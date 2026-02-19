@@ -242,15 +242,15 @@ impl GossipService for IrohGossipService {
                             }
                         };
 
-                        if let Some(message) = decoded_message.as_ref() {
-                            if let Err(e) = mesh_for_task.handle_message(message.clone()).await {
-                                tracing::debug!(
-                                    target: LOG_TARGET,
-                                    topic = %topic_clone,
-                                    error = ?e,
-                                    "Failed to record gossip message in TopicMesh"
-                                );
-                            }
+                        if let Some(message) = decoded_message.as_ref()
+                            && let Err(e) = mesh_for_task.handle_message(message.clone()).await
+                        {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                topic = %topic_clone,
+                                error = ?e,
+                                "Failed to record gossip message in TopicMesh"
+                            );
                         }
 
                         if let (Some(tx), Some(message)) =

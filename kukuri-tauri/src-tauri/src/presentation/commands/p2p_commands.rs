@@ -236,11 +236,11 @@ pub async fn get_relay_status(
             }
         }
 
-        if let Some(url) = matched {
-            if let Some(index) = statuses.iter().position(|entry| entry.url == url) {
-                statuses[index].status = "connected".to_string();
-                continue;
-            }
+        if let Some(url) = matched
+            && let Some(index) = statuses.iter().position(|entry| entry.url == url)
+        {
+            statuses[index].status = "connected".to_string();
+            continue;
         }
 
         if seen.insert(peer.address.clone()) {

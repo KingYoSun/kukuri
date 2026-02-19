@@ -108,20 +108,20 @@ pub struct UpdateMetadataRequest {
 impl Validate for UpdateMetadataRequest {
     fn validate(&self) -> Result<(), String> {
         // 各フィールドの長さチェック
-        if let Some(name) = &self.metadata.name {
-            if name.len() > 100 {
-                return Err("Name is too long (max 100 characters)".to_string());
-            }
+        if let Some(name) = &self.metadata.name
+            && name.len() > 100
+        {
+            return Err("Name is too long (max 100 characters)".to_string());
         }
-        if let Some(display_name) = &self.metadata.display_name {
-            if display_name.len() > 100 {
-                return Err("Display name is too long (max 100 characters)".to_string());
-            }
+        if let Some(display_name) = &self.metadata.display_name
+            && display_name.len() > 100
+        {
+            return Err("Display name is too long (max 100 characters)".to_string());
         }
-        if let Some(about) = &self.metadata.about {
-            if about.len() > 1000 {
-                return Err("About is too long (max 1000 characters)".to_string());
-            }
+        if let Some(about) = &self.metadata.about
+            && about.len() > 1000
+        {
+            return Err("About is too long (max 1000 characters)".to_string());
         }
         if let Some(relays) = &self.metadata.relays {
             if relays.len() > MAX_NIP65_RELAYS {

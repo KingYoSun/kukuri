@@ -116,17 +116,17 @@ impl EventHandler {
                     .await;
                 }
                 // カスタムタグ 'topic'
-                if tag.kind().to_string() == "topic" {
-                    if let Some(content) = tag.content() {
-                        let _ = sqlx::query(
-                            r#"INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at) VALUES (?1, ?2, ?3)"#,
-                        )
-                        .bind(event.id.to_string())
-                        .bind(content)
-                        .bind(chrono::Utc::now().timestamp_millis())
-                        .execute(pool.get_pool())
-                        .await;
-                    }
+                if tag.kind().to_string() == "topic"
+                    && let Some(content) = tag.content()
+                {
+                    let _ = sqlx::query(
+                        r#"INSERT OR IGNORE INTO event_topics (event_id, topic_id, created_at) VALUES (?1, ?2, ?3)"#,
+                    )
+                    .bind(event.id.to_string())
+                    .bind(content)
+                    .bind(chrono::Utc::now().timestamp_millis())
+                    .execute(pool.get_pool())
+                    .await;
                 }
             }
         }

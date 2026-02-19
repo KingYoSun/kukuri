@@ -226,12 +226,12 @@ pub mod secret {
     /// シークレットを取得または生成
     pub async fn get_or_create_secret() -> Result<Vec<u8>, AppError> {
         // キーリングから取得を試みる
-        if let Ok(entry) = Entry::new(SERVICE_NAME, SECRET_KEY) {
-            if let Ok(secret_str) = entry.get_password() {
-                use base64::prelude::*;
-                if let Ok(secret) = BASE64_STANDARD.decode(secret_str) {
-                    return Ok(secret);
-                }
+        if let Ok(entry) = Entry::new(SERVICE_NAME, SECRET_KEY)
+            && let Ok(secret_str) = entry.get_password()
+        {
+            use base64::prelude::*;
+            if let Ok(secret) = BASE64_STANDARD.decode(secret_str) {
+                return Ok(secret);
             }
         }
 

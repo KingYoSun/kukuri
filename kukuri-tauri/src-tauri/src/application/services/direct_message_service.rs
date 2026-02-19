@@ -388,15 +388,15 @@ impl DirectMessageService {
     }
 
     async fn dispatch_notification(&self, owner_npub: &str, message: &DirectMessage) {
-        if let Some(notifier) = &self.notifier {
-            if let Err(err) = notifier.notify(owner_npub, message).await {
-                error!(
-                    error = %err,
-                    owner_npub,
-                    conversation = message.conversation_npub,
-                    "Failed to emit direct message notification"
-                );
-            }
+        if let Some(notifier) = &self.notifier
+            && let Err(err) = notifier.notify(owner_npub, message).await
+        {
+            error!(
+                error = %err,
+                owner_npub,
+                conversation = message.conversation_npub,
+                "Failed to emit direct message notification"
+            );
         }
     }
 

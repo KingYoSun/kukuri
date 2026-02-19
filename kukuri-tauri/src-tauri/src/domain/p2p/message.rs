@@ -169,16 +169,15 @@ pub fn generate_topic_id_with_visibility(topic_name: &str, _visibility: TopicVis
 }
 
 pub fn topic_id_bytes(canonical_id: &str) -> [u8; 32] {
-    if let Some(tail) = canonical_id.strip_prefix(TOPIC_NAMESPACE) {
-        if tail.len() == 64 && tail.chars().all(|c| c.is_ascii_hexdigit()) {
-            if let Ok(decoded) = hex::decode(tail) {
-                if decoded.len() >= 32 {
-                    let mut out = [0u8; 32];
-                    out.copy_from_slice(&decoded[..32]);
-                    return out;
-                }
-            }
-        }
+    if let Some(tail) = canonical_id.strip_prefix(TOPIC_NAMESPACE)
+        && tail.len() == 64
+        && tail.chars().all(|c| c.is_ascii_hexdigit())
+        && let Ok(decoded) = hex::decode(tail)
+        && decoded.len() >= 32
+    {
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&decoded[..32]);
+        return out;
     }
 
     *blake3::hash(canonical_id.as_bytes()).as_bytes()

@@ -707,11 +707,11 @@ impl AppState {
                         {
                             let mut order = order_arc.write().await;
                             order.push_back(evt_id.clone());
-                            if order.len() > P2P_DEDUP_MAX {
-                                if let Some(old_id) = order.pop_front() {
-                                    let mut set = set_arc.write().await;
-                                    set.remove(&old_id);
-                                }
+                            if order.len() > P2P_DEDUP_MAX
+                                && let Some(old_id) = order.pop_front()
+                            {
+                                let mut set = set_arc.write().await;
+                                set.remove(&old_id);
                             }
                         }
                         // 受信: domain::entities::Event

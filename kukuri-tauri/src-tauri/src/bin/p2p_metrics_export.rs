@@ -54,11 +54,11 @@ fn usage() -> &'static str {
 }
 
 fn write_output(path: &Path, data: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create {}", parent.display()))?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
     }
     fs::write(path, data).with_context(|| format!("Failed to write {}", path.display()))
 }
@@ -192,10 +192,10 @@ fn resolve_database_url(options: &CliOptions) -> String {
     if let Some(url) = &options.database_url {
         return url.clone();
     }
-    if let Ok(env_url) = env::var("DATABASE_URL") {
-        if !env_url.trim().is_empty() {
-            return env_url;
-        }
+    if let Ok(env_url) = env::var("DATABASE_URL")
+        && !env_url.trim().is_empty()
+    {
+        return env_url;
     }
     AppConfig::from_env().database.url
 }

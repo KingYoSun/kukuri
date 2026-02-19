@@ -81,10 +81,10 @@ impl EventManager {
         };
         drop(client_manager);
 
-        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            if let Err(e) = self.broadcast_to_topic(&gossip, topic_id, &event).await {
-                error!("Failed to broadcast to P2P (topic {}): {}", topic_id, e);
-            }
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned()
+            && let Err(e) = self.broadcast_to_topic(&gossip, topic_id, &event).await
+        {
+            error!("Failed to broadcast to P2P (topic {}): {}", topic_id, e);
         }
 
         if let Some(store) = self.event_topic_store.read().await.as_ref().cloned() {

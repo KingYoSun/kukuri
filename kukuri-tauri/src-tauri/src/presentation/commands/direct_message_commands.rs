@@ -24,27 +24,27 @@ async fn ensure_authenticated(
         return Ok(pair.npub.clone());
     }
 
-    if let Some(user) = state.auth_service.get_current_user().await? {
-        if let Ok(nsec) = state.key_manager.export_private_key(&user.npub).await {
-            let restored = state.key_manager.import_private_key(&nsec).await?;
-            return Ok(restored.npub);
-        }
+    if let Some(user) = state.auth_service.get_current_user().await?
+        && let Ok(nsec) = state.key_manager.export_private_key(&user.npub).await
+    {
+        let restored = state.key_manager.import_private_key(&nsec).await?;
+        return Ok(restored.npub);
     }
 
-    if let Some(nsec) = fallback_nsec {
-        if let Ok(secret_key) = SecretKey::from_bech32(nsec) {
-            let keys = Keys::new(secret_key);
-            if let Err(err) = state.key_manager.import_private_key(nsec).await {
-                warn!(
-                    error = %err,
-                    "Failed to import fallback nsec during authentication; continuing with derived npub"
-                );
-            }
-            return keys
-                .public_key()
-                .to_bech32()
-                .map_err(|err| AppError::Crypto(format!("Failed to convert npub: {err}")));
+    if let Some(nsec) = fallback_nsec
+        && let Ok(secret_key) = SecretKey::from_bech32(nsec)
+    {
+        let keys = Keys::new(secret_key);
+        if let Err(err) = state.key_manager.import_private_key(nsec).await {
+            warn!(
+                error = %err,
+                "Failed to import fallback nsec during authentication; continuing with derived npub"
+            );
         }
+        return keys
+            .public_key()
+            .to_bech32()
+            .map_err(|err| AppError::Crypto(format!("Failed to convert npub: {err}")));
     }
 
     Err(AppError::Unauthorized(

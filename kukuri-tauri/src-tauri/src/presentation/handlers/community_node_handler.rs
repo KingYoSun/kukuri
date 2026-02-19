@@ -876,15 +876,15 @@ impl CommunityNodeHandler {
             }
             return Ok(builder);
         };
-        if let Some(exp) = node.token_expires_at {
-            if exp <= Utc::now().timestamp() {
-                if !require_auth {
-                    return Ok(builder);
-                }
-                return Err(AppError::Unauthorized(
-                    "Community node token has expired".to_string(),
-                ));
+        if let Some(exp) = node.token_expires_at
+            && exp <= Utc::now().timestamp()
+        {
+            if !require_auth {
+                return Ok(builder);
             }
+            return Err(AppError::Unauthorized(
+                "Community node token has expired".to_string(),
+            ));
         }
         Ok(builder.bearer_auth(token))
     }
@@ -1013,10 +1013,10 @@ impl CommunityNodeHandler {
             }
         }
 
-        if items.is_empty() {
-            if let Some(err) = last_error {
-                return Err(err);
-            }
+        if items.is_empty()
+            && let Some(err) = last_error
+        {
+            return Err(err);
         }
 
         let next_cursor = if next_cursor_map.is_empty() {
@@ -1345,10 +1345,10 @@ fn resolve_expected_pubkey<'a>(
     let node_pubkey = node_pubkey
         .map(str::trim)
         .filter(|value| !value.is_empty())?;
-    if let Some(current_pubkey) = current_pubkey {
-        if node_pubkey.eq_ignore_ascii_case(current_pubkey) {
-            return None;
-        }
+    if let Some(current_pubkey) = current_pubkey
+        && node_pubkey.eq_ignore_ascii_case(current_pubkey)
+    {
+        return None;
     }
     Some(node_pubkey)
 }
@@ -1542,10 +1542,10 @@ fn should_refresh_bootstrap(entry: &BootstrapCacheEntry, now: i64) -> bool {
     if entry.stale {
         return true;
     }
-    if let Some(next_refresh_at) = entry.next_refresh_at {
-        if next_refresh_at <= now {
-            return true;
-        }
+    if let Some(next_refresh_at) = entry.next_refresh_at
+        && next_refresh_at <= now
+    {
+        return true;
     }
     false
 }
@@ -1607,10 +1607,10 @@ fn sanitize_bootstrap_items(
         let Some(event) = validate_kip_event_json(item, expected_kind, None, now) else {
             continue;
         };
-        if let Some(topic) = topic_filter {
-            if event_tag_value(&event, "t") != Some(topic) {
-                continue;
-            }
+        if let Some(topic) = topic_filter
+            && event_tag_value(&event, "t") != Some(topic)
+        {
+            continue;
         }
         let Some(key) = addressable_key(&event) else {
             continue;

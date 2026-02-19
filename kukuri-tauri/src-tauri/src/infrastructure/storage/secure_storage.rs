@@ -430,15 +430,14 @@ impl SecureAccountStore for DefaultSecureStorage {
 
     async fn current_account(&self) -> Result<Option<CurrentAccountSecret>, AppError> {
         let metadata = Self::get_accounts_metadata().map_err(to_storage_error)?;
-        if let Some(current) = metadata.current_npub.as_ref() {
-            if let Some(account) = metadata.accounts.get(current) {
-                if let Some(nsec) = Self::get_private_key(current).map_err(to_storage_error)? {
-                    return Ok(Some(CurrentAccountSecret {
-                        metadata: account.clone(),
-                        nsec,
-                    }));
-                }
-            }
+        if let Some(current) = metadata.current_npub.as_ref()
+            && let Some(account) = metadata.accounts.get(current)
+            && let Some(nsec) = Self::get_private_key(current).map_err(to_storage_error)?
+        {
+            return Ok(Some(CurrentAccountSecret {
+                metadata: account.clone(),
+                nsec,
+            }));
         }
         Ok(None)
     }
@@ -522,12 +521,12 @@ impl KeyMaterialStore for DefaultSecureStorage {
 
     async fn current_keypair(&self) -> Result<Option<KeyPair>, AppError> {
         let ledger = Self::get_key_material_ledger().map_err(to_storage_error)?;
-        if let Some(npub) = ledger.current_npub.as_deref() {
-            if let Some(record) = ledger.records.get(npub) {
-                let nsec = Self::get_private_key(&record.npub).map_err(to_storage_error)?;
-                if let Some(nsec) = nsec {
-                    return build_keypair_from_record(record, nsec).map(Some);
-                }
+        if let Some(npub) = ledger.current_npub.as_deref()
+            && let Some(record) = ledger.records.get(npub)
+        {
+            let nsec = Self::get_private_key(&record.npub).map_err(to_storage_error)?;
+            if let Some(nsec) = nsec {
+                return build_keypair_from_record(record, nsec).map(Some);
             }
         }
         Ok(None)
