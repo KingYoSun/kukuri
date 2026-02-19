@@ -173,13 +173,13 @@ fn cursor_start_index(
                 }
             }
             Cursor::Recency { updated_at, npub } => {
-                if matches!(params.sort, SearchSort::Recency) {
-                    if let Some(pos) = ranked.iter().position(|entry| {
+                if matches!(params.sort, SearchSort::Recency)
+                    && let Some(pos) = ranked.iter().position(|entry| {
                         entry.user.npub == npub
                             && entry.user.updated_at.timestamp_millis() == updated_at
-                    }) {
-                        return Ok(pos + 1);
-                    }
+                    })
+                {
+                    return Ok(pos + 1);
                 }
             }
         }

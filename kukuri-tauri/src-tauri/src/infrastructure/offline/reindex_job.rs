@@ -144,14 +144,14 @@ impl OfflineReindexJob {
     }
 
     fn emit_success(&self, report: &OfflineReindexReport) {
-        if let Some(emitter) = &self.event_emitter {
-            if let Err(err) = emitter.emit_report(report) {
-                tracing::warn!(
-                    target: "offline::reindex",
-                    error = %err,
-                    "failed to emit offline reindex completion event"
-                );
-            }
+        if let Some(emitter) = &self.event_emitter
+            && let Err(err) = emitter.emit_report(report)
+        {
+            tracing::warn!(
+                target: "offline::reindex",
+                error = %err,
+                "failed to emit offline reindex completion event"
+            );
         }
         tracing::info!(
             target: "offline::reindex",
@@ -162,14 +162,14 @@ impl OfflineReindexJob {
     }
 
     fn emit_failure(&self, message: &str) {
-        if let Some(emitter) = &self.event_emitter {
-            if let Err(err) = emitter.emit_failure(message) {
-                tracing::warn!(
-                    target: "offline::reindex",
-                    error = %err,
-                    "failed to emit offline reindex failure event"
-                );
-            }
+        if let Some(emitter) = &self.event_emitter
+            && let Err(err) = emitter.emit_failure(message)
+        {
+            tracing::warn!(
+                target: "offline::reindex",
+                error = %err,
+                "failed to emit offline reindex failure event"
+            );
         }
         tracing::error!(
             target: "offline::reindex",

@@ -56,10 +56,10 @@ pub fn build_peer_hints(
         if idx == self_idx {
             continue;
         }
-        if let Some(h) = hint {
-            if !result.contains(h) {
-                result.push(h.clone());
-            }
+        if let Some(h) = hint
+            && !result.contains(h)
+        {
+            result.push(h.clone());
         }
     }
     result

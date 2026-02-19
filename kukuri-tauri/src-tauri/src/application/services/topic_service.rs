@@ -293,19 +293,19 @@ impl TopicService {
             });
         }
 
-        if self.metrics_enabled {
-            if let Some(snapshot) = self.metrics_repository.list_recent_metrics(limit).await? {
-                let entries = self
-                    .build_entries_from_metrics(&snapshot.metrics, limit)
-                    .await?;
+        if self.metrics_enabled
+            && let Some(snapshot) = self.metrics_repository.list_recent_metrics(limit).await?
+        {
+            let entries = self
+                .build_entries_from_metrics(&snapshot.metrics, limit)
+                .await?;
 
-                if !entries.is_empty() || !snapshot.metrics.is_empty() {
-                    return Ok(TrendingTopicsResult {
-                        generated_at: snapshot.window_end,
-                        entries,
-                        data_source: TrendingDataSource::Metrics,
-                    });
-                }
+            if !entries.is_empty() || !snapshot.metrics.is_empty() {
+                return Ok(TrendingTopicsResult {
+                    generated_at: snapshot.window_end,
+                    entries,
+                    data_source: TrendingDataSource::Metrics,
+                });
             }
         }
 

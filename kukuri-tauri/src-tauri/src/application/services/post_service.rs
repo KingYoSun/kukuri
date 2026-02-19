@@ -336,12 +336,12 @@ impl PostService {
     pub async fn react_to_post(&self, post_id: &str, reaction: &str) -> Result<(), AppError> {
         self.event_service.send_reaction(post_id, reaction).await?;
 
-        if reaction == "+" {
-            if let Some(mut post) = self.repository.get_post(post_id).await? {
-                post.increment_likes();
-                self.repository.update_post(&post).await?;
-                self.cache.remove(post_id).await;
-            }
+        if reaction == "+"
+            && let Some(mut post) = self.repository.get_post(post_id).await?
+        {
+            post.increment_likes();
+            self.repository.update_post(&post).await?;
+            self.cache.remove(post_id).await;
         }
 
         Ok(())

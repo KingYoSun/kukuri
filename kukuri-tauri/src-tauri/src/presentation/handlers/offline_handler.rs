@@ -125,17 +125,15 @@ impl OfflineHandler {
             .payload
             .get("cacheType")
             .and_then(|value| value.as_str())
-        {
-            if let Err(err) = self
+            && let Err(err) = self
                 .record_sync_queue_metadata(cache_type, &request.payload, queue_id)
                 .await
-            {
-                tracing::warn!(
-                    target: "offline::handler",
-                    error = %err,
-                    "failed to update sync_queue metadata for {cache_type}"
-                );
-            }
+        {
+            tracing::warn!(
+                target: "offline::handler",
+                error = %err,
+                "failed to update sync_queue metadata for {cache_type}"
+            );
         }
         Ok(queue_id.value())
     }
