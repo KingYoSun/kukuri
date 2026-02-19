@@ -37,16 +37,6 @@ services:
     networks:
       - community-node-network
 
-  community-node-meilisearch:
-    image: getmeili/meilisearch:v1.5.0
-    container_name: kukuri-community-node-meilisearch
-    environment:
-      MEILI_MASTER_KEY: "${COMMUNITY_NODE_MEILI_MASTER_KEY:-change-me}"
-    volumes:
-      - community-node-meili:/meili_data
-    networks:
-      - community-node-network
-
   community-node-user-api:
     build:
       context: ./kukuri-community-node
@@ -63,13 +53,9 @@ services:
       NODE_KEY_PATH: "/data/node_key.json"
       PERSONAL_DATA_EXPORT_DIR: "/data/personal_exports"
       PERSONAL_DATA_HMAC_SECRET: "${COMMUNITY_NODE_HMAC_SECRET:-change-me}"
-      MEILI_URL: "http://community-node-meilisearch:7700"
-      MEILI_MASTER_KEY: "${COMMUNITY_NODE_MEILI_MASTER_KEY:-change-me}"
     depends_on:
       community-node-postgres:
         condition: service_healthy
-      community-node-meilisearch:
-        condition: service_started
     volumes:
       - community-node-data:/data
     ports:
@@ -306,8 +292,6 @@ volumes:
     name: kukuri-pnpm-store
   community-node-postgres:
     name: kukuri-community-node-postgres
-  community-node-meili:
-    name: kukuri-community-node-meili
   community-node-data:
     name: kukuri-community-node-data
 

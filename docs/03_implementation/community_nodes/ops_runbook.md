@@ -20,7 +20,7 @@
 ## 0. 運用原則（v1）
 
 - **入口は統合**: 外部I/Fは `user-api`（HTTP）+ `relay`（WS）を正とし、他サービスは内部NWに閉じる
-- **DBが正**: 取込レコード・監査・購読・同意・ジョブ状態は Postgres を正とする（Meilisearch は派生）
+- **DBが正**: 取込レコード・監査・購読・同意・ジョブ状態は Postgres を正とする（検索派生データも Postgres に集約）
 - **最小開示**: ログ/監査は必要最小限（本文・識別子を不用意に残さない）
 - **停止できる設計**: LLM/バックフィル/低優先topicは止められる（運用で破綻しない）
 
@@ -28,11 +28,11 @@
 
 - community-node の回帰確認は Linux/macOS/Windows すべてでコンテナ経路を既定とする。`cd kukuri-community-node && cargo test ...` のホスト直実行はデバッグ用途に限定する。
 - 依存サービス起動:
-  - `docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch`
+  - `docker compose -f docker-compose.test.yml up -d community-node-postgres`
 - test-runner イメージビルド:
   - `docker compose -f docker-compose.test.yml build test-runner`
 - テスト + ビルド:
-  - `docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -e MEILI_URL=http://community-node-meilisearch:7700 -e MEILI_MASTER_KEY=change-me -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"`
+  - `docker run --rm --network kukuri_community-node-network -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn -v "$(git rev-parse --show-toplevel):/workspace" -w /workspace/kukuri-community-node kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"`
 
 ## 1. 監視 / メトリクス / ログ
 
@@ -87,7 +87,7 @@
 
 #### index/moderation/trust
 - outbox追従遅延（consumer_offsetsの遅れ）
-- 依存（Meilisearch/LLM/AGE）の失敗率
+- 依存（LLM/AGE）の失敗率
 
 #### Postgres
 - 接続数/ロック待ち/ディスク使用率（最小でもディスク逼迫は必須アラート）
@@ -97,15 +97,15 @@
 - outbox backlog が閾値超過（consumer停止/詰まり）
 - relay reject 急増（攻撃/設定ミス/認証切替失敗）
 - DB ディスク逼迫、接続枯渇、ロック待ち増大
-- Meilisearch 同期停止（index consumer の停止）
+- 検索インデクサ停止（index consumer / backfill worker の停止）
 - LLM 連続失敗/予算上限到達（LLM自動停止に落ちているか）
 
 ### 1.5 検索 PG cutover 監視（Issue #27 / PR-07）
 
 - 参照 Runbook: `docs/01_project/activeContext/search_pg_migration/PR-07_cutover_runbook.md`
 - cutover は次の順序で実施する（`search_read_backend` / `suggest_read_backend` は二値フラグで、比率解釈しない）。
-  1. 5%/25%/50% canary: `search_read_backend='meili'` / `suggest_read_backend='legacy'` を維持し、`shadow_sample_rate` のみ `5 -> 25 -> 50` へ引き上げる。
-  2. 100% cutover: 各カナリア段階の 24h 品質/性能ゲート通過後に、`search_read_backend='pg'` / `suggest_read_backend='pg'` へ一括切替する。
+  1. 5%/25%/50% canary: `search_read_backend='pg'` / `suggest_read_backend='legacy'` を維持し、`shadow_sample_rate` のみ `5 -> 25 -> 50` へ引き上げる。
+  2. 100% cutover: 各カナリア段階の 24h 品質/性能ゲート通過後に、`suggest_read_backend='pg'` へ一括切替する。
 - 上記のカナリア期間と 100% cutover 直後は、以下を Dashboard の必須パネルとして扱う。
   - Search latency: `http_request_duration_seconds{service=\"cn-user-api\",route=\"/v1/search\"}`（p50/p95/p99）
   - Search error rate: `http_requests_total{service=\"cn-user-api\",route=\"/v1/search\",status=~\"5..\"}` / 総リクエスト
@@ -122,9 +122,6 @@
 
 必須:
 - Postgres（全スキーマ: `cn_*`）
-
-任意（再構築可能）:
-- Meilisearch（壊れたら reindex できる前提）
 
 別管理（DBに入れない）:
 - Node鍵（署名鍵）、JWT secret、OpenAI key 等の秘匿情報
@@ -145,7 +142,7 @@ v2（必要なら）:
 3. 新しい DB へリストア（`pg_restore`）
 4. マイグレーション適用（必要なら）
 5. services 起動（`relay`→`user-api`→各worker）
-6. Meilisearch は必要なら reindex（index ジョブ）
+6. 検索派生テーブルは必要なら index job / backfill job で再構築
 
 ### 2.4 運用スクリプト（`pg_dump` 世代管理 + `pg_restore` 復旧ドリル）
 
@@ -249,7 +246,7 @@ trust:
 
 1. ユーザーが User API へ申請（例: `POST /v1/personal-data-deletion-requests`）
 2. 即時に失効/無効化を反映し、以後の保護 API を拒否（JWT でも DB の状態で即時拒否できる）
-3. deletion job を実行し、DB データを削除/匿名化し、派生データ（Meilisearch/AGE）を削除/再計算
+3. deletion job を実行し、DB データを削除/匿名化し、派生データ（検索/AGE）を削除/再計算
 4. 完了を監査ログへ記録し、ユーザーへ status を返す（完了までの目安時間を返す）
 
 注意:

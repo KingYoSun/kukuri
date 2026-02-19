@@ -1,12 +1,14 @@
 use anyhow::{anyhow, Result};
 use chrono::TimeZone;
-use cn_core::{auth, config as env_config, db, meili, moderation, nostr, trust as trust_core};
+use cn_core::{
+    auth, config as env_config, db, moderation, nostr, search_normalizer, trust as trust_core,
+};
 use nostr_sdk::prelude::{EventBuilder, Keys, Kind, SecretKey, Tag, TagKind, Timestamp};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::types::Json;
 use sqlx::{Pool, Postgres, Row};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 const SEED_TAG_KEY: &str = "seed";
 const SEED_TAG_VALUE: &str = "community-node-e2e";
@@ -78,19 +80,6 @@ struct SeedEvent {
 }
 
 #[derive(Serialize)]
-struct IndexDocument {
-    event_id: String,
-    topic_id: String,
-    kind: i32,
-    author: String,
-    created_at: i64,
-    title: String,
-    summary: String,
-    content: String,
-    tags: Vec<String>,
-}
-
-#[derive(Serialize)]
 pub struct SeedPostSummary {
     pub event_id: String,
     pub author_pubkey: String,
@@ -118,35 +107,25 @@ pub struct SeedSummary {
 
 pub async fn seed() -> Result<SeedSummary> {
     let database_url = env_config::required_env("DATABASE_URL")?;
-    let meili_url = env_config::required_env("MEILI_URL")?;
-    let meili_master_key = std::env::var("MEILI_MASTER_KEY").ok();
 
     let pool = db::connect(&database_url).await?;
-    let meili = meili::MeiliClient::new(meili_url, meili_master_key)?;
     let ctx = SeedContext::new()?;
 
-    cleanup_with_clients(&pool, &meili, &ctx).await?;
-    let summary = seed_with_clients(&pool, &meili, &ctx).await?;
+    cleanup_with_clients(&pool, &ctx).await?;
+    let summary = seed_with_clients(&pool, &ctx).await?;
     Ok(summary)
 }
 
 pub async fn cleanup() -> Result<()> {
     let database_url = env_config::required_env("DATABASE_URL")?;
-    let meili_url = env_config::required_env("MEILI_URL")?;
-    let meili_master_key = std::env::var("MEILI_MASTER_KEY").ok();
 
     let pool = db::connect(&database_url).await?;
-    let meili = meili::MeiliClient::new(meili_url, meili_master_key)?;
     let ctx = SeedContext::new()?;
-    cleanup_with_clients(&pool, &meili, &ctx).await?;
+    cleanup_with_clients(&pool, &ctx).await?;
     Ok(())
 }
 
-async fn seed_with_clients(
-    pool: &Pool<Postgres>,
-    meili: &meili::MeiliClient,
-    ctx: &SeedContext,
-) -> Result<SeedSummary> {
+async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<SeedSummary> {
     upsert_subscriber(pool, &ctx.subscriber.pubkey).await?;
     for topic_id in SEED_TOPICS {
         upsert_topic_subscription(pool, topic_id, &ctx.subscriber.pubkey).await?;
@@ -161,7 +140,7 @@ async fn seed_with_clients(
         insert_event_topic(pool, &event.raw.id, &event.topic_id).await?;
     }
 
-    seed_meili_documents(meili, &events).await?;
+    seed_post_search_documents(pool, &events).await?;
 
     let primary_event = events
         .first()
@@ -324,11 +303,7 @@ async fn seed_with_clients(
     Ok(summary)
 }
 
-async fn cleanup_with_clients(
-    pool: &Pool<Postgres>,
-    meili: &meili::MeiliClient,
-    ctx: &SeedContext,
-) -> Result<()> {
+async fn cleanup_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<()> {
     let seed_tag = Json(json!([[SEED_TAG_KEY, SEED_TAG_VALUE]]));
     let rows = sqlx::query(
         "SELECT e.event_id, t.topic_id          FROM cn_relay.events e          JOIN cn_relay.event_topics t            ON e.event_id = t.event_id          WHERE e.tags @> $1",
@@ -354,16 +329,6 @@ async fn cleanup_with_clients(
         ids.dedup();
     }
 
-    for (topic_id, ids) in &ids_by_topic {
-        let uid = meili::topic_index_uid(topic_id);
-        if let Err(err) = meili.delete_documents(&uid, ids).await {
-            let message = err.to_string();
-            if !message.contains("404") {
-                return Err(err);
-            }
-        }
-    }
-
     let event_ids: Vec<String> = event_ids.into_iter().collect();
     if !event_ids.is_empty() {
         sqlx::query("DELETE FROM cn_relay.events_outbox WHERE event_id = ANY($1)")
@@ -375,6 +340,10 @@ async fn cleanup_with_clients(
             .execute(pool)
             .await?;
         sqlx::query("DELETE FROM cn_relay.events WHERE event_id = ANY($1)")
+            .bind(&event_ids)
+            .execute(pool)
+            .await?;
+        sqlx::query("DELETE FROM cn_search.post_search_documents WHERE post_id = ANY($1)")
             .bind(&event_ids)
             .execute(pool)
             .await?;
@@ -686,26 +655,74 @@ async fn insert_event_topic(pool: &Pool<Postgres>, event_id: &str, topic_id: &st
     Ok(())
 }
 
-async fn seed_meili_documents(meili: &meili::MeiliClient, events: &[SeedEvent]) -> Result<()> {
-    let mut docs_by_topic: BTreeMap<String, Vec<IndexDocument>> = BTreeMap::new();
+async fn seed_post_search_documents(pool: &Pool<Postgres>, events: &[SeedEvent]) -> Result<()> {
     for event in events {
         if event.raw.kind != 1 {
             continue;
         }
-        let doc = build_document(&event.raw, &event.topic_id);
-        docs_by_topic
-            .entry(event.topic_id.clone())
-            .or_default()
-            .push(doc);
+
+        let body_raw = event.raw.content.clone();
+        let body_norm = search_normalizer::normalize_search_text(&body_raw);
+        let hashtags_norm = search_normalizer::normalize_search_terms(event.raw.tag_values("t"));
+        let mentions_norm = search_normalizer::normalize_search_terms(event.raw.tag_values("p"));
+        let community_terms_norm =
+            search_normalizer::normalize_search_terms([event.topic_id.as_str()]);
+        let search_text = search_normalizer::build_search_text(
+            &body_norm,
+            &hashtags_norm,
+            &mentions_norm,
+            &community_terms_norm,
+        );
+        let visibility = event
+            .raw
+            .first_tag_value("visibility")
+            .map(|value| search_normalizer::normalize_search_text(&value))
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "public".to_string());
+        let language_hint = event
+            .raw
+            .first_tag_value("lang")
+            .or_else(|| event.raw.first_tag_value("language"))
+            .map(|value| search_normalizer::normalize_search_text(&value))
+            .filter(|value| !value.is_empty());
+
+        sqlx::query(
+            "INSERT INTO cn_search.post_search_documents \
+             (post_id, topic_id, author_id, visibility, body_raw, body_norm, hashtags_norm, mentions_norm, community_terms_norm, search_text, language_hint, popularity_score, created_at, is_deleted, normalizer_version, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0.0, $12, FALSE, $13, NOW()) \
+             ON CONFLICT (post_id, topic_id) DO UPDATE SET \
+               author_id = EXCLUDED.author_id, \
+               visibility = EXCLUDED.visibility, \
+               body_raw = EXCLUDED.body_raw, \
+               body_norm = EXCLUDED.body_norm, \
+               hashtags_norm = EXCLUDED.hashtags_norm, \
+               mentions_norm = EXCLUDED.mentions_norm, \
+               community_terms_norm = EXCLUDED.community_terms_norm, \
+               search_text = EXCLUDED.search_text, \
+               language_hint = EXCLUDED.language_hint, \
+               popularity_score = EXCLUDED.popularity_score, \
+               created_at = EXCLUDED.created_at, \
+               is_deleted = FALSE, \
+               normalizer_version = EXCLUDED.normalizer_version, \
+               updated_at = NOW()",
+        )
+        .bind(&event.raw.id)
+        .bind(&event.topic_id)
+        .bind(&event.raw.pubkey)
+        .bind(visibility)
+        .bind(body_raw)
+        .bind(body_norm)
+        .bind(hashtags_norm)
+        .bind(mentions_norm)
+        .bind(community_terms_norm)
+        .bind(search_text)
+        .bind(language_hint)
+        .bind(event.raw.created_at)
+        .bind(search_normalizer::SEARCH_NORMALIZER_VERSION)
+        .execute(pool)
+        .await?;
     }
 
-    for (topic_id, docs) in docs_by_topic {
-        let uid = meili::topic_index_uid(&topic_id);
-        meili
-            .ensure_index(&uid, "event_id", Some(default_index_settings()))
-            .await?;
-        meili.upsert_documents(&uid, &docs).await?;
-    }
     Ok(())
 }
 
@@ -818,64 +835,4 @@ async fn upsert_communication_score(
     .execute(pool)
     .await?;
     Ok(())
-}
-
-fn build_document(raw: &nostr::RawEvent, topic_id: &str) -> IndexDocument {
-    IndexDocument {
-        event_id: raw.id.clone(),
-        topic_id: topic_id.to_string(),
-        kind: raw.kind as i32,
-        author: raw.pubkey.clone(),
-        created_at: raw.created_at,
-        title: normalize_title(raw),
-        summary: normalize_summary(&raw.content),
-        content: raw.content.clone(),
-        tags: normalize_tags(raw),
-    }
-}
-
-fn normalize_title(raw: &nostr::RawEvent) -> String {
-    let from_tag = raw
-        .first_tag_value("title")
-        .or_else(|| raw.first_tag_value("subject"))
-        .unwrap_or_default();
-    if !from_tag.trim().is_empty() {
-        return truncate_chars(from_tag.trim(), 80);
-    }
-    let first_line = raw.content.lines().next().unwrap_or("").trim();
-    truncate_chars(first_line, 80)
-}
-
-fn normalize_summary(content: &str) -> String {
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    truncate_chars(trimmed, 200)
-}
-
-fn truncate_chars(value: &str, max: usize) -> String {
-    if value.chars().count() <= max {
-        return value.to_string();
-    }
-    value.chars().take(max).collect()
-}
-
-fn normalize_tags(raw: &nostr::RawEvent) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut tags = Vec::new();
-    for tag in raw.tag_values("t") {
-        if seen.insert(tag.clone()) {
-            tags.push(tag);
-        }
-    }
-    tags
-}
-
-fn default_index_settings() -> Value {
-    json!({
-        "searchableAttributes": ["title", "summary", "content", "author", "tags"],
-        "filterableAttributes": ["author", "kind", "created_at", "tags"],
-        "sortableAttributes": ["created_at"]
-    })
 }

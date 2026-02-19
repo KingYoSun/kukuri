@@ -94,7 +94,7 @@ outbox/NOTIFY の配信セマンティクス（outbox を正、`LISTEN/NOTIFY` �
 
 サービスごとの推奨動作（v1）:
 
-- index: `upsert` は Meilisearch を更新、`delete` はドキュメントを削除
+- index: `upsert` は `cn_search.post_search_documents` を更新、`delete` はドキュメントを論理削除
 - moderation: `upsert` を評価対象にし、`delete` は参照/表示対象から外す（label は `exp` で自然失効させる）
 - trust:
   - report-based は削除に影響させない（通報履歴は残す）

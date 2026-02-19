@@ -21,7 +21,7 @@
 - 外部公開する HTTP インターフェイスは User API に集約する（認証/課金/購読/レート制限の統一）
 - Access Control（invite/keys）は P2P-only。User API に `/v1/invite/redeem` `/v1/keys/envelopes` は提供しない。
 - 利用規約/プライバシーポリシーへの同意を必須化し、User API で同意状態を管理する
-- indexer は Meilisearch を利用する
+- indexer は PostgreSQL（`cn_search.post_search_documents`）を利用する
 - moderation はルールベースのフィルタ設定 + LLM によるラベリング自動化を組み込む
   - LLM は OpenAI Moderation API と、オープンウェイトモデルの Self Hosting に両対応する
 - trust は「通報ベース」「ユーザーごとのコミュニケーション濃度ベース」の2種類を用意し、Apache AGE（Postgres 拡張）で計算する
@@ -51,7 +51,7 @@
 - `docs/03_implementation/community_nodes/postgres_age_design.md`: Postgres 集約 + Apache AGE のスキーマ/運用設計
 - `docs/03_implementation/community_nodes/services_bootstrap.md`: bootstrap サービス実装計画
 - `docs/03_implementation/community_nodes/services_relay.md`: relay サービス実装計画
-- `docs/03_implementation/community_nodes/services_index.md`: index サービス（Meilisearch）実装計画
+- `docs/03_implementation/community_nodes/services_index.md`: index サービス（PG-only）実装計画
 - `docs/03_implementation/community_nodes/services_moderation.md`: moderation サービス（ルール + LLM）実装計画
 - `docs/03_implementation/community_nodes/services_trust.md`: trust サービス（Apache AGE）実装計画
 - `docs/03_implementation/community_nodes/cn_cli_migration.md`: 旧CLI統合方針（bootstrap/relay）
@@ -66,8 +66,8 @@
    - `postgres(+age)` / `relay` / `user-api` / `admin-api` / `admin-console` を `docker compose up` で起動
 3. **M2: bootstrap/relay 統合**
    - 旧CLIを `kukuri-community-node` に統合し、Compose サービス化（profile 対応）
-4. **M3: Index v1（Meilisearch）**
-   - relay取込レコード → 正規化 → Meilisearch 反映 → 検索 API
+4. **M3: Index v1（PostgreSQL検索）**
+   - relay取込レコード → 正規化 → `cn_search.post_search_documents` 反映 → 検索 API
 5. **M4: Moderation v1/v2**
    - v1: ルールベースで label(39006) 発行（exp 必須）
    - v2: LLM でラベリング自動化（OpenAI / Self Hosting）

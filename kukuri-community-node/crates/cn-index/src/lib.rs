@@ -5,11 +5,11 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use cn_core::{
-    community_search_terms, config as env_config, db, health, http, logging, meili, metrics, nostr,
+    community_search_terms, config as env_config, db, health, http, logging, metrics, nostr,
     search_normalizer, search_runtime_flags, server, service_config,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{postgres::PgListener, Pool, Postgres, QueryBuilder, Row, Transaction};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -17,7 +17,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 
 mod config;
 #[cfg(test)]
@@ -50,9 +49,6 @@ struct AffinitySignal {
 struct AppState {
     pool: Pool<Postgres>,
     config: service_config::ServiceConfigHandle,
-    meili: meili::MeiliClient,
-    index_cache: Arc<RwLock<HashSet<String>>>,
-    dual_write_retry_rows: Arc<RwLock<HashSet<i64>>>,
     health_targets: Arc<HashMap<String, String>>,
     health_client: reqwest::Client,
 }
@@ -66,8 +62,6 @@ struct HealthStatus {
 pub struct IndexConfig {
     pub addr: SocketAddr,
     pub database_url: String,
-    pub meili_url: String,
-    pub meili_master_key: Option<String>,
     pub config_poll_seconds: u64,
 }
 
@@ -79,36 +73,6 @@ struct OutboxRow {
     topic_id: String,
     kind: i32,
     effective_key: Option<String>,
-}
-
-#[derive(Serialize)]
-struct IndexDocument {
-    event_id: String,
-    topic_id: String,
-    kind: i32,
-    author: String,
-    created_at: i64,
-    title: String,
-    summary: String,
-    content: String,
-    tags: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SearchWriteMode {
-    MeiliOnly,
-    Dual,
-    PgOnly,
-}
-
-impl SearchWriteMode {
-    fn writes_meili(self) -> bool {
-        !matches!(self, SearchWriteMode::PgOnly)
-    }
-
-    fn writes_pg(self) -> bool {
-        !matches!(self, SearchWriteMode::MeiliOnly)
-    }
 }
 
 #[derive(Debug)]
@@ -129,22 +93,9 @@ struct PostSearchDocument {
     normalizer_version: i16,
 }
 
-#[derive(Debug)]
-struct DualWriteFailureMarker;
-
-impl std::fmt::Display for DualWriteFailureMarker {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("dual-write side failure")
-    }
-}
-
-impl std::error::Error for DualWriteFailureMarker {}
-
 pub fn load_config() -> Result<IndexConfig> {
     let addr = env_config::socket_addr_from_env("INDEX_ADDR", "0.0.0.0:8084")?;
     let database_url = env_config::required_env("DATABASE_URL")?;
-    let meili_url = env_config::required_env("MEILI_URL")?;
-    let meili_master_key = std::env::var("MEILI_MASTER_KEY").ok();
     let config_poll_seconds = std::env::var("INDEX_CONFIG_POLL_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -152,8 +103,6 @@ pub fn load_config() -> Result<IndexConfig> {
     Ok(IndexConfig {
         addr,
         database_url,
-        meili_url,
-        meili_master_key,
         config_poll_seconds,
     })
 }
@@ -163,7 +112,6 @@ pub async fn run(config: IndexConfig) -> Result<()> {
     metrics::init(SERVICE_NAME);
 
     let pool = db::connect(&config.database_url).await?;
-    let meili_client = meili::MeiliClient::new(config.meili_url, config.meili_master_key)?;
     ensure_suggest_graph(&pool).await?;
     bootstrap_suggest_graph_if_needed(&pool).await?;
     let default_config = json!({
@@ -197,9 +145,6 @@ pub async fn run(config: IndexConfig) -> Result<()> {
     let state = AppState {
         pool: pool.clone(),
         config: config_handle,
-        meili: meili_client,
-        index_cache: Arc::new(RwLock::new(HashSet::new())),
-        dual_write_retry_rows: Arc::new(RwLock::new(HashSet::new())),
         health_targets,
         health_client,
     };
@@ -222,7 +167,6 @@ pub async fn run(config: IndexConfig) -> Result<()> {
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     let ready = async {
         db::check_ready(&state.pool).await?;
-        state.meili.check_ready().await?;
         health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await?;
         Ok::<(), anyhow::Error>(())
     }
@@ -321,26 +265,9 @@ fn spawn_outbox_consumer(state: AppState) {
                     for row in &batch {
                         match handle_outbox_row(&state, row).await {
                             Ok(()) => {
-                                let mut retry_rows = state.dual_write_retry_rows.write().await;
-                                if retry_rows.remove(&row.seq) {
-                                    metrics::inc_search_dual_write_retry(
-                                        SERVICE_NAME,
-                                        row.op.as_str(),
-                                    );
-                                    tracing::info!(
-                                        seq = row.seq,
-                                        op = %row.op,
-                                        event_id = %row.event_id,
-                                        topic_id = %row.topic_id,
-                                        "dual-write replay recovered failed row"
-                                    );
-                                }
                                 last_seq = row.seq;
                             }
                             Err(err) => {
-                                if err.is::<DualWriteFailureMarker>() {
-                                    state.dual_write_retry_rows.write().await.insert(row.seq);
-                                }
                                 tracing::warn!(
                                     error = %err,
                                     seq = row.seq,
@@ -1419,9 +1346,8 @@ async fn handle_outbox_row(state: &AppState, row: &OutboxRow) -> Result<()> {
 }
 
 async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
-    let write_mode = load_search_write_mode(&state.pool).await;
     let Some(event) = load_event(&state.pool, &row.event_id).await? else {
-        return handle_delete_with_mode(state, row, write_mode).await;
+        return handle_delete(state, row).await;
     };
 
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
@@ -1433,213 +1359,25 @@ async fn handle_upsert(state: &AppState, row: &OutboxRow) -> Result<()> {
         if let Some(expired_at) = event.expires_at.filter(|exp| *exp <= now) {
             record_expired_event(&state.pool, &row.event_id, &row.topic_id, expired_at).await?;
         }
-        return handle_delete_with_mode(state, row, write_mode).await;
+        return handle_delete(state, row).await;
     }
 
     upsert_community_search_terms(&state.pool, &row.topic_id).await?;
-
-    let doc = build_document(&event.raw, &row.topic_id);
-    let mut dual_write_failure = None;
-    let mut meili_uid: Option<String> = None;
-    let mut meili_upsert_succeeded = false;
-    if write_mode.writes_meili() {
-        match ensure_topic_index(state, &row.topic_id).await {
-            Ok(uid) => {
-                meili_uid = Some(uid.clone());
-                if let Err(err) = state.meili.upsert_documents(&uid, &[doc]).await {
-                    capture_write_side_failure(
-                        write_mode,
-                        row,
-                        "meili",
-                        "upsert",
-                        err,
-                        &mut dual_write_failure,
-                    )?;
-                } else {
-                    meili_upsert_succeeded = true;
-                }
-            }
-            Err(err) => {
-                capture_write_side_failure(
-                    write_mode,
-                    row,
-                    "meili",
-                    "upsert",
-                    err,
-                    &mut dual_write_failure,
-                )?;
-            }
-        }
-    }
-
-    let mut pg_upsert_succeeded = false;
-    if write_mode.writes_pg() {
-        let pg_document = build_post_search_document(&event.raw, &row.topic_id);
-        if let Err(err) = upsert_post_search_document(&state.pool, &pg_document).await {
-            capture_write_side_failure(
-                write_mode,
-                row,
-                "pg",
-                "upsert",
-                err,
-                &mut dual_write_failure,
-            )?;
-        } else {
-            pg_upsert_succeeded = true;
-        }
-    }
+    let pg_document = build_post_search_document(&event.raw, &row.topic_id);
+    upsert_post_search_document(&state.pool, &pg_document).await?;
 
     if let Some(key) = row.effective_key.as_deref() {
         let stale_ids = find_stale_versions(&state.pool, &row.topic_id, key, &row.event_id).await?;
         if !stale_ids.is_empty() {
-            if write_mode.writes_meili() && meili_upsert_succeeded {
-                if let Some(uid) = meili_uid.as_deref() {
-                    if let Err(err) = state.meili.delete_documents(uid, &stale_ids).await {
-                        capture_write_side_failure(
-                            write_mode,
-                            row,
-                            "meili",
-                            "delete_stale",
-                            err,
-                            &mut dual_write_failure,
-                        )?;
-                    }
-                }
-            }
-            if write_mode.writes_pg() && pg_upsert_succeeded {
-                if let Err(err) =
-                    mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await
-                {
-                    capture_write_side_failure(
-                        write_mode,
-                        row,
-                        "pg",
-                        "delete_stale",
-                        err,
-                        &mut dual_write_failure,
-                    )?;
-                }
-            }
+            mark_post_search_documents_deleted(&state.pool, &stale_ids, &row.topic_id).await?;
         }
-    }
-
-    if let Some(err) = dual_write_failure {
-        return Err(err);
     }
 
     Ok(())
 }
 
 async fn handle_delete(state: &AppState, row: &OutboxRow) -> Result<()> {
-    let write_mode = load_search_write_mode(&state.pool).await;
-    handle_delete_with_mode(state, row, write_mode).await
-}
-
-async fn handle_delete_with_mode(
-    state: &AppState,
-    row: &OutboxRow,
-    write_mode: SearchWriteMode,
-) -> Result<()> {
-    let mut dual_write_failure = None;
-
-    if write_mode.writes_meili() {
-        match ensure_topic_index(state, &row.topic_id).await {
-            Ok(uid) => {
-                if let Err(err) = state.meili.delete_document(&uid, &row.event_id).await {
-                    capture_write_side_failure(
-                        write_mode,
-                        row,
-                        "meili",
-                        "delete",
-                        err,
-                        &mut dual_write_failure,
-                    )?;
-                }
-            }
-            Err(err) => {
-                capture_write_side_failure(
-                    write_mode,
-                    row,
-                    "meili",
-                    "delete",
-                    err,
-                    &mut dual_write_failure,
-                )?;
-            }
-        }
-    }
-    if write_mode.writes_pg() {
-        if let Err(err) =
-            mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await
-        {
-            capture_write_side_failure(
-                write_mode,
-                row,
-                "pg",
-                "delete",
-                err,
-                &mut dual_write_failure,
-            )?;
-        }
-    }
-
-    if let Some(err) = dual_write_failure {
-        return Err(err);
-    }
-
-    Ok(())
-}
-
-fn capture_write_side_failure(
-    write_mode: SearchWriteMode,
-    row: &OutboxRow,
-    backend: &'static str,
-    operation: &'static str,
-    source: anyhow::Error,
-    dual_write_failure: &mut Option<anyhow::Error>,
-) -> Result<()> {
-    if write_mode != SearchWriteMode::Dual {
-        return Err(source);
-    }
-
-    metrics::inc_search_dual_write_error(SERVICE_NAME, backend, operation);
-    tracing::warn!(
-        backend = backend,
-        operation = operation,
-        seq = row.seq,
-        event_id = %row.event_id,
-        topic_id = %row.topic_id,
-        error = %source,
-        "dual-write side failed; outbox replay will retry failed side"
-    );
-
-    if dual_write_failure.is_none() {
-        *dual_write_failure = Some(anyhow::Error::new(DualWriteFailureMarker).context(format!(
-            "dual-write side failed (backend={backend}, operation={operation}, seq={}, event_id={}, topic_id={}): {source}",
-            row.seq, row.event_id, row.topic_id
-        )));
-    }
-
-    Ok(())
-}
-
-async fn load_search_write_mode(pool: &Pool<Postgres>) -> SearchWriteMode {
-    let flags = match search_runtime_flags::load_search_runtime_flags(pool).await {
-        Ok(flags) => flags,
-        Err(err) => {
-            tracing::warn!(
-                error = %err,
-                "failed to load search runtime flags; fallback to meili_only write mode"
-            );
-            return SearchWriteMode::MeiliOnly;
-        }
-    };
-
-    match flags.search_write_mode.trim().to_ascii_lowercase().as_str() {
-        search_runtime_flags::SEARCH_WRITE_MODE_DUAL => SearchWriteMode::Dual,
-        search_runtime_flags::SEARCH_WRITE_MODE_PG_ONLY => SearchWriteMode::PgOnly,
-        _ => SearchWriteMode::MeiliOnly,
-    }
+    mark_post_search_document_deleted(&state.pool, &row.event_id, &row.topic_id).await
 }
 
 fn build_post_search_document(raw: &nostr::RawEvent, topic_id: &str) -> PostSearchDocument {
@@ -1809,30 +1547,15 @@ async fn mark_post_search_documents_deleted(
     Ok(())
 }
 
-async fn ensure_topic_index(state: &AppState, topic_id: &str) -> Result<String> {
-    let uid = meili::topic_index_uid(topic_id);
-    {
-        let cache = state.index_cache.read().await;
-        if cache.contains(&uid) {
-            return Ok(uid);
-        }
-    }
-    let settings = default_index_settings();
-    state
-        .meili
-        .ensure_index(&uid, "event_id", Some(settings))
+async fn clear_post_search_documents_for_topic(
+    pool: &Pool<Postgres>,
+    topic_id: &str,
+) -> Result<()> {
+    sqlx::query("DELETE FROM cn_search.post_search_documents WHERE topic_id = $1")
+        .bind(topic_id)
+        .execute(pool)
         .await?;
-    let mut cache = state.index_cache.write().await;
-    cache.insert(uid.clone());
-    Ok(uid)
-}
-
-fn default_index_settings() -> Value {
-    json!({
-        "searchableAttributes": ["title", "summary", "content", "author", "tags"],
-        "filterableAttributes": ["author", "kind", "created_at", "tags"],
-        "sortableAttributes": ["created_at"]
-    })
+    Ok(())
 }
 
 struct IndexedEvent {
@@ -1862,58 +1585,6 @@ async fn load_event(pool: &Pool<Postgres>, event_id: &str) -> Result<Option<Inde
         is_ephemeral: row.try_get("is_ephemeral")?,
         expires_at: row.try_get("expires_at")?,
     }))
-}
-
-fn build_document(raw: &nostr::RawEvent, topic_id: &str) -> IndexDocument {
-    IndexDocument {
-        event_id: raw.id.clone(),
-        topic_id: topic_id.to_string(),
-        kind: raw.kind as i32,
-        author: raw.pubkey.clone(),
-        created_at: raw.created_at,
-        title: normalize_title(raw),
-        summary: normalize_summary(&raw.content),
-        content: raw.content.clone(),
-        tags: normalize_tags(raw),
-    }
-}
-
-fn normalize_title(raw: &nostr::RawEvent) -> String {
-    let from_tag = raw
-        .first_tag_value("title")
-        .or_else(|| raw.first_tag_value("subject"))
-        .unwrap_or_default();
-    if !from_tag.trim().is_empty() {
-        return truncate_chars(from_tag.trim(), 80);
-    }
-    let first_line = raw.content.lines().next().unwrap_or("").trim();
-    truncate_chars(first_line, 80)
-}
-
-fn normalize_summary(content: &str) -> String {
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    truncate_chars(trimmed, 200)
-}
-
-fn truncate_chars(value: &str, max: usize) -> String {
-    if value.chars().count() <= max {
-        return value.to_string();
-    }
-    value.chars().take(max).collect()
-}
-
-fn normalize_tags(raw: &nostr::RawEvent) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut tags = Vec::new();
-    for tag in raw.tag_values("t") {
-        if seen.insert(tag.clone()) {
-            tags.push(tag);
-        }
-    }
-    tags
 }
 
 async fn find_stale_versions(
@@ -2037,10 +1708,8 @@ async fn run_reindex_job_impl(state: &AppState, job: &ReindexJob) -> Result<()> 
 
     let mut processed = 0_i64;
     for topic_id in topics {
-        let uid = ensure_topic_index(state, &topic_id).await?;
-        state.meili.delete_all_documents(&uid).await?;
-        processed =
-            reindex_topic(state, &topic_id, &uid, &job.job_id, processed, total_events).await?;
+        clear_post_search_documents_for_topic(&state.pool, &topic_id).await?;
+        processed = reindex_topic(state, &topic_id, &job.job_id, processed, total_events).await?;
     }
 
     update_job_complete(&state.pool, &job.job_id, processed).await?;
@@ -2066,7 +1735,6 @@ async fn count_reindex_events(pool: &Pool<Postgres>, topics: &[String]) -> Resul
 async fn reindex_topic(
     state: &AppState,
     topic_id: &str,
-    uid: &str,
     job_id: &str,
     mut processed: i64,
     total_events: i64,
@@ -2090,7 +1758,6 @@ async fn reindex_topic(
             break;
         }
 
-        let mut docs = Vec::new();
         for row in rows {
             let raw_json: serde_json::Value = row.try_get("raw_json")?;
             let raw: nostr::RawEvent = serde_json::from_value(raw_json)?;
@@ -2098,10 +1765,11 @@ async fn reindex_topic(
             let event_id: String = row.try_get("event_id")?;
             last_created_at = created_at;
             last_event_id = event_id.clone();
-            docs.push(build_document(&raw, topic_id));
+            upsert_community_search_terms(&state.pool, topic_id).await?;
+            let document = build_post_search_document(&raw, topic_id);
+            upsert_post_search_document(&state.pool, &document).await?;
+            processed += 1;
         }
-        state.meili.upsert_documents(uid, &docs).await?;
-        processed += docs.len() as i64;
         update_job_totals(&state.pool, job_id, total_events, processed).await?;
     }
     Ok(processed)
@@ -2572,7 +2240,6 @@ fn compute_backfill_eta_seconds(started_at: Instant, total_rows: i64, processed_
 
 async fn expire_events_once(state: &AppState) -> Result<()> {
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
-    let write_mode = load_search_write_mode(&state.pool).await;
     loop {
         let rows = sqlx::query(
             "SELECT e.event_id, t.topic_id, e.expires_at          FROM cn_relay.events e          JOIN cn_relay.event_topics t            ON e.event_id = t.event_id          LEFT JOIN cn_index.expired_events x            ON x.event_id = e.event_id AND x.topic_id = t.topic_id          WHERE e.expires_at IS NOT NULL            AND e.expires_at <= $1            AND e.is_deleted = FALSE            AND e.is_ephemeral = FALSE            AND e.is_current = TRUE            AND x.event_id IS NULL          LIMIT 200",
@@ -2589,13 +2256,7 @@ async fn expire_events_once(state: &AppState) -> Result<()> {
             let event_id: String = row.try_get("event_id")?;
             let topic_id: String = row.try_get("topic_id")?;
             let expires_at: i64 = row.try_get("expires_at")?;
-            if write_mode.writes_meili() {
-                let uid = ensure_topic_index(state, &topic_id).await?;
-                state.meili.delete_document(&uid, &event_id).await?;
-            }
-            if write_mode.writes_pg() {
-                mark_post_search_document_deleted(&state.pool, &event_id, &topic_id).await?;
-            }
+            mark_post_search_document_deleted(&state.pool, &event_id, &topic_id).await?;
             record_expired_event(&state.pool, &event_id, &topic_id, expires_at).await?;
         }
     }
@@ -2617,30 +2278,4 @@ async fn record_expired_event(
     .execute(pool)
     .await?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_title_prefers_subject() {
-        let raw = nostr::RawEvent {
-            id: "id".to_string(),
-            pubkey: "pub".to_string(),
-            created_at: 1,
-            kind: 1,
-            tags: vec![vec!["subject".to_string(), "Hello".to_string()]],
-            content: "body".to_string(),
-            sig: "sig".to_string(),
-        };
-        assert_eq!(normalize_title(&raw), "Hello");
-    }
-
-    #[test]
-    fn normalize_summary_truncates() {
-        let content = "a".repeat(250);
-        let summary = normalize_summary(&content);
-        assert_eq!(summary.len(), 200);
-    }
 }

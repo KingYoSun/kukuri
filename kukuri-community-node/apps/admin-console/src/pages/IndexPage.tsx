@@ -78,7 +78,7 @@ export const IndexPage = () => {
       <div className="hero">
         <div>
           <h1>Index</h1>
-          <p>Manage index runtime settings and trigger Meilisearch reindex jobs.</p>
+          <p>Manage index runtime settings and trigger PostgreSQL search reindex jobs.</p>
         </div>
         <button
           className="button"

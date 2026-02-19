@@ -14,7 +14,7 @@
 - **コア（profiles無しで常時起動を推奨）**: `postgres` / `relay` / `user-api`
 - `admin`: `admin-api` / `admin-console`
 - `bootstrap`: bootstrap サービス
-- `index`: index サービス + Meilisearch
+- `index`: index サービス（Postgres検索派生同期）
 - `moderation`: moderation サービス（必要に応じて `llm-*` と併用）
 - `trust`: trust サービス（Apache AGE を利用）
 - `llm-openai`: OpenAI Moderation API を利用（コンテナ追加は不要、設定のみ）
@@ -51,7 +51,6 @@ docker compose --profile moderation --profile llm-local up -d
 
 - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`
 - `DATABASE_URL`（サービス側。例: `postgres://...`）
-- `MEILI_URL` / `MEILI_MASTER_KEY`
 - `ADMIN_SESSION_SECRET`（Admin API の session cookie 署名/暗号用。v1推奨）
 - （代替）`ADMIN_JWT_SECRET`（Admin API を JWT 運用する場合）
 - `USER_JWT_SECRET`（User API の access token 署名用。v1 は JWT（HS256））

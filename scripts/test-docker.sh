@@ -892,7 +892,7 @@ cleanup_community_node() {
 
 stop_community_node() {
   echo 'Stopping community-node services...'
-  compose_run '' rm -sf community-node-user-api community-node-bootstrap community-node-postgres community-node-meilisearch >/dev/null 2>&1 || true
+  compose_run '' rm -sf community-node-user-api community-node-bootstrap community-node-postgres >/dev/null 2>&1 || true
 }
 
 run_desktop_e2e_community_node() {

@@ -1567,8 +1567,7 @@ function Stop-CommunityNode {
         "-sf",
         "community-node-user-api",
         "community-node-bootstrap",
-        "community-node-postgres",
-        "community-node-meilisearch"
+        "community-node-postgres"
     ) -IgnoreFailure | Out-Null
 }
 

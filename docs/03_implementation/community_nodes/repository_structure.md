@@ -29,7 +29,7 @@ kukuri-community-node/
     cn-kip-types/                  # KIP-0001の型/validate/serialize（必要最小から）
     cn-bootstrap/                  # bootstrap（daemon）
     cn-relay/                      # relay（daemon）
-    cn-index/                      # index（daemon: Meilisearch同期）
+    cn-index/                      # index（daemon: Postgres検索派生同期）
     cn-moderation/                 # moderation（daemon）
     cn-trust/                      # trust（daemon: AGE計算）
     cn-cli/                        # 管理CLI（旧CLIの統合先）

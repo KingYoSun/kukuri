@@ -93,7 +93,7 @@ Access Control は **P2P-only** を正とし、本ノードでは原則扱わな
 削除要求は「本ノードが管理しているユーザー関連データ」を対象とし、次を提供する。
 
 - User API/DB 上のユーザー関連データ（同意、購読、利用量、通報、メンバーシップ等）の削除または匿名化
-- 本ノードの検索（Meilisearch）・トラスト計算（AGE）・モデレーション結果からの除外（派生データの削除/再計算）
+- 本ノードの検索（`cn_search.post_search_documents`）・トラスト計算（AGE）・モデレーション結果からの除外（派生データの削除/再計算）
 
 削除要求で **できない** こと（明記）:
 
@@ -109,7 +109,7 @@ v1 は「全消去」ではなく **匿名化（pseudonymization）+ 追跡停�
   - 以後の API を拒否（`410 Gone` または `403`）
 - 非同期ジョブ（Deletion Job）で実施:
   - 参照整合性を保った削除/匿名化（下記）
-  - 派生データの削除（Meilisearch）と再計算（AGE）
+  - 派生データの削除（PostgreSQL検索）と再計算（AGE）
 
 匿名化の基本:
 - pubkey 生値を保持せず、`subject_hmac = HMAC(node_secret, pubkey)` を保存して “同一人物判定だけ可能” にする
@@ -125,7 +125,7 @@ v1 は「全消去」ではなく **匿名化（pseudonymization）+ 追跡停�
    - usage_events/reports: pubkey を hmac 化（ユニーク数/監査用）
   - access_control: v1 は対象外（将来導入時は memberships を無効化し、invites/key_envelopes を削除または暗号化済みでも hmac 化して保持）
 4. 派生系の削除/再計算
-   - Meilisearch: subject が author のドキュメントを削除（取込イベントが残っても検索結果から除外）
+   - PostgreSQL検索: subject が author のドキュメントを削除（取込イベントが残っても検索結果から除外）
    - AGE: subject を頂点/エッジごと削除し、必要ならスコア再計算
 5. 監査ログを残し、status=`completed`
 
