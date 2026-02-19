@@ -2,6 +2,7 @@
 
 作成日: 2026年02月19日
 Issue: https://github.com/KingYoSun/kukuri/issues/107
+PR: https://github.com/KingYoSun/kukuri/pull/108
 対象ブランチ: `chore/issue-107-remove-meilisearch-dependency`
 handoff_id: `LHO-meilisearch-removal-20260219-1427Z`
 
