@@ -22,7 +22,7 @@
 - `cn_relay`: 取込レコード（イベント）保存、node-level subscription、outbox（下流通知）
   - 取込レコードの永続化ポリシー（dedupe/保持期間/容量上限/パーティション）: `docs/03_implementation/community_nodes/ingested_record_persistence_policy.md`
   - outbox/NOTIFY の配信セマンティクス（at-least-once/offset/リプレイ/バックプレッシャ）: `docs/03_implementation/community_nodes/outbox_notify_semantics.md`
-- `cn_index`: Meilisearch 同期状態（offset）、インデックス設定、reindex ジョブ
+- `cn_index`: Postgres 検索同期状態（offset）、インデックス設定、reindex ジョブ
 - `cn_moderation`: 通報・ラベル・ルール・LLMジョブ
   - LLM moderation の送信/保存/開示ポリシー（外部送信範囲、ログ/保持、コスト上限、Privacy への記載）: `docs/03_implementation/community_nodes/llm_moderation_policy.md`
 - `cn_trust`: trust ジョブ・集計結果・attestation 発行履歴

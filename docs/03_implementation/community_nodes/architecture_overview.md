@@ -38,7 +38,7 @@
                            |      |
                            |      v
                            |  +---+--------+
-                           |  | Meilisearch|
+                           |  | Search Docs|
                            |  +------------+
                            v
                    +-------+------+
@@ -77,7 +77,7 @@
 - すべてのサービスは Docker Compose で起動する
 - 各サービスは `profiles` により起動対象を切り替える
 - Postgres は 1 サービスに集約し、必要に応じて Apache AGE を有効化したイメージを使う
-- indexer は Meilisearch を別サービスとして起動し、index サービスが同期する
+- indexer は Postgres 内の検索派生テーブル（`cn_search.post_search_documents`）を更新する
 - relay は **必須**とし、レコード取込・永続化の入口を一本化する（購読 topic 設計とセット）
 
 ## データの最小単位（KIP-0001 寄りの整理）
@@ -98,7 +98,7 @@
   - 最小は `Admin API` の password login + session cookie（`httpOnly` 推奨）
   - 外部公開する場合は TLS 前提（v1推奨: Caddy で終端）。ただし admin 系は原則インターネット公開しない
 - **秘匿情報**
-  - `OPENAI_API_KEY` / `MEILI_MASTER_KEY` 等は `.env` と secrets で注入し、DB に平文保存しない
+  - `OPENAI_API_KEY` 等は `.env` と secrets で注入し、DB に平文保存しない
 - **監査ログ**
   - 管理画面の設定変更、手動ラベリング、キー更新等は監査ログに残す（Postgres）
 - **運用 Runbook**
@@ -108,6 +108,6 @@
 
 1. **Postgres + relay + User API + Compose**（取込/参照の入口が動く）
 2. **Admin API + Admin Console**（運用設定と可視化ができる）
-3. **index（Meilisearch）**（見つかる体験を作る）
+3. **index（PostgreSQL検索）**（見つかる体験を作る）
 4. **moderation（ルール → LLM）**（荒れにくい体験を作る）
 5. **trust（AGE）**（採用ノード選択の根拠を作る）

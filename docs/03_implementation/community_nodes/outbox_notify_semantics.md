@@ -73,7 +73,7 @@
 
 - `seq` は **単調増加**なので、consumer は「処理完了した最後の `seq`」を `consumer_offsets.last_seq` に保存する
 - at-least-once 前提なので、コミットタイミングは次を推奨する
-  - 下流の副作用（Meilisearch 更新/label 発行/AGE 更新）が成功した後に `last_seq` を更新する
+  - 下流の副作用（Postgres検索更新/label 発行/AGE 更新）が成功した後に `last_seq` を更新する
 
 ## 冪等性（idempotency）指針
 
@@ -105,4 +105,3 @@
 
 - v1 は単純に **時間ベース（例: 30日）**で outbox を保持し、古い行を削除（またはパーティション drop）する
 - consumer の遅延が保持期間を超えた場合は、リプレイではなく再構築で復旧する
-

@@ -1031,8 +1031,6 @@ mod tests {
         let bootstrap_config = service_config::static_handle(json!({
             "auth": { "mode": "off" }
         }));
-        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
-            .expect("meili");
 
         AppState {
             pool,
@@ -1044,7 +1042,6 @@ mod tests {
             node_keys: Keys::generate(),
             export_dir: PathBuf::from("tmp/test_exports"),
             hmac_secret: b"test-secret".to_vec(),
-            meili,
             bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
     }

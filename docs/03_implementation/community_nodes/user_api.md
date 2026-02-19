@@ -211,12 +211,12 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 | flag_name | 値 | 対象 | 実装時挙動 |
 |---|---|---|---|
-| `search_read_backend` | `meili` / `pg` | `/v1/search`（`cn-user-api`） | 主 read backend を切替。未知値・読取失敗時は `meili` フォールバック。 |
-| `search_write_mode` | `meili_only` / `dual` / `pg_only` | 検索索引書込（`cn-index`） | outbox からの書込先を切替。未知値・読取失敗時は `meili_only`。 |
+| `search_read_backend` | `pg` | `/v1/search`（`cn-user-api`） | PostgreSQL 検索を使用（`pgroonga`）。 |
+| `search_write_mode` | `pg_only` | 検索索引書込（`cn-index`） | outbox から `cn_search.post_search_documents` へ書込。 |
 | `suggest_read_backend` | `legacy` / `pg` | `/v1/communities/suggest`（Stage-A） | 候補生成の backend を切替。未知値・読取失敗時は `legacy`。 |
 | `suggest_rerank_mode` | `shadow` / `enabled` | `/v1/communities/suggest`（Stage-B） | `enabled` で rerank 順を応答順に適用。`shadow` は Stage-A 順を維持しつつ `stage_b_rank` と比較メトリクスを記録。 |
 | `suggest_relation_weights` | JSON | `/v1/communities/suggest`（Stage-B） | relation score 重み。JSON 不正時は既定値へフォールバック。 |
-| `shadow_sample_rate` | `0` - `100` | `/v1/search` と `/v1/communities/suggest` | sampled shadow 比較率。数値以外は `0`、`100` 超は `100` に丸める。 |
+| `shadow_sample_rate` | `0` - `100` | `/v1/communities/suggest` | sampled shadow 比較率。数値以外は `0`、`100` 超は `100` に丸める。 |
 
 運用メモ:
 - read backend（`search_read_backend` / `suggest_read_backend`）は二値フラグであり比率適用しない。5% / 25% / 50% のカナリア段階は `shadow_sample_rate` で実施する。

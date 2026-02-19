@@ -244,8 +244,6 @@ mod api_contract_tests {
         let bootstrap_config = service_config::static_handle(serde_json::json!({
             "auth": { "mode": auth_mode }
         }));
-        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
-            .expect("meili");
 
         crate::AppState {
             pool,
@@ -257,7 +255,6 @@ mod api_contract_tests {
             node_keys: Keys::generate(),
             export_dir: PathBuf::from("tmp/test_exports"),
             hmac_secret: b"test-secret".to_vec(),
-            meili,
             bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
     }
@@ -289,8 +286,6 @@ mod api_contract_tests {
         let bootstrap_config = service_config::static_handle(serde_json::json!({
             "auth": { "mode": auth_mode }
         }));
-        let meili = cn_core::meili::MeiliClient::new("http://localhost:7700".to_string(), None)
-            .expect("meili");
         let export_dir = PathBuf::from(format!("tmp/test_exports/{}", Uuid::new_v4()));
         std::fs::create_dir_all(&export_dir).expect("create test export dir");
 
@@ -304,7 +299,6 @@ mod api_contract_tests {
             node_keys: Keys::generate(),
             export_dir,
             hmac_secret: b"test-secret".to_vec(),
-            meili,
             bootstrap_hints: Arc::new(crate::BootstrapHintStore::default()),
         }
     }

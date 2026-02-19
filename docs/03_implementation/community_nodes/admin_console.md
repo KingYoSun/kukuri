@@ -19,7 +19,7 @@
 ## 画面（提案）
 
 1. **Dashboard**
-   - 全サービスの稼働状態（health）、DB/Meilisearch 接続状態、ジョブ滞留数
+   - 全サービスの稼働状態（health）、DB/検索同期状態、ジョブ滞留数
    - outbox backlog、reject 急増、DBディスク逼迫などの主要指標/アラートを可視化（詳細: `docs/03_implementation/community_nodes/ops_runbook.md`）
 2. **Services**
    - 各サービスの設定（有効/無効、エンドポイント、閾値、レート制限など）
@@ -49,7 +49,7 @@
    - 2方式（通報/コミュ濃度）のパラメータ（時間窓、重み）
    - trust 計算ジョブの実行/スケジュール、結果の確認（対象検索）
 8. **Index**
-   - Meilisearch の状態、インデックス再構築、ランキングパラメータ
+   - PostgreSQL検索の状態、インデックス再構築、ランキングパラメータ
 9. **Audit Logs**
    - 管理操作の履歴（ユーザー/時刻/差分/対象）
 10. **Access Control**

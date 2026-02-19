@@ -7,7 +7,6 @@ pub mod db;
 pub mod health;
 pub mod http;
 pub mod logging;
-pub mod meili;
 pub mod metrics;
 pub mod migrations;
 pub mod moderation;

@@ -73,7 +73,7 @@
 ## データ/運用（補完）
 
 - 永続化は relay が担う（取込経路の一本化）
-  - index は「検索用の派生ストア（Meilisearch）」として扱い、生データの責任は relay/DB に寄せる
+  - index は「検索用の派生ストア（`cn_search.post_search_documents`）」として扱い、生データの責任は relay/DB に寄せる
 - topic購読（必須）
   - relay は `node-level subscription` の状態を監視し、subscribe/unsubscribe を切替える
   - 詳細: `docs/03_implementation/community_nodes/topic_subscription_design.md`

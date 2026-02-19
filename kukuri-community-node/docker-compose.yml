@@ -98,7 +98,6 @@ services:
       INDEX_ADDR: ${INDEX_ADDR}
     depends_on:
       - postgres
-      - meilisearch
     expose:
       - "8084"
 
@@ -136,19 +135,6 @@ services:
       - cn_data:/data
     expose:
       - "8086"
-
-  meilisearch:
-    image: getmeili/meilisearch:v1.5.0
-    profiles:
-      - index
-    environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
-    volumes:
-      - meili_data:/meili_data
-    expose:
-      - "7700"
-    networks:
-      - cn
 
   caddy:
     image: caddy:2.7.6
@@ -211,7 +197,6 @@ volumes:
   caddy_data:
   caddy_config:
   cn_data:
-  meili_data:
   ollama_data:
 
 networks:

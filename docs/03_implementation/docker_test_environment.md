@@ -46,7 +46,7 @@ community-node（`kukuri-community-node`）のテスト/ビルド検証は Linux
 #### Community Node テスト（全OS共通）
 ```bash
 # 依存サービス起動
-docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml up -d community-node-postgres
 
 # test-runner イメージをビルド
 docker compose -f docker-compose.test.yml build test-runner
@@ -54,8 +54,6 @@ docker compose -f docker-compose.test.yml build test-runner
 # community-node テスト + cn-cli ビルド
 docker run --rm --network kukuri_community-node-network \
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-  -e MEILI_URL=http://community-node-meilisearch:7700 \
-  -e MEILI_MASTER_KEY=change-me \
   -v "$(git rev-parse --show-toplevel):/workspace" \
   -w /workspace/kukuri-community-node \
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
@@ -63,7 +61,7 @@ docker run --rm --network kukuri_community-node-network \
 
 ```powershell
 # 依存サービス起動
-docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml up -d community-node-postgres
 
 # test-runner イメージをビルド
 docker compose -f docker-compose.test.yml build test-runner
@@ -71,8 +69,6 @@ docker compose -f docker-compose.test.yml build test-runner
 # community-node テスト + cn-cli ビルド
 docker run --rm --network kukuri_community-node-network `
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn `
-  -e MEILI_URL=http://community-node-meilisearch:7700 `
-  -e MEILI_MASTER_KEY=change-me `
   -v $(git rev-parse --show-toplevel):/workspace `
   -w /workspace/kukuri-community-node `
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"

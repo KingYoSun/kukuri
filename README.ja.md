@@ -50,12 +50,10 @@ cd kukuri-tauri/src-tauri
 cargo test
 
 # Community node テスト/ビルド（全OS既定: コンテナ実行）
-docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml up -d community-node-postgres
 docker compose -f docker-compose.test.yml build test-runner
 docker run --rm --network kukuri_community-node-network \
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-  -e MEILI_URL=http://community-node-meilisearch:7700 \
-  -e MEILI_MASTER_KEY=change-me \
   -v "$(git rev-parse --show-toplevel):/workspace" \
   -w /workspace/kukuri-community-node \
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
@@ -79,7 +77,7 @@ docker run --rm --network kukuri_community-node-network \
 | --- | --- | --- | --- |
 | デスクトップアプリ | `kukuri-tauri/` | Tauri + React クライアント | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test` |
 | Rust コア（Tauri） | `kukuri-tauri/src-tauri/` | Rust バックエンド + SQLite | `cd kukuri-tauri/src-tauri && cargo test` |
-| Community node | `kukuri-community-node/` | Community node サービス群 + `cn` CLI（`p2p bootstrap/relay`） | コンテナ既定: `docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features` |
+| Community node | `kukuri-community-node/` | Community node サービス群 + `cn` CLI（`p2p bootstrap/relay`） | コンテナ既定: `docker compose -f docker-compose.test.yml up -d community-node-postgres` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features` |
 
 ## 開発フロー
 
@@ -101,12 +99,10 @@ cargo test
 cargo clippy -D warnings
 
 # Community node / cn-cli
-docker compose -f docker-compose.test.yml up -d community-node-postgres community-node-meilisearch
+docker compose -f docker-compose.test.yml up -d community-node-postgres
 docker compose -f docker-compose.test.yml build test-runner
 docker run --rm --network kukuri_community-node-network \
   -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-  -e MEILI_URL=http://community-node-meilisearch:7700 \
-  -e MEILI_MASTER_KEY=change-me \
   -v "$(git rev-parse --show-toplevel):/workspace" \
   -w /workspace/kukuri-community-node \
   kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"

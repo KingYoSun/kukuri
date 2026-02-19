@@ -12,9 +12,7 @@ pub const FLAG_SHADOW_SAMPLE_RATE: &str = "shadow_sample_rate";
 pub const FLAG_SUGGEST_RERANK_MODE: &str = "suggest_rerank_mode";
 pub const FLAG_SUGGEST_RELATION_WEIGHTS: &str = "suggest_relation_weights";
 
-pub const SEARCH_READ_BACKEND_MEILI: &str = "meili";
 pub const SEARCH_READ_BACKEND_PG: &str = "pg";
-pub const SEARCH_WRITE_MODE_MEILI_ONLY: &str = "meili_only";
 pub const SEARCH_WRITE_MODE_DUAL: &str = "dual";
 pub const SEARCH_WRITE_MODE_PG_ONLY: &str = "pg_only";
 pub const SUGGEST_READ_BACKEND_LEGACY: &str = "legacy";
@@ -38,8 +36,8 @@ pub struct SearchRuntimeFlags {
 impl Default for SearchRuntimeFlags {
     fn default() -> Self {
         Self {
-            search_read_backend: SEARCH_READ_BACKEND_MEILI.to_string(),
-            search_write_mode: SEARCH_WRITE_MODE_MEILI_ONLY.to_string(),
+            search_read_backend: SEARCH_READ_BACKEND_PG.to_string(),
+            search_write_mode: SEARCH_WRITE_MODE_PG_ONLY.to_string(),
             suggest_read_backend: SUGGEST_READ_BACKEND_LEGACY.to_string(),
             shadow_sample_rate: SHADOW_SAMPLE_RATE_DISABLED.to_string(),
             suggest_rerank_mode: SUGGEST_RERANK_MODE_SHADOW.to_string(),
@@ -229,7 +227,7 @@ mod tests {
             "INSERT INTO cn_search.runtime_flags (flag_name, flag_value, updated_by) VALUES ($1, $2, 'test') ON CONFLICT (flag_name) DO UPDATE SET flag_value = EXCLUDED.flag_value, updated_at = NOW(), updated_by = EXCLUDED.updated_by",
         )
         .bind(FLAG_SEARCH_WRITE_MODE)
-        .bind(SEARCH_WRITE_MODE_MEILI_ONLY)
+        .bind(SEARCH_WRITE_MODE_PG_ONLY)
         .execute(pool)
         .await
         .expect("upsert search_write_mode");
@@ -272,10 +270,10 @@ mod tests {
     }
 
     #[test]
-    fn default_flags_are_backward_compatible_with_meili() {
+    fn default_flags_are_pg_only() {
         let flags = SearchRuntimeFlags::default();
-        assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_MEILI);
-        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
+        assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_PG);
+        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_PG_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, SHADOW_SAMPLE_RATE_DISABLED);
         assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
@@ -290,19 +288,14 @@ mod tests {
         let _guard = db_test_lock().lock().await;
         let pool = test_pool().await;
 
-        seed_flags(
-            &pool,
-            SEARCH_READ_BACKEND_MEILI,
-            SHADOW_SAMPLE_RATE_DISABLED,
-        )
-        .await;
+        seed_flags(&pool, SEARCH_READ_BACKEND_PG, SHADOW_SAMPLE_RATE_DISABLED).await;
 
         let flags = load_search_runtime_flags(&pool)
             .await
             .expect("load search runtime flags");
 
-        assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_MEILI);
-        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
+        assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_PG);
+        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_PG_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, SHADOW_SAMPLE_RATE_DISABLED);
         assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
@@ -342,7 +335,7 @@ mod tests {
             .expect("load search runtime flags");
 
         assert_eq!(flags.search_read_backend, SEARCH_READ_BACKEND_PG);
-        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_MEILI_ONLY);
+        assert_eq!(flags.search_write_mode, SEARCH_WRITE_MODE_PG_ONLY);
         assert_eq!(flags.suggest_read_backend, SUGGEST_READ_BACKEND_LEGACY);
         assert_eq!(flags.shadow_sample_rate, "25");
         assert_eq!(flags.suggest_rerank_mode, SUGGEST_RERANK_MODE_SHADOW);
@@ -351,11 +344,6 @@ mod tests {
             SUGGEST_RELATION_WEIGHTS_DEFAULT
         );
 
-        seed_flags(
-            &pool,
-            SEARCH_READ_BACKEND_MEILI,
-            SHADOW_SAMPLE_RATE_DISABLED,
-        )
-        .await;
+        seed_flags(&pool, SEARCH_READ_BACKEND_PG, SHADOW_SAMPLE_RATE_DISABLED).await;
     }
 }
