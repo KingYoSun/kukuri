@@ -1,5 +1,7 @@
 name: GitHub -> Discord Hook
 on:
+  pull_request:
+    types: [opened, reopened, synchronize]
   issues:
     types: [opened, edited, reopened]
   issue_comment:
