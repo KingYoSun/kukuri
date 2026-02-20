@@ -1,5 +1,7 @@
 name: GitHub -> Discord Hook
 on:
+  pull_request:
+    types: [opened, reopened, synchronize]
   issues:
     types: [opened, edited, reopened]
   issue_comment:
@@ -44,6 +46,10 @@ jobs:
               title = `[Issue Comment] #${p.issue.number}: ${p.issue.title}`;
               url = p.comment.html_url;
               summary = (p.comment.body || "").slice(0, 200).replace(/\n/g, " ");
+            } else if (event === "pull_request") {
+              title = `[PR ${p.action}] #${p.pull_request.number}: ${p.pull_request.title}`;
+              url = p.pull_request.html_url;
+              summary = (p.pull_request.body || "").slice(0, 200).replace(/\n/g, " ");
             } else if (event === "pull_request_review") {
               title = `[PR Review ${p.review.state}] #${p.pull_request.number}: ${p.pull_request.title}`;
               url = p.review.html_url || p.pull_request.html_url;
