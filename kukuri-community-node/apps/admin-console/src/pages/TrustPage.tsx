@@ -30,7 +30,7 @@ type TrustParameterForm = {
   communicationWindowDays: string;
   communicationScoreNormalization: string;
   interactionWeights: string;
-  attestationExpSeconds: string;
+  assertionExpSeconds: string;
 };
 
 const defaultTrustParameterForm = (): TrustParameterForm => ({
@@ -42,7 +42,7 @@ const defaultTrustParameterForm = (): TrustParameterForm => ({
   communicationWindowDays: '30',
   communicationScoreNormalization: '20',
   interactionWeights: JSON.stringify({ '1': 1, '6': 0.5, '7': 0.3 }, null, 2),
-  attestationExpSeconds: '86400'
+  assertionExpSeconds: '86400'
 });
 
 const asFiniteNumber = (value: unknown, fallback: number): number => {
@@ -57,7 +57,7 @@ const buildTrustParameterForm = (configJson: unknown): TrustParameterForm => {
   const trustConfig = asRecord(configJson);
   const reportBased = asRecord(trustConfig?.report_based);
   const communicationDensity = asRecord(trustConfig?.communication_density);
-  const attestation = asRecord(trustConfig?.attestation);
+  const assertion = asRecord(trustConfig?.assertion) ?? asRecord(trustConfig?.attestation);
 
   const interactionWeights =
     communicationDensity?.interaction_weights &&
@@ -82,7 +82,7 @@ const buildTrustParameterForm = (configJson: unknown): TrustParameterForm => {
       Math.max(1, asFiniteNumber(communicationDensity?.score_normalization, 20))
     ),
     interactionWeights: JSON.stringify(interactionWeights, null, 2),
-    attestationExpSeconds: String(Math.max(60, asFiniteNumber(attestation?.exp_seconds, 86400)))
+    assertionExpSeconds: String(Math.max(60, asFiniteNumber(assertion?.exp_seconds, 86400)))
   };
 };
 
@@ -223,7 +223,7 @@ export const TrustPage = () => {
     const reportScoreNormalization = Number(parameterForm.reportScoreNormalization);
     const communicationWindowDays = Number(parameterForm.communicationWindowDays);
     const communicationScoreNormalization = Number(parameterForm.communicationScoreNormalization);
-    const attestationExpSeconds = Number(parameterForm.attestationExpSeconds);
+    const assertionExpSeconds = Number(parameterForm.assertionExpSeconds);
 
     if (Number.isNaN(reportWindowDays) || reportWindowDays < 1) {
       setParameterMessage('Report window days must be 1 or greater.');
@@ -249,8 +249,8 @@ export const TrustPage = () => {
       setParameterMessage('Communication score normalization must be 1 or greater.');
       return;
     }
-    if (Number.isNaN(attestationExpSeconds) || attestationExpSeconds < 60) {
-      setParameterMessage('Attestation exp seconds must be 60 or greater.');
+    if (Number.isNaN(assertionExpSeconds) || assertionExpSeconds < 60) {
+      setParameterMessage('Assertion exp seconds must be 60 or greater.');
       return;
     }
 
@@ -286,7 +286,7 @@ export const TrustPage = () => {
     const currentConfig = asRecord(trustService.config_json) ?? {};
     const reportBased = asRecord(currentConfig.report_based) ?? {};
     const communicationDensity = asRecord(currentConfig.communication_density) ?? {};
-    const attestation = asRecord(currentConfig.attestation) ?? {};
+    const assertion = asRecord(currentConfig.assertion) ?? asRecord(currentConfig.attestation) ?? {};
 
     saveParametersMutation.mutate({
       ...currentConfig,
@@ -304,9 +304,9 @@ export const TrustPage = () => {
         score_normalization: communicationScoreNormalization,
         interaction_weights: interactionWeights
       },
-      attestation: {
-        ...attestation,
-        exp_seconds: Math.floor(attestationExpSeconds)
+      assertion: {
+        ...assertion,
+        exp_seconds: Math.floor(assertionExpSeconds)
       }
     });
   };
@@ -493,16 +493,16 @@ export const TrustPage = () => {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="trust-attestation-exp">Attestation exp seconds</label>
+                  <label htmlFor="trust-assertion-exp">Assertion exp seconds</label>
                   <input
-                    id="trust-attestation-exp"
+                    id="trust-assertion-exp"
                     type="number"
                     min={60}
-                    value={parameterForm.attestationExpSeconds}
+                    value={parameterForm.assertionExpSeconds}
                     onChange={(event) =>
                       setParameterForm((prev) => ({
                         ...prev,
-                        attestationExpSeconds: event.target.value
+                        assertionExpSeconds: event.target.value
                       }))
                     }
                   />

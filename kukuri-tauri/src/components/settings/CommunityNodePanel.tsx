@@ -44,7 +44,7 @@ export function CommunityNodePanel() {
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [actionNodeBaseUrl, setActionNodeBaseUrl] = useState('');
   const [inviteJson, setInviteJson] = useState('');
-  const [trustAnchorAttester, setTrustAnchorAttester] = useState('auto');
+  const [trustProviderPubkey, setTrustProviderPubkey] = useState('auto');
   const { enableAccessControl, setEnableAccessControl } = useCommunityNodeStore();
 
   const configQuery = useQuery({
@@ -52,9 +52,9 @@ export function CommunityNodePanel() {
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60,
   });
-  const trustAnchorQuery = useQuery({
-    queryKey: ['community-node', 'trust-anchor'],
-    queryFn: () => communityNodeApi.getTrustAnchor(),
+  const trustProviderQuery = useQuery({
+    queryKey: ['community-node', 'trust-provider'],
+    queryFn: () => communityNodeApi.getTrustProvider(),
     staleTime: 1000 * 60,
   });
   const groupKeysQuery = useQuery({
@@ -79,9 +79,9 @@ export function CommunityNodePanel() {
       label: formatAttesterLabel(node),
       baseUrl: node.base_url,
     }));
-  const trustAnchorNode =
-    trustAnchorAttester !== 'auto'
-      ? (trustNodes.find((node) => node.pubkey === trustAnchorAttester) ?? null)
+  const trustProviderNode =
+    trustProviderPubkey !== 'auto'
+      ? (trustNodes.find((node) => node.pubkey === trustProviderPubkey) ?? null)
       : null;
 
   const consentsQuery = useQuery({
@@ -106,22 +106,22 @@ export function CommunityNodePanel() {
   }, [nodes, actionNodeBaseUrl]);
 
   useEffect(() => {
-    if (trustAnchorQuery.data?.attester) {
-      setTrustAnchorAttester(trustAnchorQuery.data.attester);
+    if (trustProviderQuery.data?.provider_pubkey) {
+      setTrustProviderPubkey(trustProviderQuery.data.provider_pubkey);
       return;
     }
-    setTrustAnchorAttester('auto');
-  }, [trustAnchorQuery.data?.attester]);
+    setTrustProviderPubkey('auto');
+  }, [trustProviderQuery.data?.provider_pubkey]);
 
   useEffect(() => {
-    if (trustAnchorQuery.isError) {
-      errorHandler.log('Failed to load community node trust anchor', trustAnchorQuery.error, {
-        context: 'CommunityNodePanel.trustAnchor',
+    if (trustProviderQuery.isError) {
+      errorHandler.log('Failed to load community node trust provider', trustProviderQuery.error, {
+        context: 'CommunityNodePanel.trustProvider',
         showToast: true,
-        toastTitle: t('communityNodePanel.toastTrustAnchorFetchFailed'),
+        toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
       });
     }
-  }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
+  }, [trustProviderQuery.isError, trustProviderQuery.error]);
 
   useEffect(() => {
     if (pendingJoinRequestsQuery.isError) {
@@ -137,7 +137,7 @@ export function CommunityNodePanel() {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'config'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'group-keys'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'consents'] });
-    await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-anchor'] });
+    await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-provider'] });
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
   };
 
@@ -251,21 +251,26 @@ export function CommunityNodePanel() {
     }
   };
 
-  const handleTrustAnchorChange = async (value: string) => {
-    setTrustAnchorAttester(value);
+  const handleTrustProviderChange = async (value: string) => {
+    setTrustProviderPubkey(value);
     try {
       if (value === 'auto') {
-        await communityNodeApi.clearTrustAnchor();
+        await communityNodeApi.clearTrustProvider();
       } else {
-        await communityNodeApi.setTrustAnchor({ attester: value, weight: 1 });
+        const selected = trustAttesterOptions.find((option) => option.value === value);
+        await communityNodeApi.setTrustProvider({
+          provider_pubkey: value,
+          assertion_kind: 30382,
+          relay_url: selected?.baseUrl,
+        });
       }
-      await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-anchor'] });
+      await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-provider'] });
       await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust'] });
     } catch (error) {
-      errorHandler.log('Community node trust anchor update failed', error, {
-        context: 'CommunityNodePanel.trustAnchorUpdate',
+      errorHandler.log('Community node trust provider update failed', error, {
+        context: 'CommunityNodePanel.trustProviderUpdate',
         showToast: true,
-        toastTitle: t('communityNodePanel.toastTrustAnchorUpdateFailed'),
+        toastTitle: t('communityNodePanel.toastTrustProviderUpdateFailed'),
       });
     }
   };
@@ -385,8 +390,8 @@ export function CommunityNodePanel() {
             </p>
           </div>
           <Select
-            value={trustAnchorAttester}
-            onValueChange={handleTrustAnchorChange}
+            value={trustProviderPubkey}
+            onValueChange={handleTrustProviderChange}
             disabled={trustAttesterOptions.length === 0}
           >
             <SelectTrigger data-testid="community-node-trust-anchor">
@@ -401,14 +406,14 @@ export function CommunityNodePanel() {
               ))}
             </SelectContent>
           </Select>
-          {trustAnchorAttester === 'auto' ? (
+          {trustProviderPubkey === 'auto' ? (
             <p className="text-xs text-muted-foreground">{t('communityNodePanel.autoModeHint')}</p>
-          ) : trustAnchorNode ? (
+          ) : trustProviderNode ? (
             <p
               className="text-xs text-muted-foreground"
               data-testid="community-node-trust-anchor-current"
             >
-              attester: {formatAttesterLabel(trustAnchorNode)}
+              provider: {formatAttesterLabel(trustProviderNode)}
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">

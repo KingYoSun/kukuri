@@ -627,7 +627,7 @@ describe('PostCard', () => {
     });
   });
 
-  it('trust anchorが設定されている場合、trust取得にbase_urlを渡す', async () => {
+  it('trust providerが設定されている場合、trust取得にbase_urlを渡す', async () => {
     const { communityNodeApi } = await import('@/lib/api/communityNode');
     vi.mocked(communityNodeApi.getConfig).mockResolvedValue({
       nodes: [
@@ -640,11 +640,10 @@ describe('PostCard', () => {
         },
       ],
     });
-    vi.mocked(communityNodeApi.getTrustAnchor).mockResolvedValue({
-      attester: 'a'.repeat(64),
-      claim: null,
-      topic: null,
-      weight: 1,
+    vi.mocked(communityNodeApi.getTrustProvider).mockResolvedValue({
+      provider_pubkey: 'a'.repeat(64),
+      assertion_kind: 30382,
+      relay_url: 'https://trust.example',
       issued_at: 0,
       event_json: {},
     });

@@ -61,7 +61,7 @@
 `community_node_plan.md` の M0-M6（プロトコル中心）を、今回の「運用可能なサービス群」へ落とし込む。
 
 1. **M0: 仕様・境界の確定**
-   - KIP-0001（39000/39001/39005/39006/39010/39011/39020/39021/39022）と HTTP API の責務分界を確定
+   - KIP-0001 + NIP-85（39000/39001/39005/39006/30382-30385/10040/39020/39021/39022）と HTTP API の責務分界を確定
 2. **M1: リポジトリ雛形 + Compose**
    - `postgres(+age)` / `relay` / `user-api` / `admin-api` / `admin-console` を `docker compose up` で起動
 3. **M2: bootstrap/relay 統合**
@@ -72,7 +72,7 @@
    - v1: ルールベースで label(39006) 発行（exp 必須）
    - v2: LLM でラベリング自動化（OpenAI / Self Hosting）
 6. **M5: Trust v1**
-   - AGE による2方式（通報/コミュ濃度）計算 → attestation(39010) 発行
+   - AGE による2方式（通報/コミュ濃度）計算 → NIP-85 assertion（30382-30385）発行
 
 ## v2互換の実装ルール（破壊的変更を避ける）
 

@@ -5,8 +5,8 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
     CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeRoleConfig,
-    CommunityNodeSearchRequest, CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest,
-    CommunityNodeTrustAnchorState, CommunityNodeTrustRequest,
+    CommunityNodeSearchRequest, CommunityNodeTokenRequest, CommunityNodeTrustProviderRequest,
+    CommunityNodeTrustProviderState, CommunityNodeTrustRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
 use chrono::Utc;
@@ -23,19 +23,22 @@ use std::sync::Arc;
 
 const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
 const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
-const COMMUNITY_NODE_TRUST_ANCHOR_KEY: &str = "community_node_trust_anchor_v1";
+const COMMUNITY_NODE_TRUST_PROVIDER_KEY: &str = "community_node_trust_provider_v1";
+const COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY: &str = "community_node_trust_anchor_v1";
 const COMMUNITY_NODE_BOOTSTRAP_CACHE_KEY: &str = "community_node_bootstrap_cache_v1";
 const AUTH_KIND: u16 = 22242;
 const NODE_DESCRIPTOR_KIND: u16 = 39000;
 const TOPIC_SERVICE_KIND: u16 = 39001;
 const LABEL_KIND: u16 = 39006;
-const ATTESTATION_KIND: u16 = 39010;
-const TRUST_ANCHOR_KIND: u16 = 39011;
+const TRUST_ASSERTION_KIND_PUBKEY: u16 = 30382;
+const TRUST_ASSERTION_KIND_EVENT: u16 = 30383;
+const TRUST_ASSERTION_KIND_RELAY: u16 = 30384;
+const TRUST_ASSERTION_KIND_TOPIC: u16 = 30385;
+const TRUST_PROVIDER_LIST_KIND: u16 = 10040;
 const KIP_NAMESPACE: &str = "kukuri";
 const KIP_VERSION: &str = "1";
 const KIP_NODE_DESCRIPTOR_SCHEMA: &str = "kukuri-node-desc-v1";
 const KIP_TOPIC_SERVICE_SCHEMA: &str = "kukuri-topic-service-v1";
-const KIP_ATTESTATION_SCHEMA: &str = "kukuri-attest-v1";
 const KIP_BOOTSTRAP_HINT_SCHEMA: &str = "kukuri-bootstrap-update-hint-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -75,7 +78,16 @@ struct LegacyCommunityNodeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredTrustAnchor {
+struct StoredTrustProvider {
+    provider_pubkey: String,
+    assertion_kind: u16,
+    relay_url: Option<String>,
+    issued_at: i64,
+    event_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyStoredTrustAnchor {
     attester: String,
     claim: Option<String>,
     topic: Option<String>,
@@ -112,15 +124,14 @@ struct BootstrapHintCursorEntry {
     last_seq: u64,
 }
 
-impl From<StoredTrustAnchor> for CommunityNodeTrustAnchorState {
-    fn from(anchor: StoredTrustAnchor) -> Self {
+impl From<StoredTrustProvider> for CommunityNodeTrustProviderState {
+    fn from(provider: StoredTrustProvider) -> Self {
         Self {
-            attester: anchor.attester,
-            claim: anchor.claim,
-            topic: anchor.topic,
-            weight: anchor.weight,
-            issued_at: anchor.issued_at,
-            event_json: anchor.event_json,
+            provider_pubkey: provider.provider_pubkey,
+            assertion_kind: provider.assertion_kind,
+            relay_url: provider.relay_url,
+            issued_at: provider.issued_at,
+            event_json: provider.event_json,
         }
     }
 }
@@ -271,107 +282,135 @@ impl CommunityNodeHandler {
         self.save_config(&config).await
     }
 
-    pub async fn get_trust_anchor(
+    pub async fn get_trust_provider(
         &self,
-    ) -> Result<Option<CommunityNodeTrustAnchorState>, AppError> {
+    ) -> Result<Option<CommunityNodeTrustProviderState>, AppError> {
         let raw = self
             .secure_storage
-            .retrieve(COMMUNITY_NODE_TRUST_ANCHOR_KEY)
+            .retrieve(COMMUNITY_NODE_TRUST_PROVIDER_KEY)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
-        let Some(raw) = raw else {
+        if let Some(raw) = raw {
+            let stored: StoredTrustProvider = serde_json::from_str(&raw)
+                .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+            return Ok(Some(stored.into()));
+        }
+
+        let legacy_raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        let Some(legacy_raw) = legacy_raw else {
             return Ok(None);
         };
-        let stored: StoredTrustAnchor = serde_json::from_str(&raw)
+        let legacy: LegacyStoredTrustAnchor = serde_json::from_str(&legacy_raw)
             .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        Ok(Some(stored.into()))
-    }
-
-    pub async fn set_trust_anchor(
-        &self,
-        request: CommunityNodeTrustAnchorRequest,
-    ) -> Result<CommunityNodeTrustAnchorState, AppError> {
-        let attester = request.attester.trim().to_string();
-        if attester.is_empty() {
-            return Err(AppError::validation(
-                ValidationFailureKind::Generic,
-                "Attester is required",
-            ));
-        }
-        PublicKey::from_hex(&attester).map_err(|err| {
+        PublicKey::from_hex(&legacy.attester).map_err(|err| {
             AppError::validation(
                 ValidationFailureKind::Generic,
-                format!("Invalid attester pubkey: {err}"),
+                format!("Invalid provider pubkey in legacy trust anchor: {err}"),
             )
         })?;
 
-        let weight = request.weight.unwrap_or(1.0);
-        if !weight.is_finite() || !(0.0..=1.0).contains(&weight) {
+        let migrated = StoredTrustProvider {
+            provider_pubkey: legacy.attester,
+            assertion_kind: TRUST_ASSERTION_KIND_PUBKEY,
+            relay_url: None,
+            issued_at: legacy.issued_at,
+            event_json: legacy.event_json,
+        };
+        let raw = serde_json::to_string(&migrated)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        self.secure_storage
+            .store(COMMUNITY_NODE_TRUST_PROVIDER_KEY, &raw)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await;
+        Ok(Some(migrated.into()))
+    }
+
+    pub async fn set_trust_provider(
+        &self,
+        request: CommunityNodeTrustProviderRequest,
+    ) -> Result<CommunityNodeTrustProviderState, AppError> {
+        let provider_pubkey = request.provider_pubkey.trim().to_string();
+        if provider_pubkey.is_empty() {
             return Err(AppError::validation(
                 ValidationFailureKind::Generic,
-                "Weight must be between 0 and 1",
+                "Provider pubkey is required",
             ));
         }
+        PublicKey::from_hex(&provider_pubkey).map_err(|err| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                format!("Invalid provider pubkey: {err}"),
+            )
+        })?;
 
-        let claim = normalize_optional_value(request.claim);
-        let topic = normalize_optional_value(request.topic);
+        let assertion_kind = request
+            .assertion_kind
+            .unwrap_or(TRUST_ASSERTION_KIND_PUBKEY);
+        if !is_supported_trust_assertion_kind(assertion_kind) {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Unsupported trust assertion kind",
+            ));
+        }
+        let relay_url = normalize_optional_value(request.relay_url);
 
         let keypair = self.key_manager.current_keypair().await?;
         let secret_key = SecretKey::from_bech32(&keypair.nsec)
             .map_err(|err| AppError::Crypto(format!("Invalid nsec: {err}")))?;
         let keys = Keys::new(secret_key);
-        let mut tags = vec![
-            Tag::parse(["k", KIP_NAMESPACE])
-                .map_err(|err| AppError::NostrError(err.to_string()))?,
-            Tag::parse(["ver", KIP_VERSION])
-                .map_err(|err| AppError::NostrError(err.to_string()))?,
-            Tag::parse(["attester", &attester])
-                .map_err(|err| AppError::NostrError(err.to_string()))?,
-            Tag::parse(["weight", &weight.to_string()])
-                .map_err(|err| AppError::NostrError(err.to_string()))?,
-        ];
-        if let Some(value) = claim.as_ref() {
-            tags.push(
-                Tag::parse(["claim", value])
-                    .map_err(|err| AppError::NostrError(err.to_string()))?,
-            );
-        }
-        if let Some(value) = topic.as_ref() {
-            tags.push(
-                Tag::parse(["t", value]).map_err(|err| AppError::NostrError(err.to_string()))?,
-            );
-        }
 
-        let event = EventBuilder::new(Kind::Custom(TRUST_ANCHOR_KIND), "")
+        let mut provider_tag = vec![format!("{assertion_kind}:rank"), provider_pubkey.clone()];
+        if let Some(relay_url) = relay_url.as_ref() {
+            provider_tag.push(relay_url.clone());
+        }
+        let tags =
+            vec![Tag::parse(provider_tag).map_err(|err| AppError::NostrError(err.to_string()))?];
+
+        let event = EventBuilder::new(Kind::Custom(TRUST_PROVIDER_LIST_KIND), "")
             .tags(tags)
             .sign_with_keys(&keys)?;
         let event_json = serde_json::to_value(&event)
             .map_err(|err| AppError::SerializationError(err.to_string()))?;
         let issued_at = event.created_at.as_secs() as i64;
 
-        let stored = StoredTrustAnchor {
-            attester,
-            claim,
-            topic,
-            weight,
+        let stored = StoredTrustProvider {
+            provider_pubkey,
+            assertion_kind,
+            relay_url,
             issued_at,
             event_json,
         };
         let raw = serde_json::to_string(&stored)
             .map_err(|err| AppError::SerializationError(err.to_string()))?;
         self.secure_storage
-            .store(COMMUNITY_NODE_TRUST_ANCHOR_KEY, &raw)
+            .store(COMMUNITY_NODE_TRUST_PROVIDER_KEY, &raw)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await;
 
         Ok(stored.into())
     }
 
-    pub async fn clear_trust_anchor(&self) -> Result<(), AppError> {
+    pub async fn clear_trust_provider(&self) -> Result<(), AppError> {
         self.secure_storage
-            .delete(COMMUNITY_NODE_TRUST_ANCHOR_KEY)
+            .delete(COMMUNITY_NODE_TRUST_PROVIDER_KEY)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await;
         Ok(())
     }
 
@@ -895,6 +934,12 @@ impl CommunityNodeHandler {
         path: &str,
         subject: &str,
     ) -> Result<serde_json::Value, AppError> {
+        if parse_trust_subject(subject).is_none() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Invalid trust subject",
+            ));
+        }
         let mut scores: Vec<f64> = Vec::new();
         let mut sources: Vec<serde_json::Value> = Vec::new();
         let mut last_error: Option<AppError> = None;
@@ -921,10 +966,15 @@ impl CommunityNodeHandler {
             match request_json::<serde_json::Value>(builder).await {
                 Ok(response) => {
                     if let Some(score) = response.get("score").and_then(|value| value.as_f64()) {
-                        if !validate_attestation_payload(&response, expected_pubkey, now) {
+                        if !validate_trust_assertion_payload(
+                            &response,
+                            expected_pubkey,
+                            subject,
+                            now,
+                        ) {
                             last_error = Some(AppError::validation(
                                 ValidationFailureKind::Generic,
-                                "Community node attestation is invalid",
+                                "Community node trust assertion is invalid",
                             ));
                             continue;
                         }
@@ -1314,28 +1364,106 @@ fn validate_kip_event_json(
     Some(event)
 }
 
-fn validate_attestation_payload(
+fn validate_trust_assertion_payload(
     response: &serde_json::Value,
     expected_pubkey: Option<&str>,
+    subject: &str,
     now: i64,
 ) -> bool {
-    let Some(attestation) = response.get("attestation") else {
+    let Some(assertion) = response.get("assertion") else {
         return false;
     };
-    if attestation.is_null() {
+    if assertion.is_null() {
         return false;
     }
-    let exp = match attestation.get("exp").and_then(|value| value.as_i64()) {
+    let exp = match assertion.get("exp").and_then(|value| value.as_i64()) {
         Some(exp) => exp,
         None => return false,
     };
     if exp <= now {
         return false;
     }
-    let Some(event_json) = attestation.get("event_json") else {
+    let Some(event_json) = assertion.get("event_json") else {
         return false;
     };
-    validate_kip_event_json(event_json, ATTESTATION_KIND, expected_pubkey, now).is_some()
+    validate_trust_assertion_event_json(event_json, expected_pubkey, subject, now).is_some()
+}
+
+fn validate_trust_assertion_event_json(
+    event_json: &serde_json::Value,
+    expected_pubkey: Option<&str>,
+    subject: &str,
+    now: i64,
+) -> Option<NostrEvent> {
+    let (expected_kind, subject_id) = parse_trust_subject(subject)?;
+    let event: NostrEvent = serde_json::from_value(event_json.clone()).ok()?;
+    if event.kind.as_u16() != expected_kind {
+        return None;
+    }
+    if let Some(expected_pubkey) = expected_pubkey {
+        let expected_pubkey = expected_pubkey.trim();
+        if expected_pubkey.is_empty() {
+            return None;
+        }
+        if event.pubkey.to_string() != expected_pubkey {
+            return None;
+        }
+    }
+    if event.verify().is_err() {
+        return None;
+    }
+
+    if event_tag_value(&event, "d")? != subject_id {
+        return None;
+    }
+    require_tag_value(&event, "claim")?;
+    let rank = require_tag_value(&event, "rank")?.parse::<i64>().ok()?;
+    if !(0..=100).contains(&rank) {
+        return None;
+    }
+    require_expiration_tag(&event, now)?;
+    Some(event)
+}
+
+fn parse_trust_subject(subject: &str) -> Option<(u16, &str)> {
+    let mut parts = subject.splitn(2, ':');
+    let subject_kind = parts.next()?.trim();
+    let subject_id = parts.next()?.trim();
+    if subject_id.is_empty() {
+        return None;
+    }
+    match subject_kind {
+        "pubkey" => {
+            PublicKey::from_hex(subject_id).ok()?;
+            Some((TRUST_ASSERTION_KIND_PUBKEY, subject_id))
+        }
+        "event" => {
+            if !is_32byte_hex(subject_id) {
+                return None;
+            }
+            Some((TRUST_ASSERTION_KIND_EVENT, subject_id))
+        }
+        "relay" => Some((TRUST_ASSERTION_KIND_RELAY, subject_id)),
+        "topic" => Some((TRUST_ASSERTION_KIND_TOPIC, subject_id)),
+        _ => None,
+    }
+}
+
+fn is_supported_trust_assertion_kind(kind: u16) -> bool {
+    matches!(
+        kind,
+        TRUST_ASSERTION_KIND_PUBKEY
+            | TRUST_ASSERTION_KIND_EVENT
+            | TRUST_ASSERTION_KIND_RELAY
+            | TRUST_ASSERTION_KIND_TOPIC
+    )
+}
+
+fn is_32byte_hex(value: &str) -> bool {
+    match hex::decode(value) {
+        Ok(bytes) => bytes.len() == 32,
+        Err(_) => false,
+    }
 }
 
 fn resolve_expected_pubkey<'a>(
@@ -1364,17 +1492,6 @@ fn event_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
     })
 }
 
-fn event_tag(event: &NostrEvent, name: &str) -> Option<Vec<String>> {
-    event.tags.iter().find_map(|tag| {
-        let values = tag.as_slice();
-        if values.first().map(|value| value.as_str()) == Some(name) {
-            Some(values.to_vec())
-        } else {
-            None
-        }
-    })
-}
-
 fn has_tag(event: &NostrEvent, name: &str) -> bool {
     event
         .tags
@@ -1392,6 +1509,17 @@ fn require_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
 
 fn require_exp_tag(event: &NostrEvent, now: i64) -> Option<i64> {
     let exp = require_tag_value(event, "exp")?
+        .trim()
+        .parse::<i64>()
+        .ok()?;
+    if exp <= now {
+        return None;
+    }
+    Some(exp)
+}
+
+fn require_expiration_tag(event: &NostrEvent, now: i64) -> Option<i64> {
+    let exp = require_tag_value(event, "expiration")?
         .trim()
         .parse::<i64>()
         .ok()?;
@@ -1493,43 +1621,6 @@ fn validate_kip_requirements(event: &NostrEvent, expected_kind: u16, now: i64) -
                 return false;
             }
             if has_tag(event, "policy_ref") && require_tag_value(event, "policy_ref").is_none() {
-                return false;
-            }
-        }
-        ATTESTATION_KIND => {
-            let sub_tag = match event_tag(event, "sub") {
-                Some(tag) => tag,
-                None => return false,
-            };
-            if sub_tag.len() < 3 {
-                return false;
-            }
-            if sub_tag
-                .get(1)
-                .map(|value| value.trim().is_empty())
-                .unwrap_or(true)
-                || sub_tag
-                    .get(2)
-                    .map(|value| value.trim().is_empty())
-                    .unwrap_or(true)
-            {
-                return false;
-            }
-            if require_tag_value(event, "claim").is_none() {
-                return false;
-            }
-            if require_exp_tag(event, now).is_none() {
-                return false;
-            }
-            if !validate_schema(event, KIP_ATTESTATION_SCHEMA) {
-                return false;
-            }
-        }
-        TRUST_ANCHOR_KIND => {
-            if require_tag_value(event, "attester").is_none() {
-                return false;
-            }
-            if require_tag_value(event, "weight").is_none() {
                 return false;
             }
         }
@@ -2132,26 +2223,23 @@ mod community_node_handler_tests {
         node
     }
 
-    fn build_attestation_event(exp: i64) -> serde_json::Value {
+    fn build_assertion_event(subject_pubkey: &str, exp: i64) -> serde_json::Value {
         let keys = Keys::generate();
         let exp_str = exp.to_string();
-        let subject = keys.public_key().to_string();
         let tags = vec![
-            Tag::parse(["k", KIP_NAMESPACE]).expect("k"),
-            Tag::parse(["ver", KIP_VERSION]).expect("ver"),
-            Tag::parse(["sub", "pubkey", subject.as_str()]).expect("sub"),
+            Tag::parse(["d", subject_pubkey]).expect("d"),
             Tag::parse(["claim", "reputation"]).expect("claim"),
-            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+            Tag::parse(["rank", "50"]).expect("rank"),
+            Tag::parse(["expiration", exp_str.as_str()]).expect("expiration"),
         ];
         let content = json!({
-            "schema": KIP_ATTESTATION_SCHEMA,
-            "subject": format!("pubkey:{subject}"),
+            "subject": format!("pubkey:{subject_pubkey}"),
             "claim": "reputation",
-            "value": { "score": 0.5 },
+            "score": 0.5,
             "expires": exp
         })
         .to_string();
-        let event = EventBuilder::new(Kind::Custom(ATTESTATION_KIND), content)
+        let event = EventBuilder::new(Kind::Custom(TRUST_ASSERTION_KIND_PUBKEY), content)
             .tags(tags)
             .sign_with_keys(&keys)
             .expect("sign");
@@ -2224,7 +2312,7 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
-    async fn trust_anchor_roundtrip() {
+    async fn trust_provider_roundtrip() {
         let key_manager = Arc::new(DefaultKeyManager::new());
         let keypair = key_manager.generate_keypair().await.expect("keypair");
         let secure_storage = Arc::new(InMemorySecureStorage::default());
@@ -2232,26 +2320,60 @@ mod community_node_handler_tests {
             Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
         let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
 
-        let request = CommunityNodeTrustAnchorRequest {
-            attester: keypair.public_key.clone(),
-            claim: Some("trust:v1".to_string()),
-            topic: Some("kukuri:topic1".to_string()),
-            weight: Some(0.6),
+        let request = CommunityNodeTrustProviderRequest {
+            provider_pubkey: keypair.public_key.clone(),
+            assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+            relay_url: Some("wss://relay.example".to_string()),
         };
-        let stored = handler.set_trust_anchor(request).await.expect("set");
+        let stored = handler.set_trust_provider(request).await.expect("set");
         let loaded = handler
-            .get_trust_anchor()
+            .get_trust_provider()
             .await
             .expect("get")
             .expect("stored");
-        assert_eq!(loaded.attester, stored.attester);
-        assert_eq!(loaded.weight, 0.6);
-        assert_eq!(loaded.claim, Some("trust:v1".to_string()));
-        assert_eq!(loaded.topic, Some("kukuri:topic1".to_string()));
+        assert_eq!(loaded.provider_pubkey, stored.provider_pubkey);
+        assert_eq!(loaded.assertion_kind, TRUST_ASSERTION_KIND_PUBKEY);
+        assert_eq!(loaded.relay_url, Some("wss://relay.example".to_string()));
     }
 
     #[tokio::test]
-    async fn trust_anchor_rejects_invalid_weight() {
+    async fn trust_provider_migrates_legacy_trust_anchor() {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let keypair = key_manager.generate_keypair().await.expect("keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler =
+            CommunityNodeHandler::new(key_manager.clone(), secure_storage.clone(), group_key_store);
+
+        let legacy = LegacyStoredTrustAnchor {
+            attester: keypair.public_key.clone(),
+            claim: None,
+            topic: None,
+            weight: 1.0,
+            issued_at: 42,
+            event_json: json!({ "kind": 39011 }),
+        };
+        secure_storage
+            .store(
+                COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY,
+                &serde_json::to_string(&legacy).expect("legacy serialize"),
+            )
+            .await
+            .expect("store legacy");
+
+        let loaded = handler
+            .get_trust_provider()
+            .await
+            .expect("get")
+            .expect("provider");
+        assert_eq!(loaded.provider_pubkey, keypair.public_key);
+        assert_eq!(loaded.assertion_kind, TRUST_ASSERTION_KIND_PUBKEY);
+        assert!(loaded.relay_url.is_none());
+    }
+
+    #[tokio::test]
+    async fn trust_provider_rejects_invalid_assertion_kind() {
         let key_manager = Arc::new(DefaultKeyManager::new());
         let keypair = key_manager.generate_keypair().await.expect("keypair");
         let secure_storage = Arc::new(InMemorySecureStorage::default());
@@ -2259,13 +2381,12 @@ mod community_node_handler_tests {
             Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
         let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
 
-        let request = CommunityNodeTrustAnchorRequest {
-            attester: keypair.public_key.clone(),
-            claim: None,
-            topic: None,
-            weight: Some(1.5),
+        let request = CommunityNodeTrustProviderRequest {
+            provider_pubkey: keypair.public_key.clone(),
+            assertion_kind: Some(20000),
+            relay_url: None,
         };
-        assert!(handler.set_trust_anchor(request).await.is_err());
+        assert!(handler.set_trust_provider(request).await.is_err());
     }
 
     #[tokio::test]
@@ -2561,14 +2682,16 @@ mod community_node_handler_tests {
     #[tokio::test]
     async fn trust_report_based_aggregates_scores_across_nodes() {
         let exp = Utc::now().timestamp() + 600;
-        let event_json = build_attestation_event(exp);
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let event_json = build_assertion_event(&subject_pubkey, exp);
         let response1 = json!({
             "score": 0.2,
-            "attestation": { "exp": exp, "event_json": event_json.clone() }
+            "assertion": { "exp": exp, "event_json": event_json.clone() }
         });
         let response2 = json!({
             "score": 0.6,
-            "attestation": { "exp": exp, "event_json": event_json }
+            "assertion": { "exp": exp, "event_json": event_json }
         });
 
         let (base_url1, rx1, handle1) = spawn_json_server(response1);
@@ -2592,7 +2715,7 @@ mod community_node_handler_tests {
         let response = handler
             .trust_report_based(CommunityNodeTrustRequest {
                 base_url: None,
-                subject: "npub1testsubject".to_string(),
+                subject: subject.clone(),
             })
             .await
             .expect("trust response");
@@ -2619,17 +2742,11 @@ mod community_node_handler_tests {
 
         let req1 = rx1.recv_timeout(Duration::from_secs(2)).expect("request 1");
         assert_eq!(req1.path, "/v1/trust/report-based");
-        assert_eq!(
-            req1.params.get("subject"),
-            Some(&"npub1testsubject".to_string())
-        );
+        assert_eq!(req1.params.get("subject"), Some(&subject));
 
         let req2 = rx2.recv_timeout(Duration::from_secs(2)).expect("request 2");
         assert_eq!(req2.path, "/v1/trust/report-based");
-        assert_eq!(
-            req2.params.get("subject"),
-            Some(&"npub1testsubject".to_string())
-        );
+        assert_eq!(req2.params.get("subject"), Some(&subject));
 
         handle1.join().expect("server1");
         handle2.join().expect("server2");

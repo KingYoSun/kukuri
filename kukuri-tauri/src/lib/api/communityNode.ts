@@ -65,18 +65,16 @@ export interface CommunityNodeReportRequest {
   reason?: string;
 }
 
-export interface CommunityNodeTrustAnchorRequest {
-  attester: string;
-  claim?: string;
-  topic?: string;
-  weight?: number;
+export interface CommunityNodeTrustProviderRequest {
+  provider_pubkey: string;
+  assertion_kind?: number;
+  relay_url?: string;
 }
 
-export interface CommunityNodeTrustAnchorState {
-  attester: string;
-  claim?: string;
-  topic?: string;
-  weight: number;
+export interface CommunityNodeTrustProviderState {
+  provider_pubkey: string;
+  assertion_kind: number;
+  relay_url?: string;
   issued_at: number;
   event_json: unknown;
 }
@@ -170,11 +168,13 @@ export const communityNodeApi = {
   acceptConsents: (request: CommunityNodeConsentRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_accept_consents', { request }),
 
-  getTrustAnchor: () =>
-    invokeCommand<CommunityNodeTrustAnchorState | null>('community_node_get_trust_anchor'),
+  getTrustProvider: () =>
+    invokeCommand<CommunityNodeTrustProviderState | null>('community_node_get_trust_provider'),
 
-  setTrustAnchor: (request: CommunityNodeTrustAnchorRequest) =>
-    invokeCommand<CommunityNodeTrustAnchorState>('community_node_set_trust_anchor', { request }),
+  setTrustProvider: (request: CommunityNodeTrustProviderRequest) =>
+    invokeCommand<CommunityNodeTrustProviderState>('community_node_set_trust_provider', {
+      request,
+    }),
 
-  clearTrustAnchor: () => invokeCommandVoid('community_node_clear_trust_anchor'),
+  clearTrustProvider: () => invokeCommandVoid('community_node_clear_trust_provider'),
 };

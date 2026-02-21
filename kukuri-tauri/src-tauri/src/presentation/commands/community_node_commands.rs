@@ -3,7 +3,7 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
     CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeSearchRequest,
-    CommunityNodeTokenRequest, CommunityNodeTrustAnchorRequest, CommunityNodeTrustAnchorState,
+    CommunityNodeTokenRequest, CommunityNodeTrustProviderRequest, CommunityNodeTrustProviderState,
     CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
@@ -54,27 +54,30 @@ pub async fn community_node_clear_token(
 }
 
 #[tauri::command]
-pub async fn community_node_get_trust_anchor(
+pub async fn community_node_get_trust_provider(
     state: State<'_, AppState>,
-) -> Result<ApiResponse<Option<CommunityNodeTrustAnchorState>>, AppError> {
-    let result = state.community_node_handler.get_trust_anchor().await;
+) -> Result<ApiResponse<Option<CommunityNodeTrustProviderState>>, AppError> {
+    let result = state.community_node_handler.get_trust_provider().await;
     Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
-pub async fn community_node_set_trust_anchor(
+pub async fn community_node_set_trust_provider(
     state: State<'_, AppState>,
-    request: CommunityNodeTrustAnchorRequest,
-) -> Result<ApiResponse<CommunityNodeTrustAnchorState>, AppError> {
-    let result = state.community_node_handler.set_trust_anchor(request).await;
+    request: CommunityNodeTrustProviderRequest,
+) -> Result<ApiResponse<CommunityNodeTrustProviderState>, AppError> {
+    let result = state
+        .community_node_handler
+        .set_trust_provider(request)
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 
 #[tauri::command]
-pub async fn community_node_clear_trust_anchor(
+pub async fn community_node_clear_trust_provider(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = state.community_node_handler.clear_trust_anchor().await;
+    let result = state.community_node_handler.clear_trust_provider().await;
     Ok(ApiResponse::from_result(result))
 }
 

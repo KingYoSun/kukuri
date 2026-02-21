@@ -46,7 +46,7 @@ Access Control は **P2P-only** を正とし、本ノードでは原則扱わな
 ### 1.5 通報・モデレーション・トラスト
 
 - report（通報者 pubkey、対象、理由等）
-- label/attestation（発行者 pubkey、対象、期限等）
+- label/assertion（発行者 pubkey、対象、期限等）
 - trust 計算用のグラフ（エッジ、スコア、根拠。pubkey を含む）
 - LLM moderation の判定結果（event_id 参照、カテゴリ/スコア、provider 等）
   - 外部送信範囲/保存/保持は `docs/03_implementation/community_nodes/llm_moderation_policy.md` を優先する

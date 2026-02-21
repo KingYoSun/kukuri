@@ -135,7 +135,7 @@ fn runtime_config_json() -> serde_json::Value {
                 "1": 1.0
             }
         },
-        "attestation": {
+        "assertion": {
             "exp_seconds": 3600
         },
         "jobs": {
@@ -313,7 +313,7 @@ async fn cleanup_artifacts(pool: &Pool<Postgres>, event_ids: &[String], pubkeys:
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn report_and_interaction_ingest_updates_scores_attestations_and_jobs() {
+async fn report_and_interaction_ingest_updates_scores_assertions_and_jobs() {
     let _guard = lock_tests();
 
     let pool = PgPoolOptions::new()
@@ -431,14 +431,17 @@ async fn report_and_interaction_ingest_updates_scores_attestations_and_jobs() {
     let report_attestation_id = report_attestation_id.expect("report attestation id");
 
     let report_attestation = load_attestation_event(&pool, &report_attestation_id).await;
-    assert_eq!(report_attestation.kind, 39010);
+    assert_eq!(
+        report_attestation.kind,
+        u32::from(trust_core::KIND_TRUST_ASSERTION_PUBKEY)
+    );
     assert_eq!(
         report_attestation.first_tag_value("claim").as_deref(),
         Some(trust_core::CLAIM_REPORT_BASED)
     );
     assert_eq!(
-        report_attestation.first_tag_value("sub").as_deref(),
-        Some("pubkey")
+        report_attestation.first_tag_value("d").as_deref(),
+        Some(subject_event.pubkey.as_str())
     );
 
     let communication_score_row = sqlx::query(
@@ -470,7 +473,10 @@ async fn report_and_interaction_ingest_updates_scores_attestations_and_jobs() {
 
     let communication_attestation =
         load_attestation_event(&pool, &communication_attestation_id).await;
-    assert_eq!(communication_attestation.kind, 39010);
+    assert_eq!(
+        communication_attestation.kind,
+        u32::from(trust_core::KIND_TRUST_ASSERTION_PUBKEY)
+    );
     assert_eq!(
         communication_attestation
             .first_tag_value("claim")
@@ -478,8 +484,8 @@ async fn report_and_interaction_ingest_updates_scores_attestations_and_jobs() {
         Some(trust_core::CLAIM_COMMUNICATION_DENSITY)
     );
     assert_eq!(
-        communication_attestation.first_tag_value("sub").as_deref(),
-        Some("pubkey")
+        communication_attestation.first_tag_value("d").as_deref(),
+        Some(subject_event.pubkey.as_str())
     );
 
     ensure_job_schedules(&pool, &runtime)

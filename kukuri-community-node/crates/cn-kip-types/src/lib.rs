@@ -10,15 +10,17 @@ pub const KIND_NODE_DESCRIPTOR: u32 = 39000;
 pub const KIND_NODE_TOPIC_SERVICE: u32 = 39001;
 pub const KIND_REPORT: u32 = 39005;
 pub const KIND_LABEL: u32 = 39006;
-pub const KIND_ATTESTATION: u32 = 39010;
-pub const KIND_TRUST_ANCHOR: u32 = 39011;
+pub const KIND_TRUST_ASSERTION_PUBKEY: u32 = 30382;
+pub const KIND_TRUST_ASSERTION_EVENT: u32 = 30383;
+pub const KIND_TRUST_ASSERTION_RELAY: u32 = 30384;
+pub const KIND_TRUST_ASSERTION_TOPIC: u32 = 30385;
+pub const KIND_TRUST_PROVIDER_LIST: u32 = 10040;
 pub const KIND_KEY_ENVELOPE: u32 = 39020;
 pub const KIND_INVITE_CAPABILITY: u32 = 39021;
 pub const KIND_JOIN_REQUEST: u32 = 39022;
 
 pub const SCHEMA_NODE_DESCRIPTOR: &str = "kukuri-node-desc-v1";
 pub const SCHEMA_NODE_TOPIC_SERVICE: &str = "kukuri-topic-service-v1";
-pub const SCHEMA_ATTESTATION: &str = "kukuri-attest-v1";
 pub const SCHEMA_KEY_ENVELOPE: &str = "kukuri-key-envelope-v1";
 pub const SCHEMA_INVITE_CAPABILITY: &str = "kukuri-invite-v1";
 pub const SCHEMA_JOIN_REQUEST: &str = "kukuri-join-request-v1";
@@ -29,8 +31,8 @@ pub enum KipKind {
     NodeTopicService,
     Report,
     Label,
-    Attestation,
-    TrustAnchor,
+    TrustAssertion,
+    TrustProviderList,
     KeyEnvelope,
     InviteCapability,
     JoinRequest,
@@ -43,8 +45,11 @@ impl KipKind {
             KIND_NODE_TOPIC_SERVICE => Some(Self::NodeTopicService),
             KIND_REPORT => Some(Self::Report),
             KIND_LABEL => Some(Self::Label),
-            KIND_ATTESTATION => Some(Self::Attestation),
-            KIND_TRUST_ANCHOR => Some(Self::TrustAnchor),
+            KIND_TRUST_ASSERTION_PUBKEY
+            | KIND_TRUST_ASSERTION_EVENT
+            | KIND_TRUST_ASSERTION_RELAY
+            | KIND_TRUST_ASSERTION_TOPIC => Some(Self::TrustAssertion),
+            KIND_TRUST_PROVIDER_LIST => Some(Self::TrustProviderList),
             KIND_KEY_ENVELOPE => Some(Self::KeyEnvelope),
             KIND_INVITE_CAPABILITY => Some(Self::InviteCapability),
             KIND_JOIN_REQUEST => Some(Self::JoinRequest),
@@ -76,6 +81,10 @@ pub fn is_kip_kind(kind: u32) -> bool {
     KipKind::from_kind(kind).is_some()
 }
 
+fn requires_kip_namespace(kind: KipKind) -> bool {
+    !matches!(kind, KipKind::TrustAssertion | KipKind::TrustProviderList)
+}
+
 pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<KipKind> {
     let raw_kind = raw.kind;
     let kind =
@@ -85,14 +94,14 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
         cn_core::nostr::verify_event(raw)?;
     }
 
-    if options.require_k_tag {
+    if options.require_k_tag && requires_kip_namespace(kind) {
         let value = require_tag_value(raw, "k")?;
         if value != KIP_NAMESPACE {
             return Err(anyhow!("invalid k tag: {value}"));
         }
     }
 
-    if options.require_ver_tag {
+    if options.require_ver_tag && requires_kip_namespace(kind) {
         let value = require_tag_value(raw, "ver")?;
         if value != KIP_VERSION {
             return Err(anyhow!("invalid ver tag: {value}"));
@@ -133,18 +142,33 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
                 require_tag_value(raw, "policy_ref")?;
             }
         }
-        KipKind::Attestation => {
-            let sub_tag = require_tag(raw, "sub")?;
-            if sub_tag.len() < 3 {
-                return Err(anyhow!("invalid sub tag"));
-            }
+        KipKind::TrustAssertion => {
+            require_tag_value(raw, "d")?;
             require_tag_value(raw, "claim")?;
-            require_exp_tag(raw, options.now)?;
-            validate_schema(raw, SCHEMA_ATTESTATION)?;
+            let rank = require_tag_value(raw, "rank")?
+                .parse::<i64>()
+                .map_err(|_| anyhow!("invalid rank tag"))?;
+            if !(0..=100).contains(&rank) {
+                return Err(anyhow!("invalid rank tag"));
+            }
+            require_expiration_tag(raw, options.now)?;
         }
-        KipKind::TrustAnchor => {
-            require_tag_value(raw, "attester")?;
-            require_tag_value(raw, "weight")?;
+        KipKind::TrustProviderList => {
+            let has_provider_tag = raw.tags.iter().any(|tag| {
+                let Some(name) = tag.first() else {
+                    return false;
+                };
+                if !name.ends_with(":rank") {
+                    return false;
+                }
+                if tag.len() < 2 {
+                    return false;
+                }
+                !tag[1].trim().is_empty()
+            });
+            if !has_provider_tag {
+                return Err(anyhow!("missing trust provider tag"));
+            }
         }
         KipKind::KeyEnvelope => {
             require_tag_value(raw, "p")?;
@@ -188,14 +212,6 @@ fn require_tag_value(raw: &RawEvent, name: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("missing {name} tag"))
 }
 
-fn require_tag(raw: &RawEvent, name: &str) -> Result<Vec<String>> {
-    raw.tags
-        .iter()
-        .find(|tag| tag.first().map(|value| value.as_str()) == Some(name))
-        .cloned()
-        .ok_or_else(|| anyhow!("missing {name} tag"))
-}
-
 fn has_tag(raw: &RawEvent, name: &str) -> bool {
     raw.tags
         .iter()
@@ -206,6 +222,16 @@ fn require_exp_tag(raw: &RawEvent, now: i64) -> Result<i64> {
     let exp = raw.exp_tag().ok_or_else(|| anyhow!("missing exp tag"))?;
     if exp <= now {
         return Err(anyhow!("expired exp tag"));
+    }
+    Ok(exp)
+}
+
+fn require_expiration_tag(raw: &RawEvent, now: i64) -> Result<i64> {
+    let exp = raw
+        .expiration_tag()
+        .ok_or_else(|| anyhow!("missing expiration tag"))?;
+    if exp <= now {
+        return Err(anyhow!("expired expiration tag"));
     }
     Ok(exp)
 }
@@ -508,35 +534,43 @@ mod tests {
     }
 
     #[test]
-    fn validate_attestation_accepts_valid_event() {
+    fn validate_trust_assertion_accepts_valid_event() {
         let keys = Keys::generate();
+        let subject_keys = Keys::generate();
         let tags = vec![
-            vec!["sub".to_string(), "topic".to_string(), "trust".to_string()],
-            vec!["claim".to_string(), "score:0.7".to_string()],
-            vec!["exp".to_string(), (current_unix_seconds() + 60).to_string()],
-            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
-            vec!["ver".to_string(), KIP_VERSION.to_string()],
+            vec!["d".to_string(), subject_keys.public_key().to_hex()],
+            vec!["claim".to_string(), "reputation".to_string()],
+            vec!["rank".to_string(), "70".to_string()],
+            vec![
+                "expiration".to_string(),
+                (current_unix_seconds() + 60).to_string(),
+            ],
         ];
-        let content = json!({ "schema": SCHEMA_ATTESTATION }).to_string();
-        let event = nostr::build_signed_event(&keys, KIND_ATTESTATION as u16, tags, content)
-            .expect("event");
+        let event = nostr::build_signed_event(
+            &keys,
+            KIND_TRUST_ASSERTION_PUBKEY as u16,
+            tags,
+            String::new(),
+        )
+        .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
-        assert_eq!(kind, KipKind::Attestation);
+        assert_eq!(kind, KipKind::TrustAssertion);
     }
 
     #[test]
-    fn validate_trust_anchor_accepts_valid_event() {
+    fn validate_trust_provider_list_accepts_valid_event() {
         let keys = Keys::generate();
-        let tags = vec![
-            vec!["attester".to_string(), keys.public_key().to_hex()],
-            vec!["weight".to_string(), "0.5".to_string()],
-            vec!["k".to_string(), KIP_NAMESPACE.to_string()],
-            vec!["ver".to_string(), KIP_VERSION.to_string()],
-        ];
-        let event = nostr::build_signed_event(&keys, KIND_TRUST_ANCHOR as u16, tags, String::new())
-            .expect("event");
+        let provider_keys = Keys::generate();
+        let tags = vec![vec![
+            "30382:rank".to_string(),
+            provider_keys.public_key().to_hex(),
+            "wss://relay.example".to_string(),
+        ]];
+        let event =
+            nostr::build_signed_event(&keys, KIND_TRUST_PROVIDER_LIST as u16, tags, String::new())
+                .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
-        assert_eq!(kind, KipKind::TrustAnchor);
+        assert_eq!(kind, KipKind::TrustProviderList);
     }
 
     #[test]

@@ -1563,41 +1563,40 @@ pub async fn trust_report_based(
             "label_count": 0,
             "window_start": null,
             "window_end": null,
-            "attestation": null,
+            "assertion": null,
             "updated_at": null
         })));
     };
 
-    let attestation_id: Option<String> = row.try_get("attestation_id")?;
-    let attestation_exp: Option<i64> = row.try_get("attestation_exp")?;
-    let attestation = if let (Some(attestation_id), Some(attestation_exp)) =
-        (attestation_id.as_ref(), attestation_exp)
-    {
-        if attestation_exp > now {
-            let event_json = sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
-            )
-            .bind(attestation_id)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|err| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    err.to_string(),
+    let assertion_id: Option<String> = row.try_get("attestation_id")?;
+    let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
+    let assertion =
+        if let (Some(assertion_id), Some(assertion_exp)) = (assertion_id.as_ref(), assertion_exp) {
+            if assertion_exp > now {
+                let event_json = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
                 )
-            })?;
-            Some(json!({
-                "attestation_id": attestation_id,
-                "exp": attestation_exp,
-                "event_json": event_json
-            }))
+                .bind(assertion_id)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(|err| {
+                    ApiError::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "DB_ERROR",
+                        err.to_string(),
+                    )
+                })?;
+                Some(json!({
+                    "assertion_id": assertion_id,
+                    "exp": assertion_exp,
+                    "event_json": event_json
+                }))
+            } else {
+                None
+            }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -1609,7 +1608,7 @@ pub async fn trust_report_based(
         "label_count": row.try_get::<i64, _>("label_count")?,
         "window_start": row.try_get::<i64, _>("window_start")?,
         "window_end": row.try_get::<i64, _>("window_end")?,
-        "attestation": attestation,
+        "assertion": assertion,
         "updated_at": updated_at.timestamp()
     })))
 }
@@ -1653,41 +1652,40 @@ pub async fn trust_communication_density(
             "peer_count": 0,
             "window_start": null,
             "window_end": null,
-            "attestation": null,
+            "assertion": null,
             "updated_at": null
         })));
     };
 
-    let attestation_id: Option<String> = row.try_get("attestation_id")?;
-    let attestation_exp: Option<i64> = row.try_get("attestation_exp")?;
-    let attestation = if let (Some(attestation_id), Some(attestation_exp)) =
-        (attestation_id.as_ref(), attestation_exp)
-    {
-        if attestation_exp > now {
-            let event_json = sqlx::query_scalar::<_, serde_json::Value>(
-                "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
-            )
-            .bind(attestation_id)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|err| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    err.to_string(),
+    let assertion_id: Option<String> = row.try_get("attestation_id")?;
+    let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
+    let assertion =
+        if let (Some(assertion_id), Some(assertion_exp)) = (assertion_id.as_ref(), assertion_exp) {
+            if assertion_exp > now {
+                let event_json = sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
                 )
-            })?;
-            Some(json!({
-                "attestation_id": attestation_id,
-                "exp": attestation_exp,
-                "event_json": event_json
-            }))
+                .bind(assertion_id)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(|err| {
+                    ApiError::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "DB_ERROR",
+                        err.to_string(),
+                    )
+                })?;
+                Some(json!({
+                    "assertion_id": assertion_id,
+                    "exp": assertion_exp,
+                    "event_json": event_json
+                }))
+            } else {
+                None
+            }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
@@ -1699,7 +1697,7 @@ pub async fn trust_communication_density(
         "peer_count": row.try_get::<i64, _>("peer_count")?,
         "window_start": row.try_get::<i64, _>("window_start")?,
         "window_end": row.try_get::<i64, _>("window_end")?,
-        "attestation": attestation,
+        "assertion": assertion,
         "updated_at": updated_at.timestamp()
     })))
 }

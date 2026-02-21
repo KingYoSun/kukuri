@@ -232,7 +232,7 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                         "7": 0.3
                     }
                 },
-                "attestation": { "exp_seconds": 86400 },
+                "assertion": { "exp_seconds": 86400 },
                 "jobs": {
                     "schedule_poll_seconds": 30,
                     "report_based_interval_seconds": 86400,
