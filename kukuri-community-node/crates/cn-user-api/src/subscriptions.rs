@@ -1870,7 +1870,7 @@ async fn load_latest_active_assertion(
     now: i64,
 ) -> ApiResult<Option<LatestTrustAssertion>> {
     let row = sqlx::query(
-        "SELECT attestation_id, score, exp, event_json, issued_at          FROM cn_trust.attestations          WHERE subject = $1 AND claim = $2 AND exp > $3          ORDER BY exp DESC, issued_at DESC          LIMIT 1",
+        "SELECT attestation_id, score, exp, event_json, issued_at          FROM cn_trust.attestations          WHERE subject = $1 AND claim = $2 AND exp > $3          ORDER BY issued_at DESC, exp DESC          LIMIT 1",
     )
     .bind(subject)
     .bind(claim)
@@ -2974,6 +2974,103 @@ mod api_contract_tests {
             .execute(&pool)
             .await
             .expect("cleanup trust attestation");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_prefers_latest_issued_at_when_exp_differs() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let (older_attestation_id, _) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.15).await;
+        let (newer_attestation_id, _) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.91).await;
+
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let older_exp = now + 3600;
+        let newer_exp = now + 1200;
+        sqlx::query(
+            "UPDATE cn_trust.attestations              SET exp = $1, issued_at = to_timestamp($2::double precision)              WHERE attestation_id = $3",
+        )
+        .bind(older_exp)
+        .bind(now - 120)
+        .bind(&older_attestation_id)
+        .execute(&pool)
+        .await
+        .expect("set older attestation timing");
+        sqlx::query(
+            "UPDATE cn_trust.attestations              SET exp = $1, issued_at = to_timestamp($2::double precision)              WHERE attestation_id = $3",
+        )
+        .bind(newer_exp)
+        .bind(now - 30)
+        .bind(&newer_attestation_id)
+        .execute(&pool)
+        .await
+        .expect("set newer attestation timing");
+
+        let missing_attestation_id = Uuid::new_v4().to_string();
+        upsert_report_score(
+            &pool,
+            &subject_pubkey,
+            0.44,
+            5,
+            1,
+            Some(missing_attestation_id.as_str()),
+            Some(now + 600),
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/report-based?subject={query_subject}"),
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(newer_attestation_id.as_str())
+        );
+        assert_ne!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(older_attestation_id.as_str())
+        );
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("exp"))
+                .and_then(Value::as_i64),
+            Some(newer_exp)
+        );
+
+        sqlx::query("DELETE FROM cn_trust.report_scores WHERE subject_pubkey = $1")
+            .bind(&subject_pubkey)
+            .execute(&pool)
+            .await
+            .expect("cleanup report score");
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = ANY($1)")
+            .bind(vec![older_attestation_id, newer_attestation_id])
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestations");
     }
 
     #[tokio::test]
