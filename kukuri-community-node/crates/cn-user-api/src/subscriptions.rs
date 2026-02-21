@@ -2840,6 +2840,69 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn trust_report_based_contract_rejects_invalid_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            "/v1/trust/report-based?subject=pubkey%3Anot-a-valid-pubkey",
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("INVALID_SUBJECT")
+        );
+        assert!(payload.get("message").and_then(Value::as_str).is_some());
+        assert_eq!(payload.get("score"), None);
+        assert_eq!(payload.get("assertion"), None);
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_contract_rejects_invalid_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            "/v1/trust/communication-density?subject=addressable%3Akind%3Anot-a-pubkey%3Ainvalid",
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("INVALID_SUBJECT")
+        );
+        assert!(payload.get("message").and_then(Value::as_str).is_some());
+        assert_eq!(payload.get("score"), None);
+        assert_eq!(payload.get("assertion"), None);
+    }
+
+    #[tokio::test]
     async fn trust_report_based_contract_supports_event_subject() {
         let state = test_state().await;
         let pool = state.pool.clone();
