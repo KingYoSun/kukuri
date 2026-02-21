@@ -19,6 +19,7 @@ use crate::auth::{current_rate_limit, enforce_rate_limit, require_auth, AuthCont
 use crate::billing::{check_topic_limit, consume_quota};
 use crate::policies::require_consents;
 use crate::{ApiError, ApiResult, AppState};
+use cn_core::trust::{CLAIM_COMMUNICATION_DENSITY, CLAIM_REPORT_BASED};
 
 const DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY: i64 = 5;
 const TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT: &[u8] =
@@ -158,6 +159,19 @@ pub struct TrendingQuery {
 #[derive(Deserialize)]
 pub struct TrustQuery {
     pub subject: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedTrustSubject {
+    canonical: String,
+    pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct LatestTrustAssertion {
+    assertion: Value,
+    score: f64,
+    updated_at: i64,
 }
 
 #[derive(Deserialize)]
@@ -1542,74 +1556,71 @@ pub async fn trust_report_based(
     )
     .await?;
 
-    let subject_pubkey = parse_trust_subject(&query.subject)?;
+    let parsed_subject = parse_trust_subject(&query.subject)?;
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let subject = parsed_subject.canonical.clone();
 
-    let row = sqlx::query(
-        "SELECT score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.report_scores          WHERE subject_pubkey = $1",
-    )
-    .bind(&subject_pubkey)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let row = if let Some(subject_pubkey) = parsed_subject.pubkey.as_ref() {
+        sqlx::query(
+            "SELECT score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.report_scores          WHERE subject_pubkey = $1",
+        )
+        .bind(subject_pubkey)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        })?
+    } else {
+        None
+    };
 
-    let subject = format!("pubkey:{subject_pubkey}");
-    let Some(row) = row else {
+    if let Some(row) = row {
+        let assertion_id: Option<String> = row.try_get("attestation_id")?;
+        let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
+        let assertion =
+            load_referenced_assertion(&state.pool, assertion_id.as_deref().zip(assertion_exp), now)
+                .await?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
         return Ok(Json(json!({
             "subject": subject,
             "method": "report-based",
-            "score": 0.0,
+            "score": row.try_get::<f64, _>("score")?,
+            "report_count": row.try_get::<i64, _>("report_count")?,
+            "label_count": row.try_get::<i64, _>("label_count")?,
+            "window_start": row.try_get::<i64, _>("window_start")?,
+            "window_end": row.try_get::<i64, _>("window_end")?,
+            "assertion": assertion,
+            "updated_at": updated_at.timestamp()
+        })));
+    }
+
+    let latest_assertion =
+        load_latest_active_assertion(&state.pool, &subject, CLAIM_REPORT_BASED, now).await?;
+    if let Some(latest_assertion) = latest_assertion {
+        return Ok(Json(json!({
+            "subject": subject,
+            "method": "report-based",
+            "score": latest_assertion.score,
             "report_count": 0,
             "label_count": 0,
             "window_start": null,
             "window_end": null,
-            "assertion": null,
-            "updated_at": null
+            "assertion": latest_assertion.assertion,
+            "updated_at": latest_assertion.updated_at
         })));
-    };
-
-    let assertion_id: Option<String> = row.try_get("attestation_id")?;
-    let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
-    let assertion =
-        if let (Some(assertion_id), Some(assertion_exp)) = (assertion_id.as_ref(), assertion_exp) {
-            if assertion_exp > now {
-                let event_json = sqlx::query_scalar::<_, serde_json::Value>(
-                    "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
-                )
-                .bind(assertion_id)
-                .fetch_optional(&state.pool)
-                .await
-                .map_err(|err| {
-                    ApiError::new(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "DB_ERROR",
-                        err.to_string(),
-                    )
-                })?;
-                Some(json!({
-                    "assertion_id": assertion_id,
-                    "exp": assertion_exp,
-                    "event_json": event_json
-                }))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-    let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+    }
 
     Ok(Json(json!({
         "subject": subject,
         "method": "report-based",
-        "score": row.try_get::<f64, _>("score")?,
-        "report_count": row.try_get::<i64, _>("report_count")?,
-        "label_count": row.try_get::<i64, _>("label_count")?,
-        "window_start": row.try_get::<i64, _>("window_start")?,
-        "window_end": row.try_get::<i64, _>("window_end")?,
-        "assertion": assertion,
-        "updated_at": updated_at.timestamp()
+        "score": 0.0,
+        "report_count": 0,
+        "label_count": 0,
+        "window_start": null,
+        "window_end": null,
+        "assertion": null,
+        "updated_at": null
     })))
 }
 
@@ -1631,95 +1642,237 @@ pub async fn trust_communication_density(
     )
     .await?;
 
-    let subject_pubkey = parse_trust_subject(&query.subject)?;
+    let parsed_subject = parse_trust_subject(&query.subject)?;
     let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+    let subject = parsed_subject.canonical.clone();
 
-    let row = sqlx::query(
-        "SELECT score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.communication_scores          WHERE subject_pubkey = $1",
-    )
-    .bind(&subject_pubkey)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let row = if let Some(subject_pubkey) = parsed_subject.pubkey.as_ref() {
+        sqlx::query(
+            "SELECT score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp, updated_at          FROM cn_trust.communication_scores          WHERE subject_pubkey = $1",
+        )
+        .bind(subject_pubkey)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|err| {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string())
+        })?
+    } else {
+        None
+    };
 
-    let subject = format!("pubkey:{subject_pubkey}");
-    let Some(row) = row else {
+    if let Some(row) = row {
+        let assertion_id: Option<String> = row.try_get("attestation_id")?;
+        let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
+        let assertion =
+            load_referenced_assertion(&state.pool, assertion_id.as_deref().zip(assertion_exp), now)
+                .await?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+
         return Ok(Json(json!({
             "subject": subject,
             "method": "communication-density",
-            "score": 0.0,
+            "score": row.try_get::<f64, _>("score")?,
+            "interaction_count": row.try_get::<i64, _>("interaction_count")?,
+            "peer_count": row.try_get::<i64, _>("peer_count")?,
+            "window_start": row.try_get::<i64, _>("window_start")?,
+            "window_end": row.try_get::<i64, _>("window_end")?,
+            "assertion": assertion,
+            "updated_at": updated_at.timestamp()
+        })));
+    }
+
+    let latest_assertion =
+        load_latest_active_assertion(&state.pool, &subject, CLAIM_COMMUNICATION_DENSITY, now)
+            .await?;
+    if let Some(latest_assertion) = latest_assertion {
+        return Ok(Json(json!({
+            "subject": subject,
+            "method": "communication-density",
+            "score": latest_assertion.score,
             "interaction_count": 0,
             "peer_count": 0,
             "window_start": null,
             "window_end": null,
-            "assertion": null,
-            "updated_at": null
+            "assertion": latest_assertion.assertion,
+            "updated_at": latest_assertion.updated_at
         })));
-    };
-
-    let assertion_id: Option<String> = row.try_get("attestation_id")?;
-    let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
-    let assertion =
-        if let (Some(assertion_id), Some(assertion_exp)) = (assertion_id.as_ref(), assertion_exp) {
-            if assertion_exp > now {
-                let event_json = sqlx::query_scalar::<_, serde_json::Value>(
-                    "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
-                )
-                .bind(assertion_id)
-                .fetch_optional(&state.pool)
-                .await
-                .map_err(|err| {
-                    ApiError::new(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "DB_ERROR",
-                        err.to_string(),
-                    )
-                })?;
-                Some(json!({
-                    "assertion_id": assertion_id,
-                    "exp": assertion_exp,
-                    "event_json": event_json
-                }))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-    let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+    }
 
     Ok(Json(json!({
         "subject": subject,
         "method": "communication-density",
-        "score": row.try_get::<f64, _>("score")?,
-        "interaction_count": row.try_get::<i64, _>("interaction_count")?,
-        "peer_count": row.try_get::<i64, _>("peer_count")?,
-        "window_start": row.try_get::<i64, _>("window_start")?,
-        "window_end": row.try_get::<i64, _>("window_end")?,
-        "assertion": assertion,
-        "updated_at": updated_at.timestamp()
+        "score": 0.0,
+        "interaction_count": 0,
+        "peer_count": 0,
+        "window_start": null,
+        "window_end": null,
+        "assertion": null,
+        "updated_at": null
     })))
 }
 
 #[allow(clippy::result_large_err)]
-fn parse_trust_subject(subject: &str) -> ApiResult<String> {
+fn parse_trust_subject(subject: &str) -> ApiResult<ParsedTrustSubject> {
     let subject = subject.trim();
-    let pubkey = subject.strip_prefix("pubkey:").ok_or_else(|| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SUBJECT",
-            "subject must start with pubkey:",
-        )
-    })?;
-    if PublicKey::from_hex(pubkey).is_err() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SUBJECT",
-            "invalid pubkey",
+    let mut parts = subject.splitn(2, ':');
+    let kind = parts.next().unwrap_or_default().trim();
+    let value = parts.next().unwrap_or_default().trim();
+    if kind.is_empty() || value.is_empty() {
+        return Err(invalid_subject("subject must use <kind>:<value> format"));
+    }
+
+    match kind {
+        "pubkey" => {
+            let pubkey = PublicKey::from_hex(value)
+                .map_err(|_| invalid_subject("invalid pubkey subject"))?
+                .to_hex();
+            Ok(ParsedTrustSubject {
+                canonical: format!("pubkey:{pubkey}"),
+                pubkey: Some(pubkey),
+            })
+        }
+        "event" => {
+            let event_id = normalize_32byte_hex(value, "event subject")?;
+            Ok(ParsedTrustSubject {
+                canonical: format!("event:{event_id}"),
+                pubkey: None,
+            })
+        }
+        "relay" => Ok(ParsedTrustSubject {
+            canonical: format!("relay:{value}"),
+            pubkey: None,
+        }),
+        "topic" => {
+            let topic_id = normalize_topic_id(value)
+                .map_err(|err| invalid_subject(format!("invalid topic subject: {err}")))?;
+            Ok(ParsedTrustSubject {
+                canonical: format!("topic:{topic_id}"),
+                pubkey: None,
+            })
+        }
+        "addressable" => {
+            let addressable = normalize_addressable_subject(value)?;
+            Ok(ParsedTrustSubject {
+                canonical: format!("addressable:{addressable}"),
+                pubkey: None,
+            })
+        }
+        _ => Err(invalid_subject(
+            "subject kind must be one of: pubkey, event, relay, topic, addressable",
+        )),
+    }
+}
+
+fn invalid_subject(message: impl Into<String>) -> ApiError {
+    ApiError::new(StatusCode::BAD_REQUEST, "INVALID_SUBJECT", message.into())
+}
+
+fn normalize_32byte_hex(value: &str, field: &str) -> ApiResult<String> {
+    let bytes = hex::decode(value).map_err(|_| invalid_subject(format!("invalid {field}")))?;
+    if bytes.len() != 32 {
+        return Err(invalid_subject(format!("{field} must be 32-byte hex")));
+    }
+    Ok(hex::encode(bytes))
+}
+
+fn normalize_addressable_subject(value: &str) -> ApiResult<String> {
+    let mut parts = value.splitn(3, ':');
+    let kind = parts.next().unwrap_or_default().trim();
+    let author = parts.next().unwrap_or_default().trim();
+    let d_tag = parts.next().unwrap_or_default().trim();
+    if kind.is_empty() || author.is_empty() || d_tag.is_empty() {
+        return Err(invalid_subject(
+            "addressable subject must be <kind>:<pubkey>:<d-tag>",
         ));
     }
-    Ok(pubkey.to_string())
+    let kind = kind
+        .parse::<u32>()
+        .map_err(|_| invalid_subject("addressable subject kind must be an unsigned integer"))?;
+    let author = PublicKey::from_hex(author)
+        .map_err(|_| invalid_subject("invalid addressable subject pubkey"))?
+        .to_hex();
+    Ok(format!("{kind}:{author}:{d_tag}"))
+}
+
+async fn load_referenced_assertion(
+    pool: &sqlx::Pool<Postgres>,
+    assertion_ref: Option<(&str, i64)>,
+    now: i64,
+) -> ApiResult<Option<Value>> {
+    let Some((assertion_id, assertion_exp)) = assertion_ref else {
+        return Ok(None);
+    };
+    load_assertion_by_id(pool, assertion_id, assertion_exp, now).await
+}
+
+async fn load_assertion_by_id(
+    pool: &sqlx::Pool<Postgres>,
+    assertion_id: &str,
+    assertion_exp: i64,
+    now: i64,
+) -> ApiResult<Option<Value>> {
+    if assertion_exp <= now {
+        return Ok(None);
+    }
+    let event_json = sqlx::query_scalar::<_, Value>(
+        "SELECT event_json FROM cn_trust.attestations WHERE attestation_id = $1",
+    )
+    .bind(assertion_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let Some(event_json) = event_json else {
+        return Ok(None);
+    };
+
+    Ok(Some(json!({
+        "assertion_id": assertion_id,
+        "exp": assertion_exp,
+        "event_json": event_json
+    })))
+}
+
+async fn load_latest_active_assertion(
+    pool: &sqlx::Pool<Postgres>,
+    subject: &str,
+    claim: &str,
+    now: i64,
+) -> ApiResult<Option<LatestTrustAssertion>> {
+    let row = sqlx::query(
+        "SELECT attestation_id, score, exp, event_json, issued_at          FROM cn_trust.attestations          WHERE subject = $1 AND claim = $2 AND exp > $3          ORDER BY issued_at DESC, exp DESC          LIMIT 1",
+    )
+    .bind(subject)
+    .bind(claim)
+    .bind(now)
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    let assertion_id: String = row.try_get("attestation_id")?;
+    let exp: i64 = row.try_get("exp")?;
+    let event_json: Value = row.try_get("event_json")?;
+    let score: f64 = row.try_get("score")?;
+    let issued_at: chrono::DateTime<chrono::Utc> = row.try_get("issued_at")?;
+
+    Ok(Some(LatestTrustAssertion {
+        assertion: json!({
+            "assertion_id": assertion_id,
+            "exp": exp,
+            "event_json": event_json
+        }),
+        score,
+        updated_at: issued_at.timestamp(),
+    }))
 }
 
 pub async fn list_labels(
@@ -1965,13 +2118,44 @@ mod trust_subject_tests {
     fn parse_trust_subject_accepts_pubkey_prefix() {
         let pubkey = Keys::generate().public_key().to_hex();
         let subject = format!("pubkey:{pubkey}");
-        let parsed = parse_trust_subject(&subject).unwrap_or_else(|_| String::new());
-        assert_eq!(parsed, pubkey);
+        let parsed = parse_trust_subject(&subject).expect("pubkey subject");
+        assert_eq!(parsed.canonical, subject);
+        assert_eq!(parsed.pubkey.as_deref(), Some(pubkey.as_str()));
+    }
+
+    #[test]
+    fn parse_trust_subject_accepts_event_topic_relay_and_addressable() {
+        let event_id = "ab".repeat(32);
+        let event = parse_trust_subject(&format!("event:{event_id}")).expect("event subject");
+        assert_eq!(event.canonical, format!("event:{event_id}"));
+
+        let topic = parse_trust_subject("topic:kukuri:test-topic").expect("topic subject");
+        assert_eq!(topic.canonical, "topic:kukuri:test-topic");
+
+        let relay = parse_trust_subject("relay:wss://relay.example").expect("relay subject");
+        assert_eq!(relay.canonical, "relay:wss://relay.example");
+
+        let author = Keys::generate().public_key().to_hex();
+        let addressable = parse_trust_subject(&format!(
+            "addressable:30078:{author}:kukuri:topic:test:post:v1"
+        ))
+        .expect("addressable subject");
+        assert_eq!(
+            addressable.canonical,
+            format!("addressable:30078:{author}:kukuri:topic:test:post:v1")
+        );
     }
 
     #[test]
     fn parse_trust_subject_rejects_invalid_prefix() {
         assert!(parse_trust_subject("npub1example").is_err());
+    }
+
+    #[test]
+    fn parse_trust_subject_rejects_invalid_addressable_value() {
+        assert!(parse_trust_subject("addressable:kind:pubkey:d").is_err());
+        assert!(parse_trust_subject("addressable:30078:not-a-pubkey:d").is_err());
+        assert!(parse_trust_subject("addressable:30078:").is_err());
     }
 
     #[test]
@@ -2167,6 +2351,114 @@ mod api_contract_tests {
         .execute(pool)
         .await
         .expect("insert post_search_documents row");
+    }
+
+    async fn insert_trust_attestation(
+        pool: &Pool<Postgres>,
+        subject: &str,
+        claim: &str,
+        score: f64,
+    ) -> (String, i64) {
+        let attestation_id = Uuid::new_v4().to_string();
+        let exp = cn_core::auth::unix_seconds().unwrap_or(0) as i64 + 600;
+        let event_json = json!({
+            "id": Uuid::new_v4().to_string(),
+            "kind": 30383,
+            "content": "",
+            "tags": [["claim", claim]],
+        });
+        sqlx::query(
+            "INSERT INTO cn_trust.attestations \
+             (attestation_id, subject, claim, score, exp, issuer_pubkey, event_json) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        )
+        .bind(&attestation_id)
+        .bind(subject)
+        .bind(claim)
+        .bind(score)
+        .bind(exp)
+        .bind(Keys::generate().public_key().to_hex())
+        .bind(event_json)
+        .execute(pool)
+        .await
+        .expect("insert trust attestation");
+        (attestation_id, exp)
+    }
+
+    async fn upsert_report_score(
+        pool: &Pool<Postgres>,
+        subject_pubkey: &str,
+        score: f64,
+        report_count: i64,
+        label_count: i64,
+        attestation_id: Option<&str>,
+        attestation_exp: Option<i64>,
+    ) {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let since = now.saturating_sub(7 * 86400);
+        sqlx::query(
+            "INSERT INTO cn_trust.report_scores \
+             (subject_pubkey, score, report_count, label_count, window_start, window_end, attestation_id, attestation_exp) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+             ON CONFLICT (subject_pubkey) DO UPDATE \
+             SET score = EXCLUDED.score, \
+                 report_count = EXCLUDED.report_count, \
+                 label_count = EXCLUDED.label_count, \
+                 window_start = EXCLUDED.window_start, \
+                 window_end = EXCLUDED.window_end, \
+                 attestation_id = EXCLUDED.attestation_id, \
+                 attestation_exp = EXCLUDED.attestation_exp, \
+                 updated_at = NOW()",
+        )
+        .bind(subject_pubkey)
+        .bind(score)
+        .bind(report_count)
+        .bind(label_count)
+        .bind(since)
+        .bind(now)
+        .bind(attestation_id)
+        .bind(attestation_exp)
+        .execute(pool)
+        .await
+        .expect("upsert report score");
+    }
+
+    async fn upsert_communication_score(
+        pool: &Pool<Postgres>,
+        subject_pubkey: &str,
+        score: f64,
+        interaction_count: i64,
+        peer_count: i64,
+        attestation_id: Option<&str>,
+        attestation_exp: Option<i64>,
+    ) {
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let since = now.saturating_sub(7 * 86400);
+        sqlx::query(
+            "INSERT INTO cn_trust.communication_scores \
+             (subject_pubkey, score, interaction_count, peer_count, window_start, window_end, attestation_id, attestation_exp) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+             ON CONFLICT (subject_pubkey) DO UPDATE \
+             SET score = EXCLUDED.score, \
+                 interaction_count = EXCLUDED.interaction_count, \
+                 peer_count = EXCLUDED.peer_count, \
+                 window_start = EXCLUDED.window_start, \
+                 window_end = EXCLUDED.window_end, \
+                 attestation_id = EXCLUDED.attestation_id, \
+                 attestation_exp = EXCLUDED.attestation_exp, \
+                 updated_at = NOW()",
+        )
+        .bind(subject_pubkey)
+        .bind(score)
+        .bind(interaction_count)
+        .bind(peer_count)
+        .bind(since)
+        .bind(now)
+        .bind(attestation_id)
+        .bind(attestation_exp)
+        .execute(pool)
+        .await
+        .expect("upsert communication score");
     }
 
     async fn request_status(app: Router, uri: &str) -> StatusCode {
@@ -2521,6 +2813,476 @@ mod api_contract_tests {
         .execute(&pool)
         .await
         .expect("cleanup multi topic post search documents");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_rejects_invalid_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            "/v1/trust/report-based?subject=pubkey%3Anot-a-valid-pubkey",
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("INVALID_SUBJECT")
+        );
+        assert!(payload.get("message").and_then(Value::as_str).is_some());
+        assert_eq!(payload.get("score"), None);
+        assert_eq!(payload.get("assertion"), None);
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_contract_rejects_invalid_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            "/v1/trust/communication-density?subject=addressable%3Akind%3Anot-a-pubkey%3Ainvalid",
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("INVALID_SUBJECT")
+        );
+        assert!(payload.get("message").and_then(Value::as_str).is_some());
+        assert_eq!(payload.get("score"), None);
+        assert_eq!(payload.get("assertion"), None);
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_supports_event_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+
+        let subject = format!("event:{}", "ab".repeat(32));
+        let (attestation_id, exp) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.73).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/report-based?subject={query_subject}"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("subject").and_then(Value::as_str),
+            Some(subject.as_str())
+        );
+        assert_eq!(
+            payload.get("method").and_then(Value::as_str),
+            Some("report-based")
+        );
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.73));
+        assert_eq!(payload.get("report_count").and_then(Value::as_i64), Some(0));
+        assert_eq!(payload.get("label_count").and_then(Value::as_i64), Some(0));
+        assert_eq!(payload.get("window_start"), Some(&Value::Null));
+        assert_eq!(payload.get("window_end"), Some(&Value::Null));
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(attestation_id.as_str())
+        );
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("exp"))
+                .and_then(Value::as_i64),
+            Some(exp)
+        );
+        assert!(payload.get("updated_at").and_then(Value::as_i64).is_some());
+
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = $1")
+            .bind(attestation_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestation");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_returns_null_when_referenced_attestation_missing() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let (latest_attestation_id, latest_exp) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.88).await;
+        let missing_attestation_id = Uuid::new_v4().to_string();
+        upsert_report_score(
+            &pool,
+            &subject_pubkey,
+            0.31,
+            7,
+            3,
+            Some(missing_attestation_id.as_str()),
+            Some(latest_exp),
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/report-based?subject={query_subject}"),
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.31));
+        assert_eq!(payload.get("report_count").and_then(Value::as_i64), Some(7));
+        assert_eq!(payload.get("label_count").and_then(Value::as_i64), Some(3));
+        assert_eq!(payload.get("assertion"), Some(&Value::Null));
+
+        sqlx::query("DELETE FROM cn_trust.report_scores WHERE subject_pubkey = $1")
+            .bind(&subject_pubkey)
+            .execute(&pool)
+            .await
+            .expect("cleanup report score");
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = $1")
+            .bind(latest_attestation_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestation");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_prefers_latest_issued_at_when_score_row_is_missing() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let (older_attestation_id, _) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.15).await;
+        let (newer_attestation_id, _) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.91).await;
+
+        let now = cn_core::auth::unix_seconds().unwrap_or(0) as i64;
+        let older_exp = now + 3600;
+        let newer_exp = now + 1200;
+        sqlx::query(
+            "UPDATE cn_trust.attestations              SET exp = $1, issued_at = to_timestamp($2::double precision)              WHERE attestation_id = $3",
+        )
+        .bind(older_exp)
+        .bind(now - 120)
+        .bind(&older_attestation_id)
+        .execute(&pool)
+        .await
+        .expect("set older attestation timing");
+        sqlx::query(
+            "UPDATE cn_trust.attestations              SET exp = $1, issued_at = to_timestamp($2::double precision)              WHERE attestation_id = $3",
+        )
+        .bind(newer_exp)
+        .bind(now - 30)
+        .bind(&newer_attestation_id)
+        .execute(&pool)
+        .await
+        .expect("set newer attestation timing");
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/report-based?subject={query_subject}"),
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(newer_attestation_id.as_str())
+        );
+        assert_ne!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(older_attestation_id.as_str())
+        );
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("exp"))
+                .and_then(Value::as_i64),
+            Some(newer_exp)
+        );
+
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = ANY($1)")
+            .bind(vec![older_attestation_id, newer_attestation_id])
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestations");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_contract_keeps_referenced_attestation_when_present() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let (referenced_attestation_id, referenced_exp) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.41).await;
+        let (latest_attestation_id, _) =
+            insert_trust_attestation(&pool, &subject, CLAIM_REPORT_BASED, 0.93).await;
+        sqlx::query("UPDATE cn_trust.attestations SET exp = $1 WHERE attestation_id = $2")
+            .bind(referenced_exp + 120)
+            .bind(&latest_attestation_id)
+            .execute(&pool)
+            .await
+            .expect("promote latest attestation");
+        upsert_report_score(
+            &pool,
+            &subject_pubkey,
+            0.52,
+            9,
+            2,
+            Some(referenced_attestation_id.as_str()),
+            Some(referenced_exp),
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route("/v1/trust/report-based", get(trust_report_based))
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/report-based?subject={query_subject}"),
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(referenced_attestation_id.as_str())
+        );
+        assert_ne!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(latest_attestation_id.as_str())
+        );
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("exp"))
+                .and_then(Value::as_i64),
+            Some(referenced_exp)
+        );
+
+        sqlx::query("DELETE FROM cn_trust.report_scores WHERE subject_pubkey = $1")
+            .bind(&subject_pubkey)
+            .execute(&pool)
+            .await
+            .expect("cleanup report score");
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = ANY($1)")
+            .bind(vec![referenced_attestation_id, latest_attestation_id])
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestations");
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_contract_supports_addressable_subject() {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &pubkey).await;
+
+        let author = Keys::generate().public_key().to_hex();
+        let subject = format!("addressable:30078:{author}:kukuri:topic:subject-expansion:post:v1");
+        let (attestation_id, exp) =
+            insert_trust_attestation(&pool, &subject, CLAIM_COMMUNICATION_DENSITY, 0.41).await;
+
+        let token = issue_token(&state.jwt_config, &pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/communication-density?subject={query_subject}"),
+            &token,
+            &pool,
+            &pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload.get("subject").and_then(Value::as_str),
+            Some(subject.as_str())
+        );
+        assert_eq!(
+            payload.get("method").and_then(Value::as_str),
+            Some("communication-density")
+        );
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.41));
+        assert_eq!(
+            payload.get("interaction_count").and_then(Value::as_i64),
+            Some(0)
+        );
+        assert_eq!(payload.get("peer_count").and_then(Value::as_i64), Some(0));
+        assert_eq!(payload.get("window_start"), Some(&Value::Null));
+        assert_eq!(payload.get("window_end"), Some(&Value::Null));
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("assertion_id"))
+                .and_then(Value::as_str),
+            Some(attestation_id.as_str())
+        );
+        assert_eq!(
+            payload
+                .get("assertion")
+                .and_then(|value| value.get("exp"))
+                .and_then(Value::as_i64),
+            Some(exp)
+        );
+        assert!(payload.get("updated_at").and_then(Value::as_i64).is_some());
+
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = $1")
+            .bind(attestation_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestation");
+    }
+
+    #[tokio::test]
+    async fn trust_communication_density_contract_returns_null_when_referenced_attestation_missing()
+    {
+        let state = test_state().await;
+        let pool = state.pool.clone();
+        let requester_pubkey = Keys::generate().public_key().to_hex();
+        ensure_consents(&pool, &requester_pubkey).await;
+
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let (latest_attestation_id, latest_exp) =
+            insert_trust_attestation(&pool, &subject, CLAIM_COMMUNICATION_DENSITY, 0.64).await;
+        let missing_attestation_id = Uuid::new_v4().to_string();
+        upsert_communication_score(
+            &pool,
+            &subject_pubkey,
+            0.27,
+            12,
+            4,
+            Some(missing_attestation_id.as_str()),
+            Some(latest_exp),
+        )
+        .await;
+
+        let token = issue_token(&state.jwt_config, &requester_pubkey);
+        let app = Router::new()
+            .route(
+                "/v1/trust/communication-density",
+                get(trust_communication_density),
+            )
+            .with_state(state);
+        let query_subject = subject.replace(':', "%3A");
+        let (status, payload) = get_json_with_consent_retry(
+            app,
+            &format!("/v1/trust/communication-density?subject={query_subject}"),
+            &token,
+            &pool,
+            &requester_pubkey,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.27));
+        assert_eq!(
+            payload.get("interaction_count").and_then(Value::as_i64),
+            Some(12)
+        );
+        assert_eq!(payload.get("peer_count").and_then(Value::as_i64), Some(4));
+        assert_eq!(payload.get("assertion"), Some(&Value::Null));
+
+        sqlx::query("DELETE FROM cn_trust.communication_scores WHERE subject_pubkey = $1")
+            .bind(&subject_pubkey)
+            .execute(&pool)
+            .await
+            .expect("cleanup communication score");
+        sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = $1")
+            .bind(latest_attestation_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup trust attestation");
     }
 
     #[tokio::test]

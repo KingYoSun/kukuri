@@ -58,6 +58,8 @@ export interface CommunityNodeTrustRequest {
   subject: string;
 }
 
+export type CommunityNodeTrustAlgorithm = 'report-based' | 'communication-density';
+
 export interface CommunityNodeReportRequest {
   base_url?: string;
   report_event_json?: unknown;
@@ -69,6 +71,11 @@ export interface CommunityNodeTrustProviderRequest {
   provider_pubkey: string;
   assertion_kind?: number;
   relay_url?: string;
+  algorithm?: CommunityNodeTrustAlgorithm;
+}
+
+export interface CommunityNodeTrustProviderSelector {
+  algorithm: CommunityNodeTrustAlgorithm;
 }
 
 export interface CommunityNodeTrustProviderState {
@@ -77,6 +84,7 @@ export interface CommunityNodeTrustProviderState {
   relay_url?: string;
   issued_at: number;
   event_json: unknown;
+  algorithm: CommunityNodeTrustAlgorithm;
 }
 
 export interface CommunityNodeSearchRequest {
@@ -168,13 +176,20 @@ export const communityNodeApi = {
   acceptConsents: (request: CommunityNodeConsentRequest) =>
     invokeCommand<Record<string, unknown>>('community_node_accept_consents', { request }),
 
-  getTrustProvider: () =>
-    invokeCommand<CommunityNodeTrustProviderState | null>('community_node_get_trust_provider'),
+  getTrustProvider: (algorithm?: CommunityNodeTrustAlgorithm) =>
+    invokeCommand<CommunityNodeTrustProviderState | null>(
+      'community_node_get_trust_provider',
+      algorithm ? { request: { algorithm } } : undefined,
+    ),
 
   setTrustProvider: (request: CommunityNodeTrustProviderRequest) =>
     invokeCommand<CommunityNodeTrustProviderState>('community_node_set_trust_provider', {
       request,
     }),
 
-  clearTrustProvider: () => invokeCommandVoid('community_node_clear_trust_provider'),
+  clearTrustProvider: (algorithm?: CommunityNodeTrustAlgorithm) =>
+    invokeCommandVoid(
+      'community_node_clear_trust_provider',
+      algorithm ? { request: { algorithm } } : undefined,
+    ),
 };

@@ -20,6 +20,7 @@ import { accessControlApi } from '@/lib/api/accessControl';
 import {
   communityNodeApi,
   defaultCommunityNodeRoles,
+  type CommunityNodeTrustAlgorithm,
   type CommunityNodeConfigNodeResponse,
   type CommunityNodeRoleKey,
 } from '@/lib/api/communityNode';
@@ -44,7 +45,8 @@ export function CommunityNodePanel() {
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [actionNodeBaseUrl, setActionNodeBaseUrl] = useState('');
   const [inviteJson, setInviteJson] = useState('');
-  const [trustProviderPubkey, setTrustProviderPubkey] = useState('auto');
+  const [reportTrustProviderPubkey, setReportTrustProviderPubkey] = useState('auto');
+  const [communicationTrustProviderPubkey, setCommunicationTrustProviderPubkey] = useState('auto');
   const { enableAccessControl, setEnableAccessControl } = useCommunityNodeStore();
 
   const configQuery = useQuery({
@@ -52,9 +54,14 @@ export function CommunityNodePanel() {
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60,
   });
-  const trustProviderQuery = useQuery({
-    queryKey: ['community-node', 'trust-provider'],
-    queryFn: () => communityNodeApi.getTrustProvider(),
+  const reportTrustProviderQuery = useQuery({
+    queryKey: ['community-node', 'trust-provider', 'report-based'],
+    queryFn: () => communityNodeApi.getTrustProvider('report-based'),
+    staleTime: 1000 * 60,
+  });
+  const communicationTrustProviderQuery = useQuery({
+    queryKey: ['community-node', 'trust-provider', 'communication-density'],
+    queryFn: () => communityNodeApi.getTrustProvider('communication-density'),
     staleTime: 1000 * 60,
   });
   const groupKeysQuery = useQuery({
@@ -79,9 +86,13 @@ export function CommunityNodePanel() {
       label: formatAttesterLabel(node),
       baseUrl: node.base_url,
     }));
-  const trustProviderNode =
-    trustProviderPubkey !== 'auto'
-      ? (trustNodes.find((node) => node.pubkey === trustProviderPubkey) ?? null)
+  const reportTrustProviderNode =
+    reportTrustProviderPubkey !== 'auto'
+      ? (trustNodes.find((node) => node.pubkey === reportTrustProviderPubkey) ?? null)
+      : null;
+  const communicationTrustProviderNode =
+    communicationTrustProviderPubkey !== 'auto'
+      ? (trustNodes.find((node) => node.pubkey === communicationTrustProviderPubkey) ?? null)
       : null;
 
   const consentsQuery = useQuery({
@@ -106,22 +117,50 @@ export function CommunityNodePanel() {
   }, [nodes, actionNodeBaseUrl]);
 
   useEffect(() => {
-    if (trustProviderQuery.data?.provider_pubkey) {
-      setTrustProviderPubkey(trustProviderQuery.data.provider_pubkey);
+    if (reportTrustProviderQuery.data?.provider_pubkey) {
+      setReportTrustProviderPubkey(reportTrustProviderQuery.data.provider_pubkey);
       return;
     }
-    setTrustProviderPubkey('auto');
-  }, [trustProviderQuery.data?.provider_pubkey]);
+    setReportTrustProviderPubkey('auto');
+  }, [reportTrustProviderQuery.data?.provider_pubkey]);
 
   useEffect(() => {
-    if (trustProviderQuery.isError) {
-      errorHandler.log('Failed to load community node trust provider', trustProviderQuery.error, {
-        context: 'CommunityNodePanel.trustProvider',
-        showToast: true,
-        toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
-      });
+    if (communicationTrustProviderQuery.data?.provider_pubkey) {
+      setCommunicationTrustProviderPubkey(communicationTrustProviderQuery.data.provider_pubkey);
+      return;
     }
-  }, [trustProviderQuery.isError, trustProviderQuery.error]);
+    setCommunicationTrustProviderPubkey('auto');
+  }, [communicationTrustProviderQuery.data?.provider_pubkey]);
+
+  useEffect(() => {
+    if (reportTrustProviderQuery.isError) {
+      errorHandler.log(
+        'Failed to load community node trust provider',
+        reportTrustProviderQuery.error,
+        {
+          context: 'CommunityNodePanel.trustProvider',
+          showToast: true,
+          toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
+        },
+      );
+    }
+    if (communicationTrustProviderQuery.isError) {
+      errorHandler.log(
+        'Failed to load community node trust provider',
+        communicationTrustProviderQuery.error,
+        {
+          context: 'CommunityNodePanel.trustProvider',
+          showToast: true,
+          toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
+        },
+      );
+    }
+  }, [
+    reportTrustProviderQuery.isError,
+    reportTrustProviderQuery.error,
+    communicationTrustProviderQuery.isError,
+    communicationTrustProviderQuery.error,
+  ]);
 
   useEffect(() => {
     if (pendingJoinRequestsQuery.isError) {
@@ -251,20 +290,30 @@ export function CommunityNodePanel() {
     }
   };
 
-  const handleTrustProviderChange = async (value: string) => {
-    setTrustProviderPubkey(value);
+  const handleTrustProviderChange = async (
+    algorithm: CommunityNodeTrustAlgorithm,
+    value: string,
+  ) => {
+    if (algorithm === 'report-based') {
+      setReportTrustProviderPubkey(value);
+    } else {
+      setCommunicationTrustProviderPubkey(value);
+    }
     try {
       if (value === 'auto') {
-        await communityNodeApi.clearTrustProvider();
+        await communityNodeApi.clearTrustProvider(algorithm);
       } else {
         const selected = trustAttesterOptions.find((option) => option.value === value);
         await communityNodeApi.setTrustProvider({
           provider_pubkey: value,
           assertion_kind: 30382,
           relay_url: selected?.baseUrl,
+          algorithm,
         });
       }
-      await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust-provider'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['community-node', 'trust-provider', algorithm],
+      });
       await queryClient.invalidateQueries({ queryKey: ['community-node', 'trust'] });
     } catch (error) {
       errorHandler.log('Community node trust provider update failed', error, {
@@ -389,37 +438,82 @@ export function CommunityNodePanel() {
               {t('communityNodePanel.trustAnchorHint')}
             </p>
           </div>
-          <Select
-            value={trustProviderPubkey}
-            onValueChange={handleTrustProviderChange}
-            disabled={trustAttesterOptions.length === 0}
-          >
-            <SelectTrigger data-testid="community-node-trust-anchor">
-              <SelectValue placeholder={t('communityNodePanel.auto')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">{t('communityNodePanel.autoMode')}</SelectItem>
-              {trustAttesterOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {trustProviderPubkey === 'auto' ? (
-            <p className="text-xs text-muted-foreground">{t('communityNodePanel.autoModeHint')}</p>
-          ) : trustProviderNode ? (
-            <p
-              className="text-xs text-muted-foreground"
-              data-testid="community-node-trust-anchor-current"
+          <div className="space-y-2">
+            <p className="text-sm font-medium">report-based</p>
+            <Select
+              value={reportTrustProviderPubkey}
+              onValueChange={(value) => {
+                void handleTrustProviderChange('report-based', value);
+              }}
+              disabled={trustAttesterOptions.length === 0}
             >
-              provider: {formatAttesterLabel(trustProviderNode)}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {t('communityNodePanel.attesterNotFound')}
-            </p>
-          )}
+              <SelectTrigger data-testid="community-node-trust-anchor-report-based">
+                <SelectValue placeholder={t('communityNodePanel.auto')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t('communityNodePanel.autoMode')}</SelectItem>
+                {trustAttesterOptions.map((option) => (
+                  <SelectItem key={`${option.value}-report`} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {reportTrustProviderPubkey === 'auto' ? (
+              <p className="text-xs text-muted-foreground">
+                {t('communityNodePanel.autoModeHint')}
+              </p>
+            ) : reportTrustProviderNode ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="community-node-trust-anchor-report-based-current"
+              >
+                provider: {formatAttesterLabel(reportTrustProviderNode)}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('communityNodePanel.attesterNotFound')}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">communication-density</p>
+            <Select
+              value={communicationTrustProviderPubkey}
+              onValueChange={(value) => {
+                void handleTrustProviderChange('communication-density', value);
+              }}
+              disabled={trustAttesterOptions.length === 0}
+            >
+              <SelectTrigger data-testid="community-node-trust-anchor-communication-density">
+                <SelectValue placeholder={t('communityNodePanel.auto')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t('communityNodePanel.autoMode')}</SelectItem>
+                {trustAttesterOptions.map((option) => (
+                  <SelectItem key={`${option.value}-communication`} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {communicationTrustProviderPubkey === 'auto' ? (
+              <p className="text-xs text-muted-foreground">
+                {t('communityNodePanel.autoModeHint')}
+              </p>
+            ) : communicationTrustProviderNode ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="community-node-trust-anchor-communication-density-current"
+              >
+                provider: {formatAttesterLabel(communicationTrustProviderNode)}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('communityNodePanel.attesterNotFound')}
+              </p>
+            )}
+          </div>
         </div>
 
         <Separator />

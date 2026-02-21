@@ -5,7 +5,8 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
     CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeRoleConfig,
-    CommunityNodeSearchRequest, CommunityNodeTokenRequest, CommunityNodeTrustProviderRequest,
+    CommunityNodeSearchRequest, CommunityNodeTokenRequest, CommunityNodeTrustAlgorithm,
+    CommunityNodeTrustProviderRequest, CommunityNodeTrustProviderSelector,
     CommunityNodeTrustProviderState, CommunityNodeTrustRequest,
 };
 use crate::shared::{AppError, ValidationFailureKind};
@@ -23,7 +24,8 @@ use std::sync::Arc;
 
 const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
 const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
-const COMMUNITY_NODE_TRUST_PROVIDER_KEY: &str = "community_node_trust_provider_v1";
+const COMMUNITY_NODE_TRUST_PROVIDERS_KEY: &str = "community_node_trust_providers_v2";
+const COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY: &str = "community_node_trust_provider_v1";
 const COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY: &str = "community_node_trust_anchor_v1";
 const COMMUNITY_NODE_BOOTSTRAP_CACHE_KEY: &str = "community_node_bootstrap_cache_v1";
 const AUTH_KIND: u16 = 22242;
@@ -35,6 +37,8 @@ const TRUST_ASSERTION_KIND_EVENT: u16 = 30383;
 const TRUST_ASSERTION_KIND_RELAY: u16 = 30384;
 const TRUST_ASSERTION_KIND_TOPIC: u16 = 30385;
 const TRUST_PROVIDER_LIST_KIND: u16 = 10040;
+const TRUST_CLAIM_REPORT_BASED: &str = "moderation.risk";
+const TRUST_CLAIM_COMMUNICATION_DENSITY: &str = "reputation";
 const KIP_NAMESPACE: &str = "kukuri";
 const KIP_VERSION: &str = "1";
 const KIP_NODE_DESCRIPTOR_SCHEMA: &str = "kukuri-node-desc-v1";
@@ -86,14 +90,54 @@ struct StoredTrustProvider {
     event_json: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyStoredTrustAnchor {
-    attester: String,
-    claim: Option<String>,
-    topic: Option<String>,
-    weight: f64,
-    issued_at: i64,
-    event_json: serde_json::Value,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct StoredTrustProviders {
+    #[serde(default)]
+    report_based: Option<StoredTrustProvider>,
+    #[serde(default)]
+    communication_density: Option<StoredTrustProvider>,
+}
+
+impl StoredTrustProviders {
+    fn get(&self, algorithm: CommunityNodeTrustAlgorithm) -> Option<&StoredTrustProvider> {
+        match algorithm {
+            CommunityNodeTrustAlgorithm::ReportBased => self.report_based.as_ref(),
+            CommunityNodeTrustAlgorithm::CommunicationDensity => {
+                self.communication_density.as_ref()
+            }
+        }
+    }
+
+    fn set(&mut self, algorithm: CommunityNodeTrustAlgorithm, provider: StoredTrustProvider) {
+        match algorithm {
+            CommunityNodeTrustAlgorithm::ReportBased => self.report_based = Some(provider),
+            CommunityNodeTrustAlgorithm::CommunicationDensity => {
+                self.communication_density = Some(provider)
+            }
+        }
+    }
+
+    fn clear(&mut self, algorithm: CommunityNodeTrustAlgorithm) {
+        match algorithm {
+            CommunityNodeTrustAlgorithm::ReportBased => self.report_based = None,
+            CommunityNodeTrustAlgorithm::CommunicationDensity => self.communication_density = None,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.report_based.is_none() && self.communication_density.is_none()
+    }
+
+    fn first(&self) -> Option<(CommunityNodeTrustAlgorithm, &StoredTrustProvider)> {
+        self.report_based
+            .as_ref()
+            .map(|provider| (CommunityNodeTrustAlgorithm::ReportBased, provider))
+            .or_else(|| {
+                self.communication_density
+                    .as_ref()
+                    .map(|provider| (CommunityNodeTrustAlgorithm::CommunicationDensity, provider))
+            })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -124,14 +168,15 @@ struct BootstrapHintCursorEntry {
     last_seq: u64,
 }
 
-impl From<StoredTrustProvider> for CommunityNodeTrustProviderState {
-    fn from(provider: StoredTrustProvider) -> Self {
+impl From<(CommunityNodeTrustAlgorithm, StoredTrustProvider)> for CommunityNodeTrustProviderState {
+    fn from((algorithm, provider): (CommunityNodeTrustAlgorithm, StoredTrustProvider)) -> Self {
         Self {
             provider_pubkey: provider.provider_pubkey,
             assertion_kind: provider.assertion_kind,
             relay_url: provider.relay_url,
             issued_at: provider.issued_at,
             event_json: provider.event_json,
+            algorithm,
         }
     }
 }
@@ -284,53 +329,23 @@ impl CommunityNodeHandler {
 
     pub async fn get_trust_provider(
         &self,
+        request: Option<CommunityNodeTrustProviderSelector>,
     ) -> Result<Option<CommunityNodeTrustProviderState>, AppError> {
-        let raw = self
-            .secure_storage
-            .retrieve(COMMUNITY_NODE_TRUST_PROVIDER_KEY)
-            .await
-            .map_err(|err| AppError::Storage(err.to_string()))?;
-        if let Some(raw) = raw {
-            let stored: StoredTrustProvider = serde_json::from_str(&raw)
-                .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-            return Ok(Some(stored.into()));
+        let requested_algorithm = request.map(|selector| selector.algorithm);
+        let algorithm = requested_algorithm.unwrap_or(CommunityNodeTrustAlgorithm::ReportBased);
+        let providers = self.load_trust_providers().await?;
+
+        if let Some(stored) = providers.get(algorithm).cloned() {
+            return Ok(Some((algorithm, stored).into()));
         }
 
-        let legacy_raw = self
-            .secure_storage
-            .retrieve(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
-            .await
-            .map_err(|err| AppError::Storage(err.to_string()))?;
-        let Some(legacy_raw) = legacy_raw else {
-            return Ok(None);
-        };
-        let legacy: LegacyStoredTrustAnchor = serde_json::from_str(&legacy_raw)
-            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        PublicKey::from_hex(&legacy.attester).map_err(|err| {
-            AppError::validation(
-                ValidationFailureKind::Generic,
-                format!("Invalid provider pubkey in legacy trust anchor: {err}"),
-            )
-        })?;
+        if requested_algorithm.is_none()
+            && let Some((fallback_algorithm, stored)) = providers.first()
+        {
+            return Ok(Some((fallback_algorithm, stored.clone()).into()));
+        }
 
-        let migrated = StoredTrustProvider {
-            provider_pubkey: legacy.attester,
-            assertion_kind: TRUST_ASSERTION_KIND_PUBKEY,
-            relay_url: None,
-            issued_at: legacy.issued_at,
-            event_json: legacy.event_json,
-        };
-        let raw = serde_json::to_string(&migrated)
-            .map_err(|err| AppError::SerializationError(err.to_string()))?;
-        self.secure_storage
-            .store(COMMUNITY_NODE_TRUST_PROVIDER_KEY, &raw)
-            .await
-            .map_err(|err| AppError::Storage(err.to_string()))?;
-        let _ = self
-            .secure_storage
-            .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
-            .await;
-        Ok(Some(migrated.into()))
+        Ok(None)
     }
 
     pub async fn set_trust_provider(
@@ -361,52 +376,104 @@ impl CommunityNodeHandler {
             ));
         }
         let relay_url = normalize_optional_value(request.relay_url);
+        let requested_algorithm = request.algorithm;
+        let target_algorithms = requested_algorithm
+            .map(|algorithm| vec![algorithm])
+            .unwrap_or_else(all_trust_algorithms);
 
         let keypair = self.key_manager.current_keypair().await?;
         let secret_key = SecretKey::from_bech32(&keypair.nsec)
             .map_err(|err| AppError::Crypto(format!("Invalid nsec: {err}")))?;
         let keys = Keys::new(secret_key);
 
-        let mut provider_tag = vec![format!("{assertion_kind}:rank"), provider_pubkey.clone()];
-        if let Some(relay_url) = relay_url.as_ref() {
-            provider_tag.push(relay_url.clone());
+        let mut providers = self.load_trust_providers().await?;
+        let mut response: Option<CommunityNodeTrustProviderState> = None;
+
+        for algorithm in target_algorithms {
+            let mut provider_tag = vec![format!("{assertion_kind}:rank"), provider_pubkey.clone()];
+            if let Some(relay_url) = relay_url.as_ref() {
+                provider_tag.push(relay_url.clone());
+            }
+            let tags = vec![
+                Tag::parse(provider_tag).map_err(|err| AppError::NostrError(err.to_string()))?,
+                Tag::parse(vec![
+                    "claim".to_string(),
+                    trust_claim_for_algorithm(algorithm).to_string(),
+                ])
+                .map_err(|err| AppError::NostrError(err.to_string()))?,
+            ];
+            let event = EventBuilder::new(Kind::Custom(TRUST_PROVIDER_LIST_KIND), "")
+                .tags(tags)
+                .sign_with_keys(&keys)?;
+            let event_json = serde_json::to_value(&event)
+                .map_err(|err| AppError::SerializationError(err.to_string()))?;
+            let issued_at = event.created_at.as_secs() as i64;
+
+            let stored = StoredTrustProvider {
+                provider_pubkey: provider_pubkey.clone(),
+                assertion_kind,
+                relay_url: relay_url.clone(),
+                issued_at,
+                event_json,
+            };
+            providers.set(algorithm, stored.clone());
+            if requested_algorithm == Some(algorithm) || response.is_none() {
+                response = Some((algorithm, stored).into());
+            }
         }
-        let tags =
-            vec![Tag::parse(provider_tag).map_err(|err| AppError::NostrError(err.to_string()))?];
 
-        let event = EventBuilder::new(Kind::Custom(TRUST_PROVIDER_LIST_KIND), "")
-            .tags(tags)
-            .sign_with_keys(&keys)?;
-        let event_json = serde_json::to_value(&event)
-            .map_err(|err| AppError::SerializationError(err.to_string()))?;
-        let issued_at = event.created_at.as_secs() as i64;
-
-        let stored = StoredTrustProvider {
-            provider_pubkey,
-            assertion_kind,
-            relay_url,
-            issued_at,
-            event_json,
-        };
-        let raw = serde_json::to_string(&stored)
-            .map_err(|err| AppError::SerializationError(err.to_string()))?;
-        self.secure_storage
-            .store(COMMUNITY_NODE_TRUST_PROVIDER_KEY, &raw)
-            .await
-            .map_err(|err| AppError::Storage(err.to_string()))?;
+        self.save_trust_providers(&providers).await?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+            .await;
         let _ = self
             .secure_storage
             .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
             .await;
 
-        Ok(stored.into())
+        response.ok_or_else(|| {
+            AppError::validation(
+                ValidationFailureKind::Generic,
+                "Trust provider algorithm is required",
+            )
+        })
     }
 
-    pub async fn clear_trust_provider(&self) -> Result<(), AppError> {
+    pub async fn clear_trust_provider(
+        &self,
+        request: Option<CommunityNodeTrustProviderSelector>,
+    ) -> Result<(), AppError> {
+        if let Some(selector) = request {
+            let mut providers = self.load_trust_providers().await?;
+            providers.clear(selector.algorithm);
+            if providers.is_empty() {
+                self.secure_storage
+                    .delete(COMMUNITY_NODE_TRUST_PROVIDERS_KEY)
+                    .await
+                    .map_err(|err| AppError::Storage(err.to_string()))?;
+            } else {
+                self.save_trust_providers(&providers).await?;
+            }
+            let _ = self
+                .secure_storage
+                .delete(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+                .await;
+            let _ = self
+                .secure_storage
+                .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+                .await;
+            return Ok(());
+        }
+
         self.secure_storage
-            .delete(COMMUNITY_NODE_TRUST_PROVIDER_KEY)
+            .delete(COMMUNITY_NODE_TRUST_PROVIDERS_KEY)
             .await
             .map_err(|err| AppError::Storage(err.to_string()))?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+            .await;
         let _ = self
             .secure_storage
             .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
@@ -526,13 +593,28 @@ impl CommunityNodeHandler {
         request: CommunityNodeTrustRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let nodes = select_nodes_for_role(
+        let provider = self
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::ReportBased,
+            }))
+            .await?;
+        let nodes = select_nodes_for_trust(
             &config,
             request.base_url.as_deref(),
-            CommunityNodeRole::Trust,
+            provider
+                .as_ref()
+                .and_then(|state| state.relay_url.as_deref()),
         )?;
-        self.aggregate_trust_scores(nodes, "/v1/trust/report-based", &request.subject)
-            .await
+        self.aggregate_trust_scores(
+            nodes,
+            "/v1/trust/report-based",
+            &request.subject,
+            CommunityNodeTrustAlgorithm::ReportBased,
+            provider
+                .as_ref()
+                .map(|state| state.provider_pubkey.as_str()),
+        )
+        .await
     }
 
     pub async fn trust_communication_density(
@@ -540,13 +622,28 @@ impl CommunityNodeHandler {
         request: CommunityNodeTrustRequest,
     ) -> Result<serde_json::Value, AppError> {
         let config = self.require_config().await?;
-        let nodes = select_nodes_for_role(
+        let provider = self
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::CommunicationDensity,
+            }))
+            .await?;
+        let nodes = select_nodes_for_trust(
             &config,
             request.base_url.as_deref(),
-            CommunityNodeRole::Trust,
+            provider
+                .as_ref()
+                .and_then(|state| state.relay_url.as_deref()),
         )?;
-        self.aggregate_trust_scores(nodes, "/v1/trust/communication-density", &request.subject)
-            .await
+        self.aggregate_trust_scores(
+            nodes,
+            "/v1/trust/communication-density",
+            &request.subject,
+            CommunityNodeTrustAlgorithm::CommunicationDensity,
+            provider
+                .as_ref()
+                .map(|state| state.provider_pubkey.as_str()),
+        )
+        .await
     }
 
     pub async fn search(
@@ -877,6 +974,65 @@ impl CommunityNodeHandler {
         Ok(())
     }
 
+    async fn load_trust_providers(&self) -> Result<StoredTrustProviders, AppError> {
+        let raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_TRUST_PROVIDERS_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        if let Some(raw) = raw {
+            let parsed: StoredTrustProviders = serde_json::from_str(&raw)
+                .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+            return Ok(parsed);
+        }
+
+        let Some(legacy_provider) = self.load_legacy_trust_provider().await? else {
+            let _ = self
+                .secure_storage
+                .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+                .await;
+            return Ok(StoredTrustProviders::default());
+        };
+        let migrated = StoredTrustProviders {
+            report_based: Some(legacy_provider.clone()),
+            communication_density: Some(legacy_provider),
+        };
+        self.save_trust_providers(&migrated).await?;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+            .await;
+        let _ = self
+            .secure_storage
+            .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await;
+        Ok(migrated)
+    }
+
+    async fn load_legacy_trust_provider(&self) -> Result<Option<StoredTrustProvider>, AppError> {
+        let legacy_provider_raw = self
+            .secure_storage
+            .retrieve(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        if let Some(raw) = legacy_provider_raw {
+            let stored: StoredTrustProvider = serde_json::from_str(&raw)
+                .map_err(|err| AppError::DeserializationError(err.to_string()))?;
+            return Ok(Some(stored));
+        }
+        Ok(None)
+    }
+
+    async fn save_trust_providers(&self, providers: &StoredTrustProviders) -> Result<(), AppError> {
+        let json = serde_json::to_string(providers)
+            .map_err(|err| AppError::SerializationError(err.to_string()))?;
+        self.secure_storage
+            .store(COMMUNITY_NODE_TRUST_PROVIDERS_KEY, &json)
+            .await
+            .map_err(|err| AppError::Storage(err.to_string()))?;
+        Ok(())
+    }
+
     async fn load_bootstrap_cache(&self) -> Result<BootstrapCache, AppError> {
         let raw = self
             .secure_storage
@@ -933,6 +1089,8 @@ impl CommunityNodeHandler {
         nodes: Vec<&CommunityNodeConfigNode>,
         path: &str,
         subject: &str,
+        algorithm: CommunityNodeTrustAlgorithm,
+        configured_provider_pubkey: Option<&str>,
     ) -> Result<serde_json::Value, AppError> {
         if parse_trust_subject(subject).is_none() {
             return Err(AppError::validation(
@@ -952,8 +1110,11 @@ impl CommunityNodeHandler {
             .map(|pair| pair.public_key);
 
         for node in nodes {
-            let expected_pubkey =
-                resolve_expected_pubkey(node.pubkey.as_deref(), current_pubkey.as_deref());
+            let expected_pubkey = resolve_expected_trust_pubkey(
+                configured_provider_pubkey,
+                node.pubkey.as_deref(),
+                current_pubkey.as_deref(),
+            );
             let url = build_url(&node.base_url, path);
             let builder = match self.authorized_request(node, Method::GET, url, true).await {
                 Ok(builder) => builder,
@@ -970,6 +1131,7 @@ impl CommunityNodeHandler {
                             &response,
                             expected_pubkey,
                             subject,
+                            trust_claim_for_algorithm(algorithm),
                             now,
                         ) {
                             last_error = Some(AppError::validation(
@@ -1228,6 +1390,20 @@ enum CommunityNodeRole {
     Bootstrap,
 }
 
+fn all_trust_algorithms() -> Vec<CommunityNodeTrustAlgorithm> {
+    vec![
+        CommunityNodeTrustAlgorithm::ReportBased,
+        CommunityNodeTrustAlgorithm::CommunicationDensity,
+    ]
+}
+
+fn trust_claim_for_algorithm(algorithm: CommunityNodeTrustAlgorithm) -> &'static str {
+    match algorithm {
+        CommunityNodeTrustAlgorithm::ReportBased => TRUST_CLAIM_REPORT_BASED,
+        CommunityNodeTrustAlgorithm::CommunicationDensity => TRUST_CLAIM_COMMUNICATION_DENSITY,
+    }
+}
+
 fn role_enabled(roles: &CommunityNodeRoleConfig, role: CommunityNodeRole) -> bool {
     match role {
         CommunityNodeRole::Labels => roles.labels,
@@ -1295,6 +1471,25 @@ fn select_nodes_for_role<'a>(
         ));
     }
     Ok(nodes)
+}
+
+fn select_nodes_for_trust<'a>(
+    config: &'a CommunityNodeConfig,
+    requested_base_url: Option<&str>,
+    provider_base_url: Option<&str>,
+) -> Result<Vec<&'a CommunityNodeConfigNode>, AppError> {
+    if let Some(raw) = requested_base_url {
+        return select_nodes_for_role(config, Some(raw), CommunityNodeRole::Trust);
+    }
+    if let Some(raw) = provider_base_url
+        && let Ok(normalized) = normalize_base_url(raw)
+        && let Some(node) = config.nodes.iter().find(|node| {
+            node.base_url == normalized && role_enabled(&node.roles, CommunityNodeRole::Trust)
+        })
+    {
+        return Ok(vec![node]);
+    }
+    select_nodes_for_role(config, None, CommunityNodeRole::Trust)
 }
 
 fn parse_cursor_map(raw: &str, enable: bool) -> Option<HashMap<String, String>> {
@@ -1368,6 +1563,7 @@ fn validate_trust_assertion_payload(
     response: &serde_json::Value,
     expected_pubkey: Option<&str>,
     subject: &str,
+    expected_claim: &str,
     now: i64,
 ) -> bool {
     let Some(assertion) = response.get("assertion") else {
@@ -1386,18 +1582,20 @@ fn validate_trust_assertion_payload(
     let Some(event_json) = assertion.get("event_json") else {
         return false;
     };
-    validate_trust_assertion_event_json(event_json, expected_pubkey, subject, now).is_some()
+    validate_trust_assertion_event_json(event_json, expected_pubkey, subject, expected_claim, now)
+        .is_some()
 }
 
 fn validate_trust_assertion_event_json(
     event_json: &serde_json::Value,
     expected_pubkey: Option<&str>,
     subject: &str,
+    expected_claim: &str,
     now: i64,
 ) -> Option<NostrEvent> {
-    let (expected_kind, subject_id) = parse_trust_subject(subject)?;
+    let parsed_subject = parse_trust_subject(subject)?;
     let event: NostrEvent = serde_json::from_value(event_json.clone()).ok()?;
-    if event.kind.as_u16() != expected_kind {
+    if event.kind.as_u16() != parsed_subject.expected_kind {
         return None;
     }
     if let Some(expected_pubkey) = expected_pubkey {
@@ -1413,10 +1611,12 @@ fn validate_trust_assertion_event_json(
         return None;
     }
 
-    if event_tag_value(&event, "d")? != subject_id {
+    if event_tag_value(&event, "d")? != parsed_subject.subject_id {
         return None;
     }
-    require_tag_value(&event, "claim")?;
+    if require_tag_value(&event, "claim")? != expected_claim {
+        return None;
+    }
     let rank = require_tag_value(&event, "rank")?.parse::<i64>().ok()?;
     if !(0..=100).contains(&rank) {
         return None;
@@ -1425,7 +1625,12 @@ fn validate_trust_assertion_event_json(
     Some(event)
 }
 
-fn parse_trust_subject(subject: &str) -> Option<(u16, &str)> {
+struct ParsedTrustSubject {
+    expected_kind: u16,
+    subject_id: String,
+}
+
+fn parse_trust_subject(subject: &str) -> Option<ParsedTrustSubject> {
     let mut parts = subject.splitn(2, ':');
     let subject_kind = parts.next()?.trim();
     let subject_id = parts.next()?.trim();
@@ -1434,19 +1639,53 @@ fn parse_trust_subject(subject: &str) -> Option<(u16, &str)> {
     }
     match subject_kind {
         "pubkey" => {
-            PublicKey::from_hex(subject_id).ok()?;
-            Some((TRUST_ASSERTION_KIND_PUBKEY, subject_id))
+            let pubkey = PublicKey::from_hex(subject_id).ok()?.to_hex();
+            Some(ParsedTrustSubject {
+                expected_kind: TRUST_ASSERTION_KIND_PUBKEY,
+                subject_id: pubkey,
+            })
         }
         "event" => {
-            if !is_32byte_hex(subject_id) {
+            let event_id = normalize_32byte_hex(subject_id)?;
+            Some(ParsedTrustSubject {
+                expected_kind: TRUST_ASSERTION_KIND_EVENT,
+                subject_id: event_id,
+            })
+        }
+        "relay" => Some(ParsedTrustSubject {
+            expected_kind: TRUST_ASSERTION_KIND_RELAY,
+            subject_id: subject_id.to_string(),
+        }),
+        "topic" => Some(ParsedTrustSubject {
+            expected_kind: TRUST_ASSERTION_KIND_TOPIC,
+            subject_id: subject_id.to_string(),
+        }),
+        "addressable" => {
+            let mut addressable_parts = subject_id.splitn(3, ':');
+            let kind = addressable_parts.next()?.trim();
+            let pubkey = addressable_parts.next()?.trim();
+            let d_tag = addressable_parts.next()?.trim();
+            if kind.is_empty() || pubkey.is_empty() || d_tag.is_empty() {
                 return None;
             }
-            Some((TRUST_ASSERTION_KIND_EVENT, subject_id))
+            let kind = kind.parse::<u32>().ok()?;
+            let pubkey = PublicKey::from_hex(pubkey).ok()?.to_hex();
+            Some(ParsedTrustSubject {
+                // Addressable targets are event-scoped subjects in the current trust assertion model.
+                expected_kind: TRUST_ASSERTION_KIND_EVENT,
+                subject_id: format!("{kind}:{pubkey}:{d_tag}"),
+            })
         }
-        "relay" => Some((TRUST_ASSERTION_KIND_RELAY, subject_id)),
-        "topic" => Some((TRUST_ASSERTION_KIND_TOPIC, subject_id)),
         _ => None,
     }
+}
+
+fn normalize_32byte_hex(value: &str) -> Option<String> {
+    let bytes = hex::decode(value).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    Some(hex::encode(bytes))
 }
 
 fn is_supported_trust_assertion_kind(kind: u16) -> bool {
@@ -1457,13 +1696,6 @@ fn is_supported_trust_assertion_kind(kind: u16) -> bool {
             | TRUST_ASSERTION_KIND_RELAY
             | TRUST_ASSERTION_KIND_TOPIC
     )
-}
-
-fn is_32byte_hex(value: &str) -> bool {
-    match hex::decode(value) {
-        Ok(bytes) => bytes.len() == 32,
-        Err(_) => false,
-    }
 }
 
 fn resolve_expected_pubkey<'a>(
@@ -1479,6 +1711,20 @@ fn resolve_expected_pubkey<'a>(
         return None;
     }
     Some(node_pubkey)
+}
+
+fn resolve_expected_trust_pubkey<'a>(
+    configured_provider_pubkey: Option<&'a str>,
+    node_pubkey: Option<&'a str>,
+    current_pubkey: Option<&str>,
+) -> Option<&'a str> {
+    if let Some(pubkey) = configured_provider_pubkey
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Some(pubkey);
+    }
+    resolve_expected_pubkey(node_pubkey, current_pubkey)
 }
 
 fn event_tag_value<'a>(event: &'a NostrEvent, name: &str) -> Option<&'a str> {
@@ -2223,25 +2469,42 @@ mod community_node_handler_tests {
         node
     }
 
-    fn build_assertion_event(subject_pubkey: &str, exp: i64) -> serde_json::Value {
+    fn build_assertion_event(
+        kind: u16,
+        subject: &str,
+        d_tag: &str,
+        exp: i64,
+        claim: &str,
+    ) -> serde_json::Value {
         let keys = Keys::generate();
+        build_assertion_event_with_keys(&keys, kind, subject, d_tag, exp, claim)
+    }
+
+    fn build_assertion_event_with_keys(
+        keys: &Keys,
+        kind: u16,
+        subject: &str,
+        d_tag: &str,
+        exp: i64,
+        claim: &str,
+    ) -> serde_json::Value {
         let exp_str = exp.to_string();
         let tags = vec![
-            Tag::parse(["d", subject_pubkey]).expect("d"),
-            Tag::parse(["claim", "reputation"]).expect("claim"),
+            Tag::parse(["d", d_tag]).expect("d"),
+            Tag::parse(["claim", claim]).expect("claim"),
             Tag::parse(["rank", "50"]).expect("rank"),
             Tag::parse(["expiration", exp_str.as_str()]).expect("expiration"),
         ];
         let content = json!({
-            "subject": format!("pubkey:{subject_pubkey}"),
-            "claim": "reputation",
+            "subject": subject,
+            "claim": claim,
             "score": 0.5,
             "expires": exp
         })
         .to_string();
-        let event = EventBuilder::new(Kind::Custom(TRUST_ASSERTION_KIND_PUBKEY), content)
+        let event = EventBuilder::new(Kind::Custom(kind), content)
             .tags(tags)
-            .sign_with_keys(&keys)
+            .sign_with_keys(keys)
             .expect("sign");
         serde_json::to_value(event).expect("event json")
     }
@@ -2324,20 +2587,143 @@ mod community_node_handler_tests {
             provider_pubkey: keypair.public_key.clone(),
             assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
             relay_url: Some("wss://relay.example".to_string()),
+            algorithm: None,
         };
         let stored = handler.set_trust_provider(request).await.expect("set");
         let loaded = handler
-            .get_trust_provider()
+            .get_trust_provider(None)
             .await
             .expect("get")
             .expect("stored");
         assert_eq!(loaded.provider_pubkey, stored.provider_pubkey);
         assert_eq!(loaded.assertion_kind, TRUST_ASSERTION_KIND_PUBKEY);
         assert_eq!(loaded.relay_url, Some("wss://relay.example".to_string()));
+        assert_eq!(loaded.algorithm, CommunityNodeTrustAlgorithm::ReportBased);
+
+        let loaded_density = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::CommunicationDensity,
+            }))
+            .await
+            .expect("get density")
+            .expect("density");
+        assert_eq!(loaded_density.provider_pubkey, keypair.public_key);
+        assert_eq!(
+            loaded_density.algorithm,
+            CommunityNodeTrustAlgorithm::CommunicationDensity
+        );
     }
 
     #[tokio::test]
-    async fn trust_provider_migrates_legacy_trust_anchor() {
+    async fn trust_provider_supports_algorithm_separation() {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let report_keypair = key_manager
+            .generate_keypair()
+            .await
+            .expect("report keypair");
+        let communication_keypair = key_manager
+            .generate_keypair()
+            .await
+            .expect("communication keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
+
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: report_keypair.public_key.clone(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: Some("https://report.example".to_string()),
+                algorithm: Some(CommunityNodeTrustAlgorithm::ReportBased),
+            })
+            .await
+            .expect("set report provider");
+
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: communication_keypair.public_key.clone(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: Some("https://communication.example".to_string()),
+                algorithm: Some(CommunityNodeTrustAlgorithm::CommunicationDensity),
+            })
+            .await
+            .expect("set communication provider");
+
+        let report_provider = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::ReportBased,
+            }))
+            .await
+            .expect("get report provider")
+            .expect("report provider");
+        assert_eq!(report_provider.provider_pubkey, report_keypair.public_key);
+        assert_eq!(
+            report_provider.algorithm,
+            CommunityNodeTrustAlgorithm::ReportBased
+        );
+
+        let communication_provider = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::CommunicationDensity,
+            }))
+            .await
+            .expect("get communication provider")
+            .expect("communication provider");
+        assert_eq!(
+            communication_provider.provider_pubkey,
+            communication_keypair.public_key
+        );
+        assert_eq!(
+            communication_provider.algorithm,
+            CommunityNodeTrustAlgorithm::CommunicationDensity
+        );
+
+        let fallback_provider = handler
+            .get_trust_provider(None)
+            .await
+            .expect("get fallback provider")
+            .expect("fallback provider");
+        assert_eq!(
+            fallback_provider.provider_pubkey, report_keypair.public_key,
+            "legacy caller should resolve report-based provider first"
+        );
+    }
+
+    #[tokio::test]
+    async fn trust_provider_ignores_legacy_trust_anchor_without_provider_record() {
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler =
+            CommunityNodeHandler::new(key_manager, secure_storage.clone(), group_key_store);
+
+        secure_storage
+            .store(
+                COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY,
+                r#"{"attester":"legacy","issued_at":42,"event_json":{"kind":39011}}"#,
+            )
+            .await
+            .expect("store legacy");
+
+        let loaded = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::ReportBased,
+            }))
+            .await
+            .expect("get");
+        assert!(loaded.is_none());
+
+        let has_legacy_anchor = secure_storage
+            .exists(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+            .await
+            .expect("legacy anchor exists check");
+        assert!(!has_legacy_anchor);
+    }
+
+    #[tokio::test]
+    async fn trust_provider_migrates_legacy_single_provider_to_both_algorithms() {
         let key_manager = Arc::new(DefaultKeyManager::new());
         let keypair = key_manager.generate_keypair().await.expect("keypair");
         let secure_storage = Arc::new(InMemorySecureStorage::default());
@@ -2346,30 +2732,57 @@ mod community_node_handler_tests {
         let handler =
             CommunityNodeHandler::new(key_manager.clone(), secure_storage.clone(), group_key_store);
 
-        let legacy = LegacyStoredTrustAnchor {
-            attester: keypair.public_key.clone(),
-            claim: None,
-            topic: None,
-            weight: 1.0,
-            issued_at: 42,
-            event_json: json!({ "kind": 39011 }),
+        let legacy_provider = StoredTrustProvider {
+            provider_pubkey: keypair.public_key.clone(),
+            assertion_kind: TRUST_ASSERTION_KIND_PUBKEY,
+            relay_url: Some("https://legacy.example".to_string()),
+            issued_at: 99,
+            event_json: json!({ "kind": TRUST_PROVIDER_LIST_KIND }),
         };
         secure_storage
             .store(
-                COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY,
-                &serde_json::to_string(&legacy).expect("legacy serialize"),
+                COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY,
+                &serde_json::to_string(&legacy_provider).expect("legacy provider serialize"),
             )
             .await
-            .expect("store legacy");
+            .expect("store legacy provider");
 
-        let loaded = handler
-            .get_trust_provider()
+        let report_loaded = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::ReportBased,
+            }))
             .await
-            .expect("get")
-            .expect("provider");
-        assert_eq!(loaded.provider_pubkey, keypair.public_key);
-        assert_eq!(loaded.assertion_kind, TRUST_ASSERTION_KIND_PUBKEY);
-        assert!(loaded.relay_url.is_none());
+            .expect("get report")
+            .expect("report");
+        let communication_loaded = handler
+            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
+                algorithm: CommunityNodeTrustAlgorithm::CommunicationDensity,
+            }))
+            .await
+            .expect("get communication")
+            .expect("communication");
+
+        assert_eq!(report_loaded.provider_pubkey, keypair.public_key);
+        assert_eq!(communication_loaded.provider_pubkey, keypair.public_key);
+        assert_eq!(
+            report_loaded.relay_url,
+            Some("https://legacy.example".to_string())
+        );
+        assert_eq!(
+            communication_loaded.relay_url,
+            Some("https://legacy.example".to_string())
+        );
+
+        let has_v2 = secure_storage
+            .exists(COMMUNITY_NODE_TRUST_PROVIDERS_KEY)
+            .await
+            .expect("v2 exists check");
+        assert!(has_v2);
+        let has_legacy = secure_storage
+            .exists(COMMUNITY_NODE_TRUST_PROVIDER_LEGACY_KEY)
+            .await
+            .expect("legacy exists check");
+        assert!(!has_legacy);
     }
 
     #[tokio::test]
@@ -2385,6 +2798,7 @@ mod community_node_handler_tests {
             provider_pubkey: keypair.public_key.clone(),
             assertion_kind: Some(20000),
             relay_url: None,
+            algorithm: Some(CommunityNodeTrustAlgorithm::ReportBased),
         };
         assert!(handler.set_trust_provider(request).await.is_err());
     }
@@ -2684,7 +3098,13 @@ mod community_node_handler_tests {
         let exp = Utc::now().timestamp() + 600;
         let subject_pubkey = Keys::generate().public_key().to_hex();
         let subject = format!("pubkey:{subject_pubkey}");
-        let event_json = build_assertion_event(&subject_pubkey, exp);
+        let event_json = build_assertion_event(
+            TRUST_ASSERTION_KIND_PUBKEY,
+            &subject,
+            &subject_pubkey,
+            exp,
+            TRUST_CLAIM_REPORT_BASED,
+        );
         let response1 = json!({
             "score": 0.2,
             "assertion": { "exp": exp, "event_json": event_json.clone() }
@@ -2750,6 +3170,273 @@ mod community_node_handler_tests {
 
         handle1.join().expect("server1");
         handle2.join().expect("server2");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_accepts_addressable_subject() {
+        let exp = Utc::now().timestamp() + 600;
+        let author = Keys::generate().public_key().to_hex();
+        let subject = format!("addressable:30078:{author}:kukuri:topic:subject-expansion:post:v1");
+        let subject_id = format!("30078:{author}:kukuri:topic:subject-expansion:post:v1");
+        let event_json = build_assertion_event(
+            TRUST_ASSERTION_KIND_EVENT,
+            &subject,
+            &subject_id,
+            exp,
+            TRUST_CLAIM_REPORT_BASED,
+        );
+        let response = json!({
+            "score": 0.7,
+            "assertion": { "exp": exp, "event_json": event_json }
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: true,
+            search: false,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![build_config_node(base_url.clone(), roles)],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        let response = handler
+            .trust_report_based(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: subject.clone(),
+            })
+            .await
+            .expect("trust response");
+
+        let score = response
+            .get("score")
+            .and_then(|value| value.as_f64())
+            .expect("score");
+        assert!((score - 0.7).abs() < 1e-9);
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/trust/report-based");
+        assert_eq!(req.params.get("subject"), Some(&subject));
+
+        handle.join().expect("server");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_rejects_assertion_signed_by_other_algorithm_provider_key() {
+        let exp = Utc::now().timestamp() + 600;
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let report_provider_keys = Keys::generate();
+        let communication_provider_keys = Keys::generate();
+        let assertion_event = build_assertion_event_with_keys(
+            &communication_provider_keys,
+            TRUST_ASSERTION_KIND_PUBKEY,
+            &subject,
+            &subject_pubkey,
+            exp,
+            TRUST_CLAIM_REPORT_BASED,
+        );
+        let response = json!({
+            "score": 0.55,
+            "assertion": { "exp": exp, "event_json": assertion_event }
+        });
+        let (report_base_url, rx, handle) = spawn_json_server(response);
+
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        key_manager.generate_keypair().await.expect("keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: true,
+            search: false,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![build_config_node(report_base_url.clone(), roles)],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: report_provider_keys.public_key().to_hex(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: Some(report_base_url.clone()),
+                algorithm: Some(CommunityNodeTrustAlgorithm::ReportBased),
+            })
+            .await
+            .expect("set report provider");
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: communication_provider_keys.public_key().to_hex(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: None,
+                algorithm: Some(CommunityNodeTrustAlgorithm::CommunicationDensity),
+            })
+            .await
+            .expect("set communication provider");
+
+        let err = handler
+            .trust_report_based(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: subject.clone(),
+            })
+            .await
+            .expect_err("report trust should reject assertion signed by communication provider");
+        assert!(
+            err.to_string()
+                .contains("Community node trust assertion is invalid")
+        );
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/trust/report-based");
+        assert_eq!(req.params.get("subject"), Some(&subject));
+
+        handle.join().expect("server");
+    }
+
+    #[tokio::test]
+    async fn trust_queries_use_algorithm_specific_provider_configuration() {
+        let exp = Utc::now().timestamp() + 600;
+        let subject_pubkey = Keys::generate().public_key().to_hex();
+        let subject = format!("pubkey:{subject_pubkey}");
+        let report_provider_keys = Keys::generate();
+        let communication_provider_keys = Keys::generate();
+
+        let report_event = build_assertion_event_with_keys(
+            &report_provider_keys,
+            TRUST_ASSERTION_KIND_PUBKEY,
+            &subject,
+            &subject_pubkey,
+            exp,
+            TRUST_CLAIM_REPORT_BASED,
+        );
+        let communication_event = build_assertion_event_with_keys(
+            &communication_provider_keys,
+            TRUST_ASSERTION_KIND_PUBKEY,
+            &subject,
+            &subject_pubkey,
+            exp,
+            TRUST_CLAIM_COMMUNICATION_DENSITY,
+        );
+        let report_response = json!({
+            "score": 0.25,
+            "assertion": { "exp": exp, "event_json": report_event }
+        });
+        let communication_response = json!({
+            "score": 0.84,
+            "assertion": { "exp": exp, "event_json": communication_event }
+        });
+
+        let (report_base_url, report_rx, report_handle) = spawn_json_server(report_response);
+        let (communication_base_url, communication_rx, communication_handle) =
+            spawn_json_server(communication_response);
+
+        let key_manager = Arc::new(DefaultKeyManager::new());
+        key_manager.generate_keypair().await.expect("keypair");
+        let secure_storage = Arc::new(InMemorySecureStorage::default());
+        let group_key_store =
+            Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
+        let handler = CommunityNodeHandler::new(key_manager, secure_storage, group_key_store);
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: true,
+            search: false,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![
+                build_config_node(report_base_url.clone(), roles.clone()),
+                build_config_node(communication_base_url.clone(), roles),
+            ],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: report_provider_keys.public_key().to_hex(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: Some(report_base_url.clone()),
+                algorithm: Some(CommunityNodeTrustAlgorithm::ReportBased),
+            })
+            .await
+            .expect("set report provider");
+        handler
+            .set_trust_provider(CommunityNodeTrustProviderRequest {
+                provider_pubkey: communication_provider_keys.public_key().to_hex(),
+                assertion_kind: Some(TRUST_ASSERTION_KIND_PUBKEY),
+                relay_url: Some(communication_base_url.clone()),
+                algorithm: Some(CommunityNodeTrustAlgorithm::CommunicationDensity),
+            })
+            .await
+            .expect("set communication provider");
+
+        let report = handler
+            .trust_report_based(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: subject.clone(),
+            })
+            .await
+            .expect("report trust response");
+        let report_score = report
+            .get("score")
+            .and_then(|value| value.as_f64())
+            .expect("report score");
+        assert!((report_score - 0.25).abs() < 1e-9);
+
+        let communication = handler
+            .trust_communication_density(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: subject.clone(),
+            })
+            .await
+            .expect("communication trust response");
+        let communication_score = communication
+            .get("score")
+            .and_then(|value| value.as_f64())
+            .expect("communication score");
+        assert!((communication_score - 0.84).abs() < 1e-9);
+
+        let report_req = report_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("report request");
+        assert_eq!(report_req.path, "/v1/trust/report-based");
+        assert_eq!(report_req.params.get("subject"), Some(&subject));
+
+        let communication_req = communication_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("communication request");
+        assert_eq!(communication_req.path, "/v1/trust/communication-density");
+        assert_eq!(communication_req.params.get("subject"), Some(&subject));
+
+        report_handle.join().expect("report server");
+        communication_handle.join().expect("communication server");
+    }
+
+    #[test]
+    fn parse_trust_subject_accepts_addressable_subject() {
+        let author = Keys::generate().public_key().to_hex();
+        let parsed = parse_trust_subject(&format!(
+            "addressable:30078:{author}:kukuri:topic:subject-expansion:post:v1"
+        ))
+        .expect("addressable subject");
+        assert_eq!(parsed.expected_kind, TRUST_ASSERTION_KIND_EVENT);
+        assert_eq!(
+            parsed.subject_id,
+            format!("30078:{author}:kukuri:topic:subject-expansion:post:v1")
+        );
+    }
+
+    #[test]
+    fn parse_trust_subject_rejects_invalid_addressable_subject() {
+        assert!(parse_trust_subject("addressable:30078:not-a-pubkey:d").is_none());
+        assert!(parse_trust_subject("addressable:kind:deadbeef:d").is_none());
+        assert!(parse_trust_subject("addressable:30078:deadbeef").is_none());
     }
 
     #[tokio::test]
