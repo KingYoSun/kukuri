@@ -627,25 +627,45 @@ describe('PostCard', () => {
     });
   });
 
-  it('trust providerが設定されている場合、trust取得にbase_urlを渡す', async () => {
+  it('trust providerがアルゴリズム別に設定されている場合、各trust取得に対応するbase_urlを渡す', async () => {
     const { communityNodeApi } = await import('@/lib/api/communityNode');
     vi.mocked(communityNodeApi.getConfig).mockResolvedValue({
       nodes: [
         {
-          base_url: 'https://trust.example',
+          base_url: 'https://report-trust.example',
           roles: { labels: false, trust: true, search: false, bootstrap: false },
           has_token: true,
           token_expires_at: null,
           pubkey: 'a'.repeat(64),
         },
+        {
+          base_url: 'https://communication-trust.example',
+          roles: { labels: false, trust: true, search: false, bootstrap: false },
+          has_token: true,
+          token_expires_at: null,
+          pubkey: 'b'.repeat(64),
+        },
       ],
     });
-    vi.mocked(communityNodeApi.getTrustProvider).mockResolvedValue({
-      provider_pubkey: 'a'.repeat(64),
-      assertion_kind: 30382,
-      relay_url: 'https://trust.example',
-      issued_at: 0,
-      event_json: {},
+    vi.mocked(communityNodeApi.getTrustProvider).mockImplementation(async (algorithm) => {
+      if (algorithm === 'communication-density') {
+        return {
+          provider_pubkey: 'b'.repeat(64),
+          assertion_kind: 30382,
+          relay_url: 'https://communication-trust.example',
+          issued_at: 0,
+          event_json: {},
+          algorithm: 'communication-density',
+        };
+      }
+      return {
+        provider_pubkey: 'a'.repeat(64),
+        assertion_kind: 30382,
+        relay_url: 'https://report-trust.example',
+        issued_at: 0,
+        event_json: {},
+        algorithm: 'report-based',
+      };
     });
     vi.mocked(communityNodeApi.trustReportBased).mockResolvedValue({ score: 0.42 });
     vi.mocked(communityNodeApi.trustCommunicationDensity).mockResolvedValue({ score: 0.24 });
@@ -655,7 +675,11 @@ describe('PostCard', () => {
     await waitFor(() => {
       expect(communityNodeApi.trustReportBased).toHaveBeenCalledWith({
         subject: `pubkey:${mockPost.author.pubkey}`,
-        base_url: 'https://trust.example',
+        base_url: 'https://report-trust.example',
+      });
+      expect(communityNodeApi.trustCommunicationDensity).toHaveBeenCalledWith({
+        subject: `pubkey:${mockPost.author.pubkey}`,
+        base_url: 'https://communication-trust.example',
       });
     });
   });

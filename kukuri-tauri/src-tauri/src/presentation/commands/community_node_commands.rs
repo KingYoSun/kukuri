@@ -3,8 +3,8 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
     CommunityNodeConfigRequest, CommunityNodeConfigResponse, CommunityNodeConsentRequest,
     CommunityNodeLabelsRequest, CommunityNodeReportRequest, CommunityNodeSearchRequest,
-    CommunityNodeTokenRequest, CommunityNodeTrustProviderRequest, CommunityNodeTrustProviderState,
-    CommunityNodeTrustRequest,
+    CommunityNodeTokenRequest, CommunityNodeTrustProviderRequest,
+    CommunityNodeTrustProviderSelector, CommunityNodeTrustProviderState, CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
 use crate::state::AppState;
@@ -56,8 +56,12 @@ pub async fn community_node_clear_token(
 #[tauri::command]
 pub async fn community_node_get_trust_provider(
     state: State<'_, AppState>,
+    request: Option<CommunityNodeTrustProviderSelector>,
 ) -> Result<ApiResponse<Option<CommunityNodeTrustProviderState>>, AppError> {
-    let result = state.community_node_handler.get_trust_provider().await;
+    let result = state
+        .community_node_handler
+        .get_trust_provider(request)
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 
@@ -76,8 +80,12 @@ pub async fn community_node_set_trust_provider(
 #[tauri::command]
 pub async fn community_node_clear_trust_provider(
     state: State<'_, AppState>,
+    request: Option<CommunityNodeTrustProviderSelector>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = state.community_node_handler.clear_trust_provider().await;
+    let result = state
+        .community_node_handler
+        .clear_trust_provider(request)
+        .await;
     Ok(ApiResponse::from_result(result))
 }
 

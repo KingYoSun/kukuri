@@ -65,11 +65,24 @@ pub struct CommunityNodeTrustRequest {
     pub subject: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommunityNodeTrustAlgorithm {
+    ReportBased,
+    CommunicationDensity,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityNodeTrustProviderRequest {
     pub provider_pubkey: String,
     pub assertion_kind: Option<u16>,
     pub relay_url: Option<String>,
+    pub algorithm: Option<CommunityNodeTrustAlgorithm>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityNodeTrustProviderSelector {
+    pub algorithm: CommunityNodeTrustAlgorithm,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +92,7 @@ pub struct CommunityNodeTrustProviderState {
     pub relay_url: Option<String>,
     pub issued_at: i64,
     pub event_json: serde_json::Value,
+    pub algorithm: CommunityNodeTrustAlgorithm,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
