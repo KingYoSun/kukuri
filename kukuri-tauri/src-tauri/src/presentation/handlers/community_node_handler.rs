@@ -1395,9 +1395,9 @@ fn validate_trust_assertion_event_json(
     subject: &str,
     now: i64,
 ) -> Option<NostrEvent> {
-    let (expected_kind, subject_id) = parse_trust_subject(subject)?;
+    let parsed_subject = parse_trust_subject(subject)?;
     let event: NostrEvent = serde_json::from_value(event_json.clone()).ok()?;
-    if event.kind.as_u16() != expected_kind {
+    if event.kind.as_u16() != parsed_subject.expected_kind {
         return None;
     }
     if let Some(expected_pubkey) = expected_pubkey {
@@ -1413,7 +1413,7 @@ fn validate_trust_assertion_event_json(
         return None;
     }
 
-    if event_tag_value(&event, "d")? != subject_id {
+    if event_tag_value(&event, "d")? != parsed_subject.subject_id {
         return None;
     }
     require_tag_value(&event, "claim")?;
@@ -1425,7 +1425,12 @@ fn validate_trust_assertion_event_json(
     Some(event)
 }
 
-fn parse_trust_subject(subject: &str) -> Option<(u16, &str)> {
+struct ParsedTrustSubject {
+    expected_kind: u16,
+    subject_id: String,
+}
+
+fn parse_trust_subject(subject: &str) -> Option<ParsedTrustSubject> {
     let mut parts = subject.splitn(2, ':');
     let subject_kind = parts.next()?.trim();
     let subject_id = parts.next()?.trim();
@@ -1434,19 +1439,53 @@ fn parse_trust_subject(subject: &str) -> Option<(u16, &str)> {
     }
     match subject_kind {
         "pubkey" => {
-            PublicKey::from_hex(subject_id).ok()?;
-            Some((TRUST_ASSERTION_KIND_PUBKEY, subject_id))
+            let pubkey = PublicKey::from_hex(subject_id).ok()?.to_hex();
+            Some(ParsedTrustSubject {
+                expected_kind: TRUST_ASSERTION_KIND_PUBKEY,
+                subject_id: pubkey,
+            })
         }
         "event" => {
-            if !is_32byte_hex(subject_id) {
+            let event_id = normalize_32byte_hex(subject_id)?;
+            Some(ParsedTrustSubject {
+                expected_kind: TRUST_ASSERTION_KIND_EVENT,
+                subject_id: event_id,
+            })
+        }
+        "relay" => Some(ParsedTrustSubject {
+            expected_kind: TRUST_ASSERTION_KIND_RELAY,
+            subject_id: subject_id.to_string(),
+        }),
+        "topic" => Some(ParsedTrustSubject {
+            expected_kind: TRUST_ASSERTION_KIND_TOPIC,
+            subject_id: subject_id.to_string(),
+        }),
+        "addressable" => {
+            let mut addressable_parts = subject_id.splitn(3, ':');
+            let kind = addressable_parts.next()?.trim();
+            let pubkey = addressable_parts.next()?.trim();
+            let d_tag = addressable_parts.next()?.trim();
+            if kind.is_empty() || pubkey.is_empty() || d_tag.is_empty() {
                 return None;
             }
-            Some((TRUST_ASSERTION_KIND_EVENT, subject_id))
+            let kind = kind.parse::<u32>().ok()?;
+            let pubkey = PublicKey::from_hex(pubkey).ok()?.to_hex();
+            Some(ParsedTrustSubject {
+                // Addressable targets are event-scoped subjects in the current trust assertion model.
+                expected_kind: TRUST_ASSERTION_KIND_EVENT,
+                subject_id: format!("{kind}:{pubkey}:{d_tag}"),
+            })
         }
-        "relay" => Some((TRUST_ASSERTION_KIND_RELAY, subject_id)),
-        "topic" => Some((TRUST_ASSERTION_KIND_TOPIC, subject_id)),
         _ => None,
     }
+}
+
+fn normalize_32byte_hex(value: &str) -> Option<String> {
+    let bytes = hex::decode(value).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    Some(hex::encode(bytes))
 }
 
 fn is_supported_trust_assertion_kind(kind: u16) -> bool {
@@ -1457,13 +1496,6 @@ fn is_supported_trust_assertion_kind(kind: u16) -> bool {
             | TRUST_ASSERTION_KIND_RELAY
             | TRUST_ASSERTION_KIND_TOPIC
     )
-}
-
-fn is_32byte_hex(value: &str) -> bool {
-    match hex::decode(value) {
-        Ok(bytes) => bytes.len() == 32,
-        Err(_) => false,
-    }
 }
 
 fn resolve_expected_pubkey<'a>(
@@ -2223,23 +2255,23 @@ mod community_node_handler_tests {
         node
     }
 
-    fn build_assertion_event(subject_pubkey: &str, exp: i64) -> serde_json::Value {
+    fn build_assertion_event(kind: u16, subject: &str, d_tag: &str, exp: i64) -> serde_json::Value {
         let keys = Keys::generate();
         let exp_str = exp.to_string();
         let tags = vec![
-            Tag::parse(["d", subject_pubkey]).expect("d"),
+            Tag::parse(["d", d_tag]).expect("d"),
             Tag::parse(["claim", "reputation"]).expect("claim"),
             Tag::parse(["rank", "50"]).expect("rank"),
             Tag::parse(["expiration", exp_str.as_str()]).expect("expiration"),
         ];
         let content = json!({
-            "subject": format!("pubkey:{subject_pubkey}"),
+            "subject": subject,
             "claim": "reputation",
             "score": 0.5,
             "expires": exp
         })
         .to_string();
-        let event = EventBuilder::new(Kind::Custom(TRUST_ASSERTION_KIND_PUBKEY), content)
+        let event = EventBuilder::new(Kind::Custom(kind), content)
             .tags(tags)
             .sign_with_keys(&keys)
             .expect("sign");
@@ -2684,7 +2716,8 @@ mod community_node_handler_tests {
         let exp = Utc::now().timestamp() + 600;
         let subject_pubkey = Keys::generate().public_key().to_hex();
         let subject = format!("pubkey:{subject_pubkey}");
-        let event_json = build_assertion_event(&subject_pubkey, exp);
+        let event_json =
+            build_assertion_event(TRUST_ASSERTION_KIND_PUBKEY, &subject, &subject_pubkey, exp);
         let response1 = json!({
             "score": 0.2,
             "assertion": { "exp": exp, "event_json": event_json.clone() }
@@ -2750,6 +2783,74 @@ mod community_node_handler_tests {
 
         handle1.join().expect("server1");
         handle2.join().expect("server2");
+    }
+
+    #[tokio::test]
+    async fn trust_report_based_accepts_addressable_subject() {
+        let exp = Utc::now().timestamp() + 600;
+        let author = Keys::generate().public_key().to_hex();
+        let subject = format!("addressable:30078:{author}:kukuri:topic:subject-expansion:post:v1");
+        let subject_id = format!("30078:{author}:kukuri:topic:subject-expansion:post:v1");
+        let event_json =
+            build_assertion_event(TRUST_ASSERTION_KIND_EVENT, &subject, &subject_id, exp);
+        let response = json!({
+            "score": 0.7,
+            "assertion": { "exp": exp, "event_json": event_json }
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        let roles = CommunityNodeRoleConfig {
+            labels: false,
+            trust: true,
+            search: false,
+            bootstrap: false,
+        };
+        let config = CommunityNodeConfig {
+            nodes: vec![build_config_node(base_url.clone(), roles)],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        let response = handler
+            .trust_report_based(CommunityNodeTrustRequest {
+                base_url: None,
+                subject: subject.clone(),
+            })
+            .await
+            .expect("trust response");
+
+        let score = response
+            .get("score")
+            .and_then(|value| value.as_f64())
+            .expect("score");
+        assert!((score - 0.7).abs() < 1e-9);
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/trust/report-based");
+        assert_eq!(req.params.get("subject"), Some(&subject));
+
+        handle.join().expect("server");
+    }
+
+    #[test]
+    fn parse_trust_subject_accepts_addressable_subject() {
+        let author = Keys::generate().public_key().to_hex();
+        let parsed = parse_trust_subject(&format!(
+            "addressable:30078:{author}:kukuri:topic:subject-expansion:post:v1"
+        ))
+        .expect("addressable subject");
+        assert_eq!(parsed.expected_kind, TRUST_ASSERTION_KIND_EVENT);
+        assert_eq!(
+            parsed.subject_id,
+            format!("30078:{author}:kukuri:topic:subject-expansion:post:v1")
+        );
+    }
+
+    #[test]
+    fn parse_trust_subject_rejects_invalid_addressable_subject() {
+        assert!(parse_trust_subject("addressable:30078:not-a-pubkey:d").is_none());
+        assert!(parse_trust_subject("addressable:kind:deadbeef:d").is_none());
+        assert!(parse_trust_subject("addressable:30078:deadbeef").is_none());
     }
 
     #[tokio::test]

@@ -863,7 +863,7 @@
           {
             "name": "subject",
             "in": "query",
-            "description": "Trust subject",
+            "description": "Trust subject (pubkey:<hex> | event:<32-byte-hex> | relay:<url> | topic:<topic_id> | addressable:<kind>:<pubkey>:<d-tag>)",
             "required": true,
             "schema": {
               "type": "string"
@@ -890,7 +890,7 @@
           {
             "name": "subject",
             "in": "query",
-            "description": "Trust subject",
+            "description": "Trust subject (pubkey:<hex> | event:<32-byte-hex> | relay:<url> | topic:<topic_id> | addressable:<kind>:<pubkey>:<d-tag>)",
             "required": true,
             "schema": {
               "type": "string"
