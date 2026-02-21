@@ -1,6 +1,6 @@
 use crate::{
-    access_control, auth, dashboard, dsar, moderation, policies, reindex, services, subscriptions,
-    trust, AppState,
+    access_control, auth, dashboard, deprecated_attestations_alias, dsar, moderation, policies,
+    reindex, services, subscriptions, trust, AppState,
 };
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
@@ -2848,7 +2848,7 @@ async fn policies_contract_lifecycle_success() {
 }
 
 #[tokio::test]
-async fn legacy_admin_path_aliases_contract_success() {
+async fn legacy_admin_path_aliases_contract_success_and_trust_attestations_deprecated() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let policy_type = format!("terms-legacy-{}", &Uuid::new_v4().to_string()[..8]);
@@ -2898,7 +2898,7 @@ async fn legacy_admin_path_aliases_contract_success() {
             "/v1/admin/trust/jobs",
             get(trust::list_jobs).post(trust::create_job),
         )
-        .route("/v1/attestations", post(trust::create_job))
+        .route("/v1/attestations", post(deprecated_attestations_alias))
         .with_state(state);
 
     let (status, payload) = post_json(
@@ -3015,7 +3015,7 @@ async fn legacy_admin_path_aliases_contract_success() {
 
     let (status, payload) = post_json(
         app.clone(),
-        "/v1/attestations",
+        "/v1/admin/trust/jobs",
         json!({
             "job_type": "report_based",
             "subject_pubkey": subject_pubkey
@@ -3031,7 +3031,7 @@ async fn legacy_admin_path_aliases_contract_success() {
         .to_string();
 
     let (status, payload) = get_json_with_session(
-        app,
+        app.clone(),
         &format!("/v1/admin/trust/jobs?subject_pubkey={subject_pubkey}&limit=10"),
         &session_id,
     )
@@ -3042,6 +3042,26 @@ async fn legacy_admin_path_aliases_contract_success() {
         row.get("job_id").and_then(Value::as_str) == Some(job_id.as_str())
             && row.get("job_type").and_then(Value::as_str) == Some("report_based")
     }));
+
+    let (status, payload) = post_json(
+        app,
+        "/v1/attestations",
+        json!({
+            "job_type": "report_based",
+            "subject_pubkey": subject_pubkey
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::GONE);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("DEPRECATED_PATH")
+    );
+    assert_eq!(
+        payload.get("message").and_then(Value::as_str),
+        Some("POST /v1/attestations is deprecated; use POST /v1/admin/trust/jobs")
+    );
 }
 
 #[tokio::test]

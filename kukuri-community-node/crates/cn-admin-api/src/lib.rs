@@ -369,7 +369,7 @@ fn build_router(state: AppState) -> Router {
             "/v1/admin/trust/jobs",
             get(trust::list_jobs).post(trust::create_job),
         )
-        .route("/v1/attestations", post(trust::create_job))
+        .route("/v1/attestations", post(deprecated_attestations_alias))
         .route("/v1/admin/trust/schedules", get(trust::list_schedules))
         .route("/v1/admin/trust/targets", get(trust::list_targets))
         .route(
@@ -414,6 +414,14 @@ async fn metrics_endpoint() -> impl IntoResponse {
 async fn openapi_json(headers: HeaderMap) -> impl IntoResponse {
     let server_url = openapi::infer_server_url(&headers);
     Json(openapi::document(server_url.as_deref()))
+}
+
+async fn deprecated_attestations_alias() -> ApiResult<Json<serde_json::Value>> {
+    Err(ApiError::new(
+        StatusCode::GONE,
+        "DEPRECATED_PATH",
+        "POST /v1/attestations is deprecated; use POST /v1/admin/trust/jobs",
+    ))
 }
 
 fn parse_health_targets() -> HashMap<String, String> {

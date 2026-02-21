@@ -140,16 +140,6 @@ impl StoredTrustProviders {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyStoredTrustAnchor {
-    attester: String,
-    claim: Option<String>,
-    topic: Option<String>,
-    weight: f64,
-    issued_at: i64,
-    event_json: serde_json::Value,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct BootstrapCache {
     #[serde(default)]
@@ -997,6 +987,10 @@ impl CommunityNodeHandler {
         }
 
         let Some(legacy_provider) = self.load_legacy_trust_provider().await? else {
+            let _ = self
+                .secure_storage
+                .delete(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
+                .await;
             return Ok(StoredTrustProviders::default());
         };
         let migrated = StoredTrustProviders {
@@ -1026,30 +1020,7 @@ impl CommunityNodeHandler {
                 .map_err(|err| AppError::DeserializationError(err.to_string()))?;
             return Ok(Some(stored));
         }
-
-        let legacy_anchor_raw = self
-            .secure_storage
-            .retrieve(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
-            .await
-            .map_err(|err| AppError::Storage(err.to_string()))?;
-        let Some(raw) = legacy_anchor_raw else {
-            return Ok(None);
-        };
-        let legacy: LegacyStoredTrustAnchor = serde_json::from_str(&raw)
-            .map_err(|err| AppError::DeserializationError(err.to_string()))?;
-        PublicKey::from_hex(&legacy.attester).map_err(|err| {
-            AppError::validation(
-                ValidationFailureKind::Generic,
-                format!("Invalid provider pubkey in legacy trust anchor: {err}"),
-            )
-        })?;
-        Ok(Some(StoredTrustProvider {
-            provider_pubkey: legacy.attester,
-            assertion_kind: TRUST_ASSERTION_KIND_PUBKEY,
-            relay_url: None,
-            issued_at: legacy.issued_at,
-            event_json: legacy.event_json,
-        }))
+        Ok(None)
     }
 
     async fn save_trust_providers(&self, providers: &StoredTrustProviders) -> Result<(), AppError> {
@@ -2720,27 +2691,18 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
-    async fn trust_provider_migrates_legacy_trust_anchor() {
+    async fn trust_provider_ignores_legacy_trust_anchor_without_provider_record() {
         let key_manager = Arc::new(DefaultKeyManager::new());
-        let keypair = key_manager.generate_keypair().await.expect("keypair");
         let secure_storage = Arc::new(InMemorySecureStorage::default());
         let group_key_store =
             Arc::new(SecureGroupKeyStore::new(secure_storage.clone())) as Arc<dyn GroupKeyStore>;
         let handler =
-            CommunityNodeHandler::new(key_manager.clone(), secure_storage.clone(), group_key_store);
+            CommunityNodeHandler::new(key_manager, secure_storage.clone(), group_key_store);
 
-        let legacy = LegacyStoredTrustAnchor {
-            attester: keypair.public_key.clone(),
-            claim: None,
-            topic: None,
-            weight: 1.0,
-            issued_at: 42,
-            event_json: json!({ "kind": 39011 }),
-        };
         secure_storage
             .store(
                 COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY,
-                &serde_json::to_string(&legacy).expect("legacy serialize"),
+                r#"{"attester":"legacy","issued_at":42,"event_json":{"kind":39011}}"#,
             )
             .await
             .expect("store legacy");
@@ -2750,20 +2712,14 @@ mod community_node_handler_tests {
                 algorithm: CommunityNodeTrustAlgorithm::ReportBased,
             }))
             .await
-            .expect("get")
-            .expect("provider");
-        assert_eq!(loaded.provider_pubkey, keypair.public_key);
-        assert_eq!(loaded.assertion_kind, TRUST_ASSERTION_KIND_PUBKEY);
-        assert!(loaded.relay_url.is_none());
+            .expect("get");
+        assert!(loaded.is_none());
 
-        let loaded_density = handler
-            .get_trust_provider(Some(CommunityNodeTrustProviderSelector {
-                algorithm: CommunityNodeTrustAlgorithm::CommunicationDensity,
-            }))
+        let has_legacy_anchor = secure_storage
+            .exists(COMMUNITY_NODE_TRUST_ANCHOR_LEGACY_KEY)
             .await
-            .expect("get density")
-            .expect("provider");
-        assert_eq!(loaded_density.provider_pubkey, keypair.public_key);
+            .expect("legacy anchor exists check");
+        assert!(!has_legacy_anchor);
     }
 
     #[tokio::test]

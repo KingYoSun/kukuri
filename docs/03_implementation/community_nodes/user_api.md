@@ -197,6 +197,8 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 - `GET /v1/trust/report-based?subject=...`
 - `GET /v1/trust/communication-density?subject=...`
   - `subject` は `pubkey:<hex>` / `event:<32-byte-hex>` / `relay:<url>` / `topic:<topic_id>` / `addressable:<kind>:<pubkey>:<d-tag>` を受理
+  - score row（`report_scores` / `communication_scores`）が存在し、参照先 `attestation_id` が失効/欠損している場合は `assertion: null` を返す（最新 assertion への自動フォールバックは行わない）
+  - score row が存在しない場合は `cn_trust.attestations` の最新 active assertion（subject + claim）を参照して返却できる
 
 ### 個人データ（削除/エクスポート）
 
