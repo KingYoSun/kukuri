@@ -44,6 +44,7 @@ services:
       - "8082"
     ports:
       - "8082:8082"
+      - "11223:11223/udp"
 
   admin-api:
     <<: *cn-service
@@ -65,12 +66,13 @@ services:
     volumes:
       - ./apps/admin-console:/app
     environment:
+      CI: "true"
       VITE_ADMIN_API_BASE: /admin-api
     command:
       [
         "bash",
         "-lc",
-        "corepack enable && pnpm install --no-frozen-lockfile && pnpm dev --host 0.0.0.0 --port 5173"
+        "corepack enable && pnpm install --no-frozen-lockfile && pnpm dev --host 0.0.0.0 --port 5173",
       ]
     networks:
       - cn

@@ -13,7 +13,9 @@
     reverse_proxy admin-api:8081
   }
 
-  handle_path /admin/* {
+  redir /admin /admin/ 302
+
+  handle /admin* {
     reverse_proxy admin-console:5173
   }
 }
