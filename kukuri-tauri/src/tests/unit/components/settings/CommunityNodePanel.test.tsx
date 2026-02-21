@@ -19,7 +19,7 @@ vi.mock('@/lib/api/communityNode', () => ({
   },
   communityNodeApi: {
     getConfig: vi.fn(),
-    getTrustAnchor: vi.fn(),
+    getTrustProvider: vi.fn(),
     listGroupKeys: vi.fn(),
     getConsentStatus: vi.fn(),
     setConfig: vi.fn(),
@@ -27,8 +27,8 @@ vi.mock('@/lib/api/communityNode', () => ({
     authenticate: vi.fn(),
     clearToken: vi.fn(),
     acceptConsents: vi.fn(),
-    setTrustAnchor: vi.fn(),
-    clearTrustAnchor: vi.fn(),
+    setTrustProvider: vi.fn(),
+    clearTrustProvider: vi.fn(),
   },
 }));
 
@@ -97,7 +97,7 @@ beforeEach(() => {
   useCommunityNodeStore.getState().reset();
 
   mockCommunityNodeApi.getConfig.mockResolvedValue({ nodes: [createNode()] });
-  mockCommunityNodeApi.getTrustAnchor.mockResolvedValue(null);
+  mockCommunityNodeApi.getTrustProvider.mockResolvedValue(null);
   mockCommunityNodeApi.listGroupKeys.mockResolvedValue([]);
   mockCommunityNodeApi.getConsentStatus.mockResolvedValue({ pending: [] });
   mockCommunityNodeApi.setConfig.mockResolvedValue({ nodes: [createNode()] });
@@ -105,8 +105,8 @@ beforeEach(() => {
   mockCommunityNodeApi.authenticate.mockResolvedValue({});
   mockCommunityNodeApi.clearToken.mockResolvedValue(undefined);
   mockCommunityNodeApi.acceptConsents.mockResolvedValue({});
-  mockCommunityNodeApi.setTrustAnchor.mockResolvedValue({});
-  mockCommunityNodeApi.clearTrustAnchor.mockResolvedValue(undefined);
+  mockCommunityNodeApi.setTrustProvider.mockResolvedValue({});
+  mockCommunityNodeApi.clearTrustProvider.mockResolvedValue(undefined);
 
   mockAccessControlApi.listJoinRequests.mockResolvedValue({ items: [] });
   mockAccessControlApi.requestJoin.mockResolvedValue({});
@@ -256,16 +256,16 @@ describe('CommunityNodePanel', () => {
     expect(mockToast.success).toHaveBeenCalledWith('同意状況を更新しました');
   });
 
-  it('logs query error when trust anchor fetch fails', async () => {
-    mockCommunityNodeApi.getTrustAnchor.mockRejectedValue(new Error('fetch failed'));
+  it('logs query error when trust provider fetch fails', async () => {
+    mockCommunityNodeApi.getTrustProvider.mockRejectedValue(new Error('fetch failed'));
 
     renderPanel();
 
     await waitFor(() => {
       expect(mockErrorHandler.log).toHaveBeenCalledWith(
-        'Failed to load community node trust anchor',
+        'Failed to load community node trust provider',
         expect.any(Error),
-        expect.objectContaining({ context: 'CommunityNodePanel.trustAnchor' }),
+        expect.objectContaining({ context: 'CommunityNodePanel.trustProvider' }),
       );
     });
   });

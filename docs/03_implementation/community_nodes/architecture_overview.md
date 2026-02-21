@@ -7,7 +7,7 @@
 
 1. **ノードは“権威”ではなく“提案者”**
    - moderation は `label(kind=39006)`（署名付き提案）
-   - trust は `attestation(kind=39010)`（署名付き主張）
+   - trust は `NIP-85 assertion(kind=30382-30385)`（署名付き主張）
    - クライアントは採用ノードを選択できる（複数採用も可能）
 2. **役割分割 + 併用可能**
    - `bootstrap` / `relay` / `index` / `moderation` / `trust` を分離可能にし、ロックインを避ける
@@ -68,7 +68,7 @@
   - デフォルトは認証OFFで起動でき、管理画面から後から認証必須化できる（NIP-42 等）
     - 認証OFFの間は同意（ToS/Privacy）も不要として扱う（ユーザー操作の手間を最小化）
 - **bootstrap/index/moderation/trust（worker）**:
-  - relay が保存した取込レコードを入力として処理し、派生成果（検索/label/attestation）を生成する
+  - relay が保存した取込レコードを入力として処理し、派生成果（検索/label/assertion）を生成する
   - 入力は outbox を `seq` で追従し、`LISTEN/NOTIFY` は起床通知として利用する（詳細: `docs/03_implementation/community_nodes/outbox_notify_semantics.md`）
   - 外部公開ポートは原則持たず、User API が外部I/Fを集約する
 
@@ -86,7 +86,7 @@
   - 各サービスが「自分が提供する役割・エンドポイント・ポリシー」を署名付きで配布する
 - **Moderation**: `report(kind=39005)` → `label(kind=39006)`
   - report は入力（ゲームされやすい）なので、label のみを“提案”として配る
-- **Trust**: `attestation(kind=39010)` / `trust.anchor(kind=39011)`
+- **Trust**: `assertion(kind=30382-30385)` / `trust provider list(kind=10040)`
   - trust はスコアの押し付けではなく、根拠付きの主張を配る
 
 ## セキュリティ / 運用前提（補完）

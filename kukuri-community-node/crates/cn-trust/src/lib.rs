@@ -124,7 +124,7 @@ pub async fn run(config: TrustConfig) -> Result<()> {
             "score_normalization": 20.0,
             "interaction_weights": { "1": 1.0, "6": 0.5, "7": 0.3 }
         },
-        "attestation": { "exp_seconds": 86400 },
+        "assertion": { "exp_seconds": 86400 },
         "jobs": {
             "schedule_poll_seconds": 30,
             "report_based_interval_seconds": 86400,
@@ -854,8 +854,8 @@ async fn update_report_score(
         report_count as f64 * runtime.report_weight + label_count as f64 * runtime.label_weight;
     let score = (weighted / runtime.report_score_normalization).min(1.0);
 
-    let mut attestation_id: Option<String> = None;
-    let mut attestation_exp: Option<i64> = None;
+    let mut assertion_event_id: Option<String> = None;
+    let mut assertion_exp: Option<i64> = None;
     if report_count > 0 || label_count > 0 {
         let value = json!({
             "score": score,
@@ -867,8 +867,8 @@ async fn update_report_score(
             "method": trust_core::METHOD_REPORT_BASED,
             "window_days": runtime.report_window_days
         });
-        let exp = now + runtime.attestation_exp_seconds;
-        let issued = issue_attestation(
+        let exp = now + runtime.assertion_exp_seconds;
+        let issued = issue_trusted_assertion(
             tx,
             node_keys,
             subject_pubkey,
@@ -880,8 +880,8 @@ async fn update_report_score(
         )
         .await?;
         if let Some((id, exp)) = issued {
-            attestation_id = Some(id);
-            attestation_exp = Some(exp);
+            assertion_event_id = Some(id);
+            assertion_exp = Some(exp);
         }
     }
 
@@ -894,8 +894,8 @@ async fn update_report_score(
     .bind(label_count)
     .bind(since)
     .bind(now)
-    .bind(attestation_id)
-    .bind(attestation_exp)
+    .bind(assertion_event_id)
+    .bind(assertion_exp)
     .execute(&mut **tx)
     .await?;
 
@@ -913,8 +913,8 @@ async fn update_communication_score(
     let stats = age_interaction_stats(tx, subject_pubkey, since).await?;
     let score = (stats.weight_sum / runtime.communication_score_normalization).min(1.0);
 
-    let mut attestation_id: Option<String> = None;
-    let mut attestation_exp: Option<i64> = None;
+    let mut assertion_event_id: Option<String> = None;
+    let mut assertion_exp: Option<i64> = None;
     if stats.edge_count > 0 {
         let value = json!({
             "score": score,
@@ -926,8 +926,8 @@ async fn update_communication_score(
             "method": trust_core::METHOD_COMMUNICATION_DENSITY,
             "window_days": runtime.communication_window_days
         });
-        let exp = now + runtime.attestation_exp_seconds;
-        let issued = issue_attestation(
+        let exp = now + runtime.assertion_exp_seconds;
+        let issued = issue_trusted_assertion(
             tx,
             node_keys,
             subject_pubkey,
@@ -939,8 +939,8 @@ async fn update_communication_score(
         )
         .await?;
         if let Some((id, exp)) = issued {
-            attestation_id = Some(id);
-            attestation_exp = Some(exp);
+            assertion_event_id = Some(id);
+            assertion_exp = Some(exp);
         }
     }
 
@@ -953,8 +953,8 @@ async fn update_communication_score(
     .bind(stats.peer_count)
     .bind(since)
     .bind(now)
-    .bind(attestation_id)
-    .bind(attestation_exp)
+    .bind(assertion_event_id)
+    .bind(assertion_exp)
     .execute(&mut **tx)
     .await?;
 
@@ -962,7 +962,7 @@ async fn update_communication_score(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn issue_attestation(
+async fn issue_trusted_assertion(
     tx: &mut Transaction<'_, Postgres>,
     node_keys: &Keys,
     subject_pubkey: &str,
@@ -972,7 +972,7 @@ async fn issue_attestation(
     context: serde_json::Value,
     exp: i64,
 ) -> Result<Option<(String, i64)>> {
-    let input = trust_core::AttestationInput {
+    let input = trust_core::TrustedAssertionInput {
         subject: format!("pubkey:{subject_pubkey}"),
         claim: claim.to_string(),
         score,
@@ -982,7 +982,7 @@ async fn issue_attestation(
         exp,
         topic_id: None,
     };
-    let event = trust_core::build_attestation_event(node_keys, &input)?;
+    let event = trust_core::build_trusted_assertion_event(node_keys, &input)?;
     let event_json = serde_json::to_value(&event)?;
 
     sqlx::query(

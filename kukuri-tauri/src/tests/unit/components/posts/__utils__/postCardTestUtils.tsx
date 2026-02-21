@@ -131,13 +131,13 @@ vi.mock('@/lib/api/tauri', () => ({
 vi.mock('@/lib/api/communityNode', () => ({
   communityNodeApi: {
     getConfig: vi.fn().mockResolvedValue(null),
-    getTrustAnchor: vi.fn().mockResolvedValue(null),
+    getTrustProvider: vi.fn().mockResolvedValue(null),
     listLabels: vi.fn(),
     submitReport: vi.fn(),
     trustReportBased: vi.fn(),
     trustCommunicationDensity: vi.fn(),
-    setTrustAnchor: vi.fn(),
-    clearTrustAnchor: vi.fn(),
+    setTrustProvider: vi.fn(),
+    clearTrustProvider: vi.fn(),
   },
 }));
 

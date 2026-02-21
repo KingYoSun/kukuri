@@ -66,19 +66,17 @@ pub struct CommunityNodeTrustRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeTrustAnchorRequest {
-    pub attester: String,
-    pub claim: Option<String>,
-    pub topic: Option<String>,
-    pub weight: Option<f64>,
+pub struct CommunityNodeTrustProviderRequest {
+    pub provider_pubkey: String,
+    pub assertion_kind: Option<u16>,
+    pub relay_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommunityNodeTrustAnchorState {
-    pub attester: String,
-    pub claim: Option<String>,
-    pub topic: Option<String>,
-    pub weight: f64,
+pub struct CommunityNodeTrustProviderState {
+    pub provider_pubkey: String,
+    pub assertion_kind: u16,
+    pub relay_url: Option<String>,
     pub issued_at: i64,
     pub event_json: serde_json::Value,
 }

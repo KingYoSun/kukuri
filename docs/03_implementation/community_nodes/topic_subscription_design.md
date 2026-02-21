@@ -126,7 +126,7 @@
    - 実装案: DBポーリング / `LISTEN/NOTIFY` / 内部HTTP呼び出し
 6. relay が取込レコードを Postgres に保存し、outbox（正）+ `LISTEN/NOTIFY`（起床通知）で下流へ通知
    - 詳細: `docs/03_implementation/community_nodes/outbox_notify_semantics.md`
-7. index/moderation/trust が取込レコードを処理し、結果（検索インデックス/label/attestation）を生成
+7. index/moderation/trust が取込レコードを処理し、結果（検索インデックス/label/assertion）を生成
 
 ## relay 必須化に伴う「取込レコード」設計（最小）
 

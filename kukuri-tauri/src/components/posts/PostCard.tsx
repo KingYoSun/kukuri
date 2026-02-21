@@ -202,9 +202,9 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
     queryFn: () => communityNodeApi.getConfig(),
     staleTime: 1000 * 60 * 5,
   });
-  const trustAnchorQuery = useQuery({
-    queryKey: ['community-node', 'trust-anchor'],
-    queryFn: () => communityNodeApi.getTrustAnchor(),
+  const trustProviderQuery = useQuery({
+    queryKey: ['community-node', 'trust-provider'],
+    queryFn: () => communityNodeApi.getTrustProvider(),
     staleTime: 1000 * 60 * 5,
   });
   const labelNodes =
@@ -212,12 +212,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const trustNodes =
     communityConfigQuery.data?.nodes?.filter((node) => node.roles.trust && node.has_token) ?? [];
   const reportNode = communityConfigQuery.data?.nodes?.find((node) => node.has_token) ?? null;
-  const trustAnchorAttester = trustAnchorQuery.data?.attester ?? null;
-  const trustAnchorNode = trustAnchorAttester
-    ? (trustNodes.find((node) => node.pubkey === trustAnchorAttester) ?? null)
+  const trustProviderPubkey = trustProviderQuery.data?.provider_pubkey ?? null;
+  const trustProviderNode = trustProviderPubkey
+    ? (trustNodes.find((node) => node.pubkey === trustProviderPubkey) ?? null)
     : null;
-  const trustBaseUrl = trustAnchorNode?.base_url;
-  const trustAttesterLabel = formatAttesterLabel(trustBaseUrl, trustAnchorAttester);
+  const trustBaseUrl = trustProviderNode?.base_url;
+  const trustAttesterLabel = formatAttesterLabel(trustBaseUrl, trustProviderPubkey);
   const enableLabels = labelNodes.length > 0;
   const enableTrust = trustNodes.length > 0;
   const canReport = Boolean(reportNode);
@@ -239,7 +239,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       'trust',
       'report-based',
       post.author.pubkey,
-      trustAnchorAttester ?? 'auto',
+      trustProviderPubkey ?? 'auto',
     ],
     queryFn: () =>
       communityNodeApi.trustReportBased({ subject: trustSubject, base_url: trustBaseUrl }),
@@ -252,7 +252,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       'trust',
       'communication-density',
       post.author.pubkey,
-      trustAnchorAttester ?? 'auto',
+      trustProviderPubkey ?? 'auto',
     ],
     queryFn: () =>
       communityNodeApi.trustCommunicationDensity({ subject: trustSubject, base_url: trustBaseUrl }),
@@ -262,7 +262,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   const labelSummaries = parseLabelSummaries(labelQuery.data);
   const reportScore = toNumber(trustReportQuery.data?.score);
   const densityScore = toNumber(trustDensityQuery.data?.score);
-  const showAttesterLabel = Boolean(trustAnchorAttester && trustAttesterLabel);
+  const showAttesterLabel = Boolean(trustProviderPubkey && trustAttesterLabel);
   const resolvedScope = post.scope ?? 'public';
   const showScopeBadge = resolvedScope !== 'public';
   const showEncryptedBadge = post.isEncrypted === true;
@@ -294,12 +294,12 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
   }, [labelQuery.isError, labelQuery.error, post.id]);
 
   useEffect(() => {
-    if (trustAnchorQuery.isError) {
-      errorHandler.log('Failed to load community node trust anchor', trustAnchorQuery.error, {
-        context: 'PostCard.trustAnchor',
+    if (trustProviderQuery.isError) {
+      errorHandler.log('Failed to load community node trust provider', trustProviderQuery.error, {
+        context: 'PostCard.trustProvider',
       });
     }
-  }, [trustAnchorQuery.isError, trustAnchorQuery.error]);
+  }, [trustProviderQuery.isError, trustProviderQuery.error]);
 
   useEffect(() => {
     if (trustReportQuery.isError) {

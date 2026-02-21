@@ -13,7 +13,7 @@ pub struct TrustRuntimeConfig {
     pub communication_window_days: i64,
     pub communication_score_normalization: f64,
     pub interaction_weights: HashMap<i32, f64>,
-    pub attestation_exp_seconds: i64,
+    pub assertion_exp_seconds: i64,
     pub schedule_poll_seconds: u64,
     pub report_schedule_interval_seconds: i64,
     pub communication_schedule_interval_seconds: i64,
@@ -26,7 +26,10 @@ impl TrustRuntimeConfig {
         let communication = value
             .get("communication_density")
             .and_then(|v| v.as_object());
-        let attestation = value.get("attestation").and_then(|v| v.as_object());
+        let assertion = value
+            .get("assertion")
+            .and_then(|v| v.as_object())
+            .or_else(|| value.get("attestation").and_then(|v| v.as_object()));
         let jobs = value.get("jobs").and_then(|v| v.as_object());
 
         let interaction_weights = communication
@@ -98,7 +101,7 @@ impl TrustRuntimeConfig {
                 .unwrap_or(20.0)
                 .max(1.0),
             interaction_weights,
-            attestation_exp_seconds: attestation
+            assertion_exp_seconds: assertion
                 .and_then(|map| map.get("exp_seconds"))
                 .and_then(|v| v.as_i64())
                 .unwrap_or(86400)

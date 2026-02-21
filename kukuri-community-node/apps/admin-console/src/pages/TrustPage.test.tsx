@@ -38,7 +38,7 @@ describe('TrustPage', () => {
             score_normalization: 20,
             interaction_weights: { '1': 1, '6': 0.5, '7': 0.3 }
           },
-          attestation: { exp_seconds: 86400 }
+          assertion: { exp_seconds: 86400 }
         },
         updated_at: 1738809600,
         updated_by: 'admin',

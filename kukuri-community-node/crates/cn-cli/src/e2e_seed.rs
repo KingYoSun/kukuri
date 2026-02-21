@@ -195,9 +195,9 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
         "reports": 2,
         "labels": 1
     });
-    let report_attestation = trust_core::build_attestation_event(
+    let report_assertion = trust_core::build_trusted_assertion_event(
         &ctx.node.keys,
-        &trust_core::AttestationInput {
+        &trust_core::TrustedAssertionInput {
             subject: subject.clone(),
             claim: trust_core::CLAIM_REPORT_BASED.to_string(),
             score: report_score,
@@ -208,9 +208,9 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
             topic_id: Some(SEED_TOPIC_ALPHA.to_string()),
         },
     )?;
-    insert_attestation(
+    insert_assertion_event(
         pool,
-        &report_attestation,
+        &report_assertion,
         &subject,
         trust_core::CLAIM_REPORT_BASED,
         report_score,
@@ -223,7 +223,7 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
     upsert_report_score(
         pool,
         &subject_pubkey,
-        report_attestation.id.clone(),
+        report_assertion.id.clone(),
         report_exp,
     )
     .await?;
@@ -239,9 +239,9 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
         "interactions": 4,
         "peers": 2
     });
-    let comm_attestation = trust_core::build_attestation_event(
+    let comm_assertion = trust_core::build_trusted_assertion_event(
         &ctx.node.keys,
-        &trust_core::AttestationInput {
+        &trust_core::TrustedAssertionInput {
             subject: subject.clone(),
             claim: trust_core::CLAIM_COMMUNICATION_DENSITY.to_string(),
             score: comm_score,
@@ -252,9 +252,9 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
             topic_id: None,
         },
     )?;
-    insert_attestation(
+    insert_assertion_event(
         pool,
-        &comm_attestation,
+        &comm_assertion,
         &subject,
         trust_core::CLAIM_COMMUNICATION_DENSITY,
         comm_score,
@@ -264,8 +264,7 @@ async fn seed_with_clients(pool: &Pool<Postgres>, ctx: &SeedContext) -> Result<S
         None,
     )
     .await?;
-    upsert_communication_score(pool, &subject_pubkey, comm_attestation.id.clone(), comm_exp)
-        .await?;
+    upsert_communication_score(pool, &subject_pubkey, comm_assertion.id.clone(), comm_exp).await?;
 
     let summary = SeedSummary {
         label_target: label_target.clone(),
@@ -759,7 +758,7 @@ async fn insert_label(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn insert_attestation(
+async fn insert_assertion_event(
     pool: &Pool<Postgres>,
     event: &nostr::RawEvent,
     subject: &str,

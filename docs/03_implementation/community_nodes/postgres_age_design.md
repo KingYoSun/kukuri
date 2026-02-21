@@ -25,7 +25,7 @@
 - `cn_index`: Postgres 検索同期状態（offset）、インデックス設定、reindex ジョブ
 - `cn_moderation`: 通報・ラベル・ルール・LLMジョブ
   - LLM moderation の送信/保存/開示ポリシー（外部送信範囲、ログ/保持、コスト上限、Privacy への記載）: `docs/03_implementation/community_nodes/llm_moderation_policy.md`
-- `cn_trust`: trust ジョブ・集計結果・attestation 発行履歴
+- `cn_trust`: trust ジョブ・集計結果・assertion 発行履歴
 
 ## Apache AGE の導入
 

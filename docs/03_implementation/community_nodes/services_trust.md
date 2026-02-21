@@ -1,7 +1,7 @@
 # Trust サービス（Apache AGE）実装計画
 
 **作成日**: 2026年01月22日  
-**役割**: attestation 発行、集約（収益化ポイント）
+**役割**: NIP-85 assertion 発行、集約（収益化ポイント）
 
 ## 前提（要件）
 
@@ -10,9 +10,9 @@
   1. **通報ベース**
   2. **ユーザーごとのコミュニケーション濃度ベース**
 
-## 出力（KIP-0001 寄り）
+## 出力（NIP-85）
 
-- `attestation(kind=39010)` を署名して配布する（スコアの押し付けではなく“主張”）
+- `assertion(kind=30382-30385)` を署名して配布する（スコアの押し付けではなく“主張”）
 - `exp` を付与し、固定化/永続BAN を避ける（暫定判断として扱えるようにする）
 - 取込レコードは relay が Postgres に保存したものを入力として扱い、outbox を `seq` で追従する（`consumer_offsets` による offset 管理、at-least-once を冪等処理で吸収）
   - 詳細: `docs/03_implementation/community_nodes/outbox_notify_semantics.md`
@@ -62,5 +62,5 @@
 1. AGE 初期化（graph 作成、最小の vertex/edge モデル）
 2. 入力取り込み（reports + interactions）
 3. 2方式でスコア算出（まずは単純な集計）
-4. `attestation(39010)` 生成・署名・配布
+4. `assertion(30382-30385)` 生成・署名・配布
 5. 計算ジョブ管理（キュー/進捗/失敗）を Postgres に記録

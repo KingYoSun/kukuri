@@ -13,7 +13,7 @@
 ### 0.2 原則（破らない）
 1) **ノードは権威ではなく“提案者”**  
    - moderation = label（署名付き提案）  
-   - trust = attestation（署名付き主張）  
+   - trust = assertion（署名付き主張）  
    - クライアントは採用ノードを選べる。
 
 2) **役割分割 + 併用可能**  
@@ -26,7 +26,7 @@
 ## 1. スコープ
 
 ### 1.1 実装対象（KIP-0001）
-- Event kinds: 39000/39001/39005/39006/39010/39011/39020/39021/39022
+- Event kinds: 39000/39001/39005/39006/30382/30383/30384/30385/10040/39020/39021/39022
 - 暗号: NIP-44 v2（既存実装: nostr-sdk nip44::Version::V2 に合わせる）
 - Topic ID: KIP-0001 の定義に合わせ、`kukuri:<64hex>` / `kukuri:global` を正規形として扱う（タグの #t も同形式）。
 - データ検証: 署名検証、tag正当性、期限(exp)処理
@@ -42,7 +42,7 @@
   - KIPイベント生成/検証
   - ノード一覧・採用ポリシー設定
   - 暗号鍵の保管（Keychain/OSストア推奨）
-  - label/attestationの適用（UI/フィルタ/警告）
+  - label/assertionの適用（UI/フィルタ/警告）
 
 - **Community Node (Server/CLI/Daemon)**:
   - 役割別モジュール
@@ -50,7 +50,7 @@
     - Relay (optional): 互換送受信
     - Index: topic別集約・検索・ランキング
     - Moderation: report受理、label発行、監査ログ
-    - Trust: attestation発行、集約（有料化ポイント）
+    - Trust: NIP-85 assertion 発行、集約（有料化ポイント）
   - 署名鍵（Node Key）管理
   - 監査/ポリシー/当局窓口メタ情報配布
 
@@ -92,15 +92,15 @@
 - content:
   - 任意（説明/根拠）
 
-#### 39010 attestation
+#### 30382-30385 NIP-85 assertion
+- tags:
+  - d(identifier), claim, rank, expiration, t(topic_id)?
 - content(JSON):
-  - schema, subject, claim, value, evidence[], context, expires
-- tags:
-  - sub(type,id), claim, t(topic_id)?, exp
+  - subject, claim, score, evidence[], context, expires
 
-#### 39011 trust.anchor (replaceable)
+#### 10040 trust provider list (replaceable)
 - tags:
-  - attester, claim?, t(topic_id)?, weight
+  - `<assertion_kind>:rank`, `<provider_pubkey>`, `<relay_url?>`
 
 #### 39020 key.envelope
 - tags:
@@ -127,7 +127,7 @@
    - indexノードA、moderationノードB、trustノードC…のように併用可能
 
 実装要点:
-- ノード候補の“優先度”は UI設定 + trust.anchor で決める
+- ノード候補の“優先度”は UI設定 + trust provider list(10040) で決める
 - 署名検証 + ver + exp を必ずチェック
 
 ### 4.2 モデレーション（report → label）
@@ -139,11 +139,11 @@
 - labelは必ず exp を付ける（暫定判断）
 - labelは「消す」ではなく「隠す/警告/隔離」など段階にする
 
-### 4.3 Trust（attestation + anchor）
+### 4.3 Trust（NIP-85 assertion + provider list）
 - trust計算ノードは、以下を出せる:
-  - (A) **根拠つきattestation（39010）**
-  - (B) 集約スコア（39010 claim=reputation など）※ただし“提案”
-- clientは trust.anchor(39011) で採用attesterを決める
+  - (A) **根拠つき assertion（30382-30385）**
+  - (B) 集約スコア（claim=reputation など）※ただし“提案”
+- client は trust provider list(10040) で採用providerを決める
 
 実装要点:
 - 最初は claim を絞る（例: `reputation`, `moderation.risk`, `capability`）
@@ -185,7 +185,7 @@
 ## 6. セキュリティ & プライバシー（最低限の脅威モデル）
 
 ### 6.1 脅威
-- 悪意ノードが label/attestation を乱発して世論操作
+- 悪意ノードが label/assertion を乱発して世論操作
 - Sybil（大量鍵）で friend+ / trust を汚染
 - invite漏洩、鍵漏洩
 - reportスパム（DoS）
@@ -193,7 +193,7 @@
 
 ### 6.2 対策（v1で必須）
 - クライアント側で「採用ノード」を明示設定（デフォルトは保守的）
-- label/attestationは必ず署名検証 + 期限(exp)
+- label/assertionは必ず署名検証 + 期限(exp)
 - capabilityは短命/回数制限/nonce（リプレイ耐性）
 - join.request は受信側で rate limit/手動承認（濫用耐性）
 - friend+/FoFは **“関係そのもの”を外に出さない**（可能ならローカル計算 or 暗号化配送）
@@ -220,7 +220,7 @@
 - 署名検証の統一API
 
 **Acceptance**
-- 39000/39001/39010/39020 を生成・検証できる
+- 39000/39001/30382/39020 を生成・検証できる
 
 ### M2: Community Node “広告”だけ実装（2〜4日）
 - 39000 node.descriptor を定期発行
@@ -248,8 +248,8 @@
 - epochローテで追放後の新投稿は読めなくなる
 
 ### M5: Trust v1（5〜10日）
-- attestation(39010) 発行（reputation/moderation.risk/capabilityから開始）
-- trust.anchor(39011) UI
+- assertion(30382-30385) 発行（reputation/moderation.risk/capabilityから開始）
+- trust provider list(10040) UI
 - クライアントの“採用attester”切替で表示が変わる
 
 **Acceptance**
@@ -261,7 +261,7 @@
 
 ## 9. コーディング指示（Codexに渡すプロンプト用要約）
 
-- KIP-0001 kindsを `kip_types` に型定義し、必須tag/exp/署名検証を実装せよ。
+- KIP-0001 + NIP-85 kindsを `kip_types` に型定義し、必須tag/exp/署名検証を実装せよ。
 - community-node は 39000/39001 を発行し、Access Control（39020/39021/39022/epoch/加入判定）は **P2P-only**。membership はローカル判断（台帳なし）。
 - client-tauri は
   - ノード採用設定（role別に複数）
@@ -269,7 +269,7 @@
   - key.envelope受理と鍵保管
   - scope別投稿（暗号化/復号）
   を実装せよ。
-- trust はまず attestationの発行/表示/anchor採用の切替まで。集約アルゴリズムは簡易（重み平均など）でよいが、必ず“提案”として扱え。
+- trust はまず assertion の発行/表示/provider採用の切替まで。集約アルゴリズムは簡易（重み平均など）でよいが、必ず“提案”として扱え。
 
 ## 10. 未決定事項（実装前に決めるチェックリスト）
 - [x] “friend / friend+” の関係定義: friend=kind=3相互フォロー、friend+=FoF(2-hop)の pull join.request
@@ -288,7 +288,7 @@
 ### Goals
 - コミュニティノードが **役割（bootstrap/relay/index/moderation/trust）** を部分的に提供できる。
 - クライアントが **複数ノードを選択・併用・乗り換え**できる（中央集権化を避ける）。
-- Trustは「スコア押し付け」ではなく **署名付き提案（attestation）** として配布する。
+- Trustは「スコア押し付け」ではなく **署名付き提案（assertion）** として配布する。
 - 公開度を段階化し、**public→friend+→friend→invite** の「サードプレイス導線」を実現する。
 
 ### Non-Goals（このKIPでは扱わない）
@@ -315,8 +315,8 @@
 - `39001` **kukuri.node.topic_service** (replaceable推奨)
 - `39005` **kukuri.report** (通報; append-only)
 - `39006` **kukuri.label** (モデレーション提案; append-only)
-- `39010` **kukuri.attestation** (署名付き主張; append-only)
-- `39011` **kukuri.trust.anchor** (信頼アンカー; replaceable推奨)
+- `30382-30385` **NIP-85 assertions** (署名付き主張; addressable)
+- `10040` **NIP-85 trust provider list** (replaceable)
 - `39020` **kukuri.key.envelope** (鍵封筒; append-only)
 - `39021` **kukuri.invite.capability** (招待capability; append-only)
 - `39022` **kukuri.join.request** (append-only)
@@ -389,7 +389,7 @@ tags（例）:
 Attestation =「私はこう主張する」という内容を署名で証明したもの。
 Trust値は “結果” ではなく 根拠つき主張の束として配る。
 
-### 5.2 kukuri.attestation (kind=39010)
+### 5.2 NIP-85 assertion (kind=30382-30385)
 
 署名主体（attester）が、subjectについて claim を発行する。
 
@@ -414,7 +414,7 @@ content（JSON推奨例）:
 }
 ```
 
-### 5.3 kukuri.trust.anchor (kind=39011)
+### 5.3 NIP-85 trust provider list (kind=10040)
 
 ユーザーが「どのattesterをどの範囲で信頼するか」を宣言する（置き換え可能）。
 
@@ -485,7 +485,7 @@ content（暗号化前のJSON例）:
 
 ## 7. Client Rules (Minimal)
 
-- ノードは 提案者。label/attestationの採用はユーザー/クライアント設定に依存。
+- ノードは 提案者。label/assertionの採用はユーザー/クライアント設定に依存。
 - 重要データ（鍵・capability・個人関係）はデフォルトで暗号化・最小開示。
 - 期限（exp）を積極的に使い、固定スコア化・永続BANを避ける設計を推奨。
 
