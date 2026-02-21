@@ -1577,14 +1577,9 @@ pub async fn trust_report_based(
     if let Some(row) = row {
         let assertion_id: Option<String> = row.try_get("attestation_id")?;
         let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
-        let (assertion, _) = resolve_trust_assertion(
-            &state.pool,
-            assertion_id.as_deref().zip(assertion_exp),
-            &subject,
-            CLAIM_REPORT_BASED,
-            now,
-        )
-        .await?;
+        let assertion =
+            load_referenced_assertion(&state.pool, assertion_id.as_deref().zip(assertion_exp), now)
+                .await?;
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
         return Ok(Json(json!({
@@ -1600,9 +1595,8 @@ pub async fn trust_report_based(
         })));
     }
 
-    let (assertion, latest_assertion) =
-        resolve_trust_assertion(&state.pool, None, &subject, CLAIM_REPORT_BASED, now).await?;
-
+    let latest_assertion =
+        load_latest_active_assertion(&state.pool, &subject, CLAIM_REPORT_BASED, now).await?;
     if let Some(latest_assertion) = latest_assertion {
         return Ok(Json(json!({
             "subject": subject,
@@ -1612,7 +1606,7 @@ pub async fn trust_report_based(
             "label_count": 0,
             "window_start": null,
             "window_end": null,
-            "assertion": assertion,
+            "assertion": latest_assertion.assertion,
             "updated_at": latest_assertion.updated_at
         })));
     }
@@ -1669,14 +1663,9 @@ pub async fn trust_communication_density(
     if let Some(row) = row {
         let assertion_id: Option<String> = row.try_get("attestation_id")?;
         let assertion_exp: Option<i64> = row.try_get("attestation_exp")?;
-        let (assertion, _) = resolve_trust_assertion(
-            &state.pool,
-            assertion_id.as_deref().zip(assertion_exp),
-            &subject,
-            CLAIM_COMMUNICATION_DENSITY,
-            now,
-        )
-        .await?;
+        let assertion =
+            load_referenced_assertion(&state.pool, assertion_id.as_deref().zip(assertion_exp), now)
+                .await?;
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
 
         return Ok(Json(json!({
@@ -1692,15 +1681,9 @@ pub async fn trust_communication_density(
         })));
     }
 
-    let (assertion, latest_assertion) = resolve_trust_assertion(
-        &state.pool,
-        None,
-        &subject,
-        CLAIM_COMMUNICATION_DENSITY,
-        now,
-    )
-    .await?;
-
+    let latest_assertion =
+        load_latest_active_assertion(&state.pool, &subject, CLAIM_COMMUNICATION_DENSITY, now)
+            .await?;
     if let Some(latest_assertion) = latest_assertion {
         return Ok(Json(json!({
             "subject": subject,
@@ -1710,7 +1693,7 @@ pub async fn trust_communication_density(
             "peer_count": 0,
             "window_start": null,
             "window_end": null,
-            "assertion": assertion,
+            "assertion": latest_assertion.assertion,
             "updated_at": latest_assertion.updated_at
         })));
     }
@@ -1811,22 +1794,15 @@ fn normalize_addressable_subject(value: &str) -> ApiResult<String> {
     Ok(format!("{kind}:{author}:{d_tag}"))
 }
 
-async fn resolve_trust_assertion(
+async fn load_referenced_assertion(
     pool: &sqlx::Pool<Postgres>,
     assertion_ref: Option<(&str, i64)>,
-    subject: &str,
-    claim: &str,
     now: i64,
-) -> ApiResult<(Option<Value>, Option<LatestTrustAssertion>)> {
-    if let Some((assertion_id, assertion_exp)) = assertion_ref {
-        if let Some(assertion) =
-            load_assertion_by_id(pool, assertion_id, assertion_exp, now).await?
-        {
-            return Ok((Some(assertion), None));
-        }
-    }
-    let latest = load_latest_active_assertion(pool, subject, claim, now).await?;
-    Ok((latest.as_ref().map(|value| value.assertion.clone()), latest))
+) -> ApiResult<Option<Value>> {
+    let Some((assertion_id, assertion_exp)) = assertion_ref else {
+        return Ok(None);
+    };
+    load_assertion_by_id(pool, assertion_id, assertion_exp, now).await
 }
 
 async fn load_assertion_by_id(
@@ -2965,7 +2941,7 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
-    async fn trust_report_based_contract_falls_back_to_latest_assertion_when_attestation_missing() {
+    async fn trust_report_based_contract_returns_null_when_referenced_attestation_missing() {
         let state = test_state().await;
         let pool = state.pool.clone();
         let requester_pubkey = Keys::generate().public_key().to_hex();
@@ -3005,27 +2981,7 @@ mod api_contract_tests {
         assert_eq!(payload.get("score").and_then(Value::as_f64), Some(0.31));
         assert_eq!(payload.get("report_count").and_then(Value::as_i64), Some(7));
         assert_eq!(payload.get("label_count").and_then(Value::as_i64), Some(3));
-        assert_eq!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("assertion_id"))
-                .and_then(Value::as_str),
-            Some(latest_attestation_id.as_str())
-        );
-        assert_ne!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("assertion_id"))
-                .and_then(Value::as_str),
-            Some(missing_attestation_id.as_str())
-        );
-        assert_eq!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("exp"))
-                .and_then(Value::as_i64),
-            Some(latest_exp)
-        );
+        assert_eq!(payload.get("assertion"), Some(&Value::Null));
 
         sqlx::query("DELETE FROM cn_trust.report_scores WHERE subject_pubkey = $1")
             .bind(&subject_pubkey)
@@ -3040,7 +2996,7 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
-    async fn trust_report_based_contract_prefers_latest_issued_at_when_exp_differs() {
+    async fn trust_report_based_contract_prefers_latest_issued_at_when_score_row_is_missing() {
         let state = test_state().await;
         let pool = state.pool.clone();
         let requester_pubkey = Keys::generate().public_key().to_hex();
@@ -3074,18 +3030,6 @@ mod api_contract_tests {
         .execute(&pool)
         .await
         .expect("set newer attestation timing");
-
-        let missing_attestation_id = Uuid::new_v4().to_string();
-        upsert_report_score(
-            &pool,
-            &subject_pubkey,
-            0.44,
-            5,
-            1,
-            Some(missing_attestation_id.as_str()),
-            Some(now + 600),
-        )
-        .await;
 
         let token = issue_token(&state.jwt_config, &requester_pubkey);
         let app = Router::new()
@@ -3124,11 +3068,6 @@ mod api_contract_tests {
             Some(newer_exp)
         );
 
-        sqlx::query("DELETE FROM cn_trust.report_scores WHERE subject_pubkey = $1")
-            .bind(&subject_pubkey)
-            .execute(&pool)
-            .await
-            .expect("cleanup report score");
         sqlx::query("DELETE FROM cn_trust.attestations WHERE attestation_id = ANY($1)")
             .bind(vec![older_attestation_id, newer_attestation_id])
             .execute(&pool)
@@ -3285,8 +3224,8 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
-    async fn trust_communication_density_contract_falls_back_to_latest_assertion_when_attestation_missing(
-    ) {
+    async fn trust_communication_density_contract_returns_null_when_referenced_attestation_missing()
+    {
         let state = test_state().await;
         let pool = state.pool.clone();
         let requester_pubkey = Keys::generate().public_key().to_hex();
@@ -3332,27 +3271,7 @@ mod api_contract_tests {
             Some(12)
         );
         assert_eq!(payload.get("peer_count").and_then(Value::as_i64), Some(4));
-        assert_eq!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("assertion_id"))
-                .and_then(Value::as_str),
-            Some(latest_attestation_id.as_str())
-        );
-        assert_ne!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("assertion_id"))
-                .and_then(Value::as_str),
-            Some(missing_attestation_id.as_str())
-        );
-        assert_eq!(
-            payload
-                .get("assertion")
-                .and_then(|value| value.get("exp"))
-                .and_then(Value::as_i64),
-            Some(latest_exp)
-        );
+        assert_eq!(payload.get("assertion"), Some(&Value::Null));
 
         sqlx::query("DELETE FROM cn_trust.communication_scores WHERE subject_pubkey = $1")
             .bind(&subject_pubkey)

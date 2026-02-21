@@ -55,7 +55,7 @@
   - `GET /v1/trust/communication-density?subject=pubkey:...`
 - 管理者操作は Admin API 経由
   - `POST /v1/admin/trust/jobs`（手動/再計算ジョブ投入）
-  - 互換エイリアス: `POST /v1/attestations`（非推奨。既存クライアント移行期間のみ）
+  - `POST /v1/attestations` は 2026年02月21日付で `410 Gone`（`DEPRECATED_PATH`）を返す非互換境界に変更済み
 
 ## 実装手順（v1）
 
