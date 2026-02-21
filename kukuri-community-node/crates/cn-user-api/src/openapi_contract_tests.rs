@@ -75,6 +75,23 @@ async fn openapi_contract_contains_user_paths() {
         .pointer("/paths/~1v1~1communities~1suggest/get")
         .is_some());
     assert!(payload
+        .pointer("/paths/~1v1~1trust~1report-based/get")
+        .is_some());
+    assert!(payload
+        .pointer("/paths/~1v1~1trust~1communication-density/get")
+        .is_some());
+    assert_eq!(
+        payload
+            .pointer("/paths/~1v1~1trust~1report-based/get/parameters/0/name")
+            .and_then(Value::as_str),
+        Some("subject")
+    );
+    assert!(payload
+        .pointer("/paths/~1v1~1trust~1report-based/get/parameters/0/description")
+        .and_then(Value::as_str)
+        .map(|value| value.contains("addressable:"))
+        .unwrap_or(false));
+    assert!(payload
         .pointer("/paths/~1v1~1topic-subscription-requests/post/responses/429")
         .is_some());
     assert_eq!(

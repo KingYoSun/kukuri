@@ -261,7 +261,11 @@ fn labels_doc() {}
 #[utoipa::path(
     get,
     path = "/v1/trust/report-based",
-    params(("subject" = String, Query, description = "Trust subject")),
+    params((
+        "subject" = String,
+        Query,
+        description = "Trust subject (pubkey:<hex> | event:<32-byte-hex> | relay:<url> | topic:<topic_id> | addressable:<kind>:<pubkey>:<d-tag>)"
+    )),
     responses((status = 200, body = serde_json::Value))
 )]
 fn trust_report_doc() {}
@@ -269,7 +273,11 @@ fn trust_report_doc() {}
 #[utoipa::path(
     get,
     path = "/v1/trust/communication-density",
-    params(("subject" = String, Query, description = "Trust subject")),
+    params((
+        "subject" = String,
+        Query,
+        description = "Trust subject (pubkey:<hex> | event:<32-byte-hex> | relay:<url> | topic:<topic_id> | addressable:<kind>:<pubkey>:<d-tag>)"
+    )),
     responses((status = 200, body = serde_json::Value))
 )]
 fn trust_communication_doc() {}

@@ -194,8 +194,9 @@ User API は「ユーザーが何をできるか」を DB の状態で決める�
 
 ### トラスト（trust）
 
-- `GET /v1/trust/report-based?subject=pubkey:...`
-- `GET /v1/trust/communication-density?subject=pubkey:...`
+- `GET /v1/trust/report-based?subject=...`
+- `GET /v1/trust/communication-density?subject=...`
+  - `subject` は `pubkey:<hex>` / `event:<32-byte-hex>` / `relay:<url>` / `topic:<topic_id>` / `addressable:<kind>:<pubkey>:<d-tag>` を受理
 
 ### 個人データ（削除/エクスポート）
 
