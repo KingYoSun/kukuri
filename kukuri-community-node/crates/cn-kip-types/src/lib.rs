@@ -154,18 +154,40 @@ pub fn validate_kip_event(raw: &RawEvent, options: ValidationOptions) -> Result<
             require_expiration_tag(raw, options.now)?;
         }
         KipKind::TrustProviderList => {
-            let has_provider_tag = raw.tags.iter().any(|tag| {
+            let mut has_provider_tag = false;
+
+            for tag in &raw.tags {
                 let Some(name) = tag.first() else {
-                    return false;
+                    continue;
                 };
-                if !name.ends_with(":rank") {
-                    return false;
+                let Some(kind_prefix) = name.strip_suffix(":rank") else {
+                    continue;
+                };
+
+                has_provider_tag = true;
+
+                let kind_prefix = kind_prefix
+                    .parse::<u32>()
+                    .map_err(|_| anyhow!("invalid trust provider tag kind prefix: {name}"))?;
+                if !matches!(
+                    kind_prefix,
+                    KIND_TRUST_ASSERTION_PUBKEY
+                        | KIND_TRUST_ASSERTION_EVENT
+                        | KIND_TRUST_ASSERTION_RELAY
+                        | KIND_TRUST_ASSERTION_TOPIC
+                ) {
+                    return Err(anyhow!(
+                        "invalid trust provider tag kind prefix: {kind_prefix}"
+                    ));
                 }
-                if tag.len() < 2 {
-                    return false;
-                }
-                !tag[1].trim().is_empty()
-            });
+
+                let provider_pubkey = tag
+                    .get(1)
+                    .map(|value| value.trim())
+                    .ok_or_else(|| anyhow!("missing trust provider pubkey"))?;
+                validate_hex_pubkey(provider_pubkey)?;
+            }
+
             if !has_provider_tag {
                 return Err(anyhow!("missing trust provider tag"));
             }
@@ -255,6 +277,15 @@ fn validate_schema(raw: &RawEvent, expected: &str) -> Result<()> {
         return Err(anyhow!("invalid schema: {schema}"));
     }
     Ok(())
+}
+
+fn validate_hex_pubkey(value: &str) -> Result<()> {
+    if value.len() != 64 || !value.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(anyhow!("invalid trust provider pubkey"));
+    }
+    nostr_sdk::PublicKey::parse(value)
+        .map(|_| ())
+        .map_err(|_| anyhow!("invalid trust provider pubkey"))
 }
 
 fn current_unix_seconds() -> i64 {
@@ -571,6 +602,41 @@ mod tests {
                 .expect("event");
         let kind = validate_kip_event(&event, ValidationOptions::default()).expect("valid");
         assert_eq!(kind, KipKind::TrustProviderList);
+    }
+
+    #[test]
+    fn validate_trust_provider_list_rejects_invalid_tag_kind_prefix() {
+        let keys = Keys::generate();
+        let provider_keys = Keys::generate();
+        let tags = vec![vec![
+            "30381:rank".to_string(),
+            provider_keys.public_key().to_hex(),
+            "wss://relay.example".to_string(),
+        ]];
+        let event =
+            nostr::build_signed_event(&keys, KIND_TRUST_PROVIDER_LIST as u16, tags, String::new())
+                .expect("event");
+
+        let err =
+            validate_kip_event(&event, ValidationOptions::default()).expect_err("invalid prefix");
+        assert!(err.to_string().contains("kind prefix"));
+    }
+
+    #[test]
+    fn validate_trust_provider_list_rejects_invalid_pubkey() {
+        let keys = Keys::generate();
+        let tags = vec![vec![
+            "30382:rank".to_string(),
+            "z".repeat(64),
+            "wss://relay.example".to_string(),
+        ]];
+        let event =
+            nostr::build_signed_event(&keys, KIND_TRUST_PROVIDER_LIST as u16, tags, String::new())
+                .expect("event");
+
+        let err =
+            validate_kip_event(&event, ValidationOptions::default()).expect_err("invalid pubkey");
+        assert!(err.to_string().contains("pubkey"));
     }
 
     #[test]
