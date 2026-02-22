@@ -3,11 +3,16 @@ import type { Mock } from 'vitest';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { RelayStatus, MAINLINE_RUNBOOK_URL } from '@/components/RelayStatus';
 import { useAuthStore } from '@/stores/authStore';
+import { useP2PStore } from '@/stores/p2pStore';
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
 
 vi.mock('@/stores/authStore', () => ({
   useAuthStore: vi.fn(),
+}));
+
+vi.mock('@/stores/p2pStore', () => ({
+  useP2PStore: vi.fn(),
 }));
 
 vi.mock('@/lib/api/p2p', () => ({
@@ -38,6 +43,7 @@ type MockStoreState = {
 };
 
 const mockedUseAuthStore = useAuthStore as unknown as Mock;
+const mockedUseP2PStore = useP2PStore as unknown as Mock;
 const mockGetBootstrapConfig = p2pApi.getBootstrapConfig as unknown as Mock;
 const mockApplyCliBootstrapNodes = p2pApi.applyCliBootstrapNodes as unknown as Mock;
 const mockErrorHandlerLog = errorHandler.log as unknown as Mock;
@@ -61,15 +67,41 @@ const defaultState = (): MockStoreState => ({
   isFetchingRelayStatus: false,
 });
 
+type MockPeerInfo = {
+  node_id: string;
+  node_addr: string;
+  topics: string[];
+  last_seen: number;
+  connection_status: 'connected' | 'disconnected' | 'connecting';
+  connected_at?: number;
+};
+
+const connectedPeer = (nodeId: string, nodeAddr = '127.0.0.1:11233'): MockPeerInfo => ({
+  node_id: nodeId,
+  node_addr: nodeAddr,
+  topics: [],
+  last_seen: Date.now(),
+  connection_status: 'connected',
+  connected_at: Date.now(),
+});
+
 const flushAsync = async () => {
   await act(async () => {
     await Promise.resolve();
   });
 };
 
-const renderRelayStatus = async (overrides: Partial<MockStoreState> = {}) => {
+const renderRelayStatus = async (
+  overrides: Partial<MockStoreState> = {},
+  options: { p2pPeers?: Map<string, MockPeerInfo> } = {},
+) => {
   const state = { ...defaultState(), ...overrides };
   mockedUseAuthStore.mockReturnValue(state);
+  const p2pPeers = options.p2pPeers ?? new Map<string, MockPeerInfo>();
+  mockedUseP2PStore.mockImplementation(
+    (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
+      selector({ peers: p2pPeers }),
+  );
   let utils: ReturnType<typeof render>;
   await act(async () => {
     utils = render(<RelayStatus />);
@@ -85,6 +117,10 @@ describe('RelayStatus', () => {
     mockGetBootstrapConfig.mockResolvedValue(bootstrapConfigResponse);
     mockApplyCliBootstrapNodes.mockResolvedValue(bootstrapConfigResponse);
     mockErrorHandlerLog.mockReset();
+    mockedUseP2PStore.mockImplementation(
+      (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
+        selector({ peers: new Map<string, MockPeerInfo>() }),
+    );
   });
 
   afterEach(() => {
@@ -212,5 +248,95 @@ describe('RelayStatus', () => {
     await flushAsync();
     expect(mockApplyCliBootstrapNodes).toHaveBeenCalledTimes(1);
     expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows connected bootstrap count and node list in node_id@host:port format', async () => {
+    mockGetBootstrapConfig.mockResolvedValueOnce({
+      ...bootstrapConfigResponse,
+      effective_nodes: ['node-1@127.0.0.1:11233', 'node-2@127.0.0.1:22334'],
+    });
+    const p2pPeers = new Map<string, MockPeerInfo>([
+      ['node-1', connectedPeer('node-1')],
+      ['node-x', connectedPeer('node-x')],
+    ]);
+
+    await renderRelayStatus({}, { p2pPeers });
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+    expect(screen.getByTestId('relay-bootstrap-connected-list')).toHaveTextContent(
+      'node-1@127.0.0.1:11233',
+    );
+    expect(screen.queryByText('node-2@127.0.0.1:22334')).not.toBeInTheDocument();
+  });
+
+  it('counts node_id-only bootstrap entries as connected', async () => {
+    mockGetBootstrapConfig.mockResolvedValueOnce({
+      ...bootstrapConfigResponse,
+      effective_nodes: ['node-1', 'node-2@127.0.0.1:22334'],
+    });
+    const p2pPeers = new Map<string, MockPeerInfo>([
+      ['node-1', connectedPeer('node-1')],
+      ['node-x', connectedPeer('node-x')],
+    ]);
+
+    await renderRelayStatus({}, { p2pPeers });
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+    expect(screen.getByTestId('relay-bootstrap-connected-list')).toHaveTextContent('node-1');
+    expect(screen.queryByText('node-2@127.0.0.1:22334')).not.toBeInTheDocument();
+  });
+
+  it('shows empty connected bootstrap message when no configured node is connected', async () => {
+    mockGetBootstrapConfig.mockResolvedValueOnce({
+      ...bootstrapConfigResponse,
+      effective_nodes: ['node-1@127.0.0.1:11233'],
+    });
+    const p2pPeers = new Map<string, MockPeerInfo>([['node-x', connectedPeer('node-x')]]);
+
+    await renderRelayStatus({}, { p2pPeers });
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '0',
+    );
+    expect(screen.getByTestId('relay-bootstrap-connected-empty')).toBeInTheDocument();
+  });
+
+  it('updates connected bootstrap count when p2p peer state changes', async () => {
+    mockGetBootstrapConfig.mockResolvedValueOnce({
+      ...bootstrapConfigResponse,
+      effective_nodes: ['node-1@127.0.0.1:11233'],
+    });
+    const { rerender } = await renderRelayStatus();
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '0',
+    );
+
+    const nextPeers = new Map<string, MockPeerInfo>([['node-1', connectedPeer('node-1')]]);
+    mockedUseP2PStore.mockImplementation(
+      (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
+        selector({ peers: nextPeers }),
+    );
+
+    await act(async () => {
+      rerender(<RelayStatus />);
+    });
+    await flushAsync();
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+    expect(screen.getByTestId('relay-bootstrap-connected-list')).toHaveTextContent(
+      'node-1@127.0.0.1:11233',
+    );
   });
 });

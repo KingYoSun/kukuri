@@ -1018,6 +1018,7 @@
   },
   "relayStatus": {
     "title": "中继连接状态",
+    "bootstrapCategory": "引导",
     "lastUpdated": "最后更新",
     "nextRefresh": "下次刷新",
     "refreshing": "更新中…",
@@ -1036,6 +1037,9 @@
     "noRelays": "暂无连接的中继。",
     "bootstrapSource": "引导来源",
     "applied": "已应用",
+    "connectedBootstrapCount": "已连接: {{count}}",
+    "connectedNodesTitle": "已连接节点",
+    "connectedBootstrapNone": "当前没有已连接的引导节点。",
     "switching": "切换中…",
     "applyLatestList": "应用最新列表",
     "cliProvided": "CLI 提供",

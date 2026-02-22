@@ -1014,6 +1014,7 @@
   },
   "relayStatus": {
     "title": "Relay connection status",
+    "bootstrapCategory": "Bootstrap",
     "lastUpdated": "Last updated",
     "nextRefresh": "Next refresh",
     "refreshing": "Refreshing…",
@@ -1032,6 +1033,9 @@
     "noRelays": "No relays connected.",
     "bootstrapSource": "Bootstrap source",
     "applied": "Applied",
+    "connectedBootstrapCount": "Connected: {{count}}",
+    "connectedNodesTitle": "Connected nodes",
+    "connectedBootstrapNone": "No bootstrap nodes are connected.",
     "switching": "Switching…",
     "applyLatestList": "Apply latest list",
     "cliProvided": "CLI provided",
