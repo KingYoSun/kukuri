@@ -648,6 +648,18 @@ export const useAuthStore = create<AuthStore>()(
               'Deferred auto-login startup tasks',
               'AuthStore.initialize.deferred.autoLogin',
               async () => {
+                const expectedNpub = currentAccount.npub;
+                const hasActiveSession = () => {
+                  const state = useAuthStore.getState();
+                  return state.isAuthenticated && state.currentUser?.npub === expectedNpub;
+                };
+                const runIfSessionActive = async (task: () => Promise<void>) => {
+                  if (!hasActiveSession()) {
+                    return;
+                  }
+                  await task();
+                };
+
                 try {
                   await initializeNostr();
                 } catch (nostrError) {
@@ -656,11 +668,23 @@ export const useAuthStore = create<AuthStore>()(
                   });
                 }
 
+                if (!hasActiveSession()) {
+                  errorHandler.info(
+                    'Skipped deferred auto-login startup tasks because session changed',
+                    'AuthStore.initialize.deferred.autoLogin',
+                    { npub: expectedNpub },
+                  );
+                  return;
+                }
+
                 await Promise.allSettled([
-                  useAuthStore.getState().updateRelayStatus(),
-                  bootstrapTopics(),
-                  fetchAndApplyAvatar(currentAccount.npub),
+                  runIfSessionActive(() => useAuthStore.getState().updateRelayStatus()),
+                  runIfSessionActive(() => bootstrapTopics()),
+                  runIfSessionActive(() => fetchAndApplyAvatar(expectedNpub)),
                 ]);
+                if (!hasActiveSession()) {
+                  return;
+                }
                 errorHandler.info(
                   'Auto-login completed successfully',
                   'AuthStore.initialize.deferred.autoLogin',

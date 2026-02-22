@@ -229,6 +229,106 @@ describe('authStore - Multiple Account Management', () => {
       });
     });
 
+    it('should skip deferred startup tasks after logout during auto-login', async () => {
+      const mockCurrentAccount = {
+        npub: 'npub1current',
+        nsec: 'nsec1current',
+        pubkey: 'pubkey_current',
+        metadata: {
+          npub: 'npub1current',
+          pubkey: 'pubkey_current',
+          name: 'Current User',
+          display_name: 'Current User Display',
+          picture: '',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      let resolveInitializeNostr: (() => void) | null = null;
+      mockNostrApi.initializeNostr.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveInitializeNostr = resolve;
+          }),
+      );
+      mockSecureStorageApi.getCurrentAccount = vi.fn().mockResolvedValue(mockCurrentAccount);
+      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
+      mockTauriApi.logout = vi.fn().mockResolvedValue(undefined);
+
+      const initializePromise = useAuthStore.getState().initialize();
+
+      await waitFor(() => {
+        expect(mockNostrApi.initializeNostr).toHaveBeenCalledTimes(1);
+      });
+
+      await useAuthStore.getState().logout();
+      resolveInitializeNostr?.();
+      await initializePromise;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockNostrApi.getRelayStatus).not.toHaveBeenCalled();
+      expect(topicStoreState.fetchTopics).not.toHaveBeenCalled();
+      expect(mockTauriApi.fetchProfileAvatar).not.toHaveBeenCalled();
+    });
+
+    it('should skip deferred startup tasks when currentUser.npub changes during auto-login', async () => {
+      const mockCurrentAccount = {
+        npub: 'npub1current',
+        nsec: 'nsec1current',
+        pubkey: 'pubkey_current',
+        metadata: {
+          npub: 'npub1current',
+          pubkey: 'pubkey_current',
+          name: 'Current User',
+          display_name: 'Current User Display',
+          picture: '',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      let resolveInitializeNostr: (() => void) | null = null;
+      mockNostrApi.initializeNostr.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveInitializeNostr = resolve;
+          }),
+      );
+      mockSecureStorageApi.getCurrentAccount = vi.fn().mockResolvedValue(mockCurrentAccount);
+      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
+
+      const initializePromise = useAuthStore.getState().initialize();
+
+      await waitFor(() => {
+        expect(mockNostrApi.initializeNostr).toHaveBeenCalledTimes(1);
+      });
+
+      useAuthStore.setState({
+        isAuthenticated: true,
+        currentUser: {
+          id: 'pubkey_other',
+          pubkey: 'pubkey_other',
+          npub: 'npub1other',
+          name: 'Other User',
+          displayName: 'Other User',
+          about: '',
+          picture: '',
+          nip05: '',
+          avatar: null,
+          publicProfile: true,
+          showOnlineStatus: false,
+        },
+        privateKey: 'nsec1other',
+      });
+
+      resolveInitializeNostr?.();
+      await initializePromise;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockNostrApi.getRelayStatus).not.toHaveBeenCalled();
+      expect(topicStoreState.fetchTopics).not.toHaveBeenCalled();
+      expect(mockTauriApi.fetchProfileAvatar).not.toHaveBeenCalled();
+    });
+
     it('should not auto-login when no current account exists', async () => {
       mockSecureStorageApi.getCurrentAccount = vi.fn().mockResolvedValue(null);
       mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
