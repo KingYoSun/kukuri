@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useUIStore } from '@/stores/uiStore';
+import { persistKeys } from '@/stores/config/persist';
+import { resolveThemeFromStorage, useUIStore } from '@/stores/uiStore';
 
 describe('uiStore', () => {
   beforeEach(() => {
@@ -94,5 +95,35 @@ describe('uiStore', () => {
     const { resetActiveSidebarCategory } = useUIStore.getState();
     resetActiveSidebarCategory();
     expect(useUIStore.getState().activeSidebarCategory).toBeNull();
+  });
+
+  it('永続化ストレージのuiキーからテーマを復元できる', () => {
+    const storage: Pick<Storage, 'getItem'> = {
+      getItem: (key: string) =>
+        key === persistKeys.ui ? JSON.stringify({ state: { theme: 'dark' }, version: 0 }) : null,
+    };
+
+    expect(resolveThemeFromStorage(storage)).toBe('dark');
+  });
+
+  it('互換キーからテーマを復元できる', () => {
+    const storage: Pick<Storage, 'getItem'> = {
+      getItem: (key: string) => {
+        if (key === persistKeys.ui) return null;
+        if (key === 'kukuri-theme') return 'light';
+        if (key === 'theme') return null;
+        return null;
+      },
+    };
+
+    expect(resolveThemeFromStorage(storage)).toBe('light');
+  });
+
+  it('不正な永続化値は復元対象外として扱う', () => {
+    const storage: Pick<Storage, 'getItem'> = {
+      getItem: () => 'not-a-theme',
+    };
+
+    expect(resolveThemeFromStorage(storage)).toBeNull();
   });
 });

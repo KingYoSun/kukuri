@@ -10,6 +10,7 @@ export const persistKeys = {
   offline: 'offline-store',
   p2p: 'p2p-storage',
   topic: 'topic-storage',
+  ui: 'ui-storage',
   privacy: 'privacy-settings',
   keyManagement: 'key-management-history',
   communityNode: 'community-node-settings',
@@ -69,6 +70,13 @@ export const createTopicPersistConfig = <
     'joinedTopics' | 'currentTopic' | 'topicUnreadCounts' | 'topicLastReadAt'
   >(['joinedTopics', 'currentTopic', 'topicUnreadCounts', 'topicLastReadAt']),
   storage: createMapAwareStorage(),
+});
+
+export const createUiPersistConfig = <
+  T extends { theme: 'light' | 'dark' | 'system' },
+>(): PersistOptions<T> => ({
+  name: persistKeys.ui,
+  partialize: createPartializer<T, 'theme'>(['theme']),
 });
 
 export const createKeyManagementPersistConfig = <
