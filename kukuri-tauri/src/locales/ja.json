@@ -1014,6 +1014,7 @@
   },
   "relayStatus": {
     "title": "リレー接続状態",
+    "bootstrapCategory": "ブートストラップ",
     "lastUpdated": "最終更新",
     "nextRefresh": "次回再取得",
     "refreshing": "更新中…",
@@ -1032,6 +1033,9 @@
     "noRelays": "接続中のリレーはありません。",
     "bootstrapSource": "ブートストラップソース",
     "applied": "適用中",
+    "connectedBootstrapCount": "接続中: {{count}}件",
+    "connectedNodesTitle": "接続中ノード",
+    "connectedBootstrapNone": "接続中のブートストラップノードはありません。",
     "switching": "切替中…",
     "applyLatestList": "最新リストを適用",
     "cliProvided": "CLI 提供",

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { useP2PStore } from '@/stores/p2pStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,18 @@ import { errorHandler } from '@/lib/errorHandler';
 
 export const MAINLINE_RUNBOOK_URL =
   'https://github.com/KingYoSun/kukuri/blob/main/docs/03_implementation/p2p_mainline_runbook.md';
+
+const parseBootstrapNodeId = (node: string): string | null => {
+  const normalized = node.trim();
+  if (normalized === '') {
+    return null;
+  }
+  const separatorIndex = normalized.indexOf('@');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+  return normalized.slice(0, separatorIndex);
+};
 
 type BootstrapInfoState = {
   source: string;
@@ -45,6 +58,7 @@ export function RelayStatus() {
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [applyingCli, setApplyingCli] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const p2pPeers = useP2PStore((state) => state.peers);
 
   const refreshBootstrapInfo = useCallback(async () => {
     try {
@@ -127,6 +141,23 @@ export function RelayStatus() {
 
   const effectiveNodes = bootstrapInfo?.effectiveNodes ?? [];
   const cliNodes = bootstrapInfo?.cliNodes ?? [];
+  const connectedBootstrapNodes = useMemo(() => {
+    const connectedPeerNodeIds = new Set(
+      Array.from(p2pPeers.values())
+        .filter((peer) => peer.connection_status === 'connected')
+        .map((peer) => peer.node_id),
+    );
+    const seen = new Set<string>();
+    return effectiveNodes.filter((node) => {
+      const normalized = node.trim();
+      if (normalized === '' || seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      const nodeId = parseBootstrapNodeId(normalized);
+      return nodeId !== null && connectedPeerNodeIds.has(nodeId);
+    });
+  }, [effectiveNodes, p2pPeers]);
   const cliAvailable = cliNodes.length > 0;
   const envLocked = bootstrapInfo?.envLocked ?? false;
   const normalized = (values: string[]) => [...values].sort().join('|');
@@ -295,6 +326,9 @@ export function RelayStatus() {
               className="rounded-md border border-muted p-3 text-xs space-y-2 bg-muted/20"
               data-testid="relay-bootstrap-panel"
             >
+              <p className="font-medium text-foreground" data-testid="relay-bootstrap-category">
+                {t('relayStatus.bootstrapCategory')}
+              </p>
               <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
                 <div className="flex flex-col">
                   <span data-testid="relay-bootstrap-source">
@@ -309,6 +343,15 @@ export function RelayStatus() {
                     {effectiveNodes.length > 0
                       ? effectiveNodes.length
                       : t('relayStatus.sourceNone')}
+                  </span>
+                  <span
+                    className="text-[11px]"
+                    data-testid="relay-bootstrap-connected-count"
+                    data-count={connectedBootstrapNodes.length}
+                  >
+                    {t('relayStatus.connectedBootstrapCount', {
+                      count: connectedBootstrapNodes.length,
+                    })}
                   </span>
                 </div>
                 <Button
@@ -345,6 +388,31 @@ export function RelayStatus() {
                   {t('relayStatus.cliLocked')}
                 </p>
               )}
+              <div className="space-y-1" data-testid="relay-bootstrap-connected-section">
+                <p className="text-[11px] text-muted-foreground">
+                  {t('relayStatus.connectedNodesTitle')}
+                </p>
+                {connectedBootstrapNodes.length > 0 ? (
+                  <div className="space-y-1" data-testid="relay-bootstrap-connected-list">
+                    {connectedBootstrapNodes.map((node) => (
+                      <code
+                        key={node}
+                        className="block rounded bg-background/70 px-2 py-1 font-mono text-[11px] break-all"
+                        data-testid="relay-bootstrap-connected-node"
+                      >
+                        {node}
+                      </code>
+                    ))}
+                  </div>
+                ) : (
+                  <p
+                    className="text-[11px] text-muted-foreground"
+                    data-testid="relay-bootstrap-connected-empty"
+                  >
+                    {t('relayStatus.connectedBootstrapNone')}
+                  </p>
+                )}
+              </div>
             </div>
           </CardContent>
         </CollapsibleContent>
