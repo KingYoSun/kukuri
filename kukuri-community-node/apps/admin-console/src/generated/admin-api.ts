@@ -333,7 +333,7 @@ export interface paths {
         };
         get: operations["node_subscriptions_list_doc"];
         put?: never;
-        post?: never;
+        post: operations["node_subscriptions_create_doc"];
         delete?: never;
         options?: never;
         head?: never;
@@ -350,7 +350,7 @@ export interface paths {
         get?: never;
         put: operations["node_subscriptions_update_doc"];
         post?: never;
-        delete?: never;
+        delete: operations["node_subscriptions_delete_doc"];
         options?: never;
         head?: never;
         patch?: never;
@@ -926,6 +926,9 @@ export interface components {
             topic_id: string;
         };
         NodeSubscription: {
+            /** Format: int64 */
+            connected_node_count?: number;
+            connected_nodes?: string[];
             enabled: boolean;
             ingest_policy?: null | components["schemas"]["NodeSubscriptionIngestPolicy"];
             /** Format: int64 */
@@ -933,6 +936,11 @@ export interface components {
             topic_id: string;
             /** Format: int64 */
             updated_at: number;
+        };
+        NodeSubscriptionCreate: {
+            enabled?: boolean | null;
+            ingest_policy?: null | components["schemas"]["NodeSubscriptionIngestPolicy"];
+            topic_id: string;
         };
         NodeSubscriptionIngestPolicy: {
             allow_backfill?: boolean | null;
@@ -2044,6 +2052,53 @@ export interface operations {
             };
         };
     };
+    node_subscriptions_create_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeSubscriptionCreate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeSubscription"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     node_subscriptions_update_doc: {
         parameters: {
             query?: never;
@@ -2077,6 +2132,52 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    node_subscriptions_delete_doc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Topic identifier */
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

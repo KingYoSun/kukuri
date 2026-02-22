@@ -27,9 +27,9 @@ use crate::services::{
     AuditLog, ServiceConfigResponse, ServiceHealth, ServiceInfo, UpdateServiceConfigRequest,
 };
 use crate::subscriptions::{
-    NodeSubscription, NodeSubscriptionIngestPolicy, NodeSubscriptionUpdate, Plan, PlanLimit,
-    PlanRequest, ReviewRequest, SubscriptionRequestRow, SubscriptionRow, SubscriptionUpdate,
-    UsageRow,
+    NodeSubscription, NodeSubscriptionCreate, NodeSubscriptionIngestPolicy, NodeSubscriptionUpdate,
+    Plan, PlanLimit, PlanRequest, ReviewRequest, SubscriptionRequestRow, SubscriptionRow,
+    SubscriptionUpdate, UsageRow,
 };
 use crate::trust::{
     TrustJobRequest, TrustJobRow, TrustScheduleRow, TrustScheduleUpdate, TrustTargetRow,
@@ -79,7 +79,9 @@ pub struct ManualLabelResponse {
         subscription_requests_approve_doc,
         subscription_requests_reject_doc,
         node_subscriptions_list_doc,
+        node_subscriptions_create_doc,
         node_subscriptions_update_doc,
+        node_subscriptions_delete_doc,
         plans_list_doc,
         plans_create_doc,
         plans_update_doc,
@@ -139,6 +141,7 @@ pub struct ManualLabelResponse {
             SubscriptionRequestRow,
             ReviewRequest,
             NodeSubscription,
+            NodeSubscriptionCreate,
             NodeSubscriptionIngestPolicy,
             NodeSubscriptionUpdate,
             Plan,
@@ -468,6 +471,19 @@ fn subscription_requests_reject_doc() {}
 fn node_subscriptions_list_doc() {}
 
 #[utoipa::path(
+    post,
+    path = "/v1/admin/node-subscriptions",
+    request_body = NodeSubscriptionCreate,
+    responses(
+        (status = 200, body = NodeSubscription),
+        (status = 400, body = ErrorResponse),
+        (status = 409, body = ErrorResponse),
+        (status = 429, body = ErrorResponse)
+    )
+)]
+fn node_subscriptions_create_doc() {}
+
+#[utoipa::path(
     put,
     path = "/v1/admin/node-subscriptions/{topic_id}",
     params(("topic_id" = String, Path, description = "Topic identifier")),
@@ -479,6 +495,19 @@ fn node_subscriptions_list_doc() {}
     )
 )]
 fn node_subscriptions_update_doc() {}
+
+#[utoipa::path(
+    delete,
+    path = "/v1/admin/node-subscriptions/{topic_id}",
+    params(("topic_id" = String, Path, description = "Topic identifier")),
+    responses(
+        (status = 200, body = StatusResponse),
+        (status = 400, body = ErrorResponse),
+        (status = 404, body = ErrorResponse),
+        (status = 409, body = ErrorResponse)
+    )
+)]
+fn node_subscriptions_delete_doc() {}
 
 #[utoipa::path(
     get,

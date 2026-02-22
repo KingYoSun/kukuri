@@ -12,7 +12,9 @@ vi.mock('../lib/api', () => ({
     approveRequest: vi.fn(),
     rejectRequest: vi.fn(),
     nodeSubscriptions: vi.fn(),
+    createNodeSubscription: vi.fn(),
     updateNodeSubscription: vi.fn(),
+    deleteNodeSubscription: vi.fn(),
     plans: vi.fn(),
     createPlan: vi.fn(),
     updatePlan: vi.fn(),
@@ -49,9 +51,25 @@ describe('SubscriptionsPage', () => {
           max_bytes: 2048,
           allow_backfill: true
         },
+        connected_nodes: ['node-1@relay.example.com:7777'],
+        connected_node_count: 1,
         updated_at: 1738809601
       }
     ]);
+    vi.mocked(api.createNodeSubscription).mockResolvedValue({
+      topic_id: 'kukuri:topic:new',
+      enabled: true,
+      ref_count: 0,
+      ingest_policy: {
+        retention_days: 30,
+        max_events: 500,
+        max_bytes: 8192,
+        allow_backfill: true
+      },
+      connected_nodes: [],
+      connected_node_count: 0,
+      updated_at: 1738809602
+    });
     vi.mocked(api.updateNodeSubscription).mockResolvedValue({
       topic_id: 'kukuri:topic:1',
       enabled: false,
@@ -62,7 +80,13 @@ describe('SubscriptionsPage', () => {
         max_bytes: 2048,
         allow_backfill: true
       },
+      connected_nodes: ['node-1@relay.example.com:7777'],
+      connected_node_count: 1,
       updated_at: 1738809602
+    });
+    vi.mocked(api.deleteNodeSubscription).mockResolvedValue({
+      status: 'deleted',
+      topic_id: 'kukuri:topic:1'
     });
     vi.mocked(api.plans).mockResolvedValue([
       {
@@ -115,13 +139,18 @@ describe('SubscriptionsPage', () => {
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Topic' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Connected' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Connected Nodes' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Retention Days' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Subscriber' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
+    expect(screen.getByText('node-1@relay.example.com:7777')).toBeInTheDocument();
     const topicLabels = await screen.findAllByText('kukuri:topic:1');
     expect(topicLabels.length).toBeGreaterThanOrEqual(2);
     await screen.findByRole('button', { name: 'Toggle' });
     await screen.findByRole('button', { name: 'Save policy' });
+    await screen.findByRole('button', { name: 'Add topic subscription' });
+    await screen.findByRole('button', { name: 'Delete topic' });
     await screen.findByRole('button', { name: 'Edit' });
 
     const user = userEvent.setup();
@@ -176,6 +205,37 @@ describe('SubscriptionsPage', () => {
           allow_backfill: false
         }
       });
+    });
+
+    fireEvent.change(screen.getByLabelText('New topic ID'), {
+      target: { value: 'kukuri:topic:new' }
+    });
+    fireEvent.change(screen.getByLabelText('New retention days'), {
+      target: { value: '30' }
+    });
+    fireEvent.change(screen.getByLabelText('New max events'), {
+      target: { value: '500' }
+    });
+    fireEvent.change(screen.getByLabelText('New max bytes'), {
+      target: { value: '8192' }
+    });
+    await user.click(screen.getByRole('button', { name: 'Add topic subscription' }));
+    await waitFor(() => {
+      expect(api.createNodeSubscription).toHaveBeenCalledWith({
+        topic_id: 'kukuri:topic:new',
+        enabled: true,
+        ingest_policy: {
+          retention_days: 30,
+          max_events: 500,
+          max_bytes: 8192,
+          allow_backfill: true
+        }
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete topic' }));
+    await waitFor(() => {
+      expect(api.deleteNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1');
     });
 
     const createPlanButton = screen.getByRole('button', { name: 'Create plan' });

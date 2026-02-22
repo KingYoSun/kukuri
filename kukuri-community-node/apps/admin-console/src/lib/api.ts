@@ -115,6 +115,16 @@ export const api = {
       })
     ),
   nodeSubscriptions: () => unwrap(client.GET('/v1/admin/node-subscriptions')),
+  createNodeSubscription: (payload: {
+    topic_id: string;
+    enabled?: boolean;
+    ingest_policy?: {
+      retention_days?: number | null;
+      max_events?: number | null;
+      max_bytes?: number | null;
+      allow_backfill?: boolean | null;
+    };
+  }) => unwrap(client.POST('/v1/admin/node-subscriptions', { body: payload })),
   updateNodeSubscription: (
     topicId: string,
     payload: {
@@ -131,6 +141,12 @@ export const api = {
       client.PUT('/v1/admin/node-subscriptions/{topic_id}', {
         params: { path: { topic_id: topicId } },
         body: payload
+      })
+    ),
+  deleteNodeSubscription: (topicId: string) =>
+    unwrap(
+      client.DELETE('/v1/admin/node-subscriptions/{topic_id}', {
+        params: { path: { topic_id: topicId } }
       })
     ),
   policies: () => unwrap(client.GET('/v1/admin/policies')),
