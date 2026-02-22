@@ -365,5 +365,39 @@ describe('authStore', () => {
       expect(state.currentUser?.npub).toBe('npub123');
       expect(mockInitializeNostr).toHaveBeenCalled();
     });
+
+    it('非クリティカル初期化が停止していても初期化ゲートは短時間で完了すること', async () => {
+      const mockAccount = {
+        npub: 'npub123',
+        nsec: 'nsec123',
+        pubkey: 'pubkey123',
+        metadata: {
+          name: 'テストユーザー',
+          display_name: 'テストユーザー',
+          picture: 'https://example.com/avatar.png',
+        },
+      };
+
+      const { SecureStorageApi } = await import('@/lib/api/secureStorage');
+      (SecureStorageApi.getCurrentAccount as vi.Mock).mockResolvedValueOnce(mockAccount);
+      (SecureStorageApi.listAccounts as vi.Mock).mockImplementationOnce(
+        () => new Promise(() => {}),
+      );
+      mockInitializeNostr.mockImplementationOnce(() => new Promise(() => {}));
+
+      const gateResult = (await Promise.race([
+        useAuthStore
+          .getState()
+          .initialize()
+          .then(() => 'resolved' as const),
+        new Promise<'timeout'>((resolve) => {
+          setTimeout(() => resolve('timeout'), 500);
+        }),
+      ])) as 'resolved' | 'timeout';
+
+      expect(gateResult).toBe('resolved');
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(mockInitializeNostr).toHaveBeenCalledTimes(1);
+    });
   });
 });

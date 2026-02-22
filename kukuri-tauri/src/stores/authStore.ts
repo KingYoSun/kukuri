@@ -167,6 +167,11 @@ interface AuthStore extends AuthState {
 
 export const useAuthStore = create<AuthStore>()(
   withPersist<AuthStore>((set, get) => {
+    const nowMs = () =>
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+
     const isAvatarNotFoundError = (error: unknown) => {
       if (!error) {
         return false;
@@ -226,6 +231,25 @@ export const useAuthStore = create<AuthStore>()(
           context: 'AuthStore.bootstrapTopics',
         });
       }
+    };
+
+    const runDeferredInitializeTask = (
+      label: string,
+      context: string,
+      task: () => Promise<void>,
+    ) => {
+      void (async () => {
+        const startedAt = nowMs();
+        try {
+          await task();
+          errorHandler.info(`${label} completed in ${Math.round(nowMs() - startedAt)}ms`, context);
+        } catch (error) {
+          errorHandler.log(`${label} failed`, error, {
+            context,
+            showToast: false,
+          });
+        }
+      })();
     };
 
     return {
@@ -576,6 +600,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       initialize: async () => {
+        const startedAt = nowMs();
         errorHandler.info('Auth store initialization started...', 'AuthStore.initialize');
         try {
           // セキュアストレージから現在のアカウントを取得
@@ -619,15 +644,53 @@ export const useAuthStore = create<AuthStore>()(
               privateKey: currentAccount.nsec,
             });
             persistCurrentUserPubkey(user.pubkey);
+            runDeferredInitializeTask(
+              'Deferred auto-login startup tasks',
+              'AuthStore.initialize.deferred.autoLogin',
+              async () => {
+                const expectedNpub = currentAccount.npub;
+                const hasActiveSession = () => {
+                  const state = useAuthStore.getState();
+                  return state.isAuthenticated && state.currentUser?.npub === expectedNpub;
+                };
+                const runIfSessionActive = async (task: () => Promise<void>) => {
+                  if (!hasActiveSession()) {
+                    return;
+                  }
+                  await task();
+                };
 
-            // Nostrクライアントを初期化
-            await initializeNostr();
-            // リレー状態を更新
-            await useAuthStore.getState().updateRelayStatus();
-            await bootstrapTopics();
-            errorHandler.info('Auto-login completed successfully', 'AuthStore.initialize');
+                try {
+                  await initializeNostr();
+                } catch (nostrError) {
+                  errorHandler.log('Failed to initialize Nostr', nostrError, {
+                    context: 'AuthStore.initialize.deferred.initializeNostr',
+                  });
+                }
 
-            await fetchAndApplyAvatar(currentAccount.npub);
+                if (!hasActiveSession()) {
+                  errorHandler.info(
+                    'Skipped deferred auto-login startup tasks because session changed',
+                    'AuthStore.initialize.deferred.autoLogin',
+                    { npub: expectedNpub },
+                  );
+                  return;
+                }
+
+                await Promise.allSettled([
+                  runIfSessionActive(() => useAuthStore.getState().updateRelayStatus()),
+                  runIfSessionActive(() => bootstrapTopics()),
+                  runIfSessionActive(() => fetchAndApplyAvatar(expectedNpub)),
+                ]);
+                if (!hasActiveSession()) {
+                  return;
+                }
+                errorHandler.info(
+                  'Auto-login completed successfully',
+                  'AuthStore.initialize.deferred.autoLogin',
+                );
+              },
+            );
           } else {
             errorHandler.info('No current account found in secure storage', 'AuthStore.initialize');
             // アカウントが見つからない場合は初期状態
@@ -644,9 +707,17 @@ export const useAuthStore = create<AuthStore>()(
             persistCurrentUserPubkey(null);
           }
 
-          // アカウントリストを読み込み
-          await useAuthStore.getState().loadAccounts();
-          errorHandler.info('Auth store initialization completed', 'AuthStore.initialize');
+          runDeferredInitializeTask(
+            'Deferred account list preload',
+            'AuthStore.initialize.deferred.loadAccounts',
+            async () => {
+              await useAuthStore.getState().loadAccounts();
+            },
+          );
+          errorHandler.info(
+            `Auth store initialization critical path completed in ${Math.round(nowMs() - startedAt)}ms`,
+            'AuthStore.initialize',
+          );
         } catch (error) {
           errorHandler.log('Failed to initialize auth store', error, {
             context: 'AuthStore.initialize',

@@ -100,6 +100,31 @@ describe('__root (Authentication Guard)', () => {
     });
   });
 
+  it('初期化処理が失敗しても初期化画面で停止しない', async () => {
+    const initError = new Error('init failed');
+    mockInitialize.mockRejectedValueOnce(initError);
+    mockLocation.pathname = '/';
+
+    (useAuthStore as unknown as MockedFunction<any>).mockReturnValue({
+      isAuthenticated: false,
+      initialize: mockInitialize,
+    });
+
+    render(<RootComponent />);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/welcome' });
+    });
+
+    expect(errorHandler.log).toHaveBeenCalledWith(
+      'Root initialization failed',
+      initError,
+      expect.objectContaining({
+        context: 'RootRoute.initialize',
+      }),
+    );
+  });
+
   it('初期化完了後、未認証で保護されたページにアクセスするとウェルカム画面にリダイレクトする', async () => {
     mockInitialize.mockResolvedValue(undefined);
     mockLocation.pathname = '/';
