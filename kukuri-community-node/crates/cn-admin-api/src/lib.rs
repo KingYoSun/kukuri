@@ -311,11 +311,13 @@ fn build_router(state: AppState) -> Router {
         )
         .route(
             "/v1/admin/node-subscriptions",
-            get(subscriptions::list_node_subscriptions),
+            get(subscriptions::list_node_subscriptions)
+                .post(subscriptions::create_node_subscription),
         )
         .route(
             "/v1/admin/node-subscriptions/{topic_id}",
-            put(subscriptions::update_node_subscription),
+            put(subscriptions::update_node_subscription)
+                .delete(subscriptions::delete_node_subscription),
         )
         .route(
             "/v1/admin/plans",

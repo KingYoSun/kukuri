@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
+use std::collections::{BTreeSet, HashMap};
 use utoipa::ToSchema;
 
 use crate::auth::require_admin;
@@ -40,7 +41,18 @@ pub struct NodeSubscription {
     pub enabled: bool,
     pub ref_count: i64,
     pub ingest_policy: Option<NodeSubscriptionIngestPolicy>,
+    #[serde(default)]
+    pub connected_nodes: Vec<String>,
+    #[serde(default)]
+    pub connected_node_count: i64,
     pub updated_at: i64,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct NodeSubscriptionCreate {
+    pub topic_id: String,
+    pub enabled: Option<bool>,
+    pub ingest_policy: Option<NodeSubscriptionIngestPolicy>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -376,6 +388,7 @@ pub async fn list_node_subscriptions(
     jar: axum_extra::extract::cookie::CookieJar,
 ) -> ApiResult<Json<Vec<NodeSubscription>>> {
     require_admin(&state, &jar).await?;
+    let connected_nodes_by_topic = load_connected_nodes_by_topic(&state.pool, None).await?;
 
     let rows = sqlx::query(
         "SELECT topic_id, enabled, ref_count, ingest_policy, updated_at \
@@ -395,16 +408,126 @@ pub async fn list_node_subscriptions(
     let mut subscriptions = Vec::new();
     for row in rows {
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+        let topic_id: String = row.try_get("topic_id")?;
+        let connected_nodes = connected_nodes_by_topic
+            .get(&topic_id)
+            .cloned()
+            .unwrap_or_default();
         subscriptions.push(NodeSubscription {
-            topic_id: row.try_get("topic_id")?,
+            topic_id,
             enabled: row.try_get("enabled")?,
             ref_count: row.try_get("ref_count")?,
             ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
+            connected_node_count: connected_nodes.len() as i64,
+            connected_nodes,
             updated_at: updated_at.timestamp(),
         });
     }
 
     Ok(Json(subscriptions))
+}
+
+pub async fn create_node_subscription(
+    State(state): State<AppState>,
+    jar: axum_extra::extract::cookie::CookieJar,
+    Json(payload): Json<NodeSubscriptionCreate>,
+) -> ApiResult<Json<NodeSubscription>> {
+    let admin = require_admin(&state, &jar).await?;
+    let topic_id = normalize_topic_id_input(&payload.topic_id)?;
+    let enabled = payload.enabled.unwrap_or(true);
+    let ingest_policy_json = payload
+        .ingest_policy
+        .as_ref()
+        .map(validate_and_normalize_ingest_policy)
+        .transpose()?;
+
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let existing = sqlx::query_scalar::<_, String>(
+        "SELECT topic_id FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&topic_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    if existing.is_some() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "ALREADY_EXISTS",
+            "topic already exists",
+        ));
+    }
+
+    if enabled {
+        enforce_node_subscription_topic_limit(&mut tx, &topic_id).await?;
+    }
+
+    let row = sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions \
+         (topic_id, enabled, ref_count, ingest_policy, updated_at) \
+         VALUES ($1, $2, 0, $3::jsonb, NOW()) \
+         RETURNING topic_id, enabled, ref_count, ingest_policy, updated_at",
+    )
+    .bind(&topic_id)
+    .bind(enabled)
+    .bind(ingest_policy_json.clone())
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    crate::log_admin_audit_tx(
+        &mut tx,
+        &admin.admin_user_id,
+        "node_subscription.create",
+        &format!("topic:{topic_id}"),
+        Some(serde_json::json!({
+            "enabled": enabled,
+            "ingest_policy": ingest_policy_json
+        })),
+        None,
+    )
+    .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let connected_nodes = load_connected_nodes_by_topic(&state.pool, Some(&topic_id))
+        .await?
+        .remove(&topic_id)
+        .unwrap_or_default();
+    let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+    Ok(Json(NodeSubscription {
+        topic_id: row.try_get("topic_id")?,
+        enabled: row.try_get("enabled")?,
+        ref_count: row.try_get("ref_count")?,
+        ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
+        connected_node_count: connected_nodes.len() as i64,
+        connected_nodes,
+        updated_at: updated_at.timestamp(),
+    }))
 }
 
 pub async fn update_node_subscription(
@@ -460,14 +583,103 @@ pub async fn update_node_subscription(
     )
     .await?;
 
+    let connected_nodes = load_connected_nodes_by_topic(&state.pool, Some(&topic_id))
+        .await?
+        .remove(&topic_id)
+        .unwrap_or_default();
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
         topic_id: row.try_get("topic_id")?,
         enabled: row.try_get("enabled")?,
         ref_count: row.try_get("ref_count")?,
         ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
+        connected_node_count: connected_nodes.len() as i64,
+        connected_nodes,
         updated_at: updated_at.timestamp(),
     }))
+}
+
+pub async fn delete_node_subscription(
+    State(state): State<AppState>,
+    jar: axum_extra::extract::cookie::CookieJar,
+    Path(topic_id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let admin = require_admin(&state, &jar).await?;
+    let topic_id = normalize_topic_id_input(&topic_id)?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let ref_count = sqlx::query_scalar::<_, i64>(
+        "SELECT ref_count FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(&topic_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    let Some(ref_count) = ref_count else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "topic not found",
+        ));
+    };
+    if ref_count > 0 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "NODE_SUBSCRIPTION_IN_USE",
+            "node subscription is still referenced by active subscriptions",
+        )
+        .with_details(json!({
+            "topic_id": topic_id,
+            "ref_count": ref_count,
+        })));
+    }
+
+    sqlx::query("DELETE FROM cn_admin.node_subscriptions WHERE topic_id = $1")
+        .bind(&topic_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+    crate::log_admin_audit_tx(
+        &mut tx,
+        &admin.admin_user_id,
+        "node_subscription.delete",
+        &format!("topic:{topic_id}"),
+        Some(serde_json::json!({ "ref_count": ref_count })),
+        None,
+    )
+    .await?;
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "status": "deleted",
+        "topic_id": topic_id
+    })))
 }
 
 fn parse_node_ingest_policy(raw: Option<Value>) -> ApiResult<Option<NodeSubscriptionIngestPolicy>> {
@@ -520,6 +732,150 @@ fn validate_and_normalize_ingest_policy(policy: &NodeSubscriptionIngestPolicy) -
         "max_bytes": policy.max_bytes,
         "allow_backfill": policy.allow_backfill.unwrap_or(true),
     }))
+}
+
+fn normalize_topic_id_input(topic_id: &str) -> ApiResult<String> {
+    cn_core::topic::normalize_topic_id(topic_id)
+        .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC_ID", err.to_string()))
+}
+
+async fn load_connected_nodes_by_topic(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    topic_id_filter: Option<&str>,
+) -> ApiResult<HashMap<String, Vec<String>>> {
+    let descriptor_rows = sqlx::query(
+        "SELECT event_json FROM cn_bootstrap.events WHERE kind = 39000 AND is_active = TRUE",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    let mut host_port_by_node_id = HashMap::new();
+    for row in descriptor_rows {
+        let event_json: Value = row.try_get("event_json")?;
+        let Ok(raw_event) = cn_core::nostr::parse_event(&event_json) else {
+            continue;
+        };
+        if let Some(host_port) = extract_descriptor_host_port(&raw_event) {
+            host_port_by_node_id.insert(raw_event.pubkey, host_port);
+        }
+    }
+
+    let topic_rows = if let Some(topic_id) = topic_id_filter {
+        sqlx::query(
+            "SELECT event_json, topic_id \
+             FROM cn_bootstrap.events \
+             WHERE kind = 39001 AND is_active = TRUE AND topic_id = $1",
+        )
+        .bind(topic_id)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query(
+            "SELECT event_json, topic_id \
+             FROM cn_bootstrap.events \
+             WHERE kind = 39001 AND is_active = TRUE",
+        )
+        .fetch_all(pool)
+        .await
+    }
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let mut grouped = HashMap::<String, BTreeSet<String>>::new();
+    for row in topic_rows {
+        let event_json: Value = row.try_get("event_json")?;
+        let Ok(raw_event) = cn_core::nostr::parse_event(&event_json) else {
+            continue;
+        };
+        let topic_id = row
+            .try_get::<Option<String>, _>("topic_id")?
+            .or_else(|| raw_event.first_tag_value("t"))
+            .unwrap_or_default();
+        if topic_id.is_empty() {
+            continue;
+        }
+        let host_port = host_port_by_node_id
+            .get(&raw_event.pubkey)
+            .cloned()
+            .unwrap_or_else(|| "unknown:0".to_string());
+        grouped
+            .entry(topic_id)
+            .or_default()
+            .insert(format!("{}@{}", raw_event.pubkey, host_port));
+    }
+
+    Ok(grouped
+        .into_iter()
+        .map(|(topic_id, nodes)| (topic_id, nodes.into_iter().collect()))
+        .collect())
+}
+
+fn extract_descriptor_host_port(event: &cn_core::nostr::RawEvent) -> Option<String> {
+    let content: Value = serde_json::from_str(&event.content).ok()?;
+    let endpoints = content.get("endpoints")?;
+    match endpoints {
+        Value::String(endpoint) => parse_host_port_from_endpoint(endpoint),
+        Value::Object(map) => {
+            const PRIORITY_KEYS: [&str; 5] = ["p2p", "gossip", "relay", "ws", "http"];
+            for key in PRIORITY_KEYS {
+                if let Some(endpoint) = map.get(key).and_then(Value::as_str) {
+                    if let Some(host_port) = parse_host_port_from_endpoint(endpoint) {
+                        return Some(host_port);
+                    }
+                }
+            }
+            for value in map.values() {
+                if let Some(endpoint) = value.as_str() {
+                    if let Some(host_port) = parse_host_port_from_endpoint(endpoint) {
+                        return Some(host_port);
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn parse_host_port_from_endpoint(endpoint: &str) -> Option<String> {
+    let trimmed = endpoint.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some((_, rest)) = trimmed.rsplit_once('@') {
+        if rest != trimmed {
+            return parse_host_port_from_endpoint(rest);
+        }
+    }
+
+    if let Ok(url) = reqwest::Url::parse(trimmed) {
+        let host = url.host_str()?;
+        let port = url.port_or_known_default()?;
+        return Some(format!("{host}:{port}"));
+    }
+
+    let host_port = trimmed.split('/').next().unwrap_or(trimmed);
+    if let Some((host, port)) = host_port.rsplit_once(':') {
+        if host.is_empty() {
+            return None;
+        }
+        if let Ok(parsed_port) = port.parse::<u16>() {
+            return Some(format!("{host}:{parsed_port}"));
+        }
+    }
+
+    None
 }
 
 pub async fn list_plans(

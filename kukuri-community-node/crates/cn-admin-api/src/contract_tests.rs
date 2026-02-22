@@ -178,6 +178,22 @@ async fn put_json(app: Router, uri: &str, payload: Value, session_id: &str) -> (
     (status, payload)
 }
 
+async fn delete_with_session(app: Router, uri: &str, session_id: &str) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header("cookie", format!("cn_admin_session={session_id}"))
+        .body(Body::empty())
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: Value = serde_json::from_slice(&body).expect("json body");
+    (status, payload)
+}
+
 async fn get_json(app: Router, uri: &str) -> (StatusCode, Value) {
     let request = Request::builder()
         .method("GET")
@@ -3391,6 +3407,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     let requester_reject = Keys::generate().public_key().to_hex();
     let approve_topic_id = format!("kukuri:topic:approve:{}", Uuid::new_v4());
     let reject_topic_id = format!("kukuri:topic:reject:{}", Uuid::new_v4());
+    let manual_topic_id = format!("kukuri:topic:manual:{}", Uuid::new_v4());
     let approve_request_id = insert_subscription_request(
         &state.pool,
         &requester_approve,
@@ -3421,11 +3438,13 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         )
         .route(
             "/v1/admin/node-subscriptions",
-            get(subscriptions::list_node_subscriptions),
+            get(subscriptions::list_node_subscriptions)
+                .post(subscriptions::create_node_subscription),
         )
         .route(
             "/v1/admin/node-subscriptions/{topic_id}",
-            put(subscriptions::update_node_subscription),
+            put(subscriptions::update_node_subscription)
+                .delete(subscriptions::delete_node_subscription),
         )
         .with_state(state.clone());
 
@@ -3441,6 +3460,24 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         row.get("request_id").and_then(Value::as_str) == Some(approve_request_id.as_str())
             && row.get("status").and_then(Value::as_str) == Some("pending")
     }));
+
+    let (status, payload) = post_json(
+        app.clone(),
+        "/v1/admin/node-subscriptions",
+        json!({
+            "topic_id": manual_topic_id,
+            "enabled": true
+        }),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("topic_id").and_then(Value::as_str),
+        Some(manual_topic_id.as_str())
+    );
+    assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(true));
+    assert_eq!(payload.get("ref_count").and_then(Value::as_i64), Some(0));
 
     let (status, payload) = post_json(
         app.clone(),
@@ -3510,6 +3547,14 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     assert_eq!(node_row.get("enabled").and_then(Value::as_bool), Some(true));
     assert!(node_row.get("ref_count").and_then(Value::as_i64).is_some());
     assert!(node_row.get("ingest_policy").is_some_and(Value::is_null));
+    assert!(node_row
+        .get("connected_nodes")
+        .and_then(Value::as_array)
+        .is_some());
+    assert!(node_row
+        .get("connected_node_count")
+        .and_then(Value::as_i64)
+        .is_some());
     assert!(node_row.get("updated_at").and_then(Value::as_i64).is_some());
 
     let (status, payload) = put_json(
@@ -3573,6 +3618,30 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
             .get("allow_backfill")
             .and_then(Value::as_bool),
         Some(false)
+    );
+
+    let (status, payload) = delete_with_session(
+        app.clone(),
+        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        payload.get("code").and_then(Value::as_str),
+        Some("NODE_SUBSCRIPTION_IN_USE")
+    );
+
+    let (status, payload) = delete_with_session(
+        app.clone(),
+        &format!("/v1/admin/node-subscriptions/{manual_topic_id}"),
+        &session_id,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload.get("status").and_then(Value::as_str),
+        Some("deleted")
     );
 
     let stored_policy: Value = sqlx::query_scalar(

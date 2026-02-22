@@ -48,6 +48,12 @@ type NodeIngestPolicyPayload = {
   allow_backfill: boolean;
 };
 
+type NodeSubscriptionCreateForm = {
+  topicId: string;
+  enabled: boolean;
+  policy: NodePolicyDraft;
+};
+
 const toNodePolicyDraft = (policy: NodeSubscription['ingest_policy']): NodePolicyDraft => ({
   retentionDays:
     typeof policy?.retention_days === 'number' && Number.isFinite(policy.retention_days)
@@ -107,6 +113,17 @@ const parseNodePolicyDraft = (
   };
 };
 
+const normalizeConnectedNode = (value: string): string => {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return 'unknown@unknown:0';
+  }
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  return `${trimmed}@unknown:0`;
+};
+
 export const SubscriptionsPage = () => {
   const queryClient = useQueryClient();
   const [requestFilter, setRequestFilter] = useState('pending');
@@ -130,6 +147,22 @@ export const SubscriptionsPage = () => {
   const [usageError, setUsageError] = useState<string | null>(null);
   const [nodePolicyDrafts, setNodePolicyDrafts] = useState<Record<string, NodePolicyDraft>>({});
   const [nodePolicyErrors, setNodePolicyErrors] = useState<Record<string, string | null>>({});
+  const [newNodeSubscriptionForm, setNewNodeSubscriptionForm] = useState<NodeSubscriptionCreateForm>({
+    topicId: '',
+    enabled: true,
+    policy: {
+      retentionDays: '',
+      maxEvents: '',
+      maxBytes: '',
+      allowBackfill: true
+    }
+  });
+  const [createNodeSubscriptionError, setCreateNodeSubscriptionError] = useState<string | null>(
+    null
+  );
+  const [deleteNodeSubscriptionErrors, setDeleteNodeSubscriptionErrors] = useState<
+    Record<string, string | null>
+  >({});
 
   const requestsQuery = useQuery<SubscriptionRequest[]>({
     queryKey: ['subscriptionRequests', requestFilter],
@@ -201,6 +234,48 @@ export const SubscriptionsPage = () => {
       setNodePolicyErrors((prev) => ({
         ...prev,
         [variables.topicId]: errorToMessage(err)
+      }));
+    }
+  });
+
+  const createNodeSubscriptionMutation = useMutation({
+    mutationFn: (payload: {
+      topic_id: string;
+      enabled: boolean;
+      ingest_policy: NodeIngestPolicyPayload;
+    }) => api.createNodeSubscription(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodeSubscriptions'] });
+      setCreateNodeSubscriptionError(null);
+      setNewNodeSubscriptionForm({
+        topicId: '',
+        enabled: true,
+        policy: {
+          retentionDays: '',
+          maxEvents: '',
+          maxBytes: '',
+          allowBackfill: true
+        }
+      });
+    },
+    onError: (err) => {
+      setCreateNodeSubscriptionError(errorToMessage(err));
+    }
+  });
+
+  const deleteNodeSubscriptionMutation = useMutation({
+    mutationFn: (topicId: string) => api.deleteNodeSubscription(topicId),
+    onSuccess: (_payload, topicId) => {
+      queryClient.invalidateQueries({ queryKey: ['nodeSubscriptions'] });
+      setDeleteNodeSubscriptionErrors((prev) => ({
+        ...prev,
+        [topicId]: null
+      }));
+    },
+    onError: (err, topicId) => {
+      setDeleteNodeSubscriptionErrors((prev) => ({
+        ...prev,
+        [topicId]: errorToMessage(err)
       }));
     }
   });
@@ -340,9 +415,23 @@ export const SubscriptionsPage = () => {
   }, [requestList]);
 
   const nodeSubscriptions = nodeSubsQuery.data ?? [];
+  const nodeSubscriptionSummary = useMemo(() => {
+    const topicCount = nodeSubscriptions.length;
+    const connectedNodeTotal = nodeSubscriptions.reduce((total, subscription) => {
+      if (
+        typeof subscription.connected_node_count === 'number' &&
+        Number.isFinite(subscription.connected_node_count)
+      ) {
+        return total + subscription.connected_node_count;
+      }
+      return total + (subscription.connected_nodes ?? []).length;
+    }, 0);
+    return { topicCount, connectedNodeTotal };
+  }, [nodeSubscriptions]);
 
   const saveNodePolicy = (subscription: NodeSubscription) => {
-    const draft = nodePolicyDrafts[subscription.topic_id] ?? toNodePolicyDraft(subscription.ingest_policy);
+    const draft =
+      nodePolicyDrafts[subscription.topic_id] ?? toNodePolicyDraft(subscription.ingest_policy);
     const parsed = parseNodePolicyDraft(draft);
     if (parsed.error) {
       setNodePolicyErrors((prev) => ({
@@ -369,6 +458,35 @@ export const SubscriptionsPage = () => {
       enabled: !subscription.enabled,
       ingestPolicy: parsed.payload
     });
+  };
+
+  const submitNodeSubscriptionCreate = () => {
+    setCreateNodeSubscriptionError(null);
+    const topicId = newNodeSubscriptionForm.topicId.trim();
+    if (topicId === '') {
+      setCreateNodeSubscriptionError('Topic ID is required.');
+      return;
+    }
+
+    const parsed = parseNodePolicyDraft(newNodeSubscriptionForm.policy);
+    if (parsed.error) {
+      setCreateNodeSubscriptionError(parsed.error);
+      return;
+    }
+
+    createNodeSubscriptionMutation.mutate({
+      topic_id: topicId,
+      enabled: newNodeSubscriptionForm.enabled,
+      ingest_policy: parsed.payload
+    });
+  };
+
+  const removeNodeSubscription = (topicId: string) => {
+    setDeleteNodeSubscriptionErrors((prev) => ({
+      ...prev,
+      [topicId]: null
+    }));
+    deleteNodeSubscriptionMutation.mutate(topicId);
   };
 
   return (
@@ -463,7 +581,134 @@ export const SubscriptionsPage = () => {
       </div>
 
       <div className="card">
-        <h3>Node Subscriptions</h3>
+        <div className="row">
+          <div>
+            <h3>Node Subscriptions</h3>
+            <p>Relay connections are shown as node_id@host:port.</p>
+          </div>
+          <div className="muted">
+            Topics: {nodeSubscriptionSummary.topicCount} | Connected nodes:{' '}
+            {nodeSubscriptionSummary.connectedNodeTotal}
+          </div>
+        </div>
+        <div className="card sub-card">
+          <h3>Add topic subscription</h3>
+          <div className="grid">
+            <div className="field">
+              <label>Topic ID</label>
+              <input
+                aria-label="New topic ID"
+                value={newNodeSubscriptionForm.topicId}
+                onChange={(event) => {
+                  setCreateNodeSubscriptionError(null);
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    topicId: event.target.value
+                  }));
+                }}
+                placeholder="kukuri:topic:example"
+              />
+            </div>
+            <div className="field">
+              <label>Enabled</label>
+              <select
+                aria-label="New topic enabled"
+                value={newNodeSubscriptionForm.enabled ? 'enabled' : 'disabled'}
+                onChange={(event) =>
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    enabled: event.target.value === 'enabled'
+                  }))
+                }
+              >
+                <option value="enabled">enabled</option>
+                <option value="disabled">disabled</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Retention days</label>
+              <input
+                aria-label="New retention days"
+                value={newNodeSubscriptionForm.policy.retentionDays}
+                onChange={(event) =>
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    policy: {
+                      ...prev.policy,
+                      retentionDays: event.target.value
+                    }
+                  }))
+                }
+                placeholder="global"
+              />
+            </div>
+            <div className="field">
+              <label>Max events</label>
+              <input
+                aria-label="New max events"
+                value={newNodeSubscriptionForm.policy.maxEvents}
+                onChange={(event) =>
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    policy: {
+                      ...prev.policy,
+                      maxEvents: event.target.value
+                    }
+                  }))
+                }
+                placeholder="unlimited"
+              />
+            </div>
+            <div className="field">
+              <label>Max bytes</label>
+              <input
+                aria-label="New max bytes"
+                value={newNodeSubscriptionForm.policy.maxBytes}
+                onChange={(event) =>
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    policy: {
+                      ...prev.policy,
+                      maxBytes: event.target.value
+                    }
+                  }))
+                }
+                placeholder="unlimited"
+              />
+            </div>
+            <div className="field">
+              <label>Backfill</label>
+              <select
+                aria-label="New backfill"
+                value={newNodeSubscriptionForm.policy.allowBackfill ? 'enabled' : 'disabled'}
+                onChange={(event) =>
+                  setNewNodeSubscriptionForm((prev) => ({
+                    ...prev,
+                    policy: {
+                      ...prev.policy,
+                      allowBackfill: event.target.value === 'enabled'
+                    }
+                  }))
+                }
+              >
+                <option value="enabled">enabled</option>
+                <option value="disabled">disabled</option>
+              </select>
+            </div>
+          </div>
+          <button
+            className="button"
+            onClick={submitNodeSubscriptionCreate}
+            disabled={createNodeSubscriptionMutation.isPending}
+          >
+            {createNodeSubscriptionMutation.isPending
+              ? 'Adding...'
+              : 'Add topic subscription'}
+          </button>
+          {createNodeSubscriptionError && (
+            <div className="notice">{createNodeSubscriptionError}</div>
+          )}
+        </div>
         {nodeSubsQuery.isLoading && <div className="notice">Loading node topics...</div>}
         {nodeSubsQuery.error && (
           <div className="notice">{errorToMessage(nodeSubsQuery.error)}</div>
@@ -474,6 +719,8 @@ export const SubscriptionsPage = () => {
               <th>Topic</th>
               <th>Status</th>
               <th>Ref Count</th>
+              <th>Connected</th>
+              <th>Connected Nodes</th>
               <th>Retention Days</th>
               <th>Max Events</th>
               <th>Max Bytes</th>
@@ -485,7 +732,16 @@ export const SubscriptionsPage = () => {
           <tbody>
             {nodeSubscriptions.map((sub) => {
               const draft = nodePolicyDrafts[sub.topic_id] ?? toNodePolicyDraft(sub.ingest_policy);
+              const connectedNodes = Array.from(
+                new Set((sub.connected_nodes ?? []).map(normalizeConnectedNode))
+              ).sort();
+              const connectedNodeCount =
+                typeof sub.connected_node_count === 'number' &&
+                Number.isFinite(sub.connected_node_count)
+                  ? sub.connected_node_count
+                  : connectedNodes.length;
               const rowError = nodePolicyErrors[sub.topic_id];
+              const deleteError = deleteNodeSubscriptionErrors[sub.topic_id];
               return (
                 <tr key={sub.topic_id}>
                   <td>{sub.topic_id}</td>
@@ -493,6 +749,18 @@ export const SubscriptionsPage = () => {
                     <StatusBadge status={sub.enabled ? 'enabled' : 'disabled'} />
                   </td>
                   <td>{sub.ref_count}</td>
+                  <td>{connectedNodeCount}</td>
+                  <td>
+                    {connectedNodes.length === 0 ? (
+                      <span className="muted">No connected nodes</span>
+                    ) : (
+                      <div className="stack">
+                        {connectedNodes.map((node) => (
+                          <code key={`${sub.topic_id}-${node}`}>{node}</code>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <input
                       aria-label={`Retention days ${sub.topic_id}`}
@@ -576,15 +844,23 @@ export const SubscriptionsPage = () => {
                       >
                         Save policy
                       </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => removeNodeSubscription(sub.topic_id)}
+                        disabled={deleteNodeSubscriptionMutation.isPending}
+                      >
+                        Delete topic
+                      </button>
                     </div>
                     {rowError && <div className="notice">{rowError}</div>}
+                    {deleteError && <div className="notice">{deleteError}</div>}
                   </td>
                 </tr>
               );
             })}
             {nodeSubscriptions.length === 0 && (
               <tr>
-                <td colSpan={9}>No node subscriptions configured.</td>
+                <td colSpan={11}>No node subscriptions configured.</td>
               </tr>
             )}
           </tbody>
