@@ -9,7 +9,7 @@ import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
 import { useNavigate, useLocation } from '@tanstack/react-router';
 import { formatDistanceToNow } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchTrendingCategory, prefetchFollowingCategory } from '@/hooks/useTrendingFeeds';
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
@@ -46,11 +46,42 @@ const deriveCategoryFromPath = (pathname: string): SidebarCategory | null => {
   return null;
 };
 
+const SIDEBAR_MIN_WIDTH_PX = 256;
+const SIDEBAR_MAX_WIDTH_PX = 420;
+const DESKTOP_MAIN_CONTENT_MIN_WIDTH_PX = 480;
+const MOBILE_BREAKPOINT_PX = 768;
+const VIEWPORT_MARGIN_PX = 24;
+
+const clamp = (value: number, min: number, max: number): number => {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+};
+
+const getResponsiveSidebarRange = (viewportWidth: number) => {
+  const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 0;
+  const preferredMaxWidth =
+    safeViewportWidth < MOBILE_BREAKPOINT_PX
+      ? safeViewportWidth - VIEWPORT_MARGIN_PX
+      : safeViewportWidth - DESKTOP_MAIN_CONTENT_MIN_WIDTH_PX;
+  const maxWidth = clamp(preferredMaxWidth, 0, SIDEBAR_MAX_WIDTH_PX);
+  const minCandidateWidth = Math.min(
+    SIDEBAR_MIN_WIDTH_PX,
+    Math.max(0, safeViewportWidth - VIEWPORT_MARGIN_PX * 2),
+  );
+  const minWidth = Math.min(minCandidateWidth, maxWidth);
+
+  return { minWidth, maxWidth };
+};
+
 export function Sidebar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { topics, joinedTopics, currentTopic, setCurrentTopic, topicUnreadCounts } =
     useTopicStore();
   const [showTopicCreationDialog, setShowTopicCreationDialog] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH_PX);
+  const sidebarContentRef = useRef<HTMLDivElement>(null);
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const activeSidebarCategory = useUIStore((state) => state.activeSidebarCategory);
   const setActiveSidebarCategory = useUIStore((state) => state.setActiveSidebarCategory);
@@ -148,16 +179,59 @@ export function Sidebar() {
     [navigate, queryClient, setActiveSidebarCategory, setCurrentTopic],
   );
 
+  const recalculateSidebarWidth = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const { minWidth, maxWidth } = getResponsiveSidebarRange(window.innerWidth);
+    const contentElement = sidebarContentRef.current;
+
+    if (!contentElement) {
+      setSidebarWidth((prev) => clamp(prev, minWidth, maxWidth));
+      return;
+    }
+
+    const requiredWidth = Math.ceil(contentElement.scrollWidth);
+    const nextWidth = clamp(requiredWidth, minWidth, maxWidth);
+    setSidebarWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarOpen) {
+      return;
+    }
+
+    recalculateSidebarWidth();
+
+    const contentElement = sidebarContentRef.current;
+    const resizeObserver =
+      contentElement === null ? null : new ResizeObserver(() => recalculateSidebarWidth());
+    if (contentElement) {
+      resizeObserver?.observe(contentElement);
+    }
+
+    window.addEventListener('resize', recalculateSidebarWidth);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', recalculateSidebarWidth);
+    };
+  }, [i18n.language, joinedTopicsList, recalculateSidebarWidth, sidebarOpen]);
+
+  const currentSidebarWidth = sidebarOpen ? sidebarWidth : 0;
+
   return (
     <aside
       role="complementary"
       data-testid="sidebar"
       className={cn(
-        'border-r bg-background transition-all duration-300 overflow-hidden h-full',
-        sidebarOpen ? 'w-64' : 'w-0',
+        'bg-background transition-[width] duration-300 overflow-hidden h-full shrink-0',
+        sidebarOpen ? 'border-r' : 'border-r-0',
       )}
+      style={{ width: `${currentSidebarWidth}px` }}
     >
-      <div className="flex h-full w-64 flex-col min-h-0">
+      <div ref={sidebarContentRef} className="flex h-full w-full min-h-0 flex-col">
         <ScrollArea className="h-full w-full">
           <div className="flex min-h-full flex-col">
             <div className="p-4">
