@@ -277,7 +277,10 @@ const PERSISTED_KEYS: string[] = [
   persistKeys.ui,
   persistKeys.privacy,
   persistKeys.keyManagement,
+  'kukuri-theme',
+  'theme',
   'kukuri-locale',
+  'kukuri-language',
   'i18nextLng',
 ];
 

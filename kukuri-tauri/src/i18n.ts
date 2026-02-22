@@ -38,17 +38,17 @@ const resolveLocaleCandidate = (candidate: unknown): SupportedLocale | null => {
 };
 
 const resolveLocaleFromRawStorageValue = (rawValue: string | null): SupportedLocale | null => {
-  if (rawValue == null || rawValue === '') {
+  if (rawValue == null) {
     return null;
   }
 
-  const directLocale = resolveLocaleCandidate(rawValue);
-  if (directLocale) {
-    return directLocale;
+  const trimmedRawValue = rawValue.trim();
+  if (trimmedRawValue === '') {
+    return null;
   }
 
   try {
-    const parsed = JSON.parse(rawValue) as unknown;
+    const parsed = JSON.parse(trimmedRawValue) as unknown;
     if (typeof parsed === 'object' && parsed !== null) {
       const record = parsed as Record<string, unknown>;
       return (
@@ -58,10 +58,15 @@ const resolveLocaleFromRawStorageValue = (rawValue: string | null): SupportedLoc
         resolveLocaleCandidate(record.value)
       );
     }
-    return resolveLocaleCandidate(parsed);
+    const parsedLocale = resolveLocaleCandidate(parsed);
+    if (parsedLocale) {
+      return parsedLocale;
+    }
   } catch {
-    return null;
+    // 非 JSON 文字列はそのまま候補として扱う。
   }
+
+  return resolveLocaleCandidate(trimmedRawValue);
 };
 
 export const resolveStoredLocale = (

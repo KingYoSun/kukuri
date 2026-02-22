@@ -56,6 +56,17 @@ describe('locale persistence helpers', () => {
     });
   });
 
+  it('旧キーのJSON形式ロケール値を復元できる', () => {
+    const { storage } = createStorage({
+      [LEGACY_LOCALE_STORAGE_KEYS[1]]: '{"lng":"ja-JP"}',
+    });
+
+    expect(resolveStoredLocale(storage)).toEqual({
+      locale: 'ja',
+      source: 'legacy',
+    });
+  });
+
   it('旧キー復元時は新キーへ移行保存する', () => {
     const { storage, values } = createStorage({
       [LEGACY_LOCALE_STORAGE_KEYS[0]]: 'en-US',
