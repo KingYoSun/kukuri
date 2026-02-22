@@ -17,14 +17,6 @@ vi.mock('@tanstack/react-router', () => ({
   useLocation: vi.fn(),
 }));
 
-vi.mock('@/components/RelayStatus', () => ({
-  RelayStatus: () => <div>Relay Status</div>,
-}));
-
-vi.mock('@/components/P2PStatus', () => ({
-  P2PStatus: () => <div>P2P Status</div>,
-}));
-
 vi.mock('@/components/topics/TopicFormModal', () => ({
   TopicFormModal: ({
     open,
@@ -154,8 +146,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: '新規投稿' })).toBeInTheDocument();
     expect(screen.getByText('カテゴリー')).toBeInTheDocument();
     expect(screen.getByText('参加中のトピック')).toBeInTheDocument();
-    expect(screen.getByText('Relay Status')).toBeInTheDocument();
-    expect(screen.getByText('P2P Status')).toBeInTheDocument();
+    expect(screen.getByTestId('open-settings-button')).toBeInTheDocument();
   });
 
   it('新規投稿ボタンをクリックするとコンポーザーが開く', async () => {

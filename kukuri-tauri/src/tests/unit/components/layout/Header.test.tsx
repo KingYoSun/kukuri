@@ -21,6 +21,14 @@ vi.mock('@/lib/api/tauri', () => ({
   },
 }));
 
+vi.mock('@/components/RelayStatus', () => ({
+  RelayStatus: () => <div>Relay Status</div>,
+}));
+
+vi.mock('@/components/P2PStatus', () => ({
+  P2PStatus: () => <div>P2P Status</div>,
+}));
+
 vi.mock('@/components/ui/dialog', async () => {
   const passthrough =
     (slot: string) =>
@@ -144,6 +152,9 @@ describe('Header', () => {
 
     const dmButton = screen.getByRole('button', { name: 'ダイレクトメッセージ' });
     expect(dmButton).toBeInTheDocument();
+
+    const networkButton = screen.getByTestId('open-network-status-button');
+    expect(networkButton).toBeInTheDocument();
 
     // 通知ボタンが存在すること
     const notificationButton = screen.getByRole('button', { name: /通知/i });
@@ -279,6 +290,20 @@ describe('Header', () => {
     await act(() => Promise.resolve());
     expect(openInboxSpy).toHaveBeenCalledTimes(1);
     expect(useDirectMessageStore.getState().isInboxOpen).toBe(true);
+  });
+
+  it('アンテナボタンでネットワーク状態モーダルが開くこと', async () => {
+    const user = userEvent.setup();
+
+    renderHeader();
+
+    expect(screen.queryByTestId('network-status-modal')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('open-network-status-button'));
+
+    expect(screen.getByTestId('network-status-modal')).toBeInTheDocument();
+    expect(screen.getByText('Relay Status')).toBeInTheDocument();
+    expect(screen.getByText('P2P Status')).toBeInTheDocument();
   });
 
   it('ユーザー情報が表示されること', async () => {
