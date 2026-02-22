@@ -1115,7 +1115,8 @@ impl CommunityNodeHandler {
                 }
             };
 
-            for item in response.items {
+            let sanitized = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &response.items, now, None);
+            for item in sanitized {
                 let extracted = extract_bootstrap_nodes_from_descriptor(&item, now);
                 merge_unique_bootstrap_nodes(&mut resolved, extracted);
             }
@@ -1618,31 +1619,32 @@ fn extract_bootstrap_nodes_from_descriptor(
         Err(_) => return Vec::new(),
     };
     let mut extracted = Vec::new();
-    collect_bootstrap_node_candidates(&content, &mut extracted);
-    let mut deduped = Vec::new();
-    merge_unique_bootstrap_nodes(&mut deduped, extracted);
-    deduped
-}
+    let p2p = content
+        .get("endpoints")
+        .and_then(|endpoints| endpoints.get("p2p"));
 
-fn collect_bootstrap_node_candidates(value: &serde_json::Value, output: &mut Vec<String>) {
-    match value {
-        serde_json::Value::String(raw) => {
+    match p2p {
+        Some(serde_json::Value::String(raw)) => {
             if let Some(node) = normalize_bootstrap_node_candidate(raw) {
-                output.push(node);
+                extracted.push(node);
             }
         }
-        serde_json::Value::Array(items) => {
+        Some(serde_json::Value::Array(items)) => {
             for item in items {
-                collect_bootstrap_node_candidates(item, output);
-            }
-        }
-        serde_json::Value::Object(map) => {
-            for item in map.values() {
-                collect_bootstrap_node_candidates(item, output);
+                let Some(raw) = item.as_str() else {
+                    continue;
+                };
+                if let Some(node) = normalize_bootstrap_node_candidate(raw) {
+                    extracted.push(node);
+                }
             }
         }
         _ => {}
     }
+
+    let mut deduped = Vec::new();
+    merge_unique_bootstrap_nodes(&mut deduped, extracted);
+    deduped
 }
 
 fn normalize_bootstrap_node_candidate(raw: &str) -> Option<String> {
