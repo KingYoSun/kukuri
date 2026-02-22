@@ -396,7 +396,19 @@ describe('Sidebar', () => {
 
     const { container } = renderSidebar();
     const sidebar = container.querySelector('aside');
-    expect(sidebar).toHaveClass('w-0');
+    expect(sidebar).toHaveStyle({ width: '0px' });
+  });
+
+  it('サイドバーが開いている場合は最小幅が適用される', () => {
+    const topic = buildTopic({ id: 'topic-a', name: 'Topic A' });
+    useTopicStore.setState({
+      topics: new Map([[topic.id, topic]]),
+      joinedTopics: [topic.id],
+    });
+
+    const { container } = renderSidebar();
+    const sidebar = container.querySelector('aside');
+    expect(sidebar).toHaveStyle({ width: '256px' });
   });
 
   it('トレンドカテゴリーをクリックするとprefetchとナビゲーションが実行される', async () => {
