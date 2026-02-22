@@ -615,7 +615,7 @@ pub async fn delete_node_subscription(
     })?;
 
     let ref_count = sqlx::query_scalar::<_, i64>(
-        "SELECT ref_count FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+        "SELECT ref_count FROM cn_admin.node_subscriptions WHERE topic_id = $1 FOR UPDATE",
     )
     .bind(&topic_id)
     .fetch_optional(&mut *tx)
@@ -770,7 +770,7 @@ async fn load_connected_nodes_by_topic(
         sqlx::query(
             "SELECT event_json, topic_id \
              FROM cn_bootstrap.events \
-             WHERE kind = 39001 AND is_active = TRUE AND topic_id = $1",
+             WHERE kind = 39001 AND role = 'relay' AND is_active = TRUE AND topic_id = $1",
         )
         .bind(topic_id)
         .fetch_all(pool)
@@ -779,7 +779,7 @@ async fn load_connected_nodes_by_topic(
         sqlx::query(
             "SELECT event_json, topic_id \
              FROM cn_bootstrap.events \
-             WHERE kind = 39001 AND is_active = TRUE",
+             WHERE kind = 39001 AND role = 'relay' AND is_active = TRUE",
         )
         .fetch_all(pool)
         .await
