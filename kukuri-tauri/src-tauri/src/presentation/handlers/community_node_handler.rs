@@ -1,5 +1,6 @@
 use crate::application::ports::group_key_store::{GroupKeyEntry, GroupKeyStore};
 use crate::application::ports::key_manager::KeyManager;
+use crate::infrastructure::p2p::bootstrap_config;
 use crate::infrastructure::storage::SecureStorage;
 use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
@@ -19,8 +20,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 
 const COMMUNITY_NODE_CONFIG_KEY: &str = "community_node_config_v2";
 const COMMUNITY_NODE_CONFIG_LEGACY_KEY: &str = "community_node_config_v1";
@@ -44,6 +46,7 @@ const KIP_VERSION: &str = "1";
 const KIP_NODE_DESCRIPTOR_SCHEMA: &str = "kukuri-node-desc-v1";
 const KIP_TOPIC_SERVICE_SCHEMA: &str = "kukuri-topic-service-v1";
 const KIP_BOOTSTRAP_HINT_SCHEMA: &str = "kukuri-bootstrap-update-hint-v1";
+const COMMUNITY_NODE_BOOTSTRAP_REQUEST_TIMEOUT_SECS: u64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CommunityNodeConfig {
@@ -292,6 +295,7 @@ impl CommunityNodeHandler {
         }
         config.nodes = next_nodes;
         self.save_config(&config).await?;
+        self.sync_bootstrap_nodes_from_config(&config).await;
         Ok(config_response(&config))
     }
 
@@ -1055,6 +1059,73 @@ impl CommunityNodeHandler {
         Ok(())
     }
 
+    async fn sync_bootstrap_nodes_from_config(&self, config: &CommunityNodeConfig) {
+        if bootstrap_config::load_env_bootstrap_nodes().is_some() {
+            return;
+        }
+
+        let resolved = self.resolve_bootstrap_nodes_for_config(config).await;
+        if resolved.is_empty() {
+            return;
+        }
+
+        let mut merged = bootstrap_config::load_user_bootstrap_nodes();
+        merge_unique_bootstrap_nodes(&mut merged, resolved);
+
+        if let Err(err) = bootstrap_config::save_user_bootstrap_nodes(&merged) {
+            tracing::warn!(
+                error = %err,
+                "Failed to persist bootstrap nodes resolved from community node"
+            );
+        }
+    }
+
+    async fn resolve_bootstrap_nodes_for_config(
+        &self,
+        config: &CommunityNodeConfig,
+    ) -> Vec<String> {
+        let now = Utc::now().timestamp();
+        let mut resolved = Vec::new();
+
+        for node in config.nodes.iter().filter(|node| node.roles.bootstrap) {
+            let url = build_url(&node.base_url, "/v1/bootstrap/nodes");
+            let builder = match self.authorized_request(node, Method::GET, url, false).await {
+                Ok(builder) => builder.timeout(Duration::from_secs(
+                    COMMUNITY_NODE_BOOTSTRAP_REQUEST_TIMEOUT_SECS,
+                )),
+                Err(err) => {
+                    tracing::warn!(
+                        base_url = %node.base_url,
+                        error = %err,
+                        "Failed to prepare bootstrap node request"
+                    );
+                    continue;
+                }
+            };
+
+            let response = match request_json::<BootstrapHttpResponse>(builder).await {
+                Ok(response) => response,
+                Err(err) => {
+                    tracing::warn!(
+                        base_url = %node.base_url,
+                        error = %err,
+                        "Failed to resolve bootstrap nodes from community node"
+                    );
+                    continue;
+                }
+            };
+
+            let sanitized =
+                sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &response.items, now, None);
+            for item in sanitized {
+                let extracted = extract_bootstrap_nodes_from_descriptor(&item, now);
+                merge_unique_bootstrap_nodes(&mut resolved, extracted);
+            }
+        }
+
+        resolved
+    }
+
     async fn authorized_request(
         &self,
         node: &CommunityNodeConfigNode,
@@ -1526,6 +1597,66 @@ fn build_url(base_url: &str, path: &str) -> String {
     let base = base_url.trim_end_matches('/');
     let path = path.trim_start_matches('/');
     format!("{base}/{path}")
+}
+
+fn merge_unique_bootstrap_nodes(target: &mut Vec<String>, additional: Vec<String>) {
+    let mut seen: HashSet<String> = target.iter().cloned().collect();
+    for node in additional {
+        if seen.insert(node.clone()) {
+            target.push(node);
+        }
+    }
+}
+
+fn extract_bootstrap_nodes_from_descriptor(
+    event_json: &serde_json::Value,
+    now: i64,
+) -> Vec<String> {
+    let Some(event) = validate_kip_event_json(event_json, NODE_DESCRIPTOR_KIND, None, now) else {
+        return Vec::new();
+    };
+    let content = match serde_json::from_str::<serde_json::Value>(event.content.trim()) {
+        Ok(content) => content,
+        Err(_) => return Vec::new(),
+    };
+    let mut extracted = Vec::new();
+    let p2p = content
+        .get("endpoints")
+        .and_then(|endpoints| endpoints.get("p2p"));
+
+    match p2p {
+        Some(serde_json::Value::String(raw)) => {
+            if let Some(node) = normalize_bootstrap_node_candidate(raw) {
+                extracted.push(node);
+            }
+        }
+        Some(serde_json::Value::Array(items)) => {
+            for item in items {
+                let Some(raw) = item.as_str() else {
+                    continue;
+                };
+                if let Some(node) = normalize_bootstrap_node_candidate(raw) {
+                    extracted.push(node);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    let mut deduped = Vec::new();
+    merge_unique_bootstrap_nodes(&mut deduped, extracted);
+    deduped
+}
+
+fn normalize_bootstrap_node_candidate(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let (node_id, addr) = trimmed.split_once('@')?;
+    let node_id = node_id.trim();
+    let addr = addr.trim();
+    if node_id.is_empty() || addr.is_empty() || !addr.contains(':') {
+        return None;
+    }
+    Some(format!("{node_id}@{addr}"))
 }
 
 fn validate_kip_event_json(
@@ -2243,12 +2374,15 @@ mod community_node_handler_tests {
     use super::*;
     use crate::application::ports::group_key_store::GroupKeyStore;
     use crate::infrastructure::crypto::DefaultKeyManager;
+    use crate::infrastructure::p2p::bootstrap_config;
     use crate::infrastructure::storage::{SecureGroupKeyStore, SecureStorage};
     use crate::presentation::dto::community_node_dto::CommunityNodeConfigNodeRequest;
     use async_trait::async_trait;
     use chrono::Utc;
     use std::collections::HashMap;
-    use std::sync::mpsc;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::{Mutex as StdMutex, MutexGuard, OnceLock, mpsc};
     use std::thread;
     use std::time::{Duration, Instant};
     use tiny_http::{Header, Response, Server};
@@ -2256,6 +2390,63 @@ mod community_node_handler_tests {
     use tokio::time::timeout;
 
     const MOCK_SERVER_RECV_TIMEOUT: Duration = Duration::from_secs(2);
+    const XDG_DATA_HOME_ENV: &str = "XDG_DATA_HOME";
+    const KUKURI_BOOTSTRAP_PEERS_ENV: &str = "KUKURI_BOOTSTRAP_PEERS";
+    static BOOTSTRAP_ENV_GUARD: OnceLock<StdMutex<()>> = OnceLock::new();
+
+    fn lock_bootstrap_env() -> MutexGuard<'static, ()> {
+        BOOTSTRAP_ENV_GUARD
+            .get_or_init(|| StdMutex::new(()))
+            .lock()
+            .expect("bootstrap env guard poisoned")
+    }
+
+    struct ScopedEnvVar {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl ScopedEnvVar {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, previous }
+        }
+
+        fn unset(key: &'static str) -> Self {
+            let previous = std::env::var(key).ok();
+            unsafe {
+                std::env::remove_var(key);
+            }
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for ScopedEnvVar {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => unsafe {
+                    std::env::set_var(self.key, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(self.key);
+                },
+            }
+        }
+    }
+
+    fn temp_bootstrap_data_dir(suffix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "kukuri_cn_bootstrap_{}_{}_{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or_default(),
+            suffix
+        ));
+        fs::create_dir_all(&dir).expect("create temp data dir");
+        dir
+    }
 
     fn join_with_timeout(
         handle: thread::JoinHandle<()>,
@@ -2538,6 +2729,37 @@ mod community_node_handler_tests {
         serde_json::to_value(event).expect("bootstrap topic service event json")
     }
 
+    fn build_bootstrap_descriptor_event(
+        endpoint_http: &str,
+        bootstrap_nodes: &[&str],
+    ) -> serde_json::Value {
+        let keys = Keys::generate();
+        let exp = Utc::now().timestamp() + 600;
+        let exp_str = exp.to_string();
+        let tags = vec![
+            Tag::parse(["d", "descriptor"]).expect("d"),
+            Tag::parse(["k", "kukuri"]).expect("k"),
+            Tag::parse(["ver", "1"]).expect("ver"),
+            Tag::parse(["exp", exp_str.as_str()]).expect("exp"),
+            Tag::parse(["role", "bootstrap"]).expect("role"),
+        ];
+        let content = json!({
+            "schema": "kukuri-node-desc-v1",
+            "name": "Bootstrap Bridge",
+            "roles": ["bootstrap"],
+            "endpoints": {
+                "http": endpoint_http,
+                "p2p": bootstrap_nodes
+            }
+        })
+        .to_string();
+        let event = EventBuilder::new(Kind::Custom(NODE_DESCRIPTOR_KIND), content)
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign descriptor");
+        serde_json::to_value(event).expect("bootstrap descriptor event json")
+    }
+
     #[tokio::test]
     async fn set_config_normalizes_and_deduplicates_nodes() {
         let handler = test_handler();
@@ -2558,7 +2780,12 @@ mod community_node_handler_tests {
                 },
                 CommunityNodeConfigNodeRequest {
                     base_url: "https://node2.example.com".to_string(),
-                    roles: None,
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: true,
+                        trust: true,
+                        search: false,
+                        bootstrap: false,
+                    }),
                 },
             ],
         };
@@ -2572,6 +2799,172 @@ mod community_node_handler_tests {
 
         let loaded = handler.get_config().await.expect("get config");
         assert!(loaded.is_some());
+    }
+
+    #[tokio::test]
+    async fn set_config_appends_resolved_bootstrap_nodes_on_add() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("add");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let existing =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@127.0.0.1:11223";
+        bootstrap_config::save_user_bootstrap_nodes(&[existing.to_string()])
+            .expect("save existing bootstrap node");
+
+        let resolved1 =
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789@127.0.0.1:11224";
+        let resolved2 =
+            "1111111111111111111111111111111111111111111111111111111111111111@127.0.0.1:11225";
+        let descriptor =
+            build_bootstrap_descriptor_event("https://node.example", &[resolved1, resolved2]);
+        let response = json!({
+            "items": [descriptor],
+            "next_refresh_at": Utc::now().timestamp() + 600
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        let set_request = CommunityNodeConfigRequest {
+            nodes: vec![CommunityNodeConfigNodeRequest {
+                base_url: base_url.clone(),
+                roles: Some(CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                }),
+            }],
+        };
+        handler.set_config(set_request).await.expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 3);
+        assert!(nodes.contains(&existing.to_string()));
+        assert!(nodes.contains(&resolved1.to_string()));
+        assert!(nodes.contains(&resolved2.to_string()));
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn set_config_appends_resolved_bootstrap_nodes_on_update() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("update");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let resolved1 =
+            "2222222222222222222222222222222222222222222222222222222222222222@127.0.0.1:21001";
+        let resolved2 =
+            "3333333333333333333333333333333333333333333333333333333333333333@127.0.0.1:21002";
+        let responses = vec![
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [build_bootstrap_descriptor_event("https://node.example", &[resolved1])],
+                    "next_refresh_at": Utc::now().timestamp() + 600
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [build_bootstrap_descriptor_event("https://node.example", &[resolved2])],
+                    "next_refresh_at": Utc::now().timestamp() + 600
+                }),
+            ),
+        ];
+        let (base_url, rx, handle) = spawn_json_sequence_server(responses);
+        let handler = test_handler();
+
+        let build_request = || CommunityNodeConfigRequest {
+            nodes: vec![CommunityNodeConfigNodeRequest {
+                base_url: base_url.clone(),
+                roles: Some(CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                }),
+            }],
+        };
+
+        handler
+            .set_config(build_request())
+            .await
+            .expect("set config first");
+        handler
+            .set_config(build_request())
+            .await
+            .expect("set config second");
+
+        let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/bootstrap/nodes");
+        let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.contains(&resolved1.to_string()));
+        assert!(nodes.contains(&resolved2.to_string()));
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn set_config_deduplicates_bootstrap_nodes_with_existing_entries() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("dedup");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let existing =
+            "4444444444444444444444444444444444444444444444444444444444444444@127.0.0.1:20001";
+        bootstrap_config::save_user_bootstrap_nodes(&[existing.to_string()])
+            .expect("save existing bootstrap node");
+
+        let resolved2 =
+            "5555555555555555555555555555555555555555555555555555555555555555@127.0.0.1:20002";
+        let descriptor = build_bootstrap_descriptor_event(
+            "https://node.example",
+            &[existing, existing, resolved2, resolved2],
+        );
+        let response = json!({
+            "items": [descriptor],
+            "next_refresh_at": Utc::now().timestamp() + 600
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        let set_request = CommunityNodeConfigRequest {
+            nodes: vec![CommunityNodeConfigNodeRequest {
+                base_url: base_url.clone(),
+                roles: Some(CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                }),
+            }],
+        };
+        handler.set_config(set_request).await.expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes.iter().filter(|value| *value == existing).count(), 1);
+        assert_eq!(nodes.iter().filter(|value| *value == resolved2).count(), 1);
+
+        let _ = fs::remove_dir_all(&data_dir);
     }
 
     #[tokio::test]
