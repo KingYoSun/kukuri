@@ -8,8 +8,6 @@ import { useTopicStore, useUIStore, useComposerStore, type SidebarCategory } fro
 import { useP2P } from '@/hooks/useP2P';
 import { cn } from '@/lib/utils';
 import { useNavigate, useLocation } from '@tanstack/react-router';
-import { RelayStatus } from '@/components/RelayStatus';
-import { P2PStatus } from '@/components/P2PStatus';
 import { formatDistanceToNow } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -249,9 +247,7 @@ export function Sidebar() {
 
             <Separator />
 
-            <div className="p-4 space-y-4">
-              <RelayStatus />
-              <P2PStatus />
+            <div className="p-4">
               <Button
                 variant="ghost"
                 className="w-full justify-start"

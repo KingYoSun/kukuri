@@ -10,6 +10,7 @@ import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
 import { DirectMessageInbox } from '@/components/directMessages/DirectMessageInbox';
 import { useDirectMessageBootstrap } from '@/hooks/useDirectMessageBootstrap';
+import { AntennaStatusDialog } from '@/components/layout/AntennaStatusDialog';
 
 export function Header() {
   const { t } = useTranslation();
@@ -52,6 +53,7 @@ export function Header() {
         <div className="flex items-center gap-4">
           <RealtimeIndicator />
           <SyncStatusIndicator />
+          <AntennaStatusDialog />
 
           <Button
             variant="ghost"
