@@ -21,7 +21,10 @@ const parseBootstrapNodeId = (node: string): string | null => {
     return null;
   }
   const separatorIndex = normalized.indexOf('@');
-  if (separatorIndex <= 0) {
+  if (separatorIndex < 0) {
+    return normalized;
+  }
+  if (separatorIndex === 0) {
     return null;
   }
   return normalized.slice(0, separatorIndex);

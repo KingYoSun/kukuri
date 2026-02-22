@@ -272,6 +272,26 @@ describe('RelayStatus', () => {
     expect(screen.queryByText('node-2@127.0.0.1:22334')).not.toBeInTheDocument();
   });
 
+  it('counts node_id-only bootstrap entries as connected', async () => {
+    mockGetBootstrapConfig.mockResolvedValueOnce({
+      ...bootstrapConfigResponse,
+      effective_nodes: ['node-1', 'node-2@127.0.0.1:22334'],
+    });
+    const p2pPeers = new Map<string, MockPeerInfo>([
+      ['node-1', connectedPeer('node-1')],
+      ['node-x', connectedPeer('node-x')],
+    ]);
+
+    await renderRelayStatus({}, { p2pPeers });
+
+    expect(screen.getByTestId('relay-bootstrap-connected-count')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+    expect(screen.getByTestId('relay-bootstrap-connected-list')).toHaveTextContent('node-1');
+    expect(screen.queryByText('node-2@127.0.0.1:22334')).not.toBeInTheDocument();
+  });
+
   it('shows empty connected bootstrap message when no configured node is connected', async () => {
     mockGetBootstrapConfig.mockResolvedValueOnce({
       ...bootstrapConfigResponse,
