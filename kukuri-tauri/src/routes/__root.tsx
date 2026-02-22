@@ -14,6 +14,10 @@ const PROTECTED_PATHS = ['/topics', '/settings', '/profile-setup'];
 const AUTH_REDIRECT_PATHS = ['/welcome'];
 const AUTH_LAYOUT_PATHS = ['/welcome', '/login', '/profile-setup'];
 const clampText = (value: string, max = 500) => (value.length > max ? value.slice(0, max) : value);
+const getNowMs = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
 
 function RootLoadingMessage() {
   const { t } = useTranslation();
@@ -64,10 +68,22 @@ function RootComponent() {
 
   useEffect(() => {
     const initApp = async () => {
-      await initialize();
-      setIsInitializing(false);
+      const startedAt = getNowMs();
+      try {
+        await initialize();
+      } catch (error) {
+        errorHandler.log('Root initialization failed', error, {
+          context: 'RootRoute.initialize',
+        });
+      } finally {
+        errorHandler.info(
+          `Root initialization gate released in ${Math.round(getNowMs() - startedAt)}ms`,
+          'RootRoute.initialize',
+        );
+        setIsInitializing(false);
+      }
     };
-    initApp();
+    void initApp();
   }, [initialize]);
 
   useEffect(() => {

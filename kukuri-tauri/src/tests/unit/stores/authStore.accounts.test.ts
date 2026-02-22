@@ -186,7 +186,9 @@ describe('authStore - Multiple Account Management', () => {
         showOnlineStatus: false,
       });
       expect(state.privateKey).toBe('nsec1current');
-      expect(state.accounts).toEqual(mockAccounts);
+      await waitFor(() => {
+        expect(useAuthStore.getState().accounts).toEqual(mockAccounts);
+      });
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();
     });
 
@@ -237,7 +239,9 @@ describe('authStore - Multiple Account Management', () => {
       expect(state.isAuthenticated).toBe(false);
       expect(state.currentUser).toBeNull();
       expect(state.privateKey).toBeNull();
-      expect(state.accounts).toEqual([]);
+      await waitFor(() => {
+        expect(useAuthStore.getState().accounts).toEqual([]);
+      });
       expect(mockNostrApi.initializeNostr).not.toHaveBeenCalled();
     });
 
