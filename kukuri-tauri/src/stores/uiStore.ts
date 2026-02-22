@@ -1,10 +1,14 @@
 import { create } from 'zustand';
 
+import { createUiPersistConfig, persistKeys } from './config/persist';
+import { withPersist } from './utils/persistHelpers';
+
 export type SidebarCategory = 'topics' | 'search' | 'trending' | 'following';
+export type UITheme = 'light' | 'dark' | 'system';
 
 interface UIState {
   sidebarOpen: boolean;
-  theme: 'light' | 'dark' | 'system';
+  theme: UITheme;
   isLoading: boolean;
   error: string | null;
   activeSidebarCategory: SidebarCategory | null;
@@ -13,7 +17,7 @@ interface UIState {
 interface UIStore extends UIState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
-  setTheme: (theme: UIState['theme']) => void;
+  setTheme: (theme: UITheme) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
@@ -21,32 +25,124 @@ interface UIStore extends UIState {
   resetActiveSidebarCategory: () => void;
 }
 
-export const useUIStore = create<UIStore>()((set) => ({
-  sidebarOpen: true,
-  theme: 'system',
-  isLoading: false,
-  error: null,
-  activeSidebarCategory: null,
+type StorageLike = Pick<Storage, 'getItem'>;
 
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+const LEGACY_THEME_STORAGE_KEYS = ['kukuri-theme', 'theme'] as const;
+const DEFAULT_THEME: UITheme = 'system';
 
-  setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
+const normalizeThemeCandidate = (candidate: unknown): UITheme | null => {
+  if (candidate === 'dark' || candidate === 'light' || candidate === 'system') {
+    return candidate;
+  }
 
-  setTheme: (theme: UIState['theme']) => set({ theme }),
+  if (typeof candidate === 'boolean') {
+    return candidate ? 'dark' : 'light';
+  }
 
-  setLoading: (isLoading: boolean) => set({ isLoading }),
+  if (typeof candidate === 'object' && candidate !== null) {
+    const record = candidate as Record<string, unknown>;
+    return (
+      normalizeThemeCandidate(record.theme) ??
+      normalizeThemeCandidate(record.darkMode) ??
+      normalizeThemeCandidate(record.dark_mode) ??
+      normalizeThemeCandidate(record.value) ??
+      (typeof record.state === 'object' && record.state !== null
+        ? normalizeThemeCandidate((record.state as Record<string, unknown>).theme)
+        : null)
+    );
+  }
 
-  setError: (error: string | null) => set({ error }),
+  return null;
+};
 
-  clearError: () => set({ error: null }),
+const readThemeFromRawStorageValue = (rawValue: string | null): UITheme | null => {
+  if (rawValue == null || rawValue === '') {
+    return null;
+  }
 
-  setActiveSidebarCategory: (category: SidebarCategory | null) =>
-    set((state) =>
-      state.activeSidebarCategory === category ? state : { activeSidebarCategory: category },
-    ),
+  const directTheme = normalizeThemeCandidate(rawValue);
+  if (directTheme) {
+    return directTheme;
+  }
 
-  resetActiveSidebarCategory: () =>
-    set((state) =>
-      state.activeSidebarCategory === null ? state : { activeSidebarCategory: null },
-    ),
-}));
+  try {
+    return normalizeThemeCandidate(JSON.parse(rawValue) as unknown);
+  } catch {
+    return null;
+  }
+};
+
+export const resolveThemeFromStorage = (storage: StorageLike | null): UITheme | null => {
+  if (!storage) {
+    return null;
+  }
+
+  const persistedTheme = readThemeFromRawStorageValue(storage.getItem(persistKeys.ui));
+  if (persistedTheme) {
+    return persistedTheme;
+  }
+
+  for (const legacyKey of LEGACY_THEME_STORAGE_KEYS) {
+    const legacyTheme = readThemeFromRawStorageValue(storage.getItem(legacyKey));
+    if (legacyTheme) {
+      return legacyTheme;
+    }
+  }
+
+  return null;
+};
+
+const saveLegacyTheme = (theme: UITheme): void => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(LEGACY_THEME_STORAGE_KEYS[0], theme);
+};
+
+const createInitialState = (): UIState => {
+  const storage = typeof window !== 'undefined' ? window.localStorage : null;
+  return {
+    sidebarOpen: true,
+    theme: resolveThemeFromStorage(storage) ?? DEFAULT_THEME,
+    isLoading: false,
+    error: null,
+    activeSidebarCategory: null,
+  };
+};
+
+export const useUIStore = create<UIStore>()(
+  withPersist<UIStore>(
+    (set) => ({
+      ...createInitialState(),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+      setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
+
+      setTheme: (theme: UITheme) =>
+        set((state) => {
+          if (state.theme === theme) {
+            return state;
+          }
+          saveLegacyTheme(theme);
+          return { theme };
+        }),
+
+      setLoading: (isLoading: boolean) => set({ isLoading }),
+
+      setError: (error: string | null) => set({ error }),
+
+      clearError: () => set({ error: null }),
+
+      setActiveSidebarCategory: (category: SidebarCategory | null) =>
+        set((state) =>
+          state.activeSidebarCategory === category ? state : { activeSidebarCategory: category },
+        ),
+
+      resetActiveSidebarCategory: () =>
+        set((state) =>
+          state.activeSidebarCategory === null ? state : { activeSidebarCategory: null },
+        ),
+    }),
+    createUiPersistConfig<UIStore>(),
+  ),
+);

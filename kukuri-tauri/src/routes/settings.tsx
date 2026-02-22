@@ -25,7 +25,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { updateNostrMetadata } from '@/lib/api/nostr';
 import { KeyManagementDialog } from '@/components/settings/KeyManagementDialog';
-import { SUPPORTED_LOCALES, getCurrentLocale, type SupportedLocale } from '@/i18n';
+import { SUPPORTED_LOCALES, getCurrentLocale, persistLocale, type SupportedLocale } from '@/i18n';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -111,7 +111,7 @@ function SettingsPage() {
   const currentLocale = getCurrentLocale();
   const handleLocaleChange = (value: string) => {
     const locale = value as SupportedLocale;
-    localStorage.setItem('kukuri-locale', locale);
+    persistLocale(locale);
     void i18n.changeLanguage(locale);
   };
 

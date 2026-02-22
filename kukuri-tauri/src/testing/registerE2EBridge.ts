@@ -274,8 +274,14 @@ const PERSISTED_KEYS: string[] = [
   persistKeys.offline,
   persistKeys.p2p,
   persistKeys.topic,
+  persistKeys.ui,
   persistKeys.privacy,
   persistKeys.keyManagement,
+  'kukuri-theme',
+  'theme',
+  'kukuri-locale',
+  'kukuri-language',
+  'i18nextLng',
 ];
 
 const CHANNEL_ID = 'kukuri-e2e-channel';
