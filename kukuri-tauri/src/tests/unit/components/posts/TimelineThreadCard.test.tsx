@@ -4,6 +4,15 @@ import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import type { Post } from '@/stores/types';
 import type { TopicTimelineEntry } from '@/hooks/usePosts';
 
+vi.mock('@tanstack/react-router', async () => {
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router');
+  return {
+    ...actual,
+    Link: ({ children, to: _to, params: _params, ...rest }: any) => <a {...rest}>{children}</a>,
+  };
+});
+
 vi.mock('@/components/posts/PostCard', () => ({
   PostCard: ({ post }: { post: Post }) => (
     <article data-testid={`mock-post-card-${post.id}`}>{post.content}</article>
@@ -44,7 +53,7 @@ describe('TimelineThreadCard', () => {
       lastActivityAt: 1_700_000_500,
     };
 
-    render(<TimelineThreadCard entry={entry} />);
+    render(<TimelineThreadCard entry={entry} topicId="topic-1" />);
 
     expect(screen.getByTestId('timeline-thread-card-thread-1')).toBeInTheDocument();
     expect(screen.getByTestId('timeline-thread-parent-thread-1')).toBeInTheDocument();
@@ -53,6 +62,7 @@ describe('TimelineThreadCard', () => {
     expect(screen.getByTestId('timeline-thread-last-activity-thread-1')).toBeInTheDocument();
     expect(screen.getByTestId('mock-post-card-parent-1')).toHaveTextContent('Parent content');
     expect(screen.getByTestId('mock-post-card-reply-1')).toHaveTextContent('First reply content');
+    expect(screen.getByTestId('timeline-thread-open-thread-1')).toBeInTheDocument();
   });
 
   it('返信がない場合は先頭返信セクションを表示しない', () => {

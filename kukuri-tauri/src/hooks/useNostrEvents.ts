@@ -26,6 +26,8 @@ export function useNostrEvents() {
           // React Queryのキャッシュを無効化して最新データを取得
           queryClient.invalidateQueries({ queryKey: ['posts'] });
           queryClient.invalidateQueries({ queryKey: ['topicTimeline'] });
+          queryClient.invalidateQueries({ queryKey: ['topicThreads'] });
+          queryClient.invalidateQueries({ queryKey: ['threadPosts'] });
 
           // トピック投稿の場合、トピックの投稿数を更新
           if (payload.kind === 30078) {
@@ -127,6 +129,8 @@ export function useNostrEvents() {
             // 投稿とトピックの両方のキャッシュを無効化
             queryClient.invalidateQueries({ queryKey: ['posts'] });
             queryClient.invalidateQueries({ queryKey: ['topicTimeline'] });
+            queryClient.invalidateQueries({ queryKey: ['topicThreads'] });
+            queryClient.invalidateQueries({ queryKey: ['threadPosts'] });
             queryClient.invalidateQueries({ queryKey: ['topics'] });
           }
         }

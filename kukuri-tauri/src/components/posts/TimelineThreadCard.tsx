@@ -1,17 +1,20 @@
 import { useTranslation } from 'react-i18next';
+import { Link } from '@tanstack/react-router';
 import { formatDistanceToNow } from 'date-fns';
 import { getDateFnsLocale } from '@/i18n';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Clock3, MessageCircle } from 'lucide-react';
+import { ArrowRight, Clock3, MessageCircle } from 'lucide-react';
 import { PostCard } from './PostCard';
 import type { TopicTimelineEntry } from '@/hooks/usePosts';
 
 interface TimelineThreadCardProps {
   entry: TopicTimelineEntry;
+  topicId?: string;
 }
 
-export function TimelineThreadCard({ entry }: TimelineThreadCardProps) {
+export function TimelineThreadCard({ entry, topicId }: TimelineThreadCardProps) {
   const { t } = useTranslation();
   const lastActivity = formatDistanceToNow(new Date(entry.lastActivityAt * 1000), {
     addSuffix: true,
@@ -55,6 +58,21 @@ export function TimelineThreadCard({ entry }: TimelineThreadCardProps) {
             </p>
             <PostCard post={entry.firstReply} />
           </section>
+        )}
+
+        {topicId && (
+          <div className="flex justify-end">
+            <Button asChild variant="outline" size="sm">
+              <Link
+                to="/topics/$topicId/threads/$threadUuid"
+                params={{ topicId, threadUuid: entry.threadUuid }}
+                data-testid={`timeline-thread-open-${entry.threadUuid}`}
+              >
+                <span>{t('topics.openThread')}</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

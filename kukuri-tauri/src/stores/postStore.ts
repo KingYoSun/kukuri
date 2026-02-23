@@ -26,6 +26,8 @@ const addPostToCaches = (post: Post) => {
     upsertPostIntoList(prev, post),
   );
   queryClient.invalidateQueries({ queryKey: ['topicTimeline', post.topicId] });
+  queryClient.invalidateQueries({ queryKey: ['topicThreads', post.topicId] });
+  queryClient.invalidateQueries({ queryKey: ['threadPosts', post.topicId] });
 };
 
 const replacePostInCaches = (oldId: string, post: Post) => {
@@ -42,6 +44,8 @@ const replacePostInCaches = (oldId: string, post: Post) => {
     ]),
   );
   queryClient.invalidateQueries({ queryKey: ['topicTimeline', post.topicId] });
+  queryClient.invalidateQueries({ queryKey: ['topicThreads', post.topicId] });
+  queryClient.invalidateQueries({ queryKey: ['threadPosts', post.topicId] });
 };
 
 const removePostFromCaches = (id: string, topicId: string) => {
@@ -52,6 +56,8 @@ const removePostFromCaches = (id: string, topicId: string) => {
     (prev ?? []).filter((item) => item.id !== id),
   );
   queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
+  queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
+  queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
 };
 
 const updatePostLikesInCaches = (postId: string, topicId: string | undefined, likes: number) => {
@@ -63,6 +69,8 @@ const updatePostLikesInCaches = (postId: string, topicId: string | undefined, li
   queryClient.setQueryData<Post[]>(['timeline'], (prev) => updateLikes(prev));
   queryClient.setQueryData<Post[]>(['posts', topicId], (prev) => updateLikes(prev));
   queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
+  queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
+  queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
 };
 
 const resolveReplyCount = (post: Post): number => {

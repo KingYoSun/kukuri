@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useMemo } from 'react';
+import { createFileRoute, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTopicStore } from '@/stores';
 import { useTopicTimeline } from '@/hooks';
 import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import { PostComposer } from '@/components/posts/PostComposer';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Hash, PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import { Hash, PlusCircle, Loader2, MoreVertical, Edit, Trash2, ListTree } from 'lucide-react';
 import { TopicMeshVisualization } from '@/components/TopicMeshVisualization';
 import {
   DropdownMenu,
@@ -28,11 +28,19 @@ export const Route = createFileRoute('/topics/$topicId')({
 function TopicPage() {
   const { t } = useTranslation();
   const { topicId } = Route.useParams();
+  const navigate = useNavigate();
+  const currentPathname = useLocation({ select: (location) => location.pathname });
   const { topics, joinedTopics, currentTopic, pendingTopics } = useTopicStore();
   const { data: timelineEntries, isLoading, refetch } = useTopicTimeline(topicId);
   const [showComposer, setShowComposer] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const isThreadRoute = currentPathname.startsWith(`/topics/${topicId}/threads`);
+  const isJoined = joinedTopics.includes(topicId);
+
+  if (isThreadRoute) {
+    return <Outlet />;
+  }
 
   const pendingTopic = pendingTopics.get(topicId);
   const isPublicTopic = topicId === DEFAULT_PUBLIC_TOPIC_ID;
@@ -68,8 +76,6 @@ function TopicPage() {
       isJoined: joinedTopics.includes(topicId),
     };
 
-  const isJoined = useMemo(() => joinedTopics.includes(topicId), [joinedTopics, topicId]);
-
   if (!topic) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -101,6 +107,15 @@ function TopicPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate({ to: '/topics/$topicId/threads', params: { topicId } })}
+              data-testid="open-topic-threads-button"
+            >
+              <ListTree className="h-4 w-4 mr-2" />
+              {t('topics.openThreads')}
+            </Button>
             {isJoined && !showComposer && (
               <Button
                 onClick={() => setShowComposer(true)}
@@ -160,7 +175,7 @@ function TopicPage() {
           </Alert>
         ) : (
           timelineEntries.map((entry) => (
-            <TimelineThreadCard key={entry.threadUuid} entry={entry} />
+            <TimelineThreadCard key={entry.threadUuid} entry={entry} topicId={topicId} />
           ))
         )}
       </div>

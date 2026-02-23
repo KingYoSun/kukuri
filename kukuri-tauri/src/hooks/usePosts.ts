@@ -2,7 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { usePostStore } from '@/stores';
 import type { Post } from '@/stores';
-import { TauriApi, type TopicTimelineEntry as ApiTopicTimelineEntry } from '@/lib/api/tauri';
+import {
+  TauriApi,
+  type Post as ApiPost,
+  type TopicTimelineEntry as ApiTopicTimelineEntry,
+} from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import { useAuthStore } from '@/stores';
 import { useTopicStore } from '@/stores/topicStore';
@@ -47,6 +51,17 @@ const collectTimelineStorePosts = (entries: TopicTimelineEntry[]): Post[] => {
   return [...postMap.values()].sort((a, b) => b.created_at - a.created_at);
 };
 
+const mapApiPosts = async (apiPosts: ApiPost[]): Promise<Post[]> =>
+  await Promise.all(apiPosts.map((post) => mapPostResponseToDomain(post)));
+
+const fetchTopicTimelineEntries = async (topicId: string): Promise<TopicTimelineEntry[]> => {
+  const apiEntries = await TauriApi.getTopicTimeline({
+    topic_id: topicId,
+    pagination: { limit: 50 },
+  });
+  return await Promise.all(apiEntries.map((entry) => mapTopicTimelineEntry(entry)));
+};
+
 // すべての投稿を取得
 export const usePosts = () => {
   const { setPosts } = usePostStore();
@@ -57,10 +72,7 @@ export const usePosts = () => {
       const apiPosts = await TauriApi.getPosts({
         pagination: { limit: 1000 },
       });
-      // APIレスポンスをフロントエンドの型に変換
-      const posts: Post[] = await Promise.all(
-        apiPosts.map((post) => mapPostResponseToDomain(post)),
-      );
+      const posts = await mapApiPosts(apiPosts);
       setPosts(posts);
       return posts;
     },
@@ -78,10 +90,7 @@ export const useTimelinePosts = () => {
       const apiPosts = await TauriApi.getPosts({
         pagination: { limit: 50 },
       });
-      // APIレスポンスをフロントエンドの型に変換
-      const posts: Post[] = await Promise.all(
-        apiPosts.map((post) => mapPostResponseToDomain(post)),
-      );
+      const posts = await mapApiPosts(apiPosts);
       setPosts(posts);
       return posts;
     },
@@ -95,15 +104,46 @@ export const useTopicTimeline = (topicId: string) => {
   return useQuery({
     queryKey: ['topicTimeline', topicId],
     queryFn: async () => {
-      const apiEntries = await TauriApi.getTopicTimeline({
-        topic_id: topicId,
-        pagination: { limit: 50 },
-      });
-      const entries = await Promise.all(apiEntries.map((entry) => mapTopicTimelineEntry(entry)));
+      const entries = await fetchTopicTimelineEntries(topicId);
       setPosts(collectTimelineStorePosts(entries));
       return entries;
     },
     enabled: !!topicId,
+    refetchInterval: 30000,
+  });
+};
+
+export const useTopicThreads = (topicId: string) => {
+  const { setPosts } = usePostStore();
+
+  return useQuery({
+    queryKey: ['topicThreads', topicId],
+    queryFn: async () => {
+      const entries = await fetchTopicTimelineEntries(topicId);
+      setPosts(collectTimelineStorePosts(entries));
+      return entries;
+    },
+    enabled: !!topicId,
+    refetchInterval: 30000,
+  });
+};
+
+export const useThreadPosts = (topicId: string, threadUuid: string) => {
+  const { setPosts } = usePostStore();
+
+  return useQuery({
+    queryKey: ['threadPosts', topicId, threadUuid],
+    queryFn: async () => {
+      const apiPosts = await TauriApi.getThreadPosts({
+        topic_id: topicId,
+        thread_uuid: threadUuid,
+        pagination: { limit: 200 },
+      });
+      const posts = await mapApiPosts(apiPosts);
+      setPosts(posts);
+      return posts;
+    },
+    enabled: !!topicId && !!threadUuid,
     refetchInterval: 30000,
   });
 };
@@ -131,9 +171,7 @@ export const usePostsByTopic = (topicId: string) => {
         topic_id: topicId,
         pagination: { limit: 50 },
       });
-      const posts: Post[] = await Promise.all(
-        apiPosts.map((post) => mapPostResponseToDomain(post)),
-      );
+      const posts = await mapApiPosts(apiPosts);
       setPosts(posts);
       return posts;
     },
