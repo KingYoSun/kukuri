@@ -7,19 +7,49 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ArrowRight, Clock3, MessageCircle } from 'lucide-react';
 import { PostCard } from './PostCard';
+import { cn } from '@/lib/utils';
 import type { TopicTimelineEntry } from '@/hooks/usePosts';
 
 interface TimelineThreadCardProps {
   entry: TopicTimelineEntry;
   topicId?: string;
+  onParentPostClick?: (threadUuid: string) => void;
 }
 
-export function TimelineThreadCard({ entry, topicId }: TimelineThreadCardProps) {
+const isInteractiveElement = (target: EventTarget | null): boolean => {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return target.closest('button, a, input, textarea, select') !== null;
+};
+
+export function TimelineThreadCard({ entry, topicId, onParentPostClick }: TimelineThreadCardProps) {
   const { t } = useTranslation();
   const lastActivity = formatDistanceToNow(new Date(entry.lastActivityAt * 1000), {
     addSuffix: true,
     locale: getDateFnsLocale(),
   });
+
+  const canOpenPreview = typeof onParentPostClick === 'function';
+
+  const handleParentPostClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!canOpenPreview || isInteractiveElement(event.target)) {
+      return;
+    }
+    onParentPostClick(entry.threadUuid);
+  };
+
+  const handleParentPostKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!canOpenPreview || isInteractiveElement(event.target)) {
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onParentPostClick(entry.threadUuid);
+    }
+  };
 
   return (
     <Card data-testid={`timeline-thread-card-${entry.threadUuid}`}>
@@ -45,7 +75,18 @@ export function TimelineThreadCard({ entry, topicId }: TimelineThreadCardProps) 
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div data-testid={`timeline-thread-parent-${entry.threadUuid}`}>
+        <div
+          data-testid={`timeline-thread-parent-${entry.threadUuid}`}
+          role={canOpenPreview ? 'button' : undefined}
+          tabIndex={canOpenPreview ? 0 : undefined}
+          aria-label={canOpenPreview ? t('topics.openThreadPreview') : undefined}
+          className={cn(
+            canOpenPreview &&
+              'cursor-pointer rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          onClick={handleParentPostClick}
+          onKeyDown={handleParentPostKeyDown}
+        >
           <PostCard post={entry.parentPost} />
         </div>
         {entry.firstReply && (
