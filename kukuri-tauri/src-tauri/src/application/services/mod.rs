@@ -28,7 +28,7 @@ pub use direct_message_service::{
 pub use event_service::EventService;
 pub use offline_service::OfflineService;
 pub use p2p_service::P2PService;
-pub use post_service::PostService;
+pub use post_service::{PostService, TopicTimelineEntry};
 pub use profile_avatar_service::{
     ProfileAvatarFetchResult, ProfileAvatarService, UploadProfileAvatarInput,
 };

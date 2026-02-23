@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { usePostsByTopic, useCreatePost, useTimelinePosts } from '@/hooks/usePosts';
+import {
+  usePostsByTopic,
+  useCreatePost,
+  useTimelinePosts,
+  useTopicTimeline,
+} from '@/hooks/usePosts';
 import { usePostStore, useAuthStore } from '@/stores';
 import { ReactNode } from 'react';
 import type { User } from '@/stores';
@@ -10,6 +15,7 @@ import type { User } from '@/stores';
 vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     getPosts: vi.fn(),
+    getTopicTimeline: vi.fn(),
     createPost: vi.fn(),
   },
 }));
@@ -170,6 +176,67 @@ describe('usePosts hooks', () => {
 
       expect(result.current.data).toHaveLength(1);
       expect(result.current.data?.[0].content).toBe('Timeline post');
+    });
+  });
+
+  describe('useTopicTimeline', () => {
+    it('トピックタイムライン集約を取得できること', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      vi.mocked(TauriApi.getTopicTimeline).mockResolvedValue([
+        {
+          thread_uuid: 'thread-1',
+          parent_post: {
+            id: 'parent-1',
+            content: 'Parent post',
+            author_pubkey: 'pubkey1',
+            author_npub: 'npub1pubkey1',
+            topic_id: 'tech',
+            created_at: Math.floor(Date.now() / 1000),
+            likes: 3,
+            boosts: 0,
+            replies: 1,
+            is_synced: true,
+          },
+          first_reply: {
+            id: 'reply-1',
+            content: 'First reply',
+            author_pubkey: 'pubkey2',
+            author_npub: 'npub1pubkey2',
+            topic_id: 'tech',
+            created_at: Math.floor(Date.now() / 1000),
+            likes: 1,
+            boosts: 0,
+            replies: 0,
+            is_synced: true,
+          },
+          reply_count: 1,
+          last_activity_at: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      const { result } = renderHook(() => useTopicTimeline('tech'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(TauriApi.getTopicTimeline).toHaveBeenCalledWith({
+        topic_id: 'tech',
+        pagination: { limit: 50 },
+      });
+
+      expect(result.current.data).toHaveLength(1);
+      expect(result.current.data?.[0].threadUuid).toBe('thread-1');
+      expect(result.current.data?.[0].parentPost.id).toBe('parent-1');
+      expect(result.current.data?.[0].firstReply?.id).toBe('reply-1');
+      expect(result.current.data?.[0].replyCount).toBe(1);
+      expect(result.current.data?.[0].lastActivityAt).toBeGreaterThan(0);
+
+      const state = usePostStore.getState();
+      expect(state.posts.get('parent-1')).toBeDefined();
+      expect(state.posts.get('reply-1')).toBeDefined();
     });
   });
 });

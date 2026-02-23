@@ -1,12 +1,13 @@
 use crate::{
-    application::services::{AuthService, PostService, TopicService},
+    application::services::{AuthService, PostService, TopicService, TopicTimelineEntry},
     domain::entities::Post,
     presentation::dto::{
         Validate,
         post_dto::{
             BookmarkPostRequest, CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse,
-            GetPostsRequest, GetThreadPostsRequest, ListFollowingFeedRequest,
-            ListTrendingPostsRequest, ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
+            GetPostsRequest, GetThreadPostsRequest, GetTopicTimelineRequest,
+            ListFollowingFeedRequest, ListTrendingPostsRequest, ListTrendingPostsResponse,
+            PostResponse, ReactToPostRequest, TopicTimelineEntryResponse,
             TrendingTopicPostsResponse,
         },
     },
@@ -62,6 +63,22 @@ impl PostHandler {
     async fn map_posts(posts: Vec<Post>) -> Vec<PostResponse> {
         let futures = posts.into_iter().map(Self::map_post);
         join_all(futures).await
+    }
+
+    async fn map_timeline_entry(entry: TopicTimelineEntry) -> TopicTimelineEntryResponse {
+        let parent_post = Self::map_post(entry.parent_post).await;
+        let first_reply = match entry.first_reply {
+            Some(post) => Some(Self::map_post(post).await),
+            None => None,
+        };
+
+        TopicTimelineEntryResponse {
+            thread_uuid: entry.thread_uuid,
+            parent_post,
+            first_reply,
+            reply_count: entry.reply_count,
+            last_activity_at: entry.last_activity_at,
+        }
     }
 
     pub fn new(
@@ -141,6 +158,23 @@ impl PostHandler {
             .await?;
 
         Ok(Self::map_posts(posts).await)
+    }
+
+    pub async fn get_topic_timeline(
+        &self,
+        request: GetTopicTimelineRequest,
+    ) -> Result<Vec<TopicTimelineEntryResponse>, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let pagination = request.pagination.unwrap_or_default();
+        let limit = pagination.limit.unwrap_or(50).clamp(1, 100) as usize;
+        let entries = self
+            .post_service
+            .get_topic_timeline(&request.topic_id, limit)
+            .await?;
+
+        let futures = entries.into_iter().map(Self::map_timeline_entry);
+        Ok(join_all(futures).await)
     }
 
     pub async fn delete_post(&self, request: DeletePostRequest) -> Result<(), AppError> {

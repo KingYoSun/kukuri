@@ -3,11 +3,11 @@ use super::mapper::map_post_row;
 use super::queries::{
     INSERT_POST_EVENT, MARK_POST_DELETED, MARK_POST_SYNCED, SELECT_EVENT_THREAD_BY_EVENT,
     SELECT_POST_BY_ID, SELECT_POSTS_BY_AUTHOR, SELECT_POSTS_BY_THREAD, SELECT_POSTS_BY_TOPIC,
-    SELECT_RECENT_POSTS, SELECT_SYNC_EVENT_ID_BY_EVENT, SELECT_UNSYNC_POSTS, UPDATE_POST_CONTENT,
-    UPSERT_EVENT_THREAD,
+    SELECT_RECENT_POSTS, SELECT_SYNC_EVENT_ID_BY_EVENT, SELECT_TOPIC_TIMELINE_SUMMARIES,
+    SELECT_UNSYNC_POSTS, UPDATE_POST_CONTENT, UPSERT_EVENT_THREAD,
 };
 use crate::application::ports::repositories::{
-    EventThreadRecord, PostFeedCursor, PostFeedPage, PostRepository,
+    EventThreadRecord, PostFeedCursor, PostFeedPage, PostRepository, TopicTimelineSummaryRecord,
 };
 use crate::domain::entities::Post;
 use crate::shared::error::AppError;
@@ -114,6 +114,33 @@ impl PostRepository for SqliteRepository {
         }
 
         Ok(posts)
+    }
+
+    async fn get_topic_timeline(
+        &self,
+        topic_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TopicTimelineSummaryRecord>, AppError> {
+        let rows = sqlx::query(SELECT_TOPIC_TIMELINE_SUMMARIES)
+            .bind(topic_id)
+            .bind(topic_tag_like(topic_id))
+            .bind(limit as i64)
+            .fetch_all(self.pool.get_pool())
+            .await?;
+
+        let mut summaries = Vec::with_capacity(rows.len());
+        for row in rows {
+            let reply_count_raw: i64 = row.try_get("reply_count")?;
+            summaries.push(TopicTimelineSummaryRecord {
+                thread_uuid: row.try_get("thread_uuid")?,
+                root_event_id: row.try_get("root_event_id")?,
+                first_reply_event_id: row.try_get("first_reply_event_id")?,
+                reply_count: u32::try_from(reply_count_raw.max(0)).unwrap_or(u32::MAX),
+                last_activity_at: row.try_get("last_activity_at")?,
+            });
+        }
+
+        Ok(summaries)
     }
 
     async fn get_posts_by_thread(

@@ -160,6 +160,19 @@ export interface GetThreadPostsRequest {
   pagination?: PaginationRequest;
 }
 
+export interface GetTopicTimelineRequest {
+  topic_id: string;
+  pagination?: PaginationRequest;
+}
+
+export interface TopicTimelineEntry {
+  thread_uuid: string;
+  parent_post: Post;
+  first_reply?: Post | null;
+  reply_count: number;
+  last_activity_at: number;
+}
+
 export interface UserProfile {
   npub: string;
   pubkey: string;
@@ -464,6 +477,10 @@ export class TauriApi {
     }
 
     return await invokeCommand<Post[]>('get_posts', payload);
+  }
+
+  static async getTopicTimeline(request: GetTopicTimelineRequest): Promise<TopicTimelineEntry[]> {
+    return await invokeCommand<TopicTimelineEntry[]>('get_topic_timeline', { request });
   }
 
   static async listTrendingPosts(
