@@ -24,6 +24,15 @@ pub struct PostResponse {
     pub is_synced: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TopicTimelineEntryResponse {
+    pub thread_uuid: String,
+    pub parent_post: PostResponse,
+    pub first_reply: Option<PostResponse>,
+    pub reply_count: u32,
+    pub last_activity_at: i64,
+}
+
 // リクエストDTO
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -77,6 +86,21 @@ pub struct GetThreadPostsRequest {
     pub topic_id: String,
     pub thread_uuid: String,
     pub pagination: Option<PaginationRequest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetTopicTimelineRequest {
+    pub topic_id: String,
+    pub pagination: Option<PaginationRequest>,
+}
+
+impl Validate for GetTopicTimelineRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.topic_id.trim().is_empty() {
+            return Err("トピックIDが必要です".to_string());
+        }
+        Ok(())
+    }
 }
 
 impl Validate for GetThreadPostsRequest {

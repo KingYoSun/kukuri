@@ -144,6 +144,41 @@ pub(super) const SELECT_POSTS_BY_TOPIC: &str = r#"
     LIMIT ?
 "#;
 
+pub(super) const SELECT_TOPIC_TIMELINE_SUMMARIES: &str = r#"
+    SELECT
+        et.thread_uuid AS thread_uuid,
+        et.root_event_id AS root_event_id,
+        (
+            SELECT et2.event_id
+            FROM event_threads et2
+            INNER JOIN events e2 ON e2.event_id = et2.event_id
+            WHERE et2.topic_id = et.topic_id
+              AND et2.root_event_id = et.root_event_id
+              AND et2.parent_event_id IS NOT NULL
+              AND e2.kind = 1
+              AND e2.deleted = 0
+            ORDER BY e2.created_at ASC
+            LIMIT 1
+        ) AS first_reply_event_id,
+        SUM(CASE WHEN et.parent_event_id IS NOT NULL THEN 1 ELSE 0 END) AS reply_count,
+        MAX(e.created_at) AS last_activity_at
+    FROM event_threads et
+    INNER JOIN events e ON e.event_id = et.event_id
+    WHERE et.topic_id = ?1
+      AND e.kind = 1
+      AND e.deleted = 0
+      AND EXISTS (
+          SELECT 1
+          FROM events er
+          WHERE er.event_id = et.root_event_id
+            AND er.kind = 1
+            AND er.deleted = 0
+      )
+    GROUP BY et.thread_uuid, et.root_event_id
+    ORDER BY last_activity_at DESC, et.root_event_id DESC
+    LIMIT ?2
+"#;
+
 pub(super) const SELECT_POSTS_BY_THREAD: &str = r#"
     SELECT
         e.event_id,

@@ -5,8 +5,9 @@ use crate::{
             post_dto::{
                 BookmarkPostRequest, CreatePostRequest, DeletePostRequest,
                 FollowingFeedPageResponse, GetPostsRequest, GetThreadPostsRequest,
-                ListFollowingFeedRequest, ListTrendingPostsRequest, ListTrendingPostsResponse,
-                PostResponse, ReactToPostRequest,
+                GetTopicTimelineRequest, ListFollowingFeedRequest, ListTrendingPostsRequest,
+                ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
+                TopicTimelineEntryResponse,
             },
         },
         handlers::PostHandler,
@@ -67,6 +68,21 @@ pub async fn get_thread_posts(
         state.topic_service.clone(),
     );
     let result = handler.get_thread_posts(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// トピック別タイムライン集約を取得する
+#[tauri::command]
+pub async fn get_topic_timeline(
+    state: State<'_, AppState>,
+    request: GetTopicTimelineRequest,
+) -> Result<ApiResponse<Vec<TopicTimelineEntryResponse>>, AppError> {
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
+    let result = handler.get_topic_timeline(request).await;
     Ok(ApiResponse::from_result(result))
 }
 

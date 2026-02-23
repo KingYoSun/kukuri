@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { usePostStore } from '@/stores';
 import type { Post } from '@/stores';
-import { TauriApi } from '@/lib/api/tauri';
+import { TauriApi, type TopicTimelineEntry as ApiTopicTimelineEntry } from '@/lib/api/tauri';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
 import { useAuthStore } from '@/stores';
 import { useTopicStore } from '@/stores/topicStore';
@@ -12,6 +12,40 @@ import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
 import { v4 as uuidv4 } from 'uuid';
+
+export interface TopicTimelineEntry {
+  threadUuid: string;
+  parentPost: Post;
+  firstReply: Post | null;
+  replyCount: number;
+  lastActivityAt: number;
+}
+
+const mapTopicTimelineEntry = async (entry: ApiTopicTimelineEntry): Promise<TopicTimelineEntry> => {
+  const [parentPost, firstReply] = await Promise.all([
+    mapPostResponseToDomain(entry.parent_post),
+    entry.first_reply ? mapPostResponseToDomain(entry.first_reply) : Promise.resolve(null),
+  ]);
+
+  return {
+    threadUuid: entry.thread_uuid,
+    parentPost,
+    firstReply,
+    replyCount: entry.reply_count,
+    lastActivityAt: entry.last_activity_at,
+  };
+};
+
+const collectTimelineStorePosts = (entries: TopicTimelineEntry[]): Post[] => {
+  const postMap = new Map<string, Post>();
+  entries.forEach((entry) => {
+    postMap.set(entry.parentPost.id, entry.parentPost);
+    if (entry.firstReply) {
+      postMap.set(entry.firstReply.id, entry.firstReply);
+    }
+  });
+  return [...postMap.values()].sort((a, b) => b.created_at - a.created_at);
+};
 
 // すべての投稿を取得
 export const usePosts = () => {
@@ -52,6 +86,25 @@ export const useTimelinePosts = () => {
       return posts;
     },
     refetchInterval: 30000, // 30秒ごとに更新
+  });
+};
+
+export const useTopicTimeline = (topicId: string) => {
+  const { setPosts } = usePostStore();
+
+  return useQuery({
+    queryKey: ['topicTimeline', topicId],
+    queryFn: async () => {
+      const apiEntries = await TauriApi.getTopicTimeline({
+        topic_id: topicId,
+        pagination: { limit: 50 },
+      });
+      const entries = await Promise.all(apiEntries.map((entry) => mapTopicTimelineEntry(entry)));
+      setPosts(collectTimelineStorePosts(entries));
+      return entries;
+    },
+    enabled: !!topicId,
+    refetchInterval: 30000,
   });
 };
 

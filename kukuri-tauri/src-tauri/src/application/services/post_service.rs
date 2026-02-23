@@ -34,6 +34,15 @@ pub struct FollowingFeedPage {
     pub server_time: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct TopicTimelineEntry {
+    pub thread_uuid: String,
+    pub parent_post: Post,
+    pub first_reply: Option<Post>,
+    pub reply_count: u32,
+    pub last_activity_at: i64,
+}
+
 impl PostService {
     fn normalize_thread_uuid(thread_uuid: &str) -> Result<String, AppError> {
         let normalized = thread_uuid.trim();
@@ -382,6 +391,54 @@ impl PostService {
             .get_posts_by_thread(topic_id, &thread_uuid, limit)
             .await?;
         self.prepare_posts(posts).await
+    }
+
+    pub async fn get_topic_timeline(
+        &self,
+        topic_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TopicTimelineEntry>, AppError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let summaries = self.repository.get_topic_timeline(topic_id, limit).await?;
+        let mut entries = Vec::with_capacity(summaries.len());
+
+        for summary in summaries {
+            let Some(parent_post) = self.repository.get_post(&summary.root_event_id).await? else {
+                continue;
+            };
+            let parent_post = self.prepare_post(parent_post).await?;
+            if parent_post.topic_id != topic_id {
+                continue;
+            }
+
+            let first_reply = if let Some(first_reply_event_id) = summary.first_reply_event_id {
+                if let Some(post) = self.repository.get_post(&first_reply_event_id).await? {
+                    let prepared = self.prepare_post(post).await?;
+                    if prepared.topic_id == topic_id {
+                        Some(prepared)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            entries.push(TopicTimelineEntry {
+                thread_uuid: summary.thread_uuid,
+                parent_post,
+                first_reply,
+                reply_count: summary.reply_count,
+                last_activity_at: summary.last_activity_at / 1000,
+            });
+        }
+
+        Ok(entries)
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
@@ -1379,6 +1436,112 @@ mod tests {
                 .iter()
                 .all(|post| post.topic_id == "topic-thread-main")
         );
+    }
+
+    #[tokio::test]
+    async fn get_topic_timeline_returns_parent_first_reply_counts_and_last_activity() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let topic_id = "topic-timeline-main";
+        let thread_a = sample_thread_uuid(50);
+        let thread_b = sample_thread_uuid(51);
+
+        let mut root_a = Post::new("thread-a-root".into(), sample_user(), topic_id.to_string());
+        root_a.created_at = Utc.timestamp_opt(100, 0).unwrap();
+        root_a.thread_namespace = Some(format!("{topic_id}/threads/{thread_a}"));
+        root_a.thread_uuid = Some(thread_a.clone());
+        root_a.thread_root_event_id = Some(root_a.id.clone());
+        root_a.thread_parent_event_id = None;
+        root_a.is_synced = true;
+        repository
+            .create_post(&root_a)
+            .await
+            .expect("seed thread-a root");
+
+        let mut reply_a1 = Post::new(
+            "thread-a-reply-1".into(),
+            sample_user(),
+            topic_id.to_string(),
+        );
+        reply_a1.created_at = Utc.timestamp_opt(110, 0).unwrap();
+        reply_a1.thread_namespace = Some(format!("{topic_id}/threads/{thread_a}"));
+        reply_a1.thread_uuid = Some(thread_a.clone());
+        reply_a1.thread_root_event_id = Some(root_a.id.clone());
+        reply_a1.thread_parent_event_id = Some(root_a.id.clone());
+        reply_a1.is_synced = true;
+        repository
+            .create_post(&reply_a1)
+            .await
+            .expect("seed thread-a first reply");
+
+        let mut reply_a2 = Post::new(
+            "thread-a-reply-2".into(),
+            sample_user(),
+            topic_id.to_string(),
+        );
+        reply_a2.created_at = Utc.timestamp_opt(120, 0).unwrap();
+        reply_a2.thread_namespace = Some(format!("{topic_id}/threads/{thread_a}"));
+        reply_a2.thread_uuid = Some(thread_a.clone());
+        reply_a2.thread_root_event_id = Some(root_a.id.clone());
+        reply_a2.thread_parent_event_id = Some(reply_a1.id.clone());
+        reply_a2.is_synced = true;
+        repository
+            .create_post(&reply_a2)
+            .await
+            .expect("seed thread-a second reply");
+
+        let mut root_b = Post::new("thread-b-root".into(), sample_user(), topic_id.to_string());
+        root_b.created_at = Utc.timestamp_opt(105, 0).unwrap();
+        root_b.thread_namespace = Some(format!("{topic_id}/threads/{thread_b}"));
+        root_b.thread_uuid = Some(thread_b.clone());
+        root_b.thread_root_event_id = Some(root_b.id.clone());
+        root_b.thread_parent_event_id = None;
+        root_b.is_synced = true;
+        repository
+            .create_post(&root_b)
+            .await
+            .expect("seed thread-b root");
+
+        let other_topic = "topic-timeline-other";
+        let mut other_root = Post::new(
+            "other-topic-root".into(),
+            sample_user(),
+            other_topic.to_string(),
+        );
+        other_root.created_at = Utc.timestamp_opt(130, 0).unwrap();
+        other_root.thread_namespace = Some(format!("{other_topic}/threads/{thread_a}"));
+        other_root.thread_uuid = Some(thread_a.clone());
+        other_root.thread_root_event_id = Some(other_root.id.clone());
+        other_root.thread_parent_event_id = None;
+        other_root.is_synced = true;
+        repository
+            .create_post(&other_root)
+            .await
+            .expect("seed other topic root");
+
+        let entries = service
+            .get_topic_timeline(topic_id, 20)
+            .await
+            .expect("get topic timeline");
+
+        assert_eq!(entries.len(), 2);
+
+        let first = &entries[0];
+        assert_eq!(first.thread_uuid, thread_a);
+        assert_eq!(first.parent_post.id, root_a.id);
+        assert_eq!(
+            first.first_reply.as_ref().map(|post| post.id.as_str()),
+            Some(reply_a1.id.as_str())
+        );
+        assert_eq!(first.reply_count, 2);
+        assert_eq!(first.last_activity_at, 120);
+
+        let second = &entries[1];
+        assert_eq!(second.thread_uuid, thread_b);
+        assert_eq!(second.parent_post.id, root_b.id);
+        assert!(second.first_reply.is_none());
+        assert_eq!(second.reply_count, 0);
+        assert_eq!(second.last_activity_at, 105);
     }
 
     #[tokio::test]

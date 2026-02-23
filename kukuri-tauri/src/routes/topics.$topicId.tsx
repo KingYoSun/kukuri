@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState, useMemo } from 'react';
 import { useTopicStore } from '@/stores';
-import { usePostsByTopic } from '@/hooks';
-import { PostCard } from '@/components/posts/PostCard';
+import { useTopicTimeline } from '@/hooks';
+import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import { PostComposer } from '@/components/posts/PostComposer';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ function TopicPage() {
   const { t } = useTranslation();
   const { topicId } = Route.useParams();
   const { topics, joinedTopics, currentTopic, pendingTopics } = useTopicStore();
-  const { data: posts, isLoading, refetch } = usePostsByTopic(topicId);
+  const { data: timelineEntries, isLoading, refetch } = useTopicTimeline(topicId);
   const [showComposer, setShowComposer] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -152,14 +152,16 @@ function TopicPage() {
           <div className="flex justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>
-        ) : !posts || posts.length === 0 ? (
+        ) : !timelineEntries || timelineEntries.length === 0 ? (
           <Alert>
             <AlertDescription>
               {isJoined ? t('topics.noPostsYet') : t('topics.joinToSeePosts')}
             </AlertDescription>
           </Alert>
         ) : (
-          posts.map((post) => <PostCard key={post.id} post={post} />)
+          timelineEntries.map((entry) => (
+            <TimelineThreadCard key={entry.threadUuid} entry={entry} />
+          ))
         )}
       </div>
 

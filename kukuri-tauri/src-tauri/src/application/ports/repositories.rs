@@ -56,6 +56,11 @@ pub trait PostRepository: Send + Sync {
     async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError>;
     async fn get_posts_by_topic(&self, topic_id: &str, limit: usize)
     -> Result<Vec<Post>, AppError>;
+    async fn get_topic_timeline(
+        &self,
+        topic_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TopicTimelineSummaryRecord>, AppError>;
     async fn get_posts_by_thread(
         &self,
         topic_id: &str,
@@ -128,6 +133,15 @@ pub struct EventThreadRecord {
     pub thread_uuid: String,
     pub root_event_id: String,
     pub parent_event_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TopicTimelineSummaryRecord {
+    pub thread_uuid: String,
+    pub root_event_id: String,
+    pub first_reply_event_id: Option<String>,
+    pub reply_count: u32,
+    pub last_activity_at: i64,
 }
 
 #[async_trait]

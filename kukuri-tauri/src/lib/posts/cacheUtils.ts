@@ -82,6 +82,7 @@ export function invalidatePostCaches(
   queryClient.invalidateQueries({ queryKey: ['posts', 'all'] });
   if (target.topicId) {
     queryClient.invalidateQueries({ queryKey: ['posts', target.topicId] });
+    queryClient.invalidateQueries({ queryKey: ['topicTimeline', target.topicId] });
   }
   if (target.authorPubkey) {
     queryClient.invalidateQueries({ queryKey: ['userPosts', target.authorPubkey] });

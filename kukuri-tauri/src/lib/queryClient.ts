@@ -111,7 +111,13 @@ export const cacheUtils = {
    */
   optimizeForOffline: () => {
     // 重要なデータのキャッシュ時間を延長
-    const importantQueries = [['topics'], ['posts'], ['timeline'], ['bookmarks']];
+    const importantQueries = [
+      ['topics'],
+      ['posts'],
+      ['timeline'],
+      ['topicTimeline'],
+      ['bookmarks'],
+    ];
 
     importantQueries.forEach((queryKey) => {
       const data = queryClient.getQueryData(queryKey);
