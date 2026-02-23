@@ -15,7 +15,12 @@ vi.mock('@tanstack/react-router', async () => {
 
 vi.mock('@/components/posts/PostCard', () => ({
   PostCard: ({ post }: { post: Post }) => (
-    <article data-testid={`mock-post-card-${post.id}`}>{post.content}</article>
+    <article data-testid={`mock-post-card-${post.id}`}>
+      <span>{post.content}</span>
+      <button type="button" data-testid={`mock-post-card-action-${post.id}`}>
+        Action
+      </button>
+    </article>
   ),
 }));
 
@@ -97,5 +102,45 @@ describe('TimelineThreadCard', () => {
 
     fireEvent.click(screen.getByTestId('timeline-thread-parent-thread-3'));
     expect(onParentPostClick).toHaveBeenCalledWith('thread-3');
+  });
+
+  it('親投稿コンテナで Enter/Space を押すと preview コールバックを呼び出す', () => {
+    const onParentPostClick = vi.fn();
+    const entry: TopicTimelineEntry = {
+      threadUuid: 'thread-4',
+      parentPost: buildPost('parent-4', 'Parent for keyboard preview'),
+      firstReply: null,
+      replyCount: 1,
+      lastActivityAt: 1_700_001_600,
+    };
+
+    render(<TimelineThreadCard entry={entry} onParentPostClick={onParentPostClick} />);
+
+    const parentContainer = screen.getByTestId('timeline-thread-parent-thread-4');
+    fireEvent.keyDown(parentContainer, { key: 'Enter' });
+    fireEvent.keyDown(parentContainer, { key: ' ' });
+
+    expect(onParentPostClick).toHaveBeenCalledTimes(2);
+    expect(onParentPostClick).toHaveBeenNthCalledWith(1, 'thread-4');
+    expect(onParentPostClick).toHaveBeenNthCalledWith(2, 'thread-4');
+  });
+
+  it('親投稿内のインタラクティブ要素で Enter/Space を押しても preview を開かない', () => {
+    const onParentPostClick = vi.fn();
+    const entry: TopicTimelineEntry = {
+      threadUuid: 'thread-5',
+      parentPost: buildPost('parent-5', 'Parent with action'),
+      firstReply: null,
+      replyCount: 1,
+      lastActivityAt: 1_700_001_700,
+    };
+
+    render(<TimelineThreadCard entry={entry} onParentPostClick={onParentPostClick} />);
+
+    const actionButton = screen.getByTestId('mock-post-card-action-parent-5');
+    fireEvent.keyDown(actionButton, { key: 'Enter' });
+    fireEvent.keyDown(actionButton, { key: ' ' });
+
+    expect(onParentPostClick).not.toHaveBeenCalled();
   });
 });

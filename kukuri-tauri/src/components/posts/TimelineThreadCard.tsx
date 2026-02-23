@@ -41,7 +41,7 @@ export function TimelineThreadCard({ entry, topicId, onParentPostClick }: Timeli
   };
 
   const handleParentPostKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!canOpenPreview) {
+    if (!canOpenPreview || isInteractiveElement(event.target)) {
       return;
     }
 
