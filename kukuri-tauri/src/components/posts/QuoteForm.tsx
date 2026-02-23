@@ -10,6 +10,7 @@ import { resolveUserAvatarSrc, getUserInitials } from '@/lib/profile/avatarDispl
 import { useAuthStore, usePostStore } from '@/stores';
 import type { Post } from '@/stores';
 import { getDateFnsLocale } from '@/i18n';
+import { v4 as uuidv4 } from 'uuid';
 
 interface QuoteFormProps {
   post: Post;
@@ -42,6 +43,7 @@ export function QuoteForm({ post, onCancel, onSuccess, autoFocus = true }: Quote
       await TauriApi.createPost({
         content: quoteContent,
         topic_id: post.topicId,
+        thread_uuid: post.threadUuid ?? uuidv4(),
         tags,
         scope: post.scope,
       });

@@ -56,6 +56,18 @@ pub trait PostRepository: Send + Sync {
     async fn get_post(&self, id: &str) -> Result<Option<Post>, AppError>;
     async fn get_posts_by_topic(&self, topic_id: &str, limit: usize)
     -> Result<Vec<Post>, AppError>;
+    async fn get_posts_by_thread(
+        &self,
+        topic_id: &str,
+        thread_uuid: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError>;
+    async fn get_event_thread(
+        &self,
+        topic_id: &str,
+        event_id: &str,
+    ) -> Result<Option<EventThreadRecord>, AppError>;
+    async fn get_sync_event_id(&self, event_id: &str) -> Result<Option<String>, AppError>;
     async fn update_post(&self, post: &Post) -> Result<(), AppError>;
     async fn delete_post(&self, id: &str) -> Result<(), AppError>;
     async fn get_unsync_posts(&self) -> Result<Vec<Post>, AppError>;
@@ -106,6 +118,16 @@ pub struct PostFeedPage {
     pub items: Vec<Post>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventThreadRecord {
+    pub event_id: String,
+    pub topic_id: String,
+    pub thread_namespace: String,
+    pub thread_uuid: String,
+    pub root_event_id: String,
+    pub parent_event_id: Option<String>,
 }
 
 #[async_trait]

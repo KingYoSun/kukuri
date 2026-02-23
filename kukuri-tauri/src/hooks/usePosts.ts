@@ -11,6 +11,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
+import { v4 as uuidv4 } from 'uuid';
 
 // すべての投稿を取得
 export const usePosts = () => {
@@ -61,6 +62,7 @@ const createPost = async (postData: { content: string; topicId: string }): Promi
   const apiPost = await TauriApi.createPost({
     content: postData.content,
     topic_id: postData.topicId,
+    thread_uuid: uuidv4(),
   });
 
   return await mapPostResponseToDomain(apiPost);

@@ -23,10 +23,35 @@ pub(crate) fn map_post_row(
 
     let scope = extract_scope_from_tags(&tags_json);
     let epoch = extract_epoch_from_tags(&tags_json);
+    let thread_namespace = row
+        .try_get::<Option<String>, _>("thread_namespace")
+        .ok()
+        .flatten()
+        .or_else(|| extract_thread_namespace_from_tags(&tags_json));
+    let thread_uuid = row
+        .try_get::<Option<String>, _>("thread_uuid")
+        .ok()
+        .flatten()
+        .or_else(|| extract_thread_uuid_from_tags(&tags_json));
+    let thread_root_event_id = row
+        .try_get::<Option<String>, _>("thread_root_event_id")
+        .ok()
+        .flatten()
+        .or_else(|| extract_thread_root_event_id_from_tags(&tags_json))
+        .or_else(|| thread_uuid.as_ref().map(|_| event_id.clone()));
+    let thread_parent_event_id = row
+        .try_get::<Option<String>, _>("thread_parent_event_id")
+        .ok()
+        .flatten()
+        .or_else(|| extract_thread_parent_event_id_from_tags(&tags_json));
 
     let mut post = Post::new_with_id(event_id, content, user, topic_id, created_at);
     post.scope = scope;
     post.epoch = epoch;
+    post.thread_namespace = thread_namespace;
+    post.thread_uuid = thread_uuid;
+    post.thread_root_event_id = thread_root_event_id;
+    post.thread_parent_event_id = thread_parent_event_id;
     Ok(post)
 }
 
@@ -52,4 +77,20 @@ fn extract_scope_from_tags(tags_json: &str) -> Option<String> {
 
 fn extract_epoch_from_tags(tags_json: &str) -> Option<i64> {
     extract_tag_value(tags_json, "epoch").and_then(|value| value.parse::<i64>().ok())
+}
+
+fn extract_thread_namespace_from_tags(tags_json: &str) -> Option<String> {
+    extract_tag_value(tags_json, "thread")
+}
+
+fn extract_thread_uuid_from_tags(tags_json: &str) -> Option<String> {
+    extract_tag_value(tags_json, "thread_uuid")
+}
+
+fn extract_thread_root_event_id_from_tags(tags_json: &str) -> Option<String> {
+    extract_tag_value(tags_json, "thread_root_event_id")
+}
+
+fn extract_thread_parent_event_id_from_tags(tags_json: &str) -> Option<String> {
+    extract_tag_value(tags_json, "thread_parent_event_id")
 }

@@ -100,6 +100,10 @@ export interface Post {
   author_pubkey: string;
   author_npub: string;
   topic_id: string;
+  thread_namespace?: string | null;
+  thread_uuid?: string | null;
+  thread_root_event_id?: string | null;
+  thread_parent_event_id?: string | null;
   scope?: string | null;
   epoch?: number | null;
   is_encrypted?: boolean;
@@ -130,6 +134,7 @@ export interface ListTrendingPostsResult {
 export interface CreatePostRequest {
   content: string;
   topic_id?: string;
+  thread_uuid?: string;
   tags?: string[][];
   reply_to?: string;
   quoted_post?: string;
@@ -147,6 +152,12 @@ export interface GetPostsRequest {
   pagination?: PaginationRequest;
   limit?: number;
   offset?: number;
+}
+
+export interface GetThreadPostsRequest {
+  topic_id: string;
+  thread_uuid: string;
+  pagination?: PaginationRequest;
 }
 
 export interface UserProfile {
@@ -482,6 +493,10 @@ export class TauriApi {
 
   static async createPost(request: CreatePostRequest): Promise<Post> {
     return await invokeCommand<Post>('create_post', { request });
+  }
+
+  static async getThreadPosts(request: GetThreadPostsRequest): Promise<Post[]> {
+    return await invokeCommand<Post[]>('get_thread_posts', { request });
   }
 
   static async deletePost(id: string, reason?: string): Promise<void> {

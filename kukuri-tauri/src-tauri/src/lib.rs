@@ -127,6 +127,7 @@ pub fn run() {
             // ポスト関連コマンド
             presentation::commands::create_post,
             presentation::commands::get_posts,
+            presentation::commands::get_thread_posts,
             presentation::commands::list_trending_posts,
             presentation::commands::delete_post,
             presentation::commands::bookmark_post,

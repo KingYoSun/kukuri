@@ -4,6 +4,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { subscribeToTopic as nostrSubscribe } from '@/lib/api/nostr';
 import { errorHandler } from '@/lib/errorHandler';
 import i18n from '@/i18n';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface SyncConflict {
   localAction: OfflineAction;
@@ -294,6 +295,7 @@ export class SyncEngine {
         await TauriApi.createPost({
           content: actionData.content,
           topic_id: actionData.topicId,
+          thread_uuid: actionData.threadUuid ?? uuidv4(),
           reply_to: actionData.replyTo,
           quoted_post: actionData.quotedPost,
           scope: actionData.scope,
