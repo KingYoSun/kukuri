@@ -32,7 +32,11 @@ process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
 process.env.KUKURI_P2P_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
 process.env.KUKURI_CLI_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
+if (!process.env.PATH?.split(':').includes('/usr/local/cargo/bin')) {
+  process.env.PATH = `/usr/local/cargo/bin:${process.env.PATH ?? ''}`;
+}
 const FORBID_PENDING = process.env.E2E_FORBID_PENDING === '1';
+const MOCHA_TIMEOUT_MS = Number(process.env.E2E_MOCHA_TIMEOUT_MS ?? '60000');
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
@@ -156,7 +160,7 @@ export const config: Options.Testrunner = {
   framework: 'mocha',
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60000,
+    timeout: MOCHA_TIMEOUT_MS,
     forbidPending: FORBID_PENDING,
   },
   hostname: '127.0.0.1',
