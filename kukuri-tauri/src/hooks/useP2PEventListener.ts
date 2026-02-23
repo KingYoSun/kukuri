@@ -74,6 +74,8 @@ export function useP2PEventListener() {
         queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
         queryClient.invalidateQueries({ queryKey: ['posts'] });
         queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
+        queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
+        queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
         updateTopicPostCount(topicId, 1);
       } catch (error) {
         errorHandler.log('Failed to process P2P message as post', error, {

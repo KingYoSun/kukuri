@@ -1545,7 +1545,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_topic_timeline_includes_topic_posts_without_thread_uuid() {
+    async fn get_topic_timeline_excludes_topic_posts_without_thread_uuid() {
         let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
         let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
         let topic_id = "topic-timeline-fallback";
@@ -1577,18 +1577,10 @@ mod tests {
             .await
             .expect("get topic timeline");
 
-        assert_eq!(entries.len(), 2);
-
-        let first = &entries[0];
-        assert_eq!(first.parent_post.id, standalone.id);
-        assert_eq!(first.thread_uuid, standalone.id);
-        assert!(first.first_reply.is_none());
-        assert_eq!(first.reply_count, 0);
-        assert_eq!(first.last_activity_at, 130);
-
-        let second = &entries[1];
-        assert_eq!(second.parent_post.id, threaded_root.id);
-        assert_eq!(second.thread_uuid, thread_uuid);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].parent_post.id, threaded_root.id);
+        assert_eq!(entries[0].thread_uuid, thread_uuid);
+        assert_ne!(entries[0].parent_post.id, standalone.id);
     }
 
     #[tokio::test]

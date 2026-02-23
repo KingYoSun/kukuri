@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   usePostsByTopic,
   useCreatePost,
+  useThreadPosts,
   useTimelinePosts,
+  useTopicThreads,
   useTopicTimeline,
 } from '@/hooks/usePosts';
 import { usePostStore, useAuthStore } from '@/stores';
@@ -16,6 +18,7 @@ vi.mock('@/lib/api/tauri', () => ({
   TauriApi: {
     getPosts: vi.fn(),
     getTopicTimeline: vi.fn(),
+    getThreadPosts: vi.fn(),
     createPost: vi.fn(),
   },
 }));
@@ -237,6 +240,85 @@ describe('usePosts hooks', () => {
       const state = usePostStore.getState();
       expect(state.posts.get('parent-1')).toBeDefined();
       expect(state.posts.get('reply-1')).toBeDefined();
+    });
+  });
+
+  describe('useTopicThreads', () => {
+    it('スレッド一覧用フックがタイムライン集約を取得できること', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      vi.mocked(TauriApi.getTopicTimeline).mockResolvedValue([
+        {
+          thread_uuid: 'thread-99',
+          parent_post: {
+            id: 'parent-99',
+            content: 'Root',
+            author_pubkey: 'pubkey9',
+            author_npub: 'npub1pubkey9',
+            topic_id: 'rust',
+            created_at: Math.floor(Date.now() / 1000),
+            likes: 0,
+            boosts: 0,
+            replies: 0,
+            is_synced: true,
+          },
+          first_reply: null,
+          reply_count: 0,
+          last_activity_at: Math.floor(Date.now() / 1000),
+        },
+      ]);
+
+      const { result } = renderHook(() => useTopicThreads('rust'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(TauriApi.getTopicTimeline).toHaveBeenCalledWith({
+        topic_id: 'rust',
+        pagination: { limit: 50 },
+      });
+      expect(result.current.data?.[0].threadUuid).toBe('thread-99');
+    });
+  });
+
+  describe('useThreadPosts', () => {
+    it('threadUuid を指定してスレッド投稿一覧を取得できること', async () => {
+      const { TauriApi } = await import('@/lib/api/tauri');
+      vi.mocked(TauriApi.getThreadPosts).mockResolvedValue([
+        {
+          id: 'thread-post-1',
+          content: 'Thread root post',
+          author_pubkey: 'pubkey-thread',
+          author_npub: 'npub1thread',
+          topic_id: 'topic-thread',
+          thread_uuid: 'thread-abc',
+          thread_root_event_id: 'thread-post-1',
+          thread_parent_event_id: null,
+          created_at: Math.floor(Date.now() / 1000),
+          likes: 0,
+          boosts: 0,
+          replies: 2,
+          is_synced: true,
+        },
+      ]);
+
+      const { result } = renderHook(() => useThreadPosts('topic-thread', 'thread-abc'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(TauriApi.getThreadPosts).toHaveBeenCalledWith({
+        topic_id: 'topic-thread',
+        thread_uuid: 'thread-abc',
+        pagination: { limit: 200 },
+      });
+      expect(result.current.data?.[0].id).toBe('thread-post-1');
+      expect(result.current.data?.[0].threadUuid).toBe('thread-abc');
     });
   });
 });

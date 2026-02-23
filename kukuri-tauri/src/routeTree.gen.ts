@@ -19,6 +19,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as FollowingRouteImport } from './routes/following'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
+import { Route as TopicsTopicIdThreadsRouteImport } from './routes/topics.$topicId.threads'
+import { Route as TopicsTopicIdThreadsThreadUuidRouteImport } from './routes/topics.$topicId.threads.$threadUuid'
 import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -71,6 +73,17 @@ const TopicsTopicIdRoute = TopicsTopicIdRouteImport.update({
   path: '/$topicId',
   getParentRoute: () => TopicsRoute,
 } as any)
+const TopicsTopicIdThreadsRoute = TopicsTopicIdThreadsRouteImport.update({
+  id: '/threads',
+  path: '/threads',
+  getParentRoute: () => TopicsTopicIdRoute,
+} as any)
+const TopicsTopicIdThreadsThreadUuidRoute =
+  TopicsTopicIdThreadsThreadUuidRouteImport.update({
+    id: '/$threadUuid',
+    path: '/$threadUuid',
+    getParentRoute: () => TopicsTopicIdThreadsRoute,
+  } as any)
 const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
   id: '/profile/$userId',
   path: '/profile/$userId',
@@ -89,6 +102,8 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -102,6 +117,8 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +133,8 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
   '/topics/$topicId': typeof TopicsTopicIdRoute
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +150,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/profile/$userId'
     | '/topics/$topicId'
+    | '/topics/$topicId/threads'
+    | '/topics/$topicId/threads/$threadUuid'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,6 +165,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/profile/$userId'
     | '/topics/$topicId'
+    | '/topics/$topicId/threads'
+    | '/topics/$topicId/threads/$threadUuid'
   id:
     | '__root__'
     | '/'
@@ -157,6 +180,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/profile/$userId'
     | '/topics/$topicId'
+    | '/topics/$topicId/threads'
+    | '/topics/$topicId/threads/$threadUuid'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -244,6 +269,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopicsTopicIdRouteImport
       parentRoute: typeof TopicsRoute
     }
+    '/topics/$topicId/threads': {
+      id: '/topics/$topicId/threads'
+      path: '/threads'
+      fullPath: '/topics/$topicId/threads'
+      preLoaderRoute: typeof TopicsTopicIdThreadsRouteImport
+      parentRoute: typeof TopicsTopicIdRoute
+    }
+    '/topics/$topicId/threads/$threadUuid': {
+      id: '/topics/$topicId/threads/$threadUuid'
+      path: '/$threadUuid'
+      fullPath: '/topics/$topicId/threads/$threadUuid'
+      preLoaderRoute: typeof TopicsTopicIdThreadsThreadUuidRouteImport
+      parentRoute: typeof TopicsTopicIdThreadsRoute
+    }
     '/profile/$userId': {
       id: '/profile/$userId'
       path: '/profile/$userId'
@@ -255,11 +294,33 @@ declare module '@tanstack/react-router' {
 }
 
 interface TopicsRouteChildren {
-  TopicsTopicIdRoute: typeof TopicsTopicIdRoute
+  TopicsTopicIdRoute: typeof TopicsTopicIdRouteWithChildren
 }
 
+interface TopicsTopicIdRouteChildren {
+  TopicsTopicIdThreadsRoute: typeof TopicsTopicIdThreadsRouteWithChildren
+}
+
+interface TopicsTopicIdThreadsRouteChildren {
+  TopicsTopicIdThreadsThreadUuidRoute: typeof TopicsTopicIdThreadsThreadUuidRoute
+}
+
+const TopicsTopicIdThreadsRouteChildren: TopicsTopicIdThreadsRouteChildren = {
+  TopicsTopicIdThreadsThreadUuidRoute: TopicsTopicIdThreadsThreadUuidRoute,
+}
+
+const TopicsTopicIdThreadsRouteWithChildren =
+  TopicsTopicIdThreadsRoute._addFileChildren(TopicsTopicIdThreadsRouteChildren)
+
+const TopicsTopicIdRouteChildren: TopicsTopicIdRouteChildren = {
+  TopicsTopicIdThreadsRoute: TopicsTopicIdThreadsRouteWithChildren,
+}
+
+const TopicsTopicIdRouteWithChildren =
+  TopicsTopicIdRoute._addFileChildren(TopicsTopicIdRouteChildren)
+
 const TopicsRouteChildren: TopicsRouteChildren = {
-  TopicsTopicIdRoute: TopicsTopicIdRoute,
+  TopicsTopicIdRoute: TopicsTopicIdRouteWithChildren,
 }
 
 const TopicsRouteWithChildren =
