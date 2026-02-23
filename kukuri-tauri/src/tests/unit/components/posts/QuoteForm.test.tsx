@@ -137,6 +137,7 @@ describe('QuoteForm', () => {
       expect(mockTauriApi.createPost).toHaveBeenCalledWith({
         content: 'これは引用コメントです\n\nnostr:post123',
         topic_id: undefined,
+        thread_uuid: expect.any(String),
         tags: [
           ['e', 'post123', '', 'mention'],
           ['q', 'post123'],

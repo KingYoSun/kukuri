@@ -13,6 +13,7 @@ use nostr_sdk::prelude::nip44::v2::ConversationKey;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::warn;
+use uuid::Uuid;
 
 const ENCRYPTED_PLACEHOLDER: &str = "[Encrypted post]";
 const PRIVATE_SCOPES: [&str; 3] = ["friend", "friend_plus", "invite"];
@@ -34,6 +35,29 @@ pub struct FollowingFeedPage {
 }
 
 impl PostService {
+    fn normalize_thread_uuid(thread_uuid: &str) -> Result<String, AppError> {
+        let normalized = thread_uuid.trim();
+        if normalized.is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "thread_uuid is required",
+            ));
+        }
+
+        Uuid::parse_str(normalized)
+            .map(|id| id.to_string())
+            .map_err(|err| {
+                AppError::validation(
+                    ValidationFailureKind::Generic,
+                    format!("Invalid thread_uuid: {err}"),
+                )
+            })
+    }
+
+    fn build_thread_namespace(topic_id: &str, thread_uuid: &str) -> String {
+        format!("{topic_id}/threads/{thread_uuid}")
+    }
+
     fn normalize_scope(scope: Option<String>) -> Result<Option<String>, AppError> {
         let scope = scope
             .map(|value| value.trim().to_string())
@@ -169,10 +193,48 @@ impl PostService {
         content: String,
         author: User,
         topic_id: String,
+        thread_uuid: String,
+        reply_to: Option<String>,
         scope: Option<String>,
     ) -> Result<Post, AppError> {
         let scope = Self::normalize_scope(scope)?;
+        let thread_uuid = Self::normalize_thread_uuid(&thread_uuid)?;
         let mut post = Post::new(content.clone(), author, topic_id.clone());
+        let thread_namespace = Self::build_thread_namespace(&topic_id, &thread_uuid);
+
+        let (thread_root_event_id, thread_parent_event_id) = if let Some(reply_to) =
+            reply_to.as_ref()
+        {
+            let parent_thread = self
+                .repository
+                .get_event_thread(&topic_id, reply_to)
+                .await?
+                .ok_or_else(|| {
+                    AppError::validation(
+                        ValidationFailureKind::Generic,
+                        format!(
+                            "Parent post thread metadata not found for topic={topic_id} event={reply_to}"
+                        ),
+                    )
+                })?;
+            if parent_thread.thread_uuid != thread_uuid {
+                return Err(AppError::validation(
+                    ValidationFailureKind::Generic,
+                    format!(
+                        "thread_uuid mismatch: parent thread_uuid={} request thread_uuid={thread_uuid}",
+                        parent_thread.thread_uuid
+                    ),
+                ));
+            }
+            (parent_thread.root_event_id, Some(reply_to.clone()))
+        } else {
+            (post.id.clone(), None)
+        };
+
+        post.thread_namespace = Some(thread_namespace);
+        post.thread_uuid = Some(thread_uuid);
+        post.thread_root_event_id = Some(thread_root_event_id);
+        post.thread_parent_event_id = thread_parent_event_id;
 
         if let Some(ref scope_value) = scope {
             let (encrypted_content, epoch) = self
@@ -191,7 +253,7 @@ impl PostService {
             .publish_topic_post(
                 &topic_id,
                 &post.content,
-                None,
+                post.thread_parent_event_id.as_deref(),
                 post.scope.as_deref(),
                 post.epoch,
             )
@@ -267,6 +329,24 @@ impl PostService {
         self.cache.set_topic_posts(topic_id, prepared.clone()).await;
 
         Ok(prepared.into_iter().take(limit).collect())
+    }
+
+    pub async fn get_thread_posts(
+        &self,
+        topic_id: &str,
+        thread_uuid: &str,
+        limit: usize,
+    ) -> Result<Vec<Post>, AppError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let thread_uuid = Self::normalize_thread_uuid(thread_uuid)?;
+        let posts = self
+            .repository
+            .get_posts_by_thread(topic_id, &thread_uuid, limit)
+            .await?;
+        self.prepare_posts(posts).await
     }
 
     pub async fn like_post(&self, post_id: &str) -> Result<(), AppError> {
@@ -400,7 +480,7 @@ impl PostService {
                 .publish_topic_post(
                     &post.topic_id,
                     &post.content,
-                    None,
+                    post.thread_parent_event_id.as_deref(),
                     post.scope.as_deref(),
                     post.epoch,
                 )
@@ -687,6 +767,10 @@ mod tests {
 
     const SAMPLE_PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+    fn sample_thread_uuid(index: u32) -> String {
+        format!("00000000-0000-7000-8000-{index:012x}")
+    }
+
     #[tokio::test]
     async fn bookmark_flow_roundtrip() {
         let service = setup_post_service().await;
@@ -731,6 +815,8 @@ mod tests {
                 "hello world".into(),
                 sample_user(),
                 "topic-sync".into(),
+                sample_thread_uuid(1),
+                None,
                 None,
             )
             .await
@@ -783,6 +869,8 @@ mod tests {
                 "secret message".into(),
                 sample_user(),
                 "topic-private".into(),
+                sample_thread_uuid(2),
+                None,
                 Some("friend".into()),
             )
             .await
@@ -817,6 +905,8 @@ mod tests {
                 "offline".into(),
                 sample_user(),
                 "topic-offline".into(),
+                sample_thread_uuid(3),
+                None,
                 None,
             )
             .await
@@ -868,12 +958,26 @@ mod tests {
         author.npub = format!("npub_{followed_pubkey}");
 
         let first_post = service
-            .create_post("first".into(), author.clone(), "trend".into(), None)
+            .create_post(
+                "first".into(),
+                author.clone(),
+                "trend".into(),
+                sample_thread_uuid(10),
+                None,
+                None,
+            )
             .await
             .expect("create first post");
         sleep(Duration::from_millis(5)).await;
         let second_post = service
-            .create_post("second".into(), author.clone(), "trend".into(), None)
+            .create_post(
+                "second".into(),
+                author.clone(),
+                "trend".into(),
+                sample_thread_uuid(11),
+                None,
+                None,
+            )
             .await
             .expect("create second post");
 
@@ -983,12 +1087,148 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_reply_post_reuses_parent_thread_metadata() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let thread_uuid = sample_thread_uuid(30);
+
+        let root = service
+            .create_post(
+                "root".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect("create root");
+
+        let reply = service
+            .create_post(
+                "reply".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid.clone(),
+                Some(root.id.clone()),
+                None,
+            )
+            .await
+            .expect("create reply");
+
+        assert_eq!(reply.thread_uuid.as_deref(), Some(thread_uuid.as_str()));
+        assert_eq!(
+            reply.thread_root_event_id.as_deref(),
+            Some(root.id.as_str())
+        );
+        assert_eq!(
+            reply.thread_parent_event_id.as_deref(),
+            Some(root.id.as_str())
+        );
+
+        let relation = repository
+            .get_event_thread("topic-thread", &reply.id)
+            .await
+            .expect("query event_thread")
+            .expect("event_thread relation");
+        assert_eq!(relation.thread_uuid, thread_uuid);
+        assert_eq!(relation.root_event_id, root.id);
+        assert_eq!(
+            relation.parent_event_id.as_deref(),
+            reply.thread_parent_event_id.as_deref()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_thread_posts_filters_by_topic_and_thread_uuid() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, _repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let target_thread_uuid = sample_thread_uuid(40);
+
+        let root = service
+            .create_post(
+                "thread-root".into(),
+                sample_user(),
+                "topic-thread-main".into(),
+                target_thread_uuid.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect("create thread root");
+
+        sleep(Duration::from_millis(5)).await;
+
+        let reply = service
+            .create_post(
+                "thread-reply".into(),
+                sample_user(),
+                "topic-thread-main".into(),
+                target_thread_uuid.clone(),
+                Some(root.id.clone()),
+                None,
+            )
+            .await
+            .expect("create thread reply");
+
+        service
+            .create_post(
+                "other-thread".into(),
+                sample_user(),
+                "topic-thread-main".into(),
+                sample_thread_uuid(41),
+                None,
+                None,
+            )
+            .await
+            .expect("create other thread");
+
+        service
+            .create_post(
+                "other-topic".into(),
+                sample_user(),
+                "topic-thread-sub".into(),
+                target_thread_uuid.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect("create other topic");
+
+        let posts = service
+            .get_thread_posts("topic-thread-main", &target_thread_uuid, 20)
+            .await
+            .expect("get thread posts");
+
+        assert_eq!(posts.len(), 2);
+        assert_eq!(posts[0].id, root.id);
+        assert_eq!(posts[1].id, reply.id);
+        assert!(
+            posts
+                .iter()
+                .all(|post| post.thread_uuid.as_deref() == Some(target_thread_uuid.as_str()))
+        );
+        assert!(
+            posts
+                .iter()
+                .all(|post| post.topic_id == "topic-thread-main")
+        );
+    }
+
+    #[tokio::test]
     async fn delete_post_removes_from_cache() {
         let (service, _repository, cache) =
             setup_post_service_with_deps(Arc::new(TestEventService::default())).await;
 
         let post = service
-            .create_post("to delete".into(), sample_user(), "topic-del".into(), None)
+            .create_post(
+                "to delete".into(),
+                sample_user(),
+                "topic-del".into(),
+                sample_thread_uuid(20),
+                None,
+                None,
+            )
             .await
             .expect("post creation succeeds");
 

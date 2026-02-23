@@ -50,6 +50,10 @@ export interface Post {
   content: string;
   author: User;
   topicId: string;
+  threadNamespace?: string | null;
+  threadUuid?: string | null;
+  threadRootEventId?: string | null;
+  threadParentEventId?: string | null;
   scope?: PostScope;
   epoch?: number | null;
   isEncrypted?: boolean;

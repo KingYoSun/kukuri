@@ -100,6 +100,7 @@ interface PostStore extends PostState {
       replyTo?: string;
       quotedPost?: string;
       scope?: PostScope;
+      threadUuid?: string;
     },
   ) => Promise<Post>;
   updatePost: (id: string, update: Partial<Post>) => void;
@@ -221,11 +222,21 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       replyTo?: string;
       quotedPost?: string;
       scope?: PostScope;
+      threadUuid?: string;
     },
   ) => {
     const offlineStore = useOfflineStore.getState();
     const isOnline = offlineStore.isOnline;
     const scope = options?.scope ?? 'public';
+    const explicitThreadUuid = options?.threadUuid?.trim();
+    const parentPost = options?.replyTo ? get().posts.get(options.replyTo) : undefined;
+    const parentThreadUuid = parentPost?.threadUuid?.trim();
+    const resolvedThreadUuid = explicitThreadUuid || parentThreadUuid || uuidv4();
+    const resolvedThreadNamespace = `${topicId}/threads/${resolvedThreadUuid}`;
+    const resolvedThreadRootEventId = options?.replyTo
+      ? parentPost?.threadRootEventId || options.replyTo
+      : undefined;
+    const resolvedThreadParentEventId = options?.replyTo;
 
     const authState = useAuthStore.getState();
     const currentUser = authState.currentUser;
@@ -244,6 +255,10 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       content,
       author,
       topicId,
+      threadNamespace: resolvedThreadNamespace,
+      threadUuid: resolvedThreadUuid,
+      threadRootEventId: resolvedThreadRootEventId ?? tempId,
+      threadParentEventId: resolvedThreadParentEventId ?? null,
       scope,
       epoch: null,
       isEncrypted: scope !== 'public',
@@ -284,6 +299,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
         data: JSON.stringify({
           content,
           topicId,
+          threadUuid: resolvedThreadUuid,
           replyTo: options?.replyTo,
           quotedPost: options?.quotedPost,
           scope,
@@ -298,6 +314,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
       const apiPost = await TauriApi.createPost({
         content,
         topic_id: topicId,
+        thread_uuid: resolvedThreadUuid,
         reply_to: options?.replyTo,
         quoted_post: options?.quotedPost,
         scope,
@@ -338,6 +355,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
           data: JSON.stringify({
             content,
             topicId,
+            threadUuid: resolvedThreadUuid,
             replyTo: options?.replyTo,
             quotedPost: options?.quotedPost,
             scope,

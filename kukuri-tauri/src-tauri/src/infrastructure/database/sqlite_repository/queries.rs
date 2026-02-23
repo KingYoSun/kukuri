@@ -89,6 +89,38 @@ pub(super) const INSERT_POST_EVENT: &str = r#"
     VALUES (?, ?, ?, ?, ?, ?)
 "#;
 
+pub(super) const UPSERT_EVENT_THREAD: &str = r#"
+    INSERT INTO event_threads (
+        event_id,
+        topic_id,
+        thread_namespace,
+        thread_uuid,
+        root_event_id,
+        parent_event_id,
+        created_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    ON CONFLICT(event_id) DO UPDATE SET
+        topic_id = excluded.topic_id,
+        thread_namespace = excluded.thread_namespace,
+        thread_uuid = excluded.thread_uuid,
+        root_event_id = excluded.root_event_id,
+        parent_event_id = excluded.parent_event_id
+"#;
+
+pub(super) const SELECT_EVENT_THREAD_BY_EVENT: &str = r#"
+    SELECT
+        event_id,
+        topic_id,
+        thread_namespace,
+        thread_uuid,
+        root_event_id,
+        parent_event_id
+    FROM event_threads
+    WHERE topic_id = ?1
+      AND event_id = ?2
+    LIMIT 1
+"#;
+
 pub(super) const SELECT_POST_BY_ID: &str = r#"
     SELECT event_id, public_key, content, created_at, tags
     FROM events
@@ -102,6 +134,27 @@ pub(super) const SELECT_POSTS_BY_TOPIC: &str = r#"
     AND tags LIKE '%' || ? || '%'
     ORDER BY created_at DESC
     LIMIT ?
+"#;
+
+pub(super) const SELECT_POSTS_BY_THREAD: &str = r#"
+    SELECT
+        e.event_id,
+        e.public_key,
+        e.content,
+        e.created_at,
+        e.tags,
+        et.thread_namespace AS thread_namespace,
+        et.thread_uuid AS thread_uuid,
+        et.root_event_id AS thread_root_event_id,
+        et.parent_event_id AS thread_parent_event_id
+    FROM event_threads et
+    INNER JOIN events e ON e.event_id = et.event_id
+    WHERE et.topic_id = ?1
+      AND et.thread_uuid = ?2
+      AND e.kind = 1
+      AND e.deleted = 0
+    ORDER BY e.created_at ASC
+    LIMIT ?3
 "#;
 
 pub(super) const UPDATE_POST_CONTENT: &str = r#"

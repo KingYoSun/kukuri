@@ -1,5 +1,6 @@
 use super::{PaginationRequest, Validate};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 // レスポンスDTO
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -9,6 +10,10 @@ pub struct PostResponse {
     pub author_pubkey: String,
     pub author_npub: String,
     pub topic_id: String,
+    pub thread_namespace: Option<String>,
+    pub thread_uuid: Option<String>,
+    pub thread_root_event_id: Option<String>,
+    pub thread_parent_event_id: Option<String>,
     pub scope: Option<String>,
     pub epoch: Option<i64>,
     pub is_encrypted: bool,
@@ -24,6 +29,8 @@ pub struct PostResponse {
 pub struct CreatePostRequest {
     pub content: String,
     pub topic_id: String,
+    pub thread_uuid: String,
+    pub reply_to: Option<String>,
     pub media_urls: Option<Vec<String>>,
     pub scope: Option<String>,
 }
@@ -38,6 +45,12 @@ impl Validate for CreatePostRequest {
         }
         if self.topic_id.trim().is_empty() {
             return Err("トピックIDが必要です".to_string());
+        }
+        if self.thread_uuid.trim().is_empty() {
+            return Err("thread_uuid が必要です".to_string());
+        }
+        if Uuid::parse_str(self.thread_uuid.trim()).is_err() {
+            return Err("thread_uuid の形式が不正です".to_string());
         }
         if let Some(normalized) = self.scope.as_deref().map(str::trim)
             && !normalized.is_empty()
@@ -57,6 +70,28 @@ pub struct GetPostsRequest {
     pub topic_id: Option<String>,
     pub author_pubkey: Option<String>,
     pub pagination: Option<PaginationRequest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetThreadPostsRequest {
+    pub topic_id: String,
+    pub thread_uuid: String,
+    pub pagination: Option<PaginationRequest>,
+}
+
+impl Validate for GetThreadPostsRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.topic_id.trim().is_empty() {
+            return Err("トピックIDが必要です".to_string());
+        }
+        if self.thread_uuid.trim().is_empty() {
+            return Err("thread_uuid が必要です".to_string());
+        }
+        if Uuid::parse_str(self.thread_uuid.trim()).is_err() {
+            return Err("thread_uuid の形式が不正です".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

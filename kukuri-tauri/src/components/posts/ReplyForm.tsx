@@ -5,6 +5,7 @@ import { usePostActionForm } from '@/components/posts/hooks/usePostActionForm';
 import { PostActionComposer } from '@/components/posts/PostActionComposer';
 import { TauriApi } from '@/lib/api/tauri';
 import type { PostScope } from '@/stores/types';
+import { v4 as uuidv4 } from 'uuid';
 
 interface ReplyFormProps {
   postId: string;
@@ -36,6 +37,7 @@ export function ReplyForm({
       await TauriApi.createPost({
         content: message,
         topic_id: topicId,
+        thread_uuid: uuidv4(),
         tags,
         scope,
       });

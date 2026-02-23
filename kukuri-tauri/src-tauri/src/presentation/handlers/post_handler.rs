@@ -5,8 +5,8 @@ use crate::{
         Validate,
         post_dto::{
             BookmarkPostRequest, CreatePostRequest, DeletePostRequest, FollowingFeedPageResponse,
-            GetPostsRequest, ListFollowingFeedRequest, ListTrendingPostsRequest,
-            ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
+            GetPostsRequest, GetThreadPostsRequest, ListFollowingFeedRequest,
+            ListTrendingPostsRequest, ListTrendingPostsResponse, PostResponse, ReactToPostRequest,
             TrendingTopicPostsResponse,
         },
     },
@@ -44,6 +44,10 @@ impl PostHandler {
             author_pubkey: author_pubkey.clone(),
             author_npub: npub,
             topic_id: post.topic_id,
+            thread_namespace: post.thread_namespace,
+            thread_uuid: post.thread_uuid,
+            thread_root_event_id: post.thread_root_event_id,
+            thread_parent_event_id: post.thread_parent_event_id,
             scope: post.scope,
             epoch: post.epoch,
             is_encrypted: post.is_encrypted,
@@ -89,6 +93,8 @@ impl PostHandler {
                 request.content,
                 current_user,
                 request.topic_id,
+                request.thread_uuid,
+                request.reply_to,
                 request.scope,
             )
             .await?;
@@ -116,6 +122,25 @@ impl PostHandler {
 
         let results = Self::map_posts(posts).await;
         Ok(results)
+    }
+
+    pub async fn get_thread_posts(
+        &self,
+        request: GetThreadPostsRequest,
+    ) -> Result<Vec<PostResponse>, AppError> {
+        request.validate().map_err(AppError::InvalidInput)?;
+
+        let pagination = request.pagination.unwrap_or_default();
+        let posts = self
+            .post_service
+            .get_thread_posts(
+                &request.topic_id,
+                &request.thread_uuid,
+                pagination.limit.unwrap_or(200) as usize,
+            )
+            .await?;
+
+        Ok(Self::map_posts(posts).await)
     }
 
     pub async fn delete_post(&self, request: DeletePostRequest) -> Result<(), AppError> {

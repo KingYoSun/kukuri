@@ -4,9 +4,9 @@ use crate::{
             ApiResponse,
             post_dto::{
                 BookmarkPostRequest, CreatePostRequest, DeletePostRequest,
-                FollowingFeedPageResponse, GetPostsRequest, ListFollowingFeedRequest,
-                ListTrendingPostsRequest, ListTrendingPostsResponse, PostResponse,
-                ReactToPostRequest,
+                FollowingFeedPageResponse, GetPostsRequest, GetThreadPostsRequest,
+                ListFollowingFeedRequest, ListTrendingPostsRequest, ListTrendingPostsResponse,
+                PostResponse, ReactToPostRequest,
             },
         },
         handlers::PostHandler,
@@ -52,6 +52,21 @@ pub async fn get_posts(
         state.topic_service.clone(),
     );
     let result = handler.get_posts(request).await;
+    Ok(ApiResponse::from_result(result))
+}
+
+/// スレッド投稿を取得する
+#[tauri::command]
+pub async fn get_thread_posts(
+    state: State<'_, AppState>,
+    request: GetThreadPostsRequest,
+) -> Result<ApiResponse<Vec<PostResponse>>, AppError> {
+    let handler = PostHandler::new(
+        state.post_service.clone(),
+        state.auth_service.clone(),
+        state.topic_service.clone(),
+    );
+    let result = handler.get_thread_posts(request).await;
     Ok(ApiResponse::from_result(result))
 }
 

@@ -109,6 +109,7 @@ describe('ReplyForm', () => {
       expect(mockTauriApi.createPost).toHaveBeenCalledWith({
         content: 'これは返信です',
         topic_id: undefined,
+        thread_uuid: expect.any(String),
         tags: [['e', 'post123', '', 'reply']],
         scope: undefined,
       });

@@ -268,6 +268,7 @@ describe('postStore', () => {
     expect(mockCreatePost).toHaveBeenCalledWith({
       content: '縺薙ｓ縺ｫ縺｡縺ｯ',
       topic_id: 'topic1',
+      thread_uuid: 'temp-id',
       reply_to: undefined,
       quoted_post: undefined,
       scope: 'public',
@@ -296,6 +297,7 @@ describe('postStore', () => {
       data: JSON.stringify({
         content: 'fallback body',
         topicId: 'topic1',
+        threadUuid: 'temp-id',
         replyTo: undefined,
         quotedPost: undefined,
         scope: 'public',
@@ -330,6 +332,7 @@ describe('postStore', () => {
     expect(mockCreatePost).toHaveBeenLastCalledWith({
       content: 'reply body',
       topic_id: 'topic1',
+      thread_uuid: 'temp-id',
       reply_to: 'event123',
       quoted_post: undefined,
       scope: 'public',
@@ -357,6 +360,7 @@ describe('postStore', () => {
     expect(mockCreatePost).toHaveBeenLastCalledWith({
       content: 'quote body',
       topic_id: 'topic1',
+      thread_uuid: 'temp-id',
       reply_to: undefined,
       quoted_post: 'note1',
       scope: 'public',

@@ -39,6 +39,7 @@ import { useTopicStore } from '@/stores/topicStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
 import { offlineApi } from '@/api/offline';
 import { EntityType, OfflineActionType } from '@/types/offline';
+import { v4 as uuidv4 } from 'uuid';
 
 type AuthSnapshot = {
   currentUser: ReturnType<typeof useAuthStore.getState>['currentUser'];
@@ -1063,6 +1064,7 @@ export function registerE2EBridge(): void {
                   const created = await TauriApi.createPost({
                     content,
                     topic_id: createdTopicId,
+                    thread_uuid: uuidv4(),
                   });
                   const mapped = await mapPostResponseToDomain(created);
                   mapped.content = content;
