@@ -46,9 +46,16 @@ describe('P2P / RelayStatus / CLIブートストラップ', () => {
     expect(initialSnapshot.cliNodes.length).toBeGreaterThan(0);
     expect(initialSnapshot.envLocked).toBe(false);
 
+    const openNetworkStatusButton = await $('[data-testid="open-network-status-button"]');
+    await openNetworkStatusButton.waitForClickable({ timeout: 30000 });
+    await openNetworkStatusButton.click();
+
+    const networkStatusModal = await $('[data-testid="network-status-modal"]');
+    await networkStatusModal.waitForDisplayed({ timeout: 30000 });
+
     const relayCard = await $('[data-testid="relay-status-card"]');
-    await relayCard.scrollIntoView();
     await relayCard.waitForDisplayed({ timeout: 30000 });
+    await relayCard.scrollIntoView();
 
     await browser.waitUntil(
       async () => {
