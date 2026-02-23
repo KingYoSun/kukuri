@@ -205,6 +205,15 @@ export interface GetFollowingParams {
   viewerNpub?: string | null;
 }
 
+export interface UpdateUserProfileParams {
+  npub: string;
+  name: string;
+  displayName: string;
+  about: string;
+  picture: string;
+  nip05: string;
+}
+
 export type FollowListSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
 export interface SendDirectMessagePayload {
@@ -803,6 +812,19 @@ export class TauriApi {
         npub: params.npub,
         public_profile: params.publicProfile,
         show_online_status: params.showOnlineStatus,
+      },
+    });
+  }
+
+  static async updateUserProfile(params: UpdateUserProfileParams): Promise<void> {
+    await invokeCommandVoid('update_user_profile', {
+      request: {
+        npub: params.npub,
+        name: params.name,
+        display_name: params.displayName,
+        about: params.about,
+        picture: params.picture,
+        nip05: params.nip05,
       },
     });
   }

@@ -35,11 +35,13 @@ impl UserService {
     }
 
     pub async fn update_profile(&self, npub: &str, metadata: UserMetadata) -> Result<(), AppError> {
-        if let Some(mut user) = self.repository.get_user(npub).await? {
-            user.update_metadata(metadata);
-            self.repository.update_user(&user).await?;
-        }
-        Ok(())
+        let mut user = self
+            .repository
+            .get_user(npub)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("User not found: {npub}")))?;
+        user.update_metadata(metadata);
+        self.repository.update_user(&user).await
     }
 
     pub async fn update_privacy_settings(

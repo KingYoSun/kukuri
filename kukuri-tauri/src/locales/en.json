@@ -112,6 +112,13 @@
     "accountNotFound": "Account information not found",
     "avatarUploadInfoMissing": "Missing information required for avatar upload",
     "profileUpdateFailed": "Failed to update profile",
+    "profileUpdateFailedWithDetails": "Profile saved with partial failures ({{details}})",
+    "profileSaveStepAvatar": "avatar update",
+    "profileSaveStepPrivacy": "privacy settings save",
+    "profileSaveStepLocalProfile": "local profile save",
+    "profileSaveStepNostrMetadata": "Nostr metadata save",
+    "profileSaveStepAvatarSync": "avatar sync",
+    "profileSaveStepNostrInitialize": "Nostr initialization",
     "profileUpdated": "Profile updated",
     "editProfile": "Edit Profile",
     "editProfileDescription": "Update display information and bio"

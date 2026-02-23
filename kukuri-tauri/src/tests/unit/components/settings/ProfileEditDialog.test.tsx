@@ -1,7 +1,8 @@
-﻿import type { ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { initializeTauriMocks, stubObjectUrl } from '../auth/__utils__/profileTestUtils';
 import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
@@ -15,6 +16,7 @@ let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
 let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
+let mockUpdateUserProfile: ReturnType<typeof vi.fn>;
 let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
 const objectUrlMock = stubObjectUrl();
 
@@ -25,6 +27,7 @@ beforeAll(async () => {
     mockUploadProfileAvatar,
     mockFetchProfileAvatar,
     mockUpdatePrivacySettings,
+    mockUpdateUserProfile,
     mockProfileAvatarSync,
   } = await initializeTauriMocks());
 });
@@ -69,8 +72,17 @@ describe('ProfileEditDialog', () => {
 
   const renderDialog = (props?: Partial<ProfileEditDialogProps>) => {
     const onOpenChange = vi.fn();
-    render(<ProfileEditDialog open onOpenChange={onOpenChange} {...props} />);
-    return { onOpenChange };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ProfileEditDialog open onOpenChange={onOpenChange} {...props} />
+      </QueryClientProvider>,
+    );
+    return { onOpenChange, queryClient };
   };
 
   beforeEach(() => {
@@ -104,6 +116,7 @@ describe('ProfileEditDialog', () => {
       data_base64: 'AQIDBA==',
     });
     mockUpdatePrivacySettings.mockResolvedValue(undefined);
+    mockUpdateUserProfile.mockResolvedValue(undefined);
     mockProfileAvatarSync.mockResolvedValue({
       npub: mockCurrentUser.npub,
       currentVersion: 8,
@@ -162,6 +175,14 @@ describe('ProfileEditDialog', () => {
         publicProfile: true,
         showOnlineStatus: false,
       });
+    });
+    expect(mockUpdateUserProfile).toHaveBeenCalledWith({
+      npub: mockCurrentUser.npub,
+      name: '更新後ユーザー',
+      displayName: '@updated',
+      about: '更新後の自己紹介',
+      picture: 'https://example.com/new.png',
+      nip05: 'updated@example.com',
     });
     expect(mockProfileAvatarSync).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -225,6 +246,12 @@ describe('ProfileEditDialog', () => {
         }),
       );
     });
+    expect(mockUpdateUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        npub: mockCurrentUser.npub,
+        picture: expectedUri,
+      }),
+    );
 
     expect(mockUpdateUser).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -276,12 +303,51 @@ describe('ProfileEditDialog', () => {
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('プロフィールの更新に失敗しました');
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('プロフィールの保存中に一部失敗しました'),
+      );
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
     });
     expect(errorHandler.log).toHaveBeenCalledWith(
       'ProfileEditDialog.submitFailed',
       error,
       expect.objectContaining({ context: 'ProfileEditDialog.handleSubmit' }),
     );
+  });
+
+  it('保存後にプロフィールクエリキャッシュを更新する', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderDialog();
+
+    queryClient.setQueryData(['userProfile', mockCurrentUser.npub], {
+      npub: mockCurrentUser.npub,
+      pubkey: mockCurrentUser.pubkey,
+      name: mockCurrentUser.name,
+      display_name: mockCurrentUser.displayName,
+      about: mockCurrentUser.about,
+      picture: mockCurrentUser.picture,
+      banner: null,
+      website: null,
+      nip05: mockCurrentUser.nip05,
+      is_profile_public: true,
+      show_online_status: false,
+    });
+
+    await user.clear(screen.getByLabelText('名前 *'));
+    await user.type(screen.getByLabelText('名前 *'), '反映確認ユーザー');
+    await user.clear(screen.getByLabelText('自己紹介'));
+    await user.type(screen.getByLabelText('自己紹介'), '反映確認テキスト');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      const cached = queryClient.getQueryData<{
+        name: string;
+        display_name: string;
+        about: string;
+      }>(['userProfile', mockCurrentUser.npub]);
+      expect(cached?.name).toBe('反映確認ユーザー');
+      expect(cached?.display_name).toBe('Current User');
+      expect(cached?.about).toBe('反映確認テキスト');
+    });
   });
 });

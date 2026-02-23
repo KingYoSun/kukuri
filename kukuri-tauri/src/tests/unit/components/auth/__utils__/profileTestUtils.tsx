@@ -36,6 +36,7 @@ vi.mock('@/lib/api/tauri', () => ({
     uploadProfileAvatar: vi.fn(),
     fetchProfileAvatar: vi.fn(),
     updatePrivacySettings: vi.fn(),
+    updateUserProfile: vi.fn(),
     profileAvatarSync: vi.fn(),
   },
 }));
@@ -59,6 +60,7 @@ export const initializeTauriMocks = async () => {
   const tauriModule = await import('@/lib/api/tauri');
 
   tauriModule.TauriApi.updatePrivacySettings = vi.fn();
+  tauriModule.TauriApi.updateUserProfile = vi.fn();
   tauriModule.TauriApi.profileAvatarSync = vi.fn();
 
   return {
@@ -71,6 +73,9 @@ export const initializeTauriMocks = async () => {
       typeof vi.fn
     >,
     mockUpdatePrivacySettings: tauriModule.TauriApi.updatePrivacySettings as unknown as ReturnType<
+      typeof vi.fn
+    >,
+    mockUpdateUserProfile: tauriModule.TauriApi.updateUserProfile as unknown as ReturnType<
       typeof vi.fn
     >,
     mockProfileAvatarSync: tauriModule.TauriApi.profileAvatarSync as unknown as ReturnType<

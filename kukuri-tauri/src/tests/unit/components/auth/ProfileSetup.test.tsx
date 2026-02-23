@@ -21,6 +21,7 @@ let mockReadFile: ReturnType<typeof vi.fn>;
 let mockUploadProfileAvatar: ReturnType<typeof vi.fn>;
 let mockFetchProfileAvatar: ReturnType<typeof vi.fn>;
 let mockUpdatePrivacySettings: ReturnType<typeof vi.fn>;
+let mockUpdateUserProfile: ReturnType<typeof vi.fn>;
 let mockProfileAvatarSync: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
@@ -30,6 +31,7 @@ beforeAll(async () => {
     mockUploadProfileAvatar,
     mockFetchProfileAvatar,
     mockUpdatePrivacySettings,
+    mockUpdateUserProfile,
     mockProfileAvatarSync,
   } = await initializeTauriMocks());
 });
@@ -63,8 +65,10 @@ describe('ProfileSetup', () => {
     mockUploadProfileAvatar.mockReset();
     mockFetchProfileAvatar.mockReset();
     mockUpdatePrivacySettings.mockReset();
+    mockUpdateUserProfile.mockReset();
     mockProfileAvatarSync.mockReset();
     mockUpdatePrivacySettings.mockResolvedValue(undefined);
+    mockUpdateUserProfile.mockResolvedValue(undefined);
     mockProfileAvatarSync.mockResolvedValue({
       npub: mockCurrentUser.npub,
       currentVersion: null,
@@ -175,6 +179,14 @@ describe('ProfileSetup', () => {
         publicProfile: true,
         showOnlineStatus: false,
       });
+    });
+    expect(mockUpdateUserProfile).toHaveBeenCalledWith({
+      npub: mockCurrentUser.npub,
+      name: 'テストユーザー',
+      displayName: '@testuser',
+      about: 'テストユーザーです',
+      picture: 'https://example.com/test.jpg',
+      nip05: 'test@example.com',
     });
 
     expect(mockProfileAvatarSync).toHaveBeenCalled();
@@ -292,6 +304,12 @@ describe('ProfileSetup', () => {
         }),
       );
     });
+    expect(mockUpdateUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        npub: 'npub1test',
+        picture: expectedNostrUri,
+      }),
+    );
 
     await waitFor(() => {
       expect(mockUpdateUser).toHaveBeenCalledWith(
@@ -332,6 +350,12 @@ describe('ProfileSetup', () => {
         }),
       );
     });
+    expect(mockUpdateUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        npub: mockCurrentUser.npub,
+        displayName: 'テストユーザー',
+      }),
+    );
 
     // ローカルストアも同様
     await waitFor(() => {
@@ -360,8 +384,9 @@ describe('ProfileSetup', () => {
     // 部分的な失敗メッセージ
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        'プロフィールは保存しましたが、一部の同期に失敗しました',
+        expect.stringContaining('プロフィールの保存中に一部失敗しました'),
       );
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
     });
 
     // errorHandlerが呼ばれる

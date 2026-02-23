@@ -112,6 +112,13 @@
     "accountNotFound": "未找到账户信息",
     "avatarUploadInfoMissing": "缺少上传头像所需的信息",
     "profileUpdateFailed": "更新资料失败",
+    "profileUpdateFailedWithDetails": "资料已保存，但部分步骤失败（{{details}}）",
+    "profileSaveStepAvatar": "头像更新",
+    "profileSaveStepPrivacy": "隐私设置保存",
+    "profileSaveStepLocalProfile": "本地资料保存",
+    "profileSaveStepNostrMetadata": "Nostr 元数据保存",
+    "profileSaveStepAvatarSync": "头像同步",
+    "profileSaveStepNostrInitialize": "Nostr 初始化",
     "profileUpdated": "资料已更新",
     "editProfile": "编辑资料",
     "editProfileDescription": "更新显示信息和个人简介"
