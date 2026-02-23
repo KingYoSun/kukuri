@@ -1,4 +1,4 @@
-# activeContext 概要（最終確認日: 2026年02月02日）
+# activeContext 概要（最終確認日: 2026年02月23日）
 
 このディレクトリは、直近の意思決定・タスク運用・計画中/保管中の資料を集約します。参照順は以下のとおりです。
 
@@ -12,6 +12,7 @@
 - iroh-native-dht-plan.md: iroh Mainline DHT 移行計画
 - tauri_app_experience_design.md: Tauri アプリの体験設計
 - tauri_app_implementation_plan.md: 実装計画
+- topic_timeline_thread_rebuild_plan.md: トピック別タイムライン/スレッド再構築の設計・実装計画
 - artefacts/document_date_format_inventory.md: ドキュメント日付表記ルールと棚卸し
 - deprecation/
   - gossip_manager_deprecation.md: GossipManager 廃止の経緯
