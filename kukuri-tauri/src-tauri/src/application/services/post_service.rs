@@ -77,6 +77,38 @@ impl PostService {
         ))
     }
 
+    fn normalize_publish_reply_event_id(candidate: &str) -> Option<String> {
+        let normalized = candidate.trim();
+        if normalized.is_empty() {
+            return None;
+        }
+        EventId::from_hex(normalized)
+            .ok()
+            .map(|_| normalized.to_string())
+    }
+
+    async fn resolve_publish_reply_to(
+        &self,
+        reply_to: Option<&str>,
+    ) -> Result<Option<String>, AppError> {
+        let Some(reply_to) = reply_to else {
+            return Ok(None);
+        };
+        let reply_to = reply_to.trim();
+        if reply_to.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(event_id) = Self::normalize_publish_reply_event_id(reply_to) {
+            return Ok(Some(event_id));
+        }
+
+        let synced_event_id = self.repository.get_sync_event_id(reply_to).await?;
+        Ok(synced_event_id
+            .as_deref()
+            .and_then(Self::normalize_publish_reply_event_id))
+    }
+
     fn conversation_key_from_b64(key_b64: &str) -> Result<ConversationKey, AppError> {
         let bytes = STANDARD
             .decode(key_b64)
@@ -247,13 +279,16 @@ impl PostService {
         }
 
         self.repository.create_post(&post).await?;
+        let publish_reply_to = self
+            .resolve_publish_reply_to(post.thread_parent_event_id.as_deref())
+            .await?;
 
         match self
             .event_service
             .publish_topic_post(
                 &topic_id,
                 &post.content,
-                post.thread_parent_event_id.as_deref(),
+                publish_reply_to.as_deref(),
                 post.scope.as_deref(),
                 post.epoch,
             )
@@ -475,12 +510,15 @@ impl PostService {
         let mut synced_count = 0;
 
         for mut post in unsynced_posts {
+            let publish_reply_to = self
+                .resolve_publish_reply_to(post.thread_parent_event_id.as_deref())
+                .await?;
             match self
                 .event_service
                 .publish_topic_post(
                     &post.topic_id,
                     &post.content,
-                    post.thread_parent_event_id.as_deref(),
+                    publish_reply_to.as_deref(),
                     post.scope.as_deref(),
                     post.epoch,
                 )
@@ -602,26 +640,48 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct PublishTopicPostCall {
+        topic_id: String,
+        content: String,
+        reply_to: Option<String>,
+        scope: Option<String>,
+        epoch: Option<i64>,
+    }
+
     struct TestEventService {
         publish_topic_post_result: Mutex<Option<Result<EventId, AppError>>>,
+        publish_topic_post_calls: Mutex<Vec<PublishTopicPostCall>>,
     }
 
     impl TestEventService {
         fn new() -> Self {
             Self {
                 publish_topic_post_result: Mutex::new(None),
+                publish_topic_post_calls: Mutex::new(Vec::new()),
             }
         }
 
         fn with_publish_result(result: Result<EventId, AppError>) -> Self {
             Self {
                 publish_topic_post_result: Mutex::new(Some(result)),
+                publish_topic_post_calls: Mutex::new(Vec::new()),
             }
         }
 
         async fn next_publish_result(&self) -> Result<EventId, AppError> {
             let mut guard = self.publish_topic_post_result.lock().await;
             guard.take().unwrap_or_else(|| Ok(EventId::generate()))
+        }
+
+        async fn push_publish_call(&self, call: PublishTopicPostCall) {
+            let mut guard = self.publish_topic_post_calls.lock().await;
+            guard.push(call);
+        }
+
+        async fn publish_calls(&self) -> Vec<PublishTopicPostCall> {
+            let guard = self.publish_topic_post_calls.lock().await;
+            guard.clone()
         }
     }
 
@@ -641,12 +701,29 @@ mod tests {
         }
         async fn publish_topic_post(
             &self,
-            _: &str,
-            _: &str,
-            _: Option<&str>,
-            _: Option<&str>,
-            _: Option<i64>,
+            topic_id: &str,
+            content: &str,
+            reply_to: Option<&str>,
+            scope: Option<&str>,
+            epoch: Option<i64>,
         ) -> Result<EventId, AppError> {
+            self.push_publish_call(PublishTopicPostCall {
+                topic_id: topic_id.to_string(),
+                content: content.to_string(),
+                reply_to: reply_to.map(|value| value.to_string()),
+                scope: scope.map(|value| value.to_string()),
+                epoch,
+            })
+            .await;
+
+            if let Some(reply_to) = reply_to
+                && EventId::from_hex(reply_to).is_err()
+            {
+                return Err(AppError::validation(
+                    ValidationFailureKind::Generic,
+                    "Invalid event ID: reply_to must be 64-char hex",
+                ));
+            }
             self.next_publish_result().await
         }
         async fn send_reaction(&self, _: &str, _: &str) -> Result<EventId, AppError> {
@@ -1137,6 +1214,95 @@ mod tests {
             relation.parent_event_id.as_deref(),
             reply.thread_parent_event_id.as_deref()
         );
+    }
+
+    #[tokio::test]
+    async fn create_reply_post_publishes_synced_parent_event_id() {
+        let event_service_impl = Arc::new(TestEventService::default());
+        let event_service: Arc<dyn EventServiceTrait> = event_service_impl.clone();
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let thread_uuid = sample_thread_uuid(31);
+
+        let root = service
+            .create_post(
+                "root".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect("create root");
+        let root_sync_event_id = repository
+            .get_sync_event_id(&root.id)
+            .await
+            .expect("query parent sync event id")
+            .expect("parent should have sync event id");
+
+        service
+            .create_post(
+                "reply".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid,
+                Some(root.id),
+                None,
+            )
+            .await
+            .expect("create reply");
+
+        let calls = event_service_impl.publish_calls().await;
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            calls[1].reply_to.as_deref(),
+            Some(root_sync_event_id.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn create_reply_post_with_unsynced_parent_does_not_publish_uuid_reply_to() {
+        let event_service_impl = Arc::new(TestEventService::with_publish_result(Err(
+            AppError::NostrError("root publish failed".into()),
+        )));
+        let event_service: Arc<dyn EventServiceTrait> = event_service_impl.clone();
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let thread_uuid = sample_thread_uuid(32);
+
+        let _ = service
+            .create_post(
+                "root".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect_err("root publish should fail once");
+        let unsynced_parent = repository
+            .get_unsync_posts()
+            .await
+            .expect("load unsynced posts")
+            .into_iter()
+            .next()
+            .expect("unsynced parent exists");
+
+        service
+            .create_post(
+                "reply".into(),
+                sample_user(),
+                "topic-thread".into(),
+                thread_uuid,
+                Some(unsynced_parent.id),
+                None,
+            )
+            .await
+            .expect("reply create should fallback to publish without reply_to");
+
+        let calls = event_service_impl.publish_calls().await;
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[1].reply_to, None);
     }
 
     #[tokio::test]

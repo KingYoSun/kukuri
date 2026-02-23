@@ -782,6 +782,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
               <ReplyForm
                 postId={post.id}
                 topicId={post.topicId}
+                threadUuid={post.threadUuid}
                 scope={post.scope}
                 onCancel={() => setShowReplyForm(false)}
                 onSuccess={() => setShowReplyForm(false)}

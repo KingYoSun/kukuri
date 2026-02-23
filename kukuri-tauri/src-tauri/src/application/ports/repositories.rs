@@ -67,6 +67,7 @@ pub trait PostRepository: Send + Sync {
         topic_id: &str,
         event_id: &str,
     ) -> Result<Option<EventThreadRecord>, AppError>;
+    async fn get_sync_event_id(&self, event_id: &str) -> Result<Option<String>, AppError>;
     async fn update_post(&self, post: &Post) -> Result<(), AppError>;
     async fn delete_post(&self, id: &str) -> Result<(), AppError>;
     async fn get_unsync_posts(&self) -> Result<Vec<Post>, AppError>;

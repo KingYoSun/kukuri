@@ -325,6 +325,21 @@ describe('postStore', () => {
       is_synced: true,
     };
     mockCreatePost.mockResolvedValueOnce(apiResponse);
+    const parentThreadUuid = '00000000-0000-7000-8000-000000000111';
+    usePostStore.setState({
+      posts: new Map([
+        [
+          'event123',
+          {
+            ...mockPost1,
+            id: 'event123',
+            threadUuid: parentThreadUuid,
+            threadRootEventId: 'event123',
+          },
+        ],
+      ]),
+      postsByTopic: new Map([['topic1', ['event123']]]),
+    });
 
     await usePostStore.getState().createPost('reply body', 'topic1', { replyTo: 'event123' });
 
@@ -332,8 +347,47 @@ describe('postStore', () => {
     expect(mockCreatePost).toHaveBeenLastCalledWith({
       content: 'reply body',
       topic_id: 'topic1',
-      thread_uuid: 'temp-id',
+      thread_uuid: parentThreadUuid,
       reply_to: 'event123',
+      quoted_post: undefined,
+      scope: 'public',
+    });
+  });
+
+  it('replyTo指定時に親投稿がキャッシュになくthreadUuid未指定なら送信を中止すること', async () => {
+    await expect(
+      usePostStore.getState().createPost('reply body', 'topic1', { replyTo: 'missing-parent' }),
+    ).rejects.toThrow('reply_to の親投稿がキャッシュにないため threadUuid を解決できません');
+
+    expect(mockCreatePost).not.toHaveBeenCalled();
+  });
+
+  it('replyTo指定時にthreadUuid明示指定があれば親未キャッシュでもその値を使うこと', async () => {
+    const explicitThreadUuid = '00000000-0000-7000-8000-000000000222';
+    mockCreatePost.mockResolvedValueOnce({
+      id: 'reply-post-explicit-thread',
+      content: 'reply body',
+      author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_101,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    });
+
+    await usePostStore.getState().createPost('reply body', 'topic1', {
+      replyTo: 'missing-parent',
+      threadUuid: explicitThreadUuid,
+    });
+
+    expect(mockCreatePost).toHaveBeenCalledTimes(1);
+    expect(mockCreatePost).toHaveBeenLastCalledWith({
+      content: 'reply body',
+      topic_id: 'topic1',
+      thread_uuid: explicitThreadUuid,
+      reply_to: 'missing-parent',
       quoted_post: undefined,
       scope: 'public',
     });

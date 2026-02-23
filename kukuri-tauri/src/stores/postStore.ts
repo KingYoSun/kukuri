@@ -231,6 +231,9 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     const explicitThreadUuid = options?.threadUuid?.trim();
     const parentPost = options?.replyTo ? get().posts.get(options.replyTo) : undefined;
     const parentThreadUuid = parentPost?.threadUuid?.trim();
+    if (options?.replyTo && !explicitThreadUuid && !parentThreadUuid) {
+      throw new Error('reply_to の親投稿がキャッシュにないため threadUuid を解決できません');
+    }
     const resolvedThreadUuid = explicitThreadUuid || parentThreadUuid || uuidv4();
     const resolvedThreadNamespace = `${topicId}/threads/${resolvedThreadUuid}`;
     const resolvedThreadRootEventId = options?.replyTo

@@ -3,7 +3,8 @@ use super::mapper::map_post_row;
 use super::queries::{
     INSERT_POST_EVENT, MARK_POST_DELETED, MARK_POST_SYNCED, SELECT_EVENT_THREAD_BY_EVENT,
     SELECT_POST_BY_ID, SELECT_POSTS_BY_AUTHOR, SELECT_POSTS_BY_THREAD, SELECT_POSTS_BY_TOPIC,
-    SELECT_RECENT_POSTS, SELECT_UNSYNC_POSTS, UPDATE_POST_CONTENT, UPSERT_EVENT_THREAD,
+    SELECT_RECENT_POSTS, SELECT_SYNC_EVENT_ID_BY_EVENT, SELECT_UNSYNC_POSTS, UPDATE_POST_CONTENT,
+    UPSERT_EVENT_THREAD,
 };
 use crate::application::ports::repositories::{
     EventThreadRecord, PostFeedCursor, PostFeedPage, PostRepository,
@@ -160,6 +161,19 @@ impl PostRepository for SqliteRepository {
             root_event_id: row.try_get("root_event_id")?,
             parent_event_id: row.try_get("parent_event_id")?,
         }))
+    }
+
+    async fn get_sync_event_id(&self, event_id: &str) -> Result<Option<String>, AppError> {
+        let row = sqlx::query(SELECT_SYNC_EVENT_ID_BY_EVENT)
+            .bind(event_id)
+            .fetch_optional(self.pool.get_pool())
+            .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(row.try_get::<Option<String>, _>("sync_event_id")?)
     }
 
     async fn update_post(&self, post: &Post) -> Result<(), AppError> {

@@ -121,6 +121,14 @@ pub(super) const SELECT_EVENT_THREAD_BY_EVENT: &str = r#"
     LIMIT 1
 "#;
 
+pub(super) const SELECT_SYNC_EVENT_ID_BY_EVENT: &str = r#"
+    SELECT sync_event_id
+    FROM events
+    WHERE event_id = ?1
+      AND kind = 1
+    LIMIT 1
+"#;
+
 pub(super) const SELECT_POST_BY_ID: &str = r#"
     SELECT event_id, public_key, content, created_at, tags
     FROM events

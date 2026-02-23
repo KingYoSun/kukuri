@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 interface ReplyFormProps {
   postId: string;
   topicId?: string;
+  threadUuid?: string | null;
   scope?: PostScope;
   onCancel?: () => void;
   onSuccess?: () => void;
@@ -19,6 +20,7 @@ interface ReplyFormProps {
 export function ReplyForm({
   postId,
   topicId,
+  threadUuid,
   scope,
   onCancel,
   onSuccess,
@@ -30,7 +32,16 @@ export function ReplyForm({
   const { content, setContent, isPending, handleSubmit, handleKeyboardSubmit } = usePostActionForm({
     submit: async (message: string) => {
       if (topicId) {
-        await createPost(message, topicId, { replyTo: postId, scope });
+        const createPostOptions: Parameters<typeof createPost>[2] = {
+          replyTo: postId,
+          scope,
+        };
+        if (threadUuid) {
+          createPostOptions.threadUuid = threadUuid;
+        }
+        await createPost(message, topicId, {
+          ...createPostOptions,
+        });
         return;
       }
       const tags: string[][] = [['e', postId, '', 'reply']];
