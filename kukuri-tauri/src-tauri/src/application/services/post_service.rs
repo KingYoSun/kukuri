@@ -1545,6 +1545,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_topic_timeline_includes_topic_posts_without_thread_uuid() {
+        let event_service: Arc<dyn EventServiceTrait> = Arc::new(TestEventService::default());
+        let (service, repository, _cache) = setup_post_service_with_deps(event_service).await;
+        let topic_id = "topic-timeline-fallback";
+        let thread_uuid = sample_thread_uuid(52);
+
+        let mut threaded_root =
+            Post::new("threaded-root".into(), sample_user(), topic_id.to_string());
+        threaded_root.created_at = Utc.timestamp_opt(100, 0).unwrap();
+        threaded_root.thread_namespace = Some(format!("{topic_id}/threads/{thread_uuid}"));
+        threaded_root.thread_uuid = Some(thread_uuid.clone());
+        threaded_root.thread_root_event_id = Some(threaded_root.id.clone());
+        threaded_root.thread_parent_event_id = None;
+        threaded_root.is_synced = true;
+        repository
+            .create_post(&threaded_root)
+            .await
+            .expect("seed threaded root");
+
+        let mut standalone = Post::new("standalone".into(), sample_user(), topic_id.to_string());
+        standalone.created_at = Utc.timestamp_opt(130, 0).unwrap();
+        standalone.is_synced = true;
+        repository
+            .create_post(&standalone)
+            .await
+            .expect("seed standalone post");
+
+        let entries = service
+            .get_topic_timeline(topic_id, 20)
+            .await
+            .expect("get topic timeline");
+
+        assert_eq!(entries.len(), 2);
+
+        let first = &entries[0];
+        assert_eq!(first.parent_post.id, standalone.id);
+        assert_eq!(first.thread_uuid, standalone.id);
+        assert!(first.first_reply.is_none());
+        assert_eq!(first.reply_count, 0);
+        assert_eq!(first.last_activity_at, 130);
+
+        let second = &entries[1];
+        assert_eq!(second.parent_post.id, threaded_root.id);
+        assert_eq!(second.thread_uuid, thread_uuid);
+    }
+
+    #[tokio::test]
     async fn delete_post_removes_from_cache() {
         let (service, _repository, cache) =
             setup_post_service_with_deps(Arc::new(TestEventService::default())).await;

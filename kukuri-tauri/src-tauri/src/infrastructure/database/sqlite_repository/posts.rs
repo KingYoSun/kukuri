@@ -123,6 +123,7 @@ impl PostRepository for SqliteRepository {
     ) -> Result<Vec<TopicTimelineSummaryRecord>, AppError> {
         let rows = sqlx::query(SELECT_TOPIC_TIMELINE_SUMMARIES)
             .bind(topic_id)
+            .bind(topic_tag_like(topic_id))
             .bind(limit as i64)
             .fetch_all(self.pool.get_pool())
             .await?;
