@@ -12,6 +12,8 @@ pub(crate) fn map_user_row(row: &SqliteRow) -> Result<User, AppError> {
 
     let mut user = User::new_with_profile(row.try_get("npub")?, profile);
     user.pubkey = row.try_get("pubkey")?;
+    user.name = row.try_get::<Option<String>, _>("name").unwrap_or(None);
+    user.nip05 = row.try_get::<Option<String>, _>("nip05").unwrap_or(None);
     user.public_profile = row.try_get::<i64, _>("is_profile_public").unwrap_or(1) != 0;
     user.show_online_status = row.try_get::<i64, _>("show_online_status").unwrap_or(0) != 0;
 

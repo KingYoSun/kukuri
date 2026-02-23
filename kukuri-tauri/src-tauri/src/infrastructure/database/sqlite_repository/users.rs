@@ -67,7 +67,7 @@ async fn query_follow_relation(
     let normalized_search = search.map(|s| s.to_lowercase());
 
     let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(&format!(
-        "SELECT u.npub, u.pubkey, u.display_name, u.bio, u.avatar_url, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
+        "SELECT u.npub, u.pubkey, u.name, u.display_name, u.bio, u.avatar_url, u.nip05, u.is_profile_public, u.show_online_status, u.created_at, u.updated_at, \
                 f.created_at AS relation_created_at, {relation_column} AS relation_pubkey, \
                 {SORT_KEY_LOWER_EXPR} AS sort_key_normalized \
              FROM users u \
@@ -229,9 +229,11 @@ impl UserRepository for SqliteRepository {
         sqlx::query(INSERT_USER)
             .bind(user.npub())
             .bind(user.pubkey())
+            .bind(&user.name)
             .bind(&user.profile.display_name)
             .bind(&user.profile.bio)
             .bind(&user.profile.avatar_url)
+            .bind(&user.nip05)
             .bind(if user.public_profile { 1 } else { 0 })
             .bind(if user.show_online_status { 1 } else { 0 })
             .bind(user.created_at.timestamp_millis())
@@ -287,9 +289,11 @@ impl UserRepository for SqliteRepository {
 
     async fn update_user(&self, user: &User) -> Result<(), AppError> {
         sqlx::query(UPDATE_USER)
+            .bind(&user.name)
             .bind(&user.profile.display_name)
             .bind(&user.profile.bio)
             .bind(&user.profile.avatar_url)
+            .bind(&user.nip05)
             .bind(if user.public_profile { 1 } else { 0 })
             .bind(if user.show_online_status { 1 } else { 0 })
             .bind(user.updated_at.timestamp_millis())
@@ -409,5 +413,91 @@ impl UserRepository for SqliteRepository {
             result.push(row.try_get::<String, _>("follower_pubkey")?);
         }
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::database::connection_pool::ConnectionPool;
+
+    async fn setup_repository() -> SqliteRepository {
+        let pool = ConnectionPool::new("sqlite::memory:?cache=shared")
+            .await
+            .expect("failed to create pool");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS users (
+                npub TEXT PRIMARY KEY NOT NULL,
+                pubkey TEXT NOT NULL UNIQUE,
+                name TEXT,
+                display_name TEXT,
+                bio TEXT,
+                avatar_url TEXT,
+                nip05 TEXT,
+                is_profile_public INTEGER NOT NULL DEFAULT 1,
+                show_online_status INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            "#,
+        )
+        .execute(pool.get_pool())
+        .await
+        .expect("failed to create users table");
+
+        SqliteRepository::new(pool)
+    }
+
+    #[tokio::test]
+    async fn update_user_persists_name_and_nip05() {
+        let repo = setup_repository().await;
+        let mut user = User::new("npub1alice".to_string(), "pubkey_alice".to_string());
+
+        user.profile.display_name = "Alice".to_string();
+        user.profile.bio = "initial".to_string();
+        repo.create_user(&user).await.expect("user created");
+
+        user.name = Some("alice".to_string());
+        user.nip05 = Some("alice@example.com".to_string());
+        user.profile.display_name = "Alice Wonderland".to_string();
+        user.profile.bio = "updated bio".to_string();
+        user.profile.avatar_url = Some("https://example.com/avatar.png".to_string());
+        repo.update_user(&user).await.expect("user updated");
+
+        let loaded = repo
+            .get_user(&user.npub)
+            .await
+            .expect("user loaded")
+            .expect("user exists");
+
+        assert_eq!(loaded.name.as_deref(), Some("alice"));
+        assert_eq!(loaded.nip05.as_deref(), Some("alice@example.com"));
+        assert_eq!(loaded.profile.display_name, "Alice Wonderland");
+        assert_eq!(loaded.profile.bio, "updated bio");
+        assert_eq!(
+            loaded.profile.avatar_url.as_deref(),
+            Some("https://example.com/avatar.png")
+        );
+    }
+
+    #[tokio::test]
+    async fn search_users_restores_name_and_nip05_from_row_mapper() {
+        let repo = setup_repository().await;
+        let mut user = User::new("npub1bob".to_string(), "pubkey_bob".to_string());
+
+        user.profile.display_name = "Bob".to_string();
+        repo.create_user(&user).await.expect("user created");
+
+        user.name = Some("bobby".to_string());
+        user.nip05 = Some("bobby@example.com".to_string());
+        user.profile.display_name = "Bobby".to_string();
+        repo.update_user(&user).await.expect("user updated");
+
+        let users = repo.search_users("Bobby", 10).await.expect("search users");
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].name.as_deref(), Some("bobby"));
+        assert_eq!(users[0].nip05.as_deref(), Some("bobby@example.com"));
     }
 }
