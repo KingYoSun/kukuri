@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import type { Post } from '@/stores/types';
 import type { TopicTimelineEntry } from '@/hooks/usePosts';
@@ -79,5 +79,23 @@ describe('TimelineThreadCard', () => {
     expect(screen.getByTestId('timeline-thread-card-thread-2')).toBeInTheDocument();
     expect(screen.queryByTestId('timeline-thread-first-reply-thread-2')).toBeNull();
     expect(screen.getByTestId('mock-post-card-parent-2')).toHaveTextContent('Only parent content');
+  });
+
+  it('親投稿クリックで preview コールバックを呼び出す', () => {
+    const onParentPostClick = vi.fn();
+    const entry: TopicTimelineEntry = {
+      threadUuid: 'thread-3',
+      parentPost: buildPost('parent-3', 'Parent for preview'),
+      firstReply: null,
+      replyCount: 1,
+      lastActivityAt: 1_700_001_500,
+    };
+
+    render(
+      <TimelineThreadCard entry={entry} topicId="topic-1" onParentPostClick={onParentPostClick} />,
+    );
+
+    fireEvent.click(screen.getByTestId('timeline-thread-parent-thread-3'));
+    expect(onParentPostClick).toHaveBeenCalledWith('thread-3');
   });
 });

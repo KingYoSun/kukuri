@@ -1,10 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { createFileRoute, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTopicStore } from '@/stores';
 import { useTopicTimeline } from '@/hooks';
 import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import { PostComposer } from '@/components/posts/PostComposer';
+import { ThreadPreviewPane } from '@/components/posts/ThreadPreviewPane';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Hash, PlusCircle, Loader2, MoreVertical, Edit, Trash2, ListTree } from 'lucide-react';
@@ -19,13 +20,14 @@ import {
 import { TopicFormModal } from '@/components/topics/TopicFormModal';
 import { TopicDeleteDialog } from '@/components/topics/TopicDeleteDialog';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
+import { cn } from '@/lib/utils';
 import i18n from '@/i18n';
 
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
 });
 
-function TopicPage() {
+export function TopicPage() {
   const { t } = useTranslation();
   const { topicId } = Route.useParams();
   const navigate = useNavigate();
@@ -35,8 +37,24 @@ function TopicPage() {
   const [showComposer, setShowComposer] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [previewThreadUuid, setPreviewThreadUuid] = useState<string | null>(null);
   const isThreadRoute = currentPathname.startsWith(`/topics/${topicId}/threads`);
   const isJoined = joinedTopics.includes(topicId);
+
+  useEffect(() => {
+    setPreviewThreadUuid(null);
+  }, [topicId]);
+
+  useEffect(() => {
+    if (!previewThreadUuid || !timelineEntries) {
+      return;
+    }
+
+    const previewExists = timelineEntries.some((entry) => entry.threadUuid === previewThreadUuid);
+    if (!previewExists) {
+      setPreviewThreadUuid(null);
+    }
+  }, [previewThreadUuid, timelineEntries]);
 
   if (isThreadRoute) {
     return <Outlet />;
@@ -87,6 +105,26 @@ function TopicPage() {
   const handlePostSuccess = () => {
     setShowComposer(false);
     refetch();
+  };
+
+  const handleOpenThreadPreview = (threadUuid: string) => {
+    setPreviewThreadUuid(threadUuid);
+  };
+
+  const handleCloseThreadPreview = () => {
+    setPreviewThreadUuid(null);
+  };
+
+  const handleOpenFullThread = () => {
+    if (!previewThreadUuid) {
+      return;
+    }
+
+    navigate({
+      to: '/topics/$topicId/threads/$threadUuid',
+      params: { topicId, threadUuid: previewThreadUuid },
+    });
+    setPreviewThreadUuid(null);
   };
 
   return (
@@ -162,21 +200,44 @@ function TopicPage() {
         />
       )}
 
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : !timelineEntries || timelineEntries.length === 0 ? (
-          <Alert>
-            <AlertDescription>
-              {isJoined ? t('topics.noPostsYet') : t('topics.joinToSeePosts')}
-            </AlertDescription>
-          </Alert>
-        ) : (
-          timelineEntries.map((entry) => (
-            <TimelineThreadCard key={entry.threadUuid} entry={entry} topicId={topicId} />
-          ))
+      <div
+        className={cn(
+          'grid gap-4',
+          previewThreadUuid
+            ? 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]'
+            : 'grid-cols-1',
+        )}
+      >
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : !timelineEntries || timelineEntries.length === 0 ? (
+            <Alert>
+              <AlertDescription>
+                {isJoined ? t('topics.noPostsYet') : t('topics.joinToSeePosts')}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            timelineEntries.map((entry) => (
+              <TimelineThreadCard
+                key={entry.threadUuid}
+                entry={entry}
+                topicId={topicId}
+                onParentPostClick={handleOpenThreadPreview}
+              />
+            ))
+          )}
+        </div>
+
+        {previewThreadUuid && (
+          <ThreadPreviewPane
+            topicId={topicId}
+            threadUuid={previewThreadUuid}
+            onClose={handleCloseThreadPreview}
+            onOpenFullThread={handleOpenFullThread}
+          />
         )}
       </div>
 
