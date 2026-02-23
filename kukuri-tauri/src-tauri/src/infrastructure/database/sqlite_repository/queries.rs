@@ -176,24 +176,6 @@ pub(super) const SELECT_TOPIC_TIMELINE_SUMMARIES: &str = r#"
                 AND er.deleted = 0
           )
         GROUP BY et.thread_uuid, et.root_event_id
-    ),
-    standalone AS (
-        SELECT
-            e.event_id AS thread_uuid,
-            e.event_id AS root_event_id,
-            CAST(NULL AS TEXT) AS first_reply_event_id,
-            0 AS reply_count,
-            e.created_at AS last_activity_at
-        FROM events e
-        WHERE e.kind = 1
-          AND e.deleted = 0
-          AND e.tags LIKE '%' || ?2 || '%'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM event_threads et
-              WHERE et.event_id = e.event_id
-                AND et.topic_id = ?1
-          )
     )
     SELECT
         thread_uuid,
@@ -201,13 +183,9 @@ pub(super) const SELECT_TOPIC_TIMELINE_SUMMARIES: &str = r#"
         first_reply_event_id,
         reply_count,
         last_activity_at
-    FROM (
-        SELECT * FROM threaded
-        UNION ALL
-        SELECT * FROM standalone
-    )
+    FROM threaded
     ORDER BY last_activity_at DESC, root_event_id DESC
-    LIMIT ?3
+    LIMIT ?2
 "#;
 
 pub(super) const SELECT_POSTS_BY_THREAD: &str = r#"
