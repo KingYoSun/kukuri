@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { createFileRoute, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTopicStore } from '@/stores';
-import { useTopicTimeline } from '@/hooks';
+import { useRealtimeTimeline, useTopicTimeline } from '@/hooks';
 import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import { PostComposer } from '@/components/posts/PostComposer';
 import { ThreadPreviewPane } from '@/components/posts/ThreadPreviewPane';
+import { TimelineModeToggle } from '@/components/posts/TimelineModeToggle';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Hash, PlusCircle, Loader2, MoreVertical, Edit, Trash2, ListTree } from 'lucide-react';
@@ -22,6 +23,7 @@ import { TopicDeleteDialog } from '@/components/topics/TopicDeleteDialog';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { cn } from '@/lib/utils';
 import i18n from '@/i18n';
+import { useUIStore } from '@/stores/uiStore';
 
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
@@ -33,13 +35,29 @@ export function TopicPage() {
   const navigate = useNavigate();
   const currentPathname = useLocation({ select: (location) => location.pathname });
   const { topics, joinedTopics, currentTopic, pendingTopics } = useTopicStore();
-  const { data: timelineEntries, isLoading, refetch } = useTopicTimeline(topicId);
+  const timelineUpdateMode = useUIStore((state) => state.timelineUpdateMode);
+  const setTimelineUpdateMode = useUIStore((state) => state.setTimelineUpdateMode);
+  const {
+    data: timelineEntries,
+    isLoading,
+    refetch,
+  } = useTopicTimeline(topicId, timelineUpdateMode);
   const [showComposer, setShowComposer] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [previewThreadUuid, setPreviewThreadUuid] = useState<string | null>(null);
   const isThreadRoute = currentPathname.startsWith(`/topics/${topicId}/threads`);
   const isJoined = joinedTopics.includes(topicId);
+
+  const handleFallbackToStandard = useCallback(() => {
+    setTimelineUpdateMode('standard');
+  }, [setTimelineUpdateMode]);
+
+  useRealtimeTimeline({
+    topicId,
+    mode: timelineUpdateMode,
+    onFallbackToStandard: handleFallbackToStandard,
+  });
 
   useEffect(() => {
     setPreviewThreadUuid(null);
@@ -107,6 +125,10 @@ export function TopicPage() {
     refetch();
   };
 
+  const handleTimelineModeChange = (mode: 'standard' | 'realtime') => {
+    setTimelineUpdateMode(mode);
+  };
+
   const handleOpenThreadPreview = (threadUuid: string) => {
     setPreviewThreadUuid(threadUuid);
   };
@@ -144,7 +166,8 @@ export function TopicPage() {
               {topic.lastActive ? new Date(topic.lastActive * 1000).toLocaleDateString() : '-'}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <TimelineModeToggle mode={timelineUpdateMode} onChange={handleTimelineModeChange} />
             <Button
               variant="outline"
               size="sm"

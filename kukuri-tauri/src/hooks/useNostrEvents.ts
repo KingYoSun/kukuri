@@ -4,8 +4,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { errorHandler } from '@/lib/errorHandler';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
+import { useUIStore } from '@/stores/uiStore';
 import type { NostrEventPayload } from '@/types/nostr';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
+import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
 
 /**
  * Nostrイベントリスナーフック
@@ -25,9 +27,12 @@ export function useNostrEvents() {
         if (payload.kind === 1 || payload.kind === 30078) {
           // React Queryのキャッシュを無効化して最新データを取得
           queryClient.invalidateQueries({ queryKey: ['posts'] });
-          queryClient.invalidateQueries({ queryKey: ['topicTimeline'] });
-          queryClient.invalidateQueries({ queryKey: ['topicThreads'] });
-          queryClient.invalidateQueries({ queryKey: ['threadPosts'] });
+          const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
+          if (timelineUpdateMode === 'standard') {
+            queryClient.invalidateQueries({ queryKey: ['topicTimeline'] });
+            queryClient.invalidateQueries({ queryKey: ['topicThreads'] });
+            queryClient.invalidateQueries({ queryKey: ['threadPosts'] });
+          }
 
           // トピック投稿の場合、トピックの投稿数を更新
           if (payload.kind === 30078) {
@@ -35,6 +40,10 @@ export function useNostrEvents() {
             if (topicTag?.[1]) {
               updateTopicPostCount(topicTag[1], 1);
             }
+            dispatchTimelineRealtimeDelta({
+              source: 'nostr',
+              payload,
+            });
           }
 
           // リアルタイム更新イベントを発火

@@ -7,6 +7,7 @@ import type { Topic } from '@/stores';
 
 const hooksMocks = vi.hoisted(() => ({
   useTopicTimelineMock: vi.fn(),
+  useRealtimeTimelineMock: vi.fn(),
 }));
 
 const storeMocks = vi.hoisted(() => ({
@@ -18,12 +19,28 @@ const routerMocks = vi.hoisted(() => ({
   pathname: '/topics/topic-1',
 }));
 
+const uiStoreMocks = vi.hoisted(() => {
+  const state = {
+    timelineUpdateMode: 'standard' as const,
+    setTimelineUpdateMode: vi.fn(),
+  };
+  return {
+    state,
+    useUIStoreMock: vi.fn((selector: (value: typeof state) => unknown) => selector(state)),
+  };
+});
+
 vi.mock('@/hooks', () => ({
   useTopicTimeline: hooksMocks.useTopicTimelineMock,
+  useRealtimeTimeline: hooksMocks.useRealtimeTimelineMock,
 }));
 
 vi.mock('@/stores', () => ({
   useTopicStore: storeMocks.useTopicStoreMock,
+}));
+
+vi.mock('@/stores/uiStore', () => ({
+  useUIStore: uiStoreMocks.useUIStoreMock,
 }));
 
 vi.mock('@/components/posts/TimelineThreadCard', () => ({
@@ -142,11 +159,13 @@ describe('TopicPage right pane preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routerMocks.pathname = '/topics/topic-1';
+    uiStoreMocks.state.timelineUpdateMode = 'standard';
     hooksMocks.useTopicTimelineMock.mockReturnValue({
       data: [buildEntry()],
       isLoading: false,
       refetch: vi.fn(),
     });
+    hooksMocks.useRealtimeTimelineMock.mockReturnValue(undefined);
     storeMocks.useTopicStoreMock.mockReturnValue({
       topics: new Map([['topic-1', buildTopic()]]),
       joinedTopics: ['topic-1'],
@@ -177,5 +196,14 @@ describe('TopicPage right pane preview', () => {
       to: '/topics/$topicId/threads/$threadUuid',
       params: { topicId: 'topic-1', threadUuid: 'thread-1' },
     });
+  });
+
+  it('timeline mode toggle で realtime 選択時に store setter が呼ばれる', async () => {
+    const user = userEvent.setup();
+    render(<TopicPage />);
+
+    await user.click(screen.getByTestId('timeline-mode-toggle-realtime'));
+
+    expect(uiStoreMocks.state.setTimelineUpdateMode).toHaveBeenCalledWith('realtime');
   });
 });
