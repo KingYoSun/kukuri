@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useP2PStore, type P2PMessage, type PeerInfo } from '@/stores/p2pStore';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
+import { useUIStore } from '@/stores/uiStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
@@ -11,6 +12,7 @@ import { pubkeyToNpub } from '@/lib/utils/nostr';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 import i18n from '@/i18n';
+import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
 
 interface P2PMessageEvent {
   topic_id: string;
@@ -73,9 +75,18 @@ export function useP2PEventListener() {
         addPost(post);
         queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
         queryClient.invalidateQueries({ queryKey: ['posts'] });
-        queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
-        queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
-        queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
+        const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
+        if (timelineUpdateMode === 'standard') {
+          queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
+          queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
+          queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
+        } else {
+          dispatchTimelineRealtimeDelta({
+            source: 'p2p',
+            topicId,
+            message,
+          });
+        }
         updateTopicPostCount(topicId, 1);
       } catch (error) {
         errorHandler.log('Failed to process P2P message as post', error, {

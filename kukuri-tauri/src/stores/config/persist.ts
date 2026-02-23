@@ -73,10 +73,10 @@ export const createTopicPersistConfig = <
 });
 
 export const createUiPersistConfig = <
-  T extends { theme: 'light' | 'dark' | 'system' },
+  T extends { theme: 'light' | 'dark' | 'system'; timelineUpdateMode: 'standard' | 'realtime' },
 >(): PersistOptions<T> => ({
   name: persistKeys.ui,
-  partialize: createPartializer<T, 'theme'>(['theme']),
+  partialize: createPartializer<T, 'theme' | 'timelineUpdateMode'>(['theme', 'timelineUpdateMode']),
 });
 
 export const createKeyManagementPersistConfig = <

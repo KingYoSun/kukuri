@@ -16,6 +16,7 @@ import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { toast } from 'sonner';
 import i18n from '@/i18n';
 import { v4 as uuidv4 } from 'uuid';
+import type { TimelineUpdateMode } from '@/stores/uiStore';
 
 export interface TopicTimelineEntry {
   threadUuid: string;
@@ -40,7 +41,7 @@ const mapTopicTimelineEntry = async (entry: ApiTopicTimelineEntry): Promise<Topi
   };
 };
 
-const collectTimelineStorePosts = (entries: TopicTimelineEntry[]): Post[] => {
+export const collectTimelineStorePosts = (entries: TopicTimelineEntry[]): Post[] => {
   const postMap = new Map<string, Post>();
   entries.forEach((entry) => {
     postMap.set(entry.parentPost.id, entry.parentPost);
@@ -98,7 +99,7 @@ export const useTimelinePosts = () => {
   });
 };
 
-export const useTopicTimeline = (topicId: string) => {
+export const useTopicTimeline = (topicId: string, mode: TimelineUpdateMode = 'standard') => {
   const { setPosts } = usePostStore();
 
   return useQuery({
@@ -109,7 +110,7 @@ export const useTopicTimeline = (topicId: string) => {
       return entries;
     },
     enabled: !!topicId,
-    refetchInterval: 30000,
+    refetchInterval: mode === 'standard' ? 30000 : false,
   });
 };
 

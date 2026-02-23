@@ -5,10 +5,12 @@ import { withPersist } from './utils/persistHelpers';
 
 export type SidebarCategory = 'topics' | 'search' | 'trending' | 'following';
 export type UITheme = 'light' | 'dark' | 'system';
+export type TimelineUpdateMode = 'standard' | 'realtime';
 
 interface UIState {
   sidebarOpen: boolean;
   theme: UITheme;
+  timelineUpdateMode: TimelineUpdateMode;
   isLoading: boolean;
   error: string | null;
   activeSidebarCategory: SidebarCategory | null;
@@ -18,6 +20,7 @@ interface UIStore extends UIState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setTheme: (theme: UITheme) => void;
+  setTimelineUpdateMode: (mode: TimelineUpdateMode) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
@@ -104,6 +107,7 @@ const createInitialState = (): UIState => {
   return {
     sidebarOpen: true,
     theme: resolveThemeFromStorage(storage) ?? DEFAULT_THEME,
+    timelineUpdateMode: 'standard',
     isLoading: false,
     error: null,
     activeSidebarCategory: null,
@@ -125,6 +129,14 @@ export const useUIStore = create<UIStore>()(
           }
           saveLegacyTheme(theme);
           return { theme };
+        }),
+
+      setTimelineUpdateMode: (timelineUpdateMode: TimelineUpdateMode) =>
+        set((state) => {
+          if (state.timelineUpdateMode === timelineUpdateMode) {
+            return state;
+          }
+          return { timelineUpdateMode };
         }),
 
       setLoading: (isLoading: boolean) => set({ isLoading }),

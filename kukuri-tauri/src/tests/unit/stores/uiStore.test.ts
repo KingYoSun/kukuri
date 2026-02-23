@@ -7,6 +7,7 @@ describe('uiStore', () => {
     useUIStore.setState({
       sidebarOpen: true,
       theme: 'system',
+      timelineUpdateMode: 'standard',
       isLoading: false,
       error: null,
       activeSidebarCategory: null,
@@ -17,6 +18,7 @@ describe('uiStore', () => {
     const state = useUIStore.getState();
     expect(state.sidebarOpen).toBe(true);
     expect(state.theme).toBe('system');
+    expect(state.timelineUpdateMode).toBe('standard');
     expect(state.isLoading).toBe(false);
     expect(state.error).toBeNull();
     expect(state.activeSidebarCategory).toBeNull();
@@ -50,6 +52,15 @@ describe('uiStore', () => {
 
     setTheme('system');
     expect(useUIStore.getState().theme).toBe('system');
+  });
+
+  it('setTimelineUpdateModeメソッドが正しく動作すること', () => {
+    const { setTimelineUpdateMode } = useUIStore.getState();
+    setTimelineUpdateMode('realtime');
+    expect(useUIStore.getState().timelineUpdateMode).toBe('realtime');
+
+    setTimelineUpdateMode('standard');
+    expect(useUIStore.getState().timelineUpdateMode).toBe('standard');
   });
 
   it('setLoadingメソッドが正しく動作すること', () => {
