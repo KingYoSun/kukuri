@@ -97,3 +97,40 @@ impl crate::presentation::dto::Validate for UpdatePrivacySettingsRequest {
         Ok(())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateUserProfileRequest {
+    pub npub: String,
+    pub name: String,
+    pub display_name: String,
+    pub about: String,
+    pub picture: String,
+    pub nip05: String,
+}
+
+impl crate::presentation::dto::Validate for UpdateUserProfileRequest {
+    fn validate(&self) -> Result<(), String> {
+        if self.npub.trim().is_empty() {
+            return Err("npub is required".to_string());
+        }
+        if self.name.trim().is_empty() {
+            return Err("name is required".to_string());
+        }
+        if self.name.chars().count() > 100 {
+            return Err("name is too long (max 100 characters)".to_string());
+        }
+        if self.display_name.chars().count() > 100 {
+            return Err("display_name is too long (max 100 characters)".to_string());
+        }
+        if self.about.chars().count() > 1_000 {
+            return Err("about is too long (max 1000 characters)".to_string());
+        }
+        if self.picture.chars().count() > 1_024 {
+            return Err("picture is too long (max 1024 characters)".to_string());
+        }
+        if self.nip05.chars().count() > 255 {
+            return Err("nip05 is too long (max 255 characters)".to_string());
+        }
+        Ok(())
+    }
+}

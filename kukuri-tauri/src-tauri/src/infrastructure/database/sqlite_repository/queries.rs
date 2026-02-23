@@ -365,24 +365,28 @@ pub(super) const INSERT_USER: &str = r#"
     INSERT INTO users (
         npub,
         pubkey,
+        name,
         display_name,
         bio,
         avatar_url,
+        nip05,
         is_profile_public,
         show_online_status,
         created_at,
         updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#;
 
 pub(super) const SELECT_USER_BY_NPUB: &str = r#"
     SELECT
         npub,
         pubkey,
+        name,
         display_name,
         bio,
         avatar_url,
+        nip05,
         is_profile_public,
         show_online_status,
         created_at,
@@ -395,9 +399,11 @@ pub(super) const SELECT_USER_BY_PUBKEY: &str = r#"
     SELECT
         npub,
         pubkey,
+        name,
         display_name,
         bio,
         avatar_url,
+        nip05,
         is_profile_public,
         show_online_status,
         created_at,
@@ -410,9 +416,11 @@ pub(super) const SEARCH_USERS: &str = r#"
     SELECT
         npub,
         pubkey,
+        name,
         display_name,
         bio,
         avatar_url,
+        nip05,
         is_profile_public,
         show_online_status,
         created_at,
@@ -429,9 +437,11 @@ pub(super) const SEARCH_USERS: &str = r#"
 pub(super) const UPDATE_USER: &str = r#"
     UPDATE users
     SET
+        name = ?,
         display_name = ?,
         bio = ?,
         avatar_url = ?,
+        nip05 = ?,
         is_profile_public = ?,
         show_online_status = ?,
         updated_at = ?

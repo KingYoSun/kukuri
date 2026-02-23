@@ -112,6 +112,13 @@
     "accountNotFound": "アカウント情報が見つかりません",
     "avatarUploadInfoMissing": "アバターのアップロードに必要な情報が不足しています",
     "profileUpdateFailed": "プロフィールの更新に失敗しました",
+    "profileUpdateFailedWithDetails": "プロフィールの保存中に一部失敗しました（{{details}}）",
+    "profileSaveStepAvatar": "アバター更新",
+    "profileSaveStepPrivacy": "プライバシー設定保存",
+    "profileSaveStepLocalProfile": "ローカルプロフィール保存",
+    "profileSaveStepNostrMetadata": "Nostr メタデータ保存",
+    "profileSaveStepAvatarSync": "アバター同期",
+    "profileSaveStepNostrInitialize": "Nostr 初期化",
     "profileUpdated": "プロフィールを更新しました",
     "editProfile": "プロフィール編集",
     "editProfileDescription": "表示情報と自己紹介を更新します"

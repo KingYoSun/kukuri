@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
 import { useOfflineStore } from '@/stores/offlineStore';
@@ -13,10 +14,13 @@ import { TauriApi } from '@/lib/api/tauri';
 import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
 import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
 import { useTheme } from '@/hooks/useTheme';
+import { buildProfileSavePayload, collectUniqueSaveErrors } from '@/lib/profile/profileSave';
+import { syncProfileQueryCaches } from '@/lib/profile/profileQuerySync';
 
 export function ProfileSetup() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { currentUser, updateUser } = useAuthStore();
   useTheme(); // Apply theme to HTML element
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
@@ -61,18 +65,25 @@ export function ProfileSetup() {
 
     setIsLoading(true);
     shouldNavigateRef.current = false;
-    let hasError = false;
+    const saveErrors: string[] = [];
+    const pushSaveError = (stepLabel: string, error?: unknown) => {
+      const details =
+        error instanceof Error && error.message.trim().length > 0
+          ? `${stepLabel}: ${error.message}`
+          : stepLabel;
+      saveErrors.push(details);
+    };
     let updatedPicture = profile.picture || currentUser?.picture || '';
     let updatedAvatar = currentUser?.avatar ?? null;
     let nostrPicture =
       profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
-    const displayName = profile.displayName || profile.name;
+    const accountNpub = currentUser?.npub?.trim() || '';
 
     try {
       try {
         await initializeNostr();
       } catch (nostrInitError) {
-        hasError = true;
+        pushSaveError(t('auth.profileSaveStepNostrInitialize'), nostrInitError);
         errorHandler.log('Failed to initialize Nostr for profile setup', nostrInitError, {
           context: 'ProfileSetup.handleSubmit.initializeNostr',
         });
@@ -86,7 +97,7 @@ export function ProfileSetup() {
             showOnlineStatus,
           });
         } catch (privacyError) {
-          hasError = true;
+          pushSaveError(t('auth.profileSaveStepPrivacy'), privacyError);
           // プライバシー更新に失敗してもログだけ出して続行
           errorHandler.log('Privacy update skipped (proceeding anyway)', privacyError, {
             context: 'ProfileSetup.handleSubmit.updatePrivacySettings',
@@ -111,60 +122,91 @@ export function ProfileSetup() {
           updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
           nostrPicture = updatedAvatar.nostrUri;
         } catch (avatarError) {
-          hasError = true;
+          pushSaveError(t('auth.profileSaveStepAvatar'), avatarError);
           errorHandler.log('ProfileSetup.avatarUploadFailed', avatarError, {
             context: 'ProfileSetup.handleSubmit.avatarUpload',
           });
         }
       }
 
-      if (!currentUser?.npub) {
+      if (!accountNpub) {
         throw new Error('Missing npub for profile setup');
       }
-
-      try {
-        await updateNostrMetadata({
-          name: profile.name,
-          display_name: profile.displayName || profile.name,
-          about: profile.about,
-          picture: nostrPicture,
-          nip05: profile.nip05,
-          kukuri_privacy: {
-            public_profile: publicProfile,
-            show_online_status: showOnlineStatus,
-          },
-        });
-      } catch (nostrError) {
-        hasError = true;
-        errorHandler.log('Failed to update Nostr metadata', nostrError, {
-          context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
-        });
+      if (!currentUser) {
+        throw new Error('Missing current user for profile setup');
       }
 
-      // 繝ｭ繝ｼ繧ｫ繝ｫ繧ｹ繝医い繧呈峩譁ｰ
-      updateUser({
+      const payload = buildProfileSavePayload({
+        npub: accountNpub,
         name: profile.name,
-        displayName,
+        displayName: profile.displayName,
         about: profile.about,
-        picture: updatedPicture,
+        picture: nostrPicture,
         nip05: profile.nip05,
-        avatar: updatedAvatar,
         publicProfile,
         showOnlineStatus,
       });
 
       try {
+        await TauriApi.updateUserProfile(payload.localProfile);
+      } catch (localProfileError) {
+        pushSaveError(t('auth.profileSaveStepLocalProfile'), localProfileError);
+        errorHandler.log('ProfileSetup.localProfileUpdateFailed', localProfileError, {
+          context: 'ProfileSetup.handleSubmit.updateUserProfile',
+        });
+      }
+
+      try {
+        await updateNostrMetadata(payload.nostrMetadata);
+      } catch (nostrError) {
+        pushSaveError(t('auth.profileSaveStepNostrMetadata'), nostrError);
+        errorHandler.log('Failed to update Nostr metadata', nostrError, {
+          context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
+        });
+      }
+
+      const updatedUser = {
+        ...currentUser,
+        name: payload.localProfile.name,
+        displayName: payload.displayName,
+        about: payload.localProfile.about,
+        picture: updatedPicture,
+        nip05: payload.localProfile.nip05,
+        avatar: updatedAvatar,
+        publicProfile,
+        showOnlineStatus,
+      };
+
+      updateUser({
+        name: updatedUser.name,
+        displayName: updatedUser.displayName,
+        about: updatedUser.about,
+        picture: updatedUser.picture,
+        nip05: updatedUser.nip05,
+        avatar: updatedUser.avatar,
+        publicProfile: updatedUser.publicProfile,
+        showOnlineStatus: updatedUser.showOnlineStatus,
+      });
+      syncProfileQueryCaches(queryClient, updatedUser);
+
+      try {
         await syncAvatar({ force: true });
       } catch (syncError) {
-        hasError = true;
+        pushSaveError(t('auth.profileSaveStepAvatarSync'), syncError);
         errorHandler.log('ProfileSetup.avatarSyncFailed', syncError, {
           context: 'ProfileSetup.handleSubmit',
         });
       } finally {
         useOfflineStore.getState().updateLastSyncedAt();
       }
-      if (hasError) {
-        toast.error(t('auth.profileSavedPartialSyncFailed'));
+
+      const uniqueErrors = collectUniqueSaveErrors(saveErrors);
+      if (uniqueErrors.length > 0) {
+        toast.error(
+          t('auth.profileUpdateFailedWithDetails', {
+            details: uniqueErrors.join(' / '),
+          }),
+        );
       } else {
         toast.success(t('auth.profileSetupSuccess'));
       }

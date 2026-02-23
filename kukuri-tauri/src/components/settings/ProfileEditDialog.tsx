@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
   Dialog,
@@ -22,6 +23,8 @@ import { errorHandler } from '@/lib/errorHandler';
 import { TauriApi } from '@/lib/api/tauri';
 import { buildAvatarDataUrl, buildUserAvatarMetadata } from '@/lib/profile/avatar';
 import { useProfileAvatarSync } from '@/hooks/useProfileAvatarSync';
+import { buildProfileSavePayload, collectUniqueSaveErrors } from '@/lib/profile/profileSave';
+import { syncProfileQueryCaches } from '@/lib/profile/profileQuerySync';
 
 interface ProfileEditDialogProps {
   open: boolean;
@@ -31,6 +34,7 @@ interface ProfileEditDialogProps {
 export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps) {
   const { t } = useTranslation();
   const { currentUser, updateUser } = useAuthStore();
+  const queryClient = useQueryClient();
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const shouldCloseOnFinallyRef = useRef(false);
@@ -75,10 +79,22 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       toast.error(t('auth.accountNotFound'));
       return;
     }
+    if (!currentUser.npub.trim()) {
+      toast.error(t('auth.accountNotFound'));
+      return;
+    }
 
     shouldCloseOnFinallyRef.current = true;
     setIsSubmitting(true);
-    let hasError = false;
+    const saveErrors: string[] = [];
+    const pushSaveError = (stepLabel: string, error?: unknown) => {
+      const details =
+        error instanceof Error && error.message.trim().length > 0
+          ? `${stepLabel}: ${error.message}`
+          : stepLabel;
+      saveErrors.push(details);
+    };
+
     try {
       let updatedPicture = profile.picture || currentUser.picture || '';
       let updatedAvatar = currentUser.avatar ?? null;
@@ -88,7 +104,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       if (profile.avatarFile) {
         if (!currentUser.npub) {
           toast.error(t('auth.avatarUploadInfoMissing'));
-          hasError = true;
+          pushSaveError(t('auth.profileSaveStepAvatar'));
         } else {
           try {
             const uploadResult = await TauriApi.uploadProfileAvatar({
@@ -102,7 +118,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
             updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
             nostrPicture = updatedAvatar.nostrUri;
           } catch (error) {
-            hasError = true;
+            pushSaveError(t('auth.profileSaveStepAvatar'), error);
             errorHandler.log('ProfileEditDialog.avatarUploadFailed', error, {
               context: 'ProfileEditDialog.handleSubmit',
             });
@@ -118,47 +134,70 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
             showOnlineStatus,
           });
         } catch (error) {
-          hasError = true;
+          pushSaveError(t('auth.profileSaveStepPrivacy'), error);
           errorHandler.log('ProfileEditDialog.privacyUpdateFailed', error, {
             context: 'ProfileEditDialog.handleSubmit',
           });
         }
       }
 
-      try {
-        await updateNostrMetadata({
-          name: profile.name,
-          display_name: profile.displayName || profile.name,
-          about: profile.about,
-          picture: nostrPicture,
-          nip05: profile.nip05,
-          kukuri_privacy: {
-            public_profile: publicProfile,
-            show_online_status: showOnlineStatus,
-          },
-        });
-      } catch (error) {
-        hasError = true;
-        errorHandler.log('ProfileEditDialog.submitFailed', error, {
-          context: 'ProfileEditDialog.handleSubmit',
-        });
-      }
-
-      updateUser({
+      const payload = buildProfileSavePayload({
+        npub: currentUser.npub,
         name: profile.name,
-        displayName: profile.displayName || profile.name,
+        displayName: profile.displayName,
         about: profile.about,
-        picture: updatedPicture,
+        picture: nostrPicture,
         nip05: profile.nip05,
-        avatar: updatedAvatar,
         publicProfile,
         showOnlineStatus,
       });
 
       try {
+        await TauriApi.updateUserProfile(payload.localProfile);
+      } catch (error) {
+        pushSaveError(t('auth.profileSaveStepLocalProfile'), error);
+        errorHandler.log('ProfileEditDialog.localProfileUpdateFailed', error, {
+          context: 'ProfileEditDialog.handleSubmit',
+        });
+      }
+
+      try {
+        await updateNostrMetadata(payload.nostrMetadata);
+      } catch (error) {
+        pushSaveError(t('auth.profileSaveStepNostrMetadata'), error);
+        errorHandler.log('ProfileEditDialog.submitFailed', error, {
+          context: 'ProfileEditDialog.handleSubmit',
+        });
+      }
+
+      const updatedUser = {
+        ...currentUser,
+        name: payload.localProfile.name,
+        displayName: payload.displayName,
+        about: payload.localProfile.about,
+        picture: updatedPicture,
+        nip05: payload.localProfile.nip05,
+        avatar: updatedAvatar,
+        publicProfile,
+        showOnlineStatus,
+      };
+
+      updateUser({
+        name: updatedUser.name,
+        displayName: updatedUser.displayName,
+        about: updatedUser.about,
+        picture: updatedUser.picture,
+        nip05: updatedUser.nip05,
+        avatar: updatedUser.avatar,
+        publicProfile: updatedUser.publicProfile,
+        showOnlineStatus: updatedUser.showOnlineStatus,
+      });
+      syncProfileQueryCaches(queryClient, updatedUser);
+
+      try {
         await syncAvatar({ force: true });
       } catch (error) {
-        hasError = true;
+        pushSaveError(t('auth.profileSaveStepAvatarSync'), error);
         errorHandler.log('ProfileEditDialog.avatarSyncFailed', error, {
           context: 'ProfileEditDialog.handleSubmit',
         });
@@ -166,8 +205,13 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         useOfflineStore.getState().updateLastSyncedAt();
       }
 
-      if (hasError) {
-        toast.error(t('auth.profileUpdateFailed'));
+      const uniqueErrors = collectUniqueSaveErrors(saveErrors);
+      if (uniqueErrors.length > 0) {
+        toast.error(
+          t('auth.profileUpdateFailedWithDetails', {
+            details: uniqueErrors.join(' / '),
+          }),
+        );
       } else {
         toast.success(t('auth.profileUpdated'));
       }

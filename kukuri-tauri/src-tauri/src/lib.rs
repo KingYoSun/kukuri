@@ -98,6 +98,7 @@ pub fn run() {
             presentation::commands::get_user_by_pubkey,
             presentation::commands::search_users,
             presentation::commands::update_privacy_settings,
+            presentation::commands::update_user_profile,
             presentation::commands::follow_user,
             presentation::commands::unfollow_user,
             presentation::commands::get_followers,

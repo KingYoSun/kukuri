@@ -7,6 +7,7 @@ use crate::application::services::user_search_service::{
 use crate::application::services::{
     OfflineService, ProfileAvatarService, UploadProfileAvatarInput, UserSearchService, UserService,
 };
+use crate::domain::entities::UserMetadata;
 use crate::domain::entities::offline::CacheMetadataUpdate;
 use crate::domain::value_objects::offline::{CacheKey, CacheType};
 use crate::presentation::dto::{
@@ -17,13 +18,14 @@ use crate::presentation::dto::{
     },
     user_dto::{
         GetFollowersRequest, GetFollowingRequest, PaginatedUserProfiles, SearchUsersRequest,
-        SearchUsersResponse, UpdatePrivacySettingsRequest, UserProfile as UserProfileDto,
+        SearchUsersResponse, UpdatePrivacySettingsRequest, UpdateUserProfileRequest,
+        UserProfile as UserProfileDto,
     },
 };
 use crate::shared::AppError;
 use chrono::{Duration, Utc};
 use nostr_sdk::prelude::{FromBech32, PublicKey};
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 use tauri::State;
 
@@ -47,11 +49,11 @@ fn map_user_to_profile(user: crate::domain::entities::User) -> UserProfileDto {
 pub async fn get_user(
     npub: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<ApiResponse<Option<Value>>, AppError> {
-    let result = user_service.get_user(&npub).await.and_then(|user| {
-        user.map(|u| serde_json::to_value(u).map_err(AppError::from))
-            .transpose()
-    });
+) -> Result<ApiResponse<Option<UserProfileDto>>, AppError> {
+    let result = user_service
+        .get_user(&npub)
+        .await
+        .map(|user| user.map(map_user_to_profile));
     Ok(ApiResponse::from_result(result))
 }
 
@@ -59,14 +61,11 @@ pub async fn get_user(
 pub async fn get_user_by_pubkey(
     pubkey: String,
     user_service: State<'_, Arc<UserService>>,
-) -> Result<ApiResponse<Option<Value>>, AppError> {
+) -> Result<ApiResponse<Option<UserProfileDto>>, AppError> {
     let result = user_service
         .get_user_by_pubkey(&pubkey)
         .await
-        .and_then(|user| {
-            user.map(|u| serde_json::to_value(u).map_err(AppError::from))
-                .transpose()
-        });
+        .map(|user| user.map(map_user_to_profile));
     Ok(ApiResponse::from_result(result))
 }
 
@@ -129,6 +128,28 @@ pub async fn update_privacy_settings(
             request.show_online_status,
         )
         .await;
+    Ok(ApiResponse::from_result(result))
+}
+
+#[tauri::command]
+pub async fn update_user_profile(
+    request: UpdateUserProfileRequest,
+    user_service: State<'_, Arc<UserService>>,
+) -> Result<ApiResponse<()>, AppError> {
+    request.validate()?;
+
+    let metadata = UserMetadata {
+        name: Some(request.name.trim().to_string()),
+        display_name: Some(request.display_name.trim().to_string()),
+        about: Some(request.about.trim().to_string()),
+        picture: Some(request.picture.trim().to_string()),
+        banner: None,
+        nip05: Some(request.nip05.trim().to_string()),
+        lud16: None,
+        public_profile: None,
+        show_online_status: None,
+    };
+    let result = user_service.update_profile(&request.npub, metadata).await;
     Ok(ApiResponse::from_result(result))
 }
 
