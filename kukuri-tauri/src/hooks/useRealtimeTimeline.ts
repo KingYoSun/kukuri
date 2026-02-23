@@ -335,18 +335,16 @@ export function useRealtimeTimeline({
   }, [flushRealtimeQueue]);
 
   useEffect(() => {
-    if (mode === 'realtime') {
-      fallbackTriggeredRef.current = false;
-      queuedDeltasRef.current = [];
-      seenRealtimePostIdsRef.current.clear();
-      return;
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
     }
 
     queuedDeltasRef.current = [];
     seenRealtimePostIdsRef.current.clear();
-    if (flushTimerRef.current) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
+
+    if (mode === 'realtime') {
+      fallbackTriggeredRef.current = false;
     }
   }, [mode, topicId]);
 

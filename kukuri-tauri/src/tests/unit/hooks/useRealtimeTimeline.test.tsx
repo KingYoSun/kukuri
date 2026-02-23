@@ -207,6 +207,94 @@ describe('useRealtimeTimeline', () => {
     });
   });
 
+  it('トピック切り替え時に pending flush timer を破棄して新トピック差分を適用する', () => {
+    const queryClient = buildQueryClient();
+    queryClient.setQueryData<TopicTimelineEntry[]>(
+      ['topicTimeline', 'topic-1'],
+      [baseTimelineEntry],
+    );
+
+    const topic2BaseEntry: TopicTimelineEntry = {
+      ...baseTimelineEntry,
+      threadUuid: 'topic2-thread-1',
+      parentPost: {
+        ...baseTimelineEntry.parentPost,
+        id: 'topic2-parent-1',
+        topicId: 'topic-2',
+        threadNamespace: 'topic-2/threads/topic2-thread-1',
+        threadUuid: 'topic2-thread-1',
+        threadRootEventId: 'topic2-parent-1',
+      },
+      lastActivityAt: 1_700_000_010,
+    };
+    queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', 'topic-2'], [topic2BaseEntry]);
+
+    const { rerender } = renderHook(
+      ({ topicId }) =>
+        useRealtimeTimeline({
+          topicId,
+          mode: 'realtime',
+          onFallbackToStandard: vi.fn(),
+        }),
+      {
+        wrapper: buildWrapper(queryClient),
+        initialProps: { topicId: 'topic-1' },
+      },
+    );
+
+    const topic1Payload: NostrEventPayload = {
+      id: 'topic1-parent-2',
+      author: 'author-topic1',
+      content: 'topic1 pending delta',
+      created_at: 1_700_000_060,
+      kind: 30078,
+      tags: [
+        ['t', 'topic-1'],
+        ['thread', 'topic-1/threads/topic1-thread-2'],
+        ['thread_uuid', 'topic1-thread-2'],
+      ],
+    };
+
+    const topic2Payload: NostrEventPayload = {
+      id: 'topic2-parent-2',
+      author: 'author-topic2',
+      content: 'topic2 new delta',
+      created_at: 1_700_000_120,
+      kind: 30078,
+      tags: [
+        ['t', 'topic-2'],
+        ['thread', 'topic-2/threads/topic2-thread-2'],
+        ['thread_uuid', 'topic2-thread-2'],
+      ],
+    };
+
+    act(() => {
+      dispatchRealtimeDelta({
+        source: 'nostr',
+        payload: topic1Payload,
+        receivedAt: Date.now(),
+      });
+    });
+
+    rerender({ topicId: 'topic-2' });
+
+    act(() => {
+      dispatchRealtimeDelta({
+        source: 'nostr',
+        payload: topic2Payload,
+        receivedAt: Date.now(),
+      });
+      vi.advanceTimersByTime(750);
+    });
+
+    const topic2Entries = queryClient.getQueryData<TopicTimelineEntry[]>([
+      'topicTimeline',
+      'topic-2',
+    ]);
+    expect(topic2Entries).toHaveLength(2);
+    expect(topic2Entries?.some((entry) => entry.threadUuid === 'topic2-thread-2')).toBe(true);
+  });
+
   it('realtime 中に接続が切れたら standard へフォールバックする', () => {
     const queryClient = buildQueryClient();
     const onFallbackToStandard = vi.fn();
