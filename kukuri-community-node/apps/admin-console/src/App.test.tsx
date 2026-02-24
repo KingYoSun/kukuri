@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
 import { api } from './lib/api';
+import { subscriptionsQueryOptions } from './lib/subscriptionsQuery';
 import { useAuthStore } from './store/authStore';
 import { renderWithQueryClient } from './test/renderWithQueryClient';
 
@@ -18,9 +20,11 @@ vi.mock('./lib/api', () => ({
   }
 }));
 
+let outletContent: ReactNode = null;
+
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  Outlet: () => <div data-testid="app-outlet" />
+  Outlet: () => outletContent ?? <div data-testid="app-outlet" />
 }));
 
 const adminUser = {
@@ -31,6 +35,7 @@ const adminUser = {
 describe('App auth flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    outletContent = null;
     useAuthStore.setState({ user: null, status: 'unknown', error: undefined });
     vi.mocked(api.logout).mockResolvedValue({ status: 'ok' });
     vi.mocked(api.nodeSubscriptions).mockResolvedValue([]);
@@ -129,5 +134,22 @@ describe('App auth flow', () => {
     expect(await screen.findByText('pubkey-active-1')).toBeInTheDocument();
     expect(await screen.findByText('pubkey-active-2')).toBeInTheDocument();
     expect(screen.queryByText('pubkey-latest-paused')).not.toBeInTheDocument();
+  });
+
+  it('サイドバーと購読ページのクエリキーを共有して購読APIの重複呼び出しを防ぐ', async () => {
+    vi.mocked(api.me).mockResolvedValue(adminUser);
+
+    const SubscriptionsOutlet = () => {
+      useQuery(subscriptionsQueryOptions(''));
+      return <div data-testid="subscriptions-outlet" />;
+    };
+    outletContent = <SubscriptionsOutlet />;
+
+    renderWithQueryClient(<App />);
+
+    expect(await screen.findByText('admin')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.subscriptions).toHaveBeenCalledTimes(1);
+    });
   });
 });

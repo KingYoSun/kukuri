@@ -6,6 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Notice } from './comp
 import { api } from './lib/api';
 import { normalizeConnectedNode } from './lib/bootstrap';
 import { errorToMessage } from './lib/errorHandler';
+import { subscriptionsQueryOptions } from './lib/subscriptionsQuery';
 import type { NodeSubscription, SubscriptionRow } from './lib/types';
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/authStore';
@@ -52,8 +53,7 @@ const App = () => {
     enabled: Boolean(user)
   });
   const subscriptionsQuery = useQuery<SubscriptionRow[]>({
-    queryKey: ['subscriptions', 'sidebar'],
-    queryFn: () => api.subscriptions(),
+    ...subscriptionsQueryOptions(''),
     enabled: Boolean(user)
   });
 

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { normalizeConnectedNode } from '../lib/bootstrap';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatJson, formatTimestamp } from '../lib/format';
+import { subscriptionsQueryOptions } from '../lib/subscriptionsQuery';
 import type {
   NodeSubscription,
   Plan,
@@ -171,8 +172,7 @@ export const SubscriptionsPage = () => {
   });
 
   const subscriptionsQuery = useQuery<SubscriptionRow[]>({
-    queryKey: ['subscriptions', subscriptionFilter],
-    queryFn: () => api.subscriptions(subscriptionFilter || undefined)
+    ...subscriptionsQueryOptions(subscriptionFilter)
   });
 
   const usageQuery = useQuery<UsageRow[]>({
