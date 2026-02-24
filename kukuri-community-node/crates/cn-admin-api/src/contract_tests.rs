@@ -3478,6 +3478,17 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     );
     assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(true));
     assert_eq!(payload.get("ref_count").and_then(Value::as_i64), Some(0));
+    assert_eq!(
+        payload.get("connected_user_count").and_then(Value::as_i64),
+        Some(0)
+    );
+    assert_eq!(
+        payload
+            .get("connected_users")
+            .and_then(Value::as_array)
+            .map(std::vec::Vec::len),
+        Some(0)
+    );
 
     let (status, payload) = post_json(
         app.clone(),
@@ -3555,6 +3566,17 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         .get("connected_node_count")
         .and_then(Value::as_i64)
         .is_some());
+    assert_eq!(
+        node_row.get("connected_user_count").and_then(Value::as_i64),
+        Some(1)
+    );
+    let connected_users = node_row
+        .get("connected_users")
+        .and_then(Value::as_array)
+        .expect("connected_users array");
+    assert!(connected_users
+        .iter()
+        .any(|value| value.as_str() == Some(requester_approve.as_str())));
     assert!(node_row.get("updated_at").and_then(Value::as_i64).is_some());
 
     let (status, payload) = put_json(

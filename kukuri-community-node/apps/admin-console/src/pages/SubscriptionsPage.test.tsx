@@ -11,10 +11,6 @@ vi.mock('../lib/api', () => ({
     subscriptionRequests: vi.fn(),
     approveRequest: vi.fn(),
     rejectRequest: vi.fn(),
-    nodeSubscriptions: vi.fn(),
-    createNodeSubscription: vi.fn(),
-    updateNodeSubscription: vi.fn(),
-    deleteNodeSubscription: vi.fn(),
     plans: vi.fn(),
     createPlan: vi.fn(),
     updatePlan: vi.fn(),
@@ -40,54 +36,6 @@ describe('SubscriptionsPage', () => {
     ]);
     vi.mocked(api.approveRequest).mockResolvedValue({ status: 'approved' });
     vi.mocked(api.rejectRequest).mockResolvedValue({ status: 'rejected' });
-    vi.mocked(api.nodeSubscriptions).mockResolvedValue([
-      {
-        topic_id: 'kukuri:topic:1',
-        enabled: true,
-        ref_count: 2,
-        ingest_policy: {
-          retention_days: 7,
-          max_events: 100,
-          max_bytes: 2048,
-          allow_backfill: true
-        },
-        connected_nodes: ['node-1@relay.example.com:7777'],
-        connected_node_count: 1,
-        updated_at: 1738809601
-      }
-    ]);
-    vi.mocked(api.createNodeSubscription).mockResolvedValue({
-      topic_id: 'kukuri:topic:new',
-      enabled: true,
-      ref_count: 0,
-      ingest_policy: {
-        retention_days: 30,
-        max_events: 500,
-        max_bytes: 8192,
-        allow_backfill: true
-      },
-      connected_nodes: [],
-      connected_node_count: 0,
-      updated_at: 1738809602
-    });
-    vi.mocked(api.updateNodeSubscription).mockResolvedValue({
-      topic_id: 'kukuri:topic:1',
-      enabled: false,
-      ref_count: 1,
-      ingest_policy: {
-        retention_days: 7,
-        max_events: 100,
-        max_bytes: 2048,
-        allow_backfill: true
-      },
-      connected_nodes: ['node-1@relay.example.com:7777'],
-      connected_node_count: 1,
-      updated_at: 1738809602
-    });
-    vi.mocked(api.deleteNodeSubscription).mockResolvedValue({
-      status: 'deleted',
-      topic_id: 'kukuri:topic:1'
-    });
     vi.mocked(api.plans).mockResolvedValue([
       {
         plan_id: 'basic',
@@ -130,30 +78,19 @@ describe('SubscriptionsPage', () => {
     ]);
   });
 
-  it('主要操作を実行し、主要セクション表示を維持できる', async () => {
+  it('主要操作を実行し、購読/プラン/利用量セクション表示を維持できる', async () => {
     renderWithQueryClient(<SubscriptionsPage />);
 
     expect(await screen.findByRole('heading', { name: 'Subscriptions', level: 1 })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Subscription Requests' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Node Subscriptions' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Node Subscriptions' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Topic' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Connected' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Connected Nodes' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Retention Days' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Subscriber' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
-    expect(screen.getByText('node-1@relay.example.com:7777')).toBeInTheDocument();
-    const topicLabels = await screen.findAllByText('kukuri:topic:1');
-    expect(topicLabels.length).toBeGreaterThanOrEqual(2);
-    await screen.findByRole('button', { name: 'Toggle' });
-    await screen.findByRole('button', { name: 'Save policy' });
-    await screen.findByRole('button', { name: 'Add topic subscription' });
-    await screen.findByRole('button', { name: 'Delete topic' });
-    await screen.findByRole('button', { name: 'Edit' });
 
     const user = userEvent.setup();
+    const topicLabels = await screen.findAllByText('kukuri:topic:1');
     const requestCard = topicLabels[0].closest('.card');
     expect(requestCard).not.toBeNull();
     const reviewInput = (requestCard as HTMLElement).querySelector('input');
@@ -167,75 +104,6 @@ describe('SubscriptionsPage', () => {
     await user.click(within(requestCard as HTMLElement).getByRole('button', { name: 'Reject' }));
     await waitFor(() => {
       expect(api.rejectRequest).toHaveBeenCalledWith('req-1', 'looks good');
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Toggle' }));
-    await waitFor(() => {
-      expect(api.updateNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1', {
-        enabled: false,
-        ingest_policy: {
-          retention_days: 7,
-          max_events: 100,
-          max_bytes: 2048,
-          allow_backfill: true
-        }
-      });
-    });
-
-    fireEvent.change(screen.getByLabelText('Retention days kukuri:topic:1'), {
-      target: { value: '14' }
-    });
-    fireEvent.change(screen.getByLabelText('Max events kukuri:topic:1'), {
-      target: { value: '200' }
-    });
-    fireEvent.change(screen.getByLabelText('Max bytes kukuri:topic:1'), {
-      target: { value: '4096' }
-    });
-    fireEvent.change(screen.getByLabelText('Backfill kukuri:topic:1'), {
-      target: { value: 'disabled' }
-    });
-    await user.click(screen.getByRole('button', { name: 'Save policy' }));
-    await waitFor(() => {
-      expect(api.updateNodeSubscription).toHaveBeenLastCalledWith('kukuri:topic:1', {
-        enabled: true,
-        ingest_policy: {
-          retention_days: 14,
-          max_events: 200,
-          max_bytes: 4096,
-          allow_backfill: false
-        }
-      });
-    });
-
-    fireEvent.change(screen.getByLabelText('New topic ID'), {
-      target: { value: 'kukuri:topic:new' }
-    });
-    fireEvent.change(screen.getByLabelText('New retention days'), {
-      target: { value: '30' }
-    });
-    fireEvent.change(screen.getByLabelText('New max events'), {
-      target: { value: '500' }
-    });
-    fireEvent.change(screen.getByLabelText('New max bytes'), {
-      target: { value: '8192' }
-    });
-    await user.click(screen.getByRole('button', { name: 'Add topic subscription' }));
-    await waitFor(() => {
-      expect(api.createNodeSubscription).toHaveBeenCalledWith({
-        topic_id: 'kukuri:topic:new',
-        enabled: true,
-        ingest_policy: {
-          retention_days: 30,
-          max_events: 500,
-          max_bytes: 8192,
-          allow_backfill: true
-        }
-      });
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Delete topic' }));
-    await waitFor(() => {
-      expect(api.deleteNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1');
     });
 
     const createPlanButton = screen.getByRole('button', { name: 'Create plan' });
