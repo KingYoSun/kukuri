@@ -768,7 +768,8 @@
       "publicProfile": "プロフィールを公開",
       "showOnlineStatus": "オンライン状態を表示",
       "loginRequired": "ログインするとプライバシー設定を変更できます",
-      "saving": "プライバシー設定を保存しています…"
+      "saving": "プライバシー設定を保存しています…",
+      "pendingSync": "ローカルに保存済みです。オンライン時に同期されます。"
     },
     "devTools": {
       "nostrTitle": "開発者ツール - Nostr",
@@ -777,7 +778,8 @@
     "toast": {
       "privacyLoginRequired": "プライバシー設定を変更するにはログインが必要です",
       "privacyUpdated": "プライバシー設定を更新しました",
-      "privacyUpdateFailed": "プライバシー設定の更新に失敗しました"
+      "privacyUpdateFailed": "プライバシー設定の更新に失敗しました",
+      "privacySavedOffline": "オフラインのためローカルに保存しました。オンライン復帰後に同期します。"
     }
   },
   "p2pPanel": {
