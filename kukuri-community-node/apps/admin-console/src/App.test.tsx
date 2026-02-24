@@ -12,7 +12,9 @@ vi.mock('./lib/api', () => ({
   api: {
     me: vi.fn(),
     login: vi.fn(),
-    logout: vi.fn()
+    logout: vi.fn(),
+    nodeSubscriptions: vi.fn(),
+    subscriptions: vi.fn()
   }
 }));
 
@@ -31,6 +33,8 @@ describe('App auth flow', () => {
     vi.clearAllMocks();
     useAuthStore.setState({ user: null, status: 'unknown', error: undefined });
     vi.mocked(api.logout).mockResolvedValue({ status: 'ok' });
+    vi.mocked(api.nodeSubscriptions).mockResolvedValue([]);
+    vi.mocked(api.subscriptions).mockResolvedValue([]);
   });
 
   it('セッションブートストラップで未認証時はログイン画面を表示する', async () => {
@@ -57,5 +61,73 @@ describe('App auth flow', () => {
       expect(api.logout).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByRole('heading', { name: 'Admin Login' })).toBeInTheDocument();
+  });
+
+  it('Bootstrapカードに接続先と接続ユーザー一覧を表示する', async () => {
+    vi.mocked(api.me).mockResolvedValue(adminUser);
+    vi.mocked(api.nodeSubscriptions).mockResolvedValue([
+      {
+        topic_id: 'topic-alpha',
+        enabled: true,
+        ref_count: 2,
+        ingest_policy: null,
+        connected_nodes: ['node-a@bootstrap.example:11233', 'node-b:3344'],
+        connected_node_count: 2,
+        updated_at: 1700000000
+      },
+      {
+        topic_id: 'topic-beta',
+        enabled: true,
+        ref_count: 1,
+        ingest_policy: null,
+        connected_nodes: ['node-a@bootstrap.example:11233'],
+        connected_node_count: 1,
+        updated_at: 1700000100
+      }
+    ]);
+    vi.mocked(api.subscriptions).mockResolvedValue([
+      {
+        subscription_id: 'sub-1',
+        subscriber_pubkey: 'pubkey-active-1',
+        plan_id: 'basic',
+        status: 'active',
+        started_at: 200,
+        ended_at: null
+      },
+      {
+        subscription_id: 'sub-2',
+        subscriber_pubkey: 'pubkey-latest-paused',
+        plan_id: 'basic',
+        status: 'active',
+        started_at: 100,
+        ended_at: null
+      },
+      {
+        subscription_id: 'sub-3',
+        subscriber_pubkey: 'pubkey-latest-paused',
+        plan_id: 'basic',
+        status: 'paused',
+        started_at: 300,
+        ended_at: 320
+      },
+      {
+        subscription_id: 'sub-4',
+        subscriber_pubkey: 'pubkey-active-2',
+        plan_id: 'pro',
+        status: 'active',
+        started_at: 400,
+        ended_at: null
+      }
+    ]);
+
+    renderWithQueryClient(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Bootstrap' })).toBeInTheDocument();
+    expect(await screen.findByText('Connected users: 2')).toBeInTheDocument();
+    expect(await screen.findByText('node-a@bootstrap.example:11233')).toBeInTheDocument();
+    expect(await screen.findByText('node-b:3344@unknown:0')).toBeInTheDocument();
+    expect(await screen.findByText('pubkey-active-1')).toBeInTheDocument();
+    expect(await screen.findByText('pubkey-active-2')).toBeInTheDocument();
+    expect(screen.queryByText('pubkey-latest-paused')).not.toBeInTheDocument();
   });
 });
