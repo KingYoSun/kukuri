@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createFileRoute } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useUIStore, usePrivacySettingsStore } from '@/stores';
+import { useOfflineStore } from '@/stores/offlineStore';
 import { useAuthStore } from '@/stores/authStore';
 import { NostrTestPanel } from '@/components/NostrTestPanel';
 import { P2PDebugPanel } from '@/components/P2PDebugPanel';
@@ -22,9 +23,11 @@ import { ProfileEditDialog } from '@/components/settings/ProfileEditDialog';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
-import { TauriApi } from '@/lib/api/tauri';
-import { updateNostrMetadata } from '@/lib/api/nostr';
 import { KeyManagementDialog } from '@/components/settings/KeyManagementDialog';
+import {
+  syncPrivacySettings,
+  type PrivacySettingsSyncPayload,
+} from '@/lib/settings/privacySettingsSync';
 import { SUPPORTED_LOCALES, getCurrentLocale, persistLocale, type SupportedLocale } from '@/i18n';
 
 export const Route = createFileRoute('/settings')({
@@ -37,61 +40,80 @@ function SettingsPage() {
   const {
     publicProfile,
     showOnlineStatus,
-    setPublicProfile,
-    setShowOnlineStatus,
+    hasPendingSync,
+    applyLocalChange,
+    markSyncSuccess,
+    markSyncFailure,
     hydrateFromUser: storeHydrateFromUser,
   } = usePrivacySettingsStore();
   const hydrateFromUser = storeHydrateFromUser ?? (() => {});
   const { currentUser, updateUser } = useAuthStore();
+  const isOnline = useOfflineStore((state) => state.isOnline);
   const [isProfileDialogOpen, setProfileDialogOpen] = useState(false);
   const [isKeyDialogOpen, setKeyDialogOpen] = useState(false);
-  const [savingField, setSavingField] = useState<'public' | 'online' | null>(null);
+  const [isSyncingPrivacy, setIsSyncingPrivacy] = useState(false);
+  const isSyncingPrivacyRef = useRef(false);
 
   useEffect(() => {
     hydrateFromUser(currentUser ?? null);
   }, [currentUser, hydrateFromUser]);
 
-  const persistPrivacy = async (field: 'public' | 'online', value: boolean) => {
-    if (!currentUser) {
-      toast.error(t('settings.toast.privacyLoginRequired'));
+  const persistPrivacy = useCallback(
+    async (payload: PrivacySettingsSyncPayload) => {
+      isSyncingPrivacyRef.current = true;
+      setIsSyncingPrivacy(true);
+      try {
+        await syncPrivacySettings(payload);
+        markSyncSuccess();
+        updateUser({
+          publicProfile: payload.publicProfile,
+          showOnlineStatus: payload.showOnlineStatus,
+        });
+        toast.success(t('settings.toast.privacyUpdated'));
+      } catch (error) {
+        markSyncFailure(error instanceof Error ? error.message : null);
+        errorHandler.log('SettingsPage.updatePrivacyFailed', error, {
+          context: 'SettingsPage.persistPrivacy',
+          metadata: { npub: payload.npub },
+        });
+        toast.error(t('settings.toast.privacyUpdateFailed'));
+      } finally {
+        isSyncingPrivacyRef.current = false;
+        setIsSyncingPrivacy(false);
+      }
+    },
+    [markSyncFailure, markSyncSuccess, t, updateUser],
+  );
+
+  const syncPendingPrivacyIfNeeded = useCallback(() => {
+    const latestUser = useAuthStore.getState().currentUser;
+    const latestOffline = useOfflineStore.getState();
+    const latestPrivacy = usePrivacySettingsStore.getState();
+    if (
+      !latestUser ||
+      !latestOffline.isOnline ||
+      !latestPrivacy.hasPendingSync ||
+      isSyncingPrivacyRef.current
+    ) {
       return;
     }
-    const payload = {
-      publicProfile: field === 'public' ? value : publicProfile,
-      showOnlineStatus: field === 'online' ? value : showOnlineStatus,
+    void persistPrivacy({
+      npub: latestUser.npub,
+      publicProfile: latestPrivacy.publicProfile,
+      showOnlineStatus: latestPrivacy.showOnlineStatus,
+    });
+  }, [persistPrivacy]);
+
+  useEffect(() => {
+    syncPendingPrivacyIfNeeded();
+    const handleOnline = () => {
+      syncPendingPrivacyIfNeeded();
     };
-    setSavingField(field);
-    updateUser(payload);
-    try {
-      await TauriApi.updatePrivacySettings({
-        npub: currentUser.npub,
-        publicProfile: payload.publicProfile,
-        showOnlineStatus: payload.showOnlineStatus,
-      });
-      try {
-        await updateNostrMetadata({
-          kukuri_privacy: {
-            public_profile: payload.publicProfile,
-            show_online_status: payload.showOnlineStatus,
-          },
-        });
-      } catch (nostrError) {
-        errorHandler.log('SettingsPage.updatePrivacyNostrSkipped', nostrError, {
-          context: 'SettingsPage.persistPrivacy.updateNostrMetadata',
-          metadata: { field },
-        });
-      }
-      toast.success(t('settings.toast.privacyUpdated'));
-    } catch (error) {
-      errorHandler.log('SettingsPage.updatePrivacyFailed', error, {
-        context: 'SettingsPage.persistPrivacy',
-        metadata: { field },
-      });
-      toast.error(t('settings.toast.privacyUpdateFailed'));
-    } finally {
-      setSavingField(null);
-    }
-  };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [syncPendingPrivacyIfNeeded]);
 
   const handlePrivacyToggle =
     (field: 'public' | 'online') =>
@@ -100,12 +122,21 @@ function SettingsPage() {
         toast.error(t('settings.toast.privacyLoginRequired'));
         return;
       }
-      if (field === 'public') {
-        setPublicProfile(checked);
-      } else {
-        setShowOnlineStatus(checked);
+      const payload: PrivacySettingsSyncPayload = {
+        npub: currentUser.npub,
+        publicProfile: field === 'public' ? checked : publicProfile,
+        showOnlineStatus: field === 'online' ? checked : showOnlineStatus,
+      };
+      applyLocalChange(payload);
+      updateUser({
+        publicProfile: payload.publicProfile,
+        showOnlineStatus: payload.showOnlineStatus,
+      });
+      if (!isOnline) {
+        toast.info(t('settings.toast.privacySavedOffline'));
+        return;
       }
-      void persistPrivacy(field, checked);
+      void persistPrivacy(payload);
     };
 
   const currentLocale = getCurrentLocale();
@@ -212,7 +243,7 @@ function SettingsPage() {
             <Switch
               id="public-profile"
               checked={publicProfile}
-              disabled={!currentUser || savingField === 'public'}
+              disabled={!currentUser || isSyncingPrivacy}
               onCheckedChange={handlePrivacyToggle('public')}
             />
           </div>
@@ -221,15 +252,18 @@ function SettingsPage() {
             <Switch
               id="show-online"
               checked={showOnlineStatus}
-              disabled={!currentUser || savingField === 'online'}
+              disabled={!currentUser || isSyncingPrivacy}
               onCheckedChange={handlePrivacyToggle('online')}
             />
           </div>
           {!currentUser && (
             <p className="text-xs text-muted-foreground">{t('settings.privacy.loginRequired')}</p>
           )}
-          {savingField && (
+          {isSyncingPrivacy && (
             <p className="text-xs text-muted-foreground">{t('settings.privacy.saving')}</p>
+          )}
+          {!isSyncingPrivacy && currentUser && hasPendingSync && (
+            <p className="text-xs text-muted-foreground">{t('settings.privacy.pendingSync')}</p>
           )}
         </CardContent>
       </Card>

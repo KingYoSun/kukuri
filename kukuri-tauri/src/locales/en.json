@@ -768,7 +768,8 @@
       "publicProfile": "Make profile public",
       "showOnlineStatus": "Show online status",
       "loginRequired": "Sign in to change privacy settings",
-      "saving": "Saving privacy settings…"
+      "saving": "Saving privacy settings…",
+      "pendingSync": "Saved locally. Changes will sync when back online."
     },
     "devTools": {
       "nostrTitle": "Developer tools - Nostr",
@@ -777,7 +778,8 @@
     "toast": {
       "privacyLoginRequired": "Sign in to change privacy settings",
       "privacyUpdated": "Privacy settings updated",
-      "privacyUpdateFailed": "Failed to update privacy settings"
+      "privacyUpdateFailed": "Failed to update privacy settings",
+      "privacySavedOffline": "Offline now. Privacy settings were saved locally and will sync when online."
     }
   },
   "p2pPanel": {

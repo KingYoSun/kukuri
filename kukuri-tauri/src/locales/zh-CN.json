@@ -764,7 +764,8 @@
       "publicProfile": "公开资料",
       "showOnlineStatus": "显示在线状态",
       "loginRequired": "登录后可修改隐私设置",
-      "saving": "正在保存隐私设置…"
+      "saving": "正在保存隐私设置…",
+      "pendingSync": "已本地保存，联网后会自动同步。"
     },
     "devTools": {
       "nostrTitle": "开发者工具 - Nostr",
@@ -773,7 +774,8 @@
     "toast": {
       "privacyLoginRequired": "请先登录以修改隐私设置",
       "privacyUpdated": "隐私设置已更新",
-      "privacyUpdateFailed": "隐私设置更新失败"
+      "privacyUpdateFailed": "隐私设置更新失败",
+      "privacySavedOffline": "当前离线，已本地保存隐私设置，恢复联网后会同步。"
     }
   },
   "p2pPanel": {
