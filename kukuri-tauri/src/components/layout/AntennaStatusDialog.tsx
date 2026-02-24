@@ -17,6 +17,8 @@ export function AntennaStatusDialog() {
   const [open, setOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const modalTitle = `${t('relayStatus.title')} / ${t('p2pStatus.title')}`;
+  const connectionStatusLabel = `${t('syncStatus.connectionStatus')}: ${isOnline ? t('syncStatus.online') : t('syncStatus.offline')}`;
+  const buttonAriaLabel = `${modalTitle} (${connectionStatusLabel})`;
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -36,7 +38,8 @@ export function AntennaStatusDialog() {
       <Button
         variant="ghost"
         size="icon"
-        aria-label={modalTitle}
+        aria-label={buttonAriaLabel}
+        title={buttonAriaLabel}
         data-testid="open-network-status-button"
         onClick={() => setOpen(true)}
       >
@@ -44,6 +47,7 @@ export function AntennaStatusDialog() {
           className={`h-5 w-5 ${isOnline ? 'text-green-500' : 'text-red-500'}`}
           data-testid="network-status-antenna-icon"
         />
+        <span className="sr-only">{connectionStatusLabel}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

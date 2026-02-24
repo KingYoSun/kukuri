@@ -163,6 +163,7 @@ describe('Header', () => {
 
     const networkButton = screen.getByTestId('open-network-status-button');
     expect(networkButton).toBeInTheDocument();
+    expect(networkButton).toHaveAccessibleName(/接続状態: オンライン/);
     expect(screen.queryByText(/秒前|分前|時間以上前|オフライン/)).not.toBeInTheDocument();
 
     // 通知ボタンが存在すること
@@ -294,7 +295,9 @@ describe('Header', () => {
     renderHeader();
 
     const icon = screen.getByTestId('network-status-antenna-icon');
+    const networkButton = screen.getByTestId('open-network-status-button');
     expect(icon).toHaveClass('text-green-500');
+    expect(networkButton).toHaveAccessibleName(/接続状態: オンライン/);
 
     act(() => {
       setNavigatorOnline(false);
@@ -302,6 +305,7 @@ describe('Header', () => {
     });
 
     expect(icon).toHaveClass('text-red-500');
+    expect(networkButton).toHaveAccessibleName(/接続状態: オフライン/);
   });
 
   it('ユーザー情報が表示されること', async () => {
