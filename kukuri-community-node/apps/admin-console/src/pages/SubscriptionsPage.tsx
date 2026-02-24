@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { api } from '../lib/api';
+import { normalizeConnectedNode } from '../lib/bootstrap';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatJson, formatTimestamp } from '../lib/format';
+import { subscriptionsQueryOptions } from '../lib/subscriptionsQuery';
 import type {
   NodeSubscription,
   Plan,
@@ -113,17 +115,6 @@ const parseNodePolicyDraft = (
   };
 };
 
-const normalizeConnectedNode = (value: string): string => {
-  const trimmed = value.trim();
-  if (trimmed === '') {
-    return 'unknown@unknown:0';
-  }
-  if (trimmed.includes('@')) {
-    return trimmed;
-  }
-  return `${trimmed}@unknown:0`;
-};
-
 export const SubscriptionsPage = () => {
   const queryClient = useQueryClient();
   const [requestFilter, setRequestFilter] = useState('pending');
@@ -181,8 +172,7 @@ export const SubscriptionsPage = () => {
   });
 
   const subscriptionsQuery = useQuery<SubscriptionRow[]>({
-    queryKey: ['subscriptions', subscriptionFilter],
-    queryFn: () => api.subscriptions(subscriptionFilter || undefined)
+    ...subscriptionsQueryOptions(subscriptionFilter)
   });
 
   const usageQuery = useQuery<UsageRow[]>({
