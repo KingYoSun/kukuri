@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SettingsPage } from '@/routes/settings';
@@ -284,7 +284,7 @@ describe('SettingsPage', () => {
     expect(state.showOnlineStatus).toBe(true);
   });
 
-  it('オフライン時はローカル保存のみ行いオンライン復帰時に同期する', async () => {
+  it('オフライン時はローカル保存のみ行い未同期状態を維持する', async () => {
     useOfflineStore.setState((state) => ({ ...state, isOnline: false }));
     const user = userEvent.setup();
     renderSettingsPage();
@@ -294,18 +294,6 @@ describe('SettingsPage', () => {
 
     expect(TauriApi.updatePrivacySettings).not.toHaveBeenCalled();
     expect(usePrivacySettingsStore.getState().hasPendingSync).toBe(true);
-
-    useOfflineStore.setState((state) => ({ ...state, isOnline: true }));
-    act(() => {
-      window.dispatchEvent(new Event('online'));
-    });
-
-    await waitFor(() => expect(TauriApi.updatePrivacySettings).toHaveBeenCalledTimes(1));
-    expect(TauriApi.updatePrivacySettings).toHaveBeenCalledWith({
-      npub: 'npub',
-      publicProfile: false,
-      showOnlineStatus: false,
-    });
   });
 
   it('プロフィール編集ボタンでダイアログが開く', async () => {

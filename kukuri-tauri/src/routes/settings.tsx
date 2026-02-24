@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createFileRoute } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,7 +52,6 @@ function SettingsPage() {
   const [isProfileDialogOpen, setProfileDialogOpen] = useState(false);
   const [isKeyDialogOpen, setKeyDialogOpen] = useState(false);
   const [isSyncingPrivacy, setIsSyncingPrivacy] = useState(false);
-  const isSyncingPrivacyRef = useRef(false);
 
   useEffect(() => {
     hydrateFromUser(currentUser ?? null);
@@ -60,7 +59,6 @@ function SettingsPage() {
 
   const persistPrivacy = useCallback(
     async (payload: PrivacySettingsSyncPayload) => {
-      isSyncingPrivacyRef.current = true;
       setIsSyncingPrivacy(true);
       try {
         await syncPrivacySettings(payload);
@@ -78,42 +76,11 @@ function SettingsPage() {
         });
         toast.error(t('settings.toast.privacyUpdateFailed'));
       } finally {
-        isSyncingPrivacyRef.current = false;
         setIsSyncingPrivacy(false);
       }
     },
     [markSyncFailure, markSyncSuccess, t, updateUser],
   );
-
-  const syncPendingPrivacyIfNeeded = useCallback(() => {
-    const latestUser = useAuthStore.getState().currentUser;
-    const latestOffline = useOfflineStore.getState();
-    const latestPrivacy = usePrivacySettingsStore.getState();
-    if (
-      !latestUser ||
-      !latestOffline.isOnline ||
-      !latestPrivacy.hasPendingSync ||
-      isSyncingPrivacyRef.current
-    ) {
-      return;
-    }
-    void persistPrivacy({
-      npub: latestUser.npub,
-      publicProfile: latestPrivacy.publicProfile,
-      showOnlineStatus: latestPrivacy.showOnlineStatus,
-    });
-  }, [persistPrivacy]);
-
-  useEffect(() => {
-    syncPendingPrivacyIfNeeded();
-    const handleOnline = () => {
-      syncPendingPrivacyIfNeeded();
-    };
-    window.addEventListener('online', handleOnline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [syncPendingPrivacyIfNeeded]);
 
   const handlePrivacyToggle =
     (field: 'public' | 'online') =>
