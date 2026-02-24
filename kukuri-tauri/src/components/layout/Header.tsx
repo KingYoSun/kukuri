@@ -4,7 +4,6 @@ import { Bell, Menu, MessageCircle } from 'lucide-react';
 import { useUIStore, useTopicStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
 import { AccountSwitcher } from '@/components/auth/AccountSwitcher';
-import { RealtimeIndicator } from '@/components/RealtimeIndicator';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { useDirectMessageStore } from '@/stores/directMessageStore';
 import { useDirectMessageBadge } from '@/hooks/useDirectMessageBadge';
@@ -51,7 +50,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          <RealtimeIndicator />
           <SyncStatusIndicator />
           <AntennaStatusDialog />
 
