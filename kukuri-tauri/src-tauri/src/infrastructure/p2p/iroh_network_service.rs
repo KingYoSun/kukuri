@@ -1,12 +1,13 @@
 use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
+    utils::parse_node_addr,
 };
 use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{Endpoint, EndpointAddr, RelayMode, address_lookup::MemoryLookup, protocol::Router};
+use iroh::{Endpoint, RelayMode, address_lookup::MemoryLookup, protocol::Router};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
@@ -306,28 +307,11 @@ impl NetworkService for IrohNetworkService {
     }
 
     async fn add_peer(&self, address: &str) -> Result<(), AppError> {
-        // アドレスからNodeIdを抽出（例: "node_id@socket_addr"）
-        use iroh::EndpointId;
-        use std::net::SocketAddr;
-        use std::str::FromStr;
-
-        let parts: Vec<&str> = address.split('@').collect();
-        if parts.len() != 2 {
+        let node_addr = parse_node_addr(address).map_err(|e| {
             super::metrics::record_mainline_connection_failure();
-            return Err("Invalid address format: expected 'node_id@socket_addr'".into());
-        }
-
-        let node_id = EndpointId::from_str(parts[0]).map_err(|e| {
-            super::metrics::record_mainline_connection_failure();
-            AppError::from(format!("Failed to parse node ID: {e}"))
-        })?;
-        let socket_addr: SocketAddr = parts[1].parse().map_err(|e| {
-            super::metrics::record_mainline_connection_failure();
-            AppError::from(format!("Failed to parse socket address: {e}"))
+            AppError::from(format!("Failed to parse peer address: {e}"))
         })?;
 
-        // NodeAddrを構築
-        let node_addr = EndpointAddr::new(node_id).with_ip_addr(socket_addr);
         self.static_discovery.add_endpoint_info(node_addr.clone());
 
         // ピアに接続

@@ -5,7 +5,7 @@ use dirs;
 use iroh::{EndpointAddr, EndpointId};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, info, trace, warn};
@@ -105,7 +105,7 @@ impl BootstrapConfig {
         let mut addrs = Vec::new();
 
         for node in nodes {
-            match node.parse::<SocketAddr>() {
+            match resolve_socket_addr(&node) {
                 Ok(addr) => addrs.push(addr),
                 Err(e) => {
                     debug!("Failed to parse address {}: {}", node, e);
@@ -125,7 +125,7 @@ impl BootstrapConfig {
             if let Some((id_part, addr_part)) = node.split_once('@') {
                 match (
                     EndpointId::from_str(id_part),
-                    addr_part.parse::<SocketAddr>(),
+                    resolve_socket_addr(addr_part),
                 ) {
                     (Ok(node_id), Ok(sock)) => {
                         out.push(EndpointAddr::new(node_id).with_ip_addr(sock));
@@ -139,7 +139,7 @@ impl BootstrapConfig {
                         );
                     }
                 }
-            } else if node.parse::<SocketAddr>().is_ok() {
+            } else if resolve_socket_addr(&node).is_ok() {
                 warn!(
                     "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>'. Skipping.",
                     node
@@ -161,6 +161,36 @@ fn parse_bootstrap_list(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn resolve_socket_addr(raw: &str) -> Result<SocketAddr, String> {
+    let trimmed = raw.trim();
+    if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {
+        return Ok(socket_addr);
+    }
+
+    let (host, port_raw) = trimmed
+        .rsplit_once(':')
+        .ok_or_else(|| format!("Invalid socket address `{raw}`"))?;
+    let host = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if host.is_empty() {
+        return Err(format!("Invalid host in socket address `{raw}`"));
+    }
+    let port: u16 = port_raw
+        .trim()
+        .parse()
+        .map_err(|e| format!("Invalid port `{port_raw}`: {e}"))?;
+
+    if host.eq_ignore_ascii_case("localhost") {
+        return Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port));
+    }
+
+    let mut addrs = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("Failed to resolve host `{host}`: {e}"))?;
+    addrs
+        .next()
+        .ok_or_else(|| format!("Resolved host `{host}` but no socket addresses were returned"))
+}
+
 fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
     let trimmed = entry.trim();
     if trimmed.is_empty() {
@@ -172,7 +202,7 @@ fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
         None => return Some(trimmed.to_string()),
     };
 
-    let mut socket_addr = match addr_part.parse::<SocketAddr>() {
+    let mut socket_addr = match resolve_socket_addr(addr_part) {
         Ok(addr) => addr,
         Err(err) => {
             warn!("Invalid bootstrap node '{}': {}", entry, err);
@@ -370,12 +400,12 @@ pub fn validate_bootstrap_config() -> Result<(), AppError> {
 
     for node in nodes {
         if let Some((id_part, addr_part)) = node.split_once('@') {
-            if EndpointId::from_str(id_part).is_ok() && addr_part.parse::<SocketAddr>().is_ok() {
+            if EndpointId::from_str(id_part).is_ok() && resolve_socket_addr(addr_part).is_ok() {
                 with_id += 1;
             } else {
                 invalid += 1;
             }
-        } else if node.parse::<SocketAddr>().is_ok() {
+        } else if resolve_socket_addr(&node).is_ok() {
             socket_only += 1;
         } else {
             invalid += 1;
@@ -463,7 +493,7 @@ pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
         if let Some((id_part, addr_part)) = node.split_once('@') {
             match (
                 EndpointId::from_str(id_part),
-                addr_part.parse::<SocketAddr>(),
+                resolve_socket_addr(addr_part),
             ) {
                 (Ok(node_id), Ok(sock)) => out.push(EndpointAddr::new(node_id).with_ip_addr(sock)),
                 _ => debug!("Invalid user bootstrap entry: {}", node),
@@ -593,6 +623,7 @@ mod tests {
             "node1@0.0.0.0:11223".to_string(),
             "node2@[::]:11223".to_string(),
             " node3@127.0.0.1:11223 ".to_string(),
+            "node4@localhost:11224".to_string(),
         ];
 
         let normalized = sanitize_bootstrap_nodes(&nodes);
@@ -600,7 +631,8 @@ mod tests {
         assert!(normalized.contains(&"node1@127.0.0.1:11223".to_string()));
         assert!(normalized.contains(&"node2@[::1]:11223".to_string()));
         assert!(normalized.contains(&"node3@127.0.0.1:11223".to_string()));
-        assert_eq!(normalized.len(), 3);
+        assert!(normalized.contains(&"node4@127.0.0.1:11224".to_string()));
+        assert_eq!(normalized.len(), 4);
     }
 
     #[test]

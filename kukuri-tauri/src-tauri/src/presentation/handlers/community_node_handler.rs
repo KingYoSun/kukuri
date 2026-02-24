@@ -2968,6 +2968,65 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
+    async fn set_config_treats_localhost_bootstrap_nodes_as_loopback() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("localhost");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let existing =
+            "6666666666666666666666666666666666666666666666666666666666666666@127.0.0.1:22001";
+        bootstrap_config::save_user_bootstrap_nodes(&[existing.to_string()])
+            .expect("save existing bootstrap node");
+
+        let duplicate_localhost =
+            "6666666666666666666666666666666666666666666666666666666666666666@localhost:22001";
+        let resolved_localhost =
+            "7777777777777777777777777777777777777777777777777777777777777777@localhost:22002";
+        let descriptor = build_bootstrap_descriptor_event(
+            "https://node.example",
+            &[duplicate_localhost, resolved_localhost],
+        );
+        let response = json!({
+            "items": [descriptor],
+            "next_refresh_at": Utc::now().timestamp() + 600
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+        let localhost_base_url = base_url.replacen("127.0.0.1", "localhost", 1);
+
+        let handler = test_handler();
+        let set_request = CommunityNodeConfigRequest {
+            nodes: vec![CommunityNodeConfigNodeRequest {
+                base_url: localhost_base_url,
+                roles: Some(CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                }),
+            }],
+        };
+        handler.set_config(set_request).await.expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.contains(&existing.to_string()));
+        assert!(
+            nodes.contains(
+                &"7777777777777777777777777777777777777777777777777777777777777777@127.0.0.1:22002"
+                    .to_string()
+            )
+        );
+        assert!(!nodes.iter().any(|value| value.contains("@localhost:")));
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
     async fn trust_provider_roundtrip() {
         let key_manager = Arc::new(DefaultKeyManager::new());
         let keypair = key_manager.generate_keypair().await.expect("keypair");
