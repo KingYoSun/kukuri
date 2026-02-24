@@ -90,6 +90,13 @@ vi.mock('@/components/directMessages/DirectMessageInbox', async () => {
 
 let openInboxSpy: ReturnType<typeof vi.fn>;
 
+const setNavigatorOnline = (online: boolean) => {
+  Object.defineProperty(window.navigator, 'onLine', {
+    configurable: true,
+    value: online,
+  });
+};
+
 const renderHeader = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -110,6 +117,7 @@ describe('Header', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setNavigatorOnline(true);
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
     vi.mocked(TauriApi.listDirectMessageConversations).mockResolvedValue({
       items: [],
@@ -155,6 +163,7 @@ describe('Header', () => {
 
     const networkButton = screen.getByTestId('open-network-status-button');
     expect(networkButton).toBeInTheDocument();
+    expect(screen.queryByText(/秒前|分前|時間以上前|オフライン/)).not.toBeInTheDocument();
 
     // 通知ボタンが存在すること
     const notificationButton = screen.getByRole('button', { name: /通知/i });
@@ -279,6 +288,20 @@ describe('Header', () => {
     expect(screen.getByTestId('network-status-modal')).toBeInTheDocument();
     expect(screen.getByText('Relay Status')).toBeInTheDocument();
     expect(screen.getByText('P2P Status')).toBeInTheDocument();
+  });
+
+  it('オンライン状態に応じてアンテナアイコンの色が切り替わること', () => {
+    renderHeader();
+
+    const icon = screen.getByTestId('network-status-antenna-icon');
+    expect(icon).toHaveClass('text-green-500');
+
+    act(() => {
+      setNavigatorOnline(false);
+      window.dispatchEvent(new Event('offline'));
+    });
+
+    expect(icon).toHaveClass('text-red-500');
   });
 
   it('ユーザー情報が表示されること', async () => {
