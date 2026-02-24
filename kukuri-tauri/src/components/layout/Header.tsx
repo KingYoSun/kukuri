@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Bell, Menu, MessageCircle, Plus } from 'lucide-react';
+import { Bell, Menu, MessageCircle } from 'lucide-react';
 import { useUIStore, useTopicStore } from '@/stores';
 import { useNavigate } from '@tanstack/react-router';
 import { AccountSwitcher } from '@/components/auth/AccountSwitcher';
@@ -75,15 +75,6 @@ export function Header() {
                 {unreadTotal > 99 ? '99+' : unreadTotal}
               </span>
             )}
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label={t('nav.newDirectMessage')}
-            onClick={openInbox}
-            data-testid="open-dm-inbox-button"
-          >
-            <Plus className="h-5 w-5" />
           </Button>
 
           <Button variant="ghost" size="icon" aria-label={t('nav.notifications')}>

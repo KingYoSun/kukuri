@@ -253,31 +253,6 @@ describe('Header', () => {
     expect(useDirectMessageStore.getState().activeConversationNpub).toBe('npub1target');
   });
 
-  it('Inbox CTA から新規DMダイアログを開けること', async () => {
-    const user = userEvent.setup();
-
-    renderHeader();
-
-    const inboxButton = screen.getByTestId('open-dm-inbox-button');
-    await user.click(inboxButton);
-
-    await act(() => Promise.resolve());
-    expect(openInboxSpy).toHaveBeenCalledTimes(1);
-    expect(useDirectMessageStore.getState().isInboxOpen).toBe(true);
-
-    act(() => {
-      useDirectMessageStore.setState((state) => ({
-        ...state,
-        isDialogOpen: true,
-        activeConversationNpub: 'npub1example',
-      }));
-    });
-
-    await act(() => Promise.resolve());
-    expect(useDirectMessageStore.getState().isDialogOpen).toBe(true);
-    expect(useDirectMessageStore.getState().activeConversationNpub).toBe('npub1example');
-  });
-
   it('会話がない場合はDMボタンでInboxが開くこと', async () => {
     const user = userEvent.setup();
     useDirectMessageStore.setState(getDirectMessageInitialState());
