@@ -77,37 +77,6 @@ describe('ダイレクトメッセージInbox', () => {
       { timeout: 15000, interval: 300, timeoutMsg: '未読バッジが表示されませんでした' },
     );
 
-    await $('[data-testid="open-dm-inbox-button"]').click();
-    const inboxList = await $('[data-testid="dm-inbox-list"]');
-    await inboxList.waitForDisplayed({ timeout: 20000 });
-
-    await browser.waitUntil(
-      async () => (await $$('[data-testid^="dm-inbox-conversation-"]')).length > 0,
-      { timeout: 20000, interval: 300, timeoutMsg: '会話行が一件も表示されませんでした' },
-    );
-
-    await browser.keys('Escape');
-    await inboxList.waitForDisplayed({ reverse: true, timeout: 15000 });
-
-    const summaryCards = await $$('[data-testid="trending-summary-direct-messages"]');
-    if (summaryCards.length > 0) {
-      await summaryCards[0]!.scrollIntoView();
-      const summaryText = await summaryCards[0]!.getText();
-      expect(summaryText).toContain('件');
-
-      const summaryCta = await $('[data-testid="trending-summary-direct-messages-cta"]');
-      await summaryCta.click();
-      await inboxList.waitForDisplayed({ timeout: 20000 });
-      expect(await $(unreadBadgeSelector).isExisting()).toBe(false);
-
-      await browser.keys('Escape');
-      await inboxList.waitForDisplayed({ reverse: true, timeout: 15000 });
-    } else {
-      console.info(
-        'Trending summary card for direct messages not found; skipping summary CTA check',
-      );
-    }
-
     await dmButton.click();
     await browser.waitUntil(
       async () => (await $$('[data-testid="direct-message-item"]')).length > 0,
@@ -128,5 +97,30 @@ describe('ダイレクトメッセージInbox', () => {
       async () => (await $$('[data-testid="direct-message-item"]')).length === 0,
       { timeout: 15000, interval: 300 },
     );
+
+    const summaryCards = await $$('[data-testid="trending-summary-direct-messages"]');
+    if (summaryCards.length > 0) {
+      await summaryCards[0]!.scrollIntoView();
+      const summaryText = await summaryCards[0]!.getText();
+      expect(summaryText).toContain('件');
+
+      const summaryCta = await $('[data-testid="trending-summary-direct-messages-cta"]');
+      await summaryCta.click();
+
+      const inboxList = await $('[data-testid="dm-inbox-list"]');
+      await inboxList.waitForDisplayed({ timeout: 20000 });
+      await browser.waitUntil(
+        async () => (await $$('[data-testid^="dm-inbox-conversation-"]')).length > 0,
+        { timeout: 20000, interval: 300, timeoutMsg: '会話行が一件も表示されませんでした' },
+      );
+      expect(await $(unreadBadgeSelector).isExisting()).toBe(false);
+
+      await browser.keys('Escape');
+      await inboxList.waitForDisplayed({ reverse: true, timeout: 15000 });
+    } else {
+      console.info(
+        'Trending summary card for direct messages not found; skipping summary CTA check',
+      );
+    }
   });
 });
