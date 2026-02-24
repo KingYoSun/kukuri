@@ -929,6 +929,9 @@ export interface components {
             /** Format: int64 */
             connected_node_count?: number;
             connected_nodes?: string[];
+            /** Format: int64 */
+            connected_user_count?: number;
+            connected_users?: string[];
             enabled: boolean;
             ingest_policy?: null | components["schemas"]["NodeSubscriptionIngestPolicy"];
             /** Format: int64 */

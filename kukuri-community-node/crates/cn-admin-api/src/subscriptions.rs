@@ -45,6 +45,10 @@ pub struct NodeSubscription {
     pub connected_nodes: Vec<String>,
     #[serde(default)]
     pub connected_node_count: i64,
+    #[serde(default)]
+    pub connected_users: Vec<String>,
+    #[serde(default)]
+    pub connected_user_count: i64,
     pub updated_at: i64,
 }
 
@@ -389,6 +393,7 @@ pub async fn list_node_subscriptions(
 ) -> ApiResult<Json<Vec<NodeSubscription>>> {
     require_admin(&state, &jar).await?;
     let connected_nodes_by_topic = load_connected_nodes_by_topic(&state.pool, None).await?;
+    let connected_users_by_topic = load_connected_users_by_topic(&state.pool, None).await?;
 
     let rows = sqlx::query(
         "SELECT topic_id, enabled, ref_count, ingest_policy, updated_at \
@@ -413,6 +418,10 @@ pub async fn list_node_subscriptions(
             .get(&topic_id)
             .cloned()
             .unwrap_or_default();
+        let connected_users = connected_users_by_topic
+            .get(&topic_id)
+            .cloned()
+            .unwrap_or_default();
         subscriptions.push(NodeSubscription {
             topic_id,
             enabled: row.try_get("enabled")?,
@@ -420,6 +429,8 @@ pub async fn list_node_subscriptions(
             ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
             connected_node_count: connected_nodes.len() as i64,
             connected_nodes,
+            connected_user_count: connected_users.len() as i64,
+            connected_users,
             updated_at: updated_at.timestamp(),
         });
     }
@@ -518,6 +529,10 @@ pub async fn create_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
+    let connected_users = load_connected_users_by_topic(&state.pool, Some(&topic_id))
+        .await?
+        .remove(&topic_id)
+        .unwrap_or_default();
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
         topic_id: row.try_get("topic_id")?,
@@ -526,6 +541,8 @@ pub async fn create_node_subscription(
         ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
         connected_node_count: connected_nodes.len() as i64,
         connected_nodes,
+        connected_user_count: connected_users.len() as i64,
+        connected_users,
         updated_at: updated_at.timestamp(),
     }))
 }
@@ -587,6 +604,10 @@ pub async fn update_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
+    let connected_users = load_connected_users_by_topic(&state.pool, Some(&topic_id))
+        .await?
+        .remove(&topic_id)
+        .unwrap_or_default();
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
         topic_id: row.try_get("topic_id")?,
@@ -595,6 +616,8 @@ pub async fn update_node_subscription(
         ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
         connected_node_count: connected_nodes.len() as i64,
         connected_nodes,
+        connected_user_count: connected_users.len() as i64,
+        connected_users,
         updated_at: updated_at.timestamp(),
     }))
 }
@@ -818,6 +841,55 @@ async fn load_connected_nodes_by_topic(
     Ok(grouped
         .into_iter()
         .map(|(topic_id, nodes)| (topic_id, nodes.into_iter().collect()))
+        .collect())
+}
+
+async fn load_connected_users_by_topic(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+    topic_id_filter: Option<&str>,
+) -> ApiResult<HashMap<String, Vec<String>>> {
+    let rows = if let Some(topic_id) = topic_id_filter {
+        sqlx::query(
+            "SELECT topic_id, subscriber_pubkey \
+             FROM cn_user.topic_subscriptions \
+             WHERE status = 'active' AND ended_at IS NULL AND topic_id = $1",
+        )
+        .bind(topic_id)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query(
+            "SELECT topic_id, subscriber_pubkey \
+             FROM cn_user.topic_subscriptions \
+             WHERE status = 'active' AND ended_at IS NULL",
+        )
+        .fetch_all(pool)
+        .await
+    }
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let mut grouped = HashMap::<String, BTreeSet<String>>::new();
+    for row in rows {
+        let topic_id: String = row.try_get("topic_id")?;
+        let subscriber_pubkey: String = row.try_get("subscriber_pubkey")?;
+        if topic_id.is_empty() || subscriber_pubkey.trim().is_empty() {
+            continue;
+        }
+        grouped
+            .entry(topic_id)
+            .or_default()
+            .insert(subscriber_pubkey.trim().to_string());
+    }
+
+    Ok(grouped
+        .into_iter()
+        .map(|(topic_id, users)| (topic_id, users.into_iter().collect()))
         .collect())
 }
 

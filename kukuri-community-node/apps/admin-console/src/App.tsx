@@ -14,6 +14,7 @@ import { useAuthStore } from './store/authStore';
 const navItems = [
   { to: '/', label: 'Dashboard' },
   { to: '/services', label: 'Services' },
+  { to: '/relay', label: 'Relay' },
   { to: '/subscriptions', label: 'Subscriptions' },
   { to: '/policies', label: 'Policies' },
   { to: '/privacy-data', label: 'Privacy / Data' },

@@ -3217,6 +3217,16 @@
               "type": "string"
             }
           },
+          "connected_user_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "connected_users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "enabled": {
             "type": "boolean"
           },

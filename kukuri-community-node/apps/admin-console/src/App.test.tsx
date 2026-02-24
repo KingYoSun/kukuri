@@ -78,6 +78,8 @@ describe('App auth flow', () => {
         ingest_policy: null,
         connected_nodes: ['node-a@bootstrap.example:11233', 'node-b:3344'],
         connected_node_count: 2,
+        connected_users: ['pubkey-active-1', 'pubkey-active-2'],
+        connected_user_count: 2,
         updated_at: 1700000000
       },
       {
@@ -87,6 +89,8 @@ describe('App auth flow', () => {
         ingest_policy: null,
         connected_nodes: ['node-a@bootstrap.example:11233'],
         connected_node_count: 1,
+        connected_users: ['pubkey-active-2'],
+        connected_user_count: 1,
         updated_at: 1700000100
       }
     ]);

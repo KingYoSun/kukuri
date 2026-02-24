@@ -8,6 +8,7 @@ import { IndexPage } from './pages/IndexPage';
 import { ModerationPage } from './pages/ModerationPage';
 import { PoliciesPage } from './pages/PoliciesPage';
 import { PrivacyDataPage } from './pages/PrivacyDataPage';
+import { RelayPage } from './pages/RelayPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { TrustPage } from './pages/TrustPage';
@@ -26,6 +27,12 @@ const servicesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/services',
   component: ServicesPage
+});
+
+const relayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/relay',
+  component: RelayPage
 });
 
 const subscriptionsRoute = createRoute({
@@ -79,6 +86,7 @@ const accessControlRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   servicesRoute,
+  relayRoute,
   subscriptionsRoute,
   policiesRoute,
   privacyDataRoute,
