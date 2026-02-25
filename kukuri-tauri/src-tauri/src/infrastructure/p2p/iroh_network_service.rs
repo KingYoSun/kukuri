@@ -8,6 +8,7 @@ use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::{Endpoint, RelayMode, address_lookup::MemoryLookup, protocol::Router};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
@@ -138,6 +139,37 @@ impl IrohNetworkService {
             }
         }
         success_count
+    }
+
+    fn bootstrap_node_id(candidate: &str) -> Option<String> {
+        let trimmed = candidate.trim();
+        let (node_id, _) = trimmed.split_once('@')?;
+        let node_id = node_id.trim();
+        if node_id.is_empty() {
+            return None;
+        }
+        Some(node_id.to_string())
+    }
+
+    async fn prune_stale_bootstrap_peers(&self, stale_peer_ids: &HashSet<String>) -> usize {
+        let mut peers = self.peers.write().await;
+        let before = peers.len();
+
+        peers.retain(|peer| {
+            if peer.address.ends_with("@fallback") {
+                return false;
+            }
+            !stale_peer_ids.contains(&peer.id)
+        });
+
+        let removed = before.saturating_sub(peers.len());
+        if removed > 0 {
+            let mut stats = self.stats.write().await;
+            stats.connected_peers = peers.len();
+            super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
+        }
+
+        removed
     }
 
     pub fn node_id(&self) -> String {
@@ -391,6 +423,7 @@ impl NetworkService for IrohNetworkService {
         nodes: Vec<String>,
         source: BootstrapSource,
     ) -> Result<(), AppError> {
+        let previous = { self.bootstrap_peers.read().await.clone() };
         let mut normalized: Vec<String> = nodes
             .into_iter()
             .map(|entry| entry.trim().to_string())
@@ -398,6 +431,23 @@ impl NetworkService for IrohNetworkService {
             .collect();
         normalized.sort();
         normalized.dedup();
+
+        let mut stale_peer_ids: HashSet<String> = previous
+            .iter()
+            .filter_map(|entry| Self::bootstrap_node_id(entry))
+            .collect();
+        stale_peer_ids.extend(
+            normalized
+                .iter()
+                .filter_map(|entry| Self::bootstrap_node_id(entry)),
+        );
+        let removed = self.prune_stale_bootstrap_peers(&stale_peer_ids).await;
+        if removed > 0 {
+            tracing::info!(
+                removed,
+                "Removed stale bootstrap peer entries before applying updated bootstrap nodes"
+            );
+        }
 
         {
             let mut cfg = self.network_config.write().await;
