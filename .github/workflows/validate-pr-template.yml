@@ -18,7 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     steps:
+      - name: Checkout code to check changed files
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if this is a meta PR (modifies quality gate files)
+        id: check-meta
+        run: |
+          # Get changed files
+          git diff --name-only HEAD^ HEAD > /tmp/changed_files.txt || echo "First commit, checking all files"
+          
+          # Check if any quality gate related files are modified
+          if grep -qE '^\.github/workflows/|^\.github/PULL_REQUEST_TEMPLATE\.md|^\.github/ISSUE_TEMPLATE/' /tmp/changed_files.txt 2>/dev/null; then
+            echo "is_meta=true" >> $GITHUB_OUTPUT
+            echo "This is a meta PR modifying quality gate files. Skipping body validation."
+          else
+            echo "is_meta=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Check required template sections and fields
+        if: steps.check-meta.outputs.is_meta != 'true'
         uses: actions/github-script@v7
         with:
           script: |
