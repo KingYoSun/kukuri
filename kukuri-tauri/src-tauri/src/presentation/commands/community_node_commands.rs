@@ -1,3 +1,4 @@
+use crate::infrastructure::p2p::bootstrap_config::{self, BootstrapSelection};
 use crate::presentation::dto::ApiResponse;
 use crate::presentation::dto::community_node_dto::{
     CommunityNodeAuthRequest, CommunityNodeAuthResponse, CommunityNodeBootstrapServicesRequest,
@@ -7,16 +8,49 @@ use crate::presentation::dto::community_node_dto::{
     CommunityNodeTrustProviderSelector, CommunityNodeTrustProviderState, CommunityNodeTrustRequest,
 };
 use crate::shared::AppError;
+use crate::shared::config::BootstrapSource;
 use crate::state::AppState;
 use tauri::State;
+
+fn should_apply_runtime_bootstrap(
+    previous: &BootstrapSelection,
+    next: &BootstrapSelection,
+) -> bool {
+    if next.source != BootstrapSource::User || next.nodes.is_empty() {
+        return false;
+    }
+
+    if previous.source != BootstrapSource::User {
+        return true;
+    }
+
+    previous.nodes != next.nodes
+}
 
 #[tauri::command]
 pub async fn set_community_node_config(
     state: State<'_, AppState>,
     request: CommunityNodeConfigRequest,
 ) -> Result<ApiResponse<CommunityNodeConfigResponse>, AppError> {
-    let result = state.community_node_handler.set_config(request).await;
-    Ok(ApiResponse::from_result(result))
+    let previous_selection = bootstrap_config::load_effective_bootstrap_nodes();
+    let config = state.community_node_handler.set_config(request).await?;
+    let next_selection = bootstrap_config::load_effective_bootstrap_nodes();
+
+    if should_apply_runtime_bootstrap(&previous_selection, &next_selection)
+        && let Err(err) = state
+            .p2p_handler
+            .apply_bootstrap_nodes(next_selection.nodes.clone(), next_selection.source)
+            .await
+    {
+        tracing::warn!(
+            error = %err,
+            source = ?next_selection.source,
+            node_count = next_selection.nodes.len(),
+            "Failed to apply bootstrap nodes after community node config update"
+        );
+    }
+
+    Ok(ApiResponse::success(config))
 }
 
 #[tauri::command]
@@ -187,4 +221,57 @@ pub async fn community_node_accept_consents(
 ) -> Result<ApiResponse<serde_json::Value>, AppError> {
     let result = state.community_node_handler.accept_consents(request).await;
     Ok(ApiResponse::from_result(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn selection(source: BootstrapSource, nodes: &[&str]) -> BootstrapSelection {
+        BootstrapSelection {
+            source,
+            nodes: nodes.iter().map(|node| (*node).to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn should_apply_runtime_bootstrap_when_source_switches_to_user() {
+        let previous = selection(BootstrapSource::None, &[]);
+        let next = selection(
+            BootstrapSource::User,
+            &["aaaa@127.0.0.1:11223", "bbbb@127.0.0.1:11224"],
+        );
+        assert!(should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_apply_runtime_bootstrap_when_user_nodes_change() {
+        let previous = selection(BootstrapSource::User, &["aaaa@127.0.0.1:11223"]);
+        let next = selection(
+            BootstrapSource::User,
+            &["aaaa@127.0.0.1:11223", "bbbb@127.0.0.1:11224"],
+        );
+        assert!(should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_not_apply_runtime_bootstrap_when_user_nodes_unchanged() {
+        let previous = selection(BootstrapSource::User, &["aaaa@127.0.0.1:11223"]);
+        let next = selection(BootstrapSource::User, &["aaaa@127.0.0.1:11223"]);
+        assert!(!should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_not_apply_runtime_bootstrap_for_non_user_source() {
+        let previous = selection(BootstrapSource::None, &[]);
+        let next = selection(BootstrapSource::Env, &["aaaa@127.0.0.1:11223"]);
+        assert!(!should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_not_apply_runtime_bootstrap_when_user_nodes_empty() {
+        let previous = selection(BootstrapSource::None, &[]);
+        let next = selection(BootstrapSource::User, &[]);
+        assert!(!should_apply_runtime_bootstrap(&previous, &next));
+    }
 }
