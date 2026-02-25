@@ -137,7 +137,7 @@ export function Sidebar() {
     if (topic) {
       setCurrentTopic(topic);
       setActiveSidebarCategory(null);
-      navigate({ to: '/' }); // ホーム（タイムライン）に遷移
+      navigate({ to: '/topics/$topicId', params: { topicId } });
     }
   };
 

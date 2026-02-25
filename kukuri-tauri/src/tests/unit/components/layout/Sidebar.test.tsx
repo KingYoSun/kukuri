@@ -357,7 +357,10 @@ describe('Sidebar', () => {
     await user.click(button);
 
     expect(setCurrentTopic).toHaveBeenCalledWith(topic);
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/topics/$topicId',
+      params: { topicId: 'topic-a' },
+    });
     expect(useUIStore.getState().activeSidebarCategory).toBeNull();
   });
 
