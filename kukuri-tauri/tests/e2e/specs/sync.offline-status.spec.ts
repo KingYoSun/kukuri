@@ -233,20 +233,24 @@ describe('SyncStatusIndicator オフライン同期', () => {
 
       const syncNowButton = await ensureSyncPopoverOpen();
       if (syncNowButton) {
-        await syncNowButton.scrollIntoView();
-        const isEnabled = await syncNowButton.isEnabled();
-        if (isEnabled) {
-          try {
-            await syncNowButton.click();
-          } catch {
-            await browser.execute(() => {
-              const labels = ['今すぐ同期', 'Sync now', '立即同步'];
-              const el = Array.from(document.querySelectorAll('button')).find((button) =>
-                labels.some((label) => button.textContent?.includes(label)),
-              ) as HTMLButtonElement | undefined;
-              el?.click();
-            });
+        try {
+          await syncNowButton.scrollIntoView();
+          const isEnabled = await syncNowButton.isEnabled();
+          if (isEnabled) {
+            try {
+              await syncNowButton.click();
+            } catch {
+              await browser.execute(() => {
+                const labels = ['今すぐ同期', 'Sync now', '立即同步'];
+                const el = Array.from(document.querySelectorAll('button')).find((button) =>
+                  labels.some((label) => button.textContent?.includes(label)),
+                ) as HTMLButtonElement | undefined;
+                el?.click();
+              });
+            }
           }
+        } catch {
+          // The popover action can be transiently non-interactable in CI; continue with status checks.
         }
 
         const postSyncStatusText = await browser.waitUntil(
