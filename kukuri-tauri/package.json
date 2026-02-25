@@ -23,7 +23,8 @@
     "e2e:seed": "node ./tests/e2e/tools/seed-db.cjs",
     "e2e:build": "pnpm e2e:seed && pnpm tauri build --debug --no-bundle",
     "e2e": "wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1",
-    "e2e:ci": "xvfb-run -a wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1"
+    "e2e:ci": "xvfb-run -a wdio run ./tests/e2e/wdio.desktop.ts --maxWorkers 1 --workers 1",
+    "e2e:playwright": "playwright test --config ./playwright.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -80,6 +81,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@tanstack/router-vite-plugin": "^1.161.0",
     "@tauri-apps/cli": "^2.10.0",
     "@testing-library/jest-dom": "^6.9.1",

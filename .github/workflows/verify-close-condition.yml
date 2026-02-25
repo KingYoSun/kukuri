@@ -1,0 +1,42 @@
+name: Verify Issue Close Condition
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  enforce-verified-fixed:
+    name: Enforce verified-fixed label
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reopen issue when verified-fixed label is missing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = (context.payload.issue.labels || []).map((label) => label.name);
+            const hasVerifiedFixed = labels.includes('verified-fixed');
+
+            if (hasVerifiedFixed) {
+              core.info(`Issue #${context.payload.issue.number} has verified-fixed label.`);
+              return;
+            }
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              state: 'open',
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body:
+                'Close Conditions 未達のため Issue を再オープンしました。`verified-fixed` ラベル付与と検証証跡の確認後に再度 close してください。',
+            });
+
+            core.setFailed('verified-fixed label is required before closing this issue.');

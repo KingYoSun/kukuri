@@ -11,7 +11,7 @@ export default defineConfig({
     setupFiles: './src/tests/setup.ts',
     css: false, // CSSの処理を無効化
     testTimeout: 15000, // SearchErrorState artefact や offline sync のタイマー待機に余裕を持たせる
-    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'tests/e2e/**'],
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'tests/e2e/**', 'e2e/**'],
     typecheck: {
       tsconfig: './tsconfig.test.json',
     },
