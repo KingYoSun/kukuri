@@ -63,7 +63,8 @@ describe('ユーザー検索', () => {
       ...fillerUsers,
     ];
     const seededUsers: SeedUserSearchFixtureResult['users'] = [];
-    const chunkSize = 8;
+    // Keep each bridge call under tauri-driver's async script timeout budget.
+    const chunkSize = 5;
     for (let start = 0; start < fixtureUsers.length; start += chunkSize) {
       const chunk = fixtureUsers.slice(start, start + chunkSize);
       if (chunk.length === 0) {

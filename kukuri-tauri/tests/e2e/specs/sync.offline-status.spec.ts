@@ -147,8 +147,8 @@ describe('SyncStatusIndicator オフライン同期', () => {
     );
 
     await indicator.scrollIntoView();
-    await indicator.waitForClickable({ timeout: 15000 });
     try {
+      await indicator.waitForClickable({ timeout: 15000 });
       await indicator.click();
     } catch {
       await browser.execute(() => {
@@ -205,8 +205,8 @@ describe('SyncStatusIndicator オフライン同期', () => {
           return candidate;
         }
         await indicator.scrollIntoView();
-        await indicator.waitForClickable({ timeout: 15000 });
         try {
+          await indicator.waitForClickable({ timeout: 15000 });
           await indicator.click();
         } catch {
           await browser.execute(() => {
@@ -282,13 +282,17 @@ describe('SyncStatusIndicator オフライン同期', () => {
     if (await conflictBanner.isExisting()) {
       if (!(await conflictBanner.isDisplayed())) {
         await indicator.scrollIntoView();
-        await indicator.waitForClickable({ timeout: 15000 });
-        await browser.execute(() => {
-          const el = document.querySelector(
-            '[data-testid="sync-indicator"]',
-          ) as HTMLButtonElement | null;
-          el?.click();
-        });
+        try {
+          await indicator.waitForClickable({ timeout: 15000 });
+          await indicator.click();
+        } catch {
+          await browser.execute(() => {
+            const el = document.querySelector(
+              '[data-testid="sync-indicator"]',
+            ) as HTMLButtonElement | null;
+            el?.click();
+          });
+        }
       }
       await conflictBanner.waitForDisplayed({ timeout: 20000 });
     }
