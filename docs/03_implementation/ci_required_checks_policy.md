@@ -1,6 +1,6 @@
 # CI Required Checks ポリシー
 
-最終更新日: 2026年02月14日
+最終更新日: 2026年02月25日
 
 ## 目的
 - GitHub Actions の待ち時間を短縮し、PR のレビュー待ち時間を最小化する。
@@ -12,6 +12,12 @@
 - docs-only 変更（`docs/**` のみ）では重い Docker ジョブをスキップする。
 - 同一ブランチの古い実行は `concurrency.cancel-in-progress: true` で自動キャンセルする。
 - `Community Node Tests` のローカル再現は OS を問わずコンテナ経路を既定とする（`docker compose -f docker-compose.test.yml up -d community-node-postgres` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features`）。
+
+## Issue close 品質ゲート
+- bug Issue の close 条件は `verified-fixed` ラベル付与・CI（`Test` workflow）成功・検証証跡添付の3点を必須とする。
+- `verify-close-condition.yml` は上記条件未達で close された bug Issue を自動で reopen し、再 close の前提条件をコメントする。
+- 自動 reopen が発生した場合は同ワークフローから Discord webhook 通知を送信する（payload は `flags: 4` を付与）。
+- `DISCORD_WEBHOOK_URL` が未設定の環境では通知 step はスキップし、ログに理由を残す。
 
 ## PR向け高速セット（Required Checks）
 - `Format Check`
@@ -38,5 +44,7 @@
 - `.github/workflows/smoke-tests.yml`
 - `.github/workflows/nightly.yml`
 - `.github/workflows/build-test-runner-image.yml`
+- `.github/workflows/verify-close-condition.yml`
+- `.github/ISSUE_TEMPLATE/bug_report.md`
 - `scripts/test-docker.sh`
 - `scripts/test-docker.ps1`
