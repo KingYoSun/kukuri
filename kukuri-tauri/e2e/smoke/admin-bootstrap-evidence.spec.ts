@@ -131,6 +131,8 @@ test.describe('Admin bootstrap evidence smoke', () => {
     });
 
     await page.goto(adminBaseUrl);
+    await page.getByRole('link', { name: 'Bootstrap' }).click();
+    await expect(page).toHaveURL(/\/bootstrap$/);
 
     await expect(page.getByRole('heading', { name: 'Bootstrap' })).toBeVisible();
     await expect(page.getByText('Connected users: 0')).toBeVisible();
