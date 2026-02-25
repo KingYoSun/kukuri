@@ -364,6 +364,8 @@ jobs:
         run: |
           cd kukuri-tauri
           pnpm install --frozen-lockfile
+          cd ../kukuri-community-node/apps/admin-console
+          pnpm install --frozen-lockfile
 
       - name: Install Playwright browser
         run: |
