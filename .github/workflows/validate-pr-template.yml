@@ -47,8 +47,21 @@ jobs:
               errors.push('Issue参照（例: `Closes #171`）が見つかりません。');
             }
 
-            if (!/@codex\b/i.test(body)) {
-              errors.push('`@codex` メンションが見つかりません。Codexレビュー依頼を追記してください。');
+            const hasCodexReviewCheck = /- \[[xX]\]\s*bocchan bot で Codex レビュー依頼コメントを投稿済み/.test(
+              body,
+            );
+            if (!hasCodexReviewCheck) {
+              errors.push(
+                '`## Codexレビュー依頼（必須）` のチェックボックスが未チェックです。bocchan bot での依頼後に更新してください。',
+              );
+            }
+
+            const reviewCommentUrlPattern =
+              /レビュー依頼コメントURL:\s*(?:\[[^\]]+\]\()?(https:\/\/github\.com\/[^/\s)]+\/[^/\s)#]+\/pull\/\d+#issuecomment-\d+)(?:\))?/i;
+            if (!reviewCommentUrlPattern.test(body)) {
+              errors.push(
+                '`レビュー依頼コメントURL` が未入力です。bocchan bot が投稿した PR コメント URL を記載してください。',
+              );
             }
 
             if (/\n1\.\s*\n2\.\s*\n3\.\s*(?:\n|$)/m.test(body)) {
