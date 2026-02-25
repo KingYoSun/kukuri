@@ -47,6 +47,48 @@ const hexToBytes = (hex: string): Uint8Array => {
 const deriveNsec = (hex: string) =>
   bech32.encode('nsec', bech32.toWords(hexToBytes(hex)), 1023);
 
+const waitForHomeOrTopic = async (): Promise<void> => {
+  try {
+    await waitForHome();
+    return;
+  } catch {
+    // Login can land on /topics/... depending on restored route state.
+  }
+
+  await browser.waitUntil(
+    async () => {
+      const homePage = await $('[data-testid="home-page"]');
+      if ((await homePage.isExisting()) && (await homePage.isDisplayed())) {
+        return true;
+      }
+
+      const topicPageTrigger = await $('[data-testid="open-topic-threads-button"]');
+      if ((await topicPageTrigger.isExisting()) && (await topicPageTrigger.isDisplayed())) {
+        return true;
+      }
+
+      const snapshot = await browser.execute(() => {
+        return {
+          location: window.location.pathname,
+          auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
+        };
+      });
+
+      return (
+        typeof snapshot.location === 'string' &&
+        snapshot.location.startsWith('/topics/') &&
+        snapshot.auth !== null &&
+        snapshot.auth !== 'null'
+      );
+    },
+    {
+      timeout: 40000,
+      interval: 400,
+      timeoutMsg: 'Home/Topic page did not become visible after login',
+    },
+  );
+};
+
 describe('Community Node search/index', () => {
   before(async () => {
     await waitForAppReady();
@@ -74,7 +116,7 @@ describe('Community Node search/index', () => {
     await nsecInput.setValue(deriveNsec(SEED_SUBSCRIBER_SECRET));
     await $('button[type="submit"]').click();
 
-    await waitForHome();
+    await waitForHomeOrTopic();
 
     await ensureTestTopic({ name: 'community-node-search', topicId });
     const topicButton = await $(`[data-testid="topic-${topicId}"]`);
