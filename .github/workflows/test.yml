@@ -339,6 +339,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [change-scope]
     if: needs.change-scope.outputs.docs_only != 'true'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -368,6 +374,275 @@ jobs:
         run: |
           cd kukuri-tauri
           pnpm e2e:playwright
+
+      - name: Upload Playwright screenshots to Cloudflare R2
+        if: always()
+        id: r2_upload
+        shell: bash
+        env:
+          R2_BUCKET: kukuri-screenshots
+          CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+          CLOUDFLARE_R2_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY }}
+          CLOUDFLARE_R2_SECRET: ${{ secrets.CLOUDFLARE_R2_SECRET }}
+          CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+        run: |
+          set -uo pipefail
+
+          mkdir -p tmp
+          comment_path='tmp/playwright-r2-comment.md'
+          urls_path='tmp/playwright-r2-urls.tsv'
+          : >"$urls_path"
+
+          echo "comment_path=${comment_path}" >>"$GITHUB_OUTPUT"
+          echo "uploaded_count=0" >>"$GITHUB_OUTPUT"
+          echo "upload_status=skipped" >>"$GITHUB_OUTPUT"
+
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo '## Playwright screenshots (Cloudflare R2)'
+            echo
+            echo "- Run: ${run_url}"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo
+          } >"$comment_path"
+
+          if [[ -z "${CLOUDFLARE_R2_ENDPOINT}" || -z "${CLOUDFLARE_R2_ACCESS_KEY}" || -z "${CLOUDFLARE_R2_SECRET}" ]]; then
+            echo 'R2 認証情報が未設定のため、スクリーンショットのアップロードをスキップしました。' >>"$comment_path"
+            echo "upload_status=missing-secrets" >>"$GITHUB_OUTPUT"
+            cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if ! command -v aws >/dev/null 2>&1; then
+            echo 'aws CLI が見つからないため、スクリーンショットのアップロードをスキップしました。' >>"$comment_path"
+            echo "upload_status=missing-aws-cli" >>"$GITHUB_OUTPUT"
+            cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ ! -d kukuri-tauri/test-results ]]; then
+            echo 'スクリーンショットディレクトリ（`kukuri-tauri/test-results`）が存在しないため、アップロード対象がありません。' >>"$comment_path"
+            echo "upload_status=no-results-dir" >>"$GITHUB_OUTPUT"
+            cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          mapfile -t screenshot_files < <(find kukuri-tauri/test-results -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) | sort)
+
+          if (( ${#screenshot_files[@]} == 0 )); then
+            echo 'スクリーンショット画像は生成されませんでした（通常はテスト成功時）。' >>"$comment_path"
+            echo "upload_status=no-screenshots" >>"$GITHUB_OUTPUT"
+            cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          export AWS_ACCESS_KEY_ID="${CLOUDFLARE_R2_ACCESS_KEY}"
+          export AWS_SECRET_ACCESS_KEY="${CLOUDFLARE_R2_SECRET}"
+          export AWS_DEFAULT_REGION=auto
+
+          account_id="$(echo "${CLOUDFLARE_R2_ENDPOINT}" | sed -E 's#https?://([^.]+)\.r2\.cloudflarestorage\.com/?#\1#')"
+          if [[ "${account_id}" == "${CLOUDFLARE_R2_ENDPOINT}" ]]; then
+            account_id=''
+          fi
+
+          public_base_url=''
+          if [[ -n "${account_id}" && -n "${CLOUDFLARE_R2_TOKEN}" ]]; then
+            managed_response="$(curl -fsS \
+              -H "Authorization: Bearer ${CLOUDFLARE_R2_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${account_id}/r2/buckets/${R2_BUCKET}/domains/managed" || true)"
+            managed_enabled="$(echo "${managed_response}" | jq -r '.result.enabled // false')"
+            managed_domain="$(echo "${managed_response}" | jq -r '.result.domain // empty')"
+
+            if [[ "${managed_enabled}" == 'true' && -n "${managed_domain}" ]]; then
+              if [[ "${managed_domain}" =~ ^https?:// ]]; then
+                public_base_url="${managed_domain%/}"
+              else
+                public_base_url="https://${managed_domain}"
+              fi
+            fi
+
+            if [[ -z "${public_base_url}" ]]; then
+              custom_response="$(curl -fsS \
+                -H "Authorization: Bearer ${CLOUDFLARE_R2_TOKEN}" \
+                "https://api.cloudflare.com/client/v4/accounts/${account_id}/r2/buckets/${R2_BUCKET}/domains/custom" || true)"
+              custom_domain="$(echo "${custom_response}" | jq -r '.result[]? | select(.enabled == true) | .domain' | head -n1 || true)"
+              if [[ -n "${custom_domain}" ]]; then
+                if [[ "${custom_domain}" =~ ^https?:// ]]; then
+                  public_base_url="${custom_domain%/}"
+                else
+                  public_base_url="https://${custom_domain}"
+                fi
+              fi
+            fi
+          fi
+
+          if [[ -z "${public_base_url}" ]]; then
+            public_url_note='公開ドメインが取得できなかったため、7日で失効する署名付きURLをコメントします。'
+          else
+            public_url_note=''
+          fi
+
+          prefix="playwright/${GITHUB_REPOSITORY}/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}/${GITHUB_SHA}"
+          upload_failed=0
+          uploaded_count=0
+
+          for screenshot_path in "${screenshot_files[@]}"; do
+            relative_path="${screenshot_path#./}"
+            object_key="${prefix}/${relative_path}"
+
+            if aws s3 cp "${screenshot_path}" "s3://${R2_BUCKET}/${object_key}" --endpoint-url "${CLOUDFLARE_R2_ENDPOINT}" --only-show-errors; then
+              if [[ -n "${public_base_url}" ]]; then
+                url="${public_base_url}/${object_key}"
+              else
+                url="$(aws s3 presign "s3://${R2_BUCKET}/${object_key}" --expires-in 604800 --endpoint-url "${CLOUDFLARE_R2_ENDPOINT}")"
+              fi
+              printf '%s\t%s\n' "${relative_path}" "${url}" >>"$urls_path"
+              uploaded_count=$((uploaded_count + 1))
+            else
+              upload_failed=$((upload_failed + 1))
+            fi
+          done
+
+          {
+            echo "- 検出画像数: ${#screenshot_files[@]}"
+            echo "- アップロード成功: ${uploaded_count}"
+            echo "- アップロード失敗: ${upload_failed}"
+            echo
+          } >>"$comment_path"
+
+          if (( uploaded_count == 0 )); then
+            echo 'スクリーンショットのアップロードに失敗しました。ワークフローログを確認してください。' >>"$comment_path"
+            echo "upload_status=upload-failed" >>"$GITHUB_OUTPUT"
+            cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo '| File | URL |' >>"$comment_path"
+          echo '| --- | --- |' >>"$comment_path"
+
+          max_comment_links=30
+          line_count=0
+          while IFS=$'\t' read -r relative_path url; do
+            line_count=$((line_count + 1))
+            if (( line_count <= max_comment_links )); then
+              escaped_relative_path="${relative_path//|/%7C}"
+              echo "| \`${escaped_relative_path}\` | [open](${url}) |" >>"$comment_path"
+            fi
+          done <"$urls_path"
+
+          if (( uploaded_count > max_comment_links )); then
+            omitted=$((uploaded_count - max_comment_links))
+            echo >>"$comment_path"
+            echo "_残り ${omitted} 件はジョブサマリーで確認できます。_" >>"$comment_path"
+          fi
+
+          if [[ -n "${public_url_note}" ]]; then
+            echo >>"$comment_path"
+            echo "> ${public_url_note}" >>"$comment_path"
+          fi
+
+          {
+            echo '### Playwright screenshots (Cloudflare R2)'
+            echo
+            cat "$comment_path"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          echo "uploaded_count=${uploaded_count}" >>"$GITHUB_OUTPUT"
+          echo "upload_status=uploaded" >>"$GITHUB_OUTPUT"
+
+      - name: Comment PR with Playwright screenshot URLs
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          COMMENT_BODY_PATH: ${{ steps.r2_upload.outputs.comment_path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- playwright-r2-screenshots -->';
+            const bodyPath = process.env.COMMENT_BODY_PATH;
+
+            if (!bodyPath || !fs.existsSync(bodyPath)) {
+              core.info(`Comment body file not found: ${bodyPath}`);
+              return;
+            }
+
+            const section = fs.readFileSync(bodyPath, 'utf8').trim();
+            if (!section) {
+              core.info('Comment body is empty; skip.');
+              return;
+            }
+
+            const body = `${marker}\n${section}`;
+            const issueNumber = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated screenshot comment: ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body,
+              });
+              core.info('Created screenshot comment.');
+            }
+
+      - name: Skip PR comment for fork pull requests
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: echo "Fork pull request detected. Skipping screenshot PR comment."
+
+      - name: Send completion webhook callback (Playwright screenshots)
+        if: ${{ always() && env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          WEBHOOK_URL: ${{ env.DISCORD_WEBHOOK_URL }}
+          UPLOADED_COUNT: ${{ steps.r2_upload.outputs.uploaded_count }}
+          UPLOAD_STATUS: ${{ steps.r2_upload.outputs.upload_status }}
+          REPO: ${{ github.repository }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+
+          target_line="🔗 run: ${RUN_URL}"
+          if [[ -n "${PR_URL:-}" ]]; then
+            target_line="${target_line}\n🔗 pr: ${PR_URL}"
+          fi
+
+          content=$(cat <<EOF
+          ✅ **[Playwright Screenshot Upload Completed]**
+          📌 repo: ${REPO}
+          📦 uploaded: ${UPLOADED_COUNT}
+          ℹ️ status: ${UPLOAD_STATUS}
+          ${target_line}
+          EOF
+          )
+          payload=$(jq -n --arg content "$content" '{content: $content, flags: 4}')
+          curl -sS -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
+
+      - name: Skip completion webhook callback (webhook not configured)
+        if: ${{ always() && env.DISCORD_WEBHOOK_URL == '' }}
+        run: echo "DISCORD_WEBHOOK_URL is empty; skipping completion webhook callback."
 
       - name: Upload Playwright artifacts
         if: always()
