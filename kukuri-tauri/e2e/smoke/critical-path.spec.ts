@@ -195,10 +195,17 @@ const installTauriMock = async (page: Page) => {
         configurable: true,
         writable: true,
         value: {
+          transformCallback: () => () => {},
           invoke: async (command: string) => clone(resolveCommand(command)),
           convertFileSrc: (filePath: string) => filePath,
           unregisterCallback: () => {},
         },
+      });
+
+      Object.defineProperty(window, '__TAURI__', {
+        configurable: true,
+        writable: true,
+        value: {},
       });
     },
     {

@@ -16,8 +16,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const labels = (context.payload.issue.labels || []).map((label) => label.name);
+            const labels = (context.payload.issue.labels || []).map((label) =>
+              label.name.toLowerCase(),
+            );
+            const hasBug = labels.includes('bug');
             const hasVerifiedFixed = labels.includes('verified-fixed');
+
+            if (!hasBug) {
+              core.info(`Issue #${context.payload.issue.number} is not a bug issue. Skip check.`);
+              return;
+            }
 
             if (hasVerifiedFixed) {
               core.info(`Issue #${context.payload.issue.number} has verified-fixed label.`);
