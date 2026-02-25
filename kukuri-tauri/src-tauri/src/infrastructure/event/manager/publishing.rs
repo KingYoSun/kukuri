@@ -6,6 +6,14 @@ use tracing::error;
 
 use super::EventManager;
 
+fn allow_no_relay_publish(message: &str) -> bool {
+    std::env::var("KUKURI_ALLOW_NO_RELAY")
+        .map(|value| value == "1")
+        .unwrap_or(false)
+        || message.contains("no relays specified")
+        || message.contains("not connected to any relays")
+}
+
 impl EventManager {
     /// テキストノートを投稿
     pub async fn publish_text_note(&self, content: &str) -> Result<EventId> {
@@ -19,11 +27,12 @@ impl EventManager {
         let event_id = match client_manager.publish_event(event.clone()).await {
             Ok(id) => id,
             Err(e) => {
-                if std::env::var("KUKURI_ALLOW_NO_RELAY")
-                    .map(|value| value == "1")
-                    .unwrap_or(false)
-                    && e.to_string().contains("no relays specified")
-                {
+                let msg = e.to_string();
+                if allow_no_relay_publish(&msg) {
+                    tracing::warn!(
+                        target: "event_manager",
+                        "publish_event skipped (no relay connected): {msg}"
+                    );
                     event.id
                 } else {
                     return Err(e);
@@ -62,11 +71,7 @@ impl EventManager {
             Ok(id) => id,
             Err(e) => {
                 let msg = e.to_string();
-                let allow_no_relay = std::env::var("KUKURI_ALLOW_NO_RELAY")
-                    .map(|value| value == "1")
-                    .unwrap_or(false)
-                    || msg.contains("no relays specified")
-                    || msg.contains("not connected to any relays");
+                let allow_no_relay = allow_no_relay_publish(&msg);
 
                 if allow_no_relay {
                     tracing::warn!(
@@ -243,7 +248,21 @@ impl EventManager {
         drop(publisher);
 
         let client_manager = self.client_manager.read().await;
-        let result_id = client_manager.publish_event(event.clone()).await?;
+        let result_id = match client_manager.publish_event(event.clone()).await {
+            Ok(id) => id,
+            Err(e) => {
+                let msg = e.to_string();
+                if allow_no_relay_publish(&msg) {
+                    tracing::warn!(
+                        target: "event_manager",
+                        "metadata publish skipped (no relay connected): {msg}"
+                    );
+                    event.id
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         drop(client_manager);
 
         if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
