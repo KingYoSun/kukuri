@@ -1,0 +1,65 @@
+name: Validate PR Template
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pr-template:
+    name: Validate PR body quality gates
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Check required template sections and fields
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const errors = [];
+            const requiredSections = [
+              '## 概要',
+              '## 関連Issue',
+              '## Codexレビュー依頼（必須）',
+              '## 検証証跡（必須）',
+              '## 検証チェックリスト（必須）',
+              '## テスト手順',
+            ];
+
+            const missingSections = requiredSections.filter((section) => !body.includes(section));
+            if (missingSections.length > 0) {
+              errors.push(`必須セクション不足: ${missingSections.join(', ')}`);
+            }
+
+            if (/Closes\s*#\s*(?:\n|$)/i.test(body)) {
+              errors.push('`Closes #` が未入力です。Issue番号を記入してください。');
+            }
+
+            const hasIssueReference = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*#\d+\b/i.test(body);
+            if (!hasIssueReference) {
+              errors.push('Issue参照（例: `Closes #171`）が見つかりません。');
+            }
+
+            if (!/@codex\b/i.test(body)) {
+              errors.push('`@codex` メンションが見つかりません。Codexレビュー依頼を追記してください。');
+            }
+
+            if (/\n1\.\s*\n2\.\s*\n3\.\s*(?:\n|$)/m.test(body)) {
+              errors.push('`## テスト手順` が未記入です。1-3 の手順を具体化してください。');
+            }
+
+            if (errors.length > 0) {
+              core.setFailed(
+                `PRテンプレート準拠チェックに失敗しました:\n- ${errors.join('\n- ')}`,
+              );
+              return;
+            }
+
+            core.info('PRテンプレート準拠チェックに成功しました。');

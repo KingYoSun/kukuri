@@ -2,7 +2,9 @@ name: Verify Issue Close Condition
 
 on:
   issues:
-    types: [closed]
+    types:
+      - closed
+  workflow_dispatch:
 
 permissions:
   issues: write
@@ -16,35 +18,57 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const labels = (context.payload.issue.labels || []).map((label) =>
-              label.name.toLowerCase(),
-            );
-            const hasBug = labels.includes('bug');
-            const hasVerifiedFixed = labels.includes('verified-fixed');
+            const issue = context.payload.issue;
+            if (!issue) {
+              core.info('No issue payload found. Skip.');
+              return;
+            }
 
-            if (!hasBug) {
-              core.info(`Issue #${context.payload.issue.number} is not a bug issue. Skip check.`);
+            const labels = (issue.labels || []).map((label) => label.name.toLowerCase());
+            const hasBugLabel = labels.includes('bug');
+            const hasVerifiedFixed = labels.includes('verified-fixed');
+            const hasBugTitlePrefix = /^\s*\[bug\]/i.test(issue.title || '');
+            const body = (issue.body || '').toLowerCase();
+            const hasBugTemplateMarkers =
+              body.includes('## 再現手順') && body.includes('## 期待される動作');
+            const isBugIssue = hasBugLabel || hasBugTitlePrefix || hasBugTemplateMarkers;
+
+            core.info(
+              `Issue #${issue.number} labels=${labels.join(',') || '(none)'} title="${issue.title}"`,
+            );
+
+            if (!isBugIssue) {
+              core.info(`Issue #${issue.number} is not detected as bug issue. Skip check.`);
               return;
             }
 
             if (hasVerifiedFixed) {
-              core.info(`Issue #${context.payload.issue.number} has verified-fixed label.`);
+              core.info(`Issue #${issue.number} has verified-fixed label.`);
               return;
+            }
+
+            if (!hasBugLabel) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['bug'],
+              });
             }
 
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
+              issue_number: issue.number,
               state: 'open',
             });
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
+              issue_number: issue.number,
               body:
-                'Close Conditions 未達のため Issue を再オープンしました。`verified-fixed` ラベル付与と検証証跡の確認後に再度 close してください。',
+                'Close Conditions 未達のため Issue を再オープンしました。`verified-fixed` ラベル付与と検証証跡の確認後に再度 close してください。必要に応じて `bug` ラベルも再確認してください。',
             });
 
             core.setFailed('verified-fixed label is required before closing this issue.');
