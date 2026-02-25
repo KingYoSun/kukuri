@@ -13,11 +13,19 @@ jobs:
   enforce-verified-fixed:
     name: Enforce verified-fixed label
     runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - name: Reopen issue when verified-fixed label is missing
+        id: enforce
         uses: actions/github-script@v7
         with:
           script: |
+            core.setOutput('reopened', 'false');
+            core.setOutput('issue_number', '');
+            core.setOutput('issue_title', '');
+            core.setOutput('issue_url', '');
+
             const issue = context.payload.issue;
             if (!issue) {
               core.info('No issue payload found. Skip.');
@@ -68,7 +76,37 @@ jobs:
               repo: context.repo.repo,
               issue_number: issue.number,
               body:
-                'Close Conditions 未達のため Issue を再オープンしました。`verified-fixed` ラベル付与と検証証跡の確認後に再度 close してください。必要に応じて `bug` ラベルも再確認してください。',
+                'Close Conditions 未達のため Issue を再オープンしました。`verified-fixed` ラベル付与、CI（`Test` workflow）成功、検証証跡の確認後に再度 close してください。必要に応じて `bug` ラベルも再確認してください。',
             });
 
+            core.setOutput('reopened', 'true');
+            core.setOutput('issue_number', String(issue.number));
+            core.setOutput('issue_title', issue.title || '');
+            core.setOutput('issue_url', issue.html_url || '');
+
             core.setFailed('verified-fixed label is required before closing this issue.');
+
+      - name: Send Discord notification for auto-reopened issue
+        if: ${{ always() && steps.enforce.outputs.reopened == 'true' && env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          WEBHOOK_URL: ${{ env.DISCORD_WEBHOOK_URL }}
+          ISSUE_NUMBER: ${{ steps.enforce.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.enforce.outputs.issue_title }}
+          ISSUE_URL: ${{ steps.enforce.outputs.issue_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          content=$(cat <<EOF
+          🔁 **[Issue Reopened] #${ISSUE_NUMBER}: ${ISSUE_TITLE}**
+          📌 repo: ${REPO}
+          📎 reason: Close Conditions 未達（verified-fixed / CI success / 検証証跡）
+          🔗 ${ISSUE_URL}
+          EOF
+          )
+          payload=$(jq -n --arg content "$content" '{content: $content, flags: 4}')
+          curl -sS -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
+
+      - name: Skip Discord notification (webhook not configured)
+        if: ${{ always() && steps.enforce.outputs.reopened == 'true' && env.DISCORD_WEBHOOK_URL == '' }}
+        run: echo "DISCORD_WEBHOOK_URL is empty; skipping reopen notification."
