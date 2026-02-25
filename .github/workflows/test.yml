@@ -375,7 +375,7 @@ jobs:
           cd kukuri-tauri
           pnpm e2e:playwright
 
-      - name: Upload Playwright screenshots to Cloudflare R2
+      - name: Upload Playwright screenshots (success + failure) to Cloudflare R2
         if: always()
         id: r2_upload
         shell: bash
@@ -430,7 +430,7 @@ jobs:
           mapfile -t screenshot_files < <(find kukuri-tauri/test-results -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) | sort)
 
           if (( ${#screenshot_files[@]} == 0 )); then
-            echo 'スクリーンショット画像は生成されませんでした（通常はテスト成功時）。' >>"$comment_path"
+            echo 'スクリーンショット画像が見つかりませんでした。Playwright の screenshot 設定とテスト実行ログを確認してください。' >>"$comment_path"
             echo "upload_status=no-screenshots" >>"$GITHUB_OUTPUT"
             cat "$comment_path" >>"$GITHUB_STEP_SUMMARY"
             exit 0
