@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 import App from './App';
 import { AccessControlPage } from './pages/AccessControlPage';
 import { AuditPage } from './pages/AuditPage';
+import { BootstrapPage } from './pages/BootstrapPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { IndexPage } from './pages/IndexPage';
 import { ModerationPage } from './pages/ModerationPage';
@@ -33,6 +34,12 @@ const relayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/relay',
   component: RelayPage
+});
+
+const bootstrapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/bootstrap',
+  component: BootstrapPage
 });
 
 const subscriptionsRoute = createRoute({
@@ -87,6 +94,7 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   servicesRoute,
   relayRoute,
+  bootstrapRoute,
   subscriptionsRoute,
   policiesRoute,
   privacyDataRoute,

@@ -68,76 +68,12 @@ describe('App auth flow', () => {
     expect(await screen.findByRole('heading', { name: 'Admin Login' })).toBeInTheDocument();
   });
 
-  it('Bootstrapカードに接続先と接続ユーザー一覧を表示する', async () => {
+  it('サイドバーにBootstrap専用ページへのメニューを表示する', async () => {
     vi.mocked(api.me).mockResolvedValue(adminUser);
-    vi.mocked(api.nodeSubscriptions).mockResolvedValue([
-      {
-        topic_id: 'topic-alpha',
-        enabled: true,
-        ref_count: 2,
-        ingest_policy: null,
-        connected_nodes: ['node-a@bootstrap.example:11233', 'node-b:3344'],
-        connected_node_count: 2,
-        connected_users: ['pubkey-active-1', 'pubkey-active-2'],
-        connected_user_count: 2,
-        updated_at: 1700000000
-      },
-      {
-        topic_id: 'topic-beta',
-        enabled: true,
-        ref_count: 1,
-        ingest_policy: null,
-        connected_nodes: ['node-a@bootstrap.example:11233'],
-        connected_node_count: 1,
-        connected_users: ['pubkey-active-2'],
-        connected_user_count: 1,
-        updated_at: 1700000100
-      }
-    ]);
-    vi.mocked(api.subscriptions).mockResolvedValue([
-      {
-        subscription_id: 'sub-1',
-        subscriber_pubkey: 'pubkey-active-1',
-        plan_id: 'basic',
-        status: 'active',
-        started_at: 200,
-        ended_at: null
-      },
-      {
-        subscription_id: 'sub-2',
-        subscriber_pubkey: 'pubkey-latest-paused',
-        plan_id: 'basic',
-        status: 'active',
-        started_at: 100,
-        ended_at: null
-      },
-      {
-        subscription_id: 'sub-3',
-        subscriber_pubkey: 'pubkey-latest-paused',
-        plan_id: 'basic',
-        status: 'paused',
-        started_at: 300,
-        ended_at: 320
-      },
-      {
-        subscription_id: 'sub-4',
-        subscriber_pubkey: 'pubkey-active-2',
-        plan_id: 'pro',
-        status: 'active',
-        started_at: 400,
-        ended_at: null
-      }
-    ]);
 
     renderWithQueryClient(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'Bootstrap' })).toBeInTheDocument();
-    expect(await screen.findByText('Connected users: 2')).toBeInTheDocument();
-    expect(await screen.findByText('node-a@bootstrap.example:11233')).toBeInTheDocument();
-    expect(await screen.findByText('node-b:3344@unknown:0')).toBeInTheDocument();
-    expect(await screen.findByText('pubkey-active-1')).toBeInTheDocument();
-    expect(await screen.findByText('pubkey-active-2')).toBeInTheDocument();
-    expect(screen.queryByText('pubkey-latest-paused')).not.toBeInTheDocument();
+    expect(await screen.findByText('Bootstrap')).toBeInTheDocument();
   });
 
   it('サイドバーと購読ページのクエリキーを共有して購読APIの重複呼び出しを防ぐ', async () => {
