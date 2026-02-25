@@ -94,6 +94,27 @@ async fn publish_topic_post_broadcasts_and_links_topics() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn update_metadata_succeeds_without_relays_and_broadcasts_to_p2p() -> Result<()> {
+    let ctx = TestContext::setup().await?;
+    let manager: Arc<dyn EventManagerHandle> = ctx.manager.clone();
+
+    manager
+        .set_default_p2p_topics(vec![DEFAULT_PUBLIC_TOPIC_ID.to_string()])
+        .await;
+
+    let metadata = Metadata::new().name("phase5-local-profile");
+    let event_id = manager.update_metadata(metadata).await?;
+    assert!(!event_id.to_hex().is_empty());
+
+    let joined = ctx.gossip.joined_topics().await;
+    assert!(joined.iter().any(|topic| topic == DEFAULT_PUBLIC_TOPIC_ID));
+    assert!(!ctx.gossip.broadcasts().await.is_empty());
+
+    ctx.pool.close().await;
+    Ok(())
+}
+
 struct TestContext {
     _temp_dir: TempDir,
     pool: ConnectionPool,
@@ -151,6 +172,10 @@ struct RecordingGossipService {
 impl RecordingGossipService {
     async fn joined_topics(&self) -> Vec<String> {
         self.joined_topics.lock().await.clone()
+    }
+
+    async fn broadcasts(&self) -> Vec<(String, DomainEvent)> {
+        self.broadcasts.lock().await.clone()
     }
 }
 
