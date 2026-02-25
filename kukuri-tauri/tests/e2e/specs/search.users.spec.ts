@@ -4,6 +4,7 @@ import {
   resetAppState,
   primeUserSearchRateLimit,
   seedUserSearchFixture,
+  type SeedUserSearchFixtureResult,
 } from '../helpers/bridge';
 import {
   completeProfileSetup,
@@ -55,19 +56,27 @@ describe('ユーザー検索', () => {
       follow: false,
     }));
 
-    const seedResult = await seedUserSearchFixture({
-      users: [
-        { displayName: 'Search Alpha', about: 'alpha user', follow: true },
-        { displayName: 'Search Beta', about: 'beta user', follow: false },
-        { displayName: 'Search Gamma', about: 'gamma user', follow: false },
-        ...fillerUsers,
-      ],
-    });
+    const fixtureUsers = [
+      { displayName: 'Search Alpha', about: 'alpha user', follow: true },
+      { displayName: 'Search Beta', about: 'beta user', follow: false },
+      { displayName: 'Search Gamma', about: 'gamma user', follow: false },
+      ...fillerUsers,
+    ];
+    const seededUsers: SeedUserSearchFixtureResult['users'] = [];
+    const chunkSize = 8;
+    for (let start = 0; start < fixtureUsers.length; start += chunkSize) {
+      const chunk = fixtureUsers.slice(start, start + chunkSize);
+      if (chunk.length === 0) {
+        continue;
+      }
+      const chunkResult = await seedUserSearchFixture({ users: chunk });
+      seededUsers.push(...chunkResult.users);
+    }
     const searchQuery = 'npub1';
     const targetUser =
-      seedResult.users.find((user) => user.displayName === 'Search Beta') ??
-      seedResult.users[1] ??
-      seedResult.users[0];
+      seededUsers.find((user) => user.displayName === 'Search Beta') ??
+      seededUsers[1] ??
+      seededUsers[0];
     const targetQuery = targetUser?.npub ?? searchQuery;
 
     await $('[data-testid="category-search"]').click();

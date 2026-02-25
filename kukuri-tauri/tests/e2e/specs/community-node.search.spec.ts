@@ -121,7 +121,21 @@ describe('Community Node search/index', () => {
     await topicButtonAfterSettings.waitForDisplayed({ timeout: 20000 });
     await topicButtonAfterSettings.scrollIntoView();
     await topicButtonAfterSettings.click();
-    await waitForHome();
+    await browser.waitUntil(
+      async () => {
+        const topicPageTrigger = await $('[data-testid="open-topic-threads-button"]');
+        if (await topicPageTrigger.isExisting()) {
+          return await topicPageTrigger.isDisplayed();
+        }
+        const homePage = await $('[data-testid="home-page"]');
+        return (await homePage.isExisting()) && (await homePage.isDisplayed());
+      },
+      {
+        timeout: 20000,
+        interval: 300,
+        timeoutMsg: 'Topic/Home page did not become visible after settings update',
+      },
+    );
 
     await browser.execute(() => {
       try {

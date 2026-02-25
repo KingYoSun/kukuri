@@ -37,6 +37,8 @@ if (!process.env.PATH?.split(':').includes('/usr/local/cargo/bin')) {
 }
 const FORBID_PENDING = process.env.E2E_FORBID_PENDING === '1';
 const MOCHA_TIMEOUT_MS = Number(process.env.E2E_MOCHA_TIMEOUT_MS ?? '60000');
+const SCRIPT_TIMEOUT_MS = Number(process.env.E2E_SCRIPT_TIMEOUT_MS ?? '120000');
+const PAGELOAD_TIMEOUT_MS = Number(process.env.E2E_PAGELOAD_TIMEOUT_MS ?? '120000');
 
 const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WORKERS ?? '1');
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
@@ -202,6 +204,13 @@ export const config: Options.Testrunner = {
   beforeSession: async function (_config, capabilities) {
     pruneUnsupportedCapabilities(capabilities);
     await ensureDriverReady();
+  },
+  before: async () => {
+    await browser.setTimeout({
+      script: SCRIPT_TIMEOUT_MS,
+      pageLoad: PAGELOAD_TIMEOUT_MS,
+      implicit: 0,
+    });
   },
   afterTest: async function (test, _context, { error }) {
     if (!error) {

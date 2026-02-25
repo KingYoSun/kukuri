@@ -1246,19 +1246,17 @@ export function registerE2EBridge(): void {
                 publicProfile: true,
                 showOnlineStatus: true,
               });
-              try {
-                await NostrAPI.updateMetadata({
-                  name: displayName,
-                  display_name: displayName,
-                  about,
-                  kukuri_privacy: { public_profile: true, show_online_status: true },
-                });
-              } catch (error) {
+              void NostrAPI.updateMetadata({
+                name: displayName,
+                display_name: displayName,
+                about,
+                kukuri_privacy: { public_profile: true, show_online_status: true },
+              }).catch((error) => {
                 errorHandler.log('E2EBridge.userSearchSeedMetadataFailed', error, {
                   context: 'registerE2EBridge.seedUserSearchFixture',
                   metadata: { npub: fixtureUser.npub },
                 });
-              }
+              });
               seeded.push({
                 npub: fixtureUser.npub,
                 displayName,
