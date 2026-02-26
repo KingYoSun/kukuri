@@ -1,15 +1,22 @@
 use anyhow::{anyhow, Result};
 use base64::prelude::*;
+use chrono::{TimeZone, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use futures_util::StreamExt;
 use iroh::{
     address_lookup::{
         DhtAddressLookup, DnsAddressLookup, MdnsAddressLookup, MemoryLookup, PkarrPublisher,
     },
     endpoint::Builder as EndpointBuilder,
     protocol::Router,
-    Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey,
+    Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey as IrohSecretKey,
 };
-use iroh_gossip::net::Gossip;
+use iroh_gossip::{
+    api::{Event as GossipApiEvent, GossipSender},
+    net::Gossip,
+};
+use nostr_sdk::prelude::{Keys as NostrKeys, SecretKey as NostrSecretKey};
+use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
@@ -30,6 +37,64 @@ pub(crate) const TOPIC_NAMESPACE: &str = "kukuri:tauri:";
 const LEGACY_TOPIC_PREFIX: &str = "kukuri:";
 const DEFAULT_PUBLIC_TOPIC_ID: &str =
     "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0";
+const P2P_PUBLISH_SIGNING_SECRET: &str =
+    "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+type MessageId = [u8; 32];
+
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+struct CliGossipMessage {
+    id: MessageId,
+    msg_type: CliMessageType,
+    payload: Vec<u8>,
+    timestamp: i64,
+    sender: Vec<u8>,
+    signature: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
+enum CliMessageType {
+    NostrEvent,
+    TopicSync,
+    PeerExchange,
+    Heartbeat,
+}
+
+impl CliGossipMessage {
+    fn new_nostr_event(payload: Vec<u8>, sender: Vec<u8>) -> Self {
+        Self {
+            id: generate_message_id(),
+            msg_type: CliMessageType::NostrEvent,
+            payload,
+            timestamp: Utc::now().timestamp(),
+            sender,
+            signature: Vec::new(),
+        }
+    }
+
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::encode_to_vec(self, bincode::config::standard())
+            .map_err(|err| anyhow!("Failed to serialize gossip message: {err}"))
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct PublishDomainEvent {
+    id: String,
+    pubkey: String,
+    created_at: String,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PublishSummary {
+    topic_id: String,
+    published_count: usize,
+    event_ids: Vec<String>,
+}
 
 #[derive(Parser)]
 #[command(name = "cn", version, about = "Kukuri community node CLI")]
@@ -228,6 +293,35 @@ enum P2pCommand {
         /// Connection timeout in seconds
         #[arg(long, default_value_t = 15)]
         timeout: u64,
+    },
+    /// Publish NIP-01 compatible event payload to a topic and exit
+    Publish {
+        #[command(flatten)]
+        args: P2pArgs,
+        /// Topic name or topic id
+        #[arg(long, default_value = DEFAULT_PUBLIC_TOPIC_ID)]
+        topic: String,
+        /// Post content
+        #[arg(long)]
+        content: String,
+        /// Bootstrap peers (format: node_id@host:port). If omitted, env/file fallback is used.
+        #[arg(long)]
+        peers: Vec<String>,
+        /// Number of events to publish
+        #[arg(long, default_value_t = 1)]
+        repeat: u16,
+        /// Interval between repeated publish attempts (milliseconds)
+        #[arg(long, default_value_t = 250)]
+        interval_ms: u64,
+        /// Wait timeout for first neighbor join before publish (seconds)
+        #[arg(long, default_value_t = 8)]
+        wait_for_peer_secs: u64,
+        /// Disable DHT discovery (enabled by default)
+        #[arg(long, default_value_t = false)]
+        no_dht: bool,
+        /// Enable mDNS discovery
+        #[arg(long, default_value_t = false)]
+        mdns: bool,
     },
 }
 
@@ -577,6 +671,31 @@ async fn handle_p2p(command: P2pCommand) -> Result<()> {
             init_logging(&args.log_level, args.json_logs)?;
             run_connectivity_probe(&args, &peer, !no_dht, mdns, timeout).await?;
         }
+        P2pCommand::Publish {
+            args,
+            topic,
+            content,
+            peers,
+            repeat,
+            interval_ms,
+            wait_for_peer_secs,
+            no_dht,
+            mdns,
+        } => {
+            init_logging(&args.log_level, args.json_logs)?;
+            run_publish_event(
+                &args,
+                &topic,
+                &content,
+                peers,
+                repeat,
+                interval_ms,
+                wait_for_peer_secs,
+                !no_dht,
+                mdns,
+            )
+            .await?;
+        }
     }
 
     Ok(())
@@ -598,7 +717,7 @@ fn apply_secret_key(
         }
         let mut buf = [0u8; 32];
         buf.copy_from_slice(&decoded);
-        let secret = SecretKey::from_bytes(&buf);
+        let secret = IrohSecretKey::from_bytes(&buf);
         builder = builder.secret_key(secret);
     }
     Ok(builder)
@@ -681,7 +800,69 @@ async fn run_bootstrap_node(
     let _router = Router::builder(endpoint.clone())
         .accept(iroh_gossip::ALPN, gossip.clone())
         .spawn();
-    let _gossip = gossip;
+
+    // Bootstrapノードを relay としても機能させるため、既定トピックへ参加して中継経路を確保する。
+    let relay_topics_raw = std::env::var("BOOTSTRAP_RELAY_TOPICS")
+        .unwrap_or_else(|_| DEFAULT_PUBLIC_TOPIC_ID.to_string());
+    let mut _relay_topics: Vec<(GossipSender, tokio::task::JoinHandle<()>)> = Vec::new();
+    for topic in relay_topics_raw
+        .split(',')
+        .map(str::trim)
+        .filter(|topic| !topic.is_empty())
+    {
+        let Some(canonical_topic) = generate_topic_id(topic) else {
+            warn!(topic = topic, "Skipping invalid bootstrap relay topic");
+            continue;
+        };
+        match gossip
+            .subscribe(topic_bytes(&canonical_topic).into(), vec![])
+            .await
+        {
+            Ok(topic_handle) => {
+                let (sender, mut receiver) = topic_handle.split();
+                let relay_topic = canonical_topic.clone();
+                let receiver_task = tokio::spawn(async move {
+                    while let Some(event) = receiver.next().await {
+                        match event {
+                            Ok(GossipApiEvent::Received(_)) => {
+                                debug!(topic = %relay_topic, "Bootstrap relay received gossip message");
+                            }
+                            Ok(GossipApiEvent::NeighborUp(peer)) => {
+                                debug!(topic = %relay_topic, peer = ?peer, "Bootstrap relay neighbor up");
+                            }
+                            Ok(GossipApiEvent::NeighborDown(peer)) => {
+                                debug!(topic = %relay_topic, peer = ?peer, "Bootstrap relay neighbor down");
+                            }
+                            Ok(GossipApiEvent::Lagged) => {
+                                warn!(topic = %relay_topic, "Bootstrap relay receiver lagged");
+                            }
+                            Err(err) => {
+                                warn!(
+                                    topic = %relay_topic,
+                                    error = %err,
+                                    "Bootstrap relay receiver task stopped with error"
+                                );
+                                break;
+                            }
+                        }
+                    }
+                });
+                info!(
+                    "Bootstrap relay subscribed to topic: {} ({})",
+                    topic, canonical_topic
+                );
+                _relay_topics.push((sender, receiver_task));
+            }
+            Err(err) => {
+                warn!(
+                    topic = topic,
+                    canonical = canonical_topic,
+                    error = %err,
+                    "Failed to subscribe bootstrap relay topic"
+                );
+            }
+        }
+    }
 
     info!("DHT bootstrap node is running. Press Ctrl+C to stop.");
 
@@ -838,6 +1019,174 @@ async fn run_connectivity_probe(
     Ok(())
 }
 
+async fn run_publish_event(
+    args: &P2pArgs,
+    topic: &str,
+    content: &str,
+    peers: Vec<String>,
+    repeat: u16,
+    interval_ms: u64,
+    wait_for_peer_secs: u64,
+    enable_dht: bool,
+    enable_mdns: bool,
+) -> Result<()> {
+    if content.trim().is_empty() {
+        return Err(anyhow!("content must not be empty"));
+    }
+
+    let bind_addr = SocketAddr::from_str(&args.bind)?;
+    let static_discovery = Arc::new(MemoryLookup::new());
+    let builder = Endpoint::empty_builder(RelayMode::Default);
+    let builder = apply_bind_address(builder, bind_addr)?;
+    let builder = apply_secret_key(builder, &args.secret_key)?;
+    let builder = apply_discovery_services(builder, enable_dht, enable_mdns, &static_discovery);
+    let endpoint = builder.bind().await?;
+
+    let gossip = Arc::new(Gossip::builder().spawn(endpoint.clone()));
+    let _router = Router::builder(endpoint.clone())
+        .accept(iroh_gossip::ALPN, gossip.clone())
+        .spawn();
+
+    let peer_hints = resolve_publish_peers(peers);
+    let mut peer_ids = Vec::new();
+    for peer in &peer_hints {
+        match parse_node_addr(peer) {
+            Ok(node_addr) => {
+                peer_ids.push(node_addr.id);
+                static_discovery.add_endpoint_info(node_addr.clone());
+                if let Err(err) = endpoint.connect(node_addr.clone(), iroh_gossip::ALPN).await {
+                    warn!(peer = %node_addr.id, error = %err, "Failed to connect bootstrap peer");
+                }
+            }
+            Err(err) => {
+                warn!(peer = %peer, error = %err, "Invalid publish peer hint");
+            }
+        }
+    }
+
+    let canonical_topic =
+        generate_topic_id(topic).ok_or_else(|| anyhow!("topic must not be empty"))?;
+    let topic_id = topic_bytes(&canonical_topic);
+
+    let gossip_topic = gossip
+        .subscribe(topic_id.into(), peer_ids.clone())
+        .await
+        .map_err(|err| anyhow!("failed to subscribe topic `{canonical_topic}`: {err:?}"))?;
+    let (sender, mut receiver) = gossip_topic.split();
+
+    if !peer_ids.is_empty() {
+        if let Err(err) = sender.join_peers(peer_ids.clone()).await {
+            warn!(error = ?err, "Failed to join peers before publish");
+        }
+    }
+
+    if wait_for_peer_secs > 0 {
+        let wait_duration = Duration::from_secs(wait_for_peer_secs);
+        match timeout(wait_duration, receiver.joined()).await {
+            Ok(Ok(peer)) => info!(peer = ?peer, topic = %canonical_topic, "Neighbor joined"),
+            Ok(Err(err)) => debug!(
+                error = ?err,
+                topic = %canonical_topic,
+                "No neighbor joined before publish"
+            ),
+            Err(_) => warn!(
+                topic = %canonical_topic,
+                timeout_secs = wait_for_peer_secs,
+                "Timed out waiting for neighbor"
+            ),
+        }
+    }
+
+    let repeat_count = repeat.max(1) as usize;
+    let mut event_ids = Vec::with_capacity(repeat_count);
+    let sender_id = endpoint.id().to_string().into_bytes();
+
+    for index in 0..repeat_count {
+        let attempt_content = if repeat_count == 1 {
+            content.to_string()
+        } else {
+            format!("{content} [#{:02}]", index + 1)
+        };
+        let raw_event = build_publish_raw_event(&canonical_topic, &attempt_content)?;
+        let event_payload = raw_event_to_publish_domain(&raw_event)?;
+        let payload = serde_json::to_vec(&event_payload)?;
+        let message = CliGossipMessage::new_nostr_event(payload, sender_id.clone());
+
+        sender
+            .broadcast(message.to_bytes()?.into())
+            .await
+            .map_err(|err| anyhow!("failed to broadcast gossip message: {err:?}"))?;
+
+        event_ids.push(raw_event.id);
+
+        if index + 1 < repeat_count && interval_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+        }
+    }
+
+    let summary = PublishSummary {
+        topic_id: canonical_topic,
+        published_count: event_ids.len(),
+        event_ids,
+    };
+    println!("{}", serde_json::to_string(&summary)?);
+    Ok(())
+}
+
+fn resolve_publish_peers(explicit: Vec<String>) -> Vec<String> {
+    let mut candidates = Vec::new();
+    if explicit.is_empty() {
+        if let Ok(from_env) = std::env::var("KUKURI_BOOTSTRAP_PEERS") {
+            candidates.extend(parse_bootstrap_peers(&from_env));
+        }
+        if candidates.is_empty() {
+            candidates.extend(load_bootstrap_peers_from_json());
+        }
+    } else {
+        candidates.extend(explicit);
+    }
+
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn parse_bootstrap_peers(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn build_publish_raw_event(topic_id: &str, content: &str) -> Result<cn_core::nostr::RawEvent> {
+    let secret = NostrSecretKey::from_hex(P2P_PUBLISH_SIGNING_SECRET)
+        .map_err(|err| anyhow!("invalid publish signing secret: {err}"))?;
+    let keys = NostrKeys::new(secret);
+    let tags = vec![
+        vec!["t".to_string(), topic_id.to_string()],
+        vec!["client".to_string(), "cn-cli".to_string()],
+        vec!["source".to_string(), "cn-cli:p2p:publish".to_string()],
+    ];
+    cn_core::nostr::build_signed_event(&keys, 1, tags, content.to_string())
+}
+
+fn raw_event_to_publish_domain(raw: &cn_core::nostr::RawEvent) -> Result<PublishDomainEvent> {
+    let created_at = Utc
+        .timestamp_opt(raw.created_at, 0)
+        .single()
+        .ok_or_else(|| anyhow!("invalid event timestamp: {}", raw.created_at))?;
+    Ok(PublishDomainEvent {
+        id: raw.id.clone(),
+        pubkey: raw.pubkey.clone(),
+        created_at: created_at.to_rfc3339(),
+        kind: raw.kind,
+        tags: raw.tags.clone(),
+        content: raw.content.clone(),
+        sig: raw.sig.clone(),
+    })
+}
+
 fn init_logging(level: &str, json: bool) -> Result<()> {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -979,6 +1328,17 @@ fn topic_bytes(canonical: &str) -> [u8; 32] {
     }
 
     *blake3::hash(canonical.as_bytes()).as_bytes()
+}
+
+fn generate_message_id() -> MessageId {
+    let uuid = uuid::Uuid::new_v4();
+    let mut id = [0u8; 32];
+    let uuid_bytes = uuid.as_bytes();
+    id[..16].copy_from_slice(uuid_bytes);
+    let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    id[16..24].copy_from_slice(&timestamp.to_le_bytes());
+    id[24..].copy_from_slice(&uuid_bytes[8..]);
+    id
 }
 
 fn is_hashed_topic_id(topic_id: &str) -> bool {

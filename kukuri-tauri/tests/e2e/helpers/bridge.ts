@@ -1,5 +1,6 @@
 import { browser } from '@wdio/globals';
 import type { SeedDirectMessageConversationResult } from '@/lib/api/tauri';
+import type { P2PStatus } from '@/lib/api/p2p';
 import type {
   CommunityNodeAuthResponse,
   CommunityNodeConfigResponse,
@@ -35,6 +36,10 @@ export type BridgeAction =
   | 'getBootstrapSnapshot'
   | 'applyCliBootstrap'
   | 'clearBootstrapNodes'
+  | 'getP2PStatus'
+  | 'getP2PMessageSnapshot'
+  | 'getPostStoreSnapshot'
+  | 'joinP2PTopic'
   | 'seedFriendPlusAccounts'
   | 'accessControlRequestJoin'
   | 'accessControlListJoinRequests'
@@ -222,6 +227,20 @@ export interface BootstrapSnapshot {
   envLocked: boolean;
 }
 
+export interface P2PMessageSnapshot {
+  topicId: string;
+  count: number;
+  recentMessageIds: string[];
+  recentContents: string[];
+}
+
+export interface PostStoreSnapshot {
+  topicId: string;
+  count: number;
+  recentPostIds: string[];
+  recentContents: string[];
+}
+
 export interface CommunityNodeAuthFlowResult {
   config: CommunityNodeConfigResponse | null;
   auth: CommunityNodeAuthResponse;
@@ -302,6 +321,10 @@ type BridgeResultMap = {
   getBootstrapSnapshot: BootstrapSnapshot;
   applyCliBootstrap: BootstrapSnapshot;
   clearBootstrapNodes: BootstrapSnapshot;
+  getP2PStatus: P2PStatus;
+  getP2PMessageSnapshot: P2PMessageSnapshot;
+  getPostStoreSnapshot: PostStoreSnapshot;
+  joinP2PTopic: null;
   seedFriendPlusAccounts: SeedFriendPlusAccountsResult;
   accessControlRequestJoin: AccessControlRequestJoinResult;
   accessControlListJoinRequests: AccessControlListJoinRequestsResult;
@@ -669,6 +692,22 @@ export async function applyCliBootstrap(): Promise<BootstrapSnapshot> {
 
 export async function clearBootstrapNodes(): Promise<BootstrapSnapshot> {
   return await callBridge('clearBootstrapNodes');
+}
+
+export async function getP2PStatus(): Promise<P2PStatus> {
+  return await callBridge('getP2PStatus');
+}
+
+export async function getP2PMessageSnapshot(topicId: string): Promise<P2PMessageSnapshot> {
+  return await callBridge('getP2PMessageSnapshot', { topicId });
+}
+
+export async function getPostStoreSnapshot(topicId: string): Promise<PostStoreSnapshot> {
+  return await callBridge('getPostStoreSnapshot', { topicId });
+}
+
+export async function joinP2PTopic(topicId: string, initialPeers: string[] = []): Promise<void> {
+  await callBridge('joinP2PTopic', { topicId, initialPeers });
 }
 
 export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {

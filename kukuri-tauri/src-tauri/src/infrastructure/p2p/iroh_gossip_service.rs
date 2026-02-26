@@ -11,6 +11,7 @@ use iroh_gossip::{
     net::Gossip,
     proto::TopicId,
 };
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +38,38 @@ struct TopicHandle {
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
     mesh: Arc<TopicMesh>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyRawEventPayload {
+    id: String,
+    pubkey: String,
+    created_at: i64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
+fn parse_domain_event_payload(payload: &[u8]) -> Result<Event, String> {
+    if let Ok(event) = serde_json::from_slice::<Event>(payload) {
+        return Ok(event);
+    }
+
+    let legacy = serde_json::from_slice::<LegacyRawEventPayload>(payload)
+        .map_err(|err| format!("failed to decode event payload: {err}"))?;
+    let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(legacy.created_at, 0)
+        .ok_or_else(|| format!("invalid legacy created_at: {}", legacy.created_at))?;
+
+    Ok(Event {
+        id: legacy.id,
+        pubkey: legacy.pubkey,
+        created_at,
+        kind: legacy.kind,
+        tags: legacy.tags,
+        content: legacy.content,
+        sig: legacy.sig,
+    })
 }
 
 impl IrohGossipService {
@@ -80,6 +113,50 @@ impl IrohGossipService {
         TopicId::from_bytes(bytes)
     }
 
+    async fn connect_parsed_peers(&self, topic: &str, parsed_peers: &[ParsedPeer]) {
+        for peer in parsed_peers {
+            let connect_timeout = Duration::from_secs(6);
+            let connect_result = if let Some(addr) = &peer.node_addr {
+                timeout(
+                    connect_timeout,
+                    self.endpoint.connect(addr.clone(), GOSSIP_ALPN),
+                )
+                .await
+            } else {
+                timeout(
+                    connect_timeout,
+                    self.endpoint.connect(peer.node_id, GOSSIP_ALPN),
+                )
+                .await
+            };
+
+            match connect_result {
+                Ok(Ok(_)) => {
+                    eprintln!(
+                        "[iroh_gossip_service] connected initial peer {} for topic {}",
+                        peer.node_id, topic
+                    );
+                }
+                Ok(Err(e)) => {
+                    tracing::debug!(
+                        topic = %topic,
+                        peer = %peer.node_id,
+                        error = %e,
+                        "Failed to connect initial peer"
+                    );
+                }
+                Err(_) => {
+                    tracing::debug!(
+                        topic = %topic,
+                        peer = %peer.node_id,
+                        timeout_secs = connect_timeout.as_secs(),
+                        "Timed out connecting initial peer"
+                    );
+                }
+            }
+        }
+    }
+
     async fn apply_initial_peers(
         &self,
         topic: &str,
@@ -104,6 +181,7 @@ impl IrohGossipService {
                 self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
+        self.connect_parsed_peers(topic, parsed_peers).await;
 
         let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
         if peer_ids.is_empty() {
@@ -168,6 +246,7 @@ impl GossipService for IrohGossipService {
                 self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
+        self.connect_parsed_peers(topic, &parsed_peers).await;
 
         let canonical_topic = generate_topic_id(topic);
         let topic_id = Self::create_topic_id(&canonical_topic);
@@ -263,14 +342,13 @@ impl GossipService for IrohGossipService {
                             });
                         }
 
-                        let event_result = if let Some(message) = decoded_message
-                            .as_ref()
-                            .filter(|m| matches!(m.msg_type, MessageType::NostrEvent))
-                        {
-                            serde_json::from_slice::<Event>(&message.payload)
+                        let event_result = if let Some(message) = decoded_message.as_ref() {
+                            // msg_type が想定外でも payload 側がイベントJSONなら取り込む。
+                            parse_domain_event_payload(&message.payload)
+                                .or_else(|_| parse_domain_event_payload(&msg.content))
                         } else {
                             // 後方互換のため、生バイト列をそのまま JSON として扱う
-                            serde_json::from_slice::<Event>(&msg.content)
+                            parse_domain_event_payload(&msg.content)
                         };
 
                         match event_result {
@@ -313,7 +391,7 @@ impl GossipService for IrohGossipService {
                                     action = "receive_failure",
                                     topic = %topic_clone,
                                     failures = snap.receive_details.failures,
-                                    error = ?e,
+                                    error = %e,
                                     "Failed to decode gossip payload as Nostr event"
                                 );
                             }
@@ -429,11 +507,7 @@ impl GossipService for IrohGossipService {
 
             tokio::spawn(async move {
                 while let Some(message) = message_rx.recv().await {
-                    if !matches!(message.msg_type, MessageType::NostrEvent) {
-                        continue;
-                    }
-
-                    match serde_json::from_slice::<Event>(&message.payload) {
+                    match parse_domain_event_payload(&message.payload) {
                         Ok(domain_event) => {
                             match domain_event
                                 .validate_nip01()
@@ -458,7 +532,7 @@ impl GossipService for IrohGossipService {
                             tracing::debug!(
                                 target: LOG_TARGET,
                                 topic = %topic_name,
-                                error = ?e,
+                                error = %e,
                                 "Failed to decode gossip payload into Event for subscription"
                             );
                         }

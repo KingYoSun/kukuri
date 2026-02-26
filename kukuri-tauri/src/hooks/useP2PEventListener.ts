@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { useP2PStore, type P2PMessage, type PeerInfo } from '@/stores/p2pStore';
@@ -8,7 +8,6 @@ import { useUIStore } from '@/stores/uiStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
-import { pubkeyToNpub } from '@/lib/utils/nostr';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 import i18n from '@/i18n';
@@ -25,6 +24,12 @@ interface P2PMessageEvent {
   };
 }
 
+interface P2PRawMessageEvent {
+  topic_id: string;
+  payload: unknown;
+  timestamp: number;
+}
+
 interface P2PPeerEvent {
   topic_id: string;
   peer_id: string;
@@ -37,19 +42,149 @@ interface P2PConnectionEvent {
   status: 'connected' | 'disconnected';
 }
 
+const upsertPostIntoList = (posts: Post[] | undefined, post: Post): Post[] => {
+  const filtered = (posts ?? []).filter((item) => item.id !== post.id);
+  return [...filtered, post].sort((a, b) => b.created_at - a.created_at);
+};
+
+const textDecoder = new TextDecoder();
+const RECENT_MESSAGE_ID_LIMIT = 2000;
+
+const normalizeTimestampMillis = (value: unknown, fallbackSeconds: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? Math.floor(value) : Math.floor(value * 1000);
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return Math.floor(fallbackSeconds * 1000);
+};
+
+const parseRawPayload = (payload: unknown): Record<string, unknown> | null => {
+  const parseJsonText = (value: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (payload instanceof Uint8Array) {
+    try {
+      return parseJsonText(textDecoder.decode(payload));
+    } catch {
+      return null;
+    }
+  }
+
+  if (payload instanceof ArrayBuffer) {
+    try {
+      return parseJsonText(textDecoder.decode(new Uint8Array(payload)));
+    } catch {
+      return null;
+    }
+  }
+
+  if (ArrayBuffer.isView(payload)) {
+    try {
+      return parseJsonText(
+        textDecoder.decode(new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength)),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return payload as Record<string, unknown>;
+  }
+
+  if (typeof payload === 'string') {
+    return parseJsonText(payload);
+  }
+
+  if (Array.isArray(payload) && payload.every((item) => typeof item === 'number')) {
+    try {
+      return parseJsonText(textDecoder.decode(Uint8Array.from(payload)));
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const parseRawEventMessage = (
+  topicId: string,
+  payload: unknown,
+  fallbackSeconds: number,
+): P2PMessage | null => {
+  const parsed = parseRawPayload(payload);
+  if (!parsed) {
+    return null;
+  }
+
+  const id = parsed.id;
+  const content = parsed.content;
+  const author = typeof parsed.author === 'string' ? parsed.author : parsed.pubkey;
+  const signature = typeof parsed.signature === 'string' ? parsed.signature : parsed.sig;
+
+  if (
+    typeof id !== 'string' ||
+    typeof author !== 'string' ||
+    typeof content !== 'string' ||
+    typeof signature !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    topic_id: topicId,
+    author,
+    content,
+    timestamp: normalizeTimestampMillis(parsed.created_at ?? parsed.timestamp, fallbackSeconds),
+    signature,
+  };
+};
+
 export function useP2PEventListener() {
   const queryClient = useQueryClient();
   const { addMessage, updatePeer, removePeer, refreshStatus } = useP2PStore();
   const { addPost } = usePostStore();
   const { updateTopicPostCount } = useTopicStore();
+  const recentMessageIds = useRef<Set<string>>(new Set());
+  const recentMessageOrder = useRef<string[]>([]);
+
+  const shouldHandleMessage = useCallback((messageId: string): boolean => {
+    if (recentMessageIds.current.has(messageId)) {
+      return false;
+    }
+
+    recentMessageIds.current.add(messageId);
+    recentMessageOrder.current.push(messageId);
+
+    if (recentMessageOrder.current.length > RECENT_MESSAGE_ID_LIMIT) {
+      const removed = recentMessageOrder.current.shift();
+      if (removed) {
+        recentMessageIds.current.delete(removed);
+      }
+    }
+
+    return true;
+  }, []);
 
   const handleP2PMessageAsPost = useCallback(
-    async (message: P2PMessage, topicId: string) => {
+    (message: P2PMessage, topicId: string) => {
       try {
         const author = applyKnownUserMetadata({
           id: message.author,
           pubkey: message.author,
-          npub: await pubkeyToNpub(message.author),
+          npub: message.author,
           name: i18n.t('p2p.unknownUser'),
           displayName: i18n.t('p2p.unknownUser'),
           about: '',
@@ -73,8 +208,10 @@ export function useP2PEventListener() {
         };
 
         addPost(post);
-        queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
-        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        queryClient.setQueryData<Post[]>(['timeline'], (prev) => upsertPostIntoList(prev, post));
+        queryClient.setQueryData<Post[]>(['posts', topicId], (prev) =>
+          upsertPostIntoList(prev, post),
+        );
         const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
         if (timelineUpdateMode === 'standard') {
           queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
@@ -96,6 +233,40 @@ export function useP2PEventListener() {
       }
     },
     [addPost, queryClient, updateTopicPostCount],
+  );
+
+  const handleIncomingP2PMessage = useCallback(
+    (topic_id: string, message: P2PMessage, context: string) => {
+      const v = validateNip01LiteMessage(message);
+      if (!v.ok) {
+        errorHandler.log('Drop invalid P2P message (NIP-01 lite)', v.reason, {
+          context,
+          showToast: false,
+        });
+        return;
+      }
+
+      if (!shouldHandleMessage(message.id)) {
+        return;
+      }
+
+      const p2pMessage: P2PMessage = {
+        ...message,
+        topic_id,
+      };
+
+      addMessage(p2pMessage);
+
+      const messageTimestampSeconds =
+        p2pMessage.timestamp > 1_000_000_000_000
+          ? Math.floor(p2pMessage.timestamp / 1000)
+          : Math.floor(p2pMessage.timestamp);
+
+      useTopicStore.getState().handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
+      handleP2PMessageAsPost(p2pMessage, topic_id);
+      window.dispatchEvent(new Event('realtime-update'));
+    },
+    [addMessage, handleP2PMessageAsPost, shouldHandleMessage],
   );
 
   useEffect(() => {
@@ -130,32 +301,25 @@ export function useP2PEventListener() {
     void registerListener<P2PMessageEvent>(
       'p2p://message',
       ({ topic_id, message }) => {
-        const v = validateNip01LiteMessage(message);
-        if (!v.ok) {
-          errorHandler.log('Drop invalid P2P message (NIP-01 lite)', v.reason, {
-            context: 'useP2PEventListener.p2p://message',
-            showToast: false,
-          });
-          return;
-        }
-
-        const p2pMessage: P2PMessage = {
-          ...message,
+        handleIncomingP2PMessage(
           topic_id,
-        };
-
-        addMessage(p2pMessage);
-
-        const messageTimestampSeconds =
-          message.timestamp > 1_000_000_000_000
-            ? Math.floor(message.timestamp / 1000)
-            : Math.floor(message.timestamp);
-
-        useTopicStore.getState().handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
-        handleP2PMessageAsPost(p2pMessage, topic_id);
-        window.dispatchEvent(new Event('realtime-update'));
+          { ...message, topic_id },
+          'useP2PEventListener.p2p://message',
+        );
       },
       'useP2PEventListener.p2p://message',
+    );
+
+    void registerListener<P2PRawMessageEvent>(
+      'p2p://message/raw',
+      ({ topic_id, payload, timestamp }) => {
+        const parsed = parseRawEventMessage(topic_id, payload, timestamp);
+        if (!parsed) {
+          return;
+        }
+        handleIncomingP2PMessage(topic_id, parsed, 'useP2PEventListener.p2p://message/raw');
+      },
+      'useP2PEventListener.p2p://message/raw',
     );
 
     void registerListener<P2PPeerEvent>(
@@ -222,5 +386,5 @@ export function useP2PEventListener() {
         }
       });
     };
-  }, [addMessage, updatePeer, removePeer, refreshStatus, handleP2PMessageAsPost]);
+  }, [updatePeer, removePeer, refreshStatus, handleIncomingP2PMessage]);
 }
