@@ -68,24 +68,102 @@ const SYNC_NOW_BUTTON_LABELS = ['今すぐ同期', 'Sync now', '立即同步'] a
 const includesAny = (text: string, labels: readonly string[]) =>
   labels.some((label) => text.includes(label));
 
-const findButtonByLabel = async (labels: readonly string[]) => {
+const isDisplayedSafe = async (element: WebdriverIO.Element) => {
+  try {
+    return await element.isDisplayed();
+  } catch {
+    return false;
+  }
+};
+
+const findButtonByLabel = async (
+  labels: readonly string[],
+  options?: { visibleOnly?: boolean },
+) => {
+  const visibleOnly = options?.visibleOnly ?? false;
+
   for (const label of labels) {
     const ariaButton = await $(`button[aria-label="${label}"]`);
-    if (await ariaButton.isExisting()) {
+    if ((await ariaButton.isExisting()) && (!visibleOnly || (await isDisplayedSafe(ariaButton)))) {
       return ariaButton;
     }
 
     const button = await $(`button=${label}`);
-    if (await button.isExisting()) {
+    if ((await button.isExisting()) && (!visibleOnly || (await isDisplayedSafe(button)))) {
       return button;
     }
 
     const partialTextButton = await $(`//button[contains(normalize-space(.), "${label}")]`);
-    if (await partialTextButton.isExisting()) {
+    if (
+      (await partialTextButton.isExisting()) &&
+      (!visibleOnly || (await isDisplayedSafe(partialTextButton)))
+    ) {
       return partialTextButton;
     }
   }
   return null;
+};
+
+const clickButtonByLabel = async (
+  labels: readonly string[],
+  options?: { visibleOnly?: boolean; timeoutMs?: number },
+) => {
+  const visibleOnly = options?.visibleOnly ?? false;
+  const timeoutMs = options?.timeoutMs ?? 5000;
+
+  const button = await findButtonByLabel(labels, { visibleOnly });
+  if (button) {
+    try {
+      await button.waitForClickable({ timeout: timeoutMs });
+      await button.click();
+      return true;
+    } catch {
+      // fall through to DOM click fallback
+    }
+  }
+
+  return await browser.execute(
+    (buttonLabels, requireVisible) => {
+      const normalize = (value: string | null) => value?.replace(/\s+/g, ' ').trim() ?? '';
+      const isVisible = (element: HTMLButtonElement) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.opacity !== '0' &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.bottom > 0 &&
+          rect.top < window.innerHeight
+        );
+      };
+
+      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
+      const candidates = allButtons.filter((button) => {
+        const ariaLabel = normalize(button.getAttribute('aria-label'));
+        const text = normalize(button.textContent);
+        return buttonLabels.some((label) => ariaLabel === label || text.includes(label));
+      });
+      if (candidates.length === 0) {
+        return false;
+      }
+
+      const enabledCandidates = candidates.filter((candidate) => !candidate.disabled);
+      const interactableCandidates = enabledCandidates.filter((candidate) => isVisible(candidate));
+      const target =
+        (requireVisible ? interactableCandidates[0] : undefined) ??
+        interactableCandidates[0] ??
+        enabledCandidates[0];
+      if (!target) {
+        return false;
+      }
+      target.click();
+      return true;
+    },
+    [...labels],
+    visibleOnly,
+  );
 };
 
 describe('SyncStatusIndicator オフライン同期', () => {
@@ -168,12 +246,12 @@ describe('SyncStatusIndicator オフライン同期', () => {
       expect(indicatorTextWithPending).toContain(`${summarySnapshot.pendingActionCount}`);
       expect((await summary.getText()).trim().length).toBeGreaterThan(0);
 
-      const refreshQueueButton = await findButtonByLabel(RETRY_QUEUE_BUTTON_LABELS);
-      if (!refreshQueueButton) {
+      const queueRefreshed = await clickButtonByLabel(RETRY_QUEUE_BUTTON_LABELS, {
+        visibleOnly: true,
+      });
+      if (!queueRefreshed) {
         throw new Error('再送キュー更新ボタンが見つかりませんでした');
       }
-      await refreshQueueButton.waitForClickable({ timeout: 15000 });
-      await refreshQueueButton.click();
       await browser.waitUntil(
         async () => {
           const item = await $(`[data-testid="queue-item-${queueSeed.queueId}"]`);
@@ -200,7 +278,9 @@ describe('SyncStatusIndicator オフライン同期', () => {
       );
 
       const ensureSyncPopoverOpen = async () => {
-        const candidate = await findButtonByLabel(SYNC_NOW_BUTTON_LABELS);
+        const candidate = await findButtonByLabel(SYNC_NOW_BUTTON_LABELS, {
+          visibleOnly: true,
+        });
         if (candidate) {
           return candidate;
         }
@@ -218,9 +298,10 @@ describe('SyncStatusIndicator オフライン同期', () => {
         }
         try {
           await browser.waitUntil(
-            async () => (await findButtonByLabel(SYNC_NOW_BUTTON_LABELS)) !== null,
+            async () =>
+              (await findButtonByLabel(SYNC_NOW_BUTTON_LABELS, { visibleOnly: true })) !== null,
             {
-              timeout: 15000,
+              timeout: 5000,
               interval: 300,
               timeoutMsg: '同期ポップオーバーが表示されませんでした',
             },
@@ -228,30 +309,12 @@ describe('SyncStatusIndicator オフライン同期', () => {
         } catch {
           return null;
         }
-        return await findButtonByLabel(SYNC_NOW_BUTTON_LABELS);
+        return await findButtonByLabel(SYNC_NOW_BUTTON_LABELS, { visibleOnly: true });
       };
 
       const syncNowButton = await ensureSyncPopoverOpen();
       if (syncNowButton) {
-        try {
-          await syncNowButton.scrollIntoView();
-          const isEnabled = await syncNowButton.isEnabled();
-          if (isEnabled) {
-            try {
-              await syncNowButton.click();
-            } catch {
-              await browser.execute(() => {
-                const labels = ['今すぐ同期', 'Sync now', '立即同步'];
-                const el = Array.from(document.querySelectorAll('button')).find((button) =>
-                  labels.some((label) => button.textContent?.includes(label)),
-                ) as HTMLButtonElement | undefined;
-                el?.click();
-              });
-            }
-          }
-        } catch {
-          // The popover action can be transiently non-interactable in CI; continue with status checks.
-        }
+        await clickButtonByLabel(SYNC_NOW_BUTTON_LABELS, { visibleOnly: true, timeoutMs: 3000 });
 
         const postSyncStatusText = await browser.waitUntil(
           async () => {
