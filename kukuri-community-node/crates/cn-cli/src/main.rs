@@ -249,6 +249,30 @@ struct P2pArgs {
     secret_key: Option<String>,
 }
 
+#[derive(Args, Clone)]
+struct P2pPublishArgs {
+    /// Bind address for one-shot publish (ephemeral default to avoid port collisions)
+    #[arg(
+        short,
+        long,
+        default_value = "127.0.0.1:0",
+        env = "P2P_PUBLISH_BIND_ADDRESS"
+    )]
+    bind: String,
+
+    /// Log level (trace, debug, info, warn, error)
+    #[arg(short, long, default_value = "info", env = "LOG_LEVEL")]
+    log_level: String,
+
+    /// Enable JSON logging
+    #[arg(long, env = "JSON_LOGS")]
+    json_logs: bool,
+
+    /// Optional base64-encoded 32-byte secret key for deterministic node identity
+    #[arg(long, env = "KUKURI_SECRET_KEY")]
+    secret_key: Option<String>,
+}
+
 #[derive(Subcommand)]
 enum P2pCommand {
     /// Print the node ID derived from the configured secret key
@@ -295,7 +319,7 @@ enum P2pCommand {
     /// Publish NIP-01 compatible event payload to a topic and exit
     Publish {
         #[command(flatten)]
-        args: P2pArgs,
+        args: P2pPublishArgs,
         /// Topic name or topic id
         #[arg(long, default_value = DEFAULT_PUBLIC_TOPIC_ID)]
         topic: String,
@@ -1022,7 +1046,7 @@ async fn run_connectivity_probe(
 }
 
 async fn run_publish_event(
-    args: &P2pArgs,
+    args: &P2pPublishArgs,
     topic: &str,
     content: &str,
     peers: Vec<String>,
@@ -1362,6 +1386,7 @@ fn is_hashed_topic_id(topic_id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
     use std::{
         fs,
         path::PathBuf,
@@ -1427,6 +1452,18 @@ mod tests {
             Some(super::DEFAULT_PUBLIC_TOPIC_ID.to_string())
         );
         assert!(super::generate_topic_id("   ").is_none());
+    }
+
+    #[test]
+    fn publish_command_uses_ephemeral_bind_by_default() {
+        let cli = Cli::parse_from(["cn", "p2p", "publish", "--content", "hello"]);
+        let Commands::P2p { command } = cli.command else {
+            panic!("expected p2p command");
+        };
+        let P2pCommand::Publish { args, .. } = command else {
+            panic!("expected publish subcommand");
+        };
+        assert_eq!(args.bind, "127.0.0.1:0");
     }
 
     #[test]

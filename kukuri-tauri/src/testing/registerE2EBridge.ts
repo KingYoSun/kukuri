@@ -36,6 +36,7 @@ import { usePostStore, useP2PStore, type Post } from '@/stores';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
+import { useUIStore } from '@/stores/uiStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
 import { offlineApi } from '@/api/offline';
 import { EntityType, OfflineActionType } from '@/types/offline';
@@ -238,7 +239,12 @@ export interface E2EBridge {
   getBootstrapSnapshot: () => Promise<BootstrapSnapshot>;
   applyCliBootstrap: () => Promise<BootstrapSnapshot>;
   clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
+  getTimelineUpdateMode: () => Promise<{ mode: 'standard' | 'realtime' }>;
+  setTimelineUpdateMode: (payload: {
+    mode: 'standard' | 'realtime';
+  }) => Promise<{ mode: 'standard' | 'realtime' }>;
   getP2PStatus: () => Promise<P2PStatus>;
+  getP2PNodeAddresses: () => Promise<string[]>;
   getP2PMessageSnapshot: (payload?: { topicId?: string }) => Promise<{
     topicId: string;
     count: number;
@@ -1434,7 +1440,18 @@ export function registerE2EBridge(): void {
           const config = await p2pApi.getBootstrapConfig();
           return bootstrapSnapshotFromConfig(config);
         },
+        getTimelineUpdateMode: async () => ({
+          mode: useUIStore.getState().timelineUpdateMode,
+        }),
+        setTimelineUpdateMode: async (payload: { mode: 'standard' | 'realtime' }) => {
+          const mode = payload?.mode === 'realtime' ? 'realtime' : 'standard';
+          useUIStore.getState().setTimelineUpdateMode(mode);
+          return {
+            mode: useUIStore.getState().timelineUpdateMode,
+          };
+        },
         getP2PStatus: async () => await p2pApi.getStatus(),
+        getP2PNodeAddresses: async () => await p2pApi.getNodeAddress(),
         getP2PMessageSnapshot: async (payload?: { topicId?: string }) => {
           const topicId = payload?.topicId?.trim();
           if (!topicId) {

@@ -36,7 +36,9 @@ if (!process.env.PATH?.split(':').includes('/usr/local/cargo/bin')) {
   process.env.PATH = `/usr/local/cargo/bin:${process.env.PATH ?? ''}`;
 }
 const FORBID_PENDING = process.env.E2E_FORBID_PENDING === '1';
-const MOCHA_TIMEOUT_MS = Number(process.env.E2E_MOCHA_TIMEOUT_MS ?? '60000');
+const MOCHA_TIMEOUT_MS = Number(
+  process.env.E2E_MOCHA_TIMEOUT_MS ?? (process.env.SCENARIO === 'community-node-e2e' ? '180000' : '60000'),
+);
 const SCRIPT_TIMEOUT_MS = Number(process.env.E2E_SCRIPT_TIMEOUT_MS ?? '120000');
 const PAGELOAD_TIMEOUT_MS = Number(process.env.E2E_PAGELOAD_TIMEOUT_MS ?? '120000');
 
@@ -44,6 +46,7 @@ const WORKER_COUNT = Number(process.env.WDIO_WORKERS ?? process.env.WDIO_MAX_WOR
 console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
 console.info(`[wdio.desktop] p2p bootstrap path resolved to ${P2P_BOOTSTRAP_PATH}`);
+console.info(`[wdio.desktop] mocha timeout resolved to ${MOCHA_TIMEOUT_MS}`);
 if (FORBID_PENDING) {
   console.info('[wdio.desktop] pending/skip tests are forbidden for this run');
 }

@@ -10,6 +10,7 @@ import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
+import { NostrEventKind } from '@/types/nostr';
 import i18n from '@/i18n';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
 
@@ -222,9 +223,20 @@ export function useP2PEventListener() {
           queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
         } else {
           dispatchTimelineRealtimeDelta({
-            source: 'p2p',
-            topicId,
-            message,
+            source: 'nostr',
+            payload: {
+              id: message.id,
+              author: message.author,
+              content: message.content,
+              created_at: message.timestamp,
+              kind: NostrEventKind.TopicPost,
+              tags: [
+                ['t', topicId],
+                ['thread_uuid', message.id],
+                ['thread', `${topicId}/threads/${message.id}`],
+                ['source', 'p2p'],
+              ],
+            },
           });
         }
         updateTopicPostCount(topicId, 1);

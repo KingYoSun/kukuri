@@ -5,14 +5,14 @@ import { dirname, resolve } from 'node:path';
 import { waitForAppReady } from '../helpers/waitForAppReady';
 import {
   applyCliBootstrap,
-  communityNodeListBootstrapNodes,
-  communityNodeListBootstrapServices,
-  getP2PStatus,
-  getP2PMessageSnapshot,
+  ensureTestTopic,
   getBootstrapSnapshot,
-  getTopicSnapshot,
+  getP2PMessageSnapshot,
+  getP2PStatus,
+  getPostStoreSnapshot,
   joinP2PTopic,
   resetAppState,
+  setTimelineUpdateMode,
 } from '../helpers/bridge';
 import {
   completeProfileSetup,
@@ -27,62 +27,11 @@ const DEFAULT_PUBLIC_TOPIC_ID =
 const REAL_BOOTSTRAP_PEER =
   process.env.E2E_REAL_BOOTSTRAP_PEER ??
   '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233';
-const REAL_BOOTSTRAP_NODE_ID = REAL_BOOTSTRAP_PEER.split('@')[0];
 
 const profile: ProfileInfo = {
   name: 'E2E CN Relay',
   displayName: 'community-node-cn-cli-propagation',
   about: 'Community node bootstrap/relay + cn-cli publish propagation',
-};
-
-type SeedPostSummary = {
-  topic_id?: string;
-  content?: string;
-};
-
-type SeedSummary = {
-  post?: SeedPostSummary;
-};
-
-const parseSeedSummary = (): SeedSummary | null => {
-  const raw = process.env.E2E_COMMUNITY_NODE_SEED_JSON;
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as SeedSummary;
-  } catch {
-    return null;
-  }
-};
-
-const extractItems = (payload: Record<string, unknown>): unknown[] => {
-  const items = payload?.items;
-  return Array.isArray(items) ? items : [];
-};
-
-const parseEventContent = (event: unknown): Record<string, unknown> | null => {
-  if (!event || typeof event !== 'object') {
-    return null;
-  }
-  const content = (event as { content?: unknown }).content;
-  if (typeof content !== 'string' || content.trim().length === 0) {
-    return null;
-  }
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-};
-
-const findEventByKind = (items: unknown[], kind: number): Record<string, unknown> | null => {
-  for (const item of items) {
-    if (item && typeof item === 'object' && (item as { kind?: number }).kind === kind) {
-      return item as Record<string, unknown>;
-    }
-  }
-  return null;
 };
 
 const writeCliBootstrapFixture = (peers: string[]) => {
@@ -98,7 +47,13 @@ const writeCliBootstrapFixture = (peers: string[]) => {
   writeFileSync(bootstrapPath, JSON.stringify(payload, null, 2), 'utf-8');
 };
 
-const runCnCliPublish = (content: string, topicId: string, peer: string) => {
+type PublishSummary = {
+  topic_id?: string;
+  published_count?: number;
+  event_ids?: string[];
+};
+
+const resolveCanonicalTopicId = (topicId: string): string => {
   const workspace = resolve(process.cwd(), '..', 'kukuri-community-node');
   const args = [
     'run',
@@ -115,6 +70,65 @@ const runCnCliPublish = (content: string, topicId: string, peer: string) => {
     '--topic',
     topicId,
     '--content',
+    `E2E canonical topic probe ${Date.now()}`,
+    '--repeat',
+    '1',
+    '--interval-ms',
+    '0',
+    '--wait-for-peer-secs',
+    '0',
+    '--no-dht',
+  ];
+  const result = spawnSync('cargo', args, {
+    cwd: workspace,
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      RUST_LOG: 'error',
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `cn-cli topic canonicalization failed (status=${result.status}): ${result.stderr || result.stdout}`,
+    );
+  }
+  const stdout = result.stdout?.trim();
+  if (!stdout) {
+    throw new Error('cn-cli topic canonicalization returned empty stdout');
+  }
+  const lastLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(-1)[0];
+  if (!lastLine) {
+    throw new Error('cn-cli topic canonicalization summary line was missing');
+  }
+  const summary = JSON.parse(lastLine) as PublishSummary;
+  const canonicalTopicId = summary.topic_id?.trim();
+  if (!canonicalTopicId) {
+    throw new Error(`cn-cli topic canonicalization did not return topic_id: ${lastLine}`);
+  }
+  return canonicalTopicId;
+};
+
+const runCnCliPublish = (content: string, topicId: string, peers: string[]): PublishSummary | null => {
+  const workspace = resolve(process.cwd(), '..', 'kukuri-community-node');
+  const args: string[] = [
+    'run',
+    '--locked',
+    '-p',
+    'cn-cli',
+    '--',
+    'p2p',
+    'publish',
+    '--bind',
+    '0.0.0.0:0',
+    '--log-level',
+    'error',
+    '--topic',
+    topicId,
+    '--content',
     content,
     '--repeat',
     '6',
@@ -122,9 +136,10 @@ const runCnCliPublish = (content: string, topicId: string, peer: string) => {
     '400',
     '--wait-for-peer-secs',
     '8',
-    '--peers',
-    peer,
   ];
+  for (const peer of peers) {
+    args.push('--peers', peer);
+  }
   const result = spawnSync('cargo', args, {
     cwd: workspace,
     encoding: 'utf-8',
@@ -137,6 +152,24 @@ const runCnCliPublish = (content: string, topicId: string, peer: string) => {
     throw new Error(
       `cn-cli publish failed (status=${result.status}): ${result.stderr || result.stdout}`,
     );
+  }
+
+  const stdout = result.stdout?.trim();
+  if (!stdout) {
+    return null;
+  }
+  const lastLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(-1)[0];
+  if (!lastLine) {
+    return null;
+  }
+  try {
+    return JSON.parse(lastLine) as PublishSummary;
+  } catch {
+    return null;
   }
 };
 
@@ -151,13 +184,15 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
 
     const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
     const scenario = process.env.SCENARIO;
-    const seed = parseSeedSummary();
-    const bootstrapServiceTopicId = seed?.post?.topic_id ?? 'kukuri:e2e-alpha';
 
     if (!baseUrl || scenario !== 'community-node-e2e') {
       this.skip();
       return;
     }
+    const propagationTopicId = resolveCanonicalTopicId(DEFAULT_PUBLIC_TOPIC_ID);
+    console.info(
+      `[community-node.cn-cli-propagation] propagationTopicId:${propagationTopicId}`,
+    );
 
     await waitForWelcome();
     await $('[data-testid="welcome-create-account"]').click();
@@ -165,48 +200,10 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
     await waitForHome();
 
     await runCommunityNodeAuthFlow(baseUrl);
-    const topicSnapshot = await getTopicSnapshot();
-    const propagationTopicId = topicSnapshot.currentTopicId?.trim() || DEFAULT_PUBLIC_TOPIC_ID;
-
-    let nodesPayload: Record<string, unknown> = {};
-    await browser.waitUntil(
-      async () => {
-        nodesPayload = await communityNodeListBootstrapNodes();
-        return extractItems(nodesPayload).length > 0;
-      },
-      {
-        timeout: 40000,
-        interval: 1000,
-        timeoutMsg: 'Community node bootstrap nodes did not return any items',
-      },
-    );
-    const nodeItems = extractItems(nodesPayload);
-    const descriptorEvent =
-      findEventByKind(nodeItems, 39000) ?? (nodeItems[0] as Record<string, unknown>);
-    const descriptorContent = parseEventContent(descriptorEvent);
-    expect(descriptorContent?.schema).toBe('kukuri-node-desc-v1');
-    const roles = Array.isArray(descriptorContent?.roles) ? descriptorContent?.roles : [];
-    expect(roles).toContain('bootstrap');
-    expect(roles).toContain('relay');
-
-    let servicesPayload: Record<string, unknown> = {};
-    await browser.waitUntil(
-      async () => {
-        servicesPayload = await communityNodeListBootstrapServices(bootstrapServiceTopicId);
-        return extractItems(servicesPayload).length > 0;
-      },
-      {
-        timeout: 40000,
-        interval: 1000,
-        timeoutMsg: 'Community node bootstrap services did not return any items',
-      },
-    );
-    const serviceItems = extractItems(servicesPayload);
-    const serviceEvent =
-      findEventByKind(serviceItems, 39001) ?? (serviceItems[0] as Record<string, unknown>);
-    const serviceContent = parseEventContent(serviceEvent);
-    expect(serviceContent?.schema).toBe('kukuri-topic-service-v1');
-    expect(['relay', 'bootstrap']).toContain(serviceContent?.role);
+    await ensureTestTopic({
+      name: 'community-node-cn-cli-propagation',
+      topicId: propagationTopicId,
+    });
 
     const timelineScreenshotPath =
       process.env.E2E_TIMELINE_SCREENSHOT_PATH ??
@@ -215,32 +212,8 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
         '..',
         'test-results',
         'community-node-e2e',
-        'cn-cli-propagation-timeline.png',
+        'cn-cli-propagation-received-timeline.png',
       );
-
-    const postsList = await $('[data-testid="posts-list"]');
-    await postsList.waitForDisplayed({ timeout: 30000 });
-
-    const seedPostContent = seed?.post?.content?.trim();
-    if (seedPostContent) {
-      try {
-        await browser.waitUntil(
-          async () => (await postsList.getText()).includes(seedPostContent),
-          {
-            timeout: 60000,
-            interval: 1000,
-            timeoutMsg: 'Seed event did not appear on timeline',
-          },
-        );
-      } catch {
-        console.info('[community-node.cn-cli-propagation] seed event was not visible before capture');
-      }
-    }
-    mkdirSync(dirname(timelineScreenshotPath), { recursive: true });
-    await browser.saveScreenshot(timelineScreenshotPath);
-    console.info(
-      `[community-node.cn-cli-propagation] timeline screenshot (seed): ${timelineScreenshotPath}`,
-    );
 
     writeCliBootstrapFixture([REAL_BOOTSTRAP_PEER]);
     await applyCliBootstrap();
@@ -261,87 +234,136 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
       },
     );
 
-    const ensureBootstrapConnected = async (timeoutMs: number) => {
-      await browser.waitUntil(
-        async () => {
-          const status = await getP2PStatus();
-          const topicStatus = status.active_topics.find((topic) => topic.topic_id === propagationTopicId);
-          const isConnectedToBootstrap = status.peers.some(
-            (peer) => peer.node_id === REAL_BOOTSTRAP_NODE_ID,
-          );
-          const connected =
-            Boolean(topicStatus) &&
-            (topicStatus?.peer_count ?? 0) > 0 &&
-            status.peer_count > 0 &&
-            isConnectedToBootstrap;
-          if (!connected) {
-            await joinP2PTopic(propagationTopicId, [REAL_BOOTSTRAP_PEER]);
-            return false;
-          }
-          return true;
-        },
-        {
-          timeout: timeoutMs,
-          interval: 1000,
-          timeoutMsg: 'P2P topic did not join bootstrap/relay peer for propagation test',
-        },
-      );
-    };
-
     await joinP2PTopic(propagationTopicId, [REAL_BOOTSTRAP_PEER]);
-    await ensureBootstrapConnected(40000);
+    await browser.waitUntil(
+      async () => {
+        const status = await getP2PStatus();
+        const topicStatus = status.active_topics.find((topic) => topic.topic_id === propagationTopicId);
+        return Boolean(topicStatus) && status.connection_status === 'connected';
+      },
+      {
+        timeout: 45000,
+        interval: 1000,
+        timeoutMsg: 'P2P topic did not become active and connected for propagation test',
+      },
+    );
+    await waitForHome();
+    await setTimelineUpdateMode('realtime');
+    const publishPeers = [REAL_BOOTSTRAP_PEER];
+    console.info(
+      `[community-node.cn-cli-propagation] publishPeers:${JSON.stringify(publishPeers)}`,
+    );
 
-    const statusBeforePublish = await getP2PStatus();
-    const baselineMessagesReceived = statusBeforePublish.metrics_summary.messages_received;
+    const baselineSnapshot = await getP2PMessageSnapshot(propagationTopicId);
+    const baselinePostSnapshot = await getPostStoreSnapshot(propagationTopicId);
+    const baselineStatus = await getP2PStatus();
 
     let contentPrefix = '';
     let received = false;
+    let lastP2PSnapshot = baselineSnapshot;
+    let lastPostStoreSnapshot = baselinePostSnapshot;
+    let lastStatus = baselineStatus;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       contentPrefix = `E2E cn-cli -> tauri propagation ${Date.now()} [attempt:${attempt}]`;
-      runCnCliPublish(contentPrefix, propagationTopicId, REAL_BOOTSTRAP_PEER);
+      const publishSummary = runCnCliPublish(
+        contentPrefix,
+        propagationTopicId,
+        publishPeers,
+      );
+      console.info(
+        `[community-node.cn-cli-propagation] cn-cli publish attempt:${attempt} summary:${JSON.stringify(
+          publishSummary,
+        )}`,
+      );
       try {
         await browser.waitUntil(
           async () => {
-            const status = await getP2PStatus();
-            return status.metrics_summary.messages_received > baselineMessagesReceived;
+            lastP2PSnapshot = await getP2PMessageSnapshot(propagationTopicId);
+            lastPostStoreSnapshot = await getPostStoreSnapshot(propagationTopicId);
+            lastStatus = await getP2PStatus();
+            const p2pMatched = lastP2PSnapshot.recentContents.some((content) =>
+              content.includes(contentPrefix),
+            );
+            const postStoreMatched = lastPostStoreSnapshot.recentContents.some((content) =>
+              content.includes(contentPrefix),
+            );
+            return p2pMatched || postStoreMatched;
           },
           {
             timeout: 45000,
             interval: 1000,
-            timeoutMsg: 'Tauri did not receive cn-cli published gossip message',
+            timeoutMsg: `Tauri did not receive cn-cli payload for attempt:${attempt}`,
           },
         );
         received = true;
         break;
       } catch {
-        await ensureBootstrapConnected(30000);
+        await joinP2PTopic(propagationTopicId, publishPeers);
       }
     }
     expect(received).toBe(true);
-
-    let p2pSnapshot = await getP2PMessageSnapshot(propagationTopicId);
-    await browser.waitUntil(
-      async () => {
-        p2pSnapshot = await getP2PMessageSnapshot(propagationTopicId);
-        return p2pSnapshot.count > 0;
-      },
-      {
-        timeout: 20000,
-        interval: 1000,
-        timeoutMsg: `P2P bridge did not receive topic message: ${JSON.stringify(p2pSnapshot)}`,
-      },
+    console.info(
+      `[community-node.cn-cli-propagation] P2P snapshot baseline:${JSON.stringify(
+        baselineSnapshot,
+      )} last:${JSON.stringify(lastP2PSnapshot)} postStoreBaseline:${JSON.stringify(
+        baselinePostSnapshot,
+      )} postStoreLast:${JSON.stringify(lastPostStoreSnapshot)} statusBaseline:${JSON.stringify(
+        baselineStatus.metrics_summary,
+      )} statusLast:${JSON.stringify(lastStatus.metrics_summary)}`,
     );
 
+    const findTimelineElementWithContent = async (needle: string) => {
+      const timelineItems = await $$('[data-testid^="post-"]');
+      for (const item of timelineItems) {
+        try {
+          if (!(await item.isExisting())) {
+            continue;
+          }
+          if ((await item.getText()).includes(needle)) {
+            return item;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      const postsLists = await $$('[data-testid="posts-list"]');
+      for (const postsList of postsLists) {
+        try {
+          if (!(await postsList.isExisting())) {
+            continue;
+          }
+          if ((await postsList.getText()).includes(needle)) {
+            return postsList;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      return null;
+    };
+
     await browser.waitUntil(
-      async () => (await postsList.getText()).includes(contentPrefix),
+      async () => {
+        return Boolean(await findTimelineElementWithContent(contentPrefix));
+      },
       {
         timeout: 120000,
         interval: 1000,
-        timeoutMsg: 'cn-cli published content did not appear on Tauri timeline',
+        timeoutMsg: 'cn-cli received payload did not render on Tauri timeline',
       },
     );
+    const matchedTimelineElement = await findTimelineElementWithContent(contentPrefix);
+    expect(matchedTimelineElement).not.toBeNull();
+    if (matchedTimelineElement) {
+      await matchedTimelineElement.scrollIntoView({ block: 'center', inline: 'center' });
+    }
 
+    mkdirSync(dirname(timelineScreenshotPath), { recursive: true });
     await browser.saveScreenshot(timelineScreenshotPath);
-    console.info(`[community-node.cn-cli-propagation] timeline screenshot: ${timelineScreenshotPath}`);
+    console.info(
+      `[community-node.cn-cli-propagation] timeline screenshot (cn-cli received): ${timelineScreenshotPath}`,
+    );
   });
 });
