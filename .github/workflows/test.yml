@@ -377,6 +377,45 @@ jobs:
           cd kukuri-tauri
           pnpm e2e:playwright
 
+      - name: Stage cn-cli received evidence screenshot for R2 upload
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          src='docs/01_project/progressReports/evidence/2026-02-26_pr188_cn_cli_received_timeline.png'
+          dst='kukuri-tauri/test-results/community-node-e2e/cn-cli-propagation-received-timeline.png'
+          if [[ ! -f "${src}" ]]; then
+            echo "Evidence screenshot not found: ${src}"
+            exit 0
+          fi
+          mkdir -p "$(dirname "${dst}")"
+          cp "${src}" "${dst}"
+
+      - name: Download community node E2E artefacts
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-e2e-${{ github.run_id }}
+          path: tmp/community-node-e2e-artifacts
+
+      - name: Merge community node screenshots for R2 upload
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          src_dir='tmp/community-node-e2e-artifacts/test-results/community-node-e2e'
+          dst_dir='kukuri-tauri/test-results/community-node-e2e'
+          if [[ ! -d "${src_dir}" ]]; then
+            echo "No community node E2E screenshots found at ${src_dir}"
+            exit 0
+          fi
+          mkdir -p "${dst_dir}"
+          find "${src_dir}" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) -print0 \
+            | while IFS= read -r -d '' file_path; do
+                cp "${file_path}" "${dst_dir}/$(basename "${file_path}")"
+              done
+
       - name: Upload Playwright screenshots (success + failure) to Cloudflare R2
         if: always()
         id: r2_upload
@@ -387,6 +426,7 @@ jobs:
           CLOUDFLARE_R2_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY }}
           CLOUDFLARE_R2_SECRET: ${{ secrets.CLOUDFLARE_R2_SECRET }}
           CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+          CLOUDFLARE_R2_PUBLIC_BASE_URL: ${{ secrets.CLOUDFLARE_R2_PUBLIC_BASE_URL }}
         run: |
           set -uo pipefail
 
@@ -448,8 +488,8 @@ jobs:
             account_id=''
           fi
 
-          public_base_url=''
-          if [[ -n "${account_id}" && -n "${CLOUDFLARE_R2_TOKEN}" ]]; then
+          public_base_url="${CLOUDFLARE_R2_PUBLIC_BASE_URL:-}"
+          if [[ -z "${public_base_url}" && -n "${account_id}" && -n "${CLOUDFLARE_R2_TOKEN}" ]]; then
             managed_response="$(curl -fsS \
               -H "Authorization: Bearer ${CLOUDFLARE_R2_TOKEN}" \
               "https://api.cloudflare.com/client/v4/accounts/${account_id}/r2/buckets/${R2_BUCKET}/domains/managed" || true)"
@@ -477,6 +517,15 @@ jobs:
                 fi
               fi
             fi
+          fi
+
+          if [[ -n "${public_base_url}" ]]; then
+            if [[ ! "${public_base_url}" =~ ^https?:// ]]; then
+              public_base_url="https://${public_base_url}"
+            fi
+            while [[ "${public_base_url}" == */ ]]; do
+              public_base_url="${public_base_url%/}"
+            done
           fi
 
           if [[ -z "${public_base_url}" ]]; then

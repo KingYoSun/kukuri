@@ -9,7 +9,11 @@ export const isTauriRuntime = (): boolean => {
     __TAURI_IPC__?: unknown;
   };
 
+  const hasTauriScheme =
+    candidate.location?.protocol === 'tauri:' || candidate.location?.href?.startsWith('tauri://');
+
   return Boolean(
+    hasTauriScheme ||
     candidate.__TAURI_INTERNALS__?.transformCallback ||
     candidate.__TAURI__ ||
     candidate.__TAURI_IPC__,

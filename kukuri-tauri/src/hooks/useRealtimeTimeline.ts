@@ -260,11 +260,6 @@ export function useRealtimeTimeline({
     const queryKey = ['topicTimeline', topicId] as const;
     const currentEntries = queryClient.getQueryData<TopicTimelineEntry[]>(queryKey) ?? [];
 
-    if (currentEntries.length === 0) {
-      void queryClient.invalidateQueries({ queryKey });
-      return;
-    }
-
     let nextEntries = currentEntries;
     let hasDiff = false;
     let needsRefetch = false;

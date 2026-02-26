@@ -7,7 +7,7 @@ import {
   type UserProfile,
 } from '@/lib/api/tauri';
 import { TauriCommandError } from '@/lib/api/tauriClient';
-import { p2pApi } from '@/lib/api/p2p';
+import { p2pApi, type P2PStatus } from '@/lib/api/p2p';
 import { accessControlApi } from '@/lib/api/accessControl';
 import {
   communityNodeApi,
@@ -32,10 +32,11 @@ import {
   listFallbackAccountMetadata,
   useAuthStore,
 } from '@/stores/authStore';
-import { usePostStore, type Post } from '@/stores';
+import { usePostStore, useP2PStore, type Post } from '@/stores';
 import { mapApiMessageToModel, useDirectMessageStore } from '@/stores/directMessageStore';
 import { useOfflineStore } from '@/stores/offlineStore';
 import { useTopicStore } from '@/stores/topicStore';
+import { useUIStore } from '@/stores/uiStore';
 import { getE2EStatus, setE2EStatus, type E2EStatus } from './e2eStatus';
 import { offlineApi } from '@/api/offline';
 import { EntityType, OfflineActionType } from '@/types/offline';
@@ -238,6 +239,25 @@ export interface E2EBridge {
   getBootstrapSnapshot: () => Promise<BootstrapSnapshot>;
   applyCliBootstrap: () => Promise<BootstrapSnapshot>;
   clearBootstrapNodes: () => Promise<BootstrapSnapshot>;
+  getTimelineUpdateMode: () => Promise<{ mode: 'standard' | 'realtime' }>;
+  setTimelineUpdateMode: (payload: {
+    mode: 'standard' | 'realtime';
+  }) => Promise<{ mode: 'standard' | 'realtime' }>;
+  getP2PStatus: () => Promise<P2PStatus>;
+  getP2PNodeAddresses: () => Promise<string[]>;
+  getP2PMessageSnapshot: (payload?: { topicId?: string }) => Promise<{
+    topicId: string;
+    count: number;
+    recentMessageIds: string[];
+    recentContents: string[];
+  }>;
+  getPostStoreSnapshot: (payload?: { topicId?: string }) => Promise<{
+    topicId: string;
+    count: number;
+    recentPostIds: string[];
+    recentContents: string[];
+  }>;
+  joinP2PTopic: (payload: { topicId: string; initialPeers?: string[] }) => Promise<void>;
   seedFriendPlusAccounts: () => Promise<SeedFriendPlusAccountsResult>;
   accessControlRequestJoin: (
     payload: AccessControlRequestJoinPayload,
@@ -1419,6 +1439,58 @@ export function registerE2EBridge(): void {
           await refreshRelayStatusSafe();
           const config = await p2pApi.getBootstrapConfig();
           return bootstrapSnapshotFromConfig(config);
+        },
+        getTimelineUpdateMode: async () => ({
+          mode: useUIStore.getState().timelineUpdateMode,
+        }),
+        setTimelineUpdateMode: async (payload: { mode: 'standard' | 'realtime' }) => {
+          const mode = payload?.mode === 'realtime' ? 'realtime' : 'standard';
+          useUIStore.getState().setTimelineUpdateMode(mode);
+          return {
+            mode: useUIStore.getState().timelineUpdateMode,
+          };
+        },
+        getP2PStatus: async () => await p2pApi.getStatus(),
+        getP2PNodeAddresses: async () => await p2pApi.getNodeAddress(),
+        getP2PMessageSnapshot: async (payload?: { topicId?: string }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          const topicMessages = useP2PStore.getState().messages.get(topicId) ?? [];
+          return {
+            topicId,
+            count: topicMessages.length,
+            recentMessageIds: topicMessages.slice(0, 5).map((message) => message.id),
+            recentContents: topicMessages.slice(0, 5).map((message) => message.content),
+          };
+        },
+        getPostStoreSnapshot: async (payload?: { topicId?: string }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          const postStore = usePostStore.getState();
+          const postIds = postStore.postsByTopic.get(topicId) ?? [];
+          const recentPosts = postIds
+            .slice(-5)
+            .reverse()
+            .map((id) => postStore.posts.get(id))
+            .filter((post): post is Post => Boolean(post));
+          return {
+            topicId,
+            count: postIds.length,
+            recentPostIds: recentPosts.map((post) => post.id),
+            recentContents: recentPosts.map((post) => post.content),
+          };
+        },
+        joinP2PTopic: async (payload: { topicId: string; initialPeers?: string[] }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          await p2pApi.joinTopic(topicId, payload.initialPeers ?? []);
+          await refreshRelayStatusSafe();
         },
         seedFriendPlusAccounts: async () => {
           const authState = useAuthStore.getState();

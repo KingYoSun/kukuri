@@ -1,0 +1,369 @@
+import { $, browser, expect } from '@wdio/globals';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { waitForAppReady } from '../helpers/waitForAppReady';
+import {
+  applyCliBootstrap,
+  ensureTestTopic,
+  getBootstrapSnapshot,
+  getP2PMessageSnapshot,
+  getP2PStatus,
+  getPostStoreSnapshot,
+  joinP2PTopic,
+  resetAppState,
+  setTimelineUpdateMode,
+} from '../helpers/bridge';
+import {
+  completeProfileSetup,
+  waitForHome,
+  waitForWelcome,
+  type ProfileInfo,
+} from '../helpers/appActions';
+import { runCommunityNodeAuthFlow } from '../helpers/communityNodeAuth';
+
+const DEFAULT_PUBLIC_TOPIC_ID =
+  'kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0';
+const REAL_BOOTSTRAP_PEER =
+  process.env.E2E_REAL_BOOTSTRAP_PEER ??
+  '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233';
+
+const profile: ProfileInfo = {
+  name: 'E2E CN Relay',
+  displayName: 'community-node-cn-cli-propagation',
+  about: 'Community node bootstrap/relay + cn-cli publish propagation',
+};
+
+const writeCliBootstrapFixture = (peers: string[]) => {
+  const bootstrapPath = process.env.KUKURI_CLI_BOOTSTRAP_PATH ?? process.env.KUKURI_P2P_BOOTSTRAP_PATH;
+  if (!bootstrapPath) {
+    throw new Error('KUKURI_CLI_BOOTSTRAP_PATH/KUKURI_P2P_BOOTSTRAP_PATH is not set');
+  }
+  mkdirSync(dirname(bootstrapPath), { recursive: true });
+  const payload = {
+    nodes: peers,
+    updated_at_ms: Date.now(),
+  };
+  writeFileSync(bootstrapPath, JSON.stringify(payload, null, 2), 'utf-8');
+};
+
+type PublishSummary = {
+  topic_id?: string;
+  published_count?: number;
+  event_ids?: string[];
+};
+
+const resolveCanonicalTopicId = (topicId: string): string => {
+  const workspace = resolve(process.cwd(), '..', 'kukuri-community-node');
+  const args = [
+    'run',
+    '--locked',
+    '-p',
+    'cn-cli',
+    '--',
+    'p2p',
+    'publish',
+    '--bind',
+    '127.0.0.1:0',
+    '--log-level',
+    'error',
+    '--topic',
+    topicId,
+    '--content',
+    `E2E canonical topic probe ${Date.now()}`,
+    '--repeat',
+    '1',
+    '--interval-ms',
+    '0',
+    '--wait-for-peer-secs',
+    '0',
+    '--no-dht',
+  ];
+  const result = spawnSync('cargo', args, {
+    cwd: workspace,
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      RUST_LOG: 'error',
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `cn-cli topic canonicalization failed (status=${result.status}): ${result.stderr || result.stdout}`,
+    );
+  }
+  const stdout = result.stdout?.trim();
+  if (!stdout) {
+    throw new Error('cn-cli topic canonicalization returned empty stdout');
+  }
+  const lastLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(-1)[0];
+  if (!lastLine) {
+    throw new Error('cn-cli topic canonicalization summary line was missing');
+  }
+  const summary = JSON.parse(lastLine) as PublishSummary;
+  const canonicalTopicId = summary.topic_id?.trim();
+  if (!canonicalTopicId) {
+    throw new Error(`cn-cli topic canonicalization did not return topic_id: ${lastLine}`);
+  }
+  return canonicalTopicId;
+};
+
+const runCnCliPublish = (content: string, topicId: string, peers: string[]): PublishSummary | null => {
+  const workspace = resolve(process.cwd(), '..', 'kukuri-community-node');
+  const args: string[] = [
+    'run',
+    '--locked',
+    '-p',
+    'cn-cli',
+    '--',
+    'p2p',
+    'publish',
+    '--bind',
+    '0.0.0.0:0',
+    '--log-level',
+    'error',
+    '--topic',
+    topicId,
+    '--content',
+    content,
+    '--repeat',
+    '6',
+    '--interval-ms',
+    '400',
+    '--wait-for-peer-secs',
+    '8',
+  ];
+  for (const peer of peers) {
+    args.push('--peers', peer);
+  }
+  const result = spawnSync('cargo', args, {
+    cwd: workspace,
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      RUST_LOG: 'error',
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `cn-cli publish failed (status=${result.status}): ${result.stderr || result.stdout}`,
+    );
+  }
+
+  const stdout = result.stdout?.trim();
+  if (!stdout) {
+    return null;
+  }
+  const lastLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(-1)[0];
+  if (!lastLine) {
+    return null;
+  }
+  try {
+    return JSON.parse(lastLine) as PublishSummary;
+  } catch {
+    return null;
+  }
+};
+
+describe('Community Node bootstrap/relay + cn-cli propagation', () => {
+  before(async () => {
+    await waitForAppReady();
+    await resetAppState();
+  });
+
+  it('receives cn-cli published event on Tauri client and renders it', async function () {
+    this.timeout(480000);
+
+    const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
+    const scenario = process.env.SCENARIO;
+
+    if (!baseUrl || scenario !== 'community-node-e2e') {
+      this.skip();
+      return;
+    }
+    const propagationTopicId = resolveCanonicalTopicId(DEFAULT_PUBLIC_TOPIC_ID);
+    console.info(
+      `[community-node.cn-cli-propagation] propagationTopicId:${propagationTopicId}`,
+    );
+
+    await waitForWelcome();
+    await $('[data-testid="welcome-create-account"]').click();
+    await completeProfileSetup(profile);
+    await waitForHome();
+
+    await runCommunityNodeAuthFlow(baseUrl);
+    await ensureTestTopic({
+      name: 'community-node-cn-cli-propagation',
+      topicId: propagationTopicId,
+    });
+
+    const timelineScreenshotPath =
+      process.env.E2E_TIMELINE_SCREENSHOT_PATH ??
+      resolve(
+        process.cwd(),
+        '..',
+        'test-results',
+        'community-node-e2e',
+        'cn-cli-propagation-received-timeline.png',
+      );
+
+    writeCliBootstrapFixture([REAL_BOOTSTRAP_PEER]);
+    await applyCliBootstrap();
+
+    await browser.waitUntil(
+      async () => {
+        const snapshot = await getBootstrapSnapshot();
+        return (
+          snapshot.source === 'user' &&
+          snapshot.effectiveNodes.length > 0 &&
+          snapshot.effectiveNodes.includes(REAL_BOOTSTRAP_PEER)
+        );
+      },
+      {
+        timeout: 40000,
+        interval: 1000,
+        timeoutMsg: 'Effective bootstrap nodes were not updated for propagation test',
+      },
+    );
+
+    await joinP2PTopic(propagationTopicId, [REAL_BOOTSTRAP_PEER]);
+    await browser.waitUntil(
+      async () => {
+        const status = await getP2PStatus();
+        const topicStatus = status.active_topics.find((topic) => topic.topic_id === propagationTopicId);
+        return Boolean(topicStatus) && status.connection_status === 'connected';
+      },
+      {
+        timeout: 45000,
+        interval: 1000,
+        timeoutMsg: 'P2P topic did not become active and connected for propagation test',
+      },
+    );
+    await waitForHome();
+    await setTimelineUpdateMode('realtime');
+    const publishPeers = [REAL_BOOTSTRAP_PEER];
+    console.info(
+      `[community-node.cn-cli-propagation] publishPeers:${JSON.stringify(publishPeers)}`,
+    );
+
+    const baselineSnapshot = await getP2PMessageSnapshot(propagationTopicId);
+    const baselinePostSnapshot = await getPostStoreSnapshot(propagationTopicId);
+    const baselineStatus = await getP2PStatus();
+
+    let contentPrefix = '';
+    let received = false;
+    let lastP2PSnapshot = baselineSnapshot;
+    let lastPostStoreSnapshot = baselinePostSnapshot;
+    let lastStatus = baselineStatus;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      contentPrefix = `E2E cn-cli -> tauri propagation ${Date.now()} [attempt:${attempt}]`;
+      const publishSummary = runCnCliPublish(
+        contentPrefix,
+        propagationTopicId,
+        publishPeers,
+      );
+      console.info(
+        `[community-node.cn-cli-propagation] cn-cli publish attempt:${attempt} summary:${JSON.stringify(
+          publishSummary,
+        )}`,
+      );
+      try {
+        await browser.waitUntil(
+          async () => {
+            lastP2PSnapshot = await getP2PMessageSnapshot(propagationTopicId);
+            lastPostStoreSnapshot = await getPostStoreSnapshot(propagationTopicId);
+            lastStatus = await getP2PStatus();
+            const p2pMatched = lastP2PSnapshot.recentContents.some((content) =>
+              content.includes(contentPrefix),
+            );
+            const postStoreMatched = lastPostStoreSnapshot.recentContents.some((content) =>
+              content.includes(contentPrefix),
+            );
+            return p2pMatched || postStoreMatched;
+          },
+          {
+            timeout: 45000,
+            interval: 1000,
+            timeoutMsg: `Tauri did not receive cn-cli payload for attempt:${attempt}`,
+          },
+        );
+        received = true;
+        break;
+      } catch {
+        await joinP2PTopic(propagationTopicId, publishPeers);
+      }
+    }
+    expect(received).toBe(true);
+    console.info(
+      `[community-node.cn-cli-propagation] P2P snapshot baseline:${JSON.stringify(
+        baselineSnapshot,
+      )} last:${JSON.stringify(lastP2PSnapshot)} postStoreBaseline:${JSON.stringify(
+        baselinePostSnapshot,
+      )} postStoreLast:${JSON.stringify(lastPostStoreSnapshot)} statusBaseline:${JSON.stringify(
+        baselineStatus.metrics_summary,
+      )} statusLast:${JSON.stringify(lastStatus.metrics_summary)}`,
+    );
+
+    const findTimelineElementWithContent = async (needle: string) => {
+      const timelineItems = await $$('[data-testid^="post-"]');
+      for (const item of timelineItems) {
+        try {
+          if (!(await item.isExisting())) {
+            continue;
+          }
+          if ((await item.getText()).includes(needle)) {
+            return item;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      const postsLists = await $$('[data-testid="posts-list"]');
+      for (const postsList of postsLists) {
+        try {
+          if (!(await postsList.isExisting())) {
+            continue;
+          }
+          if ((await postsList.getText()).includes(needle)) {
+            return postsList;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      return null;
+    };
+
+    await browser.waitUntil(
+      async () => {
+        return Boolean(await findTimelineElementWithContent(contentPrefix));
+      },
+      {
+        timeout: 120000,
+        interval: 1000,
+        timeoutMsg: 'cn-cli received payload did not render on Tauri timeline',
+      },
+    );
+    const matchedTimelineElement = await findTimelineElementWithContent(contentPrefix);
+    expect(matchedTimelineElement).not.toBeNull();
+    if (matchedTimelineElement) {
+      await matchedTimelineElement.scrollIntoView({ block: 'center', inline: 'center' });
+    }
+
+    mkdirSync(dirname(timelineScreenshotPath), { recursive: true });
+    await browser.saveScreenshot(timelineScreenshotPath);
+    console.info(
+      `[community-node.cn-cli-propagation] timeline screenshot (cn-cli received): ${timelineScreenshotPath}`,
+    );
+  });
+});

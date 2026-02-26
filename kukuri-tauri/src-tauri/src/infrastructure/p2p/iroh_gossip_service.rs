@@ -11,6 +11,7 @@ use iroh_gossip::{
     net::Gossip,
     proto::TopicId,
 };
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +38,38 @@ struct TopicHandle {
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
     mesh: Arc<TopicMesh>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyRawEventPayload {
+    id: String,
+    pubkey: String,
+    created_at: i64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: String,
+    sig: String,
+}
+
+fn parse_domain_event_payload(payload: &[u8]) -> Result<Event, String> {
+    if let Ok(event) = serde_json::from_slice::<Event>(payload) {
+        return Ok(event);
+    }
+
+    let legacy = serde_json::from_slice::<LegacyRawEventPayload>(payload)
+        .map_err(|err| format!("failed to decode event payload: {err}"))?;
+    let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(legacy.created_at, 0)
+        .ok_or_else(|| format!("invalid legacy created_at: {}", legacy.created_at))?;
+
+    Ok(Event {
+        id: legacy.id,
+        pubkey: legacy.pubkey,
+        created_at,
+        kind: legacy.kind,
+        tags: legacy.tags,
+        content: legacy.content,
+        sig: legacy.sig,
+    })
 }
 
 impl IrohGossipService {
@@ -263,14 +296,13 @@ impl GossipService for IrohGossipService {
                             });
                         }
 
-                        let event_result = if let Some(message) = decoded_message
-                            .as_ref()
-                            .filter(|m| matches!(m.msg_type, MessageType::NostrEvent))
-                        {
-                            serde_json::from_slice::<Event>(&message.payload)
+                        let event_result = if let Some(message) = decoded_message.as_ref() {
+                            // msg_type が想定外でも payload 側がイベントJSONなら取り込む。
+                            parse_domain_event_payload(&message.payload)
+                                .or_else(|_| parse_domain_event_payload(&msg.content))
                         } else {
                             // 後方互換のため、生バイト列をそのまま JSON として扱う
-                            serde_json::from_slice::<Event>(&msg.content)
+                            parse_domain_event_payload(&msg.content)
                         };
 
                         match event_result {
@@ -313,7 +345,7 @@ impl GossipService for IrohGossipService {
                                     action = "receive_failure",
                                     topic = %topic_clone,
                                     failures = snap.receive_details.failures,
-                                    error = ?e,
+                                    error = %e,
                                     "Failed to decode gossip payload as Nostr event"
                                 );
                             }
@@ -429,11 +461,7 @@ impl GossipService for IrohGossipService {
 
             tokio::spawn(async move {
                 while let Some(message) = message_rx.recv().await {
-                    if !matches!(message.msg_type, MessageType::NostrEvent) {
-                        continue;
-                    }
-
-                    match serde_json::from_slice::<Event>(&message.payload) {
+                    match parse_domain_event_payload(&message.payload) {
                         Ok(domain_event) => {
                             match domain_event
                                 .validate_nip01()
@@ -458,7 +486,7 @@ impl GossipService for IrohGossipService {
                             tracing::debug!(
                                 target: LOG_TARGET,
                                 topic = %topic_name,
-                                error = ?e,
+                                error = %e,
                                 "Failed to decode gossip payload into Event for subscription"
                             );
                         }
