@@ -209,6 +209,9 @@ export function useP2PEventListener() {
 
         addPost(post);
         queryClient.setQueryData<Post[]>(['timeline'], (prev) => upsertPostIntoList(prev, post));
+        queryClient.setQueryData<Post[]>(['posts', 'all'], (prev) =>
+          upsertPostIntoList(prev, post),
+        );
         queryClient.setQueryData<Post[]>(['posts', topicId], (prev) =>
           upsertPostIntoList(prev, post),
         );

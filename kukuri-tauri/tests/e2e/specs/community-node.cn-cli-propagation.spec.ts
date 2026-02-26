@@ -37,6 +37,7 @@ const profile: ProfileInfo = {
 
 type SeedPostSummary = {
   topic_id?: string;
+  content?: string;
 };
 
 type SeedSummary = {
@@ -207,6 +208,40 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
     expect(serviceContent?.schema).toBe('kukuri-topic-service-v1');
     expect(['relay', 'bootstrap']).toContain(serviceContent?.role);
 
+    const timelineScreenshotPath =
+      process.env.E2E_TIMELINE_SCREENSHOT_PATH ??
+      resolve(
+        process.cwd(),
+        '..',
+        'test-results',
+        'community-node-e2e',
+        'cn-cli-propagation-timeline.png',
+      );
+
+    const postsList = await $('[data-testid="posts-list"]');
+    await postsList.waitForDisplayed({ timeout: 30000 });
+
+    const seedPostContent = seed?.post?.content?.trim();
+    if (seedPostContent) {
+      try {
+        await browser.waitUntil(
+          async () => (await postsList.getText()).includes(seedPostContent),
+          {
+            timeout: 60000,
+            interval: 1000,
+            timeoutMsg: 'Seed event did not appear on timeline',
+          },
+        );
+      } catch {
+        console.info('[community-node.cn-cli-propagation] seed event was not visible before capture');
+      }
+    }
+    mkdirSync(dirname(timelineScreenshotPath), { recursive: true });
+    await browser.saveScreenshot(timelineScreenshotPath);
+    console.info(
+      `[community-node.cn-cli-propagation] timeline screenshot (seed): ${timelineScreenshotPath}`,
+    );
+
     writeCliBootstrapFixture([REAL_BOOTSTRAP_PEER]);
     await applyCliBootstrap();
 
@@ -226,45 +261,63 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
       },
     );
 
+    const ensureBootstrapConnected = async (timeoutMs: number) => {
+      await browser.waitUntil(
+        async () => {
+          const status = await getP2PStatus();
+          const topicStatus = status.active_topics.find((topic) => topic.topic_id === propagationTopicId);
+          const isConnectedToBootstrap = status.peers.some(
+            (peer) => peer.node_id === REAL_BOOTSTRAP_NODE_ID,
+          );
+          const connected =
+            Boolean(topicStatus) &&
+            (topicStatus?.peer_count ?? 0) > 0 &&
+            status.peer_count > 0 &&
+            isConnectedToBootstrap;
+          if (!connected) {
+            await joinP2PTopic(propagationTopicId, [REAL_BOOTSTRAP_PEER]);
+            return false;
+          }
+          return true;
+        },
+        {
+          timeout: timeoutMs,
+          interval: 1000,
+          timeoutMsg: 'P2P topic did not join bootstrap/relay peer for propagation test',
+        },
+      );
+    };
+
     await joinP2PTopic(propagationTopicId, [REAL_BOOTSTRAP_PEER]);
-    await browser.waitUntil(
-      async () => {
-        const status = await getP2PStatus();
-        const topicStatus = status.active_topics.find((topic) => topic.topic_id === propagationTopicId);
-        const isConnectedToBootstrap = status.peers.some(
-          (peer) => peer.node_id === REAL_BOOTSTRAP_NODE_ID,
-        );
-        return (
-          Boolean(topicStatus) &&
-          (topicStatus?.peer_count ?? 0) > 0 &&
-          status.peer_count > 0 &&
-          isConnectedToBootstrap
-        );
-      },
-      {
-        timeout: 40000,
-        interval: 1000,
-        timeoutMsg: 'P2P topic did not join bootstrap/relay peer for propagation test',
-      },
-    );
+    await ensureBootstrapConnected(40000);
 
     const statusBeforePublish = await getP2PStatus();
     const baselineMessagesReceived = statusBeforePublish.metrics_summary.messages_received;
 
-    const contentPrefix = `E2E cn-cli -> tauri propagation ${Date.now()}`;
-    runCnCliPublish(contentPrefix, propagationTopicId, REAL_BOOTSTRAP_PEER);
-
-    await browser.waitUntil(
-      async () => {
-        const status = await getP2PStatus();
-        return status.metrics_summary.messages_received > baselineMessagesReceived;
-      },
-      {
-        timeout: 120000,
-        interval: 1000,
-        timeoutMsg: 'Tauri did not receive cn-cli published gossip message',
-      },
-    );
+    let contentPrefix = '';
+    let received = false;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      contentPrefix = `E2E cn-cli -> tauri propagation ${Date.now()} [attempt:${attempt}]`;
+      runCnCliPublish(contentPrefix, propagationTopicId, REAL_BOOTSTRAP_PEER);
+      try {
+        await browser.waitUntil(
+          async () => {
+            const status = await getP2PStatus();
+            return status.metrics_summary.messages_received > baselineMessagesReceived;
+          },
+          {
+            timeout: 45000,
+            interval: 1000,
+            timeoutMsg: 'Tauri did not receive cn-cli published gossip message',
+          },
+        );
+        received = true;
+        break;
+      } catch {
+        await ensureBootstrapConnected(30000);
+      }
+    }
+    expect(received).toBe(true);
 
     let p2pSnapshot = await getP2PMessageSnapshot(propagationTopicId);
     await browser.waitUntil(
@@ -279,8 +332,6 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
       },
     );
 
-    const postsList = await $('[data-testid="posts-list"]');
-    await postsList.waitForDisplayed({ timeout: 30000 });
     await browser.waitUntil(
       async () => (await postsList.getText()).includes(contentPrefix),
       {
@@ -289,5 +340,8 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
         timeoutMsg: 'cn-cli published content did not appear on Tauri timeline',
       },
     );
+
+    await browser.saveScreenshot(timelineScreenshotPath);
+    console.info(`[community-node.cn-cli-propagation] timeline screenshot: ${timelineScreenshotPath}`);
   });
 });

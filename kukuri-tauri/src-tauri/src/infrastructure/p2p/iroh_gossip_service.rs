@@ -113,50 +113,6 @@ impl IrohGossipService {
         TopicId::from_bytes(bytes)
     }
 
-    async fn connect_parsed_peers(&self, topic: &str, parsed_peers: &[ParsedPeer]) {
-        for peer in parsed_peers {
-            let connect_timeout = Duration::from_secs(6);
-            let connect_result = if let Some(addr) = &peer.node_addr {
-                timeout(
-                    connect_timeout,
-                    self.endpoint.connect(addr.clone(), GOSSIP_ALPN),
-                )
-                .await
-            } else {
-                timeout(
-                    connect_timeout,
-                    self.endpoint.connect(peer.node_id, GOSSIP_ALPN),
-                )
-                .await
-            };
-
-            match connect_result {
-                Ok(Ok(_)) => {
-                    eprintln!(
-                        "[iroh_gossip_service] connected initial peer {} for topic {}",
-                        peer.node_id, topic
-                    );
-                }
-                Ok(Err(e)) => {
-                    tracing::debug!(
-                        topic = %topic,
-                        peer = %peer.node_id,
-                        error = %e,
-                        "Failed to connect initial peer"
-                    );
-                }
-                Err(_) => {
-                    tracing::debug!(
-                        topic = %topic,
-                        peer = %peer.node_id,
-                        timeout_secs = connect_timeout.as_secs(),
-                        "Timed out connecting initial peer"
-                    );
-                }
-            }
-        }
-    }
-
     async fn apply_initial_peers(
         &self,
         topic: &str,
@@ -181,7 +137,6 @@ impl IrohGossipService {
                 self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
-        self.connect_parsed_peers(topic, parsed_peers).await;
 
         let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
         if peer_ids.is_empty() {
@@ -246,7 +201,6 @@ impl GossipService for IrohGossipService {
                 self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
-        self.connect_parsed_peers(topic, &parsed_peers).await;
 
         let canonical_topic = generate_topic_id(topic);
         let topic_id = Self::create_topic_id(&canonical_topic);

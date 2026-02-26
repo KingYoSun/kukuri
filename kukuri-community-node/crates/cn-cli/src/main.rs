@@ -37,8 +37,6 @@ pub(crate) const TOPIC_NAMESPACE: &str = "kukuri:tauri:";
 const LEGACY_TOPIC_PREFIX: &str = "kukuri:";
 const DEFAULT_PUBLIC_TOPIC_ID: &str =
     "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0";
-const P2P_PUBLISH_SIGNING_SECRET: &str =
-    "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 
 type MessageId = [u8; 32];
 
@@ -706,21 +704,25 @@ fn apply_secret_key(
     secret_key: &Option<String>,
 ) -> Result<EndpointBuilder> {
     if let Some(encoded) = secret_key {
-        let decoded = BASE64_STANDARD
-            .decode(encoded.trim())
-            .map_err(|e| anyhow!("Failed to decode secret key: {e}"))?;
-        if decoded.len() != 32 {
-            return Err(anyhow!(
-                "Secret key must decode to 32 bytes, got {}",
-                decoded.len()
-            ));
-        }
-        let mut buf = [0u8; 32];
-        buf.copy_from_slice(&decoded);
-        let secret = IrohSecretKey::from_bytes(&buf);
+        let secret = IrohSecretKey::from_bytes(&decode_base64_secret_key(encoded)?);
         builder = builder.secret_key(secret);
     }
     Ok(builder)
+}
+
+fn decode_base64_secret_key(encoded: &str) -> Result<[u8; 32]> {
+    let decoded = BASE64_STANDARD
+        .decode(encoded.trim())
+        .map_err(|e| anyhow!("Failed to decode secret key: {e}"))?;
+    if decoded.len() != 32 {
+        return Err(anyhow!(
+            "Secret key must decode to 32 bytes, got {}",
+            decoded.len()
+        ));
+    }
+    let mut buf = [0u8; 32];
+    buf.copy_from_slice(&decoded);
+    Ok(buf)
 }
 
 fn apply_bind_address(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
@@ -1107,7 +1109,8 @@ async fn run_publish_event(
         } else {
             format!("{content} [#{:02}]", index + 1)
         };
-        let raw_event = build_publish_raw_event(&canonical_topic, &attempt_content)?;
+        let raw_event =
+            build_publish_raw_event(&canonical_topic, &attempt_content, &args.secret_key)?;
         let event_payload = raw_event_to_publish_domain(&raw_event)?;
         let payload = serde_json::to_vec(&event_payload)?;
         let message = CliGossipMessage::new_nostr_event(payload, sender_id.clone());
@@ -1159,10 +1162,19 @@ fn parse_bootstrap_peers(raw: &str) -> Vec<String> {
         .collect()
 }
 
-fn build_publish_raw_event(topic_id: &str, content: &str) -> Result<cn_core::nostr::RawEvent> {
-    let secret = NostrSecretKey::from_hex(P2P_PUBLISH_SIGNING_SECRET)
-        .map_err(|err| anyhow!("invalid publish signing secret: {err}"))?;
-    let keys = NostrKeys::new(secret);
+fn build_publish_raw_event(
+    topic_id: &str,
+    content: &str,
+    secret_key: &Option<String>,
+) -> Result<cn_core::nostr::RawEvent> {
+    let keys = if let Some(encoded) = secret_key {
+        let secret_bytes = decode_base64_secret_key(encoded)?;
+        let secret = NostrSecretKey::from_hex(&hex::encode(secret_bytes))
+            .map_err(|err| anyhow!("invalid publish signing secret: {err}"))?;
+        NostrKeys::new(secret)
+    } else {
+        NostrKeys::generate()
+    };
     let tags = vec![
         vec!["t".to_string(), topic_id.to_string()],
         vec!["client".to_string(), "cn-cli".to_string()],
