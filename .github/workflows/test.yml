@@ -426,6 +426,7 @@ jobs:
           CLOUDFLARE_R2_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY }}
           CLOUDFLARE_R2_SECRET: ${{ secrets.CLOUDFLARE_R2_SECRET }}
           CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+          CLOUDFLARE_R2_PUBLIC_BASE_URL: ${{ secrets.CLOUDFLARE_R2_PUBLIC_BASE_URL }}
         run: |
           set -uo pipefail
 
@@ -487,8 +488,8 @@ jobs:
             account_id=''
           fi
 
-          public_base_url=''
-          if [[ -n "${account_id}" && -n "${CLOUDFLARE_R2_TOKEN}" ]]; then
+          public_base_url="${CLOUDFLARE_R2_PUBLIC_BASE_URL:-}"
+          if [[ -z "${public_base_url}" && -n "${account_id}" && -n "${CLOUDFLARE_R2_TOKEN}" ]]; then
             managed_response="$(curl -fsS \
               -H "Authorization: Bearer ${CLOUDFLARE_R2_TOKEN}" \
               "https://api.cloudflare.com/client/v4/accounts/${account_id}/r2/buckets/${R2_BUCKET}/domains/managed" || true)"
@@ -516,6 +517,15 @@ jobs:
                 fi
               fi
             fi
+          fi
+
+          if [[ -n "${public_base_url}" ]]; then
+            if [[ ! "${public_base_url}" =~ ^https?:// ]]; then
+              public_base_url="https://${public_base_url}"
+            fi
+            while [[ "${public_base_url}" == */ ]]; do
+              public_base_url="${public_base_url%/}"
+            done
           fi
 
           if [[ -z "${public_base_url}" ]]; then
