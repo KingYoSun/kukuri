@@ -10,6 +10,7 @@ import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
 import type { Post } from '@/stores/types';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
+import { isHexFormat, pubkeyToNpub } from '@/lib/utils/nostr';
 import { NostrEventKind } from '@/types/nostr';
 import i18n from '@/i18n';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
@@ -153,6 +154,13 @@ const parseRawEventMessage = (
   };
 };
 
+const resolveAuthorNpub = async (author: string): Promise<string> => {
+  if (!isHexFormat(author)) {
+    return author;
+  }
+  return await pubkeyToNpub(author);
+};
+
 export function useP2PEventListener() {
   const queryClient = useQueryClient();
   const { addMessage, updatePeer, removePeer, refreshStatus } = useP2PStore();
@@ -180,12 +188,13 @@ export function useP2PEventListener() {
   }, []);
 
   const handleP2PMessageAsPost = useCallback(
-    (message: P2PMessage, topicId: string) => {
+    async (message: P2PMessage, topicId: string) => {
       try {
+        const authorNpub = await resolveAuthorNpub(message.author);
         const author = applyKnownUserMetadata({
           id: message.author,
           pubkey: message.author,
-          npub: message.author,
+          npub: authorNpub,
           name: i18n.t('p2p.unknownUser'),
           displayName: i18n.t('p2p.unknownUser'),
           about: '',
@@ -278,7 +287,7 @@ export function useP2PEventListener() {
           : Math.floor(p2pMessage.timestamp);
 
       useTopicStore.getState().handleIncomingTopicMessage(topic_id, messageTimestampSeconds);
-      handleP2PMessageAsPost(p2pMessage, topic_id);
+      void handleP2PMessageAsPost(p2pMessage, topic_id);
       window.dispatchEvent(new Event('realtime-update'));
     },
     [addMessage, handleP2PMessageAsPost, shouldHandleMessage],
