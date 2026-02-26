@@ -185,7 +185,7 @@ jobs:
     name: Desktop E2E (Community Node, Docker)
     runs-on: ubuntu-latest
     needs: [change-scope]
-    if: needs.change-scope.outputs.docs_only != 'true'
+    if: github.event_name == 'push' && needs.change-scope.outputs.docs_only != 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -337,7 +337,7 @@ jobs:
   playwright-tauri-smoke:
     name: Playwright Tauri Smoke
     runs-on: ubuntu-latest
-    needs: [change-scope, desktop-e2e]
+    needs: [change-scope]
     if: needs.change-scope.outputs.docs_only != 'true'
     permissions:
       contents: read
@@ -376,6 +376,20 @@ jobs:
         run: |
           cd kukuri-tauri
           pnpm e2e:playwright
+
+      - name: Stage cn-cli received evidence screenshot for R2 upload
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          src='docs/01_project/progressReports/evidence/2026-02-26_pr188_cn_cli_received_timeline.png'
+          dst='kukuri-tauri/test-results/community-node-e2e/cn-cli-propagation-received-timeline.png'
+          if [[ ! -f "${src}" ]]; then
+            echo "Evidence screenshot not found: ${src}"
+            exit 0
+          fi
+          mkdir -p "$(dirname "${dst}")"
+          cp "${src}" "${dst}"
 
       - name: Download community node E2E artefacts
         if: always()
