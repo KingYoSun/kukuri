@@ -8,7 +8,8 @@ import { BootstrapPage } from './BootstrapPage';
 vi.mock('../lib/api', () => ({
   api: {
     nodeSubscriptions: vi.fn(),
-    subscriptions: vi.fn()
+    subscriptions: vi.fn(),
+    services: vi.fn()
   }
 }));
 
@@ -17,9 +18,10 @@ describe('BootstrapPage', () => {
     vi.clearAllMocks();
     vi.mocked(api.nodeSubscriptions).mockResolvedValue([]);
     vi.mocked(api.subscriptions).mockResolvedValue([]);
+    vi.mocked(api.services).mockResolvedValue([]);
   });
 
-  it('接続先を node_id@host:port 表記で表示し、接続ユーザー数と一覧を同期する', async () => {
+  it('shows normalized nodes and active user summary', async () => {
     vi.mocked(api.nodeSubscriptions).mockResolvedValue([
       {
         topic_id: 'topic-alpha',
@@ -91,11 +93,44 @@ describe('BootstrapPage', () => {
     expect(screen.getByText('node_id@host:port')).toBeInTheDocument();
   });
 
-  it('接続ユーザー0件時の空表示を出す', async () => {
+  it('shows empty state when both subscription and runtime data are unavailable', async () => {
     renderWithQueryClient(<BootstrapPage />);
 
     expect(await screen.findByText('Connected users: 0')).toBeInTheDocument();
     expect(await screen.findByText('No connected nodes')).toBeInTheDocument();
     expect(await screen.findByText('No connected users')).toBeInTheDocument();
+  });
+
+  it('falls back to relay runtime data when topic subscription connectivity is empty', async () => {
+    vi.mocked(api.services).mockResolvedValue([
+      {
+        service: 'relay',
+        version: 3,
+        config_json: {},
+        updated_at: 1700001000,
+        updated_by: 'test-admin',
+        health: {
+          status: 'healthy',
+          checked_at: 1700001000,
+          details: {
+            auth_transition: {
+              ws_connections: 3
+            },
+            p2p_runtime: {
+              bootstrap_nodes: ['relay-node@127.0.0.1:7777']
+            }
+          }
+        }
+      }
+    ]);
+
+    renderWithQueryClient(<BootstrapPage />);
+
+    expect(await screen.findByText('Connected users: 3')).toBeInTheDocument();
+    expect(await screen.findByText('Connected nodes: 1')).toBeInTheDocument();
+    expect(await screen.findByText('relay-node@127.0.0.1:7777')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Pubkeys are unavailable. Relay runtime reports 3 websocket connection(s).')
+    ).toBeInTheDocument();
   });
 });

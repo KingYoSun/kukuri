@@ -25,8 +25,11 @@ import {
   type CommunityNodeRoleKey,
 } from '@/lib/api/communityNode';
 import { errorHandler } from '@/lib/errorHandler';
+import { emitNetworkStatusRefresh } from '@/lib/networkRefreshEvent';
 import { formatDateTimeByI18n } from '@/lib/utils/localeFormat';
 import { useCommunityNodeStore } from '@/stores/communityNodeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useP2PStore } from '@/stores/p2pStore';
 import { toast } from 'sonner';
 
 const shortenPubkey = (value: string) =>
@@ -180,6 +183,14 @@ export function CommunityNodePanel() {
     await queryClient.invalidateQueries({ queryKey: ['community-node', 'join-requests'] });
   };
 
+  const refreshNetworkStatusPanels = async () => {
+    const authStore = useAuthStore.getState();
+    const p2pStore = useP2PStore.getState();
+
+    await Promise.allSettled([authStore.updateRelayStatus(), p2pStore.refreshStatus()]);
+    emitNetworkStatusRefresh();
+  };
+
   const serializeNodes = (items: CommunityNodeConfigNodeResponse[]) =>
     items.map((item) => ({ base_url: item.base_url, roles: item.roles }));
 
@@ -204,6 +215,7 @@ export function CommunityNodePanel() {
       ];
       await communityNodeApi.setConfig(nextNodes);
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
       setNewBaseUrl('');
       toast.success(t('communityNodePanel.toastAddSuccess'));
     } catch (error) {
@@ -219,6 +231,7 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.clearConfig();
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
       setNewBaseUrl('');
       setActionNodeBaseUrl('');
       toast.success(t('communityNodePanel.toastClearSuccess'));
@@ -236,6 +249,7 @@ export function CommunityNodePanel() {
       const nextNodes = nodes.filter((node) => node.base_url !== baseUrl);
       await communityNodeApi.setConfig(serializeNodes(nextNodes));
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
       toast.success(t('communityNodePanel.toastRemoveSuccess'));
     } catch (error) {
       errorHandler.log('Community node remove failed', error, {
@@ -250,6 +264,7 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.authenticate(baseUrl);
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
       toast.success(t('communityNodePanel.toastAuthSuccess'));
     } catch (error) {
       errorHandler.log('Community node auth failed', error, {
@@ -264,6 +279,7 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.clearToken(baseUrl);
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
       toast.success(t('communityNodePanel.toastTokenCleared'));
     } catch (error) {
       errorHandler.log('Community node token clear failed', error, {
@@ -281,6 +297,7 @@ export function CommunityNodePanel() {
     try {
       await communityNodeApi.setConfig(serializeNodes(nextNodes));
       await refreshCommunityData();
+      await refreshNetworkStatusPanels();
     } catch (error) {
       errorHandler.log('Community node role update failed', error, {
         context: 'CommunityNodePanel.updateRoles',

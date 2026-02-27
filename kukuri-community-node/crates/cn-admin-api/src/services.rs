@@ -492,6 +492,10 @@ pub(crate) async fn poll_health_once(state: &AppState) {
                             "auth_transition".to_string(),
                             collect_relay_auth_transition_details(&state.health_client, url).await,
                         );
+                        details_map.insert(
+                            "p2p_runtime".to_string(),
+                            collect_relay_p2p_runtime_details(&state.health_client, url).await,
+                        );
                     }
                 }
 
@@ -585,12 +589,87 @@ async fn collect_relay_auth_transition_details(
     })
 }
 
+async fn collect_relay_p2p_runtime_details(
+    health_client: &reqwest::Client,
+    health_url: &str,
+) -> Value {
+    let p2p_info_url = p2p_info_url_from_health_url(health_url);
+    let response = match health_client.get(&p2p_info_url).send().await {
+        Ok(response) => response,
+        Err(err) => {
+            return serde_json::json!({
+                "p2p_info_url": p2p_info_url,
+                "p2p_info_error": err.to_string(),
+            });
+        }
+    };
+
+    let p2p_info_status = response.status().as_u16();
+    if !response.status().is_success() {
+        return serde_json::json!({
+            "p2p_info_url": p2p_info_url,
+            "p2p_info_status": p2p_info_status,
+            "p2p_info_error": format!("relay p2p info status {}", p2p_info_status),
+        });
+    }
+
+    let payload = match response.json::<Value>().await {
+        Ok(payload) => payload,
+        Err(err) => {
+            return serde_json::json!({
+                "p2p_info_url": p2p_info_url,
+                "p2p_info_status": p2p_info_status,
+                "p2p_info_error": err.to_string(),
+            });
+        }
+    };
+
+    let node_id = payload
+        .get("node_id")
+        .and_then(Value::as_str)
+        .map(std::string::ToString::to_string);
+    let bind_addr = payload
+        .get("bind_addr")
+        .and_then(Value::as_str)
+        .map(std::string::ToString::to_string);
+    let bootstrap_nodes = payload
+        .get("bootstrap_nodes")
+        .and_then(Value::as_array)
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|node| node.as_str().map(str::trim))
+                .filter(|node| !node.is_empty())
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let bootstrap_node_count = bootstrap_nodes.len() as i64;
+
+    serde_json::json!({
+        "p2p_info_url": p2p_info_url,
+        "p2p_info_status": p2p_info_status,
+        "node_id": node_id,
+        "bind_addr": bind_addr,
+        "bootstrap_nodes": bootstrap_nodes,
+        "bootstrap_node_count": bootstrap_node_count,
+    })
+}
+
 fn metrics_url_from_health_url(health_url: &str) -> String {
     if let Some(prefix) = health_url.strip_suffix("/healthz") {
         return format!("{prefix}/metrics");
     }
     let trimmed = health_url.trim_end_matches('/');
     format!("{trimmed}/metrics")
+}
+
+fn p2p_info_url_from_health_url(health_url: &str) -> String {
+    if let Some(prefix) = health_url.strip_suffix("/healthz") {
+        return format!("{prefix}/v1/p2p/info");
+    }
+    let trimmed = health_url.trim_end_matches('/');
+    format!("{trimmed}/v1/p2p/info")
 }
 
 fn parse_prometheus_metric_sum(
@@ -733,5 +812,17 @@ ws_connections{service="cn-relay"} 4
 "#;
         let total = parse_prometheus_metric_sum(payload, "ws_connections", &[]);
         assert_eq!(total, Some(7.0));
+    }
+
+    #[test]
+    fn p2p_info_url_from_health_url_rewrites_health_endpoint() {
+        assert_eq!(
+            p2p_info_url_from_health_url("http://relay.local:8083/healthz"),
+            "http://relay.local:8083/v1/p2p/info"
+        );
+        assert_eq!(
+            p2p_info_url_from_health_url("http://relay.local:8083"),
+            "http://relay.local:8083/v1/p2p/info"
+        );
     }
 }

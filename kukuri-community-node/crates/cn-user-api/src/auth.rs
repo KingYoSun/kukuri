@@ -194,6 +194,7 @@ pub async fn auth_verify(
 
     mark_challenge_used(&state.pool, &challenge).await?;
     ensure_active_subscriber(&state.pool, &raw.pubkey).await?;
+    let _ = ensure_default_public_topic_subscription(&state.pool, &raw.pubkey).await?;
 
     let (token, claims) = auth::issue_token(&raw.pubkey, &state.jwt_config).map_err(|err| {
         ApiError::new(
@@ -224,6 +225,7 @@ pub(crate) async fn require_auth(state: &AppState, headers: &HeaderMap) -> ApiRe
         .map_err(|err| auth_required_error(err.to_string()))?;
     let pubkey = claims.sub;
     ensure_active_subscriber(&state.pool, &pubkey).await?;
+    let _ = ensure_default_public_topic_subscription(&state.pool, &pubkey).await?;
     Ok(AuthContext { pubkey })
 }
 
@@ -294,6 +296,62 @@ async fn ensure_active_subscriber(pool: &sqlx::Pool<Postgres>, pubkey: &str) -> 
     Ok(())
 }
 
+async fn ensure_default_public_topic_subscription(
+    pool: &sqlx::Pool<Postgres>,
+    pubkey: &str,
+) -> ApiResult<bool> {
+    let topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID;
+    let activated = sqlx::query_scalar::<_, i64>(
+        "WITH upsert AS ( \
+            INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status, ended_at) \
+            VALUES ($1, $2, 'active', NULL) \
+            ON CONFLICT (topic_id, subscriber_pubkey) DO UPDATE \
+                SET status = 'active', ended_at = NULL \
+                WHERE cn_user.topic_subscriptions.status <> 'active' \
+                   OR cn_user.topic_subscriptions.ended_at IS NOT NULL \
+            RETURNING 1 \
+         ) \
+         SELECT COALESCE((SELECT COUNT(*) FROM upsert), 0)",
+    )
+    .bind(topic_id)
+    .bind(pubkey)
+    .fetch_one(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    if activated <= 0 {
+        return Ok(false);
+    }
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions \
+         (topic_id, enabled, ref_count) \
+         VALUES ($1, TRUE, 1) \
+         ON CONFLICT (topic_id) DO UPDATE \
+             SET ref_count = cn_admin.node_subscriptions.ref_count + 1, \
+                 enabled = TRUE, \
+                 updated_at = NOW()",
+    )
+    .bind(topic_id)
+    .execute(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    Ok(true)
+}
+
 pub(crate) async fn current_rate_limit(state: &AppState) -> UserRateLimitConfig {
     let snapshot = state.user_config.get().await;
     let rate = snapshot
@@ -350,4 +408,110 @@ fn normalize_pubkey(pubkey: &str) -> ApiResult<String> {
     let parsed = nostr_sdk::prelude::PublicKey::parse(pubkey)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_PUBKEY", "invalid pubkey"))?;
     Ok(parsed.to_hex())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nostr_sdk::prelude::Keys;
+    use sqlx::postgres::PgPoolOptions;
+    use std::sync::OnceLock;
+    use tokio::sync::{Mutex, OnceCell};
+
+    static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
+
+    fn database_url() -> String {
+        std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://cn:cn_password@localhost:5432/cn".to_string())
+    }
+
+    fn db_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    async fn ensure_migrated(pool: &sqlx::Pool<Postgres>) {
+        MIGRATIONS
+            .get_or_init(|| async {
+                cn_core::migrations::run(pool)
+                    .await
+                    .expect("run migrations");
+            })
+            .await;
+    }
+
+    async fn test_pool() -> sqlx::Pool<Postgres> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url())
+            .await
+            .expect("connect database");
+        ensure_migrated(&pool).await;
+        pool
+    }
+
+    #[tokio::test]
+    async fn ensure_default_public_topic_subscription_is_idempotent() {
+        let _guard = db_test_lock().lock().await;
+        let pool = test_pool().await;
+        let pubkey = Keys::generate().public_key().to_hex();
+        let topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID;
+
+        let first = ensure_default_public_topic_subscription(&pool, &pubkey)
+            .await
+            .expect("first ensure should succeed");
+        let second = ensure_default_public_topic_subscription(&pool, &pubkey)
+            .await
+            .expect("second ensure should succeed");
+
+        assert!(first);
+        assert!(!second);
+
+        let status: Option<String> = sqlx::query_scalar(
+            "SELECT status \
+             FROM cn_user.topic_subscriptions \
+             WHERE topic_id = $1 AND subscriber_pubkey = $2",
+        )
+        .bind(topic_id)
+        .bind(&pubkey)
+        .fetch_optional(&pool)
+        .await
+        .expect("load topic subscription status");
+        assert_eq!(status.as_deref(), Some("active"));
+
+        let enabled: Option<bool> = sqlx::query_scalar(
+            "SELECT enabled \
+             FROM cn_admin.node_subscriptions \
+             WHERE topic_id = $1",
+        )
+        .bind(topic_id)
+        .fetch_optional(&pool)
+        .await
+        .expect("load node subscription");
+        assert_eq!(enabled, Some(true));
+
+        sqlx::query(
+            "DELETE FROM cn_user.topic_subscriptions \
+             WHERE topic_id = $1 AND subscriber_pubkey = $2",
+        )
+        .bind(topic_id)
+        .bind(&pubkey)
+        .execute(&pool)
+        .await
+        .expect("cleanup topic subscription");
+
+        if first {
+            sqlx::query(
+                "UPDATE cn_admin.node_subscriptions \
+                 SET ref_count = GREATEST(ref_count - 1, 0), \
+                     enabled = CASE WHEN ref_count - 1 > 0 THEN TRUE ELSE FALSE END, \
+                     updated_at = NOW() \
+                 WHERE topic_id = $1",
+            )
+            .bind(topic_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup node subscription ref_count");
+        }
+    }
 }

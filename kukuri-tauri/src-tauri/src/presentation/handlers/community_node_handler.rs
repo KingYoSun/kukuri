@@ -212,6 +212,8 @@ struct BootstrapHttpResponse {
     items: Vec<serde_json::Value>,
     #[serde(default)]
     next_refresh_at: Option<i64>,
+    #[serde(default)]
+    bootstrap_nodes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -502,6 +504,7 @@ impl CommunityNodeHandler {
         node.token_expires_at = Some(verified.expires_at);
         node.pubkey = Some(verified.pubkey.clone());
         self.save_config(&config).await?;
+        self.sync_bootstrap_nodes_from_config(&config).await;
 
         Ok(CommunityNodeAuthResponse {
             expires_at: verified.expires_at,
@@ -1120,6 +1123,12 @@ impl CommunityNodeHandler {
             for item in sanitized {
                 let extracted = extract_bootstrap_nodes_from_descriptor(&item, now);
                 merge_unique_bootstrap_nodes(&mut resolved, extracted);
+            }
+
+            for raw in response.bootstrap_nodes {
+                if let Some(node) = normalize_bootstrap_node_candidate(&raw) {
+                    merge_unique_bootstrap_nodes(&mut resolved, vec![node]);
+                }
             }
         }
 
@@ -2968,6 +2977,53 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
+    async fn set_config_uses_runtime_bootstrap_nodes_when_descriptor_has_no_p2p() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("runtime-fallback");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let descriptor = build_bootstrap_descriptor_event("https://node.example", &[]);
+        let runtime_node_1 =
+            "1212121212121212121212121212121212121212121212121212121212121212@127.0.0.1:24001";
+        let runtime_node_2 =
+            "3434343434343434343434343434343434343434343434343434343434343434@127.0.0.1:24002";
+        let response = json!({
+            "items": [descriptor],
+            "next_refresh_at": Utc::now().timestamp() + 600,
+            "bootstrap_nodes": [runtime_node_1, runtime_node_2],
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        handler
+            .set_config(CommunityNodeConfigRequest {
+                nodes: vec![CommunityNodeConfigNodeRequest {
+                    base_url: base_url.clone(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: false,
+                        trust: false,
+                        search: false,
+                        bootstrap: true,
+                    }),
+                }],
+            })
+            .await
+            .expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.contains(&runtime_node_1.to_string()));
+        assert!(nodes.contains(&runtime_node_2.to_string()));
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
     async fn set_config_treats_localhost_bootstrap_nodes_as_loopback() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("localhost");
@@ -3022,6 +3078,83 @@ mod community_node_handler_tests {
             )
         );
         assert!(!nodes.iter().any(|value| value.contains("@localhost:")));
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn authenticate_refreshes_bootstrap_nodes_with_new_token() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("auth-refresh");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let resolved =
+            "8888888888888888888888888888888888888888888888888888888888888888@127.0.0.1:23001";
+        let descriptor = build_bootstrap_descriptor_event("https://node.example", &[resolved]);
+        let responses = vec![
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "challenge": "challenge-1",
+                    "expires_at": Utc::now().timestamp() + 300
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "access_token": "token-auth",
+                    "token_type": "Bearer",
+                    "expires_at": Utc::now().timestamp() + 600,
+                    "pubkey": Keys::generate().public_key().to_hex()
+                }),
+            ),
+            MockHttpResponse::json(
+                200,
+                json!({
+                    "items": [descriptor],
+                    "next_refresh_at": Utc::now().timestamp() + 600
+                }),
+            ),
+        ];
+        let (base_url, rx, handle) = spawn_json_sequence_server(responses);
+
+        let handler = test_handler();
+        handler
+            .key_manager
+            .generate_keypair()
+            .await
+            .expect("keypair");
+        let config = CommunityNodeConfig {
+            nodes: vec![CommunityNodeConfigNode::new(
+                base_url.clone(),
+                CommunityNodeRoleConfig {
+                    labels: false,
+                    trust: false,
+                    search: false,
+                    bootstrap: true,
+                },
+            )],
+        };
+        handler.save_config(&config).await.expect("save config");
+
+        handler
+            .authenticate(CommunityNodeAuthRequest {
+                base_url: base_url.clone(),
+            })
+            .await
+            .expect("authenticate");
+
+        let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/auth/challenge");
+        let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, "/v1/auth/verify");
+        let req3 = rx.recv_timeout(Duration::from_secs(2)).expect("request 3");
+        assert_eq!(req3.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes, vec![resolved.to_string()]);
 
         let _ = fs::remove_dir_all(&data_dir);
     }

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
+import { NETWORK_STATUS_REFRESH_EVENT } from '@/lib/networkRefreshEvent';
 
 vi.mock('@/stores/authStore', () => ({
   useAuthStore: vi.fn(),
@@ -76,6 +77,8 @@ type MockPeerInfo = {
   connected_at?: number;
 };
 
+const mockRefreshP2PStatus = vi.fn().mockResolvedValue(undefined);
+
 const connectedPeer = (nodeId: string, nodeAddr = '127.0.0.1:11233'): MockPeerInfo => ({
   node_id: nodeId,
   node_addr: nodeAddr,
@@ -93,14 +96,18 @@ const flushAsync = async () => {
 
 const renderRelayStatus = async (
   overrides: Partial<MockStoreState> = {},
-  options: { p2pPeers?: Map<string, MockPeerInfo> } = {},
+  options: {
+    p2pPeers?: Map<string, MockPeerInfo>;
+    refreshP2PStatus?: Mock;
+  } = {},
 ) => {
   const state = { ...defaultState(), ...overrides };
   mockedUseAuthStore.mockReturnValue(state);
   const p2pPeers = options.p2pPeers ?? new Map<string, MockPeerInfo>();
+  const refreshP2PStatus = options.refreshP2PStatus ?? mockRefreshP2PStatus;
   mockedUseP2PStore.mockImplementation(
-    (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
-      selector({ peers: p2pPeers }),
+    (selector: (value: { peers: Map<string, MockPeerInfo>; refreshStatus: Mock }) => unknown) =>
+      selector({ peers: p2pPeers, refreshStatus: refreshP2PStatus }),
   );
   let utils: ReturnType<typeof render>;
   await act(async () => {
@@ -114,12 +121,13 @@ describe('RelayStatus', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    mockRefreshP2PStatus.mockResolvedValue(undefined);
     mockGetBootstrapConfig.mockResolvedValue(bootstrapConfigResponse);
     mockApplyCliBootstrapNodes.mockResolvedValue(bootstrapConfigResponse);
     mockErrorHandlerLog.mockReset();
     mockedUseP2PStore.mockImplementation(
-      (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
-        selector({ peers: new Map<string, MockPeerInfo>() }),
+      (selector: (value: { peers: Map<string, MockPeerInfo>; refreshStatus: Mock }) => unknown) =>
+        selector({ peers: new Map<string, MockPeerInfo>(), refreshStatus: mockRefreshP2PStatus }),
     );
   });
 
@@ -223,6 +231,22 @@ describe('RelayStatus', () => {
     expect(mockGetBootstrapConfig).toHaveBeenCalledTimes(1);
   });
 
+  it('network refresh event triggers automatic relay snapshot refresh', async () => {
+    const { state } = await renderRelayStatus();
+    mockGetBootstrapConfig.mockClear();
+    mockRefreshP2PStatus.mockClear();
+    state.updateRelayStatus.mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(new Event(NETWORK_STATUS_REFRESH_EVENT));
+    });
+    await flushAsync();
+
+    expect(state.updateRelayStatus).toHaveBeenCalledTimes(1);
+    expect(mockGetBootstrapConfig).toHaveBeenCalledTimes(1);
+    expect(mockRefreshP2PStatus).toHaveBeenCalledTimes(1);
+  });
+
   it('renders runbook link with external target', async () => {
     await renderRelayStatus();
 
@@ -322,8 +346,8 @@ describe('RelayStatus', () => {
 
     const nextPeers = new Map<string, MockPeerInfo>([['node-1', connectedPeer('node-1')]]);
     mockedUseP2PStore.mockImplementation(
-      (selector: (value: { peers: Map<string, MockPeerInfo> }) => unknown) =>
-        selector({ peers: nextPeers }),
+      (selector: (value: { peers: Map<string, MockPeerInfo>; refreshStatus: Mock }) => unknown) =>
+        selector({ peers: nextPeers, refreshStatus: mockRefreshP2PStatus }),
     );
 
     await act(async () => {

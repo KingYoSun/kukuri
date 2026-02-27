@@ -100,6 +100,9 @@ fn build_state_with_config(pool: Pool<Postgres>, config_json: serde_json::Value)
         gossip_senders: Arc::new(RwLock::new(HashMap::new())),
         node_topics: Arc::new(RwLock::new(HashSet::new())),
         relay_public_url: None,
+        p2p_node_id: Arc::new(RwLock::new(None)),
+        p2p_bind_addr: "0.0.0.0:11223".parse().expect("p2p bind addr"),
+        p2p_router: Arc::new(RwLock::new(None)),
     }
 }
 
@@ -789,6 +792,45 @@ fn assert_metric_line(body: &str, metric_name: &str, labels: &[(&str, &str)]) {
         found,
         "metrics body did not contain {metric_name} with labels {labels:?}: {body}"
     );
+}
+
+#[tokio::test]
+async fn ensure_default_public_node_subscription_upserts_public_topic() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count)
+         VALUES ($1, FALSE, 0)
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = FALSE, ref_count = 0, updated_at = NOW()",
+    )
+    .bind(cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID)
+    .execute(&pool)
+    .await
+    .expect("prepare disabled default public topic subscription");
+
+    super::ensure_default_public_node_subscription(&pool)
+        .await
+        .expect("ensure default public topic subscription");
+
+    let row = sqlx::query(
+        "SELECT enabled, ref_count FROM cn_admin.node_subscriptions WHERE topic_id = $1",
+    )
+    .bind(cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID)
+    .fetch_one(&pool)
+    .await
+    .expect("fetch default public topic subscription");
+
+    let enabled: bool = row.try_get("enabled").expect("enabled");
+    let ref_count: i64 = row.try_get("ref_count").expect("ref_count");
+    assert!(enabled);
+    assert!(ref_count >= 1);
 }
 
 #[tokio::test]

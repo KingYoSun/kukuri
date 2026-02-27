@@ -6,6 +6,7 @@ use cn_core::service_config;
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::Row;
+use std::time::Duration;
 
 use crate::auth::{current_rate_limit, enforce_rate_limit, require_auth};
 use crate::policies::require_consents;
@@ -16,6 +17,15 @@ pub struct BootstrapHintQuery {
     #[serde(default)]
     since: Option<u64>,
 }
+
+#[derive(Debug, Default, Deserialize)]
+struct RelayP2pInfoResponse {
+    #[serde(default)]
+    bootstrap_nodes: Vec<String>,
+}
+
+const RELAY_P2P_INFO_TIMEOUT_SECS: u64 = 1;
+const DEFAULT_RELAY_P2P_INFO_URL: &str = "http://relay:8082/v1/p2p/info";
 
 pub async fn get_bootstrap_nodes(
     State(state): State<AppState>,
@@ -32,7 +42,8 @@ pub async fn get_bootstrap_nodes(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    respond_with_events(&headers, rows).await
+    let bootstrap_nodes = fetch_runtime_bootstrap_nodes().await;
+    respond_with_events(&headers, rows, bootstrap_nodes).await
 }
 
 pub async fn get_bootstrap_services(
@@ -52,7 +63,7 @@ pub async fn get_bootstrap_services(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    respond_with_events(&headers, rows).await
+    respond_with_events(&headers, rows, Vec::new()).await
 }
 
 pub async fn get_bootstrap_hint(
@@ -114,6 +125,7 @@ async fn apply_public_rate_limit(
 async fn respond_with_events(
     headers: &HeaderMap,
     rows: Vec<sqlx::postgres::PgRow>,
+    bootstrap_nodes: Vec<String>,
 ) -> ApiResult<impl IntoResponse> {
     let mut events = Vec::new();
     let mut latest: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -134,7 +146,8 @@ async fn respond_with_events(
 
     let payload = json!({
         "items": events,
-        "next_refresh_at": next_refresh
+        "next_refresh_at": next_refresh,
+        "bootstrap_nodes": bootstrap_nodes,
     });
     let payload_bytes = serde_json::to_vec(&payload).map_err(|err| {
         ApiError::new(
@@ -190,6 +203,70 @@ async fn respond_with_events(
     }
 
     Ok(response)
+}
+
+async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
+    let url = relay_p2p_info_url();
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(RELAY_P2P_INFO_TIMEOUT_SECS))
+        .build()
+    {
+        Ok(client) => client,
+        Err(err) => {
+            tracing::debug!(error = %err, "failed to build relay p2p info client");
+            return Vec::new();
+        }
+    };
+
+    let response = match client.get(&url).send().await {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::debug!(error = %err, url = %url, "failed to fetch relay p2p info");
+            return Vec::new();
+        }
+    };
+
+    if !response.status().is_success() {
+        tracing::debug!(
+            status = %response.status(),
+            url = %url,
+            "relay p2p info endpoint returned non-success status"
+        );
+        return Vec::new();
+    }
+
+    match response.json::<RelayP2pInfoResponse>().await {
+        Ok(payload) => payload.bootstrap_nodes,
+        Err(err) => {
+            tracing::debug!(error = %err, url = %url, "failed to decode relay p2p info payload");
+            Vec::new()
+        }
+    }
+}
+
+fn relay_p2p_info_url() -> String {
+    if let Ok(explicit) = std::env::var("RELAY_P2P_INFO_URL") {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    if let Ok(health_url) = std::env::var("RELAY_HEALTH_URL") {
+        if let Some(derived) = derive_relay_p2p_info_url_from_health_url(health_url.trim()) {
+            return derived;
+        }
+    }
+
+    DEFAULT_RELAY_P2P_INFO_URL.to_string()
+}
+
+fn derive_relay_p2p_info_url_from_health_url(health_url: &str) -> Option<String> {
+    let mut parsed = reqwest::Url::parse(health_url).ok()?;
+    parsed.set_path("/v1/p2p/info");
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Some(parsed.to_string())
 }
 
 #[cfg(test)]
@@ -351,6 +428,29 @@ mod api_contract_tests {
     }
 
     #[tokio::test]
+    async fn bootstrap_nodes_contract_includes_runtime_bootstrap_nodes_field() {
+        let state = test_state_with_auth_mode_and_user_config(
+            "off",
+            serde_json::json!({ "rate_limit": { "enabled": false } }),
+        )
+        .await;
+        let app = Router::new()
+            .route("/v1/bootstrap/nodes", get(get_bootstrap_nodes))
+            .with_state(state);
+        let (status, body) = request_status_and_body(app, "/v1/bootstrap/nodes").await;
+        assert_eq!(status, StatusCode::OK);
+
+        let payload: serde_json::Value = serde_json::from_str(&body).expect("payload json");
+        assert!(
+            payload
+                .get("bootstrap_nodes")
+                .and_then(|value| value.as_array())
+                .is_some(),
+            "bootstrap_nodes field should be present in bootstrap response payload: {payload}"
+        );
+    }
+
+    #[tokio::test]
     async fn bootstrap_services_requires_auth_when_enabled() {
         let app = Router::new()
             .route(
@@ -497,5 +597,17 @@ mod api_contract_tests {
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0);
         assert!(retry_after >= 1, "Retry-After must be >= 1: {retry_after}");
+    }
+
+    #[test]
+    fn derive_relay_p2p_info_url_from_health_url_maps_path() {
+        let derived =
+            derive_relay_p2p_info_url_from_health_url("http://relay:8082/healthz?x=1#frag");
+        assert_eq!(derived.as_deref(), Some("http://relay:8082/v1/p2p/info"));
+    }
+
+    #[test]
+    fn derive_relay_p2p_info_url_from_health_url_rejects_invalid_url() {
+        assert!(derive_relay_p2p_info_url_from_health_url("not-a-url").is_none());
     }
 }

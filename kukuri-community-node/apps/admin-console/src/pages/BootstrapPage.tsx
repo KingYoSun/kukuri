@@ -5,34 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle, Notice } from '../components/
 import { api } from '../lib/api';
 import { normalizeConnectedNode } from '../lib/bootstrap';
 import { errorToMessage } from '../lib/errorHandler';
-import { subscriptionsQueryOptions } from '../lib/subscriptionsQuery';
-import type { NodeSubscription, SubscriptionRow } from '../lib/types';
-
-const collectConnectedUsers = (rows: SubscriptionRow[]): string[] => {
-  const latestByUser = new Map<string, SubscriptionRow>();
-  for (const row of rows) {
-    const pubkey = row.subscriber_pubkey.trim();
-    if (pubkey === '') {
-      continue;
-    }
-    const current = latestByUser.get(pubkey);
-    if (!current || row.started_at > current.started_at) {
-      latestByUser.set(pubkey, row);
-    }
-  }
-
-  return Array.from(latestByUser.values())
-    .filter((row) => row.status === 'active')
-    .map((row) => row.subscriber_pubkey.trim())
-    .sort();
-};
+import { parseRelayRuntimeSnapshot } from '../lib/relayRuntime';
+import type { NodeSubscription, ServiceInfo } from '../lib/types';
 
 export const BootstrapPage = () => {
   const nodeSubscriptionsQuery = useQuery<NodeSubscription[]>({
     queryKey: ['nodeSubscriptions'],
     queryFn: api.nodeSubscriptions
   });
-  const subscriptionsQuery = useQuery<SubscriptionRow[]>(subscriptionsQueryOptions(''));
+  const servicesQuery = useQuery<ServiceInfo[]>({
+    queryKey: ['services'],
+    queryFn: api.services,
+    refetchInterval: 5000
+  });
 
   const connectedNodes = useMemo(() => {
     const rawNodes = (nodeSubscriptionsQuery.data ?? []).flatMap(
@@ -41,15 +26,52 @@ export const BootstrapPage = () => {
     return Array.from(new Set(rawNodes.map(normalizeConnectedNode))).sort();
   }, [nodeSubscriptionsQuery.data]);
 
-  const connectedUsers = useMemo(
-    () => collectConnectedUsers(subscriptionsQuery.data ?? []),
-    [subscriptionsQuery.data]
-  );
+  const connectedUsers = useMemo(() => {
+    const uniqueUsers = new Set<string>();
+    for (const subscription of nodeSubscriptionsQuery.data ?? []) {
+      for (const user of subscription.connected_users ?? []) {
+        const trimmed = user.trim();
+        if (trimmed !== '') {
+          uniqueUsers.add(trimmed);
+        }
+      }
+    }
+    return Array.from(uniqueUsers).sort();
+  }, [nodeSubscriptionsQuery.data]);
 
-  const bootstrapError = [nodeSubscriptionsQuery.error, subscriptionsQuery.error]
+  const connectedUserCountFromTopics = useMemo(() => {
+    return (nodeSubscriptionsQuery.data ?? []).reduce((total, subscription) => {
+      if (
+        typeof subscription.connected_user_count === 'number' &&
+        Number.isFinite(subscription.connected_user_count)
+      ) {
+        return total + subscription.connected_user_count;
+      }
+      return total + (subscription.connected_users ?? []).length;
+    }, 0);
+  }, [nodeSubscriptionsQuery.data]);
+
+  const relayRuntime = useMemo(
+    () => parseRelayRuntimeSnapshot(servicesQuery.data),
+    [servicesQuery.data]
+  );
+  const summaryConnectedNodes = connectedNodes.length > 0 ? connectedNodes : relayRuntime.bootstrapNodes;
+  const runtimeConnectedUsers = relayRuntime.wsConnections ?? 0;
+  const summaryConnectedUsers =
+    connectedUsers.length > 0
+      ? connectedUsers.length
+      : connectedUserCountFromTopics > 0
+        ? connectedUserCountFromTopics
+        : runtimeConnectedUsers;
+  const usesRuntimeNodeFallback = connectedNodes.length === 0 && summaryConnectedNodes.length > 0;
+  const usesRuntimeUserFallback =
+    connectedUsers.length === 0 && connectedUserCountFromTopics === 0 && runtimeConnectedUsers > 0;
+  const usersCountWithoutPubkeys = connectedUsers.length === 0 && summaryConnectedUsers > 0;
+
+  const bootstrapError = [nodeSubscriptionsQuery.error, servicesQuery.error]
     .map((err) => (err ? errorToMessage(err) : null))
     .find((message): message is string => message !== null);
-  const isBootstrapLoading = nodeSubscriptionsQuery.isLoading || subscriptionsQuery.isLoading;
+  const isBootstrapLoading = nodeSubscriptionsQuery.isLoading || servicesQuery.isLoading;
 
   return (
     <>
@@ -65,8 +87,14 @@ export const BootstrapPage = () => {
             <CardTitle>Summary</CardTitle>
           </CardHeader>
           <CardContent className="stack">
-            <div className="muted">Connected users: {connectedUsers.length}</div>
-            <div className="muted">Connected nodes: {connectedNodes.length}</div>
+            <div className="muted">Connected users: {summaryConnectedUsers}</div>
+            <div className="muted">Connected nodes: {summaryConnectedNodes.length}</div>
+            {usesRuntimeNodeFallback && (
+              <div className="muted">Connected nodes are sourced from relay runtime p2p info.</div>
+            )}
+            {usesRuntimeUserFallback && (
+              <div className="muted">Connected users are sourced from relay runtime ws connections.</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -84,11 +112,11 @@ export const BootstrapPage = () => {
             <CardTitle>Connected nodes</CardTitle>
           </CardHeader>
           <CardContent>
-            {connectedNodes.length === 0 ? (
+            {summaryConnectedNodes.length === 0 ? (
               <div className="muted">No connected nodes</div>
             ) : (
               <div className="stack">
-                {connectedNodes.map((node) => (
+                {summaryConnectedNodes.map((node) => (
                   <code key={node}>{node}</code>
                 ))}
               </div>
@@ -101,7 +129,14 @@ export const BootstrapPage = () => {
           </CardHeader>
           <CardContent>
             {connectedUsers.length === 0 ? (
-              <div className="muted">No connected users</div>
+              usersCountWithoutPubkeys ? (
+                <div className="muted">
+                  Pubkeys are unavailable. Relay runtime reports {summaryConnectedUsers}{' '}
+                  websocket connection(s).
+                </div>
+              ) : (
+                <div className="muted">No connected users</div>
+              )
             ) : (
               <div className="stack">
                 {connectedUsers.map((userPubkey) => (

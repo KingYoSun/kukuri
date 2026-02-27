@@ -394,6 +394,7 @@ pub async fn list_node_subscriptions(
     require_admin(&state, &jar).await?;
     let connected_nodes_by_topic = load_connected_nodes_by_topic(&state.pool, None).await?;
     let connected_users_by_topic = load_connected_users_by_topic(&state.pool, None).await?;
+    let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
 
     let rows = sqlx::query(
         "SELECT topic_id, enabled, ref_count, ingest_policy, updated_at \
@@ -414,6 +415,8 @@ pub async fn list_node_subscriptions(
     for row in rows {
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
         let topic_id: String = row.try_get("topic_id")?;
+        let enabled: bool = row.try_get("enabled")?;
+        let ref_count: i64 = row.try_get("ref_count")?;
         let connected_nodes = connected_nodes_by_topic
             .get(&topic_id)
             .cloned()
@@ -422,14 +425,22 @@ pub async fn list_node_subscriptions(
             .get(&topic_id)
             .cloned()
             .unwrap_or_default();
+        let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+            apply_runtime_connectivity_fallback(
+                enabled,
+                ref_count,
+                connected_nodes,
+                connected_users,
+                &relay_runtime,
+            );
         subscriptions.push(NodeSubscription {
             topic_id,
-            enabled: row.try_get("enabled")?,
-            ref_count: row.try_get("ref_count")?,
+            enabled,
+            ref_count,
             ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
-            connected_node_count: connected_nodes.len() as i64,
+            connected_node_count,
             connected_nodes,
-            connected_user_count: connected_users.len() as i64,
+            connected_user_count,
             connected_users,
             updated_at: updated_at.timestamp(),
         });
@@ -533,15 +544,26 @@ pub async fn create_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
+    let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
+    let enabled: bool = row.try_get("enabled")?;
+    let ref_count: i64 = row.try_get("ref_count")?;
+    let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+        apply_runtime_connectivity_fallback(
+            enabled,
+            ref_count,
+            connected_nodes,
+            connected_users,
+            &relay_runtime,
+        );
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
         topic_id: row.try_get("topic_id")?,
-        enabled: row.try_get("enabled")?,
-        ref_count: row.try_get("ref_count")?,
+        enabled,
+        ref_count,
         ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
-        connected_node_count: connected_nodes.len() as i64,
+        connected_node_count,
         connected_nodes,
-        connected_user_count: connected_users.len() as i64,
+        connected_user_count,
         connected_users,
         updated_at: updated_at.timestamp(),
     }))
@@ -608,15 +630,26 @@ pub async fn update_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
+    let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
+    let enabled: bool = row.try_get("enabled")?;
+    let ref_count: i64 = row.try_get("ref_count")?;
+    let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+        apply_runtime_connectivity_fallback(
+            enabled,
+            ref_count,
+            connected_nodes,
+            connected_users,
+            &relay_runtime,
+        );
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
         topic_id: row.try_get("topic_id")?,
-        enabled: row.try_get("enabled")?,
-        ref_count: row.try_get("ref_count")?,
+        enabled,
+        ref_count,
         ingest_policy: parse_node_ingest_policy(row.try_get("ingest_policy")?)?,
-        connected_node_count: connected_nodes.len() as i64,
+        connected_node_count,
         connected_nodes,
-        connected_user_count: connected_users.len() as i64,
+        connected_user_count,
         connected_users,
         updated_at: updated_at.timestamp(),
     }))
@@ -760,6 +793,97 @@ fn validate_and_normalize_ingest_policy(policy: &NodeSubscriptionIngestPolicy) -
 fn normalize_topic_id_input(topic_id: &str) -> ApiResult<String> {
     cn_core::topic::normalize_topic_id(topic_id)
         .map_err(|err| ApiError::new(StatusCode::BAD_REQUEST, "INVALID_TOPIC_ID", err.to_string()))
+}
+
+#[derive(Default)]
+struct RelayRuntimeConnectivity {
+    bootstrap_nodes: Vec<String>,
+    ws_connections: i64,
+}
+
+async fn load_relay_runtime_connectivity(
+    pool: &sqlx::Pool<sqlx::Postgres>,
+) -> ApiResult<RelayRuntimeConnectivity> {
+    let details = sqlx::query_scalar::<_, Value>(
+        "SELECT details_json FROM cn_admin.service_health WHERE service = 'relay'",
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let Some(details) = details else {
+        return Ok(RelayRuntimeConnectivity::default());
+    };
+
+    let ws_connections = details
+        .get("auth_transition")
+        .and_then(Value::as_object)
+        .and_then(|auth_transition| auth_transition.get("ws_connections"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .max(0);
+    let bootstrap_nodes = details
+        .get("p2p_runtime")
+        .and_then(Value::as_object)
+        .and_then(|runtime| runtime.get("bootstrap_nodes"))
+        .and_then(Value::as_array)
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|node| !node.is_empty())
+                .map(std::string::ToString::to_string)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(RelayRuntimeConnectivity {
+        bootstrap_nodes,
+        ws_connections,
+    })
+}
+
+fn apply_runtime_connectivity_fallback(
+    enabled: bool,
+    ref_count: i64,
+    mut connected_nodes: Vec<String>,
+    connected_users: Vec<String>,
+    relay_runtime: &RelayRuntimeConnectivity,
+) -> (Vec<String>, i64, Vec<String>, i64) {
+    if enabled
+        && ref_count > 0
+        && connected_nodes.is_empty()
+        && !relay_runtime.bootstrap_nodes.is_empty()
+    {
+        connected_nodes = relay_runtime.bootstrap_nodes.clone();
+    }
+    let connected_node_count = connected_nodes.len() as i64;
+
+    let connected_user_count = if enabled
+        && ref_count > 0
+        && connected_users.is_empty()
+        && relay_runtime.ws_connections > 0
+    {
+        relay_runtime.ws_connections
+    } else {
+        connected_users.len() as i64
+    };
+
+    (
+        connected_nodes,
+        connected_node_count,
+        connected_users,
+        connected_user_count,
+    )
 }
 
 async fn load_connected_nodes_by_topic(
