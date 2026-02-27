@@ -85,6 +85,7 @@ const mockNostrApi = nostrApi as unknown as {
 
 describe('authStore - Multiple Account Management', () => {
   beforeEach(() => {
+    localStorage.clear();
     useAuthStore.setState({
       isAuthenticated: false,
       currentUser: null,
@@ -190,6 +191,62 @@ describe('authStore - Multiple Account Management', () => {
         expect(useAuthStore.getState().accounts).toEqual(mockAccounts);
       });
       expect(mockNostrApi.initializeNostr).toHaveBeenCalled();
+    });
+
+    it('should prioritize persisted local profile when secure storage account matches', async () => {
+      const mockCurrentAccount = {
+        npub: 'npub1current',
+        nsec: 'nsec1current',
+        pubkey: 'pubkey_current',
+        metadata: {
+          npub: 'npub1current',
+          pubkey: 'pubkey_current',
+          name: '新規ユーザー',
+          display_name: '新規ユーザー',
+          picture: '',
+          last_used: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      localStorage.setItem(
+        'auth-storage',
+        JSON.stringify({
+          state: {
+            currentUser: {
+              id: 'pubkey_current',
+              pubkey: 'pubkey_current',
+              npub: 'npub1current',
+              name: 'Updated Name',
+              displayName: 'Updated Display',
+              about: 'Updated About',
+              picture: 'https://example.com/updated.png',
+              nip05: 'updated@example.com',
+              avatar: null,
+              publicProfile: false,
+              showOnlineStatus: true,
+            },
+          },
+          version: 0,
+        }),
+      );
+
+      mockSecureStorageApi.getCurrentAccount = vi.fn().mockResolvedValue(mockCurrentAccount);
+      mockSecureStorageApi.listAccounts = vi.fn().mockResolvedValue([]);
+
+      await useAuthStore.getState().initialize();
+
+      const state = useAuthStore.getState();
+      expect(state.currentUser).toMatchObject({
+        npub: 'npub1current',
+        pubkey: 'pubkey_current',
+        name: 'Updated Name',
+        displayName: 'Updated Display',
+        about: 'Updated About',
+        picture: 'https://example.com/updated.png',
+        nip05: 'updated@example.com',
+        publicProfile: false,
+        showOnlineStatus: true,
+      });
     });
 
     it('should populate avatar metadata when fetchProfileAvatar succeeds', async () => {

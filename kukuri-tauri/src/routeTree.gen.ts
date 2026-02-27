@@ -19,9 +19,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as FollowingRouteImport } from './routes/following'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TopicsTopicIdRouteImport } from './routes/topics.$topicId'
+import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as TopicsTopicIdThreadsRouteImport } from './routes/topics.$topicId.threads'
 import { Route as TopicsTopicIdThreadsThreadUuidRouteImport } from './routes/topics.$topicId.threads.$threadUuid'
-import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -73,6 +73,11 @@ const TopicsTopicIdRoute = TopicsTopicIdRouteImport.update({
   path: '/$topicId',
   getParentRoute: () => TopicsRoute,
 } as any)
+const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
+  id: '/profile/$userId',
+  path: '/profile/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TopicsTopicIdThreadsRoute = TopicsTopicIdThreadsRouteImport.update({
   id: '/threads',
   path: '/threads',
@@ -84,11 +89,6 @@ const TopicsTopicIdThreadsThreadUuidRoute =
     path: '/$threadUuid',
     getParentRoute: () => TopicsTopicIdThreadsRoute,
   } as any)
-const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
-  id: '/profile/$userId',
-  path: '/profile/$userId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,8 +101,8 @@ export interface FileRoutesByFullPath {
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
-  '/topics/$topicId': typeof TopicsTopicIdRoute
-  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId': typeof TopicsTopicIdRouteWithChildren
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRouteWithChildren
   '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRoutesByTo {
@@ -116,8 +116,8 @@ export interface FileRoutesByTo {
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
-  '/topics/$topicId': typeof TopicsTopicIdRoute
-  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId': typeof TopicsTopicIdRouteWithChildren
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRouteWithChildren
   '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRoutesById {
@@ -132,8 +132,8 @@ export interface FileRoutesById {
   '/trending': typeof TrendingRoute
   '/welcome': typeof WelcomeRoute
   '/profile/$userId': typeof ProfileUserIdRoute
-  '/topics/$topicId': typeof TopicsTopicIdRoute
-  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRoute
+  '/topics/$topicId': typeof TopicsTopicIdRouteWithChildren
+  '/topics/$topicId/threads': typeof TopicsTopicIdThreadsRouteWithChildren
   '/topics/$topicId/threads/$threadUuid': typeof TopicsTopicIdThreadsThreadUuidRoute
 }
 export interface FileRouteTypes {
@@ -269,6 +269,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopicsTopicIdRouteImport
       parentRoute: typeof TopicsRoute
     }
+    '/profile/$userId': {
+      id: '/profile/$userId'
+      path: '/profile/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof ProfileUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/topics/$topicId/threads': {
       id: '/topics/$topicId/threads'
       path: '/threads'
@@ -283,22 +290,7 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TopicsTopicIdThreadsThreadUuidRouteImport
       parentRoute: typeof TopicsTopicIdThreadsRoute
     }
-    '/profile/$userId': {
-      id: '/profile/$userId'
-      path: '/profile/$userId'
-      fullPath: '/profile/$userId'
-      preLoaderRoute: typeof ProfileUserIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
-}
-
-interface TopicsRouteChildren {
-  TopicsTopicIdRoute: typeof TopicsTopicIdRouteWithChildren
-}
-
-interface TopicsTopicIdRouteChildren {
-  TopicsTopicIdThreadsRoute: typeof TopicsTopicIdThreadsRouteWithChildren
 }
 
 interface TopicsTopicIdThreadsRouteChildren {
@@ -312,12 +304,21 @@ const TopicsTopicIdThreadsRouteChildren: TopicsTopicIdThreadsRouteChildren = {
 const TopicsTopicIdThreadsRouteWithChildren =
   TopicsTopicIdThreadsRoute._addFileChildren(TopicsTopicIdThreadsRouteChildren)
 
+interface TopicsTopicIdRouteChildren {
+  TopicsTopicIdThreadsRoute: typeof TopicsTopicIdThreadsRouteWithChildren
+}
+
 const TopicsTopicIdRouteChildren: TopicsTopicIdRouteChildren = {
   TopicsTopicIdThreadsRoute: TopicsTopicIdThreadsRouteWithChildren,
 }
 
-const TopicsTopicIdRouteWithChildren =
-  TopicsTopicIdRoute._addFileChildren(TopicsTopicIdRouteChildren)
+const TopicsTopicIdRouteWithChildren = TopicsTopicIdRoute._addFileChildren(
+  TopicsTopicIdRouteChildren,
+)
+
+interface TopicsRouteChildren {
+  TopicsTopicIdRoute: typeof TopicsTopicIdRouteWithChildren
+}
 
 const TopicsRouteChildren: TopicsRouteChildren = {
   TopicsTopicIdRoute: TopicsTopicIdRouteWithChildren,
