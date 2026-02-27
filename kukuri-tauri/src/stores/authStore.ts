@@ -117,10 +117,7 @@ const readPersistedCurrentUserFromStorage = (): User | null => {
         : name;
 
     return {
-      id:
-        typeof currentUser.id === 'string' && currentUser.id.length > 0
-          ? currentUser.id
-          : pubkey,
+      id: typeof currentUser.id === 'string' && currentUser.id.length > 0 ? currentUser.id : pubkey,
       pubkey,
       npub,
       name,
