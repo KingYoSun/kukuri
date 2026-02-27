@@ -8,7 +8,7 @@ import { errorHandler } from '@/lib/errorHandler';
 import { useTopicStore } from './topicStore';
 import { usePrivacySettingsStore } from './privacySettingsStore';
 import { withPersist } from './utils/persistHelpers';
-import { createAuthPersistConfig } from './config/persist';
+import { createAuthPersistConfig, persistKeys } from './config/persist';
 import { DEFAULT_PUBLIC_TOPIC_ID } from '@/constants/topics';
 import { buildAvatarDataUrl, buildUserAvatarMetadataFromFetch } from '@/lib/profile/avatar';
 import i18n from '@/i18n';
@@ -80,6 +80,61 @@ const persistCurrentUserPubkey = (pubkey: string | null) => {
     window.localStorage?.setItem('currentUserPubkey', pubkey);
   } else {
     window.localStorage?.removeItem('currentUserPubkey');
+  }
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const readPersistedCurrentUserFromStorage = (): User | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const rawValue = window.localStorage?.getItem(persistKeys.auth);
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!isRecord(parsed) || !isRecord(parsed.state) || !isRecord(parsed.state.currentUser)) {
+      return null;
+    }
+
+    const currentUser = parsed.state.currentUser;
+    const npub = typeof currentUser.npub === 'string' ? currentUser.npub : '';
+    const pubkey = typeof currentUser.pubkey === 'string' ? currentUser.pubkey : '';
+
+    if (!npub || !pubkey) {
+      return null;
+    }
+
+    const name = typeof currentUser.name === 'string' ? currentUser.name : '';
+    const displayName =
+      typeof currentUser.displayName === 'string' && currentUser.displayName.length > 0
+        ? currentUser.displayName
+        : name;
+
+    return {
+      id: typeof currentUser.id === 'string' && currentUser.id.length > 0 ? currentUser.id : pubkey,
+      pubkey,
+      npub,
+      name,
+      displayName,
+      about: typeof currentUser.about === 'string' ? currentUser.about : '',
+      picture: typeof currentUser.picture === 'string' ? currentUser.picture : '',
+      nip05: typeof currentUser.nip05 === 'string' ? currentUser.nip05 : '',
+      avatar: isRecord(currentUser.avatar)
+        ? (currentUser.avatar as unknown as User['avatar'])
+        : null,
+      publicProfile:
+        typeof currentUser.publicProfile === 'boolean' ? currentUser.publicProfile : true,
+      showOnlineStatus:
+        typeof currentUser.showOnlineStatus === 'boolean' ? currentUser.showOnlineStatus : false,
+    };
+  } catch {
+    return null;
   }
 };
 
@@ -624,7 +679,7 @@ export const useAuthStore = create<AuthStore>()(
               typeof currentAccount.metadata?.show_online_status === 'boolean'
                 ? currentAccount.metadata.show_online_status
                 : false;
-            const user: User = {
+            const secureStorageUser: User = {
               id: currentAccount.pubkey,
               pubkey: currentAccount.pubkey,
               npub: currentAccount.npub,
@@ -636,6 +691,26 @@ export const useAuthStore = create<AuthStore>()(
               avatar: null,
               publicProfile,
               showOnlineStatus,
+            };
+            const inMemoryCurrentUser = get().currentUser;
+            const localPersistedUser = readPersistedCurrentUserFromStorage();
+            const persistedCurrentUser =
+              inMemoryCurrentUser &&
+              inMemoryCurrentUser.npub === currentAccount.npub &&
+              inMemoryCurrentUser.pubkey === currentAccount.pubkey
+                ? inMemoryCurrentUser
+                : localPersistedUser &&
+                    localPersistedUser.npub === currentAccount.npub &&
+                    localPersistedUser.pubkey === currentAccount.pubkey
+                  ? localPersistedUser
+                  : null;
+            const mergedUser = applyUserMetadataOverride(
+              secureStorageUser,
+              persistedCurrentUser ?? undefined,
+            );
+            const user: User = {
+              ...mergedUser,
+              avatar: persistedCurrentUser?.avatar ?? mergedUser.avatar ?? null,
             };
 
             set({
