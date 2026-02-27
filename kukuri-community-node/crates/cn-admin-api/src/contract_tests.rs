@@ -3847,15 +3847,16 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
 
 #[tokio::test]
 async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_data_is_empty() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
-    let topic_id = format!("kukuri:topic:runtime-fallback:{}", Uuid::new_v4());
+    let topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID.to_string();
 
     sqlx::query(
-        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count)
-         VALUES ($1, TRUE, 1)
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '3 hour')
          ON CONFLICT (topic_id) DO UPDATE
-             SET enabled = TRUE, ref_count = 1, updated_at = NOW()",
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
     )
     .bind(&topic_id)
     .execute(&state.pool)
@@ -3914,6 +3915,99 @@ async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_d
             .and_then(Value::as_array)
             .map(std::vec::Vec::len),
         Some(0)
+    );
+}
+
+#[tokio::test]
+async fn node_subscriptions_list_applies_runtime_ws_fallback_only_once() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let primary_topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID.to_string();
+    let secondary_topic_id = format!("kukuri:topic:runtime-fallback-secondary:{}", Uuid::new_v4());
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '2 hour')
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&primary_topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert primary runtime fallback topic");
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '1 hour')
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&secondary_topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert secondary runtime fallback topic");
+
+    insert_service_health(
+        &state.pool,
+        "relay",
+        "healthy",
+        json!({
+            "auth_transition": {
+                "ws_connections": 5
+            },
+            "p2p_runtime": {
+                "bootstrap_nodes": ["relay-runtime@127.0.0.1:7777"]
+            }
+        }),
+    )
+    .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/node-subscriptions",
+            get(subscriptions::list_node_subscriptions),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) =
+        get_json_with_session(app, "/v1/admin/node-subscriptions", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("node subscription list");
+    let relevant_rows = rows
+        .iter()
+        .filter(|entry| {
+            entry.get("topic_id").and_then(Value::as_str) == Some(primary_topic_id.as_str())
+                || entry.get("topic_id").and_then(Value::as_str)
+                    == Some(secondary_topic_id.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        relevant_rows.len(),
+        2,
+        "expected both runtime fallback topics in payload"
+    );
+
+    let fallback_rows = relevant_rows
+        .iter()
+        .filter(|row| row.get("connected_user_count").and_then(Value::as_i64) == Some(5))
+        .count();
+    assert_eq!(
+        fallback_rows, 1,
+        "runtime ws fallback should be assigned to a single topic row: {payload}"
+    );
+
+    let total_connected_user_count: i64 = relevant_rows
+        .iter()
+        .map(|row| {
+            row.get("connected_user_count")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        })
+        .sum();
+    assert_eq!(
+        total_connected_user_count, 5,
+        "runtime ws fallback must not be duplicated across multiple topics"
     );
 }
 

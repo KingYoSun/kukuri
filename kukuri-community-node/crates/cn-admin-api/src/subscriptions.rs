@@ -432,6 +432,7 @@ pub async fn list_node_subscriptions(
                 connected_nodes,
                 connected_users,
                 &relay_runtime,
+                &topic_id,
             );
         subscriptions.push(NodeSubscription {
             topic_id,
@@ -554,6 +555,7 @@ pub async fn create_node_subscription(
             connected_nodes,
             connected_users,
             &relay_runtime,
+            &topic_id,
         );
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
@@ -640,6 +642,7 @@ pub async fn update_node_subscription(
             connected_nodes,
             connected_users,
             &relay_runtime,
+            &topic_id,
         );
     let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
     Ok(Json(NodeSubscription {
@@ -858,6 +861,7 @@ fn apply_runtime_connectivity_fallback(
     mut connected_nodes: Vec<String>,
     connected_users: Vec<String>,
     relay_runtime: &RelayRuntimeConnectivity,
+    topic_id: &str,
 ) -> (Vec<String>, i64, Vec<String>, i64) {
     if enabled
         && ref_count > 0
@@ -868,11 +872,12 @@ fn apply_runtime_connectivity_fallback(
     }
     let connected_node_count = connected_nodes.len() as i64;
 
-    let connected_user_count = if enabled
+    let runtime_ws_fallback_applied = enabled
         && ref_count > 0
         && connected_users.is_empty()
         && relay_runtime.ws_connections > 0
-    {
+        && topic_id == cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID;
+    let connected_user_count = if runtime_ws_fallback_applied {
         relay_runtime.ws_connections
     } else {
         connected_users.len() as i64

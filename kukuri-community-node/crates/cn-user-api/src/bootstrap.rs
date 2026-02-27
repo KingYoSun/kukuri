@@ -263,7 +263,18 @@ fn relay_p2p_info_url() -> String {
 
 fn derive_relay_p2p_info_url_from_health_url(health_url: &str) -> Option<String> {
     let mut parsed = reqwest::Url::parse(health_url).ok()?;
-    parsed.set_path("/v1/p2p/info");
+    let mut segments = parsed
+        .path_segments()
+        .map(|iter| {
+            iter.filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if segments.last().copied() == Some("healthz") {
+        segments.pop();
+    }
+    segments.extend(["v1", "p2p", "info"]);
+    parsed.set_path(&format!("/{}", segments.join("/")));
     parsed.set_query(None);
     parsed.set_fragment(None);
     Some(parsed.to_string())
@@ -604,6 +615,17 @@ mod api_contract_tests {
         let derived =
             derive_relay_p2p_info_url_from_health_url("http://relay:8082/healthz?x=1#frag");
         assert_eq!(derived.as_deref(), Some("http://relay:8082/v1/p2p/info"));
+    }
+
+    #[test]
+    fn derive_relay_p2p_info_url_from_health_url_preserves_prefix_path() {
+        let derived = derive_relay_p2p_info_url_from_health_url(
+            "https://relay.example.local/prefix/healthz?x=1#frag",
+        );
+        assert_eq!(
+            derived.as_deref(),
+            Some("https://relay.example.local/prefix/v1/p2p/info")
+        );
     }
 
     #[test]
