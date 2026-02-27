@@ -7,6 +7,7 @@ use axum::{Json, Router};
 use cn_core::{
     config as core_config, db, http, logging, metrics, rate_limit, server, service_config,
 };
+use iroh::protocol::Router as IrohRouter;
 use serde::Serialize;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::{HashMap, HashSet};
@@ -36,11 +37,21 @@ pub(crate) struct AppState {
     pub gossip_senders: Arc<RwLock<HashMap<String, iroh_gossip::api::GossipSender>>>,
     pub node_topics: Arc<RwLock<HashSet<String>>>,
     pub relay_public_url: Option<String>,
+    pub p2p_node_id: Arc<RwLock<Option<String>>>,
+    pub p2p_bind_addr: SocketAddr,
+    pub p2p_router: Arc<RwLock<Option<Arc<IrohRouter>>>>,
 }
 
 #[derive(Serialize)]
 struct HealthStatus {
     status: String,
+}
+
+#[derive(Serialize)]
+struct RelayP2pInfoResponse {
+    node_id: Option<String>,
+    bind_addr: String,
+    bootstrap_nodes: Vec<String>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -113,6 +124,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
     metrics::init(SERVICE_NAME);
 
     let pool = db::connect(&config.database_url).await?;
+    ensure_default_public_node_subscription(&pool).await?;
     let default_config = serde_json::json!({
         "auth": {
             "mode": "off",
@@ -163,6 +175,9 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         gossip_senders: Arc::new(RwLock::new(HashMap::new())),
         node_topics: Arc::new(RwLock::new(HashSet::new())),
         relay_public_url: config.relay_public_url.clone(),
+        p2p_node_id: Arc::new(RwLock::new(None)),
+        p2p_bind_addr: config.p2p_bind_addr,
+        p2p_router: Arc::new(RwLock::new(None)),
     };
 
     gossip::start_gossip(state.clone(), config.clone()).await?;
@@ -171,11 +186,27 @@ pub async fn run(config: RelayConfig) -> Result<()> {
     let router = Router::new()
         .route("/healthz", get(healthz))
         .route("/metrics", get(metrics_endpoint))
+        .route("/v1/p2p/info", get(p2p_info))
         .route("/relay", get(ws::ws_handler))
         .with_state(state);
 
     let router = http::apply_standard_layers(router, SERVICE_NAME);
     server::serve(config.addr, router).await
+}
+
+async fn ensure_default_public_node_subscription(pool: &Pool<Postgres>) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count)
+         VALUES ($1, TRUE, 1)
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE,
+                 ref_count = GREATEST(cn_admin.node_subscriptions.ref_count, 1),
+                 updated_at = NOW()",
+    )
+    .bind(cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
@@ -307,4 +338,96 @@ async fn metrics_endpoint(State(state): State<AppState>) -> impl IntoResponse {
     }
 
     metrics::metrics_response(SERVICE_NAME)
+}
+
+async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
+    let node_id = state.p2p_node_id.read().await.clone();
+    let bind_addr = state.p2p_bind_addr.to_string();
+    let advertised_host = resolve_advertised_host(&state);
+    let bootstrap_nodes = match (node_id.as_deref(), advertised_host) {
+        (Some(node_id), Some(host)) => {
+            vec![format!("{node_id}@{host}:{}", state.p2p_bind_addr.port())]
+        }
+        _ => Vec::new(),
+    };
+
+    Json(RelayP2pInfoResponse {
+        node_id,
+        bind_addr,
+        bootstrap_nodes,
+    })
+}
+
+fn resolve_advertised_host(state: &AppState) -> Option<String> {
+    if let Some(url) = state.relay_public_url.as_ref() {
+        if let Some(host) = extract_host_from_url_like(url) {
+            return Some(host);
+        }
+    }
+
+    match state.p2p_bind_addr.ip() {
+        std::net::IpAddr::V4(ip) if ip.is_unspecified() => None,
+        std::net::IpAddr::V6(ip) if ip.is_unspecified() => None,
+        ip => Some(ip.to_string()),
+    }
+}
+
+fn extract_host_from_url_like(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let without_scheme = trimmed
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(trimmed);
+    let authority = without_scheme.split('/').next().unwrap_or(without_scheme);
+    let authority = authority.trim();
+    if authority.is_empty() {
+        return None;
+    }
+
+    if let Some(host) = authority
+        .strip_prefix('[')
+        .and_then(|value| value.split_once(']'))
+        .map(|(host, _)| host.trim().to_string())
+    {
+        if !host.is_empty() {
+            return Some(host);
+        }
+    }
+
+    let host = authority
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(authority)
+        .trim();
+    if host.is_empty() {
+        return None;
+    }
+
+    Some(host.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_host_from_url_like;
+
+    #[test]
+    fn extract_host_from_url_like_parses_ws_url_with_port_and_path() {
+        let host = extract_host_from_url_like("ws://localhost:8082/relay");
+        assert_eq!(host.as_deref(), Some("localhost"));
+    }
+
+    #[test]
+    fn extract_host_from_url_like_parses_ipv6_authority() {
+        let host = extract_host_from_url_like("wss://[2001:db8::1]:443/relay");
+        assert_eq!(host.as_deref(), Some("2001:db8::1"));
+    }
+
+    #[test]
+    fn extract_host_from_url_like_returns_none_for_empty_input() {
+        assert_eq!(extract_host_from_url_like("   "), None);
+    }
 }

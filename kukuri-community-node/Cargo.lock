@@ -886,6 +886,7 @@ dependencies = [
  "httpdate",
  "nostr-sdk",
  "rand_core 0.6.4",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "sqlx",

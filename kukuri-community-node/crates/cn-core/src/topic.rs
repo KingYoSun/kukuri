@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use blake3::Hasher;
 
+pub const DEFAULT_PUBLIC_TOPIC_ID: &str =
+    "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0";
+
 pub fn normalize_topic_id(topic_id: &str) -> Result<String> {
     let trimmed = topic_id.trim();
     if trimmed.is_empty() {

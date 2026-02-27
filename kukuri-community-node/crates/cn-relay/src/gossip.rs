@@ -26,10 +26,26 @@ struct BootstrapHintPayload {
 
 pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     let endpoint = build_endpoint(&config).await?;
+    let node_id = endpoint.id().to_string();
+    {
+        let mut guard = state.p2p_node_id.write().await;
+        *guard = Some(node_id.clone());
+    }
+    tracing::info!(
+        node_id = %node_id,
+        bind_addr = %config.p2p_bind_addr,
+        "relay p2p endpoint initialized"
+    );
     let gossip = Gossip::builder().spawn(endpoint.clone());
-    let _router = Router::builder(endpoint)
-        .accept(iroh_gossip::ALPN, gossip.clone())
-        .spawn();
+    let router = Arc::new(
+        Router::builder(endpoint)
+            .accept(iroh_gossip::ALPN, gossip.clone())
+            .spawn(),
+    );
+    {
+        let mut guard = state.p2p_router.write().await;
+        *guard = Some(router);
+    }
 
     let senders = Arc::clone(&state.gossip_senders);
     let node_topics = Arc::clone(&state.node_topics);
@@ -315,4 +331,70 @@ async fn load_node_topics(
         topics.insert(topic_id);
     }
     Ok(topics)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cn_core::rate_limit::RateLimiter;
+    use cn_core::service_config;
+    use serde_json::json;
+    use sqlx::postgres::PgPoolOptions;
+    use std::collections::{HashMap, HashSet};
+    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+    use tokio::sync::{broadcast, RwLock};
+
+    fn test_state() -> AppState {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("lazy pool");
+        let config = service_config::static_handle(json!({
+            "auth": {
+                "mode": "off",
+                "enforce_at": null,
+                "grace_seconds": 900,
+                "ws_auth_timeout_seconds": 10
+            },
+            "limits": {
+                "max_event_bytes": 32768,
+                "max_tags": 200
+            }
+        }));
+        let (realtime_tx, _) = broadcast::channel(8);
+        AppState {
+            pool,
+            config,
+            rate_limiter: Arc::new(RateLimiter::new()),
+            realtime_tx,
+            gossip_senders: Arc::new(RwLock::new(HashMap::new())),
+            node_topics: Arc::new(RwLock::new(HashSet::new())),
+            relay_public_url: None,
+            p2p_node_id: Arc::new(RwLock::new(None)),
+            p2p_bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
+            p2p_router: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    #[tokio::test]
+    async fn start_gossip_keeps_router_alive_in_state() {
+        let state = test_state();
+        let config = RelayConfig {
+            addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8082)),
+            database_url: "postgres://postgres:postgres@localhost/postgres".to_string(),
+            p2p_bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
+            p2p_secret_key: None,
+            topic_poll_seconds: 60,
+            config_poll_seconds: 60,
+            relay_public_url: Some("ws://localhost:8082/relay".to_string()),
+        };
+
+        start_gossip(state.clone(), config)
+            .await
+            .expect("start gossip");
+
+        let node_id = state.p2p_node_id.read().await.clone();
+        assert!(node_id.is_some());
+        let router_is_present = state.p2p_router.read().await.is_some();
+        assert!(router_is_present);
+    }
 }

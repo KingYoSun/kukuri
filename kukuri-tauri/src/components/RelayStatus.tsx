@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { getDateFnsLocale } from '@/i18n';
 import { p2pApi } from '@/lib/api/p2p';
 import { errorHandler } from '@/lib/errorHandler';
+import { subscribeNetworkStatusRefresh } from '@/lib/networkRefreshEvent';
 
 export const MAINLINE_RUNBOOK_URL =
   'https://github.com/KingYoSun/kukuri/blob/main/docs/03_implementation/p2p_mainline_runbook.md';
@@ -62,6 +63,7 @@ export function RelayStatus() {
   const [applyingCli, setApplyingCli] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const p2pPeers = useP2PStore((state) => state.peers);
+  const refreshP2PStatus = useP2PStore((state) => state.refreshStatus);
 
   const refreshBootstrapInfo = useCallback(async () => {
     try {
@@ -82,8 +84,8 @@ export function RelayStatus() {
   }, []);
 
   const refreshRelaySnapshot = useCallback(async () => {
-    await Promise.all([updateRelayStatus(), refreshBootstrapInfo()]);
-  }, [refreshBootstrapInfo, updateRelayStatus]);
+    await Promise.all([updateRelayStatus(), refreshBootstrapInfo(), refreshP2PStatus()]);
+  }, [refreshBootstrapInfo, refreshP2PStatus, updateRelayStatus]);
 
   useEffect(() => {
     void refreshBootstrapInfo();
@@ -105,6 +107,12 @@ export function RelayStatus() {
 
     return () => clearTimeout(timeout);
   }, [relayStatusBackoffMs, lastRelayStatusFetchedAt, refreshRelaySnapshot]);
+
+  useEffect(() => {
+    return subscribeNetworkStatusRefresh(() => {
+      void refreshRelaySnapshot();
+    });
+  }, [refreshRelaySnapshot]);
 
   const lastUpdatedLabel = useMemo(() => {
     if (!lastRelayStatusFetchedAt) {

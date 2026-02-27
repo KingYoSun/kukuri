@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { errorHandler } from '@/lib/errorHandler';
 import { p2pApi } from '@/lib/api/p2p';
+import { subscribeNetworkStatusRefresh } from '@/lib/networkRefreshEvent';
 
 type Mode = 'default' | 'custom';
 
@@ -28,20 +29,28 @@ export function BootstrapConfigPanel() {
   const [newNode, setNewNode] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await p2pApi.getBootstrapConfig();
-        setMode(data.mode as Mode);
-        setNodes(data.nodes ?? []);
-        setEffectiveNodes(data.effective_nodes ?? []);
-        setSource(data.source ?? 'none');
-        setEnvLocked(Boolean(data.env_locked));
-      } catch (e) {
-        errorHandler.log('Failed to load bootstrap config', e);
-      }
-    })();
+  const loadBootstrapConfig = useCallback(async () => {
+    try {
+      const data = await p2pApi.getBootstrapConfig();
+      setMode(data.mode as Mode);
+      setNodes(data.nodes ?? []);
+      setEffectiveNodes(data.effective_nodes ?? []);
+      setSource(data.source ?? 'none');
+      setEnvLocked(Boolean(data.env_locked));
+    } catch (e) {
+      errorHandler.log('Failed to load bootstrap config', e);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadBootstrapConfig();
+  }, [loadBootstrapConfig]);
+
+  useEffect(() => {
+    return subscribeNetworkStatusRefresh(() => {
+      void loadBootstrapConfig();
+    });
+  }, [loadBootstrapConfig]);
 
   const sourceLabel = t(`bootstrapPanel.${sourceKeys[source]}`);
 
@@ -90,12 +99,7 @@ export function BootstrapConfigPanel() {
       } else {
         await p2pApi.clearBootstrapNodes();
       }
-      const refreshed = await p2pApi.getBootstrapConfig();
-      setMode(refreshed.mode as Mode);
-      setNodes(refreshed.nodes ?? []);
-      setEnvLocked(Boolean(refreshed.env_locked));
-      setEffectiveNodes(refreshed.effective_nodes ?? []);
-      setSource(refreshed.source ?? 'none');
+      await loadBootstrapConfig();
       errorHandler.log(
         mode === 'custom' ? t('bootstrapPanel.saved') : t('bootstrapPanel.saved'),
         undefined,

@@ -9,6 +9,7 @@ import { renderWithQueryClient } from '../test/renderWithQueryClient';
 vi.mock('../lib/api', () => ({
   api: {
     nodeSubscriptions: vi.fn(),
+    services: vi.fn(),
     createNodeSubscription: vi.fn(),
     updateNodeSubscription: vi.fn(),
     deleteNodeSubscription: vi.fn()
@@ -36,6 +37,7 @@ describe('RelayPage', () => {
         updated_at: 1738809601
       }
     ]);
+    vi.mocked(api.services).mockResolvedValue([]);
     vi.mocked(api.createNodeSubscription).mockResolvedValue({
       topic_id: 'kukuri:topic:new',
       enabled: true,
@@ -73,7 +75,7 @@ describe('RelayPage', () => {
     });
   });
 
-  it('トピック購読CRUDと接続ユーザー表示が機能する', async () => {
+  it('supports topic subscription CRUD and displays connected users', async () => {
     renderWithQueryClient(<RelayPage />);
 
     expect(await screen.findByRole('heading', { name: 'Relay', level: 1 })).toBeInTheDocument();
@@ -157,5 +159,59 @@ describe('RelayPage', () => {
     await waitFor(() => {
       expect(api.deleteNodeSubscription).toHaveBeenCalledWith('kukuri:topic:1');
     });
+  });
+
+  it('uses relay runtime data when topic row has runtime-only connectivity counts', async () => {
+    vi.mocked(api.nodeSubscriptions).mockResolvedValue([
+      {
+        topic_id: 'kukuri:topic:runtime-only',
+        enabled: true,
+        ref_count: 1,
+        ingest_policy: null,
+        connected_nodes: [],
+        connected_node_count: 0,
+        connected_users: [],
+        connected_user_count: 5,
+        updated_at: 1738809601
+      }
+    ]);
+    vi.mocked(api.services).mockResolvedValue([
+      {
+        service: 'relay',
+        version: 4,
+        config_json: {},
+        updated_at: 1700002000,
+        updated_by: 'test-admin',
+        health: {
+          status: 'healthy',
+          checked_at: 1700002000,
+          details: {
+            auth_transition: {
+              ws_connections: 5
+            },
+            p2p_runtime: {
+              bootstrap_nodes: ['relay-runtime@127.0.0.1:7777']
+            }
+          }
+        }
+      }
+    ]);
+
+    renderWithQueryClient(<RelayPage />);
+
+    expect(
+      await screen.findByText((content) => content.includes('Connected nodes:') && content.includes('1'))
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText((content) => content.includes('Connected users:') && content.includes('5'))
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'Connected nodes are sourced from relay runtime p2p info because topic connectivity is empty.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText('Runtime metrics only (pubkeys unavailable)')
+    ).toBeInTheDocument();
   });
 });

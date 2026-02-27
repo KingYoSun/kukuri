@@ -12,11 +12,15 @@ use crate::shared::config::BootstrapSource;
 use crate::state::AppState;
 use tauri::State;
 
+fn has_user_bootstrap_nodes(selection: &BootstrapSelection) -> bool {
+    selection.source == BootstrapSource::User && !selection.nodes.is_empty()
+}
+
 fn should_apply_runtime_bootstrap(
     previous: &BootstrapSelection,
     next: &BootstrapSelection,
 ) -> bool {
-    if next.source != BootstrapSource::User || next.nodes.is_empty() {
+    if !has_user_bootstrap_nodes(next) {
         return false;
     }
 
@@ -25,6 +29,10 @@ fn should_apply_runtime_bootstrap(
     }
 
     previous.nodes != next.nodes
+}
+
+fn should_retry_runtime_bootstrap_on_auth(next: &BootstrapSelection) -> bool {
+    has_user_bootstrap_nodes(next)
 }
 
 #[tauri::command]
@@ -74,8 +82,24 @@ pub async fn community_node_authenticate(
     state: State<'_, AppState>,
     request: CommunityNodeAuthRequest,
 ) -> Result<ApiResponse<CommunityNodeAuthResponse>, AppError> {
-    let result = state.community_node_handler.authenticate(request).await;
-    Ok(ApiResponse::from_result(result))
+    let auth_response = state.community_node_handler.authenticate(request).await?;
+    let next_selection = bootstrap_config::load_effective_bootstrap_nodes();
+
+    if should_retry_runtime_bootstrap_on_auth(&next_selection)
+        && let Err(err) = state
+            .p2p_handler
+            .apply_bootstrap_nodes(next_selection.nodes.clone(), next_selection.source)
+            .await
+    {
+        tracing::warn!(
+            error = %err,
+            source = ?next_selection.source,
+            node_count = next_selection.nodes.len(),
+            "Failed to apply bootstrap nodes after community node authentication"
+        );
+    }
+
+    Ok(ApiResponse::success(auth_response))
 }
 
 #[tauri::command]
@@ -273,5 +297,30 @@ mod tests {
         let previous = selection(BootstrapSource::None, &[]);
         let next = selection(BootstrapSource::User, &[]);
         assert!(!should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_apply_runtime_bootstrap_when_source_switches_from_bundle_to_user() {
+        let previous = selection(BootstrapSource::Bundle, &["n0@relay.example:11223"]);
+        let next = selection(BootstrapSource::User, &["aaaa@127.0.0.1:11223"]);
+        assert!(should_apply_runtime_bootstrap(&previous, &next));
+    }
+
+    #[test]
+    fn should_retry_runtime_bootstrap_on_auth_when_user_nodes_exist() {
+        let next = selection(BootstrapSource::User, &["aaaa@127.0.0.1:11223"]);
+        assert!(should_retry_runtime_bootstrap_on_auth(&next));
+    }
+
+    #[test]
+    fn should_not_retry_runtime_bootstrap_on_auth_without_user_source() {
+        let next = selection(BootstrapSource::Bundle, &["n0@relay.example:11223"]);
+        assert!(!should_retry_runtime_bootstrap_on_auth(&next));
+    }
+
+    #[test]
+    fn should_not_retry_runtime_bootstrap_on_auth_when_user_nodes_empty() {
+        let next = selection(BootstrapSource::User, &[]);
+        assert!(!should_retry_runtime_bootstrap_on_auth(&next));
     }
 }

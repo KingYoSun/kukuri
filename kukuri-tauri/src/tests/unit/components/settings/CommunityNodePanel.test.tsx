@@ -9,6 +9,8 @@ import { accessControlApi } from '@/lib/api/accessControl';
 import { errorHandler } from '@/lib/errorHandler';
 import { toast } from 'sonner';
 import { useCommunityNodeStore } from '@/stores/communityNodeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useP2PStore } from '@/stores/p2pStore';
 
 vi.mock('@/lib/api/communityNode', () => ({
   defaultCommunityNodeRoles: {
@@ -55,10 +57,26 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: {
+    getState: vi.fn(),
+  },
+}));
+
+vi.mock('@/stores/p2pStore', () => ({
+  useP2PStore: {
+    getState: vi.fn(),
+  },
+}));
+
 const mockCommunityNodeApi = communityNodeApi as unknown as Record<string, vi.Mock>;
 const mockAccessControlApi = accessControlApi as unknown as Record<string, vi.Mock>;
 const mockErrorHandler = errorHandler as unknown as { log: vi.Mock };
 const mockToast = toast as unknown as { success: vi.Mock; error: vi.Mock };
+const mockUseAuthStore = useAuthStore as unknown as { getState: vi.Mock };
+const mockUseP2PStore = useP2PStore as unknown as { getState: vi.Mock };
+const mockUpdateRelayStatus = vi.fn().mockResolvedValue(undefined);
+const mockRefreshP2PStatus = vi.fn().mockResolvedValue(undefined);
 
 const createNode = (overrides: Record<string, unknown> = {}) => ({
   base_url: 'https://community.example',
@@ -95,6 +113,12 @@ const renderPanel = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   useCommunityNodeStore.getState().reset();
+  mockUseAuthStore.getState.mockReturnValue({
+    updateRelayStatus: mockUpdateRelayStatus,
+  });
+  mockUseP2PStore.getState.mockReturnValue({
+    refreshStatus: mockRefreshP2PStatus,
+  });
 
   mockCommunityNodeApi.getConfig.mockResolvedValue({ nodes: [createNode()] });
   mockCommunityNodeApi.getTrustProvider.mockResolvedValue(null);
@@ -166,6 +190,20 @@ describe('CommunityNodePanel', () => {
           roles: { labels: true, trust: true, search: true, bootstrap: true },
         },
       ]);
+    });
+  });
+
+  it('refreshes relay and p2p status after authenticate', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await screen.findByTestId('community-node-node-0');
+    await user.click(screen.getByTestId('community-node-authenticate-0'));
+
+    await waitFor(() => {
+      expect(mockCommunityNodeApi.authenticate).toHaveBeenCalledWith('https://community.example');
+      expect(mockUpdateRelayStatus).toHaveBeenCalledTimes(1);
+      expect(mockRefreshP2PStatus).toHaveBeenCalledTimes(1);
     });
   });
 

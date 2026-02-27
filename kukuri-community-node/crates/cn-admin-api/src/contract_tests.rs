@@ -333,7 +333,10 @@ async fn spawn_healthz_mock(status_code: Arc<AtomicU16>) -> (String, tokio::task
     (format!("http://{addr}/healthz"), handle)
 }
 
-async fn spawn_relay_metrics_mock(metrics_body: String) -> (String, tokio::task::JoinHandle<()>) {
+async fn spawn_relay_runtime_mock(
+    metrics_body: String,
+    p2p_info_payload: Value,
+) -> (String, tokio::task::JoinHandle<()>) {
     let app = Router::new()
         .route(
             "/healthz",
@@ -350,6 +353,13 @@ async fn spawn_relay_metrics_mock(metrics_body: String) -> (String, tokio::task:
                         metrics_body,
                     )
                 }
+            }),
+        )
+        .route(
+            "/v1/p2p/info",
+            get(move || {
+                let payload = p2p_info_payload.clone();
+                async move { (StatusCode::OK, axum::Json(payload)) }
             }),
         );
 
@@ -1235,7 +1245,7 @@ async fn metrics_contract_prometheus_content_type_shape_compatible() {
 
 #[tokio::test]
 async fn dashboard_contract_runbook_signals_shape_compatible() {
-    let (relay_health_url, relay_server) = spawn_relay_metrics_mock(
+    let (relay_health_url, relay_server) = spawn_relay_runtime_mock(
         r#"
 # HELP ingest_rejected_total Total ingest messages rejected
 # TYPE ingest_rejected_total counter
@@ -1243,6 +1253,11 @@ ingest_rejected_total{service="cn-relay",reason="auth"} 5
 ingest_rejected_total{service="cn-relay",reason="ratelimit"} 9
 "#
         .to_string(),
+        json!({
+            "node_id": "relay-dashboard-node",
+            "bind_addr": "0.0.0.0:7777",
+            "bootstrap_nodes": ["relay-dashboard-node@127.0.0.1:7777"]
+        }),
     )
     .await;
 
@@ -2679,7 +2694,17 @@ ws_auth_disconnect_total{service="cn-relay",reason="timeout"} 5
 ws_auth_disconnect_total{service="cn-relay",reason="deadline"} 1
 "#
     .to_string();
-    let (relay_url, relay_server) = spawn_relay_metrics_mock(metrics_body).await;
+    let (relay_url, relay_server) = spawn_relay_runtime_mock(
+        metrics_body,
+        json!({
+            "node_id": "relay-node-1",
+            "bind_addr": "0.0.0.0:7777",
+            "bootstrap_nodes": [
+                "relay-node-1@127.0.0.1:7777"
+            ]
+        }),
+    )
+    .await;
 
     let mut health_targets = HashMap::new();
     health_targets.insert("relay".to_string(), relay_url);
@@ -2724,6 +2749,30 @@ ws_auth_disconnect_total{service="cn-relay",reason="deadline"} 1
             .pointer("/auth_transition/ws_auth_disconnect_deadline_total")
             .and_then(Value::as_i64),
         Some(1)
+    );
+    assert_eq!(
+        details
+            .pointer("/p2p_runtime/p2p_info_status")
+            .and_then(Value::as_u64),
+        Some(200)
+    );
+    assert_eq!(
+        details
+            .pointer("/p2p_runtime/node_id")
+            .and_then(Value::as_str),
+        Some("relay-node-1")
+    );
+    assert_eq!(
+        details
+            .pointer("/p2p_runtime/bootstrap_node_count")
+            .and_then(Value::as_i64),
+        Some(1)
+    );
+    assert_eq!(
+        details
+            .pointer("/p2p_runtime/bootstrap_nodes/0")
+            .and_then(Value::as_str),
+        Some("relay-node-1@127.0.0.1:7777")
     );
 
     relay_server.abort();
@@ -3794,6 +3843,180 @@ async fn subscription_request_approve_rejects_when_node_topic_limit_reached() {
         }),
     )
     .await;
+}
+
+#[tokio::test]
+async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_data_is_empty() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID.to_string();
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '3 hour')
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert node subscription for runtime fallback");
+
+    insert_service_health(
+        &state.pool,
+        "relay",
+        "healthy",
+        json!({
+            "auth_transition": {
+                "ws_connections": 1
+            },
+            "p2p_runtime": {
+                "bootstrap_nodes": ["relay-runtime@127.0.0.1:7777"]
+            }
+        }),
+    )
+    .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/node-subscriptions",
+            get(subscriptions::list_node_subscriptions),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) =
+        get_json_with_session(app, "/v1/admin/node-subscriptions", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("node subscription list");
+    let row = rows
+        .iter()
+        .find(|entry| entry.get("topic_id").and_then(Value::as_str) == Some(topic_id.as_str()))
+        .expect("runtime fallback topic row");
+
+    assert_eq!(
+        row.get("connected_node_count").and_then(Value::as_i64),
+        Some(1)
+    );
+    assert!(
+        row.get("connected_user_count")
+            .and_then(Value::as_i64)
+            .is_some_and(|count| count > 0),
+        "connected_user_count should be positive when runtime fallback is active: {payload}"
+    );
+    assert!(row
+        .get("connected_nodes")
+        .and_then(Value::as_array)
+        .is_some_and(|nodes| {
+            nodes
+                .iter()
+                .any(|node| node.as_str() == Some("relay-runtime@127.0.0.1:7777"))
+        }));
+    assert_eq!(
+        row.get("connected_users")
+            .and_then(Value::as_array)
+            .map(std::vec::Vec::len),
+        Some(0)
+    );
+}
+
+#[tokio::test]
+async fn node_subscriptions_list_applies_runtime_ws_fallback_only_once() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let primary_topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID.to_string();
+    let secondary_topic_id = format!("kukuri:topic:runtime-fallback-secondary:{}", Uuid::new_v4());
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '2 hour')
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&primary_topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert primary runtime fallback topic");
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW() + INTERVAL '1 hour')
+         ON CONFLICT (topic_id) DO UPDATE
+             SET enabled = TRUE, ref_count = 1, updated_at = EXCLUDED.updated_at",
+    )
+    .bind(&secondary_topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert secondary runtime fallback topic");
+
+    insert_service_health(
+        &state.pool,
+        "relay",
+        "healthy",
+        json!({
+            "auth_transition": {
+                "ws_connections": 5
+            },
+            "p2p_runtime": {
+                "bootstrap_nodes": ["relay-runtime@127.0.0.1:7777"]
+            }
+        }),
+    )
+    .await;
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/node-subscriptions",
+            get(subscriptions::list_node_subscriptions),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) =
+        get_json_with_session(app, "/v1/admin/node-subscriptions", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("node subscription list");
+    let relevant_rows = rows
+        .iter()
+        .filter(|entry| {
+            entry.get("topic_id").and_then(Value::as_str) == Some(primary_topic_id.as_str())
+                || entry.get("topic_id").and_then(Value::as_str)
+                    == Some(secondary_topic_id.as_str())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        relevant_rows.len(),
+        2,
+        "expected both runtime fallback topics in payload"
+    );
+
+    let fallback_counts = relevant_rows
+        .iter()
+        .map(|row| {
+            row.get("connected_user_count")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        })
+        .filter(|count| *count > 0)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        fallback_counts.len(),
+        1,
+        "runtime ws fallback should be assigned to a single topic row: {payload}"
+    );
+
+    let total_connected_user_count: i64 = relevant_rows
+        .iter()
+        .map(|row| {
+            row.get("connected_user_count")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        })
+        .sum();
+    assert_eq!(
+        total_connected_user_count, fallback_counts[0],
+        "runtime ws fallback must not be duplicated across multiple topics"
+    );
 }
 
 #[tokio::test]

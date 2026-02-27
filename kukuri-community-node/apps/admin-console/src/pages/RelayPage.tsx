@@ -6,7 +6,8 @@ import { api } from '../lib/api';
 import { normalizeConnectedNode } from '../lib/bootstrap';
 import { errorToMessage } from '../lib/errorHandler';
 import { formatTimestamp } from '../lib/format';
-import type { NodeSubscription } from '../lib/types';
+import { parseRelayRuntimeSnapshot } from '../lib/relayRuntime';
+import type { NodeSubscription, ServiceInfo } from '../lib/types';
 
 type NodePolicyDraft = {
   retentionDays: string;
@@ -138,6 +139,11 @@ export const RelayPage = () => {
     queryKey: ['nodeSubscriptions'],
     queryFn: api.nodeSubscriptions
   });
+  const servicesQuery = useQuery<ServiceInfo[]>({
+    queryKey: ['services'],
+    queryFn: api.services,
+    refetchInterval: 5000
+  });
 
   const nodeSubscriptionMutation = useMutation({
     mutationFn: ({
@@ -207,6 +213,10 @@ export const RelayPage = () => {
   });
 
   const nodeSubscriptions = nodeSubsQuery.data ?? [];
+  const relayRuntime = useMemo(
+    () => parseRelayRuntimeSnapshot(servicesQuery.data),
+    [servicesQuery.data]
+  );
   const nodeSubscriptionSummary = useMemo(() => {
     const topicCount = nodeSubscriptions.length;
     const connectedNodeTotal = nodeSubscriptions.reduce((total, subscription) => {
@@ -229,6 +239,20 @@ export const RelayPage = () => {
     }, 0);
     return { topicCount, connectedNodeTotal, connectedUserTotal };
   }, [nodeSubscriptions]);
+  const runtimeConnectedNodes = relayRuntime.bootstrapNodes.length;
+  const runtimeConnectedUsers = relayRuntime.wsConnections ?? 0;
+  const summaryConnectedNodes =
+    nodeSubscriptionSummary.connectedNodeTotal > 0
+      ? nodeSubscriptionSummary.connectedNodeTotal
+      : runtimeConnectedNodes;
+  const summaryConnectedUsers =
+    nodeSubscriptionSummary.connectedUserTotal > 0
+      ? nodeSubscriptionSummary.connectedUserTotal
+      : runtimeConnectedUsers;
+  const usesRuntimeNodeFallback =
+    nodeSubscriptionSummary.connectedNodeTotal === 0 && runtimeConnectedNodes > 0;
+  const usesRuntimeUserFallback =
+    nodeSubscriptionSummary.connectedUserTotal === 0 && runtimeConnectedUsers > 0;
 
   const saveNodePolicy = (subscription: NodeSubscription) => {
     const draft =
@@ -307,10 +331,19 @@ export const RelayPage = () => {
           </div>
           <div className="muted">
             Topics: {nodeSubscriptionSummary.topicCount} | Connected nodes:{' '}
-            {nodeSubscriptionSummary.connectedNodeTotal} | Connected users:{' '}
-            {nodeSubscriptionSummary.connectedUserTotal}
+            {summaryConnectedNodes} | Connected users: {summaryConnectedUsers}
           </div>
         </div>
+        {usesRuntimeNodeFallback && (
+          <div className="notice">
+            Connected nodes are sourced from relay runtime p2p info because topic connectivity is empty.
+          </div>
+        )}
+        {usesRuntimeUserFallback && (
+          <div className="notice">
+            Connected users are sourced from relay runtime websocket metrics.
+          </div>
+        )}
         <div className="card sub-card">
           <h3>Add topic subscription</h3>
           <div className="grid">
@@ -427,6 +460,7 @@ export const RelayPage = () => {
         </div>
         {nodeSubsQuery.isLoading && <div className="notice">Loading node topics...</div>}
         {nodeSubsQuery.error && <div className="notice">{errorToMessage(nodeSubsQuery.error)}</div>}
+        {servicesQuery.error && <div className="notice">{errorToMessage(servicesQuery.error)}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -487,7 +521,11 @@ export const RelayPage = () => {
                   <td>{connectedUserCount}</td>
                   <td>
                     {connectedUsers.length === 0 ? (
-                      <span className="muted">No connected users</span>
+                      connectedUserCount > 0 ? (
+                        <span className="muted">Runtime metrics only (pubkeys unavailable)</span>
+                      ) : (
+                        <span className="muted">No connected users</span>
+                      )
                     ) : (
                       <div className="stack">
                         {connectedUsers.map((userPubkey) => (

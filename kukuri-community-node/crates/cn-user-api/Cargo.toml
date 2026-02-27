@@ -21,6 +21,7 @@ utoipa.workspace = true
 uuid.workspace = true
 httpdate.workspace = true
 rand_core.workspace = true
+reqwest.workspace = true
 
 cn-core = { path = "../cn-core" }
 cn-kip-types = { path = "../cn-kip-types" }
