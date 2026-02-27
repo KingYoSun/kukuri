@@ -219,8 +219,8 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
       );
     };
 
-    await confirmDelete.click();
     try {
+      await confirmDelete.click();
       await waitDeleteDialogClosed(5000, '\u30c8\u30d4\u30c3\u30af\u524a\u9664\u30c0\u30a4\u30a2\u30ed\u30b0\u304c\u9589\u3058\u306a\u3044');
     } catch {
       await browser.execute(() => {

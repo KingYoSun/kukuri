@@ -371,14 +371,6 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
         }
       }
 
-      const bodyContainsNeedle = await browser.execute((value) => {
-        const bodyText = document.body?.innerText ?? '';
-        return bodyText.includes(value);
-      }, needle);
-      if (bodyContainsNeedle) {
-        return await $('body');
-      }
-
       return null;
     };
 
