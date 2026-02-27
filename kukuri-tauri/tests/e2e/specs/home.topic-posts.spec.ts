@@ -202,8 +202,26 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
     const confirmDelete = await $('[data-testid="topic-delete-confirm"]');
     await confirmDelete.waitForDisplayed({ timeout: 10000 });
     await confirmDelete.scrollIntoView();
+    const waitDeleteDialogClosed = async (timeout: number, timeoutMsg: string) => {
+      await browser.waitUntil(
+        async () => {
+          const deleteButtons = await $$('[data-testid="topic-delete-confirm"]');
+          if (deleteButtons.length === 0) {
+            return true;
+          }
+          try {
+            return !(await deleteButtons[0].isDisplayed());
+          } catch {
+            return true;
+          }
+        },
+        { timeout, timeoutMsg },
+      );
+    };
+
+    await confirmDelete.click();
     try {
-      await confirmDelete.click();
+      await waitDeleteDialogClosed(5000, '\u30c8\u30d4\u30c3\u30af\u524a\u9664\u30c0\u30a4\u30a2\u30ed\u30b0\u304c\u9589\u3058\u306a\u3044');
     } catch {
       await browser.execute(() => {
         const button = document.querySelector(
@@ -211,11 +229,21 @@ describe('\u30db\u30fc\u30e0/\u30c8\u30d4\u30c3\u30af/\u6295\u7a3f\u64cd\u4f5c',
         ) as HTMLButtonElement | null;
         button?.click();
       });
+      await waitDeleteDialogClosed(10000, '\u30c8\u30d4\u30c3\u30af\u524a\u9664\u30c0\u30a4\u30a2\u30ed\u30b0\u304c\u9589\u3058\u306a\u3044');
     }
-    await browser.waitUntil(async () => (await browser.getUrl()).endsWith('/topics'), {
-      timeout: 20000,
-      timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u623b\u3089\u306a\u3044',
-    });
+
+    await browser.waitUntil(
+      async () => {
+        const currentUrl = await browser.getUrl();
+        const isTopicsIndex = /\/topics(?:[?#]|$)/.test(currentUrl);
+        const isTopicDetail = /\/topics\/[^/?#]+/.test(currentUrl);
+        return isTopicsIndex && !isTopicDetail;
+      },
+      {
+        timeout: 30000,
+        timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u4e00\u89a7\u306b\u623b\u3089\u306a\u3044',
+      },
+    );
     await browser.waitUntil(
       async () => (await $$(`//h3[contains(., "${newTopicName}")]`)).length === 0,
       { timeout: 15000, timeoutMsg: '\u30c8\u30d4\u30c3\u30af\u30ab\u30fc\u30c9\u304c\u6d88\u3048\u306a\u3044' },

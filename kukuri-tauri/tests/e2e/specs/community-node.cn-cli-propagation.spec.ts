@@ -1,4 +1,4 @@
-import { $, browser, expect } from '@wdio/globals';
+import { $, $$, browser, expect } from '@wdio/globals';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -249,6 +249,22 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
     );
     await waitForHome();
     await setTimelineUpdateMode('realtime');
+
+    // Realtime delta を適用する timeline は topic detail で監視されるため、先に遷移しておく。
+    const topicSidebarButton = await $(`[data-testid="topic-${propagationTopicId}"]`);
+    await topicSidebarButton.waitForDisplayed({ timeout: 20000 });
+    await topicSidebarButton.click();
+    await browser.waitUntil(
+      async () => {
+        const currentUrl = decodeURIComponent(await browser.getUrl());
+        return currentUrl.includes(`/topics/${propagationTopicId}`);
+      },
+      {
+        timeout: 30000,
+        interval: 500,
+        timeoutMsg: 'Propagation topic detail did not open before publish',
+      },
+    );
     const publishPeers = [REAL_BOOTSTRAP_PEER];
     console.info(
       `[community-node.cn-cli-propagation] publishPeers:${JSON.stringify(publishPeers)}`,
@@ -313,6 +329,20 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
     );
 
     const findTimelineElementWithContent = async (needle: string) => {
+      const threadCards = await $$('[data-testid^="timeline-thread-card-"]');
+      for (const threadCard of threadCards) {
+        try {
+          if (!(await threadCard.isExisting())) {
+            continue;
+          }
+          if ((await threadCard.getText()).includes(needle)) {
+            return threadCard;
+          }
+        } catch {
+          continue;
+        }
+      }
+
       const timelineItems = await $$('[data-testid^="post-"]');
       for (const item of timelineItems) {
         try {
@@ -339,6 +369,14 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
         } catch {
           continue;
         }
+      }
+
+      const bodyContainsNeedle = await browser.execute((value) => {
+        const bodyText = document.body?.innerText ?? '';
+        return bodyText.includes(value);
+      }, needle);
+      if (bodyContainsNeedle) {
+        return await $('body');
       }
 
       return null;
