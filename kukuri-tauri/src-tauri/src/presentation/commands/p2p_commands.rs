@@ -100,6 +100,16 @@ pub async fn get_node_address(
     Ok(ApiResponse::from_result(result))
 }
 
+/// 指定したピアアドレスへ直接接続
+#[tauri::command]
+pub async fn connect_to_peer(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] peerAddress: String,
+) -> Result<ApiResponse<()>, AppError> {
+    let result = state.p2p_handler.connect_to_peer(peerAddress).await;
+    Ok(ApiResponse::from_result(result))
+}
+
 // ================= Bootstrap UI コマンド =================
 
 #[tauri::command]

@@ -39,6 +39,10 @@ impl P2PServiceTrait for TestP2PService {
         Ok(())
     }
 
+    async fn connect_to_peer(&self, _peer_address: &str) -> Result<(), AppError> {
+        Ok(())
+    }
+
     async fn get_status(&self) -> Result<P2PStatus, AppError> {
         Ok(P2PStatus {
             is_connected: true,

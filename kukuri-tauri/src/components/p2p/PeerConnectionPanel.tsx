@@ -20,6 +20,82 @@ interface PeerConnection {
   status: 'connected' | 'failed';
 }
 
+interface ParsedPeerAddress {
+  nodeId: string;
+  host: string;
+  port: number;
+}
+
+const ADDRESS_SPLIT_PATTERN = /[,;\n\r]+/;
+
+const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
+  const trimmed = address.trim();
+  const [nodeId, endpoint] = trimmed.split('@');
+
+  if (!nodeId || !endpoint) {
+    return null;
+  }
+
+  if (!/^[0-9a-fA-F]{64}$/.test(nodeId)) {
+    return null;
+  }
+
+  const splitIndex = endpoint.lastIndexOf(':');
+  if (splitIndex <= 0) {
+    return null;
+  }
+
+  const host = endpoint.slice(0, splitIndex).trim();
+  const portText = endpoint.slice(splitIndex + 1).trim();
+  if (!host || !/^\d+$/.test(portText)) {
+    return null;
+  }
+
+  const port = Number(portText);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null;
+  }
+
+  const normalizedHost = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  if (!normalizedHost) {
+    return null;
+  }
+
+  return {
+    nodeId,
+    host: normalizedHost,
+    port,
+  };
+};
+
+const isLoopbackHost = (host: string): boolean => {
+  const normalized = host.toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+};
+
+const pickPreferredAddress = (rawValue: string): string | null => {
+  const candidates = rawValue
+    .split(ADDRESS_SPLIT_PATTERN)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const validCandidates = candidates.filter((entry) => parsePeerAddress(entry) !== null);
+  if (validCandidates.length === 0) {
+    return null;
+  }
+
+  const nonLoopback = validCandidates.find((entry) => {
+    const parsed = parsePeerAddress(entry);
+    return parsed ? !isLoopbackHost(parsed.host) : false;
+  });
+
+  return nonLoopback ?? validCandidates[0];
+};
+
 export function PeerConnectionPanel() {
   const { t } = useTranslation();
   const { nodeAddr, connectionStatus, initialize } = useP2PStore();
@@ -74,18 +150,14 @@ export function PeerConnectionPanel() {
 
   // ピアアドレスのバリデーション
   const validatePeerAddress = (address: string): boolean => {
-    // 基本的なフォーマット検証
-    // /ip4/xxx.xxx.xxx.xxx/tcp/xxxx/p2p/QmXXX... または
-    // /ip6/xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx/tcp/xxxx/p2p/QmXXX...
-    const ipv4Pattern = /^\/ip4\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/tcp\/\d+\/p2p\/[a-zA-Z0-9]+$/;
-    const ipv6Pattern = /^\/ip6\/[a-fA-F0-9:]+\/tcp\/\d+\/p2p\/[a-zA-Z0-9]+$/;
-
-    return ipv4Pattern.test(address) || ipv6Pattern.test(address);
+    return parsePeerAddress(address) !== null;
   };
 
   // ピアに接続
-  const handleConnect = async () => {
-    const trimmedAddress = peerAddress.trim();
+  const handleConnect = async (addressOverride?: string) => {
+    const sourceAddress = addressOverride ?? peerAddress;
+    const preferredAddress = pickPreferredAddress(sourceAddress);
+    const trimmedAddress = preferredAddress ?? sourceAddress.trim();
 
     if (!trimmedAddress) {
       toast({
@@ -151,7 +223,7 @@ export function PeerConnectionPanel() {
   // 接続履歴から再接続
   const handleReconnect = async (address: string) => {
     setPeerAddress(address);
-    await handleConnect();
+    await handleConnect(address);
   };
 
   // 接続履歴をクリア
@@ -163,6 +235,8 @@ export function PeerConnectionPanel() {
       description: t('p2pPanel.historyClearedDesc'),
     });
   };
+
+  const addressToShare = nodeAddr ? pickPreferredAddress(nodeAddr) ?? nodeAddr : '';
 
   return (
     <Card className="w-full">
@@ -185,7 +259,7 @@ export function PeerConnectionPanel() {
               <Button
                 size="icon"
                 variant="outline"
-                onClick={() => copyToClipboard(nodeAddr)}
+                onClick={() => copyToClipboard(addressToShare)}
                 title={t('p2pPanel.copy')}
               >
                 <Copy className="h-4 w-4" />
@@ -217,7 +291,7 @@ export function PeerConnectionPanel() {
                 }
               }}
             />
-            <Button onClick={handleConnect} disabled={isConnecting || !peerAddress.trim()}>
+            <Button onClick={() => handleConnect()} disabled={isConnecting || !peerAddress.trim()}>
               {isConnecting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

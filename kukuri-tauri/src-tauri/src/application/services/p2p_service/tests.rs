@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 pub struct MockNetworkServ {
     node_id: Mutex<Option<String>>,
     addresses: Mutex<Option<Vec<String>>>,
+    add_peer_calls: Mutex<Vec<String>>,
     join_dht: Mutex<Vec<String>>,
     leave_dht: Mutex<Vec<String>>,
     broadcast_dht: Mutex<Vec<(String, Vec<u8>)>>,
@@ -27,6 +28,7 @@ impl MockNetworkServ {
         Self {
             node_id: Mutex::new(None),
             addresses: Mutex::new(None),
+            add_peer_calls: Mutex::new(Vec::new()),
             join_dht: Mutex::new(Vec::new()),
             leave_dht: Mutex::new(Vec::new()),
             broadcast_dht: Mutex::new(Vec::new()),
@@ -67,6 +69,10 @@ impl MockNetworkServ {
 
     pub fn join_dht_calls(&self) -> Vec<String> {
         self.join_dht.lock().unwrap().clone()
+    }
+
+    pub fn add_peer_calls(&self) -> Vec<String> {
+        self.add_peer_calls.lock().unwrap().clone()
     }
 
     pub fn leave_dht_calls(&self) -> Vec<String> {
@@ -114,7 +120,11 @@ impl NetworkService for MockNetworkServ {
         Ok(self.peers.lock().unwrap().clone())
     }
 
-    async fn add_peer(&self, _address: &str) -> Result<(), AppError> {
+    async fn add_peer(&self, address: &str) -> Result<(), AppError> {
+        self.add_peer_calls
+            .lock()
+            .unwrap()
+            .push(address.to_string());
         Ok(())
     }
 
@@ -520,6 +530,41 @@ async fn test_get_node_addresses() {
     let addresses = result.unwrap();
     assert_eq!(addresses.len(), 2);
     assert!(addresses.contains(&"/ip4/127.0.0.1/tcp/4001".to_string()));
+}
+
+#[tokio::test]
+async fn test_connect_to_peer_forwards_to_network_and_topics() {
+    let network = Arc::new(MockNetworkServ::new());
+    let mut mock_gossip = MockGossipServ::new();
+
+    mock_gossip
+        .expect_get_joined_topics()
+        .times(1)
+        .return_once(|| Ok(vec!["topic_a".to_string(), "topic_b".to_string()]));
+
+    mock_gossip
+        .expect_join_topic()
+        .with(eq("topic_a"), eq(vec!["peer1@127.0.0.1:4001".to_string()]))
+        .times(1)
+        .return_once(|_, _| Ok(()));
+
+    mock_gossip
+        .expect_join_topic()
+        .with(eq("topic_b"), eq(vec!["peer1@127.0.0.1:4001".to_string()]))
+        .times(1)
+        .return_once(|_, _| Ok(()));
+
+    let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
+
+    service
+        .connect_to_peer("peer1@127.0.0.1:4001")
+        .await
+        .expect("connect peer");
+
+    assert_eq!(
+        network.add_peer_calls(),
+        vec!["peer1@127.0.0.1:4001".to_string()]
+    );
 }
 
 #[tokio::test]

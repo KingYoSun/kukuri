@@ -147,7 +147,10 @@ describe('p2pApi', () => {
 
   describe('getNodeAddress', () => {
     it('should get node addresses', async () => {
-      const mockAddresses = ['/ip4/192.168.1.1/udp/4001', '/ip6/::1/udp/4001'];
+      const mockAddresses = [
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.1:4001',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[::1]:4001',
+      ];
 
       vi.mocked(invoke).mockResolvedValueOnce(successResponse({ addresses: mockAddresses }));
 
@@ -230,10 +233,12 @@ describe('p2pApi', () => {
     it('should connect to a peer with valid address', async () => {
       vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
-      await p2pApi.connectToPeer('/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample');
+      await p2pApi.connectToPeer(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.100:4001',
+      );
 
       expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
-        peerAddress: '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
+        peerAddress: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.100:4001',
       });
     });
 
@@ -241,17 +246,21 @@ describe('p2pApi', () => {
       vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection refused'));
 
       await expect(
-        p2pApi.connectToPeer('/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample'),
+        p2pApi.connectToPeer(
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.100:4001',
+        ),
       ).rejects.toThrow('Connection refused');
     });
 
     it('should connect to IPv6 peer', async () => {
       vi.mocked(invoke).mockResolvedValueOnce(successResponse(null));
 
-      await p2pApi.connectToPeer('/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWExample');
+      await p2pApi.connectToPeer(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
+      );
 
       expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
-        peerAddress: '/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWExample',
+        peerAddress: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
       });
     });
   });

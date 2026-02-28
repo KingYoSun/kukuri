@@ -4,7 +4,7 @@ use crate::presentation::dto::p2p::{
     BroadcastRequest, GossipMetricsSummaryResponse, JoinTopicRequest, LeaveTopicRequest,
     NodeAddressResponse, P2PStatusResponse, TopicStatus,
 };
-use crate::shared::{AppError, config::BootstrapSource};
+use crate::shared::{AppError, ValidationFailureKind, config::BootstrapSource};
 use std::sync::Arc;
 
 pub struct P2PHandler {
@@ -44,6 +44,17 @@ impl P2PHandler {
         self.p2p_service
             .broadcast_message(&request.topic_id, &request.content)
             .await
+    }
+
+    pub async fn connect_to_peer(&self, peer_address: String) -> Result<(), AppError> {
+        let trimmed = peer_address.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::validation(
+                ValidationFailureKind::Generic,
+                "Peer address is required",
+            ));
+        }
+        self.p2p_service.connect_to_peer(trimmed).await
     }
 
     /// P2Pステータスを取得

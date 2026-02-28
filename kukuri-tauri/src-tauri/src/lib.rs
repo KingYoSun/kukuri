@@ -154,6 +154,7 @@ pub fn run() {
             presentation::commands::broadcast_to_topic,
             presentation::commands::get_p2p_status,
             presentation::commands::get_node_address,
+            presentation::commands::connect_to_peer,
             presentation::commands::get_p2p_metrics,
             // オフライン関連コマンド
             presentation::commands::save_offline_action,

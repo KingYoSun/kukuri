@@ -47,7 +47,7 @@ describe('PeerConnectionPanel', () => {
 
     // useP2PStore のモック
     mockUseP2PStore.mockReturnValue({
-      nodeAddr: '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
+      nodeAddr: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
       connectionStatus: 'connected',
       initialize: mockInitialize,
     } as Partial<ReturnType<typeof useP2P>>);
@@ -67,7 +67,7 @@ describe('PeerConnectionPanel', () => {
     render(<PeerConnectionPanel />);
 
     const addressInput = screen.getByDisplayValue(
-      '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
     );
     expect(addressInput).toBeInTheDocument();
     expect(addressInput).toHaveAttribute('readOnly');
@@ -92,7 +92,7 @@ describe('PeerConnectionPanel', () => {
     await userEvent.click(copyButton);
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      '/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWExample',
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
     );
     expect(mockToast).toHaveBeenCalledWith({
       title: 'コピーしました',
@@ -104,15 +104,20 @@ describe('PeerConnectionPanel', () => {
     const user = userEvent.setup();
     render(<PeerConnectionPanel />);
 
-    const input = screen.getByPlaceholderText('/ip4/192.168.1.100/tcp/4001/p2p/QmXXX...');
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
     const connectButton = screen.getByText('接続');
 
-    await user.type(input, '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest');
+    await user.type(
+      input,
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
+    );
     await user.click(connectButton);
 
     await waitFor(() => {
       expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(
-        '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
       );
       expect(mockToast).toHaveBeenCalledWith({
         title: '接続成功',
@@ -125,7 +130,9 @@ describe('PeerConnectionPanel', () => {
     const user = userEvent.setup();
     render(<PeerConnectionPanel />);
 
-    const input = screen.getByPlaceholderText('/ip4/192.168.1.100/tcp/4001/p2p/QmXXX...');
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
     const connectButton = screen.getByText('接続');
 
     await user.type(input, 'invalid-address');
@@ -159,10 +166,15 @@ describe('PeerConnectionPanel', () => {
 
     render(<PeerConnectionPanel />);
 
-    const input = screen.getByPlaceholderText('/ip4/192.168.1.100/tcp/4001/p2p/QmXXX...');
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
     const connectButton = screen.getByText('接続');
 
-    await user.type(input, '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest');
+    await user.type(
+      input,
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
+    );
     await user.click(connectButton);
 
     await waitFor(() => {
@@ -176,13 +188,13 @@ describe('PeerConnectionPanel', () => {
     const mockHistory = [
       {
         id: '1',
-        address: '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest1',
+        address: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
         timestamp: Date.now() - 3600000,
         status: 'connected' as const,
       },
       {
         id: '2',
-        address: '/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWTest2',
+        address: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@10.0.0.2:4001',
         timestamp: Date.now() - 7200000,
         status: 'failed' as const,
       },
@@ -193,8 +205,12 @@ describe('PeerConnectionPanel', () => {
     render(<PeerConnectionPanel />);
 
     expect(screen.getByText('接続履歴')).toBeInTheDocument();
-    expect(screen.getByText('/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest1')).toBeInTheDocument();
-    expect(screen.getByText('/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWTest2')).toBeInTheDocument();
+    expect(
+      screen.getByText('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@10.0.0.2:4001'),
+    ).toBeInTheDocument();
     expect(screen.getByText('接続失敗')).toBeInTheDocument();
   });
 
@@ -203,7 +219,7 @@ describe('PeerConnectionPanel', () => {
     const mockHistory = [
       {
         id: '1',
-        address: '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest1',
+        address: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
         timestamp: Date.now() - 3600000,
         status: 'connected' as const,
       },
@@ -218,7 +234,7 @@ describe('PeerConnectionPanel', () => {
 
     await waitFor(() => {
       expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(
-        '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest1',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
       );
     });
   });
@@ -228,7 +244,7 @@ describe('PeerConnectionPanel', () => {
     const mockHistory = [
       {
         id: '1',
-        address: '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest1',
+        address: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
         timestamp: Date.now() - 3600000,
         status: 'connected' as const,
       },
@@ -252,14 +268,19 @@ describe('PeerConnectionPanel', () => {
     const user = userEvent.setup();
     render(<PeerConnectionPanel />);
 
-    const input = screen.getByPlaceholderText('/ip4/192.168.1.100/tcp/4001/p2p/QmXXX...');
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
 
-    await user.type(input, '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest');
+    await user.type(
+      input,
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
+    );
     await user.keyboard('{Enter}');
 
     await waitFor(() => {
       expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(
-        '/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWTest',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
       );
     });
   });
@@ -268,15 +289,22 @@ describe('PeerConnectionPanel', () => {
     const user = userEvent.setup();
     render(<PeerConnectionPanel />);
 
-    const input = screen.getByPlaceholderText('/ip4/192.168.1.100/tcp/4001/p2p/QmXXX...');
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
     const connectButton = screen.getByText('接続');
 
-    await user.type(input, '/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWTest');
+    fireEvent.change(input, {
+      target: {
+        value:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
+      },
+    });
     await user.click(connectButton);
 
     await waitFor(() => {
       expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(
-        '/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWTest',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
       );
       expect(mockToast).toHaveBeenCalledWith({
         title: '接続成功',

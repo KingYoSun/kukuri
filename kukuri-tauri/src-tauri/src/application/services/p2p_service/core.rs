@@ -21,6 +21,7 @@ pub trait P2PServiceTrait: Send + Sync {
     async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
     async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError>;
     async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError>;
+    async fn connect_to_peer(&self, peer_address: &str) -> Result<(), AppError>;
     async fn get_status(&self) -> Result<P2PStatus, AppError>;
     async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
     fn generate_topic_id(&self, topic_name: &str) -> String;
@@ -135,6 +136,31 @@ impl P2PServiceTrait for P2PService {
             self.network_service
                 .broadcast_dht(topic_id, content.as_bytes().to_vec())
                 .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn connect_to_peer(&self, peer_address: &str) -> Result<(), AppError> {
+        let trimmed = peer_address.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::P2PError("Peer address is required".to_string()));
+        }
+
+        self.network_service.add_peer(trimmed).await?;
+
+        // 既に参加済みのトピックにも新規ピアを反映し、Mesh更新を促進する。
+        let joined_topics = self
+            .gossip_service
+            .get_joined_topics()
+            .await
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+
+        for topic in joined_topics {
+            self.gossip_service
+                .join_topic(&topic, vec![trimmed.to_string()])
+                .await
+                .map_err(|e| AppError::P2PError(e.to_string()))?;
         }
 
         Ok(())

@@ -433,6 +433,7 @@ mod tests {
             async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError>;
             async fn leave_topic(&self, topic_id: &str) -> Result<(), AppError>;
             async fn broadcast_message(&self, topic_id: &str, content: &str) -> Result<(), AppError>;
+            async fn connect_to_peer(&self, peer_address: &str) -> Result<(), AppError>;
             async fn get_status(&self) -> Result<P2PStatus, AppError>;
             async fn get_node_addresses(&self) -> Result<Vec<String>, AppError>;
             fn generate_topic_id(&self, topic_name: &str) -> String;
