@@ -459,7 +459,12 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
       lastPostStoreSnapshot = await getPostStoreSnapshot(propagationTopicId);
       console.info('[community-node.cn-cli-propagation] used bridge fallback seed for timeline check');
     }
-    expect(received || usedBridgeSeedFallback).toBe(true);
+    if (usedBridgeSeedFallback) {
+      console.info(
+        '[community-node.cn-cli-propagation] bridge fallback was used only for debug evidence',
+      );
+    }
+    expect(received).toBe(true);
     console.info(
       `[community-node.cn-cli-propagation] P2P snapshot baseline:${JSON.stringify(
         baselineSnapshot,
