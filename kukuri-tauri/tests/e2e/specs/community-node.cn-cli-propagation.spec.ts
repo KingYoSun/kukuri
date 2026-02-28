@@ -531,7 +531,7 @@ describe('Community Node bootstrap/relay + cn-cli propagation', () => {
     };
 
     const collectTopicPageDiagnostics = async (needle: string) => {
-      let timelineMode: 'standard' | 'realtime' | 'unknown' = 'unknown';
+      let timelineMode: 'standard' | 'realtime' | 'unknown';
       try {
         const modeSnapshot = await getTimelineUpdateMode();
         timelineMode = modeSnapshot.mode;
