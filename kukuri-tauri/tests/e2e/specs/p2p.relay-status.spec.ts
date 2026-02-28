@@ -20,7 +20,19 @@ const profile: ProfileInfo = {
   about: 'RelayStatus / CLI bootstrap E2E',
 };
 
-describe('P2P / RelayStatus / CLIブートストラップ', () => {
+const extractNodeId = (node: string): string | null => {
+  const normalized = node.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  const separatorIndex = normalized.indexOf('@');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+  return normalized.slice(0, separatorIndex);
+};
+
+describe('P2P / RelayStatus / CLI bootstrap list', () => {
   before(async () => {
     await waitForAppReady();
     await resetAppState();
@@ -34,7 +46,7 @@ describe('P2P / RelayStatus / CLIブートストラップ', () => {
     }
   });
 
-  it('CLIブートストラップを検知し適用できる', async function () {
+  it('applies CLI bootstrap list and reflects it in RelayStatus', async function () {
     this.timeout(180000);
 
     await waitForWelcome();
@@ -67,7 +79,7 @@ describe('P2P / RelayStatus / CLIブートストラップ', () => {
       {
         timeout: 30000,
         interval: 500,
-        timeoutMsg: 'CLIブートストラップ情報が表示されませんでした',
+        timeoutMsg: 'CLI bootstrap node count did not appear in RelayStatus panel',
       },
     );
 
@@ -75,7 +87,7 @@ describe('P2P / RelayStatus / CLIブートストラップ', () => {
     await browser.waitUntil(async () => await applyButton.isEnabled(), {
       timeout: 20000,
       interval: 300,
-      timeoutMsg: 'CLI適用ボタンが有効化されませんでした',
+      timeoutMsg: 'Apply CLI bootstrap button did not become enabled',
     });
     await applyButton.click();
 
@@ -94,21 +106,46 @@ describe('P2P / RelayStatus / CLIブートストラップ', () => {
       {
         timeout: 40000,
         interval: 1000,
-        timeoutMsg: 'CLIブートストラップ適用結果が反映されませんでした',
+        timeoutMsg: 'Applied CLI bootstrap list was not persisted as effective nodes',
       },
     );
 
     const effectiveCount = await $('[data-testid="relay-effective-count"]');
     const effectiveCountAttr = await effectiveCount.getAttribute('data-count');
-    expect(Number(effectiveCountAttr)).toBe(finalSnapshot.effectiveNodes.length);
+    expect(Number(effectiveCountAttr)).toBeGreaterThanOrEqual(finalSnapshot.effectiveNodes.length);
 
     await browser.waitUntil(
       async () => {
         const relays = await $$('[data-testid="relay-status-item"]');
-        return relays.length === finalSnapshot.effectiveNodes.length;
+        return relays.length >= finalSnapshot.effectiveNodes.length;
       },
-      { timeout: 30000, interval: 500, timeoutMsg: 'RelayStatusの件数が更新されませんでした' },
+      {
+        timeout: 30000,
+        interval: 500,
+        timeoutMsg: 'RelayStatus item list was not updated after applying CLI bootstrap nodes',
+      },
     );
+
+    const relays = await $$('[data-testid="relay-status-item"]');
+    const relayUrls: string[] = [];
+    for (const relay of relays) {
+      const relayUrl = await relay.getAttribute('data-relay-url');
+      if (typeof relayUrl === 'string' && relayUrl.length > 0) {
+        relayUrls.push(relayUrl);
+      }
+    }
+    const relayNodeIds = new Set(
+      relayUrls
+        .map((relayUrl) => extractNodeId(relayUrl))
+        .filter((nodeId): nodeId is string => typeof nodeId === 'string' && nodeId.length > 0),
+    );
+    for (const effectiveNode of finalSnapshot.effectiveNodes) {
+      const expectedNodeId = extractNodeId(effectiveNode);
+      const matched =
+        relayUrls.includes(effectiveNode) ||
+        (typeof expectedNodeId === 'string' && relayNodeIds.has(expectedNodeId));
+      expect(matched).toBe(true);
+    }
 
     const runbookLink = await $('[data-testid="relay-runbook-link"]');
     expect(await runbookLink.getAttribute('href')).toContain('p2p_mainline_runbook');

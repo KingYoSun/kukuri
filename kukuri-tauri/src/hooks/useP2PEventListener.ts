@@ -14,6 +14,7 @@ import { isHexFormat, pubkeyToNpub } from '@/lib/utils/nostr';
 import { NostrEventKind } from '@/types/nostr';
 import i18n from '@/i18n';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
+import type { TopicTimelineEntry } from './usePosts';
 
 interface P2PMessageEvent {
   topic_id: string;
@@ -47,6 +48,39 @@ interface P2PConnectionEvent {
 const upsertPostIntoList = (posts: Post[] | undefined, post: Post): Post[] => {
   const filtered = (posts ?? []).filter((item) => item.id !== post.id);
   return [...filtered, post].sort((a, b) => b.created_at - a.created_at);
+};
+
+const sortTimelineEntries = (entries: TopicTimelineEntry[]): TopicTimelineEntry[] =>
+  [...entries].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+
+const upsertTimelineEntry = (
+  entries: TopicTimelineEntry[] | undefined,
+  post: Post,
+  threadUuid: string,
+): TopicTimelineEntry[] => {
+  const base = entries ?? [];
+  const existingIndex = base.findIndex((entry) => entry.threadUuid === threadUuid);
+  if (existingIndex >= 0) {
+    const next = [...base];
+    const existing = next[existingIndex];
+    next[existingIndex] = {
+      ...existing,
+      parentPost: existing.parentPost.id === post.id ? post : existing.parentPost,
+      lastActivityAt: Math.max(existing.lastActivityAt, post.created_at),
+    };
+    return sortTimelineEntries(next);
+  }
+
+  return sortTimelineEntries([
+    {
+      threadUuid,
+      parentPost: post,
+      firstReply: null,
+      replyCount: 0,
+      lastActivityAt: post.created_at,
+    },
+    ...base,
+  ]);
 };
 
 const textDecoder = new TextDecoder();
@@ -210,6 +244,10 @@ export function useP2PEventListener() {
           content: message.content,
           author: author,
           topicId,
+          threadNamespace: `${topicId}/threads/${message.id}`,
+          threadUuid: message.id,
+          threadRootEventId: message.id,
+          threadParentEventId: null,
           created_at: Math.floor(message.timestamp / 1000),
           tags: [],
           likes: 0,
@@ -226,10 +264,17 @@ export function useP2PEventListener() {
           upsertPostIntoList(prev, post),
         );
         const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
+        const threadUuid = post.threadUuid ?? post.id;
         if (timelineUpdateMode === 'standard') {
-          queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
-          queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
-          queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
+          queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], (prev) =>
+            upsertTimelineEntry(prev, post, threadUuid),
+          );
+          queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], (prev) =>
+            upsertTimelineEntry(prev, post, threadUuid),
+          );
+          queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], (prev) =>
+            upsertPostIntoList(prev, post),
+          );
         } else {
           dispatchTimelineRealtimeDelta({
             source: 'nostr',
@@ -241,8 +286,8 @@ export function useP2PEventListener() {
               kind: NostrEventKind.TopicPost,
               tags: [
                 ['t', topicId],
-                ['thread_uuid', message.id],
-                ['thread', `${topicId}/threads/${message.id}`],
+                ['thread_uuid', threadUuid],
+                ['thread', `${topicId}/threads/${threadUuid}`],
                 ['source', 'p2p'],
               ],
             },
