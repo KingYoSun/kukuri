@@ -47,6 +47,10 @@ const SPEC_PATTERNS = (process.env.E2E_SPEC_PATTERN ?? '')
   .map((value) => value.trim())
   .filter((value) => value.length > 0)
   .map((pattern) => resolve(PROJECT_ROOT, pattern));
+const EXCLUDED_SPECS =
+  process.env.SCENARIO === 'community-node-e2e'
+    ? [join(__dirname, 'specs/community-node.multi-peer.spec.ts')]
+    : [];
 const MOCHA_TIMEOUT_MS = Number(
   process.env.E2E_MOCHA_TIMEOUT_MS ?? (process.env.SCENARIO === 'community-node-e2e' ? '180000' : '60000'),
 );
@@ -60,6 +64,9 @@ console.info(`[wdio.desktop] p2p bootstrap path resolved to ${P2P_BOOTSTRAP_PATH
 console.info(`[wdio.desktop] mocha timeout resolved to ${MOCHA_TIMEOUT_MS}`);
 if (SPEC_PATTERNS.length > 0) {
   console.info(`[wdio.desktop] spec pattern override: ${SPEC_PATTERNS.join(', ')}`);
+}
+if (EXCLUDED_SPECS.length > 0) {
+  console.info(`[wdio.desktop] excluded specs: ${EXCLUDED_SPECS.join(', ')}`);
 }
 if (FORBID_PENDING) {
   console.info('[wdio.desktop] pending/skip tests are forbidden for this run');
@@ -153,6 +160,7 @@ export const config: Options.Testrunner = {
   runner: 'local',
   workers: WORKER_COUNT,
   specs: SPEC_PATTERNS.length > 0 ? SPEC_PATTERNS : [join(__dirname, 'specs/**/*.spec.ts')],
+  exclude: EXCLUDED_SPECS,
   maxInstances: WORKER_COUNT,
   logLevel: 'info',
   waitforTimeout: 15000,
