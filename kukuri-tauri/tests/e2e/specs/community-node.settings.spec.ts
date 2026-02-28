@@ -50,16 +50,23 @@ describe('Community Node settings', () => {
     });
     await runCommunityNodeAuthFlow(baseUrl);
 
-    const status = await $('[data-testid="community-node-token-status-0"]');
+    const tokenStatusSelector = '[data-testid="community-node-token-status-0"]';
     await browser.waitUntil(
-      async () => (await status.getAttribute('data-has-token')) === 'true',
+      async () =>
+        await browser.execute((selector) => {
+          const status = document.querySelector(selector);
+          return status?.getAttribute('data-has-token') === 'true';
+        }, tokenStatusSelector),
       {
         timeout: 20000,
         interval: 500,
         timeoutMsg: 'Community node token was not set',
       },
     );
-    const pubkey = await status.getAttribute('data-pubkey');
+    const pubkey = await browser.execute((selector) => {
+      const status = document.querySelector(selector);
+      return status?.getAttribute('data-pubkey') ?? '';
+    }, tokenStatusSelector);
     expect(pubkey).toBeTruthy();
 
     const consents = await $('[data-testid="community-node-consents"]');
