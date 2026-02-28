@@ -109,6 +109,8 @@ RUN install -Dm755 scripts/docker/run-tests.sh /app/run-tests.sh
 RUN install -Dm755 scripts/docker/run-smoke-tests.sh /app/run-smoke-tests.sh
 RUN install -Dm755 scripts/docker/run-post-delete-cache.sh /app/run-post-delete-cache.sh
 RUN install -Dm755 scripts/docker/run-desktop-e2e.sh /app/run-desktop-e2e.sh
+RUN install -Dm755 scripts/docker/run-multi-peer-e2e.sh /app/run-multi-peer-e2e.sh
+RUN install -Dm755 scripts/docker/run-multi-peer-manual.sh /app/run-multi-peer-manual.sh
 
 # デフォルトコマンド
 CMD ["/app/run-smoke-tests.sh"]

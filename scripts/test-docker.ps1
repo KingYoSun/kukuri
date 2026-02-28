@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e", "e2e-community-node", "recovery-drill")]
+    [ValidateSet("all", "rust", "integration", "ts", "lint", "coverage", "build", "clean", "cache-clean", "metrics", "performance", "contracts", "e2e", "e2e-community-node", "e2e-multi-peer", "multi-peer-up", "multi-peer-down", "multi-peer-status", "recovery-drill")]
     [string]$Command = "all",
 
     [switch]$Integration,            # Rust�e�X�g����P2P�����e�X�g�݂̂���s
@@ -90,6 +90,10 @@ Commands:
   contracts    - �_��e�X�g�iNIP-10���E�P�[�X�j����s
   e2e          - Desktop E2E テスト（tauri-driver + WebDriverIO）を実行
   e2e-community-node - Desktop E2E テスト（community node 実体起動）
+  e2e-multi-peer - Desktop E2E テスト（docker multi-peer clients）
+  multi-peer-up - docker multi-peer clients を起動（手動検証向け）
+  multi-peer-down - docker multi-peer clients を停止
+  multi-peer-status - docker multi-peer clients の状態表示
   recovery-drill - Community Node の Postgres バックアップ/復旧ドリルを実行
   build        - Docker�C���[�W�̃r���h�̂ݎ��s
   clean        - Docker�R���e�i�ƃC���[�W��N���[���A�b�v
@@ -121,6 +125,10 @@ Examples:
   .\test-docker.ps1 ts -Scenario user-search-pagination
   .\test-docker.ps1 e2e
   .\test-docker.ps1 e2e-community-node
+  .\test-docker.ps1 e2e-multi-peer
+  .\test-docker.ps1 multi-peer-up
+  .\test-docker.ps1 multi-peer-status
+  .\test-docker.ps1 multi-peer-down
   .\test-docker.ps1 recovery-drill
   .\test-docker.ps1 performance    # �p�t�H�[�}���X�v���p�e�X�g�o�C�i������s
   .\test-docker.ps1 cache-clean    # �L���b�V����܂߂Ċ��S�N���[���A�b�v
@@ -164,6 +172,7 @@ $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
 $BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 $BootstrapContainerName = "kukuri-p2p-bootstrap"
+$MultiPeerServices = @("p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
 
 # Docker Compose�R�}���h�̎��s
 function Invoke-DockerCompose {
@@ -1184,6 +1193,102 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     Write-Success "Desktop E2E scenario (community node) finished. Check tmp/logs/community-node-e2e/ and test-results/community-node-e2e/ for artefacts."
 }
 
+function Start-MultiPeerClients {
+    if (-not $NoBuild) {
+        Build-TestImage
+        Write-Host "Building docker multi-peer service images..."
+        Invoke-DockerCompose @("build", "p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
+    }
+
+    Write-Host "Starting docker multi-peer clients..."
+    $cleanupArgs = @("rm", "-sf") + $MultiPeerServices
+    Invoke-DockerCompose $cleanupArgs -IgnoreFailure | Out-Null
+
+    Invoke-DockerCompose @("up", "-d", "p2p-bootstrap")
+    $peerServices = @("peer-client-1", "peer-client-2", "peer-client-3")
+    foreach ($service in $peerServices) {
+        Invoke-DockerCompose @("up", "-d", "--no-deps", $service)
+    }
+    Write-Success "Multi-peer services started."
+}
+
+function Stop-MultiPeerClients {
+    Write-Host "Stopping docker multi-peer clients..."
+    $args = @("rm", "-sf") + $MultiPeerServices
+    Invoke-DockerCompose $args -IgnoreFailure | Out-Null
+    Write-Success "Multi-peer services stopped."
+}
+
+function Show-MultiPeerClientsStatus {
+    Write-Host "Docker multi-peer service status:"
+    $args = @("ps") + $MultiPeerServices
+    Invoke-DockerCompose $args
+}
+
+function Invoke-DesktopE2EMultiPeerScenario {
+    $logDir = Join-Path $repositoryRoot "tmp/logs/multi-peer-e2e"
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir | Out-Null
+    }
+
+    Write-Host "Running desktop E2E scenario (multi-peer) via Docker..."
+    $previousScenario = $env:SCENARIO
+    $previousSpecPattern = $env:E2E_SPEC_PATTERN
+    $previousExpected = $env:E2E_MULTI_PEER_EXPECTED_MIN
+    $previousPrefix = $env:E2E_MULTI_PEER_PUBLISH_PREFIX
+    $previousOutputGroup = $env:KUKURI_PEER_OUTPUT_GROUP
+
+    $env:SCENARIO = "multi-peer-e2e"
+    if ([string]::IsNullOrWhiteSpace($env:E2E_SPEC_PATTERN)) {
+        $env:E2E_SPEC_PATTERN = "./tests/e2e/specs/community-node.multi-peer.spec.ts"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:E2E_MULTI_PEER_EXPECTED_MIN)) {
+        $env:E2E_MULTI_PEER_EXPECTED_MIN = "1"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:E2E_MULTI_PEER_PUBLISH_PREFIX)) {
+        $env:E2E_MULTI_PEER_PUBLISH_PREFIX = "multi-peer-publisher"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:KUKURI_PEER_OUTPUT_GROUP)) {
+        $env:KUKURI_PEER_OUTPUT_GROUP = "multi-peer-e2e"
+    }
+
+    try {
+        Start-MultiPeerClients
+        Invoke-DockerCompose @("run", "--rm", "test-runner")
+    }
+    finally {
+        Stop-MultiPeerClients
+
+        if ($null -ne $previousScenario) {
+            $env:SCENARIO = $previousScenario
+        } else {
+            Remove-Item Env:SCENARIO -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousSpecPattern) {
+            $env:E2E_SPEC_PATTERN = $previousSpecPattern
+        } else {
+            Remove-Item Env:E2E_SPEC_PATTERN -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousExpected) {
+            $env:E2E_MULTI_PEER_EXPECTED_MIN = $previousExpected
+        } else {
+            Remove-Item Env:E2E_MULTI_PEER_EXPECTED_MIN -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousPrefix) {
+            $env:E2E_MULTI_PEER_PUBLISH_PREFIX = $previousPrefix
+        } else {
+            Remove-Item Env:E2E_MULTI_PEER_PUBLISH_PREFIX -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousOutputGroup) {
+            $env:KUKURI_PEER_OUTPUT_GROUP = $previousOutputGroup
+        } else {
+            Remove-Item Env:KUKURI_PEER_OUTPUT_GROUP -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Success "Desktop E2E scenario (multi-peer) finished. Check tmp/logs/multi-peer-e2e/ and test-results/multi-peer-e2e/ for artefacts."
+}
+
 function Invoke-TypeScriptTests {
     if (-not $NoBuild) {
         Build-TestImage
@@ -1842,7 +1947,7 @@ if (-not (Test-Path "test-results")) {
     New-Item -ItemType Directory -Path "test-results" | Out-Null
 }
 
-$pnpmRequiredCommands = @("all", "ts", "lint", "metrics", "performance", "contracts", "e2e", "e2e-community-node")
+$pnpmRequiredCommands = @("all", "ts", "lint", "metrics", "performance", "contracts", "e2e", "e2e-community-node", "e2e-multi-peer")
 if (-not $Help -and $pnpmRequiredCommands -contains $Command) {
     Assert-CorepackPnpmReady -RepoRoot $repositoryRoot
 }
@@ -1898,6 +2003,19 @@ switch ($Command) {
     "e2e-community-node" {
         Invoke-DesktopE2ECommunityNodeScenario
         Show-CacheStatus
+    }
+    "e2e-multi-peer" {
+        Invoke-DesktopE2EMultiPeerScenario
+        Show-CacheStatus
+    }
+    "multi-peer-up" {
+        Start-MultiPeerClients
+    }
+    "multi-peer-down" {
+        Stop-MultiPeerClients
+    }
+    "multi-peer-status" {
+        Show-MultiPeerClientsStatus
     }
     "recovery-drill" {
         Invoke-CommunityNodeRecoveryDrillScenario
