@@ -2677,6 +2677,7 @@ async fn services_health_poll_updates_details_json_on_status_change() {
 
 #[tokio::test]
 async fn services_health_poll_collects_relay_auth_transition_metrics() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let metrics_body = r#"
 # HELP ws_connections Active websocket connections
 # TYPE ws_connections gauge
