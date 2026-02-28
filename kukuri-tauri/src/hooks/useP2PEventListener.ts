@@ -253,6 +253,7 @@ export function useP2PEventListener() {
           likes: 0,
           boosts: 0,
           replies: [],
+          isSynced: true,
         };
 
         addPost(post);
@@ -263,19 +264,18 @@ export function useP2PEventListener() {
         queryClient.setQueryData<Post[]>(['posts', topicId], (prev) =>
           upsertPostIntoList(prev, post),
         );
-        const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
         const threadUuid = post.threadUuid ?? post.id;
-        if (timelineUpdateMode === 'standard') {
-          queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], (prev) =>
-            upsertTimelineEntry(prev, post, threadUuid),
-          );
-          queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], (prev) =>
-            upsertTimelineEntry(prev, post, threadUuid),
-          );
-          queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], (prev) =>
-            upsertPostIntoList(prev, post),
-          );
-        } else {
+        queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], (prev) =>
+          upsertTimelineEntry(prev, post, threadUuid),
+        );
+        queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], (prev) =>
+          upsertTimelineEntry(prev, post, threadUuid),
+        );
+        queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], (prev) =>
+          upsertPostIntoList(prev, post),
+        );
+        const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
+        if (timelineUpdateMode === 'realtime') {
           dispatchTimelineRealtimeDelta({
             source: 'nostr',
             payload: {

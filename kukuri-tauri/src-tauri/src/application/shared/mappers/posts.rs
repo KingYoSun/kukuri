@@ -3,6 +3,10 @@ use crate::shared::error::AppError;
 use chrono::{DateTime, Utc};
 use sqlx::{Row, sqlite::SqliteRow};
 
+fn is_nostr_event_id(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 pub(crate) fn map_post_row(
     row: &SqliteRow,
     fallback_topic: Option<&str>,
@@ -44,6 +48,16 @@ pub(crate) fn map_post_row(
         .ok()
         .flatten()
         .or_else(|| extract_thread_parent_event_id_from_tags(&tags_json));
+    let sync_status = row
+        .try_get::<Option<i64>, _>("sync_status")
+        .ok()
+        .flatten()
+        .unwrap_or(0);
+    let sync_event_id = row
+        .try_get::<Option<String>, _>("sync_event_id")
+        .ok()
+        .flatten()
+        .filter(|value| !value.trim().is_empty());
 
     let mut post = Post::new_with_id(event_id, content, user, topic_id, created_at);
     post.scope = scope;
@@ -52,6 +66,8 @@ pub(crate) fn map_post_row(
     post.thread_uuid = thread_uuid;
     post.thread_root_event_id = thread_root_event_id;
     post.thread_parent_event_id = thread_parent_event_id;
+    post.event_id = sync_event_id.clone();
+    post.is_synced = sync_status > 0 || sync_event_id.is_some() || is_nostr_event_id(&post.id);
     Ok(post)
 }
 

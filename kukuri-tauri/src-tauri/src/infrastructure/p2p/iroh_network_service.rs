@@ -343,6 +343,7 @@ impl NetworkService for IrohNetworkService {
             super::metrics::record_mainline_connection_failure();
             AppError::from(format!("Failed to parse peer address: {e}"))
         })?;
+        let node_id = node_addr.id.to_string();
 
         self.static_discovery.add_endpoint_info(node_addr.clone());
 
@@ -358,12 +359,17 @@ impl NetworkService for IrohNetworkService {
         // ピアリストに追加
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
-        peers.push(Peer {
-            id: node_addr.id.to_string(),
-            address: address.to_string(),
-            connected_at: now,
-            last_seen: now,
-        });
+        if let Some(existing) = peers.iter_mut().find(|peer| peer.id == node_id) {
+            existing.address = address.to_string();
+            existing.last_seen = now;
+        } else {
+            peers.push(Peer {
+                id: node_id,
+                address: address.to_string(),
+                connected_at: now,
+                last_seen: now,
+            });
+        }
 
         // 統計を更新
         let mut stats = self.stats.write().await;

@@ -130,13 +130,13 @@ pub(super) const SELECT_SYNC_EVENT_ID_BY_EVENT: &str = r#"
 "#;
 
 pub(super) const SELECT_POST_BY_ID: &str = r#"
-    SELECT event_id, public_key, content, created_at, tags
+    SELECT event_id, public_key, content, created_at, tags, sync_status, sync_event_id
     FROM events
     WHERE event_id = ? AND kind = 1
 "#;
 
 pub(super) const SELECT_POSTS_BY_TOPIC: &str = r#"
-    SELECT event_id, public_key, content, created_at, tags
+    SELECT event_id, public_key, content, created_at, tags, sync_status, sync_event_id
     FROM events
     WHERE kind = 1
     AND tags LIKE '%' || ? || '%'
@@ -195,6 +195,8 @@ pub(super) const SELECT_POSTS_BY_THREAD: &str = r#"
         e.content,
         e.created_at,
         e.tags,
+        e.sync_status,
+        e.sync_event_id,
         et.thread_namespace AS thread_namespace,
         et.thread_uuid AS thread_uuid,
         et.root_event_id AS thread_root_event_id,
@@ -222,7 +224,7 @@ pub(super) const MARK_POST_DELETED: &str = r#"
 "#;
 
 pub(super) const SELECT_UNSYNC_POSTS: &str = r#"
-    SELECT event_id, public_key, content, created_at, tags
+    SELECT event_id, public_key, content, created_at, tags, sync_status, sync_event_id
     FROM events
     WHERE kind = 1
     AND (sync_status IS NULL OR sync_status = 0)
@@ -236,7 +238,7 @@ pub(super) const MARK_POST_SYNCED: &str = r#"
 "#;
 
 pub(super) const SELECT_POSTS_BY_AUTHOR: &str = r#"
-    SELECT event_id, public_key, content, created_at, tags
+    SELECT event_id, public_key, content, created_at, tags, sync_status, sync_event_id
     FROM events
     WHERE kind = 1 AND public_key = ?
     ORDER BY created_at DESC
@@ -244,7 +246,7 @@ pub(super) const SELECT_POSTS_BY_AUTHOR: &str = r#"
 "#;
 
 pub(super) const SELECT_RECENT_POSTS: &str = r#"
-    SELECT event_id, public_key, content, created_at, tags
+    SELECT event_id, public_key, content, created_at, tags, sync_status, sync_event_id
     FROM events
     WHERE kind = 1
     ORDER BY created_at DESC

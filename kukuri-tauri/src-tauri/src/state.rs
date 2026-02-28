@@ -768,10 +768,27 @@ impl AppState {
                             });
                         }
 
-                        // 既存Nostr系導線へも流す（必要に応じて）
-                        // domain::Event -> NostrEventPayload 相当はEventManager内にあるが、
-                        // ここではDB保存・加工は後段で検討するためスキップ
-                        let _ = event_manager; // 未来の拡張用プレースホルダ
+                        match crate::application::shared::nostr::to_nostr_event(&evt) {
+                            Ok(nostr_event) => {
+                                if let Err(err) = event_manager.handle_p2p_event(nostr_event).await
+                                {
+                                    tracing::warn!(
+                                        error = %err,
+                                        event_id = %evt.id,
+                                        topic = %topic,
+                                        "failed to persist incoming p2p event"
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    error = %err,
+                                    event_id = %evt.id,
+                                    topic = %topic,
+                                    "failed to convert incoming p2p event to nostr event"
+                                );
+                            }
+                        }
                     }
                     // チャネルクローズ時、購読フラグを解除
                     let ui_arc = {

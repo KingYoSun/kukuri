@@ -294,7 +294,7 @@ impl PostRepository for SqliteRepository {
         let fetch_limit = limit + 1;
 
         let mut builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "SELECT e.event_id, e.public_key, e.content, e.tags, e.created_at \
+            "SELECT e.event_id, e.public_key, e.content, e.tags, e.created_at, e.sync_status, e.sync_event_id \
              FROM events e \
              INNER JOIN follows f ON f.followed_pubkey = e.public_key \
              WHERE f.follower_pubkey = ",
