@@ -26,7 +26,6 @@ const P2P_BOOTSTRAP_PATH =
 
 let shouldStopCommunityNodeMock = false;
 
-process.env.KUKURI_BOOTSTRAP_PEERS = '';
 process.env.WDIO_WORKERS ??= '1';
 process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
