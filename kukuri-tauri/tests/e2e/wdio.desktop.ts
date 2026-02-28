@@ -32,10 +32,22 @@ process.env.WDIO_MAX_WORKERS ??= process.env.WDIO_WORKERS;
 process.env.TAURI_DRIVER_PORT ??= String(4700 + Math.floor(Math.random() * 400));
 process.env.KUKURI_P2P_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
 process.env.KUKURI_CLI_BOOTSTRAP_PATH = P2P_BOOTSTRAP_PATH;
+if (process.env.SCENARIO === 'multi-peer-e2e') {
+  process.env.KUKURI_BOOTSTRAP_PEERS =
+    process.env.KUKURI_BOOTSTRAP_PEERS ??
+    '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233';
+} else {
+  process.env.KUKURI_BOOTSTRAP_PEERS = '';
+}
 if (!process.env.PATH?.split(':').includes('/usr/local/cargo/bin')) {
   process.env.PATH = `/usr/local/cargo/bin:${process.env.PATH ?? ''}`;
 }
 const FORBID_PENDING = process.env.E2E_FORBID_PENDING === '1';
+const SPEC_PATTERNS = (process.env.E2E_SPEC_PATTERN ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value) => value.length > 0)
+  .map((pattern) => resolve(PROJECT_ROOT, pattern));
 const MOCHA_TIMEOUT_MS = Number(
   process.env.E2E_MOCHA_TIMEOUT_MS ?? (process.env.SCENARIO === 'community-node-e2e' ? '180000' : '60000'),
 );
@@ -47,6 +59,9 @@ console.info(`[wdio.desktop] worker count resolved to ${WORKER_COUNT}`);
 console.info(`[wdio.desktop] driver port resolved to ${process.env.TAURI_DRIVER_PORT}`);
 console.info(`[wdio.desktop] p2p bootstrap path resolved to ${P2P_BOOTSTRAP_PATH}`);
 console.info(`[wdio.desktop] mocha timeout resolved to ${MOCHA_TIMEOUT_MS}`);
+if (SPEC_PATTERNS.length > 0) {
+  console.info(`[wdio.desktop] spec pattern override: ${SPEC_PATTERNS.join(', ')}`);
+}
 if (FORBID_PENDING) {
   console.info('[wdio.desktop] pending/skip tests are forbidden for this run');
 }
@@ -138,7 +153,7 @@ function seedCliBootstrapFixture(): void {
 export const config: Options.Testrunner = {
   runner: 'local',
   workers: WORKER_COUNT,
-  specs: [join(__dirname, 'specs/**/*.spec.ts')],
+  specs: SPEC_PATTERNS.length > 0 ? SPEC_PATTERNS : [join(__dirname, 'specs/**/*.spec.ts')],
   maxInstances: WORKER_COUNT,
   logLevel: 'info',
   waitforTimeout: 15000,

@@ -2,7 +2,7 @@
 
 作成日: 2026年02月28日  
 最終更新日: 2026年02月28日  
-ステータス: Draft（実装前）
+ステータス: Implemented（2026年02月28日）
 
 ## 1. 目的
 
@@ -207,3 +207,20 @@ scripts/test-docker(e2e-multi-peer)
 4. 手動操作導線（`multi-peer-up|down|status` と Runbook）を整備して、E2E 非依存でも検証可能にする。  
 
 この順序なら、既存資産の再利用率を高く保ちつつ、最小変更で「複数 Peer 接続挙動」を継続検証できる。
+
+## 10. 実装結果（2026年02月28日）
+
+- Phase 1（Headless Peer 実装）
+  - `kukuri-tauri/src-tauri/src/bin/p2p_peer_harness.rs` を追加し、`listener` / `publisher` / `echo` モードと JSON サマリ出力を実装。
+- Phase 2（Docker 導線）
+  - `docker-compose.test.yml` に `peer-client-1..3` サービスを追加。
+  - `scripts/docker/run-multi-peer-e2e.sh` / `scripts/docker/run-multi-peer-manual.sh` を追加。
+  - `scripts/test-docker.ps1` / `scripts/test-docker.sh` に `e2e-multi-peer` と `multi-peer-up|down|status` を追加。
+- Phase 3（E2E）
+  - `kukuri-tauri/tests/e2e/specs/community-node.multi-peer.spec.ts` を追加。
+  - `wdio.desktop.ts` に spec override（`E2E_SPEC_PATTERN`）と `multi-peer-e2e` 用 bootstrap 設定を追加。
+- Phase 4（CI）
+  - `.github/workflows/test.yml` に `desktop-e2e-multi-peer` ジョブを追加し、heavy checks に連結。
+- Phase 5（手動運用）
+  - Runbook `docs/03_implementation/p2p_mainline_runbook.md` に手動運用章を追記。
+  - 手動時のログ/サマリ保存先を `tmp/logs/multi-peer-manual` と `test-results/multi-peer-manual` に統一。

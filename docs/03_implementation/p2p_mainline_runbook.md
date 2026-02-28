@@ -1,5 +1,5 @@
 ﻿# P2P Mainline Runbook
-最終更新: 2025年11月12日
+最終更新: 2026年02月28日
 
 ## 1. 目的
 - Mainline DHT を有効にした P2P ネットワークの運用手順と統合テスト実行フローを共有する。
@@ -294,3 +294,50 @@ $env:RUST_LOG = "info,iroh_tests=debug"
 - Nightly Frontend Unit Tests には `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` を常時含め、`cargo test --package cn-cli -- test_bootstrap_runbook` を `nightly.yml` の `native-test-linux` ジョブへ追記する。Runbook 更新時は両テストのログ ID を `tasks/status/in_progress.md` と `docs/01_project/roadmap.md` Ops 行に必ず転記する。
 - Ops チームは Runbook の Chapter2（前提変数）と Chapter10（CLI PoC）をセットで参照し、`KUKURI_BOOTSTRAP_PEERS` によるロックが掛かっていないかを `RelayStatus` UI の `ブートストラップソース` 表示で確認してから適用する。適用後は `p2p_metrics_export --job p2p` で Mainline 接続数の増加を確認し、失敗時は Chapter7 のトラブルシューティング手順に従って再取得する。
    - `pnpm vitest src/tests/unit/components/RelayStatus.test.tsx` / `cargo test --package cn-cli -- test_bootstrap_runbook` / `cargo test --package kukuri-tauri --test test_event_service_gateway` を実行し、UI・CLI・Gateway の回帰テストが通ることを Runbook に記録する。
+
+## 11. Docker 複数 Peer クライアント運用（2026年02月28日追加）
+
+### 11.1 目的
+- ローカルで複数 Peer を同時接続し、`kukuri-tauri` 側の接続状態と投稿伝搬を再現性高く確認する。
+- 自動 E2E と手動操作を同じコンテナ資産（`p2p_peer_harness`）で運用する。
+
+### 11.2 自動 E2E（Windows / Linux・macOS）
+```powershell
+./scripts/test-docker.ps1 e2e-multi-peer
+```
+```bash
+./scripts/test-docker.sh e2e-multi-peer
+```
+- `SCENARIO=multi-peer-e2e` を自動設定し、WDIO では `community-node.multi-peer.spec.ts` のみ実行する。
+- 成果物:
+  - ログ: `tmp/logs/multi-peer-e2e/`
+  - スクリーンショット・JSON: `test-results/multi-peer-e2e/`
+
+### 11.3 手動操作モード
+```powershell
+./scripts/test-docker.ps1 multi-peer-up
+./scripts/test-docker.ps1 multi-peer-status
+```
+```bash
+./scripts/test-docker.sh multi-peer-up
+./scripts/test-docker.sh multi-peer-status
+```
+- 起動対象: `p2p-bootstrap`, `peer-client-1`, `peer-client-2`, `peer-client-3`
+- 既定ロール:
+  - `peer-client-1`: listener
+  - `peer-client-2`: publisher
+  - `peer-client-3`: listener
+- 手動検証の標準手順:
+  1. 上記 `multi-peer-up` を実行する。
+  2. 別端末で `pnpm --dir kukuri-tauri tauri dev` を起動する。
+  3. Settings で bootstrap を確認し、Topic 画面で `multi-peer-publisher` プレフィックス投稿の反映を確認する。
+  4. 必要に応じて `cn p2p publish` で任意 payload を注入し、Tauri 表示と peer ログを突合する。
+  5. 検証後に `multi-peer-down` を実行する。
+
+### 11.4 ログ・サマリ確認
+- コンテナログ:
+  - `docker compose -f docker-compose.test.yml logs peer-client-1 peer-client-2 peer-client-3`
+- `p2p_peer_harness` は peer ごとに JSON サマリを出力する（`KUKURI_PEER_SUMMARY_PATH`）。
+- 手動検証では `KUKURI_PEER_OUTPUT_GROUP=multi-peer-manual` を既定とし、以下へ保存する:
+  - ログ: `tmp/logs/multi-peer-manual/*.log`
+  - サマリ: `test-results/multi-peer-manual/*.json`

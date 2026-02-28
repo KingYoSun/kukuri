@@ -16,6 +16,7 @@ BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 PROMETHEUS_SERVICE="prometheus-trending"
 PROMETHEUS_METRICS_URL="${PROMETHEUS_METRICS_URL:-http://127.0.0.1:9898/metrics}"
 COMMUNITY_NODE_BASE_URL_DEFAULT="http://127.0.0.1:18080"
+MULTI_PEER_SERVICES=(p2p-bootstrap peer-client-1 peer-client-2 peer-client-3)
 
 P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
 P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
@@ -32,6 +33,10 @@ Commands:
   coverage     Run cargo tarpaulin and export coverage artifacts
   e2e          Run desktop E2E tests (Tauri + WebDriverIO)
   e2e-community-node  Run desktop E2E tests with community node
+  e2e-multi-peer  Run desktop E2E tests with docker multi-peer clients
+  multi-peer-up   Start docker multi-peer clients for manual verification
+  multi-peer-down Stop docker multi-peer clients
+  multi-peer-status Show docker multi-peer client status
   build        Build the Docker image only
   clean        Clean containers and images
   cache-clean  Clean including cache volumes
@@ -988,6 +993,94 @@ run_desktop_e2e() {
   echo '[OK] Desktop E2E scenario finished. Artefacts stored in tmp/logs/desktop-e2e/ and test-results/desktop-e2e/.'
 }
 
+start_multi_peer_clients() {
+  if [[ $NO_BUILD -eq 0 ]]; then
+    build_image
+    echo 'Building docker multi-peer service images...'
+    compose_run '' build p2p-bootstrap peer-client-1 peer-client-2 peer-client-3
+  fi
+
+  echo 'Starting docker multi-peer clients...'
+  compose_run '' rm -sf "${MULTI_PEER_SERVICES[@]}" >/dev/null 2>&1 || true
+  compose_run '' up -d p2p-bootstrap
+  local peer_services=(peer-client-1 peer-client-2 peer-client-3)
+  for service in "${peer_services[@]}"; do
+    compose_run '' up -d --no-deps "$service"
+  done
+  echo '[OK] Multi-peer services started.'
+}
+
+stop_multi_peer_clients() {
+  echo 'Stopping docker multi-peer clients...'
+  compose_run '' rm -sf "${MULTI_PEER_SERVICES[@]}" >/dev/null 2>&1 || true
+  echo '[OK] Multi-peer services stopped.'
+}
+
+status_multi_peer_clients() {
+  echo 'Docker multi-peer service status:'
+  compose_run '' ps "${MULTI_PEER_SERVICES[@]}"
+}
+
+run_desktop_e2e_multi_peer() {
+  echo 'Running desktop E2E tests (multi-peer) via Docker...'
+
+  local previous_scenario="${SCENARIO-}"
+  local previous_spec_pattern="${E2E_SPEC_PATTERN-}"
+  local previous_expected="${E2E_MULTI_PEER_EXPECTED_MIN-}"
+  local previous_prefix="${E2E_MULTI_PEER_PUBLISH_PREFIX-}"
+  local previous_output_group="${KUKURI_PEER_OUTPUT_GROUP-}"
+
+  export SCENARIO="multi-peer-e2e"
+  export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.multi-peer.spec.ts}"
+  export E2E_MULTI_PEER_EXPECTED_MIN="${E2E_MULTI_PEER_EXPECTED_MIN:-1}"
+  export E2E_MULTI_PEER_PUBLISH_PREFIX="${E2E_MULTI_PEER_PUBLISH_PREFIX:-multi-peer-publisher}"
+  export KUKURI_PEER_OUTPUT_GROUP="${KUKURI_PEER_OUTPUT_GROUP:-multi-peer-e2e}"
+
+  local status=0
+  if ! start_multi_peer_clients; then
+    status=1
+  else
+    set +e
+    compose_run '' run --rm test-runner
+    status=$?
+    set -e
+  fi
+
+  stop_multi_peer_clients
+
+  if [[ -n "${previous_scenario-}" ]]; then
+    export SCENARIO="$previous_scenario"
+  else
+    unset SCENARIO
+  fi
+  if [[ -n "${previous_spec_pattern-}" ]]; then
+    export E2E_SPEC_PATTERN="$previous_spec_pattern"
+  else
+    unset E2E_SPEC_PATTERN
+  fi
+  if [[ -n "${previous_expected-}" ]]; then
+    export E2E_MULTI_PEER_EXPECTED_MIN="$previous_expected"
+  else
+    unset E2E_MULTI_PEER_EXPECTED_MIN
+  fi
+  if [[ -n "${previous_prefix-}" ]]; then
+    export E2E_MULTI_PEER_PUBLISH_PREFIX="$previous_prefix"
+  else
+    unset E2E_MULTI_PEER_PUBLISH_PREFIX
+  fi
+  if [[ -n "${previous_output_group-}" ]]; then
+    export KUKURI_PEER_OUTPUT_GROUP="$previous_output_group"
+  else
+    unset KUKURI_PEER_OUTPUT_GROUP
+  fi
+
+  if [[ $status -ne 0 ]]; then
+    return $status
+  fi
+
+  echo '[OK] Desktop E2E scenario (multi-peer) finished. Artefacts stored in tmp/logs/multi-peer-e2e/ and test-results/multi-peer-e2e/.'
+}
+
 run_lint_check() {
   [[ $NO_BUILD -eq 1 ]] || build_image
   echo 'Running lint and format checks in Docker...'
@@ -1187,7 +1280,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  all|rust|lint|coverage|build|clean|cache-clean|performance|e2e|e2e-community-node)
+  all|rust|lint|coverage|build|clean|cache-clean|performance|e2e|e2e-community-node|e2e-multi-peer|multi-peer-up|multi-peer-down|multi-peer-status)
     ;;
   ts)
     while [[ $# -gt 0 ]]; do
@@ -1305,6 +1398,19 @@ case "$COMMAND" in
   e2e-community-node)
     run_desktop_e2e_community_node
     show_cache_status
+    ;;
+  e2e-multi-peer)
+    run_desktop_e2e_multi_peer
+    show_cache_status
+    ;;
+  multi-peer-up)
+    start_multi_peer_clients
+    ;;
+  multi-peer-down)
+    stop_multi_peer_clients
+    ;;
+  multi-peer-status)
+    status_multi_peer_clients
     ;;
   build)
     build_image

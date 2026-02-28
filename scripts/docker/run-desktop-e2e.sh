@@ -13,6 +13,10 @@ if [[ "$SCENARIO_NAME" == "community-node-e2e" ]]; then
   LOG_DIR="/app/tmp/logs/community-node-e2e"
   export E2E_FORBID_PENDING=1
   export E2E_COMMUNITY_NODE_P2P_INVITE=1
+elif [[ "$SCENARIO_NAME" == "multi-peer-e2e" ]]; then
+  RESULT_DIR="/app/test-results/multi-peer-e2e"
+  LOG_DIR="/app/tmp/logs/multi-peer-e2e"
+  export E2E_FORBID_PENDING=1
 fi
 
 mkdir -p "$RESULT_DIR" "$LOG_DIR" "$OUTPUT_DIR"
