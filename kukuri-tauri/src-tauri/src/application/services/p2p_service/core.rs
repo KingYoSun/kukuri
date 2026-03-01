@@ -99,8 +99,25 @@ impl P2PServiceTrait for P2PService {
     }
 
     async fn join_topic(&self, topic_id: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
+        let mut resolved_initial_peers = initial_peers;
+        if resolved_initial_peers.is_empty() {
+            let known_peers = self
+                .network_service
+                .get_peers()
+                .await
+                .map_err(|e| AppError::P2PError(e.to_string()))?;
+            resolved_initial_peers.extend(
+                known_peers
+                    .into_iter()
+                    .map(|peer| peer.address)
+                    .filter(|address| !address.trim().is_empty()),
+            );
+            resolved_initial_peers.sort();
+            resolved_initial_peers.dedup();
+        }
+
         self.gossip_service
-            .join_topic(topic_id, initial_peers)
+            .join_topic(topic_id, resolved_initial_peers)
             .await
             .map_err(|e| AppError::P2PError(e.to_string()))?;
 

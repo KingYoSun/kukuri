@@ -46,7 +46,8 @@ export function TopicPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [previewThreadUuid, setPreviewThreadUuid] = useState<string | null>(null);
-  const isThreadRoute = currentPathname.startsWith(`/topics/${topicId}/threads`);
+  const encodedTopicId = encodeURIComponent(topicId);
+  const isThreadRoute = currentPathname.startsWith(`/topics/${encodedTopicId}/threads`);
   const isJoined = joinedTopics.includes(topicId);
 
   const handleFallbackToStandard = useCallback(() => {

@@ -22,14 +22,21 @@ interface PeerConnection {
 
 interface ParsedPeerAddress {
   nodeId: string;
-  host: string;
-  port: number;
+  host?: string;
+  port?: number;
 }
 
 const ADDRESS_SPLIT_PATTERN = /[,;\n\r]+/;
 
 const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
   const trimmed = address.trim();
+
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return {
+      nodeId: trimmed,
+    };
+  }
+
   const [nodeId, endpoint] = trimmed.split('@');
 
   if (!nodeId || !endpoint) {
@@ -90,10 +97,18 @@ const pickPreferredAddress = (rawValue: string): string | null => {
 
   const nonLoopback = validCandidates.find((entry) => {
     const parsed = parsePeerAddress(entry);
-    return parsed ? !isLoopbackHost(parsed.host) : false;
+    return parsed?.host ? !isLoopbackHost(parsed.host) : false;
+  });
+  if (nonLoopback) {
+    return nonLoopback;
+  }
+
+  const nodeIdOnly = validCandidates.find((entry) => {
+    const parsed = parsePeerAddress(entry);
+    return Boolean(parsed && !parsed.host);
   });
 
-  return nonLoopback ?? validCandidates[0];
+  return nodeIdOnly ?? validCandidates[0];
 };
 
 export function PeerConnectionPanel() {
@@ -236,7 +251,7 @@ export function PeerConnectionPanel() {
     });
   };
 
-  const addressToShare = nodeAddr ? pickPreferredAddress(nodeAddr) ?? nodeAddr : '';
+  const addressToShare = nodeAddr ? (pickPreferredAddress(nodeAddr) ?? nodeAddr) : '';
 
   return (
     <Card className="w-full">

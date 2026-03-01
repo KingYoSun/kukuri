@@ -285,6 +285,44 @@ async fn test_join_topic_failure() {
 }
 
 #[tokio::test]
+async fn test_join_topic_uses_known_peers_when_initial_peers_empty() {
+    let network = Arc::new(MockNetworkServ::new());
+    let now = Utc::now().timestamp();
+    network.set_peers(vec![
+        Peer {
+            id: "peer-a".to_string(),
+            address: "peer-a@127.0.0.1:4001".to_string(),
+            connected_at: now,
+            last_seen: now,
+        },
+        Peer {
+            id: "peer-b".to_string(),
+            address: "peer-b@127.0.0.1:4002".to_string(),
+            connected_at: now,
+            last_seen: now,
+        },
+    ]);
+
+    let mut mock_gossip = MockGossipServ::new();
+    mock_gossip
+        .expect_join_topic()
+        .with(
+            eq("seeded_topic"),
+            eq(vec![
+                "peer-a@127.0.0.1:4001".to_string(),
+                "peer-b@127.0.0.1:4002".to_string(),
+            ]),
+        )
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    let service = P2PService::new(network.clone(), Arc::new(mock_gossip));
+    let result = service.join_topic("seeded_topic", Vec::new()).await;
+    assert!(result.is_ok());
+    assert_eq!(network.join_dht_calls(), vec!["seeded_topic".to_string()]);
+}
+
+#[tokio::test]
 async fn test_leave_topic_success() {
     let network = Arc::new(MockNetworkServ::new());
     let mut mock_gossip = MockGossipServ::new();

@@ -47,7 +47,8 @@ describe('PeerConnectionPanel', () => {
 
     // useP2PStore のモック
     mockUseP2PStore.mockReturnValue({
-      nodeAddr: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+      nodeAddr:
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
       connectionStatus: 'connected',
       initialize: mockInitialize,
     } as Partial<ReturnType<typeof useP2P>>);
@@ -206,10 +207,14 @@ describe('PeerConnectionPanel', () => {
 
     expect(screen.getByText('接続履歴')).toBeInTheDocument();
     expect(
-      screen.getByText('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001'),
+      screen.getByText(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.1:4001',
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@10.0.0.2:4001'),
+      screen.getByText(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@10.0.0.2:4001',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText('接続失敗')).toBeInTheDocument();
   });
@@ -310,6 +315,49 @@ describe('PeerConnectionPanel', () => {
         title: '接続成功',
         description: 'ピアに接続しました',
       });
+    });
+  });
+
+  it('nodeIdのみのピアアドレスで接続を許可する', async () => {
+    const user = userEvent.setup();
+    render(<PeerConnectionPanel />);
+
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
+    const connectButton = screen.getByText('接続');
+
+    const nodeIdOnly = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    await user.type(input, nodeIdOnly);
+    await user.click(connectButton);
+
+    await waitFor(() => {
+      expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(nodeIdOnly);
+    });
+  });
+
+  it('複数候補アドレス入力時は非ループバックを優先して接続する', async () => {
+    const user = userEvent.setup();
+    render(<PeerConnectionPanel />);
+
+    const input = screen.getByPlaceholderText(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@192.168.1.100:4001',
+    );
+    const connectButton = screen.getByText('接続');
+
+    await user.type(
+      input,
+      [
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@127.0.0.1:4001',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.2:4002',
+      ].join(','),
+    );
+    await user.click(connectButton);
+
+    await waitFor(() => {
+      expect(mockP2pApi.connectToPeer).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@10.0.0.2:4002',
+      );
     });
   });
 

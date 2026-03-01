@@ -1,7 +1,7 @@
 use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
-    utils::parse_node_addr,
+    utils::parse_peer_hint,
 };
 use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
@@ -339,22 +339,29 @@ impl NetworkService for IrohNetworkService {
     }
 
     async fn add_peer(&self, address: &str) -> Result<(), AppError> {
-        let node_addr = parse_node_addr(address).map_err(|e| {
+        let parsed_peer = parse_peer_hint(address).map_err(|e| {
             super::metrics::record_mainline_connection_failure();
             AppError::from(format!("Failed to parse peer address: {e}"))
         })?;
-        let node_id = node_addr.id.to_string();
+        let node_id = parsed_peer.node_id.to_string();
 
-        self.static_discovery.add_endpoint_info(node_addr.clone());
+        if let Some(node_addr) = parsed_peer.node_addr {
+            self.static_discovery.add_endpoint_info(node_addr.clone());
 
-        // ピアに接続
-        self.endpoint
-            .connect(node_addr.clone(), iroh_gossip::ALPN)
-            .await
-            .map_err(|e| {
-                super::metrics::record_mainline_connection_failure();
-                AppError::from(format!("Failed to connect to peer: {e}"))
-            })?;
+            // ピアに接続
+            self.endpoint
+                .connect(node_addr, iroh_gossip::ALPN)
+                .await
+                .map_err(|e| {
+                    super::metrics::record_mainline_connection_failure();
+                    AppError::from(format!("Failed to connect to peer: {e}"))
+                })?;
+        } else {
+            tracing::info!(
+                node_id = %node_id,
+                "Peer hint has no direct address; relying on gossip discovery"
+            );
+        }
 
         // ピアリストに追加
         let mut peers = self.peers.write().await;

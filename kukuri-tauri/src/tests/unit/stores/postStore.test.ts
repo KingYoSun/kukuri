@@ -354,12 +354,31 @@ describe('postStore', () => {
     });
   });
 
-  it('replyTo指定時に親投稿がキャッシュになくthreadUuid未指定なら送信を中止すること', async () => {
-    await expect(
-      usePostStore.getState().createPost('reply body', 'topic1', { replyTo: 'missing-parent' }),
-    ).rejects.toThrow('reply_to の親投稿がキャッシュにないため threadUuid を解決できません');
+  it('replyTo指定時に親投稿がキャッシュになくthreadUuid未指定ならreply_toをthreadUuidにフォールバックすること', async () => {
+    mockCreatePost.mockResolvedValueOnce({
+      id: 'reply-post-missing-parent-fallback',
+      content: 'reply body',
+      author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_102,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    });
 
-    expect(mockCreatePost).not.toHaveBeenCalled();
+    await usePostStore.getState().createPost('reply body', 'topic1', { replyTo: 'missing-parent' });
+
+    expect(mockCreatePost).toHaveBeenCalledTimes(1);
+    expect(mockCreatePost).toHaveBeenLastCalledWith({
+      content: 'reply body',
+      topic_id: 'topic1',
+      thread_uuid: 'missing-parent',
+      reply_to: 'missing-parent',
+      quoted_post: undefined,
+      scope: 'public',
+    });
   });
 
   it('replyTo指定時にthreadUuid明示指定があれば親未キャッシュでもその値を使うこと', async () => {

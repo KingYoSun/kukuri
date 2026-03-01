@@ -7,13 +7,15 @@ import { useTopicStore } from '@/stores/topicStore';
 import { useUIStore } from '@/stores/uiStore';
 import { errorHandler } from '@/lib/errorHandler';
 import { validateNip01LiteMessage } from '@/lib/utils/nostrEventValidator';
-import type { Post } from '@/stores/types';
+import type { Post, User } from '@/stores/types';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 import { isHexFormat, pubkeyToNpub } from '@/lib/utils/nostr';
 import { NostrEventKind } from '@/types/nostr';
 import i18n from '@/i18n';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
+import { TauriApi } from '@/lib/api/tauri';
+import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import type { TopicTimelineEntry } from './usePosts';
 
 interface P2PMessageEvent {
@@ -97,6 +99,17 @@ const normalizeTimestampMillis = (value: unknown, fallbackSeconds: number): numb
     }
   }
   return Math.floor(fallbackSeconds * 1000);
+};
+
+const shortenIdentifier = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return i18n.t('p2p.unknownUser');
+  }
+  if (trimmed.length <= 16) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 8)}...${trimmed.slice(-4)}`;
 };
 
 const parseRawPayload = (payload: unknown): Record<string, unknown> | null => {
@@ -202,6 +215,8 @@ export function useP2PEventListener() {
   const { updateTopicPostCount } = useTopicStore();
   const recentMessageIds = useRef<Set<string>>(new Set());
   const recentMessageOrder = useRef<string[]>([]);
+  const authorProfileCache = useRef<Map<string, User | null>>(new Map());
+  const authorProfileInFlight = useRef<Map<string, Promise<User | null>>>(new Map());
 
   const shouldHandleMessage = useCallback((messageId: string): boolean => {
     if (recentMessageIds.current.has(messageId)) {
@@ -221,23 +236,78 @@ export function useP2PEventListener() {
     return true;
   }, []);
 
+  const resolveAuthor = useCallback(async (author: string): Promise<User> => {
+    const cacheKey = author.trim().toLowerCase();
+
+    const toFallbackAuthor = async (): Promise<User> => {
+      const authorNpub = await resolveAuthorNpub(author);
+      const fallbackName = shortenIdentifier(authorNpub || author);
+      return applyKnownUserMetadata({
+        id: author,
+        pubkey: author,
+        npub: authorNpub,
+        name: fallbackName,
+        displayName: fallbackName,
+        about: '',
+        picture: '',
+        nip05: '',
+        avatar: null,
+        publicProfile: true,
+        showOnlineStatus: false,
+      });
+    };
+
+    if (authorProfileCache.current.has(cacheKey)) {
+      const cached = authorProfileCache.current.get(cacheKey);
+      return cached ?? (await toFallbackAuthor());
+    }
+
+    const inFlight = authorProfileInFlight.current.get(cacheKey);
+    if (inFlight) {
+      const resolved = await inFlight;
+      return resolved ?? (await toFallbackAuthor());
+    }
+
+    const loader = (async (): Promise<User | null> => {
+      try {
+        const profile = isHexFormat(author)
+          ? await TauriApi.getUserProfileByPubkey(author)
+          : author.startsWith('npub1')
+            ? await TauriApi.getUserProfile(author)
+            : null;
+        if (!profile) {
+          authorProfileCache.current.set(cacheKey, null);
+          return null;
+        }
+        const mapped = mapUserProfileToUser(profile);
+        const enriched = applyKnownUserMetadata(mapped);
+        authorProfileCache.current.set(cacheKey, enriched);
+        return enriched;
+      } catch (error) {
+        errorHandler.log('Failed to resolve author profile for P2P message', error, {
+          context: 'useP2PEventListener.resolveAuthor',
+          showToast: false,
+          metadata: { author },
+        });
+        authorProfileCache.current.set(cacheKey, null);
+        return null;
+      }
+    })();
+
+    authorProfileInFlight.current.set(cacheKey, loader);
+
+    try {
+      const resolved = await loader;
+      return resolved ?? (await toFallbackAuthor());
+    } finally {
+      authorProfileInFlight.current.delete(cacheKey);
+    }
+  }, []);
+
   const handleP2PMessageAsPost = useCallback(
     async (message: P2PMessage, topicId: string) => {
       try {
-        const authorNpub = await resolveAuthorNpub(message.author);
-        const author = applyKnownUserMetadata({
-          id: message.author,
-          pubkey: message.author,
-          npub: authorNpub,
-          name: i18n.t('p2p.unknownUser'),
-          displayName: i18n.t('p2p.unknownUser'),
-          about: '',
-          picture: '',
-          nip05: '',
-          avatar: null,
-          publicProfile: true,
-          showOnlineStatus: false,
-        });
+        const author = await resolveAuthor(message.author);
 
         const post: Post = {
           id: message.id,
@@ -294,6 +364,10 @@ export function useP2PEventListener() {
           });
         }
         updateTopicPostCount(topicId, 1);
+        void queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
+        void queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
+        void queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
+        void queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
       } catch (error) {
         errorHandler.log('Failed to process P2P message as post', error, {
           context: 'useP2PEventListener.handleP2PMessageAsPost',
@@ -301,7 +375,7 @@ export function useP2PEventListener() {
         });
       }
     },
-    [addPost, queryClient, updateTopicPostCount],
+    [addPost, queryClient, resolveAuthor, updateTopicPostCount],
   );
 
   const handleIncomingP2PMessage = useCallback(
