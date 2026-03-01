@@ -10,6 +10,36 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, info, trace, warn};
 
+fn prioritize_socket_addrs(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    let mut unique = Vec::new();
+    for addr in addrs {
+        if !unique.contains(&addr) {
+            unique.push(addr);
+        }
+    }
+
+    let mut ipv4 = Vec::new();
+    let mut other = Vec::new();
+    for addr in unique {
+        if addr.is_ipv4() {
+            ipv4.push(addr);
+        } else {
+            other.push(addr);
+        }
+    }
+
+    ipv4.extend(other);
+    ipv4
+}
+
+fn build_endpoint_addr(node_id: EndpointId, socket_addrs: Vec<SocketAddr>) -> EndpointAddr {
+    let mut endpoint_addr = EndpointAddr::new(node_id);
+    for socket_addr in socket_addrs {
+        endpoint_addr = endpoint_addr.with_ip_addr(socket_addr);
+    }
+    endpoint_addr
+}
+
 fn find_bootstrap_config_path() -> Option<PathBuf> {
     let primary = PathBuf::from("bootstrap_nodes.json");
     if primary.exists() {
@@ -105,8 +135,8 @@ impl BootstrapConfig {
         let mut addrs = Vec::new();
 
         for node in nodes {
-            match resolve_socket_addr(&node) {
-                Ok(addr) => addrs.push(addr),
+            match resolve_socket_addrs(&node) {
+                Ok(mut resolved) => addrs.append(&mut resolved),
                 Err(e) => {
                     debug!("Failed to parse address {}: {}", node, e);
                 }
@@ -125,10 +155,10 @@ impl BootstrapConfig {
             if let Some((id_part, addr_part)) = node.split_once('@') {
                 match (
                     EndpointId::from_str(id_part),
-                    resolve_socket_addr(addr_part),
+                    resolve_socket_addrs(addr_part),
                 ) {
-                    (Ok(node_id), Ok(sock)) => {
-                        out.push(EndpointAddr::new(node_id).with_ip_addr(sock));
+                    (Ok(node_id), Ok(socket_addrs)) => {
+                        out.push(build_endpoint_addr(node_id, socket_addrs));
                     }
                     (id_res, addr_res) => {
                         debug!(
@@ -161,10 +191,10 @@ fn parse_bootstrap_list(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn resolve_socket_addr(raw: &str) -> Result<SocketAddr, String> {
+fn resolve_socket_addrs(raw: &str) -> Result<Vec<SocketAddr>, String> {
     let trimmed = raw.trim();
     if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {
-        return Ok(socket_addr);
+        return Ok(vec![socket_addr]);
     }
 
     let (host, port_raw) = trimmed
@@ -180,15 +210,28 @@ fn resolve_socket_addr(raw: &str) -> Result<SocketAddr, String> {
         .map_err(|e| format!("Invalid port `{port_raw}`: {e}"))?;
 
     if host.eq_ignore_ascii_case("localhost") {
-        return Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port));
+        return Ok(vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)]);
     }
 
-    let mut addrs = (host, port)
+    let addrs: Vec<SocketAddr> = (host, port)
         .to_socket_addrs()
-        .map_err(|e| format!("Failed to resolve host `{host}`: {e}"))?;
-    addrs
+        .map_err(|e| format!("Failed to resolve host `{host}`: {e}"))?
+        .collect();
+    let prioritized = prioritize_socket_addrs(addrs);
+    if prioritized.is_empty() {
+        return Err(format!(
+            "Resolved host `{host}` but no socket addresses were returned"
+        ));
+    }
+
+    Ok(prioritized)
+}
+
+fn resolve_socket_addr(raw: &str) -> Result<SocketAddr, String> {
+    resolve_socket_addrs(raw)?
+        .into_iter()
         .next()
-        .ok_or_else(|| format!("Resolved host `{host}` but no socket addresses were returned"))
+        .ok_or_else(|| format!("Resolved host `{raw}` but no socket addresses were returned"))
 }
 
 fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
@@ -493,9 +536,11 @@ pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
         if let Some((id_part, addr_part)) = node.split_once('@') {
             match (
                 EndpointId::from_str(id_part),
-                resolve_socket_addr(addr_part),
+                resolve_socket_addrs(addr_part),
             ) {
-                (Ok(node_id), Ok(sock)) => out.push(EndpointAddr::new(node_id).with_ip_addr(sock)),
+                (Ok(node_id), Ok(socket_addrs)) => {
+                    out.push(build_endpoint_addr(node_id, socket_addrs))
+                }
                 _ => debug!("Invalid user bootstrap entry: {}", node),
             }
         } else {
@@ -594,6 +639,7 @@ pub fn apply_cli_bootstrap_nodes() -> Result<Vec<String>, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{Ipv6Addr, SocketAddrV6};
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     static CLI_BOOTSTRAP_ENV_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
@@ -633,6 +679,14 @@ mod tests {
         assert!(normalized.contains(&"node3@127.0.0.1:11223".to_string()));
         assert!(normalized.contains(&"node4@127.0.0.1:11224".to_string()));
         assert_eq!(normalized.len(), 4);
+    }
+
+    #[test]
+    fn prioritize_socket_addrs_prefers_ipv4() {
+        let ipv6 = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 11223, 0, 0));
+        let ipv4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 11223);
+        let prioritized = super::prioritize_socket_addrs(vec![ipv6, ipv4]);
+        assert_eq!(prioritized, vec![ipv4, ipv6]);
     }
 
     #[test]

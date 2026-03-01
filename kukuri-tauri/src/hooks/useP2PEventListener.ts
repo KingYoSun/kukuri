@@ -364,10 +364,12 @@ export function useP2PEventListener() {
           });
         }
         updateTopicPostCount(topicId, 1);
-        void queryClient.invalidateQueries({ queryKey: ['posts', topicId] });
-        void queryClient.invalidateQueries({ queryKey: ['topicTimeline', topicId] });
-        void queryClient.invalidateQueries({ queryKey: ['topicThreads', topicId] });
-        void queryClient.invalidateQueries({ queryKey: ['threadPosts', topicId] });
+        const invalidateInBackground = (queryKey: readonly unknown[]) =>
+          queryClient.invalidateQueries({ queryKey, refetchType: 'inactive' });
+        void invalidateInBackground(['posts', topicId]);
+        void invalidateInBackground(['topicTimeline', topicId]);
+        void invalidateInBackground(['topicThreads', topicId]);
+        void invalidateInBackground(['threadPosts', topicId]);
       } catch (error) {
         errorHandler.log('Failed to process P2P message as post', error, {
           context: 'useP2PEventListener.handleP2PMessageAsPost',
