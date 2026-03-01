@@ -519,6 +519,20 @@ pub(super) const SELECT_USER_BY_PUBKEY: &str = r#"
     WHERE pubkey = ?
 "#;
 
+pub(super) const SELECT_PROFILE_BY_PUBLIC_KEY: &str = r#"
+    SELECT
+        public_key,
+        display_name,
+        about,
+        picture_url,
+        nip05,
+        created_at,
+        updated_at
+    FROM profiles
+    WHERE public_key = ?
+    LIMIT 1
+"#;
+
 pub(super) const SEARCH_USERS: &str = r#"
     SELECT
         npub,

@@ -33,6 +33,17 @@ const toUnixSeconds = (timestamp: number): number =>
 const sortTimelineEntries = (entries: TopicTimelineEntry[]): TopicTimelineEntry[] =>
   [...entries].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 
+const shortenAuthorLabel = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return 'P2P user';
+  }
+  if (trimmed.length <= 16) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 8)}...${trimmed.slice(-4)}`;
+};
+
 const findTagValue = (tags: string[][], key: string): string | null => {
   const value = tags.find((tag) => tag[0] === key)?.[1];
   const trimmed = value?.trim();
@@ -146,7 +157,7 @@ const toRealtimePost = (
   return {
     id: payload.id,
     content: payload.content,
-    author: resolveFallbackAuthor(entries, payload.author, 'Realtime user'),
+    author: resolveFallbackAuthor(entries, payload.author, shortenAuthorLabel(payload.author)),
     topicId,
     threadNamespace: `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`,
     threadUuid,

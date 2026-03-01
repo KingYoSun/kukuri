@@ -26,6 +26,8 @@ export interface P2PMessage {
   content: string;
   timestamp: number;
   signature: string;
+  kind?: number;
+  tags?: string[][];
 }
 
 // トピックメッシュの統計情報

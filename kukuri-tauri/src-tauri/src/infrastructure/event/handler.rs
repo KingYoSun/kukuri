@@ -5,6 +5,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 /// イベントコールバックの型エイリアス
 type EventCallback = Arc<dyn Fn(Event) + Send + Sync>;
@@ -53,6 +54,30 @@ fn extract_parent_event_id(tags: &[Vec<String>]) -> Option<String> {
 fn extract_root_event_id(tags: &[Vec<String>]) -> Option<String> {
     find_tag_value(tags, "thread_root_event_id")
         .or_else(|| find_tag_value_with_marker(tags, "e", "root"))
+}
+
+fn derive_thread_uuid(seed: &str) -> String {
+    let mut normalized: String = seed
+        .chars()
+        .filter(|value| value.is_ascii_hexdigit())
+        .take(32)
+        .collect();
+    while normalized.len() < 32 {
+        normalized.push('0');
+    }
+
+    let mut bytes = [0u8; 16];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        let start = index * 2;
+        let end = start + 2;
+        let segment = &normalized[start..end];
+        *byte = u8::from_str_radix(segment, 16).unwrap_or(0);
+    }
+
+    // RFC 4122 compatible UUID bit layout.
+    bytes[6] = (bytes[6] & 0x0f) | 0x50;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes).to_string()
 }
 
 /// Nostrイベントハンドラー
@@ -226,7 +251,7 @@ impl EventHandler {
                             .as_ref()
                             .and_then(|row| row.try_get::<String, _>("thread_uuid").ok())
                     })
-                    .unwrap_or_else(|| root_event_id.clone());
+                    .unwrap_or_else(|| derive_thread_uuid(&root_event_id));
 
                 let thread_namespace = extract_thread_namespace(&raw_tags)
                     .unwrap_or_else(|| format!("{topic_id}/threads/{thread_uuid}"));
@@ -418,5 +443,20 @@ impl EventHandler {
 impl Default for EventHandler {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::derive_thread_uuid;
+
+    #[test]
+    fn derive_thread_uuid_is_deterministic_and_uuid_compatible() {
+        let source = "0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a";
+        let first = derive_thread_uuid(source);
+        let second = derive_thread_uuid(source);
+
+        assert_eq!(first, second);
+        assert!(uuid::Uuid::parse_str(&first).is_ok());
     }
 }

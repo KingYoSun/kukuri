@@ -18,17 +18,6 @@ import { TauriApi } from '@/lib/api/tauri';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import type { TopicTimelineEntry } from './usePosts';
 
-interface P2PMessageEvent {
-  topic_id: string;
-  message: {
-    id: string;
-    author: string;
-    content: string;
-    timestamp: number;
-    signature: string;
-  };
-}
-
 interface P2PRawMessageEvent {
   topic_id: string;
   payload: unknown;
@@ -59,18 +48,33 @@ const upsertTimelineEntry = (
   entries: TopicTimelineEntry[] | undefined,
   post: Post,
   threadUuid: string,
+  isReply: boolean,
 ): TopicTimelineEntry[] => {
   const base = entries ?? [];
   const existingIndex = base.findIndex((entry) => entry.threadUuid === threadUuid);
   if (existingIndex >= 0) {
     const next = [...base];
     const existing = next[existingIndex];
-    next[existingIndex] = {
-      ...existing,
-      parentPost: existing.parentPost.id === post.id ? post : existing.parentPost,
-      lastActivityAt: Math.max(existing.lastActivityAt, post.created_at),
-    };
+    if (isReply) {
+      const isSameFirstReply = existing.firstReply?.id === post.id;
+      next[existingIndex] = {
+        ...existing,
+        firstReply: isSameFirstReply ? post : (existing.firstReply ?? post),
+        replyCount: isSameFirstReply ? existing.replyCount : Math.max(existing.replyCount + 1, 1),
+        lastActivityAt: Math.max(existing.lastActivityAt, post.created_at),
+      };
+    } else {
+      next[existingIndex] = {
+        ...existing,
+        parentPost: existing.parentPost.id === post.id ? post : existing.parentPost,
+        lastActivityAt: Math.max(existing.lastActivityAt, post.created_at),
+      };
+    }
     return sortTimelineEntries(next);
+  }
+
+  if (isReply) {
+    return base;
   }
 
   return sortTimelineEntries([
@@ -87,6 +91,8 @@ const upsertTimelineEntry = (
 
 const textDecoder = new TextDecoder();
 const RECENT_MESSAGE_ID_LIMIT = 2000;
+const AUTHOR_PROFILE_MISS_TTL_MS = 60_000;
+const THREAD_PATH_SEGMENT = '/threads/';
 
 const normalizeTimestampMillis = (value: unknown, fallbackSeconds: number): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -110,6 +116,135 @@ const shortenIdentifier = (value: string): string => {
     return trimmed;
   }
   return `${trimmed.slice(0, 8)}...${trimmed.slice(-4)}`;
+};
+
+const normalizeMessageTags = (value: unknown): string[][] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter(
+      (tag): tag is string[] => Array.isArray(tag) && tag.every((item) => typeof item === 'string'),
+    )
+    .map((tag) => [...tag]);
+};
+
+const deriveThreadUuidFromEventId = (eventId: string): string => {
+  const normalizedHex = eventId
+    .toLowerCase()
+    .replace(/[^0-9a-f]/g, '')
+    .padEnd(32, '0')
+    .slice(0, 32);
+  const bytes = new Uint8Array(16);
+  for (let index = 0; index < 16; index += 1) {
+    const byteHex = normalizedHex.slice(index * 2, index * 2 + 2);
+    const parsed = Number.parseInt(byteHex, 16);
+    bytes[index] = Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  // RFC 4122 variant + version(5) bits to keep UUID tooling compatible.
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const toHex = (value: number): string => value.toString(16).padStart(2, '0');
+  const digest = Array.from(bytes, toHex).join('');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+};
+
+const findTagValue = (tags: string[][], key: string): string | null => {
+  const value = tags.find((tag) => tag[0] === key)?.[1];
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const extractThreadUuidFromTags = (tags: string[][], topicId: string): string | null => {
+  const explicitThreadUuid = findTagValue(tags, 'thread_uuid');
+  if (explicitThreadUuid) {
+    return explicitThreadUuid;
+  }
+
+  const threadNamespace = findTagValue(tags, 'thread');
+  if (!threadNamespace) {
+    return null;
+  }
+
+  const topicScopedPrefix = `${topicId}${THREAD_PATH_SEGMENT}`;
+  const topicScopedIndex = threadNamespace.indexOf(topicScopedPrefix);
+  if (topicScopedIndex >= 0) {
+    const uuid = threadNamespace.slice(topicScopedIndex + topicScopedPrefix.length).trim();
+    return uuid || null;
+  }
+
+  const lastSegmentIndex = threadNamespace.lastIndexOf(THREAD_PATH_SEGMENT);
+  if (lastSegmentIndex >= 0) {
+    const uuid = threadNamespace.slice(lastSegmentIndex + THREAD_PATH_SEGMENT.length).trim();
+    return uuid || null;
+  }
+
+  return null;
+};
+
+const extractThreadRelationFromTags = (
+  tags: string[][],
+): { rootEventId: string | null; parentEventId: string | null } => {
+  let rootEventId: string | null = null;
+  let parentEventId: string | null = null;
+
+  tags.forEach((tag) => {
+    if (tag[0] !== 'e') {
+      return;
+    }
+
+    const referencedEventId = tag[1]?.trim();
+    if (!referencedEventId) {
+      return;
+    }
+
+    const marker = tag[3]?.trim();
+    if (marker === 'root') {
+      rootEventId = referencedEventId;
+      return;
+    }
+
+    if (marker === 'reply') {
+      parentEventId = referencedEventId;
+      return;
+    }
+
+    if (!parentEventId) {
+      parentEventId = referencedEventId;
+    }
+  });
+
+  return { rootEventId, parentEventId };
+};
+
+interface ThreadDetails {
+  tags: string[][];
+  threadUuid: string;
+  threadNamespace: string;
+  threadRootEventId: string;
+  threadParentEventId: string | null;
+  isReply: boolean;
+}
+
+const resolveThreadDetails = (topicId: string, message: P2PMessage): ThreadDetails => {
+  const tags = normalizeMessageTags(message.tags);
+  const threadUuid =
+    extractThreadUuidFromTags(tags, topicId) ?? deriveThreadUuidFromEventId(message.id);
+  const threadNamespace =
+    findTagValue(tags, 'thread') ?? `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+  const { rootEventId, parentEventId } = extractThreadRelationFromTags(tags);
+  const isReply = parentEventId !== null;
+
+  return {
+    tags,
+    threadUuid,
+    threadNamespace,
+    threadRootEventId: rootEventId ?? parentEventId ?? message.id,
+    threadParentEventId: parentEventId,
+    isReply,
+  };
 };
 
 const parseRawPayload = (payload: unknown): Record<string, unknown> | null => {
@@ -181,6 +316,9 @@ const parseRawEventMessage = (
   const content = parsed.content;
   const author = typeof parsed.author === 'string' ? parsed.author : parsed.pubkey;
   const signature = typeof parsed.signature === 'string' ? parsed.signature : parsed.sig;
+  const kind =
+    typeof parsed.kind === 'number' && Number.isFinite(parsed.kind) ? parsed.kind : undefined;
+  const tags = normalizeMessageTags(parsed.tags);
 
   if (
     typeof id !== 'string' ||
@@ -198,7 +336,27 @@ const parseRawEventMessage = (
     content,
     timestamp: normalizeTimestampMillis(parsed.created_at ?? parsed.timestamp, fallbackSeconds),
     signature,
+    kind,
+    tags: tags.length > 0 ? tags : undefined,
   };
+};
+
+const isTopicPostMessage = (topicId: string, message: P2PMessage): boolean => {
+  if (message.kind === NostrEventKind.TopicPost || message.kind === NostrEventKind.TextNote) {
+    return true;
+  }
+
+  if (typeof message.kind === 'number') {
+    return false;
+  }
+
+  const tags = normalizeMessageTags(message.tags);
+  const taggedTopicId = findTagValue(tags, 't') ?? findTagValue(tags, 'topic');
+  if (taggedTopicId === topicId) {
+    return true;
+  }
+
+  return findTagValue(tags, 'thread_uuid') !== null || findTagValue(tags, 'thread') !== null;
 };
 
 const resolveAuthorNpub = async (author: string): Promise<string> => {
@@ -215,7 +373,8 @@ export function useP2PEventListener() {
   const { updateTopicPostCount } = useTopicStore();
   const recentMessageIds = useRef<Set<string>>(new Set());
   const recentMessageOrder = useRef<string[]>([]);
-  const authorProfileCache = useRef<Map<string, User | null>>(new Map());
+  const authorProfileCache = useRef<Map<string, User>>(new Map());
+  const authorProfileMissedAt = useRef<Map<string, number>>(new Map());
   const authorProfileInFlight = useRef<Map<string, Promise<User | null>>>(new Map());
 
   const shouldHandleMessage = useCallback((messageId: string): boolean => {
@@ -257,9 +416,14 @@ export function useP2PEventListener() {
       });
     };
 
-    if (authorProfileCache.current.has(cacheKey)) {
-      const cached = authorProfileCache.current.get(cacheKey);
-      return cached ?? (await toFallbackAuthor());
+    const cached = authorProfileCache.current.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const missedAt = authorProfileMissedAt.current.get(cacheKey);
+    if (missedAt && Date.now() - missedAt < AUTHOR_PROFILE_MISS_TTL_MS) {
+      return await toFallbackAuthor();
     }
 
     const inFlight = authorProfileInFlight.current.get(cacheKey);
@@ -276,12 +440,13 @@ export function useP2PEventListener() {
             ? await TauriApi.getUserProfile(author)
             : null;
         if (!profile) {
-          authorProfileCache.current.set(cacheKey, null);
+          authorProfileMissedAt.current.set(cacheKey, Date.now());
           return null;
         }
         const mapped = mapUserProfileToUser(profile);
         const enriched = applyKnownUserMetadata(mapped);
         authorProfileCache.current.set(cacheKey, enriched);
+        authorProfileMissedAt.current.delete(cacheKey);
         return enriched;
       } catch (error) {
         errorHandler.log('Failed to resolve author profile for P2P message', error, {
@@ -289,7 +454,7 @@ export function useP2PEventListener() {
           showToast: false,
           metadata: { author },
         });
-        authorProfileCache.current.set(cacheKey, null);
+        authorProfileMissedAt.current.set(cacheKey, Date.now());
         return null;
       }
     })();
@@ -308,18 +473,23 @@ export function useP2PEventListener() {
     async (message: P2PMessage, topicId: string) => {
       try {
         const author = await resolveAuthor(message.author);
+        const threadDetails = resolveThreadDetails(topicId, message);
+        const createdAt =
+          message.timestamp > 1_000_000_000_000
+            ? Math.floor(message.timestamp / 1000)
+            : Math.floor(message.timestamp);
 
         const post: Post = {
           id: message.id,
           content: message.content,
           author: author,
           topicId,
-          threadNamespace: `${topicId}/threads/${message.id}`,
-          threadUuid: message.id,
-          threadRootEventId: message.id,
-          threadParentEventId: null,
-          created_at: Math.floor(message.timestamp / 1000),
-          tags: [],
+          threadNamespace: threadDetails.threadNamespace,
+          threadUuid: threadDetails.threadUuid,
+          threadRootEventId: threadDetails.threadRootEventId,
+          threadParentEventId: threadDetails.threadParentEventId,
+          created_at: createdAt,
+          tags: threadDetails.tags.map((tag) => tag.join(':')),
           likes: 0,
           boosts: 0,
           replies: [],
@@ -336,16 +506,30 @@ export function useP2PEventListener() {
         );
         const threadUuid = post.threadUuid ?? post.id;
         queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], (prev) =>
-          upsertTimelineEntry(prev, post, threadUuid),
+          upsertTimelineEntry(prev, post, threadUuid, threadDetails.isReply),
         );
         queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], (prev) =>
-          upsertTimelineEntry(prev, post, threadUuid),
+          upsertTimelineEntry(prev, post, threadUuid, threadDetails.isReply),
         );
         queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], (prev) =>
           upsertPostIntoList(prev, post),
         );
         const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
         if (timelineUpdateMode === 'realtime') {
+          const realtimeTags = [...threadDetails.tags];
+          if (!realtimeTags.some((tag) => tag[0] === 't' && tag[1] === topicId)) {
+            realtimeTags.push(['t', topicId]);
+          }
+          if (!realtimeTags.some((tag) => tag[0] === 'thread_uuid')) {
+            realtimeTags.push(['thread_uuid', threadUuid]);
+          }
+          if (!realtimeTags.some((tag) => tag[0] === 'thread')) {
+            realtimeTags.push(['thread', threadDetails.threadNamespace]);
+          }
+          if (!realtimeTags.some((tag) => tag[0] === 'source')) {
+            realtimeTags.push(['source', 'p2p']);
+          }
+
           dispatchTimelineRealtimeDelta({
             source: 'nostr',
             payload: {
@@ -354,18 +538,13 @@ export function useP2PEventListener() {
               content: message.content,
               created_at: message.timestamp,
               kind: NostrEventKind.TopicPost,
-              tags: [
-                ['t', topicId],
-                ['thread_uuid', threadUuid],
-                ['thread', `${topicId}/threads/${threadUuid}`],
-                ['source', 'p2p'],
-              ],
+              tags: realtimeTags,
             },
           });
         }
         updateTopicPostCount(topicId, 1);
         const invalidateInBackground = (queryKey: readonly unknown[]) =>
-          queryClient.invalidateQueries({ queryKey, refetchType: 'inactive' });
+          queryClient.invalidateQueries({ queryKey, refetchType: 'active' });
         void invalidateInBackground(['posts', topicId]);
         void invalidateInBackground(['topicTimeline', topicId]);
         void invalidateInBackground(['topicThreads', topicId]);
@@ -399,6 +578,10 @@ export function useP2PEventListener() {
         ...message,
         topic_id,
       };
+
+      if (!isTopicPostMessage(topic_id, p2pMessage)) {
+        return;
+      }
 
       addMessage(p2pMessage);
 
@@ -443,23 +626,19 @@ export function useP2PEventListener() {
       }
     };
 
-    void registerListener<P2PMessageEvent>(
-      'p2p://message',
-      ({ topic_id, message }) => {
-        handleIncomingP2PMessage(
-          topic_id,
-          { ...message, topic_id },
-          'useP2PEventListener.p2p://message',
-        );
-      },
-      'useP2PEventListener.p2p://message',
-    );
-
     void registerListener<P2PRawMessageEvent>(
       'p2p://message/raw',
       ({ topic_id, payload, timestamp }) => {
         const parsed = parseRawEventMessage(topic_id, payload, timestamp);
         if (!parsed) {
+          errorHandler.log('Drop unparsable P2P raw payload', undefined, {
+            context: 'useP2PEventListener.p2p://message/raw',
+            showToast: false,
+            metadata: {
+              topic_id,
+              payloadType: typeof payload,
+            },
+          });
           return;
         }
         handleIncomingP2PMessage(topic_id, parsed, 'useP2PEventListener.p2p://message/raw');

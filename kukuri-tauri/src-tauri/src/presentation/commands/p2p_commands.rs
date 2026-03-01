@@ -151,7 +151,10 @@ pub async fn get_bootstrap_config() -> Result<ApiResponse<BootstrapConfigRespons
 }
 
 #[tauri::command]
-pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<ApiResponse<()>, AppError> {
+pub async fn set_bootstrap_nodes(
+    state: State<'_, AppState>,
+    nodes: Vec<String>,
+) -> Result<ApiResponse<()>, AppError> {
     use crate::infrastructure::p2p::bootstrap_config;
 
     if bootstrap_config::load_env_bootstrap_nodes().is_some() {
@@ -170,11 +173,18 @@ pub async fn set_bootstrap_nodes(nodes: Vec<String>) -> Result<ApiResponse<()>, 
 
     bootstrap_config::save_user_bootstrap_nodes(&nodes)
         .map_err(|e| AppError::ConfigurationError(e.to_string()))?;
+    let applied_nodes = bootstrap_config::load_user_bootstrap_nodes();
+    state
+        .p2p_handler
+        .apply_bootstrap_nodes(applied_nodes, BootstrapSource::User)
+        .await?;
     Ok(ApiResponse::success(()))
 }
 
 #[tauri::command]
-pub async fn clear_bootstrap_nodes() -> Result<ApiResponse<()>, AppError> {
+pub async fn clear_bootstrap_nodes(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<()>, AppError> {
     use crate::infrastructure::p2p::bootstrap_config;
 
     if bootstrap_config::load_env_bootstrap_nodes().is_some() {
@@ -185,6 +195,10 @@ pub async fn clear_bootstrap_nodes() -> Result<ApiResponse<()>, AppError> {
 
     bootstrap_config::clear_user_bootstrap_nodes()
         .map_err(|e| AppError::ConfigurationError(e.to_string()))?;
+    state
+        .p2p_handler
+        .apply_bootstrap_nodes(Vec::new(), BootstrapSource::None)
+        .await?;
     Ok(ApiResponse::success(()))
 }
 

@@ -2,17 +2,60 @@ use super::SqliteRepository;
 use super::mapper::map_user_row;
 use super::queries::{
     DELETE_FOLLOW_RELATION, DELETE_USER, INSERT_USER, SEARCH_USERS, SELECT_FOLLOWER_PUBKEYS,
-    SELECT_FOLLOWING_PUBKEYS, SELECT_USER_BY_NPUB, SELECT_USER_BY_PUBKEY, UPDATE_USER,
-    UPSERT_FOLLOW_RELATION,
+    SELECT_FOLLOWING_PUBKEYS, SELECT_PROFILE_BY_PUBLIC_KEY, SELECT_USER_BY_NPUB,
+    SELECT_USER_BY_PUBKEY, UPDATE_USER, UPSERT_FOLLOW_RELATION,
 };
 use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
 use crate::domain::entities::User;
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
+use nostr_sdk::prelude::{FromBech32, PublicKey};
 use sqlx::{QueryBuilder, Row, Sqlite};
 
 const SORT_KEY_LOWER_EXPR: &str = "LOWER(COALESCE(NULLIF(TRIM(u.display_name), ''), u.npub))";
+
+fn normalize_profile_timestamp_millis(value: i64) -> i64 {
+    if value > 1_000_000_000_000 {
+        value
+    } else {
+        value.saturating_mul(1000)
+    }
+}
+
+fn map_profile_row_to_user(row: &sqlx::sqlite::SqliteRow) -> Result<User, AppError> {
+    let public_key: String = row.try_get("public_key")?;
+    let mut user = User::from_pubkey(&public_key);
+
+    user.profile.display_name = row
+        .try_get::<Option<String>, _>("display_name")
+        .unwrap_or(None)
+        .unwrap_or_default();
+    user.profile.bio = row
+        .try_get::<Option<String>, _>("about")
+        .unwrap_or(None)
+        .unwrap_or_default();
+    user.profile.avatar_url = row
+        .try_get::<Option<String>, _>("picture_url")
+        .unwrap_or(None);
+    user.nip05 = row.try_get::<Option<String>, _>("nip05").unwrap_or(None);
+
+    if let Ok(created_at_raw) = row.try_get::<i64, _>("created_at") {
+        let created_at_millis = normalize_profile_timestamp_millis(created_at_raw);
+        if let Some(timestamp) = DateTime::<Utc>::from_timestamp_millis(created_at_millis) {
+            user.created_at = timestamp;
+        }
+    }
+    if let Ok(updated_at_raw) = row.try_get::<i64, _>("updated_at") {
+        let updated_at_millis = normalize_profile_timestamp_millis(updated_at_raw);
+        if let Some(timestamp) = DateTime::<Utc>::from_timestamp_millis(updated_at_millis) {
+            user.updated_at = timestamp;
+        }
+    }
+
+    Ok(user)
+}
 
 fn encode_follow_cursor(sort: FollowListSort, primary: &str, pubkey: &str) -> String {
     let encoded_primary = URL_SAFE_NO_PAD.encode(primary.as_bytes());
@@ -252,7 +295,13 @@ impl UserRepository for SqliteRepository {
 
         match row {
             Some(row) => Ok(Some(map_user_row(&row)?)),
-            None => Ok(None),
+            None => {
+                let pubkey = match PublicKey::from_bech32(npub) {
+                    Ok(value) => value.to_hex(),
+                    Err(_) => return Ok(None),
+                };
+                self.get_user_by_pubkey(&pubkey).await
+            }
         }
     }
 
@@ -264,7 +313,16 @@ impl UserRepository for SqliteRepository {
 
         match row {
             Some(row) => Ok(Some(map_user_row(&row)?)),
-            None => Ok(None),
+            None => {
+                let profile_row = sqlx::query(SELECT_PROFILE_BY_PUBLIC_KEY)
+                    .bind(pubkey)
+                    .fetch_optional(self.pool.get_pool())
+                    .await?;
+                match profile_row {
+                    Some(row) => Ok(Some(map_profile_row_to_user(&row)?)),
+                    None => Ok(None),
+                }
+            }
         }
     }
 
@@ -447,6 +505,25 @@ mod tests {
         .await
         .expect("failed to create users table");
 
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                public_key TEXT NOT NULL UNIQUE,
+                display_name TEXT,
+                about TEXT,
+                picture_url TEXT,
+                banner_url TEXT,
+                nip05 TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            "#,
+        )
+        .execute(pool.get_pool())
+        .await
+        .expect("failed to create profiles table");
+
         SqliteRepository::new(pool)
     }
 
@@ -499,5 +576,51 @@ mod tests {
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name.as_deref(), Some("bobby"));
         assert_eq!(users[0].nip05.as_deref(), Some("bobby@example.com"));
+    }
+
+    #[tokio::test]
+    async fn get_user_by_pubkey_falls_back_to_profiles_table() {
+        let repo = setup_repository().await;
+        let pubkey = "0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a";
+
+        sqlx::query(
+            r#"
+            INSERT INTO profiles (public_key, display_name, about, picture_url, nip05, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+        )
+        .bind(pubkey)
+        .bind("Alice")
+        .bind("about profile")
+        .bind("https://example.com/avatar.png")
+        .bind("alice@example.com")
+        .bind(1_707_000_000_i64)
+        .bind(1_707_000_100_i64)
+        .execute(repo.pool.get_pool())
+        .await
+        .expect("insert profile");
+
+        let loaded = repo
+            .get_user_by_pubkey(pubkey)
+            .await
+            .expect("lookup by pubkey")
+            .expect("user exists");
+
+        assert_eq!(loaded.pubkey, pubkey);
+        assert!(loaded.npub.starts_with("npub1"));
+        assert_eq!(loaded.profile.display_name, "Alice");
+        assert_eq!(loaded.profile.bio, "about profile");
+        assert_eq!(
+            loaded.profile.avatar_url.as_deref(),
+            Some("https://example.com/avatar.png")
+        );
+        assert_eq!(loaded.nip05.as_deref(), Some("alice@example.com"));
+
+        let loaded_by_npub = repo
+            .get_user(&loaded.npub)
+            .await
+            .expect("lookup by npub")
+            .expect("user exists by npub");
+        assert_eq!(loaded_by_npub.pubkey, pubkey);
     }
 }
