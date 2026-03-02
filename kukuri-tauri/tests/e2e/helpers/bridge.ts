@@ -43,6 +43,7 @@ export type BridgeAction =
   | 'getP2PMessageSnapshot'
   | 'getPostStoreSnapshot'
   | 'joinP2PTopic'
+  | 'connectToP2PPeer'
   | 'seedFriendPlusAccounts'
   | 'accessControlRequestJoin'
   | 'accessControlListJoinRequests'
@@ -335,6 +336,7 @@ type BridgeResultMap = {
   getP2PMessageSnapshot: P2PMessageSnapshot;
   getPostStoreSnapshot: PostStoreSnapshot;
   joinP2PTopic: null;
+  connectToP2PPeer: null;
   seedFriendPlusAccounts: SeedFriendPlusAccountsResult;
   accessControlRequestJoin: AccessControlRequestJoinResult;
   accessControlListJoinRequests: AccessControlListJoinRequestsResult;
@@ -754,6 +756,10 @@ export async function getPostStoreSnapshot(topicId: string): Promise<PostStoreSn
 
 export async function joinP2PTopic(topicId: string, initialPeers: string[] = []): Promise<void> {
   await callBridge('joinP2PTopic', { topicId, initialPeers });
+}
+
+export async function connectToP2PPeer(peerAddress: string): Promise<void> {
+  await callBridge('connectToP2PPeer', { peerAddress });
 }
 
 export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {

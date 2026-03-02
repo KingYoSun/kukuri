@@ -258,6 +258,7 @@ export interface E2EBridge {
     recentContents: string[];
   }>;
   joinP2PTopic: (payload: { topicId: string; initialPeers?: string[] }) => Promise<void>;
+  connectToP2PPeer: (payload: { peerAddress: string }) => Promise<void>;
   seedFriendPlusAccounts: () => Promise<SeedFriendPlusAccountsResult>;
   accessControlRequestJoin: (
     payload: AccessControlRequestJoinPayload,
@@ -1490,6 +1491,14 @@ export function registerE2EBridge(): void {
             throw new Error('topicId is required');
           }
           await p2pApi.joinTopic(topicId, payload.initialPeers ?? []);
+          await refreshRelayStatusSafe();
+        },
+        connectToP2PPeer: async (payload: { peerAddress: string }) => {
+          const peerAddress = payload?.peerAddress?.trim();
+          if (!peerAddress) {
+            throw new Error('peerAddress is required');
+          }
+          await p2pApi.connectToPeer(peerAddress);
           await refreshRelayStatusSafe();
         },
         seedFriendPlusAccounts: async () => {

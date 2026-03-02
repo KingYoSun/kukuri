@@ -10,7 +10,9 @@ use kukuri_lib::test_support::application::services::p2p_service::P2PService;
 use kukuri_lib::test_support::application::shared::nostr::EventPublisher;
 use kukuri_lib::test_support::domain::entities::Event as DomainEvent;
 use kukuri_lib::test_support::shared::config::{AppConfig, BootstrapSource, NetworkConfig};
-use nostr_sdk::prelude::{Event as NostrEvent, Keys as NostrKeys, SecretKey as NostrSecretKey};
+use nostr_sdk::prelude::{
+    Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey,
+};
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
@@ -57,13 +59,19 @@ struct HarnessConfig {
     startup_delay_ms: u64,
     run_seconds: Option<u64>,
     summary_path: Option<PathBuf>,
+    node_address_path: Option<PathBuf>,
     iroh_secret_key_b64: Option<String>,
     nostr_secret_key_b64: Option<String>,
+    publish_metadata: bool,
+    publish_on_peer_join: bool,
+    profile_name: Option<String>,
+    profile_about: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
 struct HarnessStats {
     published_count: u64,
+    metadata_published_count: u64,
     received_count: u64,
     echoed_count: u64,
     peer_joined_events: u64,
@@ -79,6 +87,8 @@ struct HarnessSummary {
     mode: String,
     topic_id: String,
     bootstrap_peers: Vec<String>,
+    node_addresses: Vec<String>,
+    preferred_address: String,
     started_at: DateTime<Utc>,
     finished_at: DateTime<Utc>,
     uptime_ms: u64,
@@ -99,6 +109,22 @@ fn parse_optional_u64(raw: Option<String>) -> Option<u64> {
     raw.and_then(|value| value.trim().parse::<u64>().ok())
 }
 
+fn parse_optional_string(raw: Option<String>) -> Option<String> {
+    raw.map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_env_bool(raw: Option<String>, default: bool) -> bool {
+    match raw {
+        Some(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            _ => default,
+        },
+        None => default,
+    }
+}
+
 fn parse_required_string(key: &str, default_value: &str) -> String {
     std::env::var(key)
         .ok()
@@ -108,6 +134,7 @@ fn parse_required_string(key: &str, default_value: &str) -> String {
 }
 
 fn build_config() -> HarnessConfig {
+    let peer_name = parse_required_string("KUKURI_PEER_NAME", "peer-client");
     let bootstrap_peers = {
         let explicit = parse_env_list(std::env::var("KUKURI_PEER_BOOTSTRAP_PEERS").ok());
         if !explicit.is_empty() {
@@ -123,7 +150,7 @@ fn build_config() -> HarnessConfig {
     };
 
     HarnessConfig {
-        peer_name: parse_required_string("KUKURI_PEER_NAME", "peer-client"),
+        peer_name: peer_name.clone(),
         mode: PeerMode::parse(
             &std::env::var("KUKURI_PEER_MODE").unwrap_or_else(|_| "listener".to_string()),
         ),
@@ -144,8 +171,20 @@ fn build_config() -> HarnessConfig {
             .map(|path| path.trim().to_string())
             .filter(|path| !path.is_empty())
             .map(PathBuf::from),
+        node_address_path: std::env::var("KUKURI_PEER_NODE_ADDRESS_PATH")
+            .ok()
+            .map(|path| path.trim().to_string())
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from),
         iroh_secret_key_b64: std::env::var("KUKURI_PEER_IROH_SECRET_KEY_B64").ok(),
         nostr_secret_key_b64: std::env::var("KUKURI_PEER_NOSTR_SECRET_KEY_B64").ok(),
+        publish_metadata: parse_env_bool(std::env::var("KUKURI_PEER_PUBLISH_METADATA").ok(), false),
+        publish_on_peer_join: parse_env_bool(
+            std::env::var("KUKURI_PEER_PUBLISH_ON_PEER_JOIN").ok(),
+            false,
+        ),
+        profile_name: parse_optional_string(std::env::var("KUKURI_PEER_PROFILE_NAME").ok()),
+        profile_about: parse_optional_string(std::env::var("KUKURI_PEER_PROFILE_ABOUT").ok()),
     }
 }
 
@@ -236,11 +275,94 @@ async fn publish_topic_event(
     Ok(())
 }
 
+async fn publish_profile_metadata(
+    publisher: &EventPublisher,
+    stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
+    cfg: &HarnessConfig,
+    stats: &mut HarnessStats,
+) -> anyhow::Result<()> {
+    let mut metadata = Metadata::new().name(
+        cfg.profile_name
+            .clone()
+            .unwrap_or_else(|| cfg.peer_name.clone()),
+    );
+    if let Some(about) = cfg.profile_about.as_deref() {
+        metadata = metadata.about(about);
+    }
+    let metadata_event = publisher.create_metadata(metadata)?;
+    let domain_event = convert_nostr_event(&metadata_event)?;
+    stack
+        .gossip_service
+        .broadcast(&cfg.topic_id, &domain_event)
+        .await?;
+    stats.metadata_published_count += 1;
+    info!(
+        peer = %cfg.peer_name,
+        topic = %cfg.topic_id,
+        event_id = %domain_event.id,
+        metadata_published = stats.metadata_published_count,
+        "Peer harness published metadata event"
+    );
+    Ok(())
+}
+
 fn push_recent_content(stats: &mut HarnessStats, content: &str) {
     if stats.recent_contents.len() >= 20 {
         stats.recent_contents.remove(0);
     }
     stats.recent_contents.push(content.to_string());
+}
+
+#[derive(Debug, Serialize)]
+struct NodeAddressSnapshot {
+    peer_name: String,
+    node_addresses: Vec<String>,
+    preferred_address: String,
+    written_at: DateTime<Utc>,
+}
+
+fn endpoint_host(address: &str) -> Option<String> {
+    let (_, endpoint) = address.split_once('@')?;
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return None;
+    }
+    if endpoint.starts_with('[') {
+        let close = endpoint.find(']')?;
+        return Some(endpoint[1..close].to_string());
+    }
+    endpoint
+        .rsplit_once(':')
+        .map(|(host, _)| host.trim().to_string())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    let normalized = host.trim().to_ascii_lowercase();
+    normalized == "127.0.0.1" || normalized == "localhost" || normalized == "::1"
+}
+
+fn pick_preferred_address(addresses: &[String]) -> Option<String> {
+    if let Some(non_loopback) = addresses.iter().find(|entry| {
+        endpoint_host(entry)
+            .map(|host| !is_loopback_host(&host))
+            .unwrap_or(false)
+    }) {
+        return Some(non_loopback.clone());
+    }
+    addresses.first().cloned()
+}
+
+async fn write_node_address_snapshot(
+    path: &PathBuf,
+    snapshot: &NodeAddressSnapshot,
+) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, serde_json::to_vec_pretty(snapshot)?)?;
+    Ok(())
 }
 
 async fn write_summary(path: &PathBuf, summary: &HarnessSummary) -> anyhow::Result<()> {
@@ -272,6 +394,8 @@ async fn main() -> anyhow::Result<()> {
         peer = %cfg.peer_name,
         mode = %cfg.mode.as_str(),
         topic = %cfg.topic_id,
+        publish_metadata = cfg.publish_metadata,
+        publish_on_peer_join = cfg.publish_on_peer_join,
         bootstrap_peers = %cfg.bootstrap_peers.join(","),
         "Starting p2p peer harness"
     );
@@ -302,10 +426,48 @@ async fn main() -> anyhow::Result<()> {
 
     let mut stats = HarnessStats::default();
     let mut seen_events = HashSet::new();
+    let mut publish_enabled = cfg.mode == PeerMode::Publisher && !cfg.publish_on_peer_join;
     let mut publish_tick = tokio::time::interval(Duration::from_millis(cfg.publish_interval_ms));
     publish_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
+    let node_addresses = match stack.p2p_service.get_node_addresses().await {
+        Ok(addresses) => addresses,
+        Err(err) => {
+            warn!(
+                peer = %cfg.peer_name,
+                error = %err,
+                "Failed to resolve node addresses"
+            );
+            Vec::new()
+        }
+    };
+    let preferred_address = pick_preferred_address(&node_addresses).unwrap_or_default();
+    if let Some(path) = &cfg.node_address_path {
+        let snapshot = NodeAddressSnapshot {
+            peer_name: cfg.peer_name.clone(),
+            node_addresses: node_addresses.clone(),
+            preferred_address: preferred_address.clone(),
+            written_at: Utc::now(),
+        };
+        if let Err(err) = write_node_address_snapshot(path, &snapshot).await {
+            warn!(
+                peer = %cfg.peer_name,
+                path = %path.display(),
+                error = %err,
+                "Failed to write node address snapshot"
+            );
+        }
+    }
+
+    if cfg.publish_metadata
+        && let Err(err) = publish_profile_metadata(&publisher, &stack, &cfg, &mut stats).await
+    {
+        stats.last_error = Some(err.to_string());
+        warn!(peer = %cfg.peer_name, error = %err, "Initial metadata publish failed");
+    }
+
     if cfg.mode == PeerMode::Publisher
+        && publish_enabled
         && let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await
     {
         stats.last_error = Some(err.to_string());
@@ -328,7 +490,7 @@ async fn main() -> anyhow::Result<()> {
             _ = tokio::signal::ctrl_c() => {
                 break "ctrl_c";
             }
-            _ = publish_tick.tick(), if cfg.mode == PeerMode::Publisher => {
+            _ = publish_tick.tick(), if cfg.mode == PeerMode::Publisher && publish_enabled => {
                 if let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await {
                     stats.last_error = Some(err.to_string());
                     warn!(peer = %cfg.peer_name, error = %err, "Periodic publish failed");
@@ -358,6 +520,13 @@ async fn main() -> anyhow::Result<()> {
                 match evt {
                     Ok(kukuri_lib::test_support::domain::p2p::P2PEvent::PeerJoined { .. }) => {
                         stats.peer_joined_events += 1;
+                        if cfg.mode == PeerMode::Publisher && cfg.publish_on_peer_join && !publish_enabled {
+                            publish_enabled = true;
+                            if let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await {
+                                stats.last_error = Some(err.to_string());
+                                warn!(peer = %cfg.peer_name, error = %err, "Peer-joined publish failed");
+                            }
+                        }
                     }
                     Ok(kukuri_lib::test_support::domain::p2p::P2PEvent::PeerLeft { .. }) => {
                         stats.peer_left_events += 1;
@@ -378,6 +547,8 @@ async fn main() -> anyhow::Result<()> {
         mode: cfg.mode.as_str().to_string(),
         topic_id: cfg.topic_id.clone(),
         bootstrap_peers: cfg.bootstrap_peers.clone(),
+        node_addresses,
+        preferred_address,
         started_at,
         finished_at: Utc::now(),
         uptime_ms: start_instant.elapsed().as_millis() as u64,
