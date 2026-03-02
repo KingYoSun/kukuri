@@ -31,3 +31,13 @@
 - `p2p.direct-peer.regression.spec.ts` の描画判定を安定化。`TimelineThreadCard` の件数差分ではなく、`getP2PMessageSnapshot` から抽出した新規メッセージ本文（marker）の表示有無で without-reload / after-reload を判定するよう変更。
 - 単発投稿ケースの厳密アサーションは env 指定時のみ有効化し、既定では観測重視（診断出力）に変更。marker 抽出不能時は `publishPrefix` へフォールバックして再現検証を継続可能にした。
 - 検証: `./scripts/test-docker.ps1 build` 実行後に `./scripts/test-docker.ps1 e2e-multi-peer`（`E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts`）を再実行し PASS、続けて既定 spec（`community-node.multi-peer.spec.ts`）も PASS。
+- IPv6強制の再現試験を実施。`multi-peer-up` 後に `docker compose ... run --rm test-runner` で `SCENARIO=multi-peer-e2e` / `E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts` を指定し、`peer-client-2.address.json` を IPv6 のみ（`@[2400:...]`）に調整して実行。
+- `KUKURI_ENABLE_DHT=0` / `KUKURI_ENABLE_DNS=0` / `KUKURI_ENABLE_LOCAL=0` / `E2E_DIRECT_PEER_PREFER_LOCAL_ADDRESS=0` 条件で、`connectToP2PPeer` と `joinP2PTopic(initialPeers)` が IPv6 宛て（`...@[2400:4050:...]:60748`）で試行されることを確認。
+- 再現結果: `Direct peer connection did not become active for ...@[2400:4050:...]:60748` で失敗し、`peer_count: 0` / `connection_status: 'disconnected'` のまま推移。実機で観測した「IPv6 経路で接続成立しない」現象をテストで再現できた。
+- 主要ログ: `tmp/logs/multi-peer-e2e/20260302-065906.log`（`connectToP2PPeer` 呼び出し、IPv6 fallback、最終タイムアウト） / 失敗時スクリーンショット `test-results/multi-peer-e2e/20260302-065906/1772435077086-reproduces-stale-realtime-timeline-rendering-and-unresolved-profile-label.png`。
+- 残タスク別の再現状況を整理。
+- 「直接接続時でも `/topics/${topicId}` の `TimelineThreadCard` とスレッド一覧がリアルタイム差分更新されない」は再現済み。`test-results/multi-peer-e2e/direct-peer-regression.json` で `renderedWithoutReload=false` / `renderedAfterReload=true` を確認。
+- 「相手プロフィールの表示名解決ができず、`ユーザー` 表示のままになる」は再現済み。`test-results/multi-peer-e2e/direct-peer-regression.json` で `profileResolved=false` を確認。
+- 「リプライ投稿が失敗する（`reply_to` の親投稿キャッシュ不足で `threadUuid` を解決できない）」は現行の community-node E2E では未再現。`tmp/logs/community-node-e2e/20260228-021555.log` の `tests/e2e/specs/topic.timeline-thread-flow.spec.ts` で `reply-submit-button` 実行後に `timeline-thread-first-reply-*` 描画と `PASSED` を確認。
+- 「スレッド一覧」「スレッドで開く」操作で画面遷移・表示更新が発生しない」は現行の community-node E2E では未再現。`tmp/logs/community-node-e2e/20260228-021555.log` で thread 一覧表示（`threadsBrowse topic threads...`）と `Open thread` 経由のフローが通過し `PASSED` を確認。
+- ただし上記2件（未再現）は community-node 経路での確認結果であり、multi-peer / IPv6 強制条件では未検証のため、再現条件の差分切り分けを継続する。

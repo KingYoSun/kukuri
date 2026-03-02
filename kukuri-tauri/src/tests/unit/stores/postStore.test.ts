@@ -412,6 +412,36 @@ describe('postStore', () => {
     });
   });
 
+  it('replyTo指定で親未キャッシュ時でも thread_uuid は UUID 形式へ正規化されること（不具合再現）', async () => {
+    const replyToEventId = 'a'.repeat(64);
+    mockCreatePost.mockResolvedValueOnce({
+      id: 'reply-post-normalized-thread-uuid',
+      content: 'reply body',
+      author_pubkey: 'pubkey123',
+      author_npub: 'npub1pubkey123',
+      topic_id: 'topic1',
+      created_at: 1_725_000_103,
+      likes: 0,
+      boosts: 0,
+      replies: 0,
+      is_synced: true,
+    });
+
+    await usePostStore.getState().createPost('reply body', 'topic1', {
+      replyTo: replyToEventId,
+    });
+
+    const payload = mockCreatePost.mock.calls.at(-1)?.[0] as {
+      thread_uuid: string;
+      reply_to?: string;
+    };
+    expect(payload.reply_to).toBe(replyToEventId);
+    expect(payload.thread_uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(payload.thread_uuid).not.toBe(replyToEventId);
+  });
+
   it('quotedPost繧呈欠螳壹☆繧九→quoted_post繝代Λ繝｡繝ｼ繧ｿ繧剃ｻ倅ｸ弱☆繧九％縺ｨ', async () => {
     const apiResponse = {
       id: 'quote-post',

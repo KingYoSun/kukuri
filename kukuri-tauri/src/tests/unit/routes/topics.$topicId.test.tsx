@@ -17,6 +17,7 @@ const storeMocks = vi.hoisted(() => ({
 const routerMocks = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   pathname: '/topics/topic-1',
+  topicId: 'topic-1',
 }));
 
 const uiStoreMocks = vi.hoisted(() => {
@@ -101,7 +102,7 @@ vi.mock('@tanstack/react-router', async () => {
     ...actual,
     Outlet: () => <div data-testid="mock-topic-outlet" />,
     createFileRoute: () => () => ({
-      useParams: () => ({ topicId: 'topic-1' }),
+      useParams: () => ({ topicId: routerMocks.topicId }),
     }),
     useNavigate: () => routerMocks.navigateMock,
     useLocation: (options?: { select?: (location: { pathname: string }) => unknown }) => {
@@ -159,6 +160,7 @@ describe('TopicPage right pane preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routerMocks.pathname = '/topics/topic-1';
+    routerMocks.topicId = 'topic-1';
     uiStoreMocks.state.timelineUpdateMode = 'standard';
     hooksMocks.useTopicTimelineMock.mockReturnValue({
       data: [buildEntry()],
@@ -205,5 +207,15 @@ describe('TopicPage right pane preview', () => {
     await user.click(screen.getByTestId('timeline-mode-toggle-realtime'));
 
     expect(uiStoreMocks.state.setTimelineUpdateMode).toHaveBeenCalledWith('realtime');
+  });
+
+  it('topicId に予約文字が含まれてもスレッドルートで Outlet を表示できること（不具合再現）', () => {
+    const reservedTopicId = 'kukuri:tauri:thread-route';
+    routerMocks.topicId = reservedTopicId;
+    routerMocks.pathname = `/topics/${reservedTopicId}/threads`;
+
+    render(<TopicPage />);
+
+    expect(screen.getByTestId('mock-topic-outlet')).toBeInTheDocument();
   });
 });

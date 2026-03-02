@@ -100,6 +100,18 @@ const parseTimeoutMs = (value: string | undefined, fallbackMs: number): number =
   return Math.floor(parsed);
 };
 
+const parseOptionalInt = (value: string | undefined): number | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.floor(parsed);
+};
+
 const parseBootstrapPeers = (): string[] => {
   const useBootstrap = parseOptionalBool(process.env.E2E_DIRECT_PEER_USE_BOOTSTRAP) === true;
   if (!useBootstrap) {
@@ -527,6 +539,11 @@ describe('Direct peer regression reproduction', () => {
     const bootstrapPeers = parseBootstrapPeers();
     const requireZeroPeersBeforeConnect =
       parseOptionalBool(process.env.E2E_DIRECT_PEER_REQUIRE_ZERO_BEFORE_CONNECT) ?? false;
+    const expectedPeersBeforeConnect = parseOptionalInt(
+      process.env.E2E_DIRECT_PEER_EXPECT_PEERS_BEFORE_CONNECT,
+    );
+    const skipDirectConnect =
+      parseOptionalBool(process.env.E2E_DIRECT_PEER_SKIP_DIRECT_CONNECT) ?? false;
 
     await setupTopicPageForDirectPeer(topicId, bootstrapPeers);
     const baselineTimelineSnapshot = await getTimelineThreadSnapshot(publishPrefix);
@@ -535,6 +552,9 @@ describe('Direct peer regression reproduction', () => {
 
     const beforeConnectStatus = await getP2PStatus();
     const beforeConnectPeerCount = getTopicPeerCount(beforeConnectStatus, topicId);
+    if (expectedPeersBeforeConnect !== null) {
+      expect(beforeConnectPeerCount).toBeGreaterThanOrEqual(expectedPeersBeforeConnect);
+    }
     if (requireZeroPeersBeforeConnect) {
       expect(beforeConnectPeerCount).toBe(0);
     }
@@ -546,7 +566,7 @@ describe('Direct peer regression reproduction', () => {
       'skip_already_connected';
     let connectToPeerError: string | null = null;
 
-    if (!isTargetPeerConnected(beforeConnectStatus, topicId, targetPeerNodeId)) {
+    if (!skipDirectConnect && !isTargetPeerConnected(beforeConnectStatus, topicId, targetPeerNodeId)) {
       connectAttempted = true;
       try {
         await connectToP2PPeer(peerAddress);
@@ -558,14 +578,16 @@ describe('Direct peer regression reproduction', () => {
       }
     }
 
-    await browser.waitUntil(
-      async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
-      {
-        timeout: 120000,
-        interval: 1000,
-        timeoutMsg: `Direct peer connection did not become active for ${peerAddress}`,
-      },
-    );
+    if (!skipDirectConnect) {
+      await browser.waitUntil(
+        async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
+        {
+          timeout: 120000,
+          interval: 1000,
+          timeoutMsg: `Direct peer connection did not become active for ${peerAddress}`,
+        },
+      );
+    }
 
     let postStoreAfterSingleArrival: PostStoreSnapshot | null = null;
     let p2pAfterSingleArrival: P2PMessageSnapshot | null = null;
@@ -669,6 +691,7 @@ describe('Direct peer regression reproduction', () => {
       peerAddress,
       targetPeerNodeId,
       connectAttempted,
+      skipDirectConnect,
       connectStrategy,
       connectToPeerError,
       publishPrefix,
@@ -679,6 +702,7 @@ describe('Direct peer regression reproduction', () => {
       singleArrivalContentMarker,
       propagationContentMarker: resolvedPropagationContentMarker,
       beforeConnectPeerCount,
+      expectedPeersBeforeConnect,
       afterConnectPeerCount,
       singlePostTimeoutMs,
       expectedSinglePostRendered,
