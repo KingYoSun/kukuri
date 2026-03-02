@@ -34,6 +34,8 @@ const DEFAULT_DIRECT_PEER_TIMEOUT_MS = 120000;
 interface PeerAddressSnapshot {
   peer_name?: string;
   node_addresses?: string[];
+  relay_urls?: string[];
+  connection_hints?: string[];
   preferred_address?: string;
 }
 
@@ -113,7 +115,9 @@ const parseOptionalInt = (value: string | undefined): number | null => {
 };
 
 const parseBootstrapPeers = (): string[] => {
-  const useBootstrap = parseOptionalBool(process.env.E2E_DIRECT_PEER_USE_BOOTSTRAP) === true;
+  const useBootstrap =
+    parseOptionalBool(process.env.E2E_DIRECT_PEER_USE_BOOTSTRAP) ??
+    process.env.SCENARIO === 'multi-peer-e2e';
   if (!useBootstrap) {
     return [];
   }
@@ -144,8 +148,73 @@ const summarySnapshotCandidates = (): string[] => {
   ];
 };
 
+interface ParsedPeerHint {
+  nodeId: string | null;
+  endpoint: string | null;
+  hasRelay: boolean;
+}
+
+const parsePeerHint = (address: string): ParsedPeerHint => {
+  const segments = address
+    .split('|')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  if (segments.length === 0) {
+    return {
+      nodeId: null,
+      endpoint: null,
+      hasRelay: false,
+    };
+  }
+
+  let nodeId: string | null = null;
+  let endpoint: string | null = null;
+  let hasRelay = false;
+
+  const first = segments[0] ?? '';
+  if (!first.includes('=')) {
+    if (first.includes('@')) {
+      const [rawNodeId, rawEndpoint] = first.split('@');
+      const normalizedNodeId = rawNodeId?.trim();
+      const normalizedEndpoint = rawEndpoint?.trim();
+      nodeId = normalizedNodeId && normalizedNodeId.length > 0 ? normalizedNodeId : null;
+      endpoint = normalizedEndpoint && normalizedEndpoint.length > 0 ? normalizedEndpoint : null;
+    } else {
+      const normalizedNodeId = first.trim();
+      nodeId = normalizedNodeId.length > 0 ? normalizedNodeId : null;
+    }
+  }
+
+  for (const segment of segments) {
+    const separatorIndex = segment.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = segment.slice(0, separatorIndex).trim().toLowerCase();
+    const value = segment.slice(separatorIndex + 1).trim();
+    if (!value) {
+      continue;
+    }
+
+    if (key === 'relay' || key === 'relay_url') {
+      hasRelay = true;
+      continue;
+    }
+    if ((key === 'addr' || key === 'ip') && !endpoint) {
+      endpoint = value;
+      continue;
+    }
+    if ((key === 'node' || key === 'node_id') && !nodeId) {
+      nodeId = value;
+    }
+  }
+
+  return { nodeId, endpoint, hasRelay };
+};
+
 const parsePeerAddressHost = (address: string): string | null => {
-  const [, endpoint] = address.split('@');
+  const { endpoint } = parsePeerHint(address);
   if (!endpoint) {
     return null;
   }
@@ -168,10 +237,10 @@ const parsePeerAddressHost = (address: string): string | null => {
 };
 
 const parsePeerAddressNodeId = (address: string): string | null => {
-  const [nodeId] = address.split('@');
-  const normalized = nodeId?.trim();
-  return normalized && normalized.length > 0 ? normalized : null;
+  return parsePeerHint(address).nodeId;
 };
+
+const hasRelayHint = (address: string): boolean => parsePeerHint(address).hasRelay;
 
 const isLoopbackHost = (host: string): boolean => {
   const normalized = host.trim().toLowerCase();
@@ -202,19 +271,31 @@ const isLocalRoutableHost = (host: string): boolean => {
 
 const pickPeerAddress = (snapshot: PeerAddressSnapshot): string | null => {
   const candidates = [
+    ...(snapshot.connection_hints ?? []).map((entry) => entry.trim()),
     snapshot.preferred_address?.trim(),
     ...(snapshot.node_addresses ?? []).map((entry) => entry.trim()),
   ].filter((entry): entry is string => Boolean(entry));
+  const dedupedCandidates = Array.from(new Set(candidates));
 
-  if (candidates.length === 0) {
+  if (dedupedCandidates.length === 0) {
     return null;
+  }
+
+  const preferRelayHint =
+    parseOptionalBool(process.env.E2E_DIRECT_PEER_PREFER_RELAY) ??
+    process.env.SCENARIO === 'multi-peer-e2e';
+  if (preferRelayHint) {
+    const relayCandidate = dedupedCandidates.find((candidate) => hasRelayHint(candidate));
+    if (relayCandidate) {
+      return relayCandidate;
+    }
   }
 
   const preferLocalAddress =
     parseOptionalBool(process.env.E2E_DIRECT_PEER_PREFER_LOCAL_ADDRESS) ??
     process.env.SCENARIO === 'multi-peer-e2e';
   if (preferLocalAddress) {
-    const localCandidate = candidates.find((candidate) => {
+    const localCandidate = dedupedCandidates.find((candidate) => {
       const host = parsePeerAddressHost(candidate);
       return host ? isLocalRoutableHost(host) : false;
     });
@@ -223,7 +304,7 @@ const pickPeerAddress = (snapshot: PeerAddressSnapshot): string | null => {
     }
   }
 
-  return candidates[0] ?? null;
+  return dedupedCandidates[0] ?? null;
 };
 
 const waitForPeerAddress = async (): Promise<string> => {

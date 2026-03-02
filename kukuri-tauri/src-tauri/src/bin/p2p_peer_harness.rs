@@ -6,9 +6,10 @@ use std::time::{Duration, Instant};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use iroh::SecretKey as IrohSecretKey;
-use kukuri_lib::test_support::application::services::p2p_service::P2PService;
+use kukuri_lib::test_support::application::services::p2p_service::{P2PService, P2PStack};
 use kukuri_lib::test_support::application::shared::nostr::EventPublisher;
 use kukuri_lib::test_support::domain::entities::Event as DomainEvent;
+use kukuri_lib::test_support::infrastructure::p2p::iroh_network_service::IrohNetworkService;
 use kukuri_lib::test_support::shared::config::{AppConfig, BootstrapSource, NetworkConfig};
 use nostr_sdk::prelude::{
     Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey,
@@ -88,6 +89,8 @@ struct HarnessSummary {
     topic_id: String,
     bootstrap_peers: Vec<String>,
     node_addresses: Vec<String>,
+    relay_urls: Vec<String>,
+    connection_hints: Vec<String>,
     preferred_address: String,
     started_at: DateTime<Utc>,
     finished_at: DateTime<Utc>,
@@ -317,8 +320,94 @@ fn push_recent_content(stats: &mut HarnessStats, content: &str) {
 struct NodeAddressSnapshot {
     peer_name: String,
     node_addresses: Vec<String>,
+    relay_urls: Vec<String>,
+    connection_hints: Vec<String>,
     preferred_address: String,
     written_at: DateTime<Utc>,
+}
+
+fn dedupe_in_order(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::new();
+    for value in values {
+        if seen.insert(value.clone()) {
+            deduped.push(value);
+        }
+    }
+    deduped
+}
+
+fn parse_node_id_from_address(address: &str) -> Option<String> {
+    let trimmed = address.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some((node_id, _)) = trimmed.split_once('@') {
+        let node_id = node_id.trim();
+        if !node_id.is_empty() {
+            return Some(node_id.to_string());
+        }
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn parse_endpoint_from_address(address: &str) -> Option<String> {
+    let (_, endpoint) = address.split_once('@')?;
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return None;
+    }
+    Some(endpoint.to_string())
+}
+
+fn build_connection_hints(node_addresses: &[String], relay_urls: &[String]) -> Vec<String> {
+    let node_id = node_addresses
+        .iter()
+        .find_map(|address| parse_node_id_from_address(address));
+    let mut hints = Vec::new();
+
+    if let Some(node_id) = node_id {
+        let endpoints: Vec<_> = node_addresses
+            .iter()
+            .filter_map(|address| parse_endpoint_from_address(address))
+            .collect();
+
+        for endpoint in endpoints {
+            for relay_url in relay_urls {
+                hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
+            }
+        }
+        for relay_url in relay_urls {
+            hints.push(format!("{node_id}|relay={relay_url}"));
+        }
+    }
+
+    hints.extend(node_addresses.iter().cloned());
+    dedupe_in_order(hints)
+}
+
+async fn resolve_relay_urls(stack: &P2PStack) -> Vec<String> {
+    let Some(network_service) = stack
+        .network_service
+        .as_any()
+        .downcast_ref::<IrohNetworkService>()
+    else {
+        return Vec::new();
+    };
+
+    if tokio::time::timeout(Duration::from_secs(10), network_service.endpoint().online())
+        .await
+        .is_err()
+    {
+        warn!("Timed out waiting for endpoint online state; relay URL snapshot may be empty");
+    }
+    let endpoint_addr = network_service.endpoint().addr();
+    let relay_urls = endpoint_addr
+        .relay_urls()
+        .map(|relay_url| relay_url.to_string())
+        .collect::<Vec<_>>();
+    dedupe_in_order(relay_urls)
 }
 
 fn endpoint_host(address: &str) -> Option<String> {
@@ -441,11 +530,17 @@ async fn main() -> anyhow::Result<()> {
             Vec::new()
         }
     };
-    let preferred_address = pick_preferred_address(&node_addresses).unwrap_or_default();
+    let relay_urls = resolve_relay_urls(&stack).await;
+    let connection_hints = build_connection_hints(&node_addresses, &relay_urls);
+    let preferred_address = pick_preferred_address(&node_addresses)
+        .or_else(|| connection_hints.first().cloned())
+        .unwrap_or_default();
     if let Some(path) = &cfg.node_address_path {
         let snapshot = NodeAddressSnapshot {
             peer_name: cfg.peer_name.clone(),
             node_addresses: node_addresses.clone(),
+            relay_urls: relay_urls.clone(),
+            connection_hints: connection_hints.clone(),
             preferred_address: preferred_address.clone(),
             written_at: Utc::now(),
         };
@@ -548,6 +643,8 @@ async fn main() -> anyhow::Result<()> {
         topic_id: cfg.topic_id.clone(),
         bootstrap_peers: cfg.bootstrap_peers.clone(),
         node_addresses,
+        relay_urls,
+        connection_hints,
         preferred_address,
         started_at,
         finished_at: Utc::now(),

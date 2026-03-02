@@ -12,7 +12,6 @@
 - P2Pトピック同期の不具合調査と修正（bootstrap反映、受信投稿のリアルタイム反映、プロフィール表示改善）
 
 ### 残タスク（2026年03月02日）
-- bootstrap / relay 経由でのピア接続が成立しない（`#public` 参加直後の peer 数が 0、投稿が伝播しない）。
 - 直接接続時でも `/topics/${topicId}` の `TimelineThreadCard` とスレッド一覧がリアルタイム差分更新されない（再読み込みや自端末操作が必要）。
 - 相手プロフィールの表示名解決ができず、`ユーザー` 表示のままになる。
 - リプライ投稿が失敗する（`reply_to` の親投稿キャッシュ不足で `threadUuid` を解決できない）。
@@ -41,3 +40,7 @@
 - 「リプライ投稿が失敗する（`reply_to` の親投稿キャッシュ不足で `threadUuid` を解決できない）」は現行の community-node E2E では未再現。`tmp/logs/community-node-e2e/20260228-021555.log` の `tests/e2e/specs/topic.timeline-thread-flow.spec.ts` で `reply-submit-button` 実行後に `timeline-thread-first-reply-*` 描画と `PASSED` を確認。
 - 「スレッド一覧」「スレッドで開く」操作で画面遷移・表示更新が発生しない」は現行の community-node E2E では未再現。`tmp/logs/community-node-e2e/20260228-021555.log` で thread 一覧表示（`threadsBrowse topic threads...`）と `Open thread` 経由のフローが通過し `PASSED` を確認。
 - ただし上記2件（未再現）は community-node 経路での確認結果であり、multi-peer / IPv6 強制条件では未検証のため、再現条件の差分切り分けを継続する。
+- `src-tauri` の `parse_peer_hint` / `parse_node_addr` を `node_id|relay=<url>|addr=<host:port>` 形式に対応させ、relay URL を含む `EndpointAddr` を組み立てられるように拡張（既存 `node_id@host:port` 互換を維持）。
+- `p2p_peer_harness` の address snapshot に `relay_urls` と `connection_hints` を追加し、relay 付き接続ヒント（`node_id|relay=...|addr=...`）を出力するように変更。
+- `p2p.direct-peer.regression.spec.ts` を更新し、multi-peer シナリオでは bootstrap 既定有効化 + relay ヒント優先選択で接続候補を解決するよう変更。
+- 検証: `./scripts/test-docker.ps1 e2e-multi-peer`（`E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts`）で PASS、`./scripts/test-docker.ps1 rust` で PASS。
