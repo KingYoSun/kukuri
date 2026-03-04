@@ -759,9 +759,7 @@ export async function joinP2PTopic(topicId: string, initialPeers: string[] = [])
 }
 
 export async function connectToP2PPeer(peerAddress: string): Promise<void> {
-  throw new Error(
-    `connectToP2PPeer is disabled for E2E. Use bootstrap API flow instead: ${peerAddress}`,
-  );
+  await callBridge('connectToP2PPeer', { peerAddress });
 }
 
 export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {
@@ -788,9 +786,7 @@ export async function accessControlIngestEventJson(eventJson: unknown): Promise<
   await callBridge('accessControlIngestEventJson', { event_json: eventJson });
 }
 
-export async function communityNodeAuthFlow(
-  baseUrl: string,
-): Promise<CommunityNodeAuthFlowResult> {
+export async function communityNodeAuthFlow(baseUrl: string): Promise<CommunityNodeAuthFlowResult> {
   return await callBridge('communityNodeAuthFlow', { baseUrl });
 }
 

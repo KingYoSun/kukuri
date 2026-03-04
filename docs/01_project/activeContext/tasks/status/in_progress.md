@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2026年03月04日
+最終更新日: 2026年03月05日
 
 ## 方針（2025年09月15日 更新）
 
@@ -44,3 +44,15 @@
 - `p2p_peer_harness` の address snapshot に `relay_urls` と `connection_hints` を追加し、relay 付き接続ヒント（`node_id|relay=...|addr=...`）を出力するように変更。
 - `p2p.direct-peer.regression.spec.ts` を更新し、multi-peer シナリオでは bootstrap 既定有効化 + relay ヒント優先選択で接続候補を解決するよう変更。
 - 検証: `./scripts/test-docker.ps1 e2e-multi-peer`（`E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts`）で PASS、`./scripts/test-docker.ps1 rust` で PASS。
+
+### 進捗メモ（2026年03月05日）
+- `docker-compose.test.yml` / `scripts/test-docker.ps1` を更新し、E2E で `cn-iroh-relay` を常時起動する経路を追加（`KUKURI_IROH_RELAY_URLS=http://127.0.0.1:3340`、`KUKURI_IROH_RELAY_MODE=custom` を multi-peer 既定に反映）。
+- `registerE2EBridge.connectToP2PPeer` を実実装化し、`bridge.ts` 側も `callBridge('connectToP2PPeer', ...)` を呼ぶよう変更（無効スタブを削除）。
+- `ensureTestTopic` から `addTopic` 直挿入を削除し、`fetchTopics` / `joinTopic` / `createTopic` の実フローへ統一。`topicId` 指定時は待機リトライ付きで参加・解決するよう修正。
+- `p2p.direct-peer.regression.spec.ts` の既定期待を再現前提から修正成功前提へ切替（`expectStale=false`、`expectProfileUnresolved=false`、`expectedSinglePostRendered=true`）。
+- 同 spec に `E2E_DIRECT_PEER_CONNECT_MODE=bootstrap|direct|both` を追加し、直結 join hint と `connectToP2PPeer` 呼び出しをモード制御可能にした（既定 `both`）。
+- 検証: `./scripts/test-docker.ps1 e2e-multi-peer`（`E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts`）は FAIL。`renderedWithoutReload` が `true` にならず、成功期待のまま適切に失敗することを確認（`tmp/logs/multi-peer-e2e/20260304-165439.log`）。
+- 検証: `E2E_DIRECT_PEER_CONNECT_MODE=direct` 指定でも同 spec は FAIL。今度は表示名解決が `true` にならず失敗（`tmp/logs/multi-peer-e2e/20260304-170650.log`）。直結経路を実際に試せる状態にはなっている。
+- 検証: `./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/topic.timeline-thread-flow.spec.ts`）は PASS（`tmp/logs/community-node-e2e/20260304-165811.log`）。`thread-preview-pane` と `timeline-thread-open-*` 導線を含む「右ペイン導線」テストが実行され、通過を確認。
+- 検証: `./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts`）は FAIL（`tmp/logs/community-node-e2e/20260304-170301.log`）。`ensureTestTopic` 呼び出し時に WebDriver 側 `Database operation failed` が継続し、原因切り分けを継続中。
+- `community-node.invite.spec.ts` は待機ロジックを `settings-page` 全文検索から `community-node-saved-key-topic` 監視に切替。`CommunityNodePanel.tsx` に対応する `data-testid` を追加したが、上記 WebDriver 失敗は未解消。

@@ -553,42 +553,7 @@ export function registerE2EBridge(): void {
             (payload?.name || '').trim() || `e2e-offline-topic-${Date.now().toString(36)}`;
           const explicitId = (payload?.topicId ?? '').trim();
 
-          if (explicitId) {
-            const existingById = Array.from(useTopicStore.getState().topics.values()).find(
-              (topic) => topic.id === explicitId,
-            );
-            if (existingById) {
-              return { id: existingById.id, name: existingById.name };
-            }
-
-            const now = new Date();
-            useTopicStore.getState().addTopic({
-              id: explicitId,
-              name: desiredName,
-              description: 'E2E invite topic',
-              tags: [],
-              memberCount: 1,
-              postCount: 0,
-              isActive: true,
-              createdAt: now,
-              visibility: 'public',
-              isJoined: true,
-            });
-            return { id: explicitId, name: desiredName };
-          }
-
-          const existing = Array.from(useTopicStore.getState().topics.values()).find(
-            (topic) => topic.name === desiredName,
-          );
-          if (existing) {
-            return { id: existing.id, name: existing.name };
-          }
-          try {
-            const created = await TauriApi.createTopic({
-              name: desiredName,
-              description: 'E2E offline sync topic',
-              visibility: 'public',
-            });
+          const refreshTopics = async () => {
             try {
               await useTopicStore.getState().fetchTopics();
             } catch (error) {
@@ -596,16 +561,95 @@ export function registerE2EBridge(): void {
                 context: 'registerE2EBridge.ensureTestTopic',
               });
             }
+          };
+
+          const findById = (topicId: string) =>
+            Array.from(useTopicStore.getState().topics.values()).find(
+              (topic) => topic.id === topicId,
+            );
+
+          const findByName = (name: string) =>
+            Array.from(useTopicStore.getState().topics.values()).find(
+              (topic) => topic.name === name,
+            );
+
+          const waitForTopicById = async (topicId: string, timeoutMs = 30_000) => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              await refreshTopics();
+              const topic = findById(topicId);
+              if (topic) {
+                return topic;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 500));
+            }
+            return null;
+          };
+
+          const ensureJoined = async (topicId: string) => {
+            const state = useTopicStore.getState();
+            if (!state.joinedTopics.includes(topicId)) {
+              await state.joinTopic(topicId);
+            }
+          };
+
+          await refreshTopics();
+
+          if (explicitId) {
+            const existingById = await waitForTopicById(explicitId, 5_000);
+            if (existingById) {
+              await ensureJoined(existingById.id);
+              return { id: existingById.id, name: existingById.name };
+            }
+
+            let joinError: unknown = null;
+            try {
+              await useTopicStore.getState().joinTopic(explicitId);
+              await refreshTopics();
+            } catch (error) {
+              joinError = error;
+              errorHandler.log('E2EBridge.ensureTestTopic.joinFailed', error, {
+                context: 'registerE2EBridge.ensureTestTopic',
+                metadata: { topicId: explicitId },
+              });
+            }
+
+            const joinedById = await waitForTopicById(explicitId);
+            if (joinedById) {
+              await ensureJoined(joinedById.id);
+              return { id: joinedById.id, name: joinedById.name };
+            }
+
+            if (joinError) {
+              throw joinError;
+            }
+            throw new Error(`Topic ${explicitId} was not found after join`);
+          }
+
+          const existingByName = findByName(desiredName);
+          if (existingByName) {
+            await ensureJoined(existingByName.id);
+            return { id: existingByName.id, name: existingByName.name };
+          }
+
+          try {
+            const created = await TauriApi.createTopic({
+              name: desiredName,
+              description: 'E2E offline sync topic',
+              visibility: 'public',
+            });
+            await refreshTopics();
+            const createdTopic = findById(created.id) ?? findByName(created.name ?? desiredName);
+            if (createdTopic) {
+              await ensureJoined(createdTopic.id);
+              return { id: createdTopic.id, name: createdTopic.name };
+            }
             return { id: created.id, name: created.name ?? desiredName };
           } catch (error) {
             errorHandler.log('E2EBridge.ensureTestTopic.createFailed', error, {
               context: 'registerE2EBridge.ensureTestTopic',
               metadata: { name: desiredName },
             });
-            const fallback = Array.from(useTopicStore.getState().topics.values())[0] ?? null;
-            if (fallback) {
-              return { id: fallback.id, name: fallback.name };
-            }
             throw error;
           }
         },
@@ -1498,9 +1542,8 @@ export function registerE2EBridge(): void {
           if (!peerAddress) {
             throw new Error('peerAddress is required');
           }
-          throw new Error(
-            `connectToP2PPeer is disabled in E2E. Use bootstrap API flow (bootstrap nodes -> relay hints -> joinP2PTopic) instead: ${peerAddress}`,
-          );
+          await p2pApi.connectToPeer(peerAddress);
+          await refreshRelayStatusSafe();
         },
         seedFriendPlusAccounts: async () => {
           const authState = useAuthStore.getState();

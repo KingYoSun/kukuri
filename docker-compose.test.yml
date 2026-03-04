@@ -18,6 +18,23 @@ services:
       retries: 10
     command: ["p2p", "bootstrap"]
 
+  # P2P統合テスト用 iroh relay
+  cn-iroh-relay:
+    build:
+      context: ./kukuri-community-node/docker/iroh-relay
+    container_name: kukuri-cn-iroh-relay
+    network_mode: host
+    environment:
+      IROH_RELAY_DEV: "${IROH_RELAY_DEV:-1}"
+      IROH_RELAY_CONFIG_PATH: "${IROH_RELAY_CONFIG_PATH:-}"
+      RUST_LOG: "${IROH_RELAY_LOG_LEVEL:-info}"
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+
   # Community node user API (E2E)
   community-node-postgres:
     build:
@@ -90,6 +107,8 @@ services:
       dockerfile: Dockerfile.test
     container_name: kukuri-test-runner
     depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
@@ -117,6 +136,8 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
       KUKURI_BOOTSTRAP_HOST: "${KUKURI_BOOTSTRAP_HOST:-127.0.0.1}"
       KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
       KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
       KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
       KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
@@ -154,6 +175,8 @@ services:
     container_name: kukuri-peer-client-1
     entrypoint: ["/app/run-multi-peer-manual.sh"]
     depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
@@ -172,6 +195,8 @@ services:
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: "-C strip=debuginfo"
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-1"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_1:-listener}"
@@ -191,6 +216,8 @@ services:
     container_name: kukuri-peer-client-2
     entrypoint: ["/app/run-multi-peer-manual.sh"]
     depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
@@ -209,6 +236,8 @@ services:
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: "-C strip=debuginfo"
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-2"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_2:-publisher}"
@@ -232,6 +261,8 @@ services:
     container_name: kukuri-peer-client-3
     entrypoint: ["/app/run-multi-peer-manual.sh"]
     depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
@@ -250,6 +281,8 @@ services:
       CARGO_PROFILE_TEST_DEBUG: "0"
       RUSTFLAGS: "-C strip=debuginfo"
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-3"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_3:-listener}"

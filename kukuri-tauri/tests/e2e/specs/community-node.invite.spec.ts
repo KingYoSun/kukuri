@@ -120,12 +120,22 @@ describe('Community Node invite flow', () => {
     await inviteInput.setValue(INVITE_JSON);
     await $('[data-testid="community-node-request-join"]').click();
 
-    const settingsPage = await $('[data-testid="settings-page"]');
-    await browser.waitUntil(async () => (await settingsPage.getText()).includes(topicId ?? ''), {
-      timeout: 30000,
-      interval: 500,
-      timeoutMsg: 'Key envelope was not stored after P2P join request',
-    });
+    await browser.waitUntil(
+      async () => {
+        const topicEntries = await $$('[data-testid="community-node-saved-key-topic"]');
+        for (const entry of topicEntries) {
+          if ((await entry.getText()).trim() === topicId) {
+            return true;
+          }
+        }
+        return false;
+      },
+      {
+        timeout: 30000,
+        interval: 500,
+        timeoutMsg: 'Key envelope was not stored after P2P join request',
+      },
+    );
 
     const topic = await ensureTestTopic({ name: TOPIC_NAME, topicId });
     expect(topic.id).toBe(topicId);

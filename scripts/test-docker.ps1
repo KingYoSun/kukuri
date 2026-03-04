@@ -172,7 +172,7 @@ $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
 $BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 $BootstrapContainerName = "kukuri-p2p-bootstrap"
-$MultiPeerServices = @("p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
+$MultiPeerServices = @("cn-iroh-relay", "p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
 
 # Docker Compose�R�}���h�̎��s
 function Invoke-DockerCompose {
@@ -1197,13 +1197,14 @@ function Start-MultiPeerClients {
     if (-not $NoBuild) {
         Build-TestImage
         Write-Host "Building docker multi-peer service images..."
-        Invoke-DockerCompose @("build", "p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
+        Invoke-DockerCompose @("build", "cn-iroh-relay", "p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
     }
 
     Write-Host "Starting docker multi-peer clients..."
     $cleanupArgs = @("rm", "-sf") + $MultiPeerServices
     Invoke-DockerCompose $cleanupArgs -IgnoreFailure | Out-Null
 
+    Invoke-DockerCompose @("up", "-d", "cn-iroh-relay")
     Invoke-DockerCompose @("up", "-d", "p2p-bootstrap")
     $peerServices = @("peer-client-1", "peer-client-2", "peer-client-3")
     foreach ($service in $peerServices) {
@@ -1237,6 +1238,8 @@ function Invoke-DesktopE2EMultiPeerScenario {
     $previousExpected = $env:E2E_MULTI_PEER_EXPECTED_MIN
     $previousPrefix = $env:E2E_MULTI_PEER_PUBLISH_PREFIX
     $previousOutputGroup = $env:KUKURI_PEER_OUTPUT_GROUP
+    $previousRelayUrls = $env:KUKURI_IROH_RELAY_URLS
+    $previousRelayMode = $env:KUKURI_IROH_RELAY_MODE
 
     $env:SCENARIO = "multi-peer-e2e"
     if ([string]::IsNullOrWhiteSpace($env:E2E_SPEC_PATTERN)) {
@@ -1250,6 +1253,12 @@ function Invoke-DesktopE2EMultiPeerScenario {
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_PEER_OUTPUT_GROUP)) {
         $env:KUKURI_PEER_OUTPUT_GROUP = "multi-peer-e2e"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
+        $env:KUKURI_IROH_RELAY_URLS = "http://127.0.0.1:3340"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
+        $env:KUKURI_IROH_RELAY_MODE = "custom"
     }
 
     try {
@@ -1283,6 +1292,16 @@ function Invoke-DesktopE2EMultiPeerScenario {
             $env:KUKURI_PEER_OUTPUT_GROUP = $previousOutputGroup
         } else {
             Remove-Item Env:KUKURI_PEER_OUTPUT_GROUP -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayUrls) {
+            $env:KUKURI_IROH_RELAY_URLS = $previousRelayUrls
+        } else {
+            Remove-Item Env:KUKURI_IROH_RELAY_URLS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayMode) {
+            $env:KUKURI_IROH_RELAY_MODE = $previousRelayMode
+        } else {
+            Remove-Item Env:KUKURI_IROH_RELAY_MODE -ErrorAction SilentlyContinue
         }
     }
 

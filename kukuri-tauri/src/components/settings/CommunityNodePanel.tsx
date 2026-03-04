@@ -814,13 +814,15 @@ export function CommunityNodePanel() {
         <div className="space-y-3">
           <p className="font-medium">{t('communityNodePanel.savedKeys')}</p>
           {groupKeysQuery.data && groupKeysQuery.data.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="community-node-saved-keys">
               {groupKeysQuery.data.map((entry) => (
                 <div
                   key={`${entry.topic_id}-${entry.scope}-${entry.epoch}`}
                   className="rounded-md border p-3 text-sm"
                 >
-                  <div className="font-medium">{entry.topic_id}</div>
+                  <div className="font-medium" data-testid="community-node-saved-key-topic">
+                    {entry.topic_id}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     scope: {entry.scope} / epoch: {entry.epoch} / stored:{' '}
                     {formatDateTimeByI18n(entry.stored_at * 1000)}

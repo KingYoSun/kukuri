@@ -10,6 +10,7 @@ import {
   type ProfileInfo,
 } from '../helpers/appActions';
 import {
+  connectToP2PPeer,
   ensureTestTopic,
   getBootstrapSnapshot,
   getP2PMessageSnapshot,
@@ -58,7 +59,7 @@ interface TimelineThreadSnapshot {
 const profile: ProfileInfo = {
   name: 'E2E Direct Peer',
   displayName: 'direct-peer-regression',
-  about: 'Direct peer regression reproduction',
+  about: 'Direct peer realtime propagation validation',
 };
 
 const resolveEnvString = (value: string | undefined, fallback: string): string => {
@@ -71,20 +72,10 @@ const parseOptionalBool = (value: string | undefined): boolean | null => {
     return null;
   }
   const normalized = value.trim().toLowerCase();
-  if (
-    normalized === '1' ||
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'on'
-  ) {
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') {
     return true;
   }
-  if (
-    normalized === '0' ||
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'off'
-  ) {
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') {
     return false;
   }
   return null;
@@ -114,6 +105,27 @@ const parseOptionalInt = (value: string | undefined): number | null => {
   return Math.floor(parsed);
 };
 
+type DirectPeerConnectMode = 'bootstrap' | 'direct' | 'both';
+
+const resolveConnectMode = (): DirectPeerConnectMode => {
+  const raw = process.env.E2E_DIRECT_PEER_CONNECT_MODE?.trim().toLowerCase();
+  if (raw === 'bootstrap' || raw === 'direct' || raw === 'both') {
+    return raw;
+  }
+  return 'both';
+};
+
+const shouldUseDirectJoinHints = (mode: DirectPeerConnectMode): boolean =>
+  mode === 'direct' || mode === 'both';
+
+const shouldCallDirectConnect = (mode: DirectPeerConnectMode): boolean => {
+  const explicit = parseOptionalBool(process.env.E2E_DIRECT_PEER_CALL_CONNECT);
+  if (explicit !== null) {
+    return explicit;
+  }
+  return mode !== 'bootstrap';
+};
+
 const parseBootstrapPeers = (): string[] => {
   const useBootstrap =
     parseOptionalBool(process.env.E2E_DIRECT_PEER_USE_BOOTSTRAP) ??
@@ -128,7 +140,8 @@ const parseBootstrapPeers = (): string[] => {
   return peers.length > 0 ? peers : [DEFAULT_BOOTSTRAP_PEER];
 };
 
-const normalizeNodeId = (value: string): string | null => parsePeerAddressNodeId(value)?.trim() ?? null;
+const normalizeNodeId = (value: string): string | null =>
+  parsePeerAddressNodeId(value)?.trim() ?? null;
 
 const hasExpectedBootstrapNode = (effectiveNodes: string[], expectedNodes: string[]): boolean => {
   const expectedNodeIds = expectedNodes
@@ -394,7 +407,10 @@ const openTopic = async (topicId: string): Promise<void> => {
   await browser.waitUntil(
     async () => {
       const currentUrl = decodeURIComponent(await browser.getUrl());
-      return currentUrl.includes(`/topics/${topicId}`) || currentUrl.includes(`/topics/${encodedTopicId}`);
+      return (
+        currentUrl.includes(`/topics/${topicId}`) ||
+        currentUrl.includes(`/topics/${encodedTopicId}`)
+      );
     },
     {
       timeout: 30000,
@@ -424,24 +440,21 @@ const waitForBodyText = async (needle: string, timeoutMs: number): Promise<boole
 };
 
 const getTimelineThreadSnapshot = async (needle: string): Promise<TimelineThreadSnapshot> => {
-  return await browser.execute(
-    (contentNeedle: string) => {
-      const cards = Array.from(
-        document.querySelectorAll<HTMLElement>('[data-testid^="timeline-thread-card-"]'),
-      );
-      const ids = cards
-        .map((card) => card.getAttribute('data-testid') ?? '')
-        .filter((value) => value.length > 0);
-      const texts = cards.map((card) => card.innerText ?? '');
-      return {
-        ids,
-        count: cards.length,
-        textDigest: texts.join('\n----\n'),
-        containsNeedle: texts.some((text) => text.includes(contentNeedle)),
-      };
-    },
-    needle,
-  );
+  return await browser.execute((contentNeedle: string) => {
+    const cards = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-testid^="timeline-thread-card-"]'),
+    );
+    const ids = cards
+      .map((card) => card.getAttribute('data-testid') ?? '')
+      .filter((value) => value.length > 0);
+    const texts = cards.map((card) => card.innerText ?? '');
+    return {
+      ids,
+      count: cards.length,
+      textDigest: texts.join('\n----\n'),
+      containsNeedle: texts.some((text) => text.includes(contentNeedle)),
+    };
+  }, needle);
 };
 
 const hasTimelineSnapshotChanged = (
@@ -547,10 +560,7 @@ const waitForP2PMessageAdvance = async (
         latest = await getP2PMessageSnapshot(topicId);
         const hasNewId = latest.recentMessageIds.some((messageId) => !baselineIds.has(messageId));
         const hasPrefix = latest.recentContents.some((content) => content.includes(publishPrefix));
-        return (
-          (latest.count > baseline.count || hasNewId) &&
-          hasPrefix
-        );
+        return (latest.count > baseline.count || hasNewId) && hasPrefix;
       },
       {
         timeout: timeoutMs,
@@ -565,7 +575,10 @@ const waitForP2PMessageAdvance = async (
   }
 };
 
-const setupTopicPageForDirectPeer = async (topicId: string): Promise<void> => {
+const setupTopicPageForDirectPeer = async (
+  topicId: string,
+  initialPeers: string[] = [],
+): Promise<void> => {
   await waitForWelcome();
   await $('[data-testid="welcome-create-account"]').click();
   await completeProfileSetup(profile);
@@ -576,31 +589,27 @@ const setupTopicPageForDirectPeer = async (topicId: string): Promise<void> => {
     topicId,
   });
 
-  // 実機経路に合わせて、topic join 時に direct peer hint を渡さない。
-  await joinP2PTopic(topicId, []);
+  await joinP2PTopic(topicId, initialPeers);
   await setTimelineUpdateMode('realtime');
   await openTopic(topicId);
 };
 
-const writeDiagnostics = (payload: Record<string, unknown>, fileName = 'direct-peer-regression.json') => {
-  const diagnosticsPath = resolve(
-    process.cwd(),
-    '..',
-    'test-results',
-    'multi-peer-e2e',
-    fileName,
-  );
+const writeDiagnostics = (
+  payload: Record<string, unknown>,
+  fileName = 'direct-peer-regression.json',
+) => {
+  const diagnosticsPath = resolve(process.cwd(), '..', 'test-results', 'multi-peer-e2e', fileName);
   mkdirSync(dirname(diagnosticsPath), { recursive: true });
   writeFileSync(diagnosticsPath, JSON.stringify(payload, null, 2), 'utf-8');
 };
 
-describe('Direct peer regression reproduction', () => {
+describe('Direct peer realtime propagation', () => {
   beforeEach(async () => {
     await waitForAppReady();
     await resetAppState();
   });
 
-  it('reproduces stale realtime timeline rendering and unresolved profile label', async function () {
+  it('updates timeline in realtime and resolves profile label without reload', async function () {
     this.timeout(420000);
 
     if (process.env.SCENARIO !== 'multi-peer-e2e') {
@@ -613,18 +622,20 @@ describe('Direct peer regression reproduction', () => {
       process.env.E2E_MULTI_PEER_PUBLISH_PREFIX,
       DEFAULT_PUBLISH_PREFIX,
     );
-    const expectStaleRender = parseOptionalBool(process.env.E2E_DIRECT_PEER_EXPECT_STALE) ?? true;
+    const connectMode = resolveConnectMode();
+    const useDirectJoinHints = shouldUseDirectJoinHints(connectMode);
+    const callDirectConnect = shouldCallDirectConnect(connectMode);
+    const expectStaleRender = parseOptionalBool(process.env.E2E_DIRECT_PEER_EXPECT_STALE) ?? false;
     const expectProfileUnresolved =
-      parseOptionalBool(process.env.E2E_DIRECT_PEER_EXPECT_PROFILE_UNRESOLVED) ?? true;
+      parseOptionalBool(process.env.E2E_DIRECT_PEER_EXPECT_PROFILE_UNRESOLVED) ?? false;
     const enableSinglePostCase =
       parseOptionalBool(process.env.E2E_DIRECT_PEER_SINGLE_POST_CASE) ?? true;
     const singlePostTimeoutMs = parseTimeoutMs(
       process.env.E2E_DIRECT_PEER_SINGLE_POST_TIMEOUT_MS,
       DEFAULT_DIRECT_PEER_TIMEOUT_MS,
     );
-    const expectedSinglePostRendered = parseOptionalBool(
-      process.env.E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED,
-    );
+    const expectedSinglePostRendered =
+      parseOptionalBool(process.env.E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED) ?? true;
     const requireStrictSinglePublish =
       parseOptionalBool(process.env.E2E_DIRECT_PEER_SINGLE_POST_REQUIRE_STRICT) ?? false;
     const expectedProfileName = resolveEnvString(
@@ -638,24 +649,30 @@ describe('Direct peer regression reproduction', () => {
       process.env.E2E_DIRECT_PEER_EXPECT_PEERS_BEFORE_CONNECT,
     );
     let bootstrapSnapshot = await getBootstrapSnapshot();
-    await browser.waitUntil(
-      async () => {
-        bootstrapSnapshot = await getBootstrapSnapshot();
-        if (bootstrapSnapshot.effectiveNodes.length === 0) {
-          return false;
-        }
-        return hasExpectedBootstrapNode(bootstrapSnapshot.effectiveNodes, bootstrapPeers);
-      },
-      {
-        timeout: 60000,
-        interval: 1000,
-        timeoutMsg: `Effective bootstrap nodes were not ready: expected=${JSON.stringify(
-          bootstrapPeers,
-        )}`,
-      },
-    );
+    if (bootstrapPeers.length > 0) {
+      await browser.waitUntil(
+        async () => {
+          bootstrapSnapshot = await getBootstrapSnapshot();
+          if (bootstrapSnapshot.effectiveNodes.length === 0) {
+            return false;
+          }
+          return hasExpectedBootstrapNode(bootstrapSnapshot.effectiveNodes, bootstrapPeers);
+        },
+        {
+          timeout: 60000,
+          interval: 1000,
+          timeoutMsg: `Effective bootstrap nodes were not ready: expected=${JSON.stringify(
+            bootstrapPeers,
+          )}`,
+        },
+      );
+    }
 
-    await setupTopicPageForDirectPeer(topicId);
+    const peerAddress = await waitForPeerAddress();
+    const targetPeerNodeId = parsePeerAddressNodeId(peerAddress);
+    const joinInitialPeers = useDirectJoinHints ? [peerAddress] : [];
+
+    await setupTopicPageForDirectPeer(topicId, joinInitialPeers);
     const baselineTimelineSnapshot = await getTimelineThreadSnapshot(publishPrefix);
     const baselinePostStoreSnapshot = await getPostStoreSnapshot(topicId);
     const baselineP2PSnapshot = await getP2PMessageSnapshot(topicId);
@@ -669,14 +686,16 @@ describe('Direct peer regression reproduction', () => {
       expect(beforeConnectPeerCount).toBe(0);
     }
 
-    const peerAddress = await waitForPeerAddress();
-    const targetPeerNodeId = parsePeerAddressNodeId(peerAddress);
+    if (callDirectConnect) {
+      await connectToP2PPeer(peerAddress);
+    }
+
     await browser.waitUntil(
       async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
       {
         timeout: 120000,
         interval: 1000,
-        timeoutMsg: `Bootstrap/relay peer discovery did not become active for ${peerAddress}`,
+        timeoutMsg: `Peer connection did not become active for ${peerAddress} (mode=${connectMode})`,
       },
     );
 
@@ -703,8 +722,13 @@ describe('Direct peer regression reproduction', () => {
       if (!singleArrivalContentMarker) {
         singleArrivalContentMarker = publishPrefix;
       }
-      timelineSnapshotAfterSingleArrival = await getTimelineThreadSnapshot(singleArrivalContentMarker);
-      renderedOnSingleArrivalWithoutLocalAction = await waitForBodyText(singleArrivalContentMarker, 2000);
+      timelineSnapshotAfterSingleArrival = await getTimelineThreadSnapshot(
+        singleArrivalContentMarker,
+      );
+      renderedOnSingleArrivalWithoutLocalAction = await waitForBodyText(
+        singleArrivalContentMarker,
+        2000,
+      );
       bodyContainsPrefixWithoutLocalAction = await waitForBodyText(publishPrefix, 2000);
 
       if (requireStrictSinglePublish) {
@@ -712,9 +736,7 @@ describe('Direct peer regression reproduction', () => {
         strictPublishedCount = peerSummary.stats?.published_count ?? 0;
         expect(strictPublishedCount).toBe(1);
       }
-      if (expectedSinglePostRendered !== null) {
-        expect(renderedOnSingleArrivalWithoutLocalAction).toBe(expectedSinglePostRendered);
-      }
+      expect(renderedOnSingleArrivalWithoutLocalAction).toBe(expectedSinglePostRendered);
     }
 
     const p2pSnapshotAfterPropagation = enableSinglePostCase
@@ -781,7 +803,10 @@ describe('Direct peer regression reproduction', () => {
       topicId,
       peerAddress,
       targetPeerNodeId,
-      connectMode: 'bootstrap_discovery_only',
+      connectMode,
+      useDirectJoinHints,
+      callDirectConnect,
+      joinInitialPeers,
       bootstrapSnapshot,
       publishPrefix,
       expectedProfileName,
