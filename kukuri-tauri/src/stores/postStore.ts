@@ -12,6 +12,9 @@ import { useTopicStore } from './topicStore';
 import { invalidatePostCaches } from '@/lib/posts/cacheUtils';
 import { queryClient } from '@/lib/queryClient';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NOSTR_EVENT_ID_PATTERN = /^[0-9a-f]{64}$/i;
+
 const sortPostsDesc = (posts: Post[]): Post[] =>
   [...posts].sort((a, b) => b.created_at - a.created_at);
 
@@ -93,6 +96,44 @@ const normalizePost = (post: Post): Post => {
     replies,
     replyCount: resolveReplyCount(post),
   };
+};
+
+const deriveThreadUuidFromSeed = (seed: string): string => {
+  let normalizedSeed = seed
+    .replace(/[^0-9a-f]/gi, '')
+    .slice(0, 32)
+    .toLowerCase();
+  while (normalizedSeed.length < 32) {
+    normalizedSeed += '0';
+  }
+
+  const bytes = new Uint8Array(16);
+  for (let index = 0; index < bytes.length; index += 1) {
+    const start = index * 2;
+    const segment = normalizedSeed.slice(start, start + 2);
+    const parsed = Number.parseInt(segment, 16);
+    bytes[index] = Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+const resolveReplyFallbackThreadUuid = (replyTo?: string): string | undefined => {
+  const candidate = replyTo?.trim();
+  if (!candidate) {
+    return undefined;
+  }
+  if (UUID_PATTERN.test(candidate)) {
+    return candidate;
+  }
+  if (NOSTR_EVENT_ID_PATTERN.test(candidate)) {
+    return deriveThreadUuidFromSeed(candidate);
+  }
+  return candidate;
 };
 
 type DeletePostRemoteInput = {
@@ -243,12 +284,20 @@ export const usePostStore = create<PostStore>()((set, get) => ({
     const explicitThreadUuid = options?.threadUuid?.trim();
     const parentPost = options?.replyTo ? get().posts.get(options.replyTo) : undefined;
     const parentThreadUuid = parentPost?.threadUuid?.trim();
-    const fallbackReplyThreadUuid = options?.replyTo?.trim();
-    if (options?.replyTo && !explicitThreadUuid && !parentThreadUuid) {
-      errorHandler.warn(
-        'reply_to parent was not cached; fallback to reply target as thread uuid',
-        'PostStore.createPost',
-      );
+    const replyTo = options?.replyTo?.trim();
+    const fallbackReplyThreadUuid = resolveReplyFallbackThreadUuid(replyTo);
+    if (replyTo && !explicitThreadUuid && !parentThreadUuid) {
+      if (fallbackReplyThreadUuid !== replyTo) {
+        errorHandler.warn(
+          'reply_to parent was not cached; normalized reply target to uuid thread id',
+          'PostStore.createPost',
+        );
+      } else {
+        errorHandler.warn(
+          'reply_to parent was not cached; fallback to reply target as thread uuid',
+          'PostStore.createPost',
+        );
+      }
     }
     const resolvedThreadUuid =
       explicitThreadUuid || parentThreadUuid || fallbackReplyThreadUuid || uuidv4();

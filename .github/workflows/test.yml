@@ -782,10 +782,8 @@ jobs:
 
           docker run --rm --network "${COMMUNITY_NODE_COMPOSE_PROJECT}_community-node-network" \
             -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-            -v "${GITHUB_WORKSPACE}:/workspace" \
-            -w /workspace/kukuri-community-node \
             "$test_runner_image" \
-            bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
+            bash -lc "set -euo pipefail; source /usr/local/cargo/env; cd /app/kukuri-community-node; cargo test --workspace --all-features; cargo build --release -p cn-cli"
 
       - name: Collect Community Node diagnostics on failure
         if: failure() || cancelled()

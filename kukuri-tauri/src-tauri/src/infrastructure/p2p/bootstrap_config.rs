@@ -337,10 +337,7 @@ fn normalize_extended_hint(entry: &str) -> Option<String> {
                 relay_urls.push(relay_url.to_string());
             }
             "addr" | "ip" => {
-                addr_hint = normalize_host_port_for_storage(entry, value);
-                if addr_hint.is_none() {
-                    return None;
-                }
+                addr_hint = Some(normalize_host_port_for_storage(entry, value)?);
             }
             "node" | "node_id" => {
                 if value != node_id {

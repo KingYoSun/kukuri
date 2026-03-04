@@ -238,7 +238,8 @@ describe('p2pApi', () => {
       );
 
       expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
-        peerAddress: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.100:4001',
+        peerAddress:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@192.168.1.100:4001',
       });
     });
 
@@ -260,7 +261,8 @@ describe('p2pApi', () => {
       );
 
       expect(invoke).toHaveBeenCalledWith('connect_to_peer', {
-        peerAddress: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
+        peerAddress:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@[2001:db8::1]:4001',
       });
     });
   });

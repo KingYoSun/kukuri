@@ -84,16 +84,14 @@ const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
       return null;
     }
 
-    let nodeId = '';
-    let endpoint: string | null = null;
+    const [nodeId, initialEndpoint] = first.includes('@')
+      ? (() => {
+          const [rawNodeId, rawEndpoint] = first.split('@');
+          return [rawNodeId?.trim() ?? '', rawEndpoint?.trim() || null] as const;
+        })()
+      : ([first.trim(), null] as const);
+    let endpoint: string | null = initialEndpoint;
     let hasRelay = false;
-    if (first.includes('@')) {
-      const [rawNodeId, rawEndpoint] = first.split('@');
-      nodeId = rawNodeId?.trim() ?? '';
-      endpoint = rawEndpoint?.trim() || null;
-    } else {
-      nodeId = first.trim();
-    }
     if (!/^[0-9a-fA-F]{64}$/.test(nodeId)) {
       return null;
     }

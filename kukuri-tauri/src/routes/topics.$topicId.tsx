@@ -25,6 +25,14 @@ import { cn } from '@/lib/utils';
 import i18n from '@/i18n';
 import { useUIStore } from '@/stores/uiStore';
 
+const decodePathname = (pathname: string): string => {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+};
+
 export const Route = createFileRoute('/topics/$topicId')({
   component: TopicPage,
 });
@@ -47,7 +55,11 @@ export function TopicPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [previewThreadUuid, setPreviewThreadUuid] = useState<string | null>(null);
   const encodedTopicId = encodeURIComponent(topicId);
-  const isThreadRoute = currentPathname.startsWith(`/topics/${encodedTopicId}/threads`);
+  const decodedPathname = decodePathname(currentPathname);
+  const isThreadRoute =
+    currentPathname.startsWith(`/topics/${topicId}/threads`) ||
+    currentPathname.startsWith(`/topics/${encodedTopicId}/threads`) ||
+    decodedPathname.startsWith(`/topics/${topicId}/threads`);
   const isJoined = joinedTopics.includes(topicId);
 
   const handleFallbackToStandard = useCallback(() => {
