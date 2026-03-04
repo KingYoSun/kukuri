@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, info, trace, warn};
 
+use super::utils::{parse_node_addr, parse_peer_hint};
+
 fn prioritize_socket_addrs(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
     let mut unique = Vec::new();
     for addr in addrs {
@@ -30,14 +32,6 @@ fn prioritize_socket_addrs(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
 
     ipv4.extend(other);
     ipv4
-}
-
-fn build_endpoint_addr(node_id: EndpointId, socket_addrs: Vec<SocketAddr>) -> EndpointAddr {
-    let mut endpoint_addr = EndpointAddr::new(node_id);
-    for socket_addr in socket_addrs {
-        endpoint_addr = endpoint_addr.with_ip_addr(socket_addr);
-    }
-    endpoint_addr
 }
 
 fn find_bootstrap_config_path() -> Option<PathBuf> {
@@ -152,30 +146,18 @@ impl BootstrapConfig {
         let mut out = Vec::new();
 
         for node in nodes {
-            if let Some((id_part, addr_part)) = node.split_once('@') {
-                match (
-                    EndpointId::from_str(id_part),
-                    resolve_socket_addrs(addr_part),
-                ) {
-                    (Ok(node_id), Ok(socket_addrs)) => {
-                        out.push(build_endpoint_addr(node_id, socket_addrs));
-                    }
-                    (id_res, addr_res) => {
-                        debug!(
-                            "Invalid node entry '{}': id_ok={}, addr_ok={}",
-                            node,
-                            id_res.is_ok(),
-                            addr_res.is_ok()
+            match parse_node_addr(&node) {
+                Ok(node_addr) => out.push(node_addr),
+                Err(err) => {
+                    if resolve_socket_addr(&node).is_ok() {
+                        warn!(
+                            "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>' or relay hint format. Skipping.",
+                            node
                         );
+                    } else {
+                        debug!("Unrecognized bootstrap node entry '{}': {}", node, err);
                     }
                 }
-            } else if resolve_socket_addr(&node).is_ok() {
-                warn!(
-                    "Bootstrap node '{}' lacks NodeId; expected '<node_id>@<host:port>'. Skipping.",
-                    node
-                );
-            } else {
-                debug!("Unrecognized bootstrap node entry: {}", node);
             }
         }
 
@@ -234,25 +216,7 @@ fn resolve_socket_addr(raw: &str) -> Result<SocketAddr, String> {
         .ok_or_else(|| format!("Resolved host `{raw}` but no socket addresses were returned"))
 }
 
-fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
-    let trimmed = entry.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let (node_id, addr_part) = match trimmed.split_once('@') {
-        Some((id, addr)) => (id.trim(), addr.trim()),
-        None => return Some(trimmed.to_string()),
-    };
-
-    let mut socket_addr = match resolve_socket_addr(addr_part) {
-        Ok(addr) => addr,
-        Err(err) => {
-            warn!("Invalid bootstrap node '{}': {}", entry, err);
-            return None;
-        }
-    };
-
+fn normalize_unspecified_socket_addr(entry: &str, mut socket_addr: SocketAddr) -> SocketAddr {
     if socket_addr.ip().is_unspecified() {
         let replacement = match socket_addr {
             SocketAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -261,10 +225,78 @@ fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
         socket_addr.set_ip(replacement);
         warn!(
             original = %entry,
-            normalized = %format!("{node_id}@{socket_addr}"),
+            normalized = %socket_addr,
             "Bootstrap node address was unspecified; replaced with loopback"
         );
     }
+    socket_addr
+}
+
+fn normalize_extended_hint(entry: &str) -> Option<String> {
+    let parsed = match parse_peer_hint(entry) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            warn!("Invalid bootstrap node '{}': {}", entry, err);
+            return None;
+        }
+    };
+
+    let node_id = parsed.node_id.to_string();
+    let Some(node_addr) = parsed.node_addr else {
+        return Some(node_id);
+    };
+
+    let relay_urls: Vec<String> = node_addr
+        .relay_urls()
+        .map(|relay_url| relay_url.to_string())
+        .collect();
+    let mut socket_addrs = prioritize_socket_addrs(node_addr.ip_addrs().cloned().collect());
+    let primary_addr = socket_addrs
+        .drain(..)
+        .next()
+        .map(|addr| normalize_unspecified_socket_addr(entry, addr));
+
+    if relay_urls.is_empty() {
+        return Some(match primary_addr {
+            Some(addr) => format!("{node_id}@{addr}"),
+            None => node_id,
+        });
+    }
+
+    let mut hint = node_id;
+    for relay_url in relay_urls {
+        hint.push_str("|relay=");
+        hint.push_str(&relay_url);
+    }
+    if let Some(addr) = primary_addr {
+        hint.push_str("|addr=");
+        hint.push_str(&addr.to_string());
+    }
+    Some(hint)
+}
+
+fn sanitize_bootstrap_node(entry: &str) -> Option<String> {
+    let trimmed = entry.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed.contains('|') {
+        return normalize_extended_hint(trimmed);
+    }
+
+    let (node_id, addr_part) = match trimmed.split_once('@') {
+        Some((id, addr)) => (id.trim(), addr.trim()),
+        None => return Some(trimmed.to_string()),
+    };
+
+    let socket_addr = match resolve_socket_addr(addr_part) {
+        Ok(addr) => normalize_unspecified_socket_addr(entry, addr),
+        Err(err) => {
+            warn!("Invalid bootstrap node '{}': {}", entry, err);
+            return None;
+        }
+    };
 
     Some(format!("{node_id}@{socket_addr}"))
 }
@@ -293,14 +325,37 @@ pub fn load_env_bootstrap_nodes() -> Option<Vec<String>> {
 fn format_node_addrs(node_addr: &EndpointAddr) -> Vec<String> {
     let node_id = node_addr.id.to_string();
     let direct: Vec<_> = node_addr.ip_addrs().cloned().collect();
-    if direct.is_empty() {
-        vec![node_id]
-    } else {
-        direct
+    let relay_urls: Vec<_> = node_addr
+        .relay_urls()
+        .map(|relay_url| relay_url.to_string())
+        .collect();
+    let mut hints = Vec::new();
+
+    if relay_urls.is_empty() {
+        if direct.is_empty() {
+            return vec![node_id];
+        }
+        return direct
             .into_iter()
             .map(|addr| format!("{node_id}@{addr}"))
-            .collect()
+            .collect();
     }
+
+    if direct.is_empty() {
+        for relay_url in relay_urls {
+            hints.push(format!("{node_id}|relay={relay_url}"));
+        }
+        return hints;
+    }
+
+    for addr in &direct {
+        for relay_url in &relay_urls {
+            hints.push(format!("{node_id}|relay={relay_url}|addr={addr}"));
+        }
+        hints.push(format!("{node_id}@{addr}"));
+    }
+
+    hints
 }
 
 fn load_bundle_bootstrap_strings() -> Vec<String> {
@@ -533,18 +588,11 @@ pub fn load_user_bootstrap_nodes() -> Vec<String> {
 pub fn load_user_bootstrap_node_addrs() -> Vec<EndpointAddr> {
     let mut out = Vec::new();
     for node in load_user_bootstrap_nodes() {
-        if let Some((id_part, addr_part)) = node.split_once('@') {
-            match (
-                EndpointId::from_str(id_part),
-                resolve_socket_addrs(addr_part),
-            ) {
-                (Ok(node_id), Ok(socket_addrs)) => {
-                    out.push(build_endpoint_addr(node_id, socket_addrs))
-                }
-                _ => debug!("Invalid user bootstrap entry: {}", node),
+        match parse_node_addr(&node) {
+            Ok(node_addr) => out.push(node_addr),
+            Err(err) => {
+                debug!("Invalid user bootstrap entry '{}': {}", node, err);
             }
-        } else {
-            debug!("Skipping SocketAddr-only user bootstrap entry: {}", node);
         }
     }
     out
@@ -687,6 +735,36 @@ mod tests {
         let ipv4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 11223);
         let prioritized = super::prioritize_socket_addrs(vec![ipv6, ipv4]);
         assert_eq!(prioritized, vec![ipv4, ipv6]);
+    }
+
+    #[test]
+    fn sanitize_bootstrap_nodes_keeps_extended_relay_hint() {
+        let nodes = vec![
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example|addr=127.0.0.1:11223"
+                .to_string(),
+        ];
+
+        let normalized = sanitize_bootstrap_nodes(&nodes);
+        assert_eq!(normalized.len(), 1);
+        assert_eq!(
+            normalized[0],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example/|addr=127.0.0.1:11223"
+        );
+    }
+
+    #[test]
+    fn sanitize_bootstrap_nodes_keeps_relay_only_hint() {
+        let nodes = vec![
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example"
+                .to_string(),
+        ];
+
+        let normalized = sanitize_bootstrap_nodes(&nodes);
+        assert_eq!(normalized.len(), 1);
+        assert_eq!(
+            normalized[0],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example/"
+        );
     }
 
     #[test]

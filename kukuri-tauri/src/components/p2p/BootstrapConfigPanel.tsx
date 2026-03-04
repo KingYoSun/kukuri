@@ -65,13 +65,6 @@ export function BootstrapConfigPanel() {
     }
     const v = newNode.trim();
     if (!v) return;
-    if (!v.includes('@')) {
-      errorHandler.log(t('bootstrapPanel.formatHint'), undefined, {
-        showToast: true,
-        toastTitle: t('bootstrapPanel.formatError'),
-      });
-      return;
-    }
     if (nodes.includes(v)) return;
     setNodes((prev) => [...prev, v]);
     setNewNode('');

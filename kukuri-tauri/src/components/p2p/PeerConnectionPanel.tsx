@@ -24,34 +24,21 @@ interface ParsedPeerAddress {
   nodeId: string;
   host?: string;
   port?: number;
+  hasRelay?: boolean;
 }
 
 const ADDRESS_SPLIT_PATTERN = /[,;\n\r]+/;
 
-const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
-  const trimmed = address.trim();
-
-  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    return {
-      nodeId: trimmed,
-    };
-  }
-
-  const [nodeId, endpoint] = trimmed.split('@');
-
-  if (!nodeId || !endpoint) {
-    return null;
-  }
-
-  if (!/^[0-9a-fA-F]{64}$/.test(nodeId)) {
-    return null;
-  }
-
+const parseEndpointHostPort = (
+  endpoint: string,
+): {
+  host: string;
+  port: number;
+} | null => {
   const splitIndex = endpoint.lastIndexOf(':');
   if (splitIndex <= 0) {
     return null;
   }
-
   const host = endpoint.slice(0, splitIndex).trim();
   const portText = endpoint.slice(splitIndex + 1).trim();
   if (!host || !/^\d+$/.test(portText)) {
@@ -69,9 +56,115 @@ const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
   }
 
   return {
-    nodeId,
     host: normalizedHost,
     port,
+  };
+};
+
+const parsePeerAddress = (address: string): ParsedPeerAddress | null => {
+  const trimmed = address.trim();
+
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return {
+      nodeId: trimmed,
+    };
+  }
+
+  if (trimmed.includes('|')) {
+    const segments = trimmed
+      .split('|')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    if (segments.length === 0) {
+      return null;
+    }
+
+    const first = segments[0] ?? '';
+    if (first.includes('=')) {
+      return null;
+    }
+
+    let nodeId = '';
+    let endpoint: string | null = null;
+    let hasRelay = false;
+    if (first.includes('@')) {
+      const [rawNodeId, rawEndpoint] = first.split('@');
+      nodeId = rawNodeId?.trim() ?? '';
+      endpoint = rawEndpoint?.trim() || null;
+    } else {
+      nodeId = first.trim();
+    }
+    if (!/^[0-9a-fA-F]{64}$/.test(nodeId)) {
+      return null;
+    }
+
+    for (const segment of segments.slice(1)) {
+      const separatorIndex = segment.indexOf('=');
+      if (separatorIndex <= 0) {
+        return null;
+      }
+      const key = segment.slice(0, separatorIndex).trim().toLowerCase();
+      const value = segment.slice(separatorIndex + 1).trim();
+      if (!value) {
+        return null;
+      }
+
+      if (key === 'relay' || key === 'relay_url') {
+        hasRelay = true;
+        continue;
+      }
+      if ((key === 'addr' || key === 'ip') && !endpoint) {
+        endpoint = value;
+        continue;
+      }
+      if (key === 'node' || key === 'node_id') {
+        if (value !== nodeId) {
+          return null;
+        }
+        continue;
+      }
+      return null;
+    }
+
+    if (!endpoint) {
+      return hasRelay
+        ? {
+            nodeId,
+            hasRelay,
+          }
+        : null;
+    }
+
+    const parsedEndpoint = parseEndpointHostPort(endpoint);
+    if (!parsedEndpoint) {
+      return null;
+    }
+
+    return {
+      nodeId,
+      host: parsedEndpoint.host,
+      port: parsedEndpoint.port,
+      hasRelay,
+    };
+  }
+
+  const [nodeId, endpoint] = trimmed.split('@');
+  if (!nodeId || !endpoint) {
+    return null;
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(nodeId)) {
+    return null;
+  }
+
+  const parsedEndpoint = parseEndpointHostPort(endpoint);
+  if (!parsedEndpoint) {
+    return null;
+  }
+
+  return {
+    nodeId,
+    host: parsedEndpoint.host,
+    port: parsedEndpoint.port,
   };
 };
 
@@ -93,6 +186,11 @@ const pickPreferredAddress = (rawValue: string): string | null => {
   const validCandidates = candidates.filter((entry) => parsePeerAddress(entry) !== null);
   if (validCandidates.length === 0) {
     return null;
+  }
+
+  const relayHint = validCandidates.find((entry) => parsePeerAddress(entry)?.hasRelay);
+  if (relayHint) {
+    return relayHint;
   }
 
   const nonLoopback = validCandidates.find((entry) => {

@@ -1,5 +1,5 @@
 use crate::{
-    infrastructure::p2p::{bootstrap_config, metrics::GossipMetricDetails},
+    infrastructure::p2p::{bootstrap_config, metrics::GossipMetricDetails, utils::parse_peer_hint},
     presentation::dto::{
         ApiResponse,
         p2p::{
@@ -164,9 +164,9 @@ pub async fn set_bootstrap_nodes(
     }
 
     for node in &nodes {
-        if !node.contains('@') {
+        if parse_peer_hint(node).is_err() {
             return Err(AppError::ConfigurationError(format!(
-                "Invalid bootstrap node format (expected node_id@host:port): {node}"
+                "Invalid bootstrap node format (expected node_id, node_id@host:port, or relay hint): {node}"
             )));
         }
     }
@@ -249,8 +249,8 @@ pub async fn get_relay_status(
     for peer in p2p_status.peers {
         let mut matched = None;
         for candidate in selection.nodes.iter() {
-            if let Some((node_id, _)) = candidate.split_once('@') {
-                if node_id == peer.node_id {
+            if let Ok(parsed) = parse_peer_hint(candidate) {
+                if parsed.node_id.to_string() == peer.node_id {
                     matched = Some(candidate.clone());
                     break;
                 }

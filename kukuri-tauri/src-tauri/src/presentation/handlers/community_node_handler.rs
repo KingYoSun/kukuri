@@ -1659,13 +1659,101 @@ fn extract_bootstrap_nodes_from_descriptor(
 
 fn normalize_bootstrap_node_candidate(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
-    let (node_id, addr) = trimmed.split_once('@')?;
-    let node_id = node_id.trim();
-    let addr = addr.trim();
-    if node_id.is_empty() || addr.is_empty() || !addr.contains(':') {
+    if trimmed.is_empty() {
         return None;
     }
-    Some(format!("{node_id}@{addr}"))
+    if crate::infrastructure::p2p::utils::parse_peer_hint(trimmed).is_ok() {
+        return Some(trimmed.to_string());
+    }
+    if is_bootstrap_node_candidate_syntax_valid(trimmed) {
+        return Some(trimmed.to_string());
+    }
+    None
+}
+
+fn is_bootstrap_node_candidate_syntax_valid(candidate: &str) -> bool {
+    if candidate.contains('|') {
+        return is_extended_bootstrap_hint_syntax_valid(candidate);
+    }
+
+    if let Some((node_id, addr)) = candidate.split_once('@') {
+        let node_id = node_id.trim();
+        let addr = addr.trim();
+        return !node_id.is_empty() && is_host_port_like(addr);
+    }
+
+    !candidate.trim().is_empty()
+}
+
+fn is_extended_bootstrap_hint_syntax_valid(candidate: &str) -> bool {
+    let mut segments = candidate
+        .split('|')
+        .map(|segment| segment.trim())
+        .filter(|segment| !segment.is_empty());
+    let Some(first_segment) = segments.next() else {
+        return false;
+    };
+
+    let (node_id, mut has_addr) = if let Some((node, addr)) = first_segment.split_once('@') {
+        let node = node.trim();
+        let addr = addr.trim();
+        if node.is_empty() || !is_host_port_like(addr) {
+            return false;
+        }
+        (node.to_string(), true)
+    } else if first_segment.contains('=') {
+        return false;
+    } else {
+        let node = first_segment.trim();
+        if node.is_empty() {
+            return false;
+        }
+        (node.to_string(), false)
+    };
+
+    let mut has_relay = false;
+    for segment in segments {
+        let Some((raw_key, raw_value)) = segment.split_once('=') else {
+            return false;
+        };
+        let key = raw_key.trim().to_ascii_lowercase();
+        let value = raw_value.trim();
+        if value.is_empty() {
+            return false;
+        }
+
+        match key.as_str() {
+            "addr" | "ip" => {
+                if !is_host_port_like(value) {
+                    return false;
+                }
+                has_addr = true;
+            }
+            "relay" | "relay_url" => has_relay = true,
+            "node" | "node_id" => {
+                if value != node_id {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+
+    has_addr || has_relay
+}
+
+fn is_host_port_like(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    match trimmed.rsplit_once(':') {
+        Some((host, port)) => {
+            let host = host.trim().trim_start_matches('[').trim_end_matches(']');
+            !host.is_empty() && !port.trim().is_empty()
+        }
+        None => false,
+    }
 }
 
 fn validate_kip_event_json(

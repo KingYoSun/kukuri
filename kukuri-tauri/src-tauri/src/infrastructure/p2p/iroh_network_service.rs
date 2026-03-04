@@ -186,12 +186,34 @@ impl IrohNetworkService {
         let node_addr = self.endpoint.addr();
         let node_id = node_addr.id.to_string();
         let mut out = Vec::new();
-        for addr in node_addr.ip_addrs() {
+        let direct_addrs: Vec<_> = node_addr.ip_addrs().cloned().collect();
+        let relay_urls: Vec<_> = node_addr
+            .relay_urls()
+            .map(|relay_url| relay_url.to_string())
+            .collect();
+
+        if !relay_urls.is_empty() {
+            if direct_addrs.is_empty() {
+                for relay_url in &relay_urls {
+                    out.push(format!("{node_id}|relay={relay_url}"));
+                }
+            } else {
+                for relay_url in &relay_urls {
+                    for addr in &direct_addrs {
+                        out.push(format!("{node_id}|relay={relay_url}|addr={addr}"));
+                    }
+                }
+            }
+        }
+
+        for addr in direct_addrs {
             out.push(format!("{node_id}@{addr}"));
         }
         if out.is_empty() {
             out.push(node_id);
         }
+        out.sort();
+        out.dedup();
         Ok(out)
     }
 

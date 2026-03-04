@@ -10,8 +10,8 @@ import {
   type ProfileInfo,
 } from '../helpers/appActions';
 import {
-  connectToP2PPeer,
   ensureTestTopic,
+  getBootstrapSnapshot,
   getP2PMessageSnapshot,
   getP2PStatus,
   getPostStoreSnapshot,
@@ -126,6 +126,22 @@ const parseBootstrapPeers = (): string[] => {
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
   return peers.length > 0 ? peers : [DEFAULT_BOOTSTRAP_PEER];
+};
+
+const normalizeNodeId = (value: string): string | null => parsePeerAddressNodeId(value)?.trim() ?? null;
+
+const hasExpectedBootstrapNode = (effectiveNodes: string[], expectedNodes: string[]): boolean => {
+  const expectedNodeIds = expectedNodes
+    .map((entry) => normalizeNodeId(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  if (expectedNodeIds.length === 0) {
+    return expectedNodes.some((entry) => effectiveNodes.includes(entry));
+  }
+  const expectedSet = new Set(expectedNodeIds);
+  return effectiveNodes.some((entry) => {
+    const nodeId = normalizeNodeId(entry);
+    return nodeId ? expectedSet.has(nodeId) : false;
+  });
 };
 
 const addressSnapshotCandidates = (): string[] => {
@@ -511,8 +527,8 @@ const isTargetPeerConnected = (
   topicId: string,
   targetNodeId: string | null,
 ): boolean => {
-  if (targetNodeId && hasPeerNodeId(status, targetNodeId)) {
-    return true;
+  if (targetNodeId) {
+    return hasPeerNodeId(status, targetNodeId);
   }
   return getTopicPeerCount(status, topicId) >= 1;
 };
@@ -549,10 +565,7 @@ const waitForP2PMessageAdvance = async (
   }
 };
 
-const setupTopicPageForDirectPeer = async (
-  topicId: string,
-  bootstrapPeers: string[],
-): Promise<void> => {
+const setupTopicPageForDirectPeer = async (topicId: string): Promise<void> => {
   await waitForWelcome();
   await $('[data-testid="welcome-create-account"]').click();
   await completeProfileSetup(profile);
@@ -563,7 +576,8 @@ const setupTopicPageForDirectPeer = async (
     topicId,
   });
 
-  await joinP2PTopic(topicId, bootstrapPeers);
+  // 実機経路に合わせて、topic join 時に direct peer hint を渡さない。
+  await joinP2PTopic(topicId, []);
   await setTimelineUpdateMode('realtime');
   await openTopic(topicId);
 };
@@ -623,10 +637,25 @@ describe('Direct peer regression reproduction', () => {
     const expectedPeersBeforeConnect = parseOptionalInt(
       process.env.E2E_DIRECT_PEER_EXPECT_PEERS_BEFORE_CONNECT,
     );
-    const skipDirectConnect =
-      parseOptionalBool(process.env.E2E_DIRECT_PEER_SKIP_DIRECT_CONNECT) ?? false;
+    let bootstrapSnapshot = await getBootstrapSnapshot();
+    await browser.waitUntil(
+      async () => {
+        bootstrapSnapshot = await getBootstrapSnapshot();
+        if (bootstrapSnapshot.effectiveNodes.length === 0) {
+          return false;
+        }
+        return hasExpectedBootstrapNode(bootstrapSnapshot.effectiveNodes, bootstrapPeers);
+      },
+      {
+        timeout: 60000,
+        interval: 1000,
+        timeoutMsg: `Effective bootstrap nodes were not ready: expected=${JSON.stringify(
+          bootstrapPeers,
+        )}`,
+      },
+    );
 
-    await setupTopicPageForDirectPeer(topicId, bootstrapPeers);
+    await setupTopicPageForDirectPeer(topicId);
     const baselineTimelineSnapshot = await getTimelineThreadSnapshot(publishPrefix);
     const baselinePostStoreSnapshot = await getPostStoreSnapshot(topicId);
     const baselineP2PSnapshot = await getP2PMessageSnapshot(topicId);
@@ -642,33 +671,14 @@ describe('Direct peer regression reproduction', () => {
 
     const peerAddress = await waitForPeerAddress();
     const targetPeerNodeId = parsePeerAddressNodeId(peerAddress);
-    let connectAttempted = false;
-    let connectStrategy: 'connect_to_peer' | 'join_topic_fallback' | 'skip_already_connected' =
-      'skip_already_connected';
-    let connectToPeerError: string | null = null;
-
-    if (!skipDirectConnect && !isTargetPeerConnected(beforeConnectStatus, topicId, targetPeerNodeId)) {
-      connectAttempted = true;
-      try {
-        await connectToP2PPeer(peerAddress);
-        connectStrategy = 'connect_to_peer';
-      } catch (error) {
-        connectToPeerError = error instanceof Error ? error.message : String(error);
-        await joinP2PTopic(topicId, [peerAddress]);
-        connectStrategy = 'join_topic_fallback';
-      }
-    }
-
-    if (!skipDirectConnect) {
-      await browser.waitUntil(
-        async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
-        {
-          timeout: 120000,
-          interval: 1000,
-          timeoutMsg: `Direct peer connection did not become active for ${peerAddress}`,
-        },
-      );
-    }
+    await browser.waitUntil(
+      async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
+      {
+        timeout: 120000,
+        interval: 1000,
+        timeoutMsg: `Bootstrap/relay peer discovery did not become active for ${peerAddress}`,
+      },
+    );
 
     let postStoreAfterSingleArrival: PostStoreSnapshot | null = null;
     let p2pAfterSingleArrival: P2PMessageSnapshot | null = null;
@@ -771,10 +781,8 @@ describe('Direct peer regression reproduction', () => {
       topicId,
       peerAddress,
       targetPeerNodeId,
-      connectAttempted,
-      skipDirectConnect,
-      connectStrategy,
-      connectToPeerError,
+      connectMode: 'bootstrap_discovery_only',
+      bootstrapSnapshot,
       publishPrefix,
       expectedProfileName,
       expectStaleRender,
