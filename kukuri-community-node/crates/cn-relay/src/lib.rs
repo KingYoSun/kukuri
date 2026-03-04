@@ -52,6 +52,7 @@ struct RelayP2pInfoResponse {
     node_id: Option<String>,
     bind_addr: String,
     bootstrap_nodes: Vec<String>,
+    bootstrap_hints: Vec<String>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -344,9 +345,28 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     let node_id = state.p2p_node_id.read().await.clone();
     let bind_addr = state.p2p_bind_addr.to_string();
     let advertised_host = resolve_advertised_host(&state);
-    let bootstrap_nodes = match (node_id.as_deref(), advertised_host) {
+    let relay_hint_url = state
+        .relay_public_url
+        .as_deref()
+        .and_then(normalize_relay_url_for_hint);
+    let bootstrap_nodes = match (node_id.as_deref(), advertised_host.as_deref()) {
         (Some(node_id), Some(host)) => {
-            vec![format!("{node_id}@{host}:{}", state.p2p_bind_addr.port())]
+            let endpoint = format_host_port(host, state.p2p_bind_addr.port());
+            vec![format!("{node_id}@{endpoint}")]
+        }
+        _ => Vec::new(),
+    };
+    let bootstrap_hints = match (node_id.as_deref(), advertised_host.as_deref()) {
+        (Some(node_id), Some(host)) => {
+            let endpoint = format_host_port(host, state.p2p_bind_addr.port());
+            if let Some(relay_url) = relay_hint_url {
+                vec![
+                    format!("{node_id}|relay={relay_url}|addr={endpoint}"),
+                    format!("{node_id}|relay={relay_url}"),
+                ]
+            } else {
+                vec![format!("{node_id}@{endpoint}")]
+            }
         }
         _ => Vec::new(),
     };
@@ -355,7 +375,39 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
         node_id,
         bind_addr,
         bootstrap_nodes,
+        bootstrap_hints,
     })
+}
+
+fn format_host_port(host: &str, port: u16) -> String {
+    let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if trimmed.contains(':') {
+        format!("[{trimmed}]:{port}")
+    } else {
+        format!("{trimmed}:{port}")
+    }
+}
+
+fn normalize_relay_url_for_hint(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut parsed = reqwest::Url::parse(trimmed).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        "ws" => {
+            parsed.set_scheme("http").ok()?;
+        }
+        "wss" => {
+            parsed.set_scheme("https").ok()?;
+        }
+        _ => return None,
+    }
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Some(parsed.to_string())
 }
 
 fn resolve_advertised_host(state: &AppState) -> Option<String> {
@@ -412,7 +464,7 @@ fn extract_host_from_url_like(raw: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_host_from_url_like;
+    use super::{extract_host_from_url_like, format_host_port, normalize_relay_url_for_hint};
 
     #[test]
     fn extract_host_from_url_like_parses_ws_url_with_port_and_path() {
@@ -429,5 +481,19 @@ mod tests {
     #[test]
     fn extract_host_from_url_like_returns_none_for_empty_input() {
         assert_eq!(extract_host_from_url_like("   "), None);
+    }
+
+    #[test]
+    fn normalize_relay_url_for_hint_maps_wss_scheme_to_https() {
+        let normalized = normalize_relay_url_for_hint("wss://relay.example/ws?x=1#frag");
+        assert_eq!(normalized.as_deref(), Some("https://relay.example/ws"));
+    }
+
+    #[test]
+    fn format_host_port_brackets_ipv6_host() {
+        assert_eq!(
+            format_host_port("2001:db8::10", 11223),
+            "[2001:db8::10]:11223"
+        );
     }
 }

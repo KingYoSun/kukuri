@@ -141,6 +141,28 @@ impl IrohNetworkService {
         success_count
     }
 
+    async fn upsert_known_peer(&self, node_id: &str, address: &str) {
+        let mut peers = self.peers.write().await;
+        let now = chrono::Utc::now().timestamp();
+        if let Some(existing) = peers.iter_mut().find(|peer| peer.id == node_id) {
+            existing.address = address.to_string();
+            existing.last_seen = now;
+        } else {
+            peers.push(Peer {
+                id: node_id.to_string(),
+                address: address.to_string(),
+                connected_at: now,
+                last_seen: now,
+            });
+        }
+        let connected_count = peers.len();
+        drop(peers);
+
+        let mut stats = self.stats.write().await;
+        stats.connected_peers = connected_count;
+        super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
+    }
+
     fn bootstrap_node_id(candidate: &str) -> Option<String> {
         let trimmed = candidate.trim();
         let (node_id, _) = trimmed.split_once('@')?;
@@ -369,6 +391,7 @@ impl NetworkService for IrohNetworkService {
 
         if let Some(node_addr) = parsed_peer.node_addr {
             self.static_discovery.add_endpoint_info(node_addr.clone());
+            self.upsert_known_peer(&node_id, address).await;
 
             // ピアに接続
             self.endpoint
@@ -383,28 +406,9 @@ impl NetworkService for IrohNetworkService {
                 node_id = %node_id,
                 "Peer hint has no direct address; relying on gossip discovery"
             );
+            self.upsert_known_peer(&node_id, address).await;
         }
-
-        // ピアリストに追加
-        let mut peers = self.peers.write().await;
-        let now = chrono::Utc::now().timestamp();
-        if let Some(existing) = peers.iter_mut().find(|peer| peer.id == node_id) {
-            existing.address = address.to_string();
-            existing.last_seen = now;
-        } else {
-            peers.push(Peer {
-                id: node_id,
-                address: address.to_string(),
-                connected_at: now,
-                last_seen: now,
-            });
-        }
-
-        // 統計を更新
-        let mut stats = self.stats.write().await;
-        stats.connected_peers = peers.len();
         super::metrics::record_mainline_connection_success();
-        super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
 
         tracing::info!("Added peer: {}", address);
         Ok(())

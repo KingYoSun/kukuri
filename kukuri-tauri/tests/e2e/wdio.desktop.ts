@@ -47,10 +47,14 @@ const SPEC_PATTERNS = (process.env.E2E_SPEC_PATTERN ?? '')
   .map((value) => value.trim())
   .filter((value) => value.length > 0)
   .map((pattern) => resolve(PROJECT_ROOT, pattern));
-const EXCLUDED_SPECS =
-  process.env.SCENARIO === 'community-node-e2e'
+const EXCLUDED_SPECS = [
+  ...(process.env.SCENARIO === 'community-node-e2e'
     ? [join(__dirname, 'specs/community-node.multi-peer.spec.ts')]
-    : [];
+    : []),
+  ...(process.env.SCENARIO !== 'multi-peer-e2e'
+    ? [join(__dirname, 'specs/p2p.direct-peer.regression.spec.ts')]
+    : []),
+];
 const MOCHA_TIMEOUT_MS = Number(
   process.env.E2E_MOCHA_TIMEOUT_MS ?? (process.env.SCENARIO === 'community-node-e2e' ? '180000' : '60000'),
 );

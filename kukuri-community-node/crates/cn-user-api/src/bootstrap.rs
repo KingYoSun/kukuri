@@ -22,6 +22,8 @@ pub struct BootstrapHintQuery {
 struct RelayP2pInfoResponse {
     #[serde(default)]
     bootstrap_nodes: Vec<String>,
+    #[serde(default)]
+    bootstrap_hints: Vec<String>,
 }
 
 const RELAY_P2P_INFO_TIMEOUT_SECS: u64 = 1;
@@ -236,7 +238,13 @@ async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
     }
 
     match response.json::<RelayP2pInfoResponse>().await {
-        Ok(payload) => payload.bootstrap_nodes,
+        Ok(payload) => {
+            if payload.bootstrap_hints.is_empty() {
+                payload.bootstrap_nodes
+            } else {
+                payload.bootstrap_hints
+            }
+        }
         Err(err) => {
             tracing::debug!(error = %err, url = %url, "failed to decode relay p2p info payload");
             Vec::new()

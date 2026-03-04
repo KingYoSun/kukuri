@@ -10,6 +10,7 @@
 
 主要ドキュメント
 - iroh-native-dht-plan.md: iroh Mainline DHT 移行計画
+- community_node_iroh_bootstrap_relay_plan.md: `cn-iroh-relay` を含む接続確立 + gossip bootstrap peer 両立計画
 - tauri_app_experience_design.md: Tauri アプリの体験設計
 - tauri_app_implementation_plan.md: 実装計画
 - docker_multi_peer_client_plan.md: Docker ベース Peer クライアントの設計・実装計画

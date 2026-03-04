@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2026年03月02日
+最終更新日: 2026年03月04日
 
 ## 方針（2025年09月15日 更新）
 
@@ -10,6 +10,25 @@
 
 ## 現在のタスク
 - P2Pトピック同期の不具合調査と修正（bootstrap反映、受信投稿のリアルタイム反映、プロフィール表示改善）
+
+### 実装チェックリスト（2026年03月04日 追加）
+- 参照計画: `docs/01_project/activeContext/community_node_iroh_bootstrap_relay_plan.md`
+- [ ] Phase 0: `cn-iroh-relay` サービス雛形を追加し、`docker-compose` / `.env.example` に設定項目を追加する。
+- [ ] Phase 1: `kukuri-tauri` の iroh endpoint 初期化を custom relay（`cn-iroh-relay`）対応へ拡張する。
+- [ ] Phase 1: `cn-relay` の iroh endpoint 初期化を custom relay（`cn-iroh-relay`）対応へ拡張する。
+- [ ] Phase 1: relay 設定未指定時の後方互換（現行挙動維持）を実装し、回帰テストを追加する。
+- [ ] Phase 2: `cn-relay /v1/p2p/info` のレスポンスへ `relay_urls` / `bootstrap_hints` を追加し契約テストを更新する。
+- [ ] Phase 2: `cn-user-api /v1/bootstrap/nodes` で `bootstrap_hints` 優先配布を実装し互換 (`bootstrap_nodes`) を維持する。
+- [ ] Phase 2: `cn-bootstrap` の 39000 `endpoints.p2p` へ relay hint を格納できるよう生成ロジックを更新する。
+- [ ] Phase 2: `kukuri-tauri` 側 `bootstrap_config` / `parse_peer_hint` の relay hint 取り込みを契約テストで固定する。
+- [ ] Phase 3: `cn-relay` の topic 参加を `subscribe(topic, peers)` ベースへ変更し、seed 解決処理を追加する。
+- [ ] Phase 3: bootstrap hint 更新 (`cn_bootstrap_hint`) 受信時の topic 再 join 制御を追加する。
+- [ ] Phase 3: join 収束時間・再試行回数・失敗理由をメトリクス化し監視可能にする。
+- [ ] Phase 4: E2E で bridge 経由の peer 直注入を禁止し、実機同等経路（bootstrap API -> hint 反映 -> join）へ統一する。
+- [ ] Phase 4: `community node bootstrap/relay 経由で peer 間通信成立` を必須 E2E シナリオとして追加する。
+- [ ] Phase 4: IPv6 優先条件での relay fallback 成立シナリオを E2E に追加する。
+- [ ] Phase 5: canary 環境で IPv4/IPv6 混在検証を実施し、ロールアウト判定基準を Runbook に反映する。
+- [ ] Phase 5: feature flag（`RelayMode::Default` フォールバック）運用を整備し、障害時の切戻し手順を文書化する。
 
 ### 残タスク（2026年03月02日）
 - 直接接続時でも `/topics/${topicId}` の `TimelineThreadCard` とスレッド一覧がリアルタイム差分更新されない（再読み込みや自端末操作が必要）。

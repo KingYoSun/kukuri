@@ -2,6 +2,7 @@ use crate::application::ports::key_manager::{KeyManager, KeyMaterialStore};
 use crate::domain::constants::DEFAULT_PUBLIC_TOPIC_ID;
 use crate::domain::entities::ScoreWeights;
 use crate::domain::p2p::P2PEvent;
+use crate::shared::config::BootstrapSource;
 
 // アプリケーションサービスのインポート
 use crate::application::ports::auth_lifecycle::AuthLifecyclePort;
@@ -587,6 +588,37 @@ impl AppState {
             let sync_service = Arc::clone(&this.sync_service);
             tauri::async_runtime::spawn(async move {
                 sync_service.schedule_sync(DEFAULT_SYNC_INTERVAL_SECS).await;
+            });
+        }
+
+        {
+            let community_node_handler = Arc::clone(&this.community_node_handler);
+            let p2p_handler = Arc::clone(&this.p2p_handler);
+            tauri::async_runtime::spawn(async move {
+                match community_node_handler
+                    .refresh_bootstrap_nodes_from_saved_config()
+                    .await
+                {
+                    Ok(Some(nodes)) if !nodes.is_empty() => {
+                        if let Err(err) = p2p_handler
+                            .apply_bootstrap_nodes(nodes.clone(), BootstrapSource::User)
+                            .await
+                        {
+                            tracing::warn!(
+                                error = %err,
+                                node_count = nodes.len(),
+                                "Failed to apply refreshed bootstrap nodes from saved community node config"
+                            );
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            "Failed to refresh bootstrap nodes from saved community node config"
+                        );
+                    }
+                }
             });
         }
 

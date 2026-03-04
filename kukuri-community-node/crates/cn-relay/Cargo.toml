@@ -19,6 +19,7 @@ hex.workspace = true
 iroh.workspace = true
 iroh-gossip.workspace = true
 nostr-sdk.workspace = true
+reqwest.workspace = true
 uuid.workspace = true
 
 cn-core = { path = "../cn-core" }

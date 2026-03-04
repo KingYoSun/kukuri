@@ -844,6 +844,7 @@ dependencies = [
  "iroh",
  "iroh-gossip",
  "nostr-sdk",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "sqlx",

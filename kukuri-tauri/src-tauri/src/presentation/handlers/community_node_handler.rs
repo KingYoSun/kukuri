@@ -297,7 +297,7 @@ impl CommunityNodeHandler {
         }
         config.nodes = next_nodes;
         self.save_config(&config).await?;
-        self.sync_bootstrap_nodes_from_config(&config).await;
+        let _ = self.sync_bootstrap_nodes_from_config(&config).await;
         Ok(config_response(&config))
     }
 
@@ -504,7 +504,7 @@ impl CommunityNodeHandler {
         node.token_expires_at = Some(verified.expires_at);
         node.pubkey = Some(verified.pubkey.clone());
         self.save_config(&config).await?;
-        self.sync_bootstrap_nodes_from_config(&config).await;
+        let _ = self.sync_bootstrap_nodes_from_config(&config).await;
 
         Ok(CommunityNodeAuthResponse {
             expires_at: verified.expires_at,
@@ -1062,25 +1062,47 @@ impl CommunityNodeHandler {
         Ok(())
     }
 
-    async fn sync_bootstrap_nodes_from_config(&self, config: &CommunityNodeConfig) {
+    async fn sync_bootstrap_nodes_from_config(
+        &self,
+        config: &CommunityNodeConfig,
+    ) -> Option<Vec<String>> {
         if bootstrap_config::load_env_bootstrap_nodes().is_some() {
-            return;
+            return None;
         }
 
         let resolved = self.resolve_bootstrap_nodes_for_config(config).await;
         if resolved.is_empty() {
-            return;
+            return None;
         }
 
         let mut merged = bootstrap_config::load_user_bootstrap_nodes();
-        merge_unique_bootstrap_nodes(&mut merged, resolved);
+        upsert_bootstrap_nodes(&mut merged, resolved);
 
         if let Err(err) = bootstrap_config::save_user_bootstrap_nodes(&merged) {
             tracing::warn!(
                 error = %err,
                 "Failed to persist bootstrap nodes resolved from community node"
             );
+            return None;
         }
+        Some(merged)
+    }
+
+    pub async fn refresh_bootstrap_nodes_from_saved_config(
+        &self,
+    ) -> Result<Option<Vec<String>>, AppError> {
+        if bootstrap_config::load_env_bootstrap_nodes().is_some() {
+            return Ok(None);
+        }
+
+        let Some(config) = self.load_config().await? else {
+            return Ok(None);
+        };
+        if config.nodes.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(self.sync_bootstrap_nodes_from_config(&config).await)
     }
 
     async fn resolve_bootstrap_nodes_for_config(
@@ -1154,12 +1176,16 @@ impl CommunityNodeHandler {
         if let Some(exp) = node.token_expires_at
             && exp <= Utc::now().timestamp()
         {
-            if !require_auth {
-                return Ok(builder);
+            if require_auth {
+                return Err(AppError::Unauthorized(
+                    "Community node token has expired".to_string(),
+                ));
             }
-            return Err(AppError::Unauthorized(
-                "Community node token has expired".to_string(),
-            ));
+            tracing::debug!(
+                base_url = %node.base_url,
+                token_expires_at = exp,
+                "Community node token appears expired; sending token for best-effort optional request"
+            );
         }
         Ok(builder.bearer_auth(token))
     }
@@ -1615,6 +1641,43 @@ fn merge_unique_bootstrap_nodes(target: &mut Vec<String>, additional: Vec<String
             target.push(node);
         }
     }
+}
+
+fn extract_bootstrap_node_id(candidate: &str) -> Option<String> {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let first_segment = trimmed
+        .split('|')
+        .map(|segment| segment.trim())
+        .find(|segment| !segment.is_empty())?;
+    let node_id = first_segment
+        .split_once('@')
+        .map(|(node_id, _)| node_id.trim())
+        .unwrap_or(first_segment.trim());
+    if node_id.is_empty() {
+        return None;
+    }
+    Some(node_id.to_string())
+}
+
+fn upsert_bootstrap_nodes(target: &mut Vec<String>, resolved: Vec<String>) {
+    let resolved_node_ids: HashSet<String> = resolved
+        .iter()
+        .filter_map(|entry| extract_bootstrap_node_id(entry))
+        .collect();
+
+    if !resolved_node_ids.is_empty() {
+        target.retain(|existing| {
+            extract_bootstrap_node_id(existing)
+                .map(|node_id| !resolved_node_ids.contains(&node_id))
+                .unwrap_or(true)
+        });
+    }
+
+    merge_unique_bootstrap_nodes(target, resolved);
 }
 
 fn extract_bootstrap_nodes_from_descriptor(
@@ -3060,6 +3123,58 @@ mod community_node_handler_tests {
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes.iter().filter(|value| *value == existing).count(), 1);
         assert_eq!(nodes.iter().filter(|value| *value == resolved2).count(), 1);
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn set_config_replaces_existing_bootstrap_nodes_for_same_node_id() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("replace-same-node-id");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let node_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let stale = format!("{node_id}@104.21.85.234:11223");
+        bootstrap_config::save_user_bootstrap_nodes(&[stale.clone()])
+            .expect("save stale bootstrap node");
+
+        let relay_hint =
+            format!("{node_id}|relay=https://relay.example|addr=bootstrap.example.com:11223");
+        let response = json!({
+            "items": [],
+            "next_refresh_at": Utc::now().timestamp() + 600,
+            "bootstrap_nodes": [relay_hint],
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        handler
+            .set_config(CommunityNodeConfigRequest {
+                nodes: vec![CommunityNodeConfigNodeRequest {
+                    base_url: base_url.clone(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: false,
+                        trust: false,
+                        search: false,
+                        bootstrap: true,
+                    }),
+                }],
+            })
+            .await
+            .expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let nodes = bootstrap_config::load_user_bootstrap_nodes();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(
+            nodes[0],
+            format!("{node_id}|relay=https://relay.example/|addr=bootstrap.example.com:11223")
+        );
+        assert!(!nodes.contains(&stale));
 
         let _ = fs::remove_dir_all(&data_dir);
     }
