@@ -11,12 +11,15 @@ Minimal community node services for kukuri.
    `docker compose run --rm cn-cli migrate`
    `docker compose run --rm cn-cli config seed`
    `docker compose run --rm cn-cli admin bootstrap --username admin --password change-me`
+4. If custom relay mode is enabled, start bootstrap profile:
+   `docker compose --profile bootstrap up -d`
 
 ## Service endpoints (default)
 
 - user-api: `http://localhost:8080/healthz`
 - admin-api: `http://localhost:8081/healthz` (profile `admin`)
 - relay: `http://localhost:8082/healthz`
+- cn-iroh-relay (custom relay): `http://localhost:3340` (profile `bootstrap`)
 - bootstrap: `http://localhost:8083/healthz` (profile `bootstrap`)
 - user-api OpenAPI: `http://localhost:8080/v1/openapi.json`
 - admin-api OpenAPI: `http://localhost:8081/v1/openapi.json`

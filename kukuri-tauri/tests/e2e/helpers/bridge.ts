@@ -759,7 +759,9 @@ export async function joinP2PTopic(topicId: string, initialPeers: string[] = [])
 }
 
 export async function connectToP2PPeer(peerAddress: string): Promise<void> {
-  await callBridge('connectToP2PPeer', { peerAddress });
+  throw new Error(
+    `connectToP2PPeer is disabled for E2E. Use bootstrap API flow instead: ${peerAddress}`,
+  );
 }
 
 export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {

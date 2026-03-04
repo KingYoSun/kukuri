@@ -24,6 +24,15 @@ struct RelayP2pInfoResponse {
     bootstrap_nodes: Vec<String>,
     #[serde(default)]
     bootstrap_hints: Vec<String>,
+    #[serde(default)]
+    relay_urls: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct RuntimeBootstrapInfo {
+    bootstrap_nodes: Vec<String>,
+    bootstrap_hints: Vec<String>,
+    relay_urls: Vec<String>,
 }
 
 const RELAY_P2P_INFO_TIMEOUT_SECS: u64 = 1;
@@ -44,8 +53,8 @@ pub async fn get_bootstrap_nodes(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    let bootstrap_nodes = fetch_runtime_bootstrap_nodes().await;
-    respond_with_events(&headers, rows, bootstrap_nodes).await
+    let bootstrap = fetch_runtime_bootstrap_info().await;
+    respond_with_events(&headers, rows, bootstrap).await
 }
 
 pub async fn get_bootstrap_services(
@@ -65,7 +74,7 @@ pub async fn get_bootstrap_services(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    respond_with_events(&headers, rows, Vec::new()).await
+    respond_with_events(&headers, rows, RuntimeBootstrapInfo::default()).await
 }
 
 pub async fn get_bootstrap_hint(
@@ -127,7 +136,7 @@ async fn apply_public_rate_limit(
 async fn respond_with_events(
     headers: &HeaderMap,
     rows: Vec<sqlx::postgres::PgRow>,
-    bootstrap_nodes: Vec<String>,
+    bootstrap: RuntimeBootstrapInfo,
 ) -> ApiResult<impl IntoResponse> {
     let mut events = Vec::new();
     let mut latest: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -149,7 +158,9 @@ async fn respond_with_events(
     let payload = json!({
         "items": events,
         "next_refresh_at": next_refresh,
-        "bootstrap_nodes": bootstrap_nodes,
+        "bootstrap_nodes": bootstrap.bootstrap_nodes,
+        "bootstrap_hints": bootstrap.bootstrap_hints,
+        "relay_urls": bootstrap.relay_urls,
     });
     let payload_bytes = serde_json::to_vec(&payload).map_err(|err| {
         ApiError::new(
@@ -207,7 +218,7 @@ async fn respond_with_events(
     Ok(response)
 }
 
-async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
+async fn fetch_runtime_bootstrap_info() -> RuntimeBootstrapInfo {
     let url = relay_p2p_info_url();
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(RELAY_P2P_INFO_TIMEOUT_SECS))
@@ -216,7 +227,7 @@ async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
         Ok(client) => client,
         Err(err) => {
             tracing::debug!(error = %err, "failed to build relay p2p info client");
-            return Vec::new();
+            return RuntimeBootstrapInfo::default();
         }
     };
 
@@ -224,7 +235,7 @@ async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
         Ok(response) => response,
         Err(err) => {
             tracing::debug!(error = %err, url = %url, "failed to fetch relay p2p info");
-            return Vec::new();
+            return RuntimeBootstrapInfo::default();
         }
     };
 
@@ -234,22 +245,48 @@ async fn fetch_runtime_bootstrap_nodes() -> Vec<String> {
             url = %url,
             "relay p2p info endpoint returned non-success status"
         );
-        return Vec::new();
+        return RuntimeBootstrapInfo::default();
     }
 
     match response.json::<RelayP2pInfoResponse>().await {
         Ok(payload) => {
-            if payload.bootstrap_hints.is_empty() {
-                payload.bootstrap_nodes
-            } else {
-                payload.bootstrap_hints
+            let bootstrap_nodes = dedupe_non_empty(payload.bootstrap_nodes);
+            let bootstrap_hints = {
+                let hints = dedupe_non_empty(payload.bootstrap_hints);
+                if hints.is_empty() {
+                    bootstrap_nodes.clone()
+                } else {
+                    hints
+                }
+            };
+            let relay_urls = dedupe_non_empty(payload.relay_urls);
+
+            RuntimeBootstrapInfo {
+                bootstrap_nodes: bootstrap_hints.clone(),
+                bootstrap_hints,
+                relay_urls,
             }
         }
         Err(err) => {
             tracing::debug!(error = %err, url = %url, "failed to decode relay p2p info payload");
-            Vec::new()
+            RuntimeBootstrapInfo::default()
         }
     }
+}
+
+fn dedupe_non_empty(values: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let normalized = trimmed.to_string();
+        if !out.contains(&normalized) {
+            out.push(normalized);
+        }
+    }
+    out
 }
 
 fn relay_p2p_info_url() -> String {
@@ -466,6 +503,20 @@ mod api_contract_tests {
                 .and_then(|value| value.as_array())
                 .is_some(),
             "bootstrap_nodes field should be present in bootstrap response payload: {payload}"
+        );
+        assert!(
+            payload
+                .get("bootstrap_hints")
+                .and_then(|value| value.as_array())
+                .is_some(),
+            "bootstrap_hints field should be present in bootstrap response payload: {payload}"
+        );
+        assert!(
+            payload
+                .get("relay_urls")
+                .and_then(|value| value.as_array())
+                .is_some(),
+            "relay_urls field should be present in bootstrap response payload: {payload}"
         );
     }
 

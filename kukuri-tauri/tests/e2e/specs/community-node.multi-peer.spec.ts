@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { waitForAppReady } from '../helpers/waitForAppReady';
 import {
   ensureTestTopic,
+  getBootstrapSnapshot,
   getP2PMessageSnapshot,
   getP2PStatus,
   getPostStoreSnapshot,
@@ -38,6 +39,37 @@ const parseBootstrapPeers = (): string[] => {
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
   return peers.length > 0 ? peers : [DEFAULT_BOOTSTRAP_PEER];
+};
+
+const parseNodeId = (candidate: string): string | null => {
+  const trimmed = candidate.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const firstSegment = trimmed
+    .split('|')
+    .map((segment) => segment.trim())
+    .find((segment) => segment.length > 0);
+  if (!firstSegment) {
+    return null;
+  }
+  const [nodeId] = firstSegment.split('@');
+  const normalized = nodeId?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+};
+
+const hasExpectedBootstrapNode = (effectiveNodes: string[], expectedNodes: string[]): boolean => {
+  const expectedNodeIds = expectedNodes
+    .map((entry) => parseNodeId(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  if (expectedNodeIds.length === 0) {
+    return expectedNodes.some((entry) => effectiveNodes.includes(entry));
+  }
+  const expectedSet = new Set(expectedNodeIds);
+  return effectiveNodes.some((entry) => {
+    const nodeId = parseNodeId(entry);
+    return nodeId ? expectedSet.has(nodeId) : false;
+  });
 };
 
 const resolveEnvString = (value: string | undefined, fallback: string): string => {
@@ -81,7 +113,25 @@ describe('Multi-peer docker propagation', () => {
       topicId,
     });
 
-    await joinP2PTopic(topicId, bootstrapPeers);
+    await browser.waitUntil(
+      async () => {
+        const snapshot = await getBootstrapSnapshot();
+        if (snapshot.effectiveNodes.length === 0) {
+          return false;
+        }
+        return hasExpectedBootstrapNode(snapshot.effectiveNodes, bootstrapPeers);
+      },
+      {
+        timeout: 60000,
+        interval: 1000,
+        timeoutMsg: `Effective bootstrap nodes were not ready: expected=${JSON.stringify(
+          bootstrapPeers,
+        )}`,
+      },
+    );
+
+    // 実機経路に合わせ、join 時は bootstrap seed を直注入しない。
+    await joinP2PTopic(topicId, []);
     await setTimelineUpdateMode('realtime');
 
     const topicButton = await $(`[data-testid="topic-${topicId}"]`);

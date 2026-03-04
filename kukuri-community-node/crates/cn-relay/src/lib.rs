@@ -39,7 +39,9 @@ pub(crate) struct AppState {
     pub relay_public_url: Option<String>,
     pub p2p_node_id: Arc<RwLock<Option<String>>>,
     pub p2p_bind_addr: SocketAddr,
+    pub p2p_relay_urls: Arc<Vec<String>>,
     pub p2p_router: Arc<RwLock<Option<Arc<IrohRouter>>>>,
+    pub bootstrap_hint_rejoin_requests: Arc<RwLock<HashSet<String>>>,
 }
 
 #[derive(Serialize)]
@@ -53,6 +55,7 @@ struct RelayP2pInfoResponse {
     bind_addr: String,
     bootstrap_nodes: Vec<String>,
     bootstrap_hints: Vec<String>,
+    relay_urls: Vec<String>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -89,6 +92,8 @@ pub struct RelayConfig {
     pub database_url: String,
     pub p2p_bind_addr: SocketAddr,
     pub p2p_secret_key: Option<String>,
+    pub p2p_relay_urls: Vec<String>,
+    pub p2p_relay_mode_default: bool,
     pub topic_poll_seconds: u64,
     pub config_poll_seconds: u64,
     pub relay_public_url: Option<String>,
@@ -99,6 +104,11 @@ pub fn load_config() -> Result<RelayConfig> {
     let database_url = core_config::required_env("DATABASE_URL")?;
     let p2p_bind_addr = core_config::socket_addr_from_env("RELAY_P2P_BIND", "0.0.0.0:11223")?;
     let p2p_secret_key = std::env::var("RELAY_P2P_SECRET_KEY").ok();
+    let p2p_relay_urls = parse_csv_env("RELAY_IROH_RELAY_URLS");
+    let p2p_relay_mode_default = std::env::var("RELAY_IROH_RELAY_MODE")
+        .ok()
+        .map(|value| relay_mode_uses_default(&value))
+        .unwrap_or(false);
     let topic_poll_seconds = std::env::var("RELAY_TOPIC_POLL_SECONDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -114,6 +124,8 @@ pub fn load_config() -> Result<RelayConfig> {
         database_url,
         p2p_bind_addr,
         p2p_secret_key,
+        p2p_relay_urls,
+        p2p_relay_mode_default,
         topic_poll_seconds,
         config_poll_seconds,
         relay_public_url,
@@ -178,7 +190,9 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         relay_public_url: config.relay_public_url.clone(),
         p2p_node_id: Arc::new(RwLock::new(None)),
         p2p_bind_addr: config.p2p_bind_addr,
+        p2p_relay_urls: Arc::new(config.p2p_relay_urls.clone()),
         p2p_router: Arc::new(RwLock::new(None)),
+        bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
     };
 
     gossip::start_gossip(state.clone(), config.clone()).await?;
@@ -345,10 +359,7 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     let node_id = state.p2p_node_id.read().await.clone();
     let bind_addr = state.p2p_bind_addr.to_string();
     let advertised_host = resolve_advertised_host(&state);
-    let relay_hint_url = state
-        .relay_public_url
-        .as_deref()
-        .and_then(normalize_relay_url_for_hint);
+    let relay_urls = resolve_p2p_relay_urls_for_info(&state);
     let bootstrap_nodes = match (node_id.as_deref(), advertised_host.as_deref()) {
         (Some(node_id), Some(host)) => {
             let endpoint = format_host_port(host, state.p2p_bind_addr.port());
@@ -359,13 +370,15 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     let bootstrap_hints = match (node_id.as_deref(), advertised_host.as_deref()) {
         (Some(node_id), Some(host)) => {
             let endpoint = format_host_port(host, state.p2p_bind_addr.port());
-            if let Some(relay_url) = relay_hint_url {
-                vec![
-                    format!("{node_id}|relay={relay_url}|addr={endpoint}"),
-                    format!("{node_id}|relay={relay_url}"),
-                ]
-            } else {
+            if relay_urls.is_empty() {
                 vec![format!("{node_id}@{endpoint}")]
+            } else {
+                let mut hints = Vec::new();
+                for relay_url in &relay_urls {
+                    hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
+                    hints.push(format!("{node_id}|relay={relay_url}"));
+                }
+                hints
             }
         }
         _ => Vec::new(),
@@ -376,7 +389,22 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
         bind_addr,
         bootstrap_nodes,
         bootstrap_hints,
+        relay_urls,
     })
+}
+
+fn resolve_p2p_relay_urls_for_info(state: &AppState) -> Vec<String> {
+    let mut relay_urls = state.p2p_relay_urls.as_ref().clone();
+    if relay_urls.is_empty() {
+        if let Some(relay_hint_url) = state
+            .relay_public_url
+            .as_deref()
+            .and_then(normalize_relay_url_for_hint)
+        {
+            relay_urls.push(relay_hint_url);
+        }
+    }
+    dedupe_in_order(relay_urls)
 }
 
 fn format_host_port(host: &str, port: u16) -> String {
@@ -408,6 +436,33 @@ fn normalize_relay_url_for_hint(raw: &str) -> Option<String> {
     parsed.set_query(None);
     parsed.set_fragment(None);
     Some(parsed.to_string())
+}
+
+fn relay_mode_uses_default(raw: &str) -> bool {
+    raw.trim().eq_ignore_ascii_case("default")
+}
+
+fn parse_csv_env(name: &str) -> Vec<String> {
+    std::env::var(name)
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|entry| entry.trim().to_string())
+                .filter(|entry| !entry.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn dedupe_in_order(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for value in values {
+        if seen.insert(value.clone()) {
+            out.push(value);
+        }
+    }
+    out
 }
 
 fn resolve_advertised_host(state: &AppState) -> Option<String> {
@@ -464,7 +519,10 @@ fn extract_host_from_url_like(raw: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_host_from_url_like, format_host_port, normalize_relay_url_for_hint};
+    use super::{
+        dedupe_in_order, extract_host_from_url_like, format_host_port,
+        normalize_relay_url_for_hint, relay_mode_uses_default,
+    };
 
     #[test]
     fn extract_host_from_url_like_parses_ws_url_with_port_and_path() {
@@ -494,6 +552,29 @@ mod tests {
         assert_eq!(
             format_host_port("2001:db8::10", 11223),
             "[2001:db8::10]:11223"
+        );
+    }
+
+    #[test]
+    fn relay_mode_uses_default_handles_case_and_whitespace() {
+        assert!(relay_mode_uses_default(" default "));
+        assert!(relay_mode_uses_default("DEFAULT"));
+        assert!(!relay_mode_uses_default("custom"));
+    }
+
+    #[test]
+    fn dedupe_in_order_keeps_first_entries() {
+        let deduped = dedupe_in_order(vec![
+            "https://relay-a.example/".to_string(),
+            "https://relay-b.example/".to_string(),
+            "https://relay-a.example/".to_string(),
+        ]);
+        assert_eq!(
+            deduped,
+            vec![
+                "https://relay-a.example/".to_string(),
+                "https://relay-b.example/".to_string()
+            ]
         );
     }
 }

@@ -24,6 +24,9 @@ struct Metrics {
     ingest_rejected_total: IntCounterVec,
     gossip_received_total: IntCounterVec,
     gossip_sent_total: IntCounterVec,
+    gossip_join_total: IntCounterVec,
+    gossip_join_retry_total: IntCounterVec,
+    gossip_join_convergence_seconds: HistogramVec,
     bootstrap_hint_publish_total: IntCounterVec,
     dedupe_hits_total: IntCounterVec,
     dedupe_misses_total: IntCounterVec,
@@ -135,6 +138,33 @@ fn metrics() -> &'static Metrics {
             &["service"],
         )
         .expect("gossip_sent_total metric");
+
+        let gossip_join_total = IntCounterVec::new(
+            Opts::new(
+                "gossip_join_total",
+                "Total gossip topic join outcomes grouped by result and reason",
+            ),
+            &["service", "result", "reason"],
+        )
+        .expect("gossip_join_total metric");
+
+        let gossip_join_retry_total = IntCounterVec::new(
+            Opts::new("gossip_join_retry_total", "Total gossip topic join retries"),
+            &["service", "reason"],
+        )
+        .expect("gossip_join_retry_total metric");
+
+        let gossip_join_convergence_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "gossip_join_convergence_seconds",
+                "Time to complete gossip topic join attempts",
+            )
+            .buckets(vec![
+                0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0,
+            ]),
+            &["service", "result"],
+        )
+        .expect("gossip_join_convergence_seconds metric");
 
         let bootstrap_hint_publish_total = IntCounterVec::new(
             Opts::new(
@@ -348,6 +378,15 @@ fn metrics() -> &'static Metrics {
             .register(Box::new(gossip_sent_total.clone()))
             .expect("register gossip_sent_total");
         registry
+            .register(Box::new(gossip_join_total.clone()))
+            .expect("register gossip_join_total");
+        registry
+            .register(Box::new(gossip_join_retry_total.clone()))
+            .expect("register gossip_join_retry_total");
+        registry
+            .register(Box::new(gossip_join_convergence_seconds.clone()))
+            .expect("register gossip_join_convergence_seconds");
+        registry
             .register(Box::new(bootstrap_hint_publish_total.clone()))
             .expect("register bootstrap_hint_publish_total");
         registry
@@ -424,6 +463,9 @@ fn metrics() -> &'static Metrics {
             ingest_rejected_total,
             gossip_received_total,
             gossip_sent_total,
+            gossip_join_total,
+            gossip_join_retry_total,
+            gossip_join_convergence_seconds,
             bootstrap_hint_publish_total,
             dedupe_hits_total,
             dedupe_misses_total,
@@ -544,6 +586,31 @@ pub fn inc_gossip_sent(service_name: &'static str) {
         .gossip_sent_total
         .with_label_values(&[service_name])
         .inc();
+}
+
+pub fn inc_gossip_join_total(service_name: &'static str, result: &str, reason: &str) {
+    metrics()
+        .gossip_join_total
+        .with_label_values(&[service_name, result, reason])
+        .inc();
+}
+
+pub fn inc_gossip_join_retry(service_name: &'static str, reason: &str) {
+    metrics()
+        .gossip_join_retry_total
+        .with_label_values(&[service_name, reason])
+        .inc();
+}
+
+pub fn observe_gossip_join_convergence(
+    service_name: &'static str,
+    result: &str,
+    duration: Duration,
+) {
+    metrics()
+        .gossip_join_convergence_seconds
+        .with_label_values(&[service_name, result])
+        .observe(duration.as_secs_f64());
 }
 
 pub fn inc_bootstrap_hint_publish(service_name: &'static str, channel: &str, result: &str) {

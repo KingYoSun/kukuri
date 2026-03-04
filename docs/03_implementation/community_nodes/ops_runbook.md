@@ -258,3 +258,46 @@ trust:
 - Postgres バックアップ（`pg_dump`）には削除前のデータが含まれるため、削除要求の反映はバックアップの自然消滅まで遅延し得る（Privacy に明記）
 - リストア（過去のバックアップへ復旧）を行う場合、復旧後に「削除要求の再適用」が必要になる可能性がある
   - v1 は運用手順で担保（削除要求の受付/完了を監査ログにも残し、復旧後に照合して再実行）
+
+## 6. iroh custom relay canary / 切戻し（cn-iroh-relay）
+
+### 6.1 設定キー（切替）
+
+- `RELAY_IROH_RELAY_URLS`:
+  - `cn-relay` が iroh endpoint 初期化時に使う custom relay URL（CSV）
+- `RELAY_IROH_RELAY_MODE`:
+  - `default` を指定すると `RELAY_IROH_RELAY_URLS` を無視し `RelayMode::Default` へ強制フォールバック
+- `KUKURI_IROH_RELAY_URLS`:
+  - `kukuri-tauri` が iroh endpoint 初期化時に使う custom relay URL（CSV）
+- `KUKURI_IROH_RELAY_MODE`:
+  - `default` を指定すると `KUKURI_IROH_RELAY_URLS` を無視し `RelayMode::Default` へ強制フォールバック
+
+### 6.2 canary 実施手順（IPv4/IPv6 混在）
+
+1. canary ノードのみ `RELAY_IROH_RELAY_URLS` / `KUKURI_IROH_RELAY_URLS` を設定し、他ノードは `RelayMode::Default` のまま維持する。
+2. `SCENARIO=multi-peer-e2e` で `community-node.multi-peer.spec.ts` と `community-node.ipv6-relay-fallback.spec.ts` を実行し、bootstrap API 経路で peer 接続が成立することを確認する。
+3. 指標を 24h 観測する。
+4. 閾値を超える劣化があれば即時切戻し（6.3）を実施する。
+
+観測対象（最低限）:
+- `gossip_join_total{service="cn-relay",result="failure"}`
+- `gossip_join_retry_total{service="cn-relay"}`
+- `gossip_join_convergence_seconds{service="cn-relay"}`
+- `gossip_received_total` / `gossip_sent_total`
+
+### 6.3 障害時の即時切戻し
+
+1. `cn-relay`:
+  - `RELAY_IROH_RELAY_MODE=default` を設定して再起動
+2. `kukuri-tauri`:
+  - `KUKURI_IROH_RELAY_MODE=default` を設定して再起動
+3. `RELAY_IROH_RELAY_URLS` / `KUKURI_IROH_RELAY_URLS` は残してよい（mode=default が優先される）
+4. 切戻し後、`/healthz` と multi-peer E2E の再実行で復旧を確認する
+
+### 6.4 ロールアウト判定基準（v1）
+
+- canary 期間中に以下をすべて満たした場合のみ段階展開を進める。
+  - multi-peer E2E（bootstrap/relay 経路）が連続 green
+  - IPv6 fallback E2E が green
+  - `gossip_join_total{result="failure"}` の増加が平常時比で許容範囲内
+  - `gossip_join_convergence_seconds` の p95 が平常時比で大幅悪化しない

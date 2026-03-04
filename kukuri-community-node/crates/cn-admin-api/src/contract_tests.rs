@@ -3864,6 +3864,12 @@ async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_d
     .await
     .expect("insert node subscription for runtime fallback");
 
+    sqlx::query("DELETE FROM cn_user.topic_subscriptions WHERE topic_id = $1")
+        .bind(&topic_id)
+        .execute(&state.pool)
+        .await
+        .expect("clear topic subscriptions for runtime fallback test");
+
     insert_service_health(
         &state.pool,
         "relay",

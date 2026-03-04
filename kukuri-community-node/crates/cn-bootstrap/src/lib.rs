@@ -24,6 +24,8 @@ const DEFAULT_HINT_NOTIFY_CHANNEL: &str = "cn_bootstrap_hint";
 const HINT_PUBLISH_RESULT_SUCCESS: &str = "success";
 const HINT_PUBLISH_RESULT_FAILURE: &str = "failure";
 const BOOTSTRAP_HINT_SCHEMA: &str = "kukuri-bootstrap-update-hint-v1";
+const RELAY_P2P_INFO_TIMEOUT_SECS: u64 = 1;
+const DEFAULT_RELAY_P2P_INFO_URL: &str = "http://relay:8082/v1/p2p/info";
 
 #[derive(Clone)]
 struct AppState {
@@ -84,6 +86,16 @@ struct BootstrapUpdateHintPayload {
     changed_topic_ids: Vec<String>,
     refresh_paths: [&'static str; 2],
     hint_channels: [&'static str; 2],
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct RelayP2pInfoResponse {
+    #[serde(default)]
+    bootstrap_nodes: Vec<String>,
+    #[serde(default)]
+    bootstrap_hints: Vec<String>,
+    #[serde(default)]
+    relay_urls: Vec<String>,
 }
 
 pub struct BootstrapConfig {
@@ -317,6 +329,8 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
         .get("descriptor")
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let runtime_p2p_hints = fetch_runtime_p2p_hints(&state.health_client).await;
+    let descriptor = merge_descriptor_with_runtime_p2p_hints(&descriptor, &runtime_p2p_hints);
     let exp_config = config.get("exp").cloned().unwrap_or_else(|| json!({}));
 
     let now = cn_core::auth::unix_seconds()? as i64;
@@ -387,6 +401,164 @@ async fn refresh_bootstrap_events(state: &AppState) -> Result<()> {
     publish_bootstrap_update_hint(&state.pool, &hint_config, &refresh_delta).await;
 
     Ok(())
+}
+
+async fn fetch_runtime_p2p_hints(client: &reqwest::Client) -> Vec<String> {
+    let url = relay_p2p_info_url();
+    let response = match client
+        .get(&url)
+        .timeout(Duration::from_secs(RELAY_P2P_INFO_TIMEOUT_SECS))
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::debug!(error = %err, url = %url, "failed to fetch relay p2p info");
+            return Vec::new();
+        }
+    };
+
+    if !response.status().is_success() {
+        tracing::debug!(
+            status = %response.status(),
+            url = %url,
+            "relay p2p info endpoint returned non-success status"
+        );
+        return Vec::new();
+    }
+
+    match response.json::<RelayP2pInfoResponse>().await {
+        Ok(payload) => {
+            let _relay_urls = dedupe_non_empty_strings(payload.relay_urls);
+            let hints = dedupe_non_empty_strings(payload.bootstrap_hints);
+            if hints.is_empty() {
+                dedupe_non_empty_strings(payload.bootstrap_nodes)
+            } else {
+                hints
+            }
+        }
+        Err(err) => {
+            tracing::debug!(error = %err, url = %url, "failed to decode relay p2p info payload");
+            Vec::new()
+        }
+    }
+}
+
+fn relay_p2p_info_url() -> String {
+    if let Ok(explicit) = std::env::var("RELAY_P2P_INFO_URL") {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    if let Ok(health_url) = std::env::var("RELAY_HEALTH_URL") {
+        if let Some(derived) = derive_relay_p2p_info_url_from_health_url(health_url.trim()) {
+            return derived;
+        }
+    }
+
+    DEFAULT_RELAY_P2P_INFO_URL.to_string()
+}
+
+fn derive_relay_p2p_info_url_from_health_url(health_url: &str) -> Option<String> {
+    let mut parsed = reqwest::Url::parse(health_url).ok()?;
+    let mut segments = parsed
+        .path_segments()
+        .map(|iter| {
+            iter.filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if segments.last().copied() == Some("healthz") {
+        segments.pop();
+    }
+    segments.extend(["v1", "p2p", "info"]);
+    parsed.set_path(&format!("/{}", segments.join("/")));
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Some(parsed.to_string())
+}
+
+fn dedupe_non_empty_strings(values: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let normalized = trimmed.to_string();
+        if !out.contains(&normalized) {
+            out.push(normalized);
+        }
+    }
+    out
+}
+
+fn merge_descriptor_with_runtime_p2p_hints(
+    descriptor: &serde_json::Value,
+    runtime_hints: &[String],
+) -> serde_json::Value {
+    let runtime_hints = dedupe_non_empty_strings(runtime_hints.to_vec());
+    if runtime_hints.is_empty() {
+        return descriptor.clone();
+    }
+
+    let mut merged_descriptor = if descriptor.is_object() {
+        descriptor.clone()
+    } else {
+        json!({})
+    };
+    let mut endpoints = merged_descriptor
+        .get("endpoints")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if !endpoints.is_object() {
+        endpoints = json!({});
+    }
+
+    let mut merged_hints = runtime_hints;
+    if let Some(existing) = endpoints.get("p2p") {
+        match existing {
+            serde_json::Value::String(raw) => {
+                let trimmed = raw.trim();
+                if !trimmed.is_empty() && !merged_hints.contains(&trimmed.to_string()) {
+                    merged_hints.push(trimmed.to_string());
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    if let Some(raw) = value.as_str() {
+                        let trimmed = raw.trim();
+                        if !trimmed.is_empty() && !merged_hints.contains(&trimmed.to_string()) {
+                            merged_hints.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let p2p_value = if merged_hints.len() == 1 {
+        serde_json::Value::String(merged_hints[0].clone())
+    } else {
+        serde_json::Value::Array(
+            merged_hints
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect(),
+        )
+    };
+
+    if let Some(map) = endpoints.as_object_mut() {
+        map.insert("p2p".to_string(), p2p_value);
+    }
+    if let Some(map) = merged_descriptor.as_object_mut() {
+        map.insert("endpoints".to_string(), endpoints);
+    }
+
+    merged_descriptor
 }
 
 async fn load_topic_services(
@@ -1002,6 +1174,72 @@ mod tests {
             topic_service_cleanup_mode(&active_tags),
             TopicServiceCleanupMode::DeleteStale
         );
+    }
+
+    #[test]
+    fn merge_descriptor_with_runtime_p2p_hints_sets_endpoints_p2p() {
+        let descriptor = json!({
+            "name": "Node",
+            "roles": ["bootstrap"],
+            "endpoints": {
+                "http": "https://node.example"
+            }
+        });
+        let runtime_hints = vec![
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|relay=https://relay.example|addr=bootstrap.example.com:11223".to_string(),
+        ];
+
+        let merged = merge_descriptor_with_runtime_p2p_hints(&descriptor, &runtime_hints);
+        let p2p = merged.pointer("/endpoints/p2p");
+        assert_eq!(
+            p2p.and_then(|value| value.as_str()),
+            Some(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|relay=https://relay.example|addr=bootstrap.example.com:11223"
+            )
+        );
+    }
+
+    #[test]
+    fn merge_descriptor_with_runtime_p2p_hints_keeps_existing_unique_values() {
+        let descriptor = json!({
+            "name": "Node",
+            "roles": ["bootstrap"],
+            "endpoints": {
+                "http": "https://node.example",
+                "p2p": [
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@127.0.0.1:11223",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|relay=https://relay.example|addr=bootstrap.example.com:11223"
+                ]
+            }
+        });
+        let runtime_hints = vec![
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|relay=https://relay.example|addr=bootstrap.example.com:11223".to_string(),
+        ];
+
+        let merged = merge_descriptor_with_runtime_p2p_hints(&descriptor, &runtime_hints);
+        let p2p = merged
+            .pointer("/endpoints/p2p")
+            .and_then(|value| value.as_array())
+            .expect("p2p array");
+        let values = p2p
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            values,
+            vec![
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|relay=https://relay.example|addr=bootstrap.example.com:11223",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@127.0.0.1:11223"
+            ]
+        );
+    }
+
+    #[test]
+    fn derive_relay_p2p_info_url_from_health_url_maps_path() {
+        let derived =
+            derive_relay_p2p_info_url_from_health_url("http://relay:8082/healthz?x=1#frag");
+        assert_eq!(derived.as_deref(), Some("http://relay:8082/v1/p2p/info"));
     }
 
     #[tokio::test]

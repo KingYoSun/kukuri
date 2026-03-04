@@ -214,6 +214,10 @@ struct BootstrapHttpResponse {
     next_refresh_at: Option<i64>,
     #[serde(default)]
     bootstrap_nodes: Vec<String>,
+    #[serde(default)]
+    bootstrap_hints: Vec<String>,
+    #[serde(default)]
+    relay_urls: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1144,12 +1148,20 @@ impl CommunityNodeHandler {
                 sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &response.items, now, None);
             for item in sanitized {
                 let extracted = extract_bootstrap_nodes_from_descriptor(&item, now);
-                merge_unique_bootstrap_nodes(&mut resolved, extracted);
+                merge_bootstrap_nodes_by_node_id(&mut resolved, extracted);
             }
 
-            for raw in response.bootstrap_nodes {
+            let _relay_urls = response.relay_urls.clone();
+            let runtime_candidates = if response.bootstrap_hints.is_empty() {
+                response.bootstrap_nodes
+            } else {
+                let mut merged = response.bootstrap_hints;
+                merged.extend(response.bootstrap_nodes);
+                merged
+            };
+            for raw in runtime_candidates {
                 if let Some(node) = normalize_bootstrap_node_candidate(&raw) {
-                    merge_unique_bootstrap_nodes(&mut resolved, vec![node]);
+                    merge_bootstrap_nodes_by_node_id(&mut resolved, vec![node]);
                 }
             }
         }
@@ -1639,6 +1651,27 @@ fn merge_unique_bootstrap_nodes(target: &mut Vec<String>, additional: Vec<String
     for node in additional {
         if seen.insert(node.clone()) {
             target.push(node);
+        }
+    }
+}
+
+fn merge_bootstrap_nodes_by_node_id(target: &mut Vec<String>, additional: Vec<String>) {
+    for candidate in additional {
+        if let Some(candidate_node_id) = extract_bootstrap_node_id(&candidate) {
+            let exists_same_node_id = target.iter().any(|existing| {
+                extract_bootstrap_node_id(existing)
+                    .map(|node_id| node_id == candidate_node_id)
+                    .unwrap_or(false)
+            });
+            if exists_same_node_id {
+                continue;
+            }
+        } else if target.contains(&candidate) {
+            continue;
+        }
+
+        if !target.contains(&candidate) {
+            target.push(candidate);
         }
     }
 }
@@ -3144,7 +3177,9 @@ mod community_node_handler_tests {
         let response = json!({
             "items": [],
             "next_refresh_at": Utc::now().timestamp() + 600,
-            "bootstrap_nodes": [relay_hint],
+            "bootstrap_nodes": [format!("{node_id}@203.0.113.10:11223")],
+            "bootstrap_hints": [relay_hint],
+            "relay_urls": ["https://relay.example"],
         });
         let (base_url, rx, handle) = spawn_json_server(response);
 

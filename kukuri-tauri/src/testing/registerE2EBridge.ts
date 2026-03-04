@@ -1498,8 +1498,9 @@ export function registerE2EBridge(): void {
           if (!peerAddress) {
             throw new Error('peerAddress is required');
           }
-          await p2pApi.connectToPeer(peerAddress);
-          await refreshRelayStatusSafe();
+          throw new Error(
+            `connectToP2PPeer is disabled in E2E. Use bootstrap API flow (bootstrap nodes -> relay hints -> joinP2PTopic) instead: ${peerAddress}`,
+          );
         },
         seedFriendPlusAccounts: async () => {
           const authState = useAuthStore.getState();

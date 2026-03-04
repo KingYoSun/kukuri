@@ -7,11 +7,15 @@ use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{Endpoint, RelayMode, address_lookup::MemoryLookup, protocol::Router};
+use iroh::{Endpoint, RelayMode, RelayUrl, address_lookup::MemoryLookup, protocol::Router};
 use std::collections::HashSet;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing;
+
+const KUKURI_IROH_RELAY_MODE_ENV: &str = "KUKURI_IROH_RELAY_MODE";
+const KUKURI_IROH_RELAY_URLS_ENV: &str = "KUKURI_IROH_RELAY_URLS";
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
@@ -37,7 +41,8 @@ impl IrohNetworkService {
     ) -> Result<Self, AppError> {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
         let static_discovery = Arc::new(MemoryLookup::new());
-        let builder = Endpoint::empty_builder(RelayMode::Default).secret_key(secret_key);
+        let relay_mode = resolve_endpoint_relay_mode()?;
+        let builder = Endpoint::empty_builder(relay_mode).secret_key(secret_key);
         let builder = discovery_options.apply_to_builder(builder);
         let builder = builder.address_lookup(static_discovery.clone());
         let endpoint = builder
@@ -329,6 +334,95 @@ impl IrohNetworkService {
             .map_err(|e| AppError::P2PError(format!("Failed to rotate secret: {e:?}")))?;
         tracing::info!("DHT shared secret rotated");
         Ok(())
+    }
+}
+
+fn resolve_endpoint_relay_mode() -> Result<RelayMode, AppError> {
+    relay_mode_from_env_values(
+        std::env::var(KUKURI_IROH_RELAY_MODE_ENV).ok(),
+        std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok(),
+    )
+}
+
+fn relay_mode_from_env_values(
+    relay_mode_raw: Option<String>,
+    relay_urls_raw: Option<String>,
+) -> Result<RelayMode, AppError> {
+    if relay_mode_raw
+        .as_deref()
+        .map(|value| value.trim().eq_ignore_ascii_case("default"))
+        .unwrap_or(false)
+    {
+        return Ok(RelayMode::Default);
+    }
+
+    let relay_urls = parse_custom_relay_urls(relay_urls_raw.as_deref())?;
+    if relay_urls.is_empty() {
+        return Ok(RelayMode::Default);
+    }
+
+    Ok(RelayMode::custom(relay_urls))
+}
+
+fn parse_custom_relay_urls(raw: Option<&str>) -> Result<Vec<RelayUrl>, AppError> {
+    let Some(raw) = raw else {
+        return Ok(Vec::new());
+    };
+
+    let mut relay_urls = Vec::new();
+    for entry in raw.split(',') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let relay_url = RelayUrl::from_str(trimmed).map_err(|err| {
+            AppError::ConfigurationError(format!(
+                "Invalid {} entry `{trimmed}`: {err}",
+                KUKURI_IROH_RELAY_URLS_ENV
+            ))
+        })?;
+        if !relay_urls.contains(&relay_url) {
+            relay_urls.push(relay_url);
+        }
+    }
+    Ok(relay_urls)
+}
+
+#[cfg(test)]
+mod relay_mode_tests {
+    use super::{parse_custom_relay_urls, relay_mode_from_env_values};
+    use iroh::RelayMode;
+
+    #[test]
+    fn relay_mode_defaults_when_env_is_empty() {
+        let mode = relay_mode_from_env_values(None, None).expect("relay mode");
+        assert!(matches!(mode, RelayMode::Default));
+    }
+
+    #[test]
+    fn relay_mode_defaults_when_flag_is_default() {
+        let mode = relay_mode_from_env_values(
+            Some("default".to_string()),
+            Some("https://relay.example".to_string()),
+        )
+        .expect("relay mode");
+        assert!(matches!(mode, RelayMode::Default));
+    }
+
+    #[test]
+    fn relay_mode_uses_custom_when_urls_exist() {
+        let mode = relay_mode_from_env_values(None, Some("https://relay.example".to_string()))
+            .expect("relay mode");
+        assert!(matches!(mode, RelayMode::Custom(_)));
+    }
+
+    #[test]
+    fn parse_custom_relay_urls_rejects_invalid_url() {
+        let err = parse_custom_relay_urls(Some("not-a-url")).expect_err("invalid relay url");
+        assert!(
+            err.to_string()
+                .contains("Invalid KUKURI_IROH_RELAY_URLS entry")
+        );
     }
 }
 

@@ -102,7 +102,9 @@ fn build_state_with_config(pool: Pool<Postgres>, config_json: serde_json::Value)
         relay_public_url: None,
         p2p_node_id: Arc::new(RwLock::new(None)),
         p2p_bind_addr: "0.0.0.0:11223".parse().expect("p2p bind addr"),
+        p2p_relay_urls: Arc::new(Vec::new()),
         p2p_router: Arc::new(RwLock::new(None)),
+        bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
     }
 }
 

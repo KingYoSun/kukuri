@@ -38,6 +38,9 @@ services:
   relay:
     <<: *cn-service
     command: ["relay"]
+    depends_on:
+      - postgres
+      - cn-iroh-relay
     environment:
       RELAY_ADDR: ${RELAY_ADDR}
     expose:
@@ -45,6 +48,22 @@ services:
     ports:
       - "8082:8082"
       - "11223:11223/udp"
+
+  cn-iroh-relay:
+    build:
+      context: ./docker/iroh-relay
+    profiles:
+      - bootstrap
+    environment:
+      IROH_RELAY_DEV: ${IROH_RELAY_DEV}
+      IROH_RELAY_CONFIG_PATH: ${IROH_RELAY_CONFIG_PATH}
+      RUST_LOG: ${IROH_RELAY_LOG_LEVEL}
+    expose:
+      - "3340"
+    ports:
+      - "3340:3340"
+    networks:
+      - cn
 
   admin-api:
     <<: *cn-service
