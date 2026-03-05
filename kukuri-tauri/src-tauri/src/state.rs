@@ -240,14 +240,18 @@ impl AppState {
         let gossip_service: Arc<dyn GossipService> = Arc::clone(&p2p_stack.gossip_service);
         let p2p_service = Arc::clone(&p2p_stack.p2p_service);
 
-        let access_control_service = Arc::new(AccessControlService::new(
-            Arc::clone(&key_manager),
-            Arc::clone(&group_key_store),
-            Arc::clone(&join_request_store),
-            Arc::clone(&repository) as Arc<dyn UserRepository>,
-            Arc::clone(&signature_service),
-            Arc::clone(&gossip_service),
-        ));
+        let access_control_service = Arc::new(
+            AccessControlService::new(
+                Arc::clone(&key_manager),
+                Arc::clone(&group_key_store),
+                Arc::clone(&join_request_store),
+                Arc::clone(&repository) as Arc<dyn UserRepository>,
+                Arc::clone(&signature_service),
+                Arc::clone(&gossip_service),
+            )
+            .with_secure_account_store(Arc::clone(&secure_account_store))
+            .with_network_service(Arc::clone(&network_service)),
+        );
 
         default_event_distributor
             .set_gossip_service(Arc::clone(&gossip_service))

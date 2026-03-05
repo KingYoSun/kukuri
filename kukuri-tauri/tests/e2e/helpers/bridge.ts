@@ -43,11 +43,13 @@ export type BridgeAction =
   | 'getP2PMessageSnapshot'
   | 'getPostStoreSnapshot'
   | 'joinP2PTopic'
+  | 'leaveP2PTopic'
   | 'connectToP2PPeer'
   | 'seedFriendPlusAccounts'
   | 'accessControlIssueInvite'
   | 'accessControlRequestJoin'
   | 'accessControlListJoinRequests'
+  | 'accessControlListJoinRequestsForOwner'
   | 'accessControlApproveJoinRequest'
   | 'accessControlIngestEventJson'
   | 'communityNodeAuthFlow'
@@ -348,6 +350,7 @@ type BridgeResultMap = {
   getP2PMessageSnapshot: P2PMessageSnapshot;
   getPostStoreSnapshot: PostStoreSnapshot;
   joinP2PTopic: null;
+  leaveP2PTopic: null;
   connectToP2PPeer: null;
   seedFriendPlusAccounts: SeedFriendPlusAccountsResult;
   accessControlIssueInvite: AccessControlIssueInviteResult;
@@ -771,6 +774,10 @@ export async function joinP2PTopic(topicId: string, initialPeers: string[] = [])
   await callBridge('joinP2PTopic', { topicId, initialPeers });
 }
 
+export async function leaveP2PTopic(topicId: string): Promise<void> {
+  await callBridge('leaveP2PTopic', { topicId });
+}
+
 export async function connectToP2PPeer(peerAddress: string): Promise<void> {
   await callBridge('connectToP2PPeer', { peerAddress });
 }
@@ -793,6 +800,14 @@ export async function accessControlRequestJoin(
 
 export async function accessControlListJoinRequests(): Promise<AccessControlListJoinRequestsResult> {
   return await callBridge('accessControlListJoinRequests');
+}
+
+export async function accessControlListJoinRequestsForOwner(
+  ownerPubkey: string,
+): Promise<AccessControlListJoinRequestsResult> {
+  return await callBridge('accessControlListJoinRequestsForOwner', {
+    owner_pubkey: ownerPubkey,
+  });
 }
 
 export async function accessControlApproveJoinRequest(

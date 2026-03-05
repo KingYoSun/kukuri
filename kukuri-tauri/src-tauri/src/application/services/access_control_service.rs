@@ -2,17 +2,19 @@ use crate::application::ports::group_key_store::{GroupKeyRecord, GroupKeyStore};
 use crate::application::ports::join_request_store::{
     InviteUsageRecord, JoinRequestRecord, JoinRequestStore,
 };
-use crate::application::ports::key_manager::KeyManager;
+use crate::application::ports::key_manager::{KeyManager, KeyPair};
 use crate::application::ports::repositories::UserRepository;
+use crate::application::ports::secure_storage::SecureAccountStore;
 use crate::application::shared::nostr::to_nostr_event;
 use crate::domain::entities::Event;
 use crate::domain::p2p::user_topic_id;
 use crate::infrastructure::crypto::SignatureService;
-use crate::infrastructure::p2p::GossipService;
+use crate::infrastructure::p2p::{GossipService, NetworkService};
 use crate::shared::{AppError, RateLimiter, ValidationFailureKind};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
+use nostr_sdk::FromBech32;
 use nostr_sdk::prelude::{PublicKey, SecretKey, nip44};
 use rand::{TryRng, rngs::SysRng};
 use serde::{Deserialize, Serialize};
@@ -63,6 +65,8 @@ pub struct AccessControlService {
     key_manager: Arc<dyn KeyManager>,
     group_key_store: Arc<dyn GroupKeyStore>,
     join_request_store: Arc<dyn JoinRequestStore>,
+    secure_account_store: Option<Arc<dyn SecureAccountStore>>,
+    network_service: Option<Arc<dyn NetworkService>>,
     user_repository: Arc<dyn UserRepository>,
     signature_service: Arc<dyn SignatureService>,
     gossip_service: Arc<dyn GossipService>,
@@ -82,6 +86,8 @@ impl AccessControlService {
             key_manager,
             group_key_store,
             join_request_store,
+            secure_account_store: None,
+            network_service: None,
             user_repository,
             signature_service,
             gossip_service,
@@ -90,6 +96,19 @@ impl AccessControlService {
                 JOIN_REQUEST_RATE_LIMIT_WINDOW,
             ),
         }
+    }
+
+    pub fn with_secure_account_store(
+        mut self,
+        secure_account_store: Arc<dyn SecureAccountStore>,
+    ) -> Self {
+        self.secure_account_store = Some(secure_account_store);
+        self
+    }
+
+    pub fn with_network_service(mut self, network_service: Arc<dyn NetworkService>) -> Self {
+        self.network_service = Some(network_service);
+        self
     }
 
     pub async fn issue_invite(
@@ -201,8 +220,9 @@ impl AccessControlService {
             .map_err(|err| AppError::SerializationError(err.to_string()))?;
 
         let mut topics = HashSet::new();
-        if let Some(issuer) = issuer_pubkey {
-            topics.insert(user_topic_id(&issuer));
+        let target_owner_pubkey = issuer_pubkey.clone();
+        if let Some(issuer) = issuer_pubkey.as_ref() {
+            topics.insert(user_topic_id(issuer));
         }
         if broadcast_to_topic {
             topics.insert(topic_id.clone());
@@ -217,6 +237,27 @@ impl AccessControlService {
 
         let sent_topics: Vec<String> = topics.into_iter().collect();
         self.broadcast_event(&event, &sent_topics).await?;
+        tracing::info!(
+            event_id = %event.id,
+            requester_pubkey = %requester_pubkey,
+            target_owner_pubkey = ?target_owner_pubkey,
+            topic_id = %topic_id,
+            scope = %scope,
+            "join.request broadcast completed"
+        );
+        let mirror_result = if let Some(owner_pubkey) = target_owner_pubkey.as_deref() {
+            self.store_join_request_for_owner(&event, owner_pubkey)
+                .await
+        } else {
+            self.handle_join_request(&event).await
+        };
+        if let Err(err) = mirror_result {
+            tracing::warn!(
+                error = %err,
+                event_id = %event.id,
+                "failed to mirror join.request into local access-control state"
+            );
+        }
 
         Ok(JoinRequestResult {
             event_id: event.id.clone(),
@@ -227,9 +268,21 @@ impl AccessControlService {
 
     pub async fn list_pending_join_requests(&self) -> Result<Vec<JoinRequestRecord>, AppError> {
         let keypair = self.current_keypair().await?;
-        self.join_request_store
-            .list_requests(&keypair.public_key)
+        self.list_pending_join_requests_for_owner(&keypair.public_key)
             .await
+    }
+
+    pub async fn list_pending_join_requests_for_owner(
+        &self,
+        owner_pubkey: &str,
+    ) -> Result<Vec<JoinRequestRecord>, AppError> {
+        let records = self.join_request_store.list_requests(owner_pubkey).await?;
+        tracing::info!(
+            owner_pubkey = %owner_pubkey,
+            pending_count = records.len(),
+            "listed pending join requests"
+        );
+        Ok(records)
     }
 
     pub async fn approve_join_request(
@@ -271,6 +324,13 @@ impl AccessControlService {
             .map_err(|err| AppError::SerializationError(err.to_string()))?;
         let topics = vec![user_topic_id(&context.requester_pubkey)];
         self.broadcast_event(&envelope_event, &topics).await?;
+        if let Err(err) = self.handle_key_envelope(&envelope_event).await {
+            tracing::warn!(
+                error = %err,
+                event_id = %envelope_event.id,
+                "failed to mirror key.envelope into local access-control state"
+            );
+        }
 
         self.join_request_store
             .delete_request(&keypair.public_key, event_id)
@@ -310,20 +370,27 @@ impl AccessControlService {
     }
 
     async fn handle_join_request(&self, event: &Event) -> Result<(), AppError> {
-        let keypair = match self.key_manager.current_keypair().await {
-            Ok(pair) => pair,
-            Err(_) => return Ok(()),
+        let Some(owner_pubkey) = self.resolve_join_request_owner_pubkey(event).await? else {
+            return Ok(());
         };
+        self.store_join_request_for_owner(event, &owner_pubkey)
+            .await
+    }
+
+    async fn store_join_request_for_owner(
+        &self,
+        event: &Event,
+        owner_pubkey: &str,
+    ) -> Result<(), AppError> {
         let Some(context) = self
-            .validate_join_request_event(event, &keypair.public_key)
+            .validate_join_request_event(event, owner_pubkey)
             .await?
         else {
             return Ok(());
         };
-
         if self
             .join_request_store
-            .get_request(&keypair.public_key, &event.id)
+            .get_request(owner_pubkey, &event.id)
             .await?
             .is_some()
         {
@@ -346,7 +413,7 @@ impl AccessControlService {
                 AppError::validation(ValidationFailureKind::Generic, "Invite event_id is missing")
             })?;
             let max_uses = context.invite_max_uses.unwrap_or(1);
-            self.consume_invite_usage(&keypair.public_key, invite_event_id, max_uses)
+            self.consume_invite_usage(owner_pubkey, invite_event_id, max_uses)
                 .await?;
         }
 
@@ -361,8 +428,16 @@ impl AccessControlService {
             invite_event_json: context.invite_event_json,
         };
 
+        tracing::info!(
+            owner_pubkey = %owner_pubkey,
+            event_id = %event.id,
+            topic_id = %record.topic_id,
+            scope = %record.scope,
+            requester_pubkey = %record.requester_pubkey,
+            "storing pending join.request"
+        );
         self.join_request_store
-            .upsert_request(&keypair.public_key, record)
+            .upsert_request(owner_pubkey, record)
             .await?;
         Ok(())
     }
@@ -485,10 +560,6 @@ impl AccessControlService {
     }
 
     async fn handle_key_envelope(&self, event: &Event) -> Result<(), AppError> {
-        let keypair = match self.key_manager.current_keypair().await {
-            Ok(pair) => pair,
-            Err(_) => return Ok(()),
-        };
         if let Ok(nostr_event) = to_nostr_event(event)
             && nostr_event.verify().is_err()
         {
@@ -498,9 +569,10 @@ impl AccessControlService {
         let tags = event.tags.clone();
         validate_kip_tags(&tags)?;
         let recipient = require_tag_value(&tags, "p")?;
-        if recipient != keypair.public_key {
+        let Some(recipient_secret_key) = self.resolve_secret_key_for_pubkey(&recipient).await?
+        else {
             return Ok(());
-        }
+        };
         let topic_tag = require_tag_value(&tags, "t")?;
         let scope_tag = require_tag_value(&tags, "scope")?;
         let epoch_tag = require_tag_value(&tags, "epoch")?
@@ -515,12 +587,11 @@ impl AccessControlService {
             ));
         }
 
-        let secret_key = SecretKey::from_hex(&keypair.private_key)
-            .map_err(|err| AppError::Crypto(format!("Invalid private key: {err}")))?;
         let sender_pubkey = PublicKey::from_hex(&event.pubkey)
             .map_err(|err| AppError::Crypto(format!("Invalid sender pubkey: {err}")))?;
-        let decrypted = nip44::decrypt(&secret_key, &sender_pubkey, event.content.clone())
-            .map_err(|err| AppError::Crypto(format!("NIP-44 decrypt failed: {err}")))?;
+        let decrypted =
+            nip44::decrypt(&recipient_secret_key, &sender_pubkey, event.content.clone())
+                .map_err(|err| AppError::Crypto(format!("NIP-44 decrypt failed: {err}")))?;
         let payload: KeyEnvelopePayload = serde_json::from_str(&decrypted)
             .map_err(|err| AppError::DeserializationError(err.to_string()))?;
 
@@ -547,6 +618,91 @@ impl AccessControlService {
         };
         self.group_key_store.store_key(record).await?;
         Ok(())
+    }
+
+    async fn resolve_join_request_owner_pubkey(
+        &self,
+        event: &Event,
+    ) -> Result<Option<String>, AppError> {
+        let current_pubkey = self
+            .key_manager
+            .current_keypair()
+            .await
+            .ok()
+            .map(|pair| pair.public_key);
+        let target_pubkey = tag_value(&event.tags, "p");
+        if let Some(target) = target_pubkey {
+            // request_join 直後のローカル mirror では、自己送信イベントを
+            // target 側の pending に反映できるようローカルアカウント判定を緩和する。
+            if current_pubkey.as_deref() == Some(event.pubkey.as_str()) {
+                return Ok(Some(target));
+            }
+            if self.has_local_account_for_pubkey(&target).await? {
+                return Ok(Some(target));
+            }
+            return Ok(None);
+        }
+
+        Ok(current_pubkey)
+    }
+
+    async fn has_local_account_for_pubkey(&self, pubkey: &str) -> Result<bool, AppError> {
+        if let Ok(current) = self.key_manager.current_keypair().await
+            && current.public_key == pubkey
+        {
+            return Ok(true);
+        }
+
+        let Some(store) = self.secure_account_store.as_ref() else {
+            return Ok(false);
+        };
+        let accounts = store.list_accounts().await?;
+        Ok(accounts.iter().any(|account| account.pubkey == pubkey))
+    }
+
+    async fn resolve_secret_key_for_pubkey(
+        &self,
+        pubkey: &str,
+    ) -> Result<Option<SecretKey>, AppError> {
+        if let Ok(current) = self.key_manager.current_keypair().await
+            && current.public_key == pubkey
+        {
+            let secret = Self::parse_secret_key_material(&current.private_key)
+                .or_else(|_| Self::parse_secret_key_material(&current.nsec))
+                .map_err(|_| {
+                    AppError::Crypto(format!("Invalid current account key material for {pubkey}"))
+                })?;
+            return Ok(Some(secret));
+        }
+
+        let Some(store) = self.secure_account_store.as_ref() else {
+            return Ok(None);
+        };
+        let accounts = store.list_accounts().await?;
+        let Some(account) = accounts
+            .into_iter()
+            .find(|account| account.pubkey == pubkey)
+        else {
+            return Ok(None);
+        };
+        let Some(nsec) = store.get_private_key(&account.npub).await? else {
+            return Ok(None);
+        };
+        let secret = Self::parse_secret_key_material(&nsec).map_err(|_| {
+            AppError::Crypto(format!(
+                "Invalid stored key material for account {} ({pubkey})",
+                account.npub
+            ))
+        })?;
+        Ok(Some(secret))
+    }
+
+    fn parse_secret_key_material(material: &str) -> Result<SecretKey, AppError> {
+        if let Ok(secret) = SecretKey::from_bech32(material) {
+            return Ok(secret);
+        }
+        SecretKey::from_hex(material)
+            .map_err(|err| AppError::Crypto(format!("Invalid secret key material: {err}")))
     }
 
     async fn ensure_group_key(
@@ -647,7 +803,22 @@ impl AccessControlService {
         }
 
         for topic in uniq {
-            self.gossip_service.join_topic(&topic, Vec::new()).await?;
+            let mut initial_peers = Vec::new();
+            if let Some(network_service) = self.network_service.as_ref()
+                && let Ok(peers) = network_service.get_peers().await
+            {
+                initial_peers = peers
+                    .into_iter()
+                    .map(|peer| peer.address.trim().to_string())
+                    .filter(|address| !address.is_empty())
+                    .collect();
+                initial_peers.sort();
+                initial_peers.dedup();
+            }
+
+            self.gossip_service
+                .join_topic(&topic, initial_peers)
+                .await?;
             self.gossip_service.broadcast(&topic, event).await?;
         }
         Ok(())
@@ -775,9 +946,7 @@ impl AccessControlService {
         Ok((topic_id, scope, None, issuer_pubkey))
     }
 
-    async fn current_keypair(
-        &self,
-    ) -> Result<crate::application::ports::key_manager::KeyPair, AppError> {
+    async fn current_keypair(&self) -> Result<KeyPair, AppError> {
         self.key_manager.current_keypair().await
     }
 }
@@ -996,7 +1165,10 @@ mod tests {
     use crate::application::ports::join_request_store::{InviteUsageRecord, JoinRequestStore};
     use crate::application::ports::key_manager::KeyPair;
     use crate::application::ports::repositories::{FollowListSort, UserCursorPage, UserRepository};
-    use crate::domain::entities::User;
+    use crate::application::ports::secure_storage::SecureAccountStore;
+    use crate::domain::entities::{
+        AccountMetadata, AccountRegistration, CurrentAccountSecret, User,
+    };
     use crate::infrastructure::crypto::DefaultSignatureService;
     use async_trait::async_trait;
     use chrono::{TimeZone, Utc};
@@ -1201,6 +1373,69 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct TestSecureAccountStore {
+        accounts: Arc<RwLock<HashMap<String, AccountMetadata>>>,
+        private_keys: Arc<RwLock<HashMap<String, String>>>,
+    }
+
+    impl TestSecureAccountStore {
+        async fn seed_account(&self, metadata: AccountMetadata, nsec: String) {
+            self.private_keys
+                .write()
+                .await
+                .insert(metadata.npub.clone(), nsec);
+            self.accounts
+                .write()
+                .await
+                .insert(metadata.npub.clone(), metadata);
+        }
+    }
+
+    #[async_trait]
+    impl SecureAccountStore for TestSecureAccountStore {
+        async fn add_account(
+            &self,
+            registration: AccountRegistration,
+        ) -> Result<AccountMetadata, AppError> {
+            let (metadata, nsec) = registration.into_metadata();
+            self.seed_account(metadata.clone(), nsec).await;
+            Ok(metadata)
+        }
+
+        async fn list_accounts(&self) -> Result<Vec<AccountMetadata>, AppError> {
+            let mut values: Vec<AccountMetadata> =
+                self.accounts.read().await.values().cloned().collect();
+            values.sort_by(|a, b| a.npub.cmp(&b.npub));
+            Ok(values)
+        }
+
+        async fn remove_account(&self, npub: &str) -> Result<(), AppError> {
+            self.accounts.write().await.remove(npub);
+            self.private_keys.write().await.remove(npub);
+            Ok(())
+        }
+
+        async fn switch_account(&self, npub: &str) -> Result<AccountMetadata, AppError> {
+            let metadata = self
+                .accounts
+                .read()
+                .await
+                .get(npub)
+                .cloned()
+                .ok_or_else(|| AppError::NotFound(format!("Account not found: {npub}")))?;
+            Ok(metadata)
+        }
+
+        async fn get_private_key(&self, npub: &str) -> Result<Option<String>, AppError> {
+            Ok(self.private_keys.read().await.get(npub).cloned())
+        }
+
+        async fn current_account(&self) -> Result<Option<CurrentAccountSecret>, AppError> {
+            Ok(None)
+        }
+    }
+
     #[async_trait]
     impl UserRepository for TestUserRepository {
         async fn create_user(&self, _user: &User) -> Result<(), AppError> {
@@ -1381,6 +1616,17 @@ mod tests {
             nsec,
         };
         (keys, keypair)
+    }
+
+    fn account_metadata_from_keypair(keypair: &KeyPair, label: &str) -> AccountMetadata {
+        AccountMetadata {
+            npub: keypair.npub.clone(),
+            pubkey: keypair.public_key.clone(),
+            name: label.to_string(),
+            display_name: label.to_string(),
+            picture: None,
+            last_used: Utc::now(),
+        }
     }
 
     fn domain_event_from_nostr(event: &nostr_sdk::Event) -> Event {
@@ -1650,6 +1896,200 @@ mod tests {
             .expect("list");
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].requester_pubkey, requester_keypair.public_key);
+    }
+
+    #[tokio::test]
+    async fn handle_join_request_stores_targeted_invite_for_non_current_local_account() {
+        let (issuer_keys, issuer_keypair) = make_keypair();
+        let (requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(requester_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+        let secure_store = Arc::new(TestSecureAccountStore::default());
+        secure_store
+            .seed_account(
+                account_metadata_from_keypair(&issuer_keypair, "issuer"),
+                issuer_keypair.nsec.clone(),
+            )
+            .await;
+        secure_store
+            .seed_account(
+                account_metadata_from_keypair(&requester_keypair, "requester"),
+                requester_keypair.private_key.clone(),
+            )
+            .await;
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+            signature_service,
+            gossip_service_trait,
+        )
+        .with_secure_account_store(secure_store);
+
+        let topic_id = "kukuri:topic1";
+        let invite_nonce = "relay-targeted";
+        let expires_at = Utc::now().timestamp() + 600;
+        let invite_content = json!({
+            "schema": SCHEMA_INVITE_CAPABILITY,
+            "topic": topic_id,
+            "scope": "invite",
+            "expires": expires_at,
+            "max_uses": 1,
+            "nonce": invite_nonce,
+            "issuer": format!("pubkey:{}", issuer_keypair.public_key),
+        })
+        .to_string();
+        let exp_tag = expires_at.to_string();
+        let invite_tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["d", "invite:relay-targeted"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+            Tag::parse(["exp", exp_tag.as_str()]).expect("tag"),
+        ];
+        let invite_event =
+            EventBuilder::new(Kind::from(KIND_INVITE_CAPABILITY as u16), invite_content)
+                .tags(invite_tags)
+                .sign_with_keys(&issuer_keys)
+                .expect("signed invite");
+        let invite_event_id = invite_event.id.to_string();
+        let invite_json = serde_json::to_value(invite_event.clone()).expect("invite json");
+
+        let join_content = json!({
+            "schema": SCHEMA_JOIN_REQUEST,
+            "topic": topic_id,
+            "scope": "invite",
+            "requester": format!("pubkey:{}", requester_keypair.public_key),
+            "requested_at": Utc::now().timestamp(),
+            "invite_event_json": invite_json,
+        })
+        .to_string();
+        let join_tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["d", "join:kukuri:topic1:relay-targeted:requester"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+            Tag::parse(["e", invite_event_id.as_str()]).expect("tag"),
+            Tag::parse(["p", issuer_keypair.public_key.as_str()]).expect("tag"),
+        ];
+        let join_event = EventBuilder::new(Kind::from(KIND_JOIN_REQUEST as u16), join_content)
+            .tags(join_tags)
+            .sign_with_keys(&requester_keys)
+            .expect("signed join");
+
+        let event = domain_event_from_nostr(&join_event);
+        service.handle_incoming_event(&event).await.expect("handle");
+
+        let issuer_pending = join_request_store
+            .list_requests(&issuer_keypair.public_key)
+            .await
+            .expect("issuer pending");
+        assert_eq!(issuer_pending.len(), 1);
+        assert_eq!(
+            issuer_pending[0].requester_pubkey,
+            requester_keypair.public_key
+        );
+
+        let requester_pending = join_request_store
+            .list_requests(&requester_keypair.public_key)
+            .await
+            .expect("requester pending");
+        assert!(requester_pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn request_join_mirrors_target_pending_without_local_target_account() {
+        let (issuer_keys, issuer_keypair) = make_keypair();
+        let (_requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(requester_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+            signature_service,
+            gossip_service_trait,
+        );
+
+        let topic_id = "kukuri:topic1";
+        let expires_at = Utc::now().timestamp() + 600;
+        let invite_content = json!({
+            "schema": SCHEMA_INVITE_CAPABILITY,
+            "topic": topic_id,
+            "scope": "invite",
+            "expires": expires_at,
+            "max_uses": 1,
+            "nonce": "mirror-without-local-target",
+            "issuer": format!("pubkey:{}", issuer_keypair.public_key),
+        })
+        .to_string();
+        let exp_tag = expires_at.to_string();
+        let invite_tags = vec![
+            Tag::parse(["t", topic_id]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["d", "invite:mirror-without-local-target"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+            Tag::parse(["exp", exp_tag.as_str()]).expect("tag"),
+        ];
+        let invite_event =
+            EventBuilder::new(Kind::from(KIND_INVITE_CAPABILITY as u16), invite_content)
+                .tags(invite_tags)
+                .sign_with_keys(&issuer_keys)
+                .expect("signed invite");
+        let invite_event_json = serde_json::to_value(invite_event).expect("invite json");
+
+        let result = service
+            .request_join(JoinRequestInput {
+                topic_id: None,
+                scope: None,
+                invite_event_json: Some(invite_event_json),
+                target_pubkey: None,
+                broadcast_to_topic: false,
+            })
+            .await
+            .expect("request join");
+
+        assert!(
+            result
+                .sent_topics
+                .contains(&user_topic_id(&issuer_keypair.public_key))
+        );
+
+        let issuer_pending = join_request_store
+            .list_requests(&issuer_keypair.public_key)
+            .await
+            .expect("issuer pending");
+        assert_eq!(issuer_pending.len(), 1);
+        assert_eq!(issuer_pending[0].event.id, result.event_id);
+
+        let requester_pending = join_request_store
+            .list_requests(&requester_keypair.public_key)
+            .await
+            .expect("requester pending");
+        assert!(requester_pending.is_empty());
     }
 
     #[tokio::test]
@@ -2066,6 +2506,82 @@ mod tests {
 
         let keys = group_key_store.list_keys().await.expect("keys");
         assert!(keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handle_key_envelope_accepts_for_non_current_local_account() {
+        let (issuer_keys, issuer_keypair) = make_keypair();
+        let (_requester_keys, requester_keypair) = make_keypair();
+
+        let key_manager = Arc::new(TestKeyManager::new(issuer_keypair.clone()));
+        let group_key_store = Arc::new(TestGroupKeyStore::default());
+        let group_key_store_trait: Arc<dyn GroupKeyStore> = group_key_store.clone();
+        let join_request_store = Arc::new(TestJoinRequestStore::default());
+        let join_request_store_trait: Arc<dyn JoinRequestStore> = join_request_store.clone();
+        let user_repository = Arc::new(TestUserRepository::default());
+        let signature_service = Arc::new(DefaultSignatureService::new());
+        let gossip_service = Arc::new(TestGossipService::default());
+        let gossip_service_trait: Arc<dyn GossipService> = gossip_service.clone();
+        let secure_store = Arc::new(TestSecureAccountStore::default());
+        secure_store
+            .seed_account(
+                account_metadata_from_keypair(&requester_keypair, "requester"),
+                requester_keypair.private_key.clone(),
+            )
+            .await;
+
+        let service = AccessControlService::new(
+            key_manager,
+            group_key_store_trait,
+            join_request_store_trait,
+            Arc::clone(&user_repository) as Arc<dyn UserRepository>,
+            signature_service,
+            gossip_service_trait,
+        )
+        .with_secure_account_store(secure_store);
+
+        let payload = json!({
+            "schema": SCHEMA_KEY_ENVELOPE,
+            "topic": "kukuri:topic1",
+            "scope": "invite",
+            "epoch": 1,
+            "key_b64": "aGVsbG8=",
+            "issued_at": Utc::now().timestamp(),
+        });
+        let sender_secret =
+            SecretKey::from_hex(&issuer_keypair.private_key).expect("sender secret");
+        let recipient_pubkey =
+            PublicKey::from_hex(&requester_keypair.public_key).expect("recipient");
+        let encrypted = nip44::encrypt(
+            &sender_secret,
+            &recipient_pubkey,
+            payload.to_string(),
+            nip44::Version::V2,
+        )
+        .expect("encrypt");
+        let tags = vec![
+            Tag::parse(["p", requester_keypair.public_key.as_str()]).expect("tag"),
+            Tag::parse(["t", "kukuri:topic1"]).expect("tag"),
+            Tag::parse(["scope", "invite"]).expect("tag"),
+            Tag::parse(["epoch", "1"]).expect("tag"),
+            Tag::parse(["d", "keyenv:kukuri:topic1:invite:1:requester"]).expect("tag"),
+            Tag::parse(["k", KIP_NAMESPACE]).expect("tag"),
+            Tag::parse(["ver", KIP_VERSION]).expect("tag"),
+        ];
+        let envelope = EventBuilder::new(Kind::from(KIND_KEY_ENVELOPE as u16), encrypted)
+            .tags(tags)
+            .sign_with_keys(&issuer_keys)
+            .expect("signed envelope");
+
+        let event = domain_event_from_nostr(&envelope);
+        service.handle_incoming_event(&event).await.expect("handle");
+
+        let stored = group_key_store
+            .get_latest_key("kukuri:topic1", "invite")
+            .await
+            .expect("store read")
+            .expect("group key");
+        assert_eq!(stored.key_b64, "aGVsbG8=");
     }
 
     #[tokio::test]

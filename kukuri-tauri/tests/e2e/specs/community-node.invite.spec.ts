@@ -2,13 +2,14 @@ import { $, browser, expect } from '@wdio/globals';
 import { waitForAppReady } from '../helpers/waitForAppReady';
 import {
   accessControlApproveJoinRequest,
-  accessControlIngestEventJson,
   accessControlIssueInvite,
   accessControlListJoinRequests,
+  accessControlListJoinRequestsForOwner,
   accessControlRequestJoin,
   communityNodeListGroupKeys,
   ensureTestTopic,
-  getTopicSnapshot,
+  joinP2PTopic,
+  leaveP2PTopic,
   resetAppState,
   seedFriendPlusAccounts,
   switchAccount,
@@ -33,6 +34,12 @@ type BridgeStepResult = {
   error?: string;
 };
 
+type InviteContext = {
+  accounts: Awaited<ReturnType<typeof seedFriendPlusAccounts>>;
+  topicId: string;
+  inviteEventJson: unknown;
+};
+
 const toErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
@@ -46,12 +53,6 @@ const toErrorMessage = (error: unknown): string => {
   }
   return String(error);
 };
-
-const snapshotSummary = (snapshot: Awaited<ReturnType<typeof getTopicSnapshot>>) => ({
-  topicCount: snapshot.topics.length,
-  joinedTopicCount: snapshot.joinedTopics.length,
-  pendingTopicCount: snapshot.pendingTopics.length,
-});
 
 const runBridgeStep = async <T>(
   step: string,
@@ -85,134 +86,208 @@ const runBridgeStep = async <T>(
   }
 };
 
-describe('Community Node invite flow', () => {
-  before(async () => {
-    await waitForAppReady();
-    await resetAppState();
+const configureCommunityNodeAccessControl = async (baseUrl: string, profile: ProfileInfo) => {
+  await waitForWelcome();
+  await $('[data-testid="welcome-create-account"]').click();
+  await completeProfileSetup(profile);
+  await waitForHome();
+
+  await openSettings();
+
+  const baseInput = await $('[data-testid="community-node-base-url"]');
+  await baseInput.waitForDisplayed({ timeout: 20000 });
+  await baseInput.setValue(baseUrl);
+  await $('[data-testid="community-node-save-config"]').click();
+
+  const authButton = await $('[data-testid="community-node-authenticate-0"]');
+  await browser.waitUntil(async () => await authButton.isEnabled(), {
+    timeout: 15000,
+    interval: 300,
+    timeoutMsg: 'Community node auth button did not become enabled',
   });
+  await runCommunityNodeAuthFlow(baseUrl);
 
-  it('isolates bridge calls around ensureTestTopic after invite join request', async function () {
-    this.timeout(300000);
+  const acceptConsents = await $('[data-testid="community-node-accept-consents"]');
+  await acceptConsents.waitForClickable({ timeout: 15000 });
+  await acceptConsents.click();
 
-    const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
-    const p2pInviteReady = process.env.E2E_COMMUNITY_NODE_P2P_INVITE === '1';
-    if (!baseUrl || !p2pInviteReady) {
-      this.skip();
+  const accessControlSwitch = await $('#community-node-access-control');
+  await accessControlSwitch.waitForDisplayed({ timeout: 10000 });
+  if ((await accessControlSwitch.getAttribute('data-state')) !== 'checked') {
+    await accessControlSwitch.click();
+  }
+};
+
+const prepareInviteContext = async (
+  steps: BridgeStepResult[],
+  stepPrefix: string,
+): Promise<InviteContext> => {
+  const accounts = await runBridgeStep(
+    `${stepPrefix}.accounts.seed`,
+    steps,
+    () => seedFriendPlusAccounts(),
+    (value) => ({
+      requester: value.requester.npub,
+      issuer: value.inviter.npub,
+    }),
+  );
+
+  await switchAccount(accounts.inviter.npub);
+
+  const issuerTopic = await runBridgeStep(
+    `${stepPrefix}.issuer.ensureTopic`,
+    steps,
+    () => ensureTestTopic({ name: TOPIC_NAME }),
+    (topic) => ({ id: topic.id, name: topic.name }),
+  );
+
+  const invite = await runBridgeStep(
+    `${stepPrefix}.issuer.issueInvite`,
+    steps,
+    () => accessControlIssueInvite({ topic_id: issuerTopic.id }),
+    () => ({ topicId: issuerTopic.id }),
+  );
+
+  return {
+    accounts,
+    topicId: issuerTopic.id,
+    inviteEventJson: invite.invite_event_json,
+  };
+};
+
+const waitForPendingInviteJoin = async (
+  eventId: string,
+  topicId: string,
+  ownerPubkey: string,
+  timeoutMsg: string,
+) => {
+  const deadline = Date.now() + 30_000;
+  let lastCurrentCount = 0;
+  let lastOwnerCount = 0;
+  let ownerHasTarget = false;
+
+  while (Date.now() < deadline) {
+    const currentPending = await accessControlListJoinRequests();
+    lastCurrentCount = currentPending.items.length;
+    const currentHasTarget = currentPending.items.some(
+      (item) => item.event_id === eventId && item.topic_id === topicId && item.scope === 'invite',
+    );
+    if (currentHasTarget) {
       return;
     }
 
-    await waitForWelcome();
-    const profile: ProfileInfo = {
-      name: 'E2E Invite User',
-      displayName: 'community-node-invite',
-      about: 'Community Node invite/key sync/encrypted post flow',
-    };
-
-    await $('[data-testid="welcome-create-account"]').click();
-    await completeProfileSetup(profile);
-    await waitForHome();
-
-    await openSettings();
-
-    const baseInput = await $('[data-testid="community-node-base-url"]');
-    await baseInput.waitForDisplayed({ timeout: 20000 });
-    await baseInput.setValue(baseUrl);
-    await $('[data-testid="community-node-save-config"]').click();
-
-    const authButton = await $('[data-testid="community-node-authenticate-0"]');
-    await browser.waitUntil(async () => await authButton.isEnabled(), {
-      timeout: 15000,
-      interval: 300,
-      timeoutMsg: 'Community node auth button did not become enabled',
-    });
-    await runCommunityNodeAuthFlow(baseUrl);
-
-    const acceptConsents = await $('[data-testid="community-node-accept-consents"]');
-    await acceptConsents.waitForClickable({ timeout: 15000 });
-    await acceptConsents.click();
-
-    const accessControlSwitch = await $('#community-node-access-control');
-    await accessControlSwitch.waitForDisplayed({ timeout: 10000 });
-    if ((await accessControlSwitch.getAttribute('data-state')) !== 'checked') {
-      await accessControlSwitch.click();
+    const ownerPending = await accessControlListJoinRequestsForOwner(ownerPubkey);
+    lastOwnerCount = ownerPending.items.length;
+    ownerHasTarget = ownerPending.items.some(
+      (item) => item.event_id === eventId && item.topic_id === topicId && item.scope === 'invite',
+    );
+    if (ownerHasTarget) {
+      throw new Error(
+        `${timeoutMsg} (owner-specific query found target but current query missed it: owner_pubkey=${ownerPubkey})`,
+      );
     }
 
+    await browser.pause(500);
+  }
+
+  throw new Error(
+    `${timeoutMsg} (current_count=${lastCurrentCount}, owner_count=${lastOwnerCount}, owner_has_target=${ownerHasTarget})`,
+  );
+};
+
+const waitForInviteGroupKey = async (topicId: string, timeoutMsg: string) => {
+  await browser.waitUntil(
+    async () => {
+      const groupKeys = await communityNodeListGroupKeys();
+      return groupKeys.some((entry) => entry.topic_id === topicId && entry.scope === 'invite');
+    },
+    {
+      timeout: 30000,
+      interval: 500,
+      timeoutMsg,
+    },
+  );
+};
+
+const resolveInviteScenarioBaseUrl = (context: Mocha.Context): string | null => {
+  const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
+  const p2pInviteReady = process.env.E2E_COMMUNITY_NODE_P2P_INVITE === '1';
+  if (!baseUrl || !p2pInviteReady) {
+    context.skip();
+    return null;
+  }
+  return baseUrl;
+};
+
+describe('Community Node invite flow', () => {
+  before(async () => {
+    await waitForAppReady();
+  });
+
+  beforeEach(async () => {
+    await resetAppState();
+  });
+
+  it('receives join.request/key.envelope automatically via relay without ingest bridge calls', async function () {
+    this.timeout(300000);
+
+    const baseUrl = resolveInviteScenarioBaseUrl(this);
+    if (!baseUrl) {
+      return;
+    }
+
+    const profile: ProfileInfo = {
+      name: 'E2E Invite User',
+      displayName: 'community-node-invite-relay-auto',
+      about: 'Community Node invite flow via relay auto receive',
+    };
+    await configureCommunityNodeAccessControl(baseUrl, profile);
+
     const steps: BridgeStepResult[] = [];
-    const accounts = await runBridgeStep(
-      'invite.accounts.seed',
-      steps,
-      () => seedFriendPlusAccounts(),
-      (value) => ({
-        requester: value.requester.npub,
-        issuer: value.inviter.npub,
-      }),
-    );
+    const context = await prepareInviteContext(steps, 'relayAuto');
+    const issuerTopic = userTopicId(context.accounts.inviter.pubkey);
+    const requesterTopic = userTopicId(context.accounts.requester.pubkey);
 
-    await switchAccount(accounts.inviter.npub);
-
-    const issuerTopic = await runBridgeStep(
-      'invite.issuer.ensureTopic',
-      steps,
-      () => ensureTestTopic({ name: TOPIC_NAME }),
-      (topic) => ({ id: topic.id, name: topic.name }),
-    );
-    const topicId = issuerTopic.id;
-
-    const invite = await runBridgeStep(
-      'invite.issuer.issueInvite',
-      steps,
-      () => accessControlIssueInvite({ topic_id: topicId }),
-      () => ({ topicId }),
-    );
-
-    await switchAccount(accounts.requester.npub);
-
+    await switchAccount(context.accounts.requester.npub);
     const joinResult = await runBridgeStep(
-      'invite.requester.requestJoin',
+      'relayAuto.requester.requestJoin',
       steps,
       () =>
         accessControlRequestJoin({
-          invite_event_json: invite.invite_event_json,
+          invite_event_json: context.inviteEventJson,
         }),
       (result) => ({
         eventId: result.event_id,
         sentTopics: result.sent_topics,
       }),
     );
-    expect(joinResult.sent_topics).toContain(userTopicId(accounts.inviter.pubkey));
+    expect(joinResult.sent_topics).toContain(issuerTopic);
 
-    await switchAccount(accounts.inviter.npub);
-    await runBridgeStep('invite.issuer.ingestJoinRequest', steps, () =>
-      accessControlIngestEventJson(joinResult.event_json),
-    );
-
+    await switchAccount(context.accounts.inviter.npub);
     await runBridgeStep(
-      'invite.issuer.pendingJoinDetected',
+      'relayAuto.issuer.refreshUserTopic',
       steps,
       async () => {
-        await browser.waitUntil(
-          async () => {
-            const pending = await accessControlListJoinRequests();
-            return pending.items.some(
-              (item) =>
-                item.event_id === joinResult.event_id &&
-                item.topic_id === topicId &&
-                item.scope === 'invite',
-            );
-          },
-          {
-            timeout: 30000,
-            interval: 500,
-            timeoutMsg: 'invite join.request was not listed for approval',
-          },
-        );
-        return true;
+        await leaveP2PTopic(issuerTopic);
+        await joinP2PTopic(issuerTopic);
       },
-      () => ({ eventId: joinResult.event_id, topicId }),
+      () => ({ topic: issuerTopic }),
+    );
+    await runBridgeStep(
+      'relayAuto.issuer.pendingJoinDetected',
+      steps,
+      async () =>
+        await waitForPendingInviteJoin(
+          joinResult.event_id,
+          context.topicId,
+          context.accounts.inviter.pubkey,
+          'invite join.request was not auto-received via relay',
+        ),
+      () => ({ eventId: joinResult.event_id, topicId: context.topicId }),
     );
 
     const approveResult = await runBridgeStep(
-      'invite.issuer.approveJoinRequest',
+      'relayAuto.issuer.approveJoinRequest',
       steps,
       () => accessControlApproveJoinRequest(joinResult.event_id),
       (result) => ({
@@ -222,66 +297,142 @@ describe('Community Node invite flow', () => {
     );
     expect(approveResult.key_envelope_event_id).toBeTruthy();
 
-    await switchAccount(accounts.requester.npub);
-    await runBridgeStep('invite.requester.ingestKeyEnvelope', steps, () =>
-      accessControlIngestEventJson(approveResult.key_envelope_event_json),
-    );
-
-    const keyEnvelopeDetected = await runBridgeStep(
-      'invite.keyEnvelopeDetected',
+    await switchAccount(context.accounts.requester.npub);
+    await runBridgeStep(
+      'relayAuto.requester.refreshUserTopic',
       steps,
       async () => {
-        await browser.waitUntil(
-          async () => {
-            const groupKeys = await communityNodeListGroupKeys();
-            return groupKeys.some(
-              (entry) => entry.topic_id === topicId && entry.scope === 'invite',
-            );
-          },
-          {
-            timeout: 30000,
-            interval: 500,
-            timeoutMsg: 'Key envelope was not stored after issuer approval',
-          },
-        );
-        return true;
+        await leaveP2PTopic(requesterTopic);
+        await joinP2PTopic(requesterTopic);
       },
-      (detected) => ({ topicId, keyEnvelopeDetected: detected }),
+      () => ({ topic: requesterTopic }),
     );
-    expect(keyEnvelopeDetected).toBe(true);
-
-    const beforeSnapshot = await runBridgeStep(
-      'snapshot.before.ensure',
+    await runBridgeStep(
+      'relayAuto.requester.keyEnvelopeDetected',
       steps,
-      () => getTopicSnapshot(),
-      snapshotSummary,
+      async () =>
+        await waitForInviteGroupKey(
+          context.topicId,
+          'invite key.envelope was not auto-received via relay',
+        ),
+      () => ({ topicId: context.topicId }),
     );
-    expect(beforeSnapshot.topics.length).toBeGreaterThanOrEqual(0);
-
-    const topicByName = await runBridgeStep(
-      'ensure.byName',
-      steps,
-      () => ensureTestTopic({ name: TOPIC_NAME }),
-      (topic) => ({ id: topic.id, name: topic.name }),
-    );
-    expect(topicByName.name).toBe(TOPIC_NAME);
-
-    await runBridgeStep('snapshot.after.byName', steps, () => getTopicSnapshot(), snapshotSummary);
 
     const topicByTopicId = await runBridgeStep(
-      'ensure.byTopicId',
+      'relayAuto.requester.ensureTopicByTopicId',
       steps,
-      () => ensureTestTopic({ name: TOPIC_NAME, topicId }),
+      () => ensureTestTopic({ name: TOPIC_NAME, topicId: context.topicId }),
       (topic) => ({ id: topic.id, name: topic.name }),
     );
-    expect(topicByTopicId.id).toBe(topicId);
+    expect(topicByTopicId.id).toBe(context.topicId);
+  });
 
-    const afterSnapshot = await runBridgeStep(
-      'snapshot.after.byTopicId',
+  it('replays join.request and key.envelope after issuer/requester resume', async function () {
+    this.timeout(300000);
+
+    const baseUrl = resolveInviteScenarioBaseUrl(this);
+    if (!baseUrl) {
+      return;
+    }
+
+    const profile: ProfileInfo = {
+      name: 'E2E Invite Resume',
+      displayName: 'community-node-invite-resume',
+      about: 'Community Node invite replay on issuer/requester resume',
+    };
+    await configureCommunityNodeAccessControl(baseUrl, profile);
+
+    const steps: BridgeStepResult[] = [];
+    const context = await prepareInviteContext(steps, 'resumeFlow');
+    const issuerTopic = userTopicId(context.accounts.inviter.pubkey);
+    const requesterTopic = userTopicId(context.accounts.requester.pubkey);
+
+    await runBridgeStep(
+      'resumeFlow.issuer.goOffline.leaveUserTopic',
       steps,
-      () => getTopicSnapshot(),
-      snapshotSummary,
+      () => leaveP2PTopic(issuerTopic),
+      () => ({ topic: issuerTopic }),
     );
-    expect(afterSnapshot.topics.length).toBeGreaterThan(0);
+
+    await switchAccount(context.accounts.requester.npub);
+    const joinResult = await runBridgeStep(
+      'resumeFlow.requester.requestJoin',
+      steps,
+      () =>
+        accessControlRequestJoin({
+          invite_event_json: context.inviteEventJson,
+        }),
+      (result) => ({
+        eventId: result.event_id,
+        sentTopics: result.sent_topics,
+      }),
+    );
+    expect(joinResult.sent_topics).toContain(issuerTopic);
+
+    await switchAccount(context.accounts.inviter.npub);
+    await runBridgeStep(
+      'resumeFlow.issuer.resume.joinUserTopic',
+      steps,
+      () => joinP2PTopic(issuerTopic),
+      () => ({ topic: issuerTopic }),
+    );
+    await runBridgeStep(
+      'resumeFlow.issuer.pendingJoinReplayed',
+      steps,
+      async () =>
+        await waitForPendingInviteJoin(
+          joinResult.event_id,
+          context.topicId,
+          context.accounts.inviter.pubkey,
+          'invite join.request was not replayed after issuer resume',
+        ),
+      () => ({ eventId: joinResult.event_id, topicId: context.topicId }),
+    );
+
+    await switchAccount(context.accounts.requester.npub);
+    await runBridgeStep(
+      'resumeFlow.requester.goOffline.leaveUserTopic',
+      steps,
+      () => leaveP2PTopic(requesterTopic),
+      () => ({ topic: requesterTopic }),
+    );
+
+    await switchAccount(context.accounts.inviter.npub);
+    const approveResult = await runBridgeStep(
+      'resumeFlow.issuer.approveJoinRequest',
+      steps,
+      () => accessControlApproveJoinRequest(joinResult.event_id),
+      (result) => ({
+        eventId: result.event_id,
+        keyEnvelopeEventId: result.key_envelope_event_id,
+      }),
+    );
+    expect(approveResult.key_envelope_event_id).toBeTruthy();
+
+    await switchAccount(context.accounts.requester.npub);
+    await runBridgeStep(
+      'resumeFlow.requester.resume.joinUserTopic',
+      steps,
+      () => joinP2PTopic(requesterTopic),
+      () => ({ topic: requesterTopic }),
+    );
+    await runBridgeStep(
+      'resumeFlow.requester.keyEnvelopeReplayed',
+      steps,
+      async () =>
+        await waitForInviteGroupKey(
+          context.topicId,
+          'invite key.envelope was not replayed after requester resume',
+        ),
+      () => ({ topicId: context.topicId }),
+    );
+
+    const topicByTopicId = await runBridgeStep(
+      'resumeFlow.requester.ensureTopicByTopicId',
+      steps,
+      () => ensureTestTopic({ name: TOPIC_NAME, topicId: context.topicId }),
+      (topic) => ({ id: topic.id, name: topic.name }),
+    );
+    expect(topicByTopicId.id).toBe(context.topicId);
   });
 });

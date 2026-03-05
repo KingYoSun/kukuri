@@ -68,11 +68,19 @@ pub async fn access_control_request_join(
 #[tauri::command]
 pub async fn access_control_list_join_requests(
     state: State<'_, AppState>,
+    owner_pubkey: Option<String>,
 ) -> Result<ApiResponse<AccessControlListJoinRequestsResponse>, AppError> {
-    let records = state
-        .access_control_service
-        .list_pending_join_requests()
-        .await?;
+    let records = if let Some(owner_pubkey) = owner_pubkey {
+        state
+            .access_control_service
+            .list_pending_join_requests_for_owner(owner_pubkey.trim())
+            .await?
+    } else {
+        state
+            .access_control_service
+            .list_pending_join_requests()
+            .await?
+    };
     let items = records
         .into_iter()
         .map(map_pending_join_request)

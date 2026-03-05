@@ -265,6 +265,7 @@ export interface E2EBridge {
     recentContents: string[];
   }>;
   joinP2PTopic: (payload: { topicId: string; initialPeers?: string[] }) => Promise<void>;
+  leaveP2PTopic: (payload: { topicId: string }) => Promise<void>;
   connectToP2PPeer: (payload: { peerAddress: string }) => Promise<void>;
   seedFriendPlusAccounts: () => Promise<SeedFriendPlusAccountsResult>;
   accessControlIssueInvite: (
@@ -276,6 +277,9 @@ export interface E2EBridge {
   accessControlListJoinRequests: () => Promise<
     Awaited<ReturnType<typeof accessControlApi.listJoinRequests>>
   >;
+  accessControlListJoinRequestsForOwner: (payload: {
+    owner_pubkey: string;
+  }) => Promise<Awaited<ReturnType<typeof accessControlApi.listJoinRequests>>>;
   accessControlApproveJoinRequest: (payload: {
     event_id: string;
   }) => Promise<Awaited<ReturnType<typeof accessControlApi.approveJoinRequest>>>;
@@ -390,6 +394,31 @@ const refreshRelayStatusSafe = async () => {
   }
 };
 
+const syncRustLoginForCurrentAccount = async (npub: string) => {
+  let secureLoginSynced = false;
+  try {
+    const response = await SecureStorageApi.secureLogin(npub);
+    secureLoginSynced = response.npub === npub;
+  } catch (error) {
+    errorHandler.log('E2EBridge.switchAccount.secureLoginFailed', error, {
+      context: 'registerE2EBridge.syncRustLoginForCurrentAccount',
+      metadata: { npub },
+    });
+  }
+
+  if (secureLoginSynced) {
+    return;
+  }
+
+  const nsec = useAuthStore.getState().privateKey;
+  if (typeof nsec === 'string' && nsec.trim().length > 0) {
+    await TauriApi.login({ nsec });
+    return;
+  }
+
+  throw new Error(`Failed to sync Rust login for ${npub}`);
+};
+
 export function registerE2EBridge(): void {
   if (typeof window === 'undefined') {
     return;
@@ -425,13 +454,7 @@ export function registerE2EBridge(): void {
           if (switchedState.currentUser?.npub !== npub) {
             throw new Error(`Failed to switch account to ${npub}`);
           }
-
-          // Fallback 経路の switchAccount はフロント状態のみ切り替えるため、
-          // privateKey が残っている場合は Rust 側のアクティブ鍵も同期する。
-          const nsec = switchedState.privateKey;
-          if (typeof nsec === 'string' && nsec.trim().length > 0) {
-            await TauriApi.login({ nsec });
-          }
+          await syncRustLoginForCurrentAccount(npub);
         },
         getOfflineSnapshot: () => {
           const offlineState = useOfflineStore.getState();
@@ -1546,6 +1569,14 @@ export function registerE2EBridge(): void {
           await p2pApi.joinTopic(topicId, payload.initialPeers ?? []);
           await refreshRelayStatusSafe();
         },
+        leaveP2PTopic: async (payload: { topicId: string }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          await p2pApi.leaveTopic(topicId);
+          await refreshRelayStatusSafe();
+        },
         connectToP2PPeer: async (payload: { peerAddress: string }) => {
           const peerAddress = payload?.peerAddress?.trim();
           if (!peerAddress) {
@@ -1689,6 +1720,13 @@ export function registerE2EBridge(): void {
         },
         accessControlListJoinRequests: async () => {
           return await accessControlApi.listJoinRequests();
+        },
+        accessControlListJoinRequestsForOwner: async (payload: { owner_pubkey: string }) => {
+          const ownerPubkey = payload?.owner_pubkey?.trim();
+          if (!ownerPubkey) {
+            throw new Error('owner_pubkey is required');
+          }
+          return await accessControlApi.listJoinRequests(ownerPubkey);
         },
         accessControlApproveJoinRequest: async (payload: { event_id: string }) => {
           const eventId = payload?.event_id?.trim();

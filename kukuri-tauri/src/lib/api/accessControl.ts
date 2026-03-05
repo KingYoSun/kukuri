@@ -63,8 +63,11 @@ export const accessControlApi = {
     invokeCommand<AccessControlIssueInviteResponse>('access_control_issue_invite', { request }),
   requestJoin: (request: AccessControlJoinRequest) =>
     invokeCommand<AccessControlJoinResponse>('access_control_request_join', { request }),
-  listJoinRequests: () =>
-    invokeCommand<AccessControlListJoinRequestsResponse>('access_control_list_join_requests'),
+  listJoinRequests: (ownerPubkey?: string) =>
+    invokeCommand<AccessControlListJoinRequestsResponse>(
+      'access_control_list_join_requests',
+      ownerPubkey ? { owner_pubkey: ownerPubkey } : undefined,
+    ),
   approveJoinRequest: (request: AccessControlApproveJoinRequest) =>
     invokeCommand<AccessControlApproveJoinResponse>('access_control_approve_join_request', {
       request,
