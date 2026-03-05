@@ -34,6 +34,12 @@ pub async fn generate_keypair(
 ) -> Result<ApiResponse<GenerateKeypairResponse>, AppError> {
     let handler = AuthHandler::new(state.auth_service.clone());
     let response = handler.create_account().await?;
+    if let Err(err) = state.ensure_default_and_user_subscriptions().await {
+        tracing::warn!(
+            error = %err,
+            "failed to ensure default/user subscriptions after generate_keypair"
+        );
+    }
 
     Ok(ApiResponse::success(GenerateKeypairResponse {
         public_key: response.pubkey,
@@ -52,6 +58,14 @@ pub async fn login(
     let login_request = LoginWithNsecRequest { nsec: request.nsec };
 
     let result = handler.login_with_nsec(login_request).await;
+    if result.is_ok()
+        && let Err(err) = state.ensure_default_and_user_subscriptions().await
+    {
+        tracing::warn!(
+            error = %err,
+            "failed to ensure default/user subscriptions after login"
+        );
+    }
     Ok(ApiResponse::from_result(result))
 }
 

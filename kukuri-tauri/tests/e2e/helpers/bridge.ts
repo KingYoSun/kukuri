@@ -45,6 +45,7 @@ export type BridgeAction =
   | 'joinP2PTopic'
   | 'connectToP2PPeer'
   | 'seedFriendPlusAccounts'
+  | 'accessControlIssueInvite'
   | 'accessControlRequestJoin'
   | 'accessControlListJoinRequests'
   | 'accessControlApproveJoinRequest'
@@ -273,6 +274,17 @@ export interface SeedFriendPlusAccountsResult {
   friend: FriendPlusActor;
 }
 
+export interface AccessControlIssueInvitePayload {
+  topic_id: string;
+  expires_in?: number | null;
+  max_uses?: number | null;
+  nonce?: string | null;
+}
+
+export interface AccessControlIssueInviteResult {
+  invite_event_json: unknown;
+}
+
 export interface AccessControlRequestJoinPayload {
   topic_id?: string;
   scope?: string;
@@ -338,6 +350,7 @@ type BridgeResultMap = {
   joinP2PTopic: null;
   connectToP2PPeer: null;
   seedFriendPlusAccounts: SeedFriendPlusAccountsResult;
+  accessControlIssueInvite: AccessControlIssueInviteResult;
   accessControlRequestJoin: AccessControlRequestJoinResult;
   accessControlListJoinRequests: AccessControlListJoinRequestsResult;
   accessControlApproveJoinRequest: AccessControlApproveJoinRequestResult;
@@ -374,7 +387,7 @@ export async function callBridge<T extends BridgeAction>(
   payload?: unknown,
 ): Promise<BridgeResultMap[T]> {
   const response = await browser.executeAsync<
-    { error?: string; result?: unknown },
+    { bridgeError?: string; result?: unknown },
     [
       BridgeAction,
       unknown,
@@ -433,13 +446,13 @@ export async function callBridge<T extends BridgeAction>(
         }
         const fn = helper[name];
         if (typeof fn !== 'function') {
-          return { error: `Unknown bridge action: ${name}` };
+          return { bridgeError: `Unknown bridge action: ${name}` };
         }
         try {
           const result = await (args !== undefined ? fn(args as never) : fn());
           return { result: normalize(result) };
         } catch (error) {
-          return { error: toMessage(error) };
+          return { bridgeError: toMessage(error) };
         }
       };
 
@@ -499,7 +512,7 @@ export async function callBridge<T extends BridgeAction>(
           `ready=${readyValue ?? 'none'}`,
           `domBridge=${String(domBridgeReady)}`,
         ].join(', ');
-        done({ error: `E2E channel is unavailable (${detail})` });
+        done({ bridgeError: `E2E channel is unavailable (${detail})` });
         return;
       }
 
@@ -510,7 +523,7 @@ export async function callBridge<T extends BridgeAction>(
       const requestPayload = JSON.stringify({ requestId, action: name, args });
 
       let settled = false;
-      const finish = (result: { error?: string; result?: unknown }) => {
+      const finish = (result: { bridgeError?: string; result?: unknown }) => {
         if (settled) {
           return;
         }
@@ -538,10 +551,10 @@ export async function callBridge<T extends BridgeAction>(
             if (parsed.requestId !== requestId) {
               continue;
             }
-            finish({ error: parsed.error, result: parsed.result ?? null });
+            finish({ bridgeError: parsed.error, result: parsed.result ?? null });
             return;
           } catch (error) {
-            finish({ error: error instanceof Error ? error.message : String(error) });
+            finish({ bridgeError: error instanceof Error ? error.message : String(error) });
             return;
           }
         }
@@ -555,7 +568,7 @@ export async function callBridge<T extends BridgeAction>(
       channel.setAttribute(requestAttr, requestPayload);
 
       const timeoutId = window.setTimeout(
-        () => finish({ error: 'E2E channel timed out' }),
+        () => finish({ bridgeError: 'E2E channel timed out' }),
         timeoutMs,
       );
     },
@@ -570,8 +583,8 @@ export async function callBridge<T extends BridgeAction>(
     },
   );
 
-  if (response?.error) {
-    throw new Error(serializeError(response.error));
+  if (response?.bridgeError) {
+    throw new Error(serializeError(response.bridgeError));
   }
   return (response?.result ?? null) as BridgeResultMap[T];
 }
@@ -644,7 +657,7 @@ export async function seedDirectMessageConversation(params?: {
   } catch (error) {
     const message = serializeError(error);
     const fallback = await browser.executeAsync<
-      { result?: SeedDirectMessageConversationResult; error?: string },
+      { result?: SeedDirectMessageConversationResult; bridgeError?: string },
       [{ content?: string; createdAt?: number }]
     >((payload, done) => {
       (async () => {
@@ -668,19 +681,19 @@ export async function seedDirectMessageConversation(params?: {
           }
           const helper = (window as Record<string, unknown>).__KUKURI_E2E__;
           if (!helper || typeof helper.seedDirectMessageConversation !== 'function') {
-            done({ error: 'E2E bridge helper is unavailable' });
+            done({ bridgeError: 'E2E bridge helper is unavailable' });
             return;
           }
           const result = await helper.seedDirectMessageConversation(payload ?? {});
           done({ result: result ?? null });
         } catch (err) {
-          done({ error: toMessage(err) });
+          done({ bridgeError: toMessage(err) });
         }
       })();
     }, params ?? {});
 
-    if (fallback?.error) {
-      throw new Error(`${message} (fallback failed: ${fallback.error})`, { cause: error });
+    if (fallback?.bridgeError) {
+      throw new Error(`${message} (fallback failed: ${fallback.bridgeError})`, { cause: error });
     }
     return (fallback.result ??
       ((): SeedDirectMessageConversationResult => {
@@ -764,6 +777,12 @@ export async function connectToP2PPeer(peerAddress: string): Promise<void> {
 
 export async function seedFriendPlusAccounts(): Promise<SeedFriendPlusAccountsResult> {
   return await callBridge('seedFriendPlusAccounts');
+}
+
+export async function accessControlIssueInvite(
+  payload: AccessControlIssueInvitePayload,
+): Promise<AccessControlIssueInviteResult> {
+  return await callBridge('accessControlIssueInvite', payload);
 }
 
 export async function accessControlRequestJoin(

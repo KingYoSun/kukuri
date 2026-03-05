@@ -163,6 +163,13 @@ interface SeedFriendPlusAccountsResult {
   friend: FriendPlusActor;
 }
 
+interface AccessControlIssueInvitePayload {
+  topic_id: string;
+  expires_in?: number | null;
+  max_uses?: number | null;
+  nonce?: string | null;
+}
+
 interface AccessControlRequestJoinPayload {
   topic_id?: string;
   scope?: string;
@@ -260,6 +267,9 @@ export interface E2EBridge {
   joinP2PTopic: (payload: { topicId: string; initialPeers?: string[] }) => Promise<void>;
   connectToP2PPeer: (payload: { peerAddress: string }) => Promise<void>;
   seedFriendPlusAccounts: () => Promise<SeedFriendPlusAccountsResult>;
+  accessControlIssueInvite: (
+    payload: AccessControlIssueInvitePayload,
+  ) => Promise<Awaited<ReturnType<typeof accessControlApi.issueInvite>>>;
   accessControlRequestJoin: (
     payload: AccessControlRequestJoinPayload,
   ) => Promise<Awaited<ReturnType<typeof accessControlApi.requestJoin>>>;
@@ -573,7 +583,7 @@ export function registerE2EBridge(): void {
               (topic) => topic.name === name,
             );
 
-          const waitForTopicById = async (topicId: string, timeoutMs = 30_000) => {
+          const waitForTopicById = async (topicId: string, timeoutMs = 8_000, intervalMs = 250) => {
             const deadline = Date.now() + timeoutMs;
             while (Date.now() < deadline) {
               await refreshTopics();
@@ -581,7 +591,21 @@ export function registerE2EBridge(): void {
               if (topic) {
                 return topic;
               }
-              await new Promise((resolve) => setTimeout(resolve, 500));
+              await new Promise((resolve) => setTimeout(resolve, intervalMs));
+            }
+            return null;
+          };
+
+          const waitForJoinedTopicById = async (topicId: string, timeoutMs = 3_000) => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              await refreshTopics();
+              const state = useTopicStore.getState();
+              const topic = findById(topicId);
+              if (topic && (topic.isJoined || state.joinedTopics.includes(topic.id))) {
+                return topic;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 250));
             }
             return null;
           };
@@ -596,34 +620,19 @@ export function registerE2EBridge(): void {
           await refreshTopics();
 
           if (explicitId) {
-            const existingById = await waitForTopicById(explicitId, 5_000);
-            if (existingById) {
-              await ensureJoined(existingById.id);
-              return { id: existingById.id, name: existingById.name };
+            const discoveredById = await waitForTopicById(explicitId);
+            if (!discoveredById) {
+              throw new Error(
+                `Topic ${explicitId} is not discoverable. Ensure invite/key sync is completed before ensureTestTopic(topicId).`,
+              );
             }
 
-            let joinError: unknown = null;
-            try {
-              await useTopicStore.getState().joinTopic(explicitId);
-              await refreshTopics();
-            } catch (error) {
-              joinError = error;
-              errorHandler.log('E2EBridge.ensureTestTopic.joinFailed', error, {
-                context: 'registerE2EBridge.ensureTestTopic',
-                metadata: { topicId: explicitId },
-              });
+            await ensureJoined(discoveredById.id);
+            const joinedById = await waitForJoinedTopicById(discoveredById.id);
+            if (!joinedById) {
+              throw new Error(`Topic ${explicitId} was discovered but join state did not settle.`);
             }
-
-            const joinedById = await waitForTopicById(explicitId);
-            if (joinedById) {
-              await ensureJoined(joinedById.id);
-              return { id: joinedById.id, name: joinedById.name };
-            }
-
-            if (joinError) {
-              throw joinError;
-            }
-            throw new Error(`Topic ${explicitId} was not found after join`);
+            return { id: joinedById.id, name: joinedById.name };
           }
 
           const existingByName = findByName(desiredName);
@@ -1664,6 +1673,18 @@ export function registerE2EBridge(): void {
             invite_event_json: payload?.invite_event_json,
             target_pubkey: payload?.target_pubkey,
             broadcast_to_topic: payload?.broadcast_to_topic,
+          });
+        },
+        accessControlIssueInvite: async (payload: AccessControlIssueInvitePayload) => {
+          const topicId = payload?.topic_id?.trim();
+          if (!topicId) {
+            throw new Error('topic_id is required to issue invite');
+          }
+          return await accessControlApi.issueInvite({
+            topic_id: topicId,
+            expires_in: payload?.expires_in ?? undefined,
+            max_uses: payload?.max_uses ?? undefined,
+            nonce: payload?.nonce ?? undefined,
           });
         },
         accessControlListJoinRequests: async () => {

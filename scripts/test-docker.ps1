@@ -1147,9 +1147,17 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $previousInviteJson = $env:E2E_COMMUNITY_NODE_INVITE_JSON
     $previousSeedJson = $env:E2E_COMMUNITY_NODE_SEED_JSON
     $previousTopicName = $env:E2E_COMMUNITY_NODE_TOPIC_NAME
+    $previousRelayUrls = $env:KUKURI_IROH_RELAY_URLS
+    $previousRelayMode = $env:KUKURI_IROH_RELAY_MODE
     $env:COMMUNITY_NODE_BASE_URL = $baseUrl
     $env:E2E_COMMUNITY_NODE_URL = $baseUrl
     $env:SCENARIO = "community-node-e2e"
+    if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
+        $env:KUKURI_IROH_RELAY_URLS = "http://127.0.0.1:3340"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
+        $env:KUKURI_IROH_RELAY_MODE = "custom"
+    }
     try {
         Start-CommunityNode -BaseUrl $baseUrl
         Invoke-CommunityNodeE2ESeed
@@ -1187,6 +1195,16 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:E2E_COMMUNITY_NODE_TOPIC_NAME = $previousTopicName
         } else {
             Remove-Item Env:E2E_COMMUNITY_NODE_TOPIC_NAME -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayUrls) {
+            $env:KUKURI_IROH_RELAY_URLS = $previousRelayUrls
+        } else {
+            Remove-Item Env:KUKURI_IROH_RELAY_URLS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayMode) {
+            $env:KUKURI_IROH_RELAY_MODE = $previousRelayMode
+        } else {
+            Remove-Item Env:KUKURI_IROH_RELAY_MODE -ErrorAction SilentlyContinue
         }
     }
 

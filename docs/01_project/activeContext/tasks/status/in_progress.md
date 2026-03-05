@@ -59,3 +59,35 @@
 - `community-node.invite.spec.ts` を `Database operation failed` の最小再現ケースへ再構成。投稿UI検証を外し、`ensureTestTopic` 前後の bridge 実行を `snapshot.before.ensure` → `ensure.byName` → `snapshot.after.byName` → `ensure.byTopicId` → `snapshot.after.byTopicId` で段階分離した。
 - `community-node-saved-key-topic` 待機失敗で中断しないよう変更し、検出可否を `invite.keyEnvelopeDetected` ステップとして記録してから bridge 段階へ進むよう修正。
 - 検証: `./scripts/test-docker.ps1 build` 後に `./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts`）を実行し FAIL（`tmp/logs/community-node-e2e/20260304-205440.log`）。`ensure.byName` は成功し、`ensure.byTopicId` でのみ `WebDriverError: Database operation failed` を再現することを確認。
+- 対応（2026年03月05日）: `registerE2EBridge.ensureTestTopic` の `topicId` 分岐を修正し、未発見 topic への `joinTopic` を禁止。`topicId` は discover 後のみ join する段階処理へ変更し、`Database operation failed` 経路を除去。
+- 対応（2026年03月05日）: `tests/e2e/helpers/bridge.ts` の `executeAsync` 応答キーを `error` から `bridgeError` に変更し、WebDriver プロトコル例外ラップを回避。
+- 検証（2026年03月05日）: `./scripts/test-docker.ps1 build` 後に `./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts`）を実行し FAIL（`tmp/logs/community-node-e2e/20260305-014809.log`）。`ensure.byTopicId` は `Topic ... is not discoverable` で失敗し、`Database operation failed` / `WebDriverError` への崩れ込みは解消。
+- 継続ブロッカー: `invite.keyEnvelopeDetected=false` のため invite 起点の topic discover が成立せず、`ensure.byTopicId` 成功条件を満たせない。次は key envelope 受信経路（保存・topic同期）側の切り分けが必要。
+
+### 修正計画（2026年03月05日）
+- 成立条件:
+  - requester/issuer が同時オンライン時、`join.request -> approve -> key envelope -> requester保存 -> topic discover/join` が成立する。
+  - issuer/requester のどちらかがオフラインでも、`cn-relay` + `cn-iroh-relay` 経由で復帰後に未処理イベントを受信・反映できる。
+  - E2E で `invite.keyEnvelopeDetected=true` と `ensure.byTopicId` 成功を確認し、既存の「右ペイン導線」PASSを維持する。
+- フェーズ0（着手）:
+  - E2E 実行経路の relay 前提を統一（PowerShell / bash 両方で `KUKURI_IROH_RELAY_URLS=http://127.0.0.1:3340`、`KUKURI_IROH_RELAY_MODE=custom` を適用）。
+  - community-node / multi-peer シナリオで `cn-iroh-relay` の起動漏れをなくす。
+- フェーズ1（着手）:
+  - ログイン直後に user topic 購読が欠落しないよう、`login` / `secure_login` / `switch_account` 後に `ensure_default_and_user_subscriptions` を再実行する。
+  - key envelope 受信待ちの前提（requester が自身 user topic を購読済み）を常時満たす。
+- フェーズ2:
+  - invite フローを `requester送信` / `issuer承認` / `requester受信` の3段に分け、各段の到達確認ログを E2E へ追加する。
+  - `invite.keyEnvelopeDetected=false` を「どの段で止まるか」で再現最小化する。
+- フェーズ3:
+  - 片側オフライン復帰ケース（issuer復帰時 invite 受信、requester復帰時 key envelope 受信）をシナリオ化し、`cn-relay` 経由での成立条件を検証する。
+
+### 実装着手ログ（2026年03月05日）
+- `login` / `generate_keypair` / `secure_login` / `switch_account` 後に `ensure_default_and_user_subscriptions` を再実行するよう変更し、user topic 購読欠落を抑止。
+- `scripts/test-docker.sh` を更新し、multi-peer / community-node の両シナリオで `cn-iroh-relay` 利用と relay 環境変数（`KUKURI_IROH_RELAY_URLS` / `KUKURI_IROH_RELAY_MODE`）を PowerShell 側と同等に統一。
+- `scripts/test-docker.ps1` の community-node シナリオにも relay 環境変数の既定適用を追加し、E2E 実行経路差分を縮小。
+- 検証: `./scripts/test-docker.ps1 rust` は PASS（Rust単体・結合テスト一式が通過）。
+- 検証: `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts ./scripts/test-docker.ps1 e2e-community-node` は FAIL（`tmp/logs/community-node-e2e/20260305-031958.log`）。`invite.keyEnvelopeDetected=false` と `ensure.byTopicId` の `Topic ... is not discoverable` は継続。
+- `registerE2EBridge` / `tests/e2e/helpers/bridge.ts` に `accessControlIssueInvite` bridge action を追加し、invite 発行を E2E bridge 経由で実行可能にした。
+- `community-node.invite.spec.ts` を 3段分離へ再構成し、`requester送信`（`accessControlRequestJoin`）→`issuer受信/承認`（`accessControlIngestEventJson` + `accessControlListJoinRequests` + `accessControlApproveJoinRequest`）→`requester受信`（`accessControlIngestEventJson` + `communityNodeListGroupKeys`）の順で到達判定するよう修正。
+- 検証: 旧 `test-runner` イメージのまま `./scripts/test-docker.ps1 e2e-community-node` を実行すると旧 spec が走るため、`./scripts/test-docker.ps1 build` で再ビルドが必要であることを確認。
+- 検証: `./scripts/test-docker.ps1 build` 後に `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS（`tmp/logs/community-node-e2e/20260305-034354.log`）。`invite.keyEnvelopeDetected` と `ensure.byTopicId` が成功することを確認。

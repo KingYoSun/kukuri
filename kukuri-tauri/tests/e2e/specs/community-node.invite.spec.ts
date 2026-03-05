@@ -1,6 +1,18 @@
-﻿import { $, $$, browser, expect } from '@wdio/globals';
+import { $, browser, expect } from '@wdio/globals';
 import { waitForAppReady } from '../helpers/waitForAppReady';
-import { resetAppState, ensureTestTopic, getTopicSnapshot } from '../helpers/bridge';
+import {
+  accessControlApproveJoinRequest,
+  accessControlIngestEventJson,
+  accessControlIssueInvite,
+  accessControlListJoinRequests,
+  accessControlRequestJoin,
+  communityNodeListGroupKeys,
+  ensureTestTopic,
+  getTopicSnapshot,
+  resetAppState,
+  seedFriendPlusAccounts,
+  switchAccount,
+} from '../helpers/bridge';
 import {
   completeProfileSetup,
   waitForHome,
@@ -10,24 +22,9 @@ import {
 } from '../helpers/appActions';
 import { runCommunityNodeAuthFlow } from '../helpers/communityNodeAuth';
 
-type InviteEvent = {
-  tags?: Array<string[]>;
-};
-
-const INVITE_JSON = process.env.E2E_COMMUNITY_NODE_INVITE_JSON;
 const TOPIC_NAME = process.env.E2E_COMMUNITY_NODE_TOPIC_NAME ?? 'e2e-community-node-invite';
 
-const getTagValue = (event: InviteEvent | null, tagName: string): string | null => {
-  if (!event?.tags) {
-    return null;
-  }
-  for (const tag of event.tags) {
-    if (Array.isArray(tag) && tag[0] === tagName && typeof tag[1] === 'string') {
-      return tag[1];
-    }
-  }
-  return null;
-};
+const userTopicId = (pubkey: string) => `kukuri:user:${pubkey}`;
 
 type BridgeStepResult = {
   step: string;
@@ -95,22 +92,14 @@ describe('Community Node invite flow', () => {
   });
 
   it('isolates bridge calls around ensureTestTopic after invite join request', async function () {
-    this.timeout(240000);
+    this.timeout(300000);
 
     const baseUrl = process.env.E2E_COMMUNITY_NODE_URL;
     const p2pInviteReady = process.env.E2E_COMMUNITY_NODE_P2P_INVITE === '1';
-    if (!baseUrl || !INVITE_JSON || !p2pInviteReady) {
+    if (!baseUrl || !p2pInviteReady) {
       this.skip();
       return;
     }
-
-    const inviteEvent = JSON.parse(INVITE_JSON) as InviteEvent;
-    const topicId = getTagValue(inviteEvent, 't');
-    const scope = getTagValue(inviteEvent, 'scope') ?? 'invite';
-    if (!topicId) {
-      throw new Error('Invite topic id is missing');
-    }
-    expect(scope).toBe('invite');
 
     await waitForWelcome();
     const profile: ProfileInfo = {
@@ -142,45 +131,124 @@ describe('Community Node invite flow', () => {
     await acceptConsents.waitForClickable({ timeout: 15000 });
     await acceptConsents.click();
 
-    const consents = await $('[data-testid="community-node-consents"]');
-    await browser.waitUntil(
-      async () => {
-        const text = await consents.getText();
-        return text.includes('accepted') || text.includes('consent') || text.includes('policies');
-      },
-      { timeout: 20000, interval: 500, timeoutMsg: 'Community node consents did not update' },
-    );
-
-    const inviteInput = await $('[data-testid="community-node-invite-json"]');
-    await inviteInput.waitForDisplayed({ timeout: 15000 });
-    await inviteInput.setValue(INVITE_JSON);
-    await $('[data-testid="community-node-request-join"]').click();
+    const accessControlSwitch = await $('#community-node-access-control');
+    await accessControlSwitch.waitForDisplayed({ timeout: 10000 });
+    if ((await accessControlSwitch.getAttribute('data-state')) !== 'checked') {
+      await accessControlSwitch.click();
+    }
 
     const steps: BridgeStepResult[] = [];
-    const keyEnvelopeDetected = await browser
-      .waitUntil(
-        async () => {
-          const topicEntries = await $$('[data-testid="community-node-saved-key-topic"]');
-          for (const entry of topicEntries) {
-            if ((await entry.getText()).trim() === topicId) {
-              return true;
-            }
-          }
-          return false;
-        },
-        {
-          timeout: 30000,
-          interval: 500,
-          timeoutMsg: 'Key envelope was not stored after P2P join request',
-        },
-      )
-      .then(() => true)
-      .catch(() => false);
-    steps.push({
-      step: 'invite.keyEnvelopeDetected',
-      status: keyEnvelopeDetected ? 'ok' : 'failed',
-      detail: { topicId, keyEnvelopeDetected },
-    });
+    const accounts = await runBridgeStep(
+      'invite.accounts.seed',
+      steps,
+      () => seedFriendPlusAccounts(),
+      (value) => ({
+        requester: value.requester.npub,
+        issuer: value.inviter.npub,
+      }),
+    );
+
+    await switchAccount(accounts.inviter.npub);
+
+    const issuerTopic = await runBridgeStep(
+      'invite.issuer.ensureTopic',
+      steps,
+      () => ensureTestTopic({ name: TOPIC_NAME }),
+      (topic) => ({ id: topic.id, name: topic.name }),
+    );
+    const topicId = issuerTopic.id;
+
+    const invite = await runBridgeStep(
+      'invite.issuer.issueInvite',
+      steps,
+      () => accessControlIssueInvite({ topic_id: topicId }),
+      () => ({ topicId }),
+    );
+
+    await switchAccount(accounts.requester.npub);
+
+    const joinResult = await runBridgeStep(
+      'invite.requester.requestJoin',
+      steps,
+      () =>
+        accessControlRequestJoin({
+          invite_event_json: invite.invite_event_json,
+        }),
+      (result) => ({
+        eventId: result.event_id,
+        sentTopics: result.sent_topics,
+      }),
+    );
+    expect(joinResult.sent_topics).toContain(userTopicId(accounts.inviter.pubkey));
+
+    await switchAccount(accounts.inviter.npub);
+    await runBridgeStep('invite.issuer.ingestJoinRequest', steps, () =>
+      accessControlIngestEventJson(joinResult.event_json),
+    );
+
+    await runBridgeStep(
+      'invite.issuer.pendingJoinDetected',
+      steps,
+      async () => {
+        await browser.waitUntil(
+          async () => {
+            const pending = await accessControlListJoinRequests();
+            return pending.items.some(
+              (item) =>
+                item.event_id === joinResult.event_id &&
+                item.topic_id === topicId &&
+                item.scope === 'invite',
+            );
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMsg: 'invite join.request was not listed for approval',
+          },
+        );
+        return true;
+      },
+      () => ({ eventId: joinResult.event_id, topicId }),
+    );
+
+    const approveResult = await runBridgeStep(
+      'invite.issuer.approveJoinRequest',
+      steps,
+      () => accessControlApproveJoinRequest(joinResult.event_id),
+      (result) => ({
+        eventId: result.event_id,
+        keyEnvelopeEventId: result.key_envelope_event_id,
+      }),
+    );
+    expect(approveResult.key_envelope_event_id).toBeTruthy();
+
+    await switchAccount(accounts.requester.npub);
+    await runBridgeStep('invite.requester.ingestKeyEnvelope', steps, () =>
+      accessControlIngestEventJson(approveResult.key_envelope_event_json),
+    );
+
+    const keyEnvelopeDetected = await runBridgeStep(
+      'invite.keyEnvelopeDetected',
+      steps,
+      async () => {
+        await browser.waitUntil(
+          async () => {
+            const groupKeys = await communityNodeListGroupKeys();
+            return groupKeys.some(
+              (entry) => entry.topic_id === topicId && entry.scope === 'invite',
+            );
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMsg: 'Key envelope was not stored after issuer approval',
+          },
+        );
+        return true;
+      },
+      (detected) => ({ topicId, keyEnvelopeDetected: detected }),
+    );
+    expect(keyEnvelopeDetected).toBe(true);
 
     const beforeSnapshot = await runBridgeStep(
       'snapshot.before.ensure',

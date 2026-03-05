@@ -41,6 +41,14 @@ pub async fn switch_account(
 ) -> Result<ApiResponse<SwitchAccountResponse>, AppError> {
     let handler = state.secure_storage_handler.clone();
     let result = handler.switch_account(npub).await;
+    if result.is_ok()
+        && let Err(err) = state.ensure_default_and_user_subscriptions().await
+    {
+        tracing::warn!(
+            error = %err,
+            "failed to ensure default/user subscriptions after switch_account"
+        );
+    }
     Ok(ApiResponse::from_result(result))
 }
 
@@ -73,5 +81,13 @@ pub async fn secure_login(
 ) -> Result<ApiResponse<LoginResponse>, AppError> {
     let handler = state.secure_storage_handler.clone();
     let result = handler.secure_login(npub).await;
+    if result.is_ok()
+        && let Err(err) = state.ensure_default_and_user_subscriptions().await
+    {
+        tracing::warn!(
+            error = %err,
+            "failed to ensure default/user subscriptions after secure_login"
+        );
+    }
     Ok(ApiResponse::from_result(result))
 }

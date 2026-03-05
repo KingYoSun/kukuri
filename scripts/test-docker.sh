@@ -16,7 +16,7 @@ BOOTSTRAP_CONTAINER="kukuri-p2p-bootstrap"
 PROMETHEUS_SERVICE="prometheus-trending"
 PROMETHEUS_METRICS_URL="${PROMETHEUS_METRICS_URL:-http://127.0.0.1:9898/metrics}"
 COMMUNITY_NODE_BASE_URL_DEFAULT="http://127.0.0.1:18080"
-MULTI_PEER_SERVICES=(p2p-bootstrap peer-client-1 peer-client-2 peer-client-3)
+MULTI_PEER_SERVICES=(cn-iroh-relay p2p-bootstrap peer-client-1 peer-client-2 peer-client-3)
 
 P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
 P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
@@ -911,10 +911,14 @@ run_desktop_e2e_community_node() {
   local previous_invite_json="${E2E_COMMUNITY_NODE_INVITE_JSON-}"
   local previous_seed_json="${E2E_COMMUNITY_NODE_SEED_JSON-}"
   local previous_topic_name="${E2E_COMMUNITY_NODE_TOPIC_NAME-}"
+  local previous_relay_urls="${KUKURI_IROH_RELAY_URLS-}"
+  local previous_relay_mode="${KUKURI_IROH_RELAY_MODE-}"
 
   export COMMUNITY_NODE_BASE_URL="$base_url"
   export E2E_COMMUNITY_NODE_URL="$base_url"
   export SCENARIO="community-node-e2e"
+  export KUKURI_IROH_RELAY_URLS="${KUKURI_IROH_RELAY_URLS:-http://127.0.0.1:3340}"
+  export KUKURI_IROH_RELAY_MODE="${KUKURI_IROH_RELAY_MODE:-custom}"
 
   local status=0
   if ! start_community_node "$base_url"; then
@@ -961,6 +965,16 @@ run_desktop_e2e_community_node() {
   else
     unset E2E_COMMUNITY_NODE_TOPIC_NAME
   fi
+  if [[ -n "${previous_relay_urls-}" ]]; then
+    export KUKURI_IROH_RELAY_URLS="$previous_relay_urls"
+  else
+    unset KUKURI_IROH_RELAY_URLS
+  fi
+  if [[ -n "${previous_relay_mode-}" ]]; then
+    export KUKURI_IROH_RELAY_MODE="$previous_relay_mode"
+  else
+    unset KUKURI_IROH_RELAY_MODE
+  fi
 
   if [[ $status -ne 0 ]]; then
     return $status
@@ -997,11 +1011,12 @@ start_multi_peer_clients() {
   if [[ $NO_BUILD -eq 0 ]]; then
     build_image
     echo 'Building docker multi-peer service images...'
-    compose_run '' build p2p-bootstrap peer-client-1 peer-client-2 peer-client-3
+    compose_run '' build cn-iroh-relay p2p-bootstrap peer-client-1 peer-client-2 peer-client-3
   fi
 
   echo 'Starting docker multi-peer clients...'
   compose_run '' rm -sf "${MULTI_PEER_SERVICES[@]}" >/dev/null 2>&1 || true
+  compose_run '' up -d cn-iroh-relay
   compose_run '' up -d p2p-bootstrap
   local peer_services=(peer-client-1 peer-client-2 peer-client-3)
   for service in "${peer_services[@]}"; do
@@ -1029,12 +1044,16 @@ run_desktop_e2e_multi_peer() {
   local previous_expected="${E2E_MULTI_PEER_EXPECTED_MIN-}"
   local previous_prefix="${E2E_MULTI_PEER_PUBLISH_PREFIX-}"
   local previous_output_group="${KUKURI_PEER_OUTPUT_GROUP-}"
+  local previous_relay_urls="${KUKURI_IROH_RELAY_URLS-}"
+  local previous_relay_mode="${KUKURI_IROH_RELAY_MODE-}"
 
   export SCENARIO="multi-peer-e2e"
   export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.multi-peer.spec.ts}"
   export E2E_MULTI_PEER_EXPECTED_MIN="${E2E_MULTI_PEER_EXPECTED_MIN:-1}"
   export E2E_MULTI_PEER_PUBLISH_PREFIX="${E2E_MULTI_PEER_PUBLISH_PREFIX:-multi-peer-publisher}"
   export KUKURI_PEER_OUTPUT_GROUP="${KUKURI_PEER_OUTPUT_GROUP:-multi-peer-e2e}"
+  export KUKURI_IROH_RELAY_URLS="${KUKURI_IROH_RELAY_URLS:-http://127.0.0.1:3340}"
+  export KUKURI_IROH_RELAY_MODE="${KUKURI_IROH_RELAY_MODE:-custom}"
 
   local status=0
   if ! start_multi_peer_clients; then
@@ -1072,6 +1091,16 @@ run_desktop_e2e_multi_peer() {
     export KUKURI_PEER_OUTPUT_GROUP="$previous_output_group"
   else
     unset KUKURI_PEER_OUTPUT_GROUP
+  fi
+  if [[ -n "${previous_relay_urls-}" ]]; then
+    export KUKURI_IROH_RELAY_URLS="$previous_relay_urls"
+  else
+    unset KUKURI_IROH_RELAY_URLS
+  fi
+  if [[ -n "${previous_relay_mode-}" ]]; then
+    export KUKURI_IROH_RELAY_MODE="$previous_relay_mode"
+  else
+    unset KUKURI_IROH_RELAY_MODE
   fi
 
   if [[ $status -ne 0 ]]; then
