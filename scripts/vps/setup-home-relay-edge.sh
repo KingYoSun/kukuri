@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_ENV_FILE="${SCRIPT_DIR}/home-relay-edge.env"
+CADDY_SITES_DIR="/etc/caddy/sites-enabled"
+CADDY_IMPORT_GLOB="${CADDY_SITES_DIR}/*.caddy"
 
 usage() {
   cat <<'EOF'
@@ -229,7 +231,7 @@ EOF
 }
 
 ensure_caddy_import() {
-  mkdir -p /etc/caddy/sites-enabled
+  mkdir -p "${CADDY_SITES_DIR}"
 
   if [[ ! -f /etc/caddy/Caddyfile ]]; then
     if [[ -n "${CADDY_EMAIL:-}" ]]; then
@@ -238,18 +240,23 @@ ensure_caddy_import() {
 	email ${CADDY_EMAIL}
 }
 
-import /etc/caddy/sites-enabled/*
+import ${CADDY_IMPORT_GLOB}
 EOF
     else
       cat > /etc/caddy/Caddyfile <<'EOF'
-import /etc/caddy/sites-enabled/*
+import /etc/caddy/sites-enabled/*.caddy
 EOF
     fi
     return
   fi
 
-  if ! grep -Fq 'import /etc/caddy/sites-enabled/*' /etc/caddy/Caddyfile; then
-    printf '\nimport /etc/caddy/sites-enabled/*\n' >> /etc/caddy/Caddyfile
+  if grep -Fq 'import /etc/caddy/sites-enabled/*' /etc/caddy/Caddyfile; then
+    sed -i 's#import /etc/caddy/sites-enabled/\*#import /etc/caddy/sites-enabled/*.caddy#g' /etc/caddy/Caddyfile
+    return
+  fi
+
+  if ! grep -Fq "import ${CADDY_IMPORT_GLOB}" /etc/caddy/Caddyfile; then
+    printf '\nimport %s\n' "${CADDY_IMPORT_GLOB}" >> /etc/caddy/Caddyfile
   fi
 }
 

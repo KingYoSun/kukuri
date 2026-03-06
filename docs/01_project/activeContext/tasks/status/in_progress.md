@@ -100,4 +100,5 @@
 - `kukuri-community-node/.env.home-vps-edge.example` を追加し、`relay.kukuri.app` / `iroh-relay.kukuri.app` / `10.73.0.2` を前提にした Home 側の具体値を定義。
 - `scripts/vps/setup-home-relay-edge.sh` と `scripts/vps/home-relay-edge.env.example` を追加し、VPS 上で `git clone` 後に WireGuard / Caddy / nftables を即構成できるようにした。
 - `scripts/vps/setup-home-relay-edge.sh` を Debian / Ubuntu と Rocky / AlmaLinux / RHEL 系の両対応へ拡張し、`dnf` 系では `epel-release` と Caddy rpm repository を自動設定、`firewalld` / `ufw` の競合も停止するよう修正。
+- `scripts/vps/setup-home-relay-edge.sh` の Caddy import を `/etc/caddy/sites-enabled/*.caddy` に修正し、旧実装の backup (`*.bak.*`) が site 定義として再読込されて `ambiguous site definition` になる不具合を回避。移行用の退避手順も `home_vps_wireguard_edge.md` に追記。
 - `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` を追加し、DNS, VPS, Home, `kukuri-community-node` の設定値と確認手順を整理。

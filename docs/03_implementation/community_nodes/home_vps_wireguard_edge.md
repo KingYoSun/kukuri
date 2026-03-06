@@ -90,6 +90,17 @@ sudo ./scripts/vps/setup-home-relay-edge.sh scripts/vps/home-relay-edge.env
 
 Rocky / AlmaLinux / RHEL 系では、`wireguard-tools` のために `epel-release` を導入し、`caddy` は公式 rpm repository を追加してから導入する。
 
+再実行時は `Caddyfile` の import 対象を `/etc/caddy/sites-enabled/*.caddy` に固定し、`*.bak.*` のバックアップファイルが site 定義として読まれないようにする。
+
+既に旧版スクリプトで `ambiguous site definition` が出ている場合は、次を 1 回だけ実行してからスクリプトを再実行する。
+
+```bash
+sudo mkdir -p /etc/caddy/backup
+sudo find /etc/caddy/sites-enabled -maxdepth 1 -type f ! -name '*.caddy' -exec mv {} /etc/caddy/backup/ \;
+sudo sed -i 's#import /etc/caddy/sites-enabled/\\*#import /etc/caddy/sites-enabled/*.caddy#g' /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+```
+
 ## Home 側
 
 ### 1. WireGuard client
