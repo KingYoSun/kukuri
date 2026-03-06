@@ -101,6 +101,14 @@ sudo sed -i 's#import /etc/caddy/sites-enabled/\\*#import /etc/caddy/sites-enabl
 sudo caddy validate --config /etc/caddy/Caddyfile
 ```
 
+もし `No files matching import glob pattern "/etc/caddy/sites-enabled/*.caddy.caddy"` が出た場合は、`/etc/caddy/Caddyfile` の import 行が壊れている。次で復旧してから `caddy` を再起動する。
+
+```bash
+sudo sed -i 's#import /etc/caddy/sites-enabled/\\*\\.caddy\\.caddy#import /etc/caddy/sites-enabled/*.caddy#g' /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+```
+
 ## Home 側
 
 ### 1. WireGuard client

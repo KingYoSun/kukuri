@@ -250,14 +250,31 @@ EOF
     return
   fi
 
-  if grep -Fq 'import /etc/caddy/sites-enabled/*' /etc/caddy/Caddyfile; then
-    sed -i 's#import /etc/caddy/sites-enabled/\*#import /etc/caddy/sites-enabled/*.caddy#g' /etc/caddy/Caddyfile
-    return
-  fi
+  local tmp_caddyfile
+  tmp_caddyfile="$(mktemp)"
 
-  if ! grep -Fq "import ${CADDY_IMPORT_GLOB}" /etc/caddy/Caddyfile; then
-    printf '\nimport %s\n' "${CADDY_IMPORT_GLOB}" >> /etc/caddy/Caddyfile
-  fi
+  awk -v desired="import ${CADDY_IMPORT_GLOB}" '
+    BEGIN {
+      normalized = 0
+    }
+    /^import \/etc\/caddy\/sites-enabled\/\*/ {
+      if (!normalized) {
+        print desired
+        normalized = 1
+      }
+      next
+    }
+    {
+      print
+    }
+    END {
+      if (!normalized) {
+        print desired
+      }
+    }
+  ' /etc/caddy/Caddyfile > "${tmp_caddyfile}"
+
+  mv "${tmp_caddyfile}" /etc/caddy/Caddyfile
 }
 
 write_caddy_site() {
