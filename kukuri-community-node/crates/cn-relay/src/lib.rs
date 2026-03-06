@@ -37,6 +37,8 @@ pub(crate) struct AppState {
     pub gossip_senders: Arc<RwLock<HashMap<String, iroh_gossip::api::GossipSender>>>,
     pub node_topics: Arc<RwLock<HashSet<String>>>,
     pub relay_public_url: Option<String>,
+    pub p2p_public_host: Option<String>,
+    pub p2p_public_port: Option<u16>,
     pub p2p_node_id: Arc<RwLock<Option<String>>>,
     pub p2p_bind_addr: SocketAddr,
     pub p2p_relay_urls: Arc<Vec<String>>,
@@ -91,6 +93,8 @@ pub struct RelayConfig {
     pub addr: SocketAddr,
     pub database_url: String,
     pub p2p_bind_addr: SocketAddr,
+    pub p2p_public_host: Option<String>,
+    pub p2p_public_port: Option<u16>,
     pub p2p_secret_key: Option<String>,
     pub p2p_relay_urls: Vec<String>,
     pub p2p_relay_mode_default: bool,
@@ -103,6 +107,20 @@ pub fn load_config() -> Result<RelayConfig> {
     let addr = core_config::socket_addr_from_env("RELAY_ADDR", "0.0.0.0:8082")?;
     let database_url = core_config::required_env("DATABASE_URL")?;
     let p2p_bind_addr = core_config::socket_addr_from_env("RELAY_P2P_BIND", "0.0.0.0:11223")?;
+    let p2p_public_host = std::env::var("RELAY_P2P_PUBLIC_HOST")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let p2p_public_port = std::env::var("RELAY_P2P_PUBLIC_PORT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value.parse::<u16>().map_err(|err| {
+                anyhow::anyhow!("invalid RELAY_P2P_PUBLIC_PORT entry `{value}`: {err}")
+            })
+        })
+        .transpose()?;
     let p2p_secret_key = std::env::var("RELAY_P2P_SECRET_KEY").ok();
     let p2p_relay_urls = parse_csv_env("RELAY_IROH_RELAY_URLS");
     let p2p_relay_mode_default = std::env::var("RELAY_IROH_RELAY_MODE")
@@ -123,6 +141,8 @@ pub fn load_config() -> Result<RelayConfig> {
         addr,
         database_url,
         p2p_bind_addr,
+        p2p_public_host,
+        p2p_public_port,
         p2p_secret_key,
         p2p_relay_urls,
         p2p_relay_mode_default,
@@ -188,6 +208,8 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         gossip_senders: Arc::new(RwLock::new(HashMap::new())),
         node_topics: Arc::new(RwLock::new(HashSet::new())),
         relay_public_url: config.relay_public_url.clone(),
+        p2p_public_host: config.p2p_public_host.clone(),
+        p2p_public_port: config.p2p_public_port,
         p2p_node_id: Arc::new(RwLock::new(None)),
         p2p_bind_addr: config.p2p_bind_addr,
         p2p_relay_urls: Arc::new(config.p2p_relay_urls.clone()),
@@ -359,17 +381,26 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     let node_id = state.p2p_node_id.read().await.clone();
     let bind_addr = state.p2p_bind_addr.to_string();
     let advertised_host = resolve_advertised_host(&state);
+    let advertised_port = resolve_advertised_port(&state);
     let relay_urls = resolve_p2p_relay_urls_for_info(&state);
-    let bootstrap_nodes = match (node_id.as_deref(), advertised_host.as_deref()) {
-        (Some(node_id), Some(host)) => {
-            let endpoint = format_host_port(host, state.p2p_bind_addr.port());
+    let bootstrap_nodes = match (
+        node_id.as_deref(),
+        advertised_host.as_deref(),
+        advertised_port,
+    ) {
+        (Some(node_id), Some(host), Some(port)) => {
+            let endpoint = format_host_port(host, port);
             vec![format!("{node_id}@{endpoint}")]
         }
         _ => Vec::new(),
     };
-    let bootstrap_hints = match (node_id.as_deref(), advertised_host.as_deref()) {
-        (Some(node_id), Some(host)) => {
-            let endpoint = format_host_port(host, state.p2p_bind_addr.port());
+    let bootstrap_hints = match (
+        node_id.as_deref(),
+        advertised_host.as_deref(),
+        advertised_port,
+    ) {
+        (Some(node_id), Some(host), Some(port)) => {
+            let endpoint = format_host_port(host, port);
             if relay_urls.is_empty() {
                 vec![format!("{node_id}@{endpoint}")]
             } else {
@@ -466,6 +497,13 @@ fn dedupe_in_order(values: Vec<String>) -> Vec<String> {
 }
 
 fn resolve_advertised_host(state: &AppState) -> Option<String> {
+    if let Some(host) = state.p2p_public_host.as_ref() {
+        let host = host.trim();
+        if !host.is_empty() {
+            return Some(host.to_string());
+        }
+    }
+
     if let Some(url) = state.relay_public_url.as_ref() {
         if let Some(host) = extract_host_from_url_like(url) {
             return Some(host);
@@ -476,6 +514,27 @@ fn resolve_advertised_host(state: &AppState) -> Option<String> {
         std::net::IpAddr::V4(ip) if ip.is_unspecified() => None,
         std::net::IpAddr::V6(ip) if ip.is_unspecified() => None,
         ip => Some(ip.to_string()),
+    }
+}
+
+fn resolve_advertised_port(state: &AppState) -> Option<u16> {
+    if let Some(port) = state.p2p_public_port {
+        return Some(port);
+    }
+
+    let has_explicit_host = state
+        .p2p_public_host
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|host| !host.is_empty());
+    if has_explicit_host || state.relay_public_url.is_some() {
+        return Some(state.p2p_bind_addr.port());
+    }
+
+    match state.p2p_bind_addr.ip() {
+        std::net::IpAddr::V4(ip) if ip.is_unspecified() => None,
+        std::net::IpAddr::V6(ip) if ip.is_unspecified() => None,
+        _ => Some(state.p2p_bind_addr.port()),
     }
 }
 
@@ -521,8 +580,37 @@ fn extract_host_from_url_like(raw: &str) -> Option<String> {
 mod tests {
     use super::{
         dedupe_in_order, extract_host_from_url_like, format_host_port,
-        normalize_relay_url_for_hint, relay_mode_uses_default,
+        normalize_relay_url_for_hint, relay_mode_uses_default, resolve_advertised_host,
+        resolve_advertised_port, AppState,
     };
+    use cn_core::rate_limit;
+    use cn_core::service_config;
+    use std::collections::{HashMap, HashSet};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::sync::Arc;
+    use tokio::sync::{broadcast, RwLock};
+
+    fn app_state_for_advertised_endpoint() -> AppState {
+        let (realtime_tx, _) = broadcast::channel(1);
+        AppState {
+            pool: sqlx::postgres::PgPoolOptions::new()
+                .connect_lazy("postgres://unused:unused@localhost/unused")
+                .expect("lazy pool"),
+            config: service_config::static_handle(serde_json::json!({})),
+            rate_limiter: Arc::new(rate_limit::RateLimiter::new()),
+            realtime_tx,
+            gossip_senders: Arc::new(RwLock::new(HashMap::new())),
+            node_topics: Arc::new(RwLock::new(HashSet::new())),
+            relay_public_url: None,
+            p2p_public_host: None,
+            p2p_public_port: None,
+            p2p_node_id: Arc::new(RwLock::new(None)),
+            p2p_bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 11223),
+            p2p_relay_urls: Arc::new(Vec::new()),
+            p2p_router: Arc::new(RwLock::new(None)),
+            bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
+        }
+    }
 
     #[test]
     fn extract_host_from_url_like_parses_ws_url_with_port_and_path() {
@@ -539,6 +627,44 @@ mod tests {
     #[test]
     fn extract_host_from_url_like_returns_none_for_empty_input() {
         assert_eq!(extract_host_from_url_like("   "), None);
+    }
+
+    #[tokio::test]
+    async fn advertised_endpoint_prefers_explicit_p2p_public_values() {
+        let mut state = app_state_for_advertised_endpoint();
+        state.relay_public_url = Some("wss://relay.kukuri.app/relay".to_string());
+        state.p2p_public_host = Some("relay-p2p.kukuri.app".to_string());
+        state.p2p_public_port = Some(40123);
+
+        assert_eq!(
+            resolve_advertised_host(&state).as_deref(),
+            Some("relay-p2p.kukuri.app")
+        );
+        assert_eq!(resolve_advertised_port(&state), Some(40123));
+    }
+
+    #[tokio::test]
+    async fn advertised_endpoint_uses_bind_port_when_public_host_is_explicit() {
+        let mut state = app_state_for_advertised_endpoint();
+        state.p2p_public_host = Some("relay.kukuri.app".to_string());
+
+        assert_eq!(
+            resolve_advertised_host(&state).as_deref(),
+            Some("relay.kukuri.app")
+        );
+        assert_eq!(resolve_advertised_port(&state), Some(11223));
+    }
+
+    #[tokio::test]
+    async fn advertised_endpoint_falls_back_to_relay_public_url_host() {
+        let mut state = app_state_for_advertised_endpoint();
+        state.relay_public_url = Some("wss://relay.kukuri.app/relay".to_string());
+
+        assert_eq!(
+            resolve_advertised_host(&state).as_deref(),
+            Some("relay.kukuri.app")
+        );
+        assert_eq!(resolve_advertised_port(&state), Some(11223));
     }
 
     #[test]

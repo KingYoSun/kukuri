@@ -905,6 +905,8 @@ mod tests {
             gossip_senders: Arc::new(RwLock::new(HashMap::new())),
             node_topics: Arc::new(RwLock::new(HashSet::new())),
             relay_public_url: None,
+            p2p_public_host: None,
+            p2p_public_port: None,
             p2p_node_id: Arc::new(RwLock::new(None)),
             p2p_bind_addr: "0.0.0.0:11223".parse().expect("p2p bind addr"),
             p2p_relay_urls: Arc::new(Vec::new()),

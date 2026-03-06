@@ -13,6 +13,9 @@ Minimal community node services for kukuri.
    `docker compose run --rm cn-cli admin bootstrap --username admin --password change-me`
 4. If custom relay mode is enabled, start bootstrap profile:
    `docker compose --profile bootstrap up -d`
+5. If you expose relay services through a VPS + WireGuard edge, see
+   `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` and
+   copy `kukuri-community-node/.env.home-vps-edge.example` to `.env` as a base.
 
 ## Service endpoints (default)
 
@@ -23,3 +26,9 @@ Minimal community node services for kukuri.
 - bootstrap: `http://localhost:8083/healthz` (profile `bootstrap`)
 - user-api OpenAPI: `http://localhost:8080/v1/openapi.json`
 - admin-api OpenAPI: `http://localhost:8081/v1/openapi.json`
+
+## Deployment variants
+
+- Local/default: copy `.env.example` to `.env`
+- Home relay behind VPS edge: copy `.env.home-vps-edge.example` to `.env`, then
+  deploy the VPS edge with `scripts/vps/setup-home-relay-edge.sh`

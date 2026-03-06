@@ -10,6 +10,7 @@
 
 ## 現在のタスク
 - P2Pトピック同期の不具合調査と修正（bootstrap反映、受信投稿のリアルタイム反映、プロフィール表示改善）
+- Community Node relay 公開構成の VPS + WireGuard edge 化（Cloudflare Tunnel 依存の除去、Home bind 制御、運用スクリプト整備）
 
 ### 残タスク（2026年03月02日）
 - 直接接続時でも `/topics/${topicId}` の `TimelineThreadCard` とスレッド一覧がリアルタイム差分更新されない（再読み込みや自端末操作が必要）。
@@ -91,3 +92,11 @@
 - `community-node.invite.spec.ts` を 3段分離へ再構成し、`requester送信`（`accessControlRequestJoin`）→`issuer受信/承認`（`accessControlIngestEventJson` + `accessControlListJoinRequests` + `accessControlApproveJoinRequest`）→`requester受信`（`accessControlIngestEventJson` + `communityNodeListGroupKeys`）の順で到達判定するよう修正。
 - 検証: 旧 `test-runner` イメージのまま `./scripts/test-docker.ps1 e2e-community-node` を実行すると旧 spec が走るため、`./scripts/test-docker.ps1 build` で再ビルドが必要であることを確認。
 - 検証: `./scripts/test-docker.ps1 build` 後に `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.invite.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS（`tmp/logs/community-node-e2e/20260305-034354.log`）。`invite.keyEnvelopeDetected` と `ensure.byTopicId` が成功することを確認。
+
+### 進捗メモ（2026年03月06日）
+- `cn-iroh-relay` の長寿命 stream が Cloudflare Tunnel 配下で `Stream terminated` になりやすいことを踏まえ、relay 系データプレーンは `VPS + WireGuard edge` へ切替、Cloudflare は `DNS only` に限定する方針を確定。
+- `cn-relay` に `RELAY_P2P_PUBLIC_HOST` / `RELAY_P2P_PUBLIC_PORT` を追加し、`RELAY_PUBLIC_URL` と `/v1/p2p/info` の advertised endpoint を分離。
+- `docker-compose.yml` に `RELAY_HOST_BIND_IP` / `RELAY_P2P_HOST_BIND_IP` / `IROH_RELAY_HOST_BIND_IP` を追加し、自宅側 relay 系 service を WireGuard IP のみに bind できるよう修正。
+- `kukuri-community-node/.env.home-vps-edge.example` を追加し、`relay.kukuri.app` / `iroh-relay.kukuri.app` / `10.73.0.2` を前提にした Home 側の具体値を定義。
+- `scripts/vps/setup-home-relay-edge.sh` と `scripts/vps/home-relay-edge.env.example` を追加し、VPS 上で `git clone` 後に WireGuard / Caddy / nftables を即構成できるようにした。
+- `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` を追加し、DNS, VPS, Home, `kukuri-community-node` の設定値と確認手順を整理。
