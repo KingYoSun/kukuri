@@ -11,6 +11,7 @@ Usage:
 
 Behavior:
   - installs wireguard-tools, nftables, and caddy
+  - supports Debian/Ubuntu and Rocky/Alma/RHEL-like hosts
   - configures wg0 on the VPS
   - configures Caddy for relay.kukuri.app and iroh-relay.kukuri.app
   - forwards UDP 11223 from the VPS to the home relay over WireGuard
@@ -80,7 +81,65 @@ backup_if_exists() {
   fi
 }
 
-install_packages() {
+log() {
+  printf '[setup-home-relay-edge] %s\n' "$*"
+}
+
+service_exists() {
+  local service_name="$1"
+  systemctl show "${service_name}" --property=LoadState --value 2>/dev/null | grep -Fqx 'loaded'
+}
+
+disable_service_if_present() {
+  local service_name="$1"
+  if ! service_exists "${service_name}"; then
+    return
+  fi
+
+  if systemctl is-active --quiet "${service_name}" || systemctl is-enabled --quiet "${service_name}" >/dev/null 2>&1; then
+    log "disabling conflicting firewall service: ${service_name}"
+    systemctl stop "${service_name}" || true
+    systemctl disable "${service_name}" || true
+  fi
+}
+
+detect_platform_family() {
+  local os_id=""
+  local os_like=""
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    os_id="${ID:-}"
+    os_like="${ID_LIKE:-}"
+  fi
+
+  case " ${os_id} ${os_like} " in
+    *" debian "*|*" ubuntu "*)
+      printf 'debian\n'
+      return
+      ;;
+    *" rocky "*|*" almalinux "*|*" centos "*|*" rhel "*|*" fedora "*)
+      printf 'rhel\n'
+      return
+      ;;
+  esac
+
+  if command -v apt-get >/dev/null 2>&1; then
+    printf 'debian\n'
+    return
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    printf 'rhel\n'
+    return
+  fi
+
+  echo "unsupported platform: could not determine Debian-like or RHEL-like package manager" >&2
+  exit 1
+}
+
+install_packages_debian() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y --no-install-recommends \
@@ -88,6 +147,52 @@ install_packages() {
     caddy \
     nftables \
     wireguard-tools
+}
+
+install_packages_rhel() {
+  if ! command -v dnf >/dev/null 2>&1; then
+    echo "dnf is required on RHEL-like hosts" >&2
+    exit 1
+  fi
+
+  dnf install -y ca-certificates dnf-plugins-core
+
+  if ! rpm -q epel-release >/dev/null 2>&1; then
+    log "installing EPEL repository for wireguard-tools"
+    if ! dnf install -y epel-release; then
+      echo "failed to install epel-release; enable EPEL on this host and rerun" >&2
+      exit 1
+    fi
+  fi
+
+  log "ensuring the official Caddy rpm repository is configured"
+  dnf config-manager --add-repo https://dl.cloudsmith.io/public/caddy/stable/rpm.repo >/dev/null
+  dnf makecache -y
+  dnf install -y caddy nftables wireguard-tools
+}
+
+install_packages() {
+  local platform_family
+  platform_family="$(detect_platform_family)"
+  log "detected platform family: ${platform_family}"
+
+  case "${platform_family}" in
+    debian)
+      install_packages_debian
+      ;;
+    rhel)
+      install_packages_rhel
+      ;;
+    *)
+      echo "unsupported platform family: ${platform_family}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+disable_conflicting_firewall_services() {
+  disable_service_if_present firewalld.service
+  disable_service_if_present ufw.service
 }
 
 write_sysctl() {
@@ -101,6 +206,7 @@ EOF
 write_wireguard() {
   local wg_conf="/etc/wireguard/${WG_IFACE}.conf"
   backup_if_exists "${wg_conf}"
+  mkdir -p /etc/wireguard
 
   cat > "${wg_conf}" <<EOF
 [Interface]
@@ -118,6 +224,8 @@ EOF
 PresharedKey = ${WG_HOME_PRESHARED_KEY}
 EOF
   fi
+
+  chmod 600 "${wg_conf}"
 }
 
 ensure_caddy_import() {
@@ -252,6 +360,8 @@ Endpoint = ${WG_ENDPOINT_HOST}:${WG_PORT}
 AllowedIPs = ${vps_tunnel_ip}/32
 PersistentKeepalive = 25
 EOF
+
+  chmod 600 "/root/${WG_IFACE}-home-client.conf"
 }
 
 restart_services() {
@@ -265,6 +375,7 @@ restart_services() {
 }
 
 install_packages
+disable_conflicting_firewall_services
 write_sysctl
 write_wireguard
 ensure_caddy_import

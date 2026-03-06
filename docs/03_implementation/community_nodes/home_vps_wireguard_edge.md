@@ -80,11 +80,15 @@ sudo ./scripts/vps/setup-home-relay-edge.sh scripts/vps/home-relay-edge.env
 
 このスクリプトは次を行う。
 
+- Debian / Ubuntu と Rocky / AlmaLinux / RHEL 系の `dnf` host をサポートする
 - `wireguard-tools` / `nftables` / `caddy` を導入
+- `firewalld` や `ufw` が有効なら停止・無効化し、`nftables` 管理へ寄せる
 - `/etc/wireguard/wg0.conf` を生成
 - `/etc/caddy/sites-enabled/kukuri-home-relay-edge.caddy` を生成
 - `/etc/nftables.conf` を生成
 - `/root/wg0-home-client.conf` を生成
+
+Rocky / AlmaLinux / RHEL 系では、`wireguard-tools` のために `epel-release` を導入し、`caddy` は公式 rpm repository を追加してから導入する。
 
 ## Home 側
 

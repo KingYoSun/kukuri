@@ -99,4 +99,5 @@
 - `docker-compose.yml` に `RELAY_HOST_BIND_IP` / `RELAY_P2P_HOST_BIND_IP` / `IROH_RELAY_HOST_BIND_IP` を追加し、自宅側 relay 系 service を WireGuard IP のみに bind できるよう修正。
 - `kukuri-community-node/.env.home-vps-edge.example` を追加し、`relay.kukuri.app` / `iroh-relay.kukuri.app` / `10.73.0.2` を前提にした Home 側の具体値を定義。
 - `scripts/vps/setup-home-relay-edge.sh` と `scripts/vps/home-relay-edge.env.example` を追加し、VPS 上で `git clone` 後に WireGuard / Caddy / nftables を即構成できるようにした。
+- `scripts/vps/setup-home-relay-edge.sh` を Debian / Ubuntu と Rocky / AlmaLinux / RHEL 系の両対応へ拡張し、`dnf` 系では `epel-release` と Caddy rpm repository を自動設定、`firewalld` / `ufw` の競合も停止するよう修正。
 - `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` を追加し、DNS, VPS, Home, `kukuri-community-node` の設定値と確認手順を整理。
