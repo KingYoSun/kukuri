@@ -73,6 +73,7 @@ use state::AppState;
 pub fn run() {
     // ログ設定の初期化
     init_logging();
+    init_rustls_crypto_provider();
 
     info!("Kukuri Tauri application starting...");
 
@@ -279,6 +280,18 @@ fn init_logging() {
 }
 
 /// P2Pイベントハンドラーを起動
+fn init_rustls_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_some() {
+        return;
+    }
+
+    if rustls::crypto::ring::default_provider()
+        .install_default()
+        .is_err()
+    {
+        tracing::debug!("Rustls CryptoProvider was already installed");
+    }
+}
 fn spawn_p2p_event_handler(app_handle: tauri::AppHandle, app_state: AppState) {
     use serde::Serialize;
 

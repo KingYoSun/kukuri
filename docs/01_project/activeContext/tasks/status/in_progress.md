@@ -112,3 +112,8 @@
 - `community_node_commands.rs` / `state.rs` から Community Node 設定更新・認証・起動時復元の各タイミングで Nostr relay 設定を適用する配線を追加。
 - `CommunityNodeHandler` に bootstrap descriptor `endpoints.ws` と `base_url -> /relay` fallback から relay URL を解決する処理を追加。
 - `cn-relay` の gossip topic join 前に、bootstrap seed peer の `EndpointAddr` へ `endpoint.connect(..., iroh_gossip::ALPN)` を明示実行する修正に着手。
+- 追加切り分け（2026年03月07日）: `kukuri-tauri` の Community Node relay 同期直後に `rustls::CryptoProvider` 未初期化 panic が発生していたため、アプリ起動時に `ring` provider を明示 install する修正に着手。
+- 追加切り分け（2026年03月07日）: `cn-relay` の iroh endpoint が既定 IPv6 transport を保持したまま `bind_addr(v4)` しており、VPS で IPv6 宛て `sendmsg ... NetworkUnreachable` を出していたため、`clear_ip_transports()` 後に設定 family のみ bind する方向で修正。
+- 対応（2026年03月07日）: `kukuri-tauri/src-tauri/Cargo.toml` に `rustls` を明示追加し、`src/lib.rs` の `run()` 起動直後で `rustls::crypto::ring::default_provider().install_default()` を呼ぶよう修正。Community Node 設定・認証時の `CryptoProvider` panic を解消する方向で実装済み。
+- 対応（2026年03月07日）: `kukuri-community-node/crates/cn-relay/src/gossip.rs` の endpoint 構築で `Endpoint::empty_builder(relay_mode).clear_ip_transports()` を使い、`bind_addr(v4)` 時に不要な IPv6 transport を残さないよう修正。VPS 側 `sendmsg ... NetworkUnreachable` の直接原因を除去。
+- 検証（2026年03月07日）: `docker compose -f docker-compose.test.yml run --rm rust-test` PASS、`gh act --workflows .github/workflows/test.yml --job format-check` PASS、`gh act --workflows .github/workflows/test.yml --job native-test-linux` PASS、`gh act --workflows .github/workflows/test.yml --job community-node-tests` PASS。`./scripts/test-docker.ps1 rust` は `rust-test` サービス用イメージを再ビルドしない既存制約で `--locked` 失敗のため、同一 Compose 定義を直接実行して確認。

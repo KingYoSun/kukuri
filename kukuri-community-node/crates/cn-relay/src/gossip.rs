@@ -98,7 +98,7 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
 
 async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
     let relay_mode = resolve_relay_mode(config)?;
-    let mut builder = Endpoint::empty_builder(relay_mode);
+    let mut builder = Endpoint::empty_builder(relay_mode).clear_ip_transports();
     builder = apply_bind(builder, config.p2p_bind_addr)?;
     if let Some(secret) = &config.p2p_secret_key {
         let decoded = BASE64_STANDARD
