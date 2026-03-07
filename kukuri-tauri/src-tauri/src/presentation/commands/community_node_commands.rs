@@ -12,6 +12,36 @@ use crate::shared::config::BootstrapSource;
 use crate::state::AppState;
 use tauri::State;
 
+async fn sync_community_node_nostr_relays(state: &AppState, reason: &'static str) {
+    match state
+        .community_node_handler
+        .resolve_nostr_relay_urls_from_saved_config()
+        .await
+    {
+        Ok(relay_urls) => {
+            if let Err(err) = state
+                .event_manager
+                .replace_nostr_relays(relay_urls.clone())
+                .await
+            {
+                tracing::warn!(
+                    error = %err,
+                    relay_count = relay_urls.len(),
+                    reason,
+                    "Failed to apply community node Nostr relay configuration"
+                );
+            }
+        }
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                reason,
+                "Failed to resolve community node Nostr relay configuration"
+            );
+        }
+    }
+}
+
 fn has_user_bootstrap_nodes(selection: &BootstrapSelection) -> bool {
     selection.source == BootstrapSource::User && !selection.nodes.is_empty()
 }
@@ -58,6 +88,8 @@ pub async fn set_community_node_config(
         );
     }
 
+    sync_community_node_nostr_relays(&state, "set_config").await;
+
     Ok(ApiResponse::success(config))
 }
 
@@ -73,8 +105,9 @@ pub async fn get_community_node_config(
 pub async fn clear_community_node_config(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<()>, AppError> {
-    let result = state.community_node_handler.clear_config().await;
-    Ok(ApiResponse::from_result(result))
+    state.community_node_handler.clear_config().await?;
+    sync_community_node_nostr_relays(&state, "clear_config").await;
+    Ok(ApiResponse::success(()))
 }
 
 #[tauri::command]
@@ -98,6 +131,8 @@ pub async fn community_node_authenticate(
             "Failed to apply bootstrap nodes after community node authentication"
         );
     }
+
+    sync_community_node_nostr_relays(&state, "authenticate").await;
 
     Ok(ApiResponse::success(auth_response))
 }

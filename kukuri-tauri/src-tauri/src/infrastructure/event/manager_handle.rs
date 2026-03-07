@@ -40,6 +40,7 @@ pub trait EventManagerHandle: Send + Sync {
     async fn subscribe_to_user(&self, pubkey: PublicKey, since: Option<Timestamp>) -> Result<()>;
     async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>);
     async fn initialize_with_keypair(&self, keypair: KeyPair) -> Result<()>;
+    async fn replace_nostr_relays(&self, relay_urls: Vec<String>) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -160,5 +161,9 @@ impl EventManagerHandle for LegacyEventManagerHandle {
 
     async fn initialize_with_keypair(&self, keypair: KeyPair) -> Result<()> {
         self.inner.initialize_with_keypair(&keypair).await
+    }
+
+    async fn replace_nostr_relays(&self, relay_urls: Vec<String>) -> Result<()> {
+        self.inner.replace_nostr_relays(relay_urls).await
     }
 }

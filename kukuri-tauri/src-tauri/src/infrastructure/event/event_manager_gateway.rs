@@ -186,6 +186,10 @@ mod tests {
         async fn initialize_with_keypair(&self, _: KeyPair) -> anyhow::Result<()> {
             Ok(())
         }
+
+        async fn replace_nostr_relays(&self, _: Vec<String>) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     fn sample_nostr_event_id(ch: char) -> NostrEventId {

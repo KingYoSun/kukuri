@@ -106,3 +106,9 @@
 - `cn-iroh-relay` を `7842/udp` 含みで本番相当に公開できるよう、compose / env / entrypoint を config mode + 手動証明書 + QUIC address discovery 前提へ拡張中。
 - `scripts/vps/setup-home-relay-edge.sh` / `home-relay-edge.env.example` / `home_vps_wireguard_edge.md` は `7842/udp` forward と `iroh-relay.kukuri.app` 証明書の Home 配置手順を追記中。
 - `iroh_gossip_service` は existing topic へ peer hint を後付けした場合、既存 handle の `join_peers` 再利用ではなく `TopicMesh` を引き継いだ fresh subscribe へ切り替える実装に着手。
+
+### 進捗メモ（2026年03月07日）
+- `kukuri-tauri` の `NostrClientManager` を relay URL 保持・差し替え対応へ拡張し、Community Node 保存設定から `ws/wss` relay URL を復元して `EventManager` に反映する実装に着手。
+- `community_node_commands.rs` / `state.rs` から Community Node 設定更新・認証・起動時復元の各タイミングで Nostr relay 設定を適用する配線を追加。
+- `CommunityNodeHandler` に bootstrap descriptor `endpoints.ws` と `base_url -> /relay` fallback から relay URL を解決する処理を追加。
+- `cn-relay` の gossip topic join 前に、bootstrap seed peer の `EndpointAddr` へ `endpoint.connect(..., iroh_gossip::ALPN)` を明示実行する修正に着手。

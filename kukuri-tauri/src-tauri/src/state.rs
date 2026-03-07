@@ -598,6 +598,7 @@ impl AppState {
         {
             let community_node_handler = Arc::clone(&this.community_node_handler);
             let p2p_handler = Arc::clone(&this.p2p_handler);
+            let event_manager = Arc::clone(&this.event_manager);
             tauri::async_runtime::spawn(async move {
                 match community_node_handler
                     .refresh_bootstrap_nodes_from_saved_config()
@@ -620,6 +621,29 @@ impl AppState {
                         tracing::warn!(
                             error = %err,
                             "Failed to refresh bootstrap nodes from saved community node config"
+                        );
+                    }
+                }
+
+                match community_node_handler
+                    .resolve_nostr_relay_urls_from_saved_config()
+                    .await
+                {
+                    Ok(relay_urls) => {
+                        if let Err(err) =
+                            event_manager.replace_nostr_relays(relay_urls.clone()).await
+                        {
+                            tracing::warn!(
+                                error = %err,
+                                relay_count = relay_urls.len(),
+                                "Failed to apply Nostr relays from saved community node config"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            "Failed to resolve Nostr relays from saved community node config"
                         );
                     }
                 }

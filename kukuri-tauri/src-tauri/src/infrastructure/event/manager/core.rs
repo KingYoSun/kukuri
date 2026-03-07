@@ -94,6 +94,11 @@ impl EventManager {
         self.event_handler.register_callback(callback).await;
     }
 
+    pub async fn replace_nostr_relays(&self, relay_urls: Vec<String>) -> Result<()> {
+        let mut client_manager = self.client_manager.write().await;
+        client_manager.replace_relays(relay_urls).await
+    }
+
     /// KeyManagerからの秘密鍵でマネージャーを初期化
     pub async fn initialize_with_key_manager(
         &self,

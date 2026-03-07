@@ -1,38 +1,97 @@
 use anyhow::Result;
 use nostr_sdk::prelude::*;
+use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::info;
 
-/// Nostrクライアントの管理構造体
+fn relay_connect_wait_timeout() -> Duration {
+    if cfg!(test) {
+        Duration::from_millis(10)
+    } else {
+        Duration::from_secs(3)
+    }
+}
+
+fn normalize_relay_urls(relay_urls: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for relay_url in relay_urls {
+        let trimmed = relay_url.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            normalized.push(trimmed.to_string());
+        }
+    }
+    normalized
+}
+
 pub struct NostrClientManager {
     client: Arc<RwLock<Option<Client>>>,
     keys: Option<Keys>,
+    configured_relays: Vec<String>,
 }
 
 impl NostrClientManager {
-    /// 新しいNostrClientManagerインスタンスを作成
     pub fn new() -> Self {
         Self {
             client: Arc::new(RwLock::new(None)),
             keys: None,
+            configured_relays: Vec::new(),
         }
     }
 
-    /// 秘密鍵からクライアントを初期化
     pub async fn init_with_keys(&mut self, secret_key: &SecretKey) -> Result<()> {
         let keys = Keys::new(secret_key.clone());
         self.keys = Some(keys.clone());
 
         let client = Client::new(keys.clone());
-
+        self.apply_relays_to_client(&client).await?;
         *self.client.write().await = Some(client);
 
-        info!("Nostr client initialized with keys");
+        info!(
+            relay_count = self.configured_relays.len(),
+            "Nostr client initialized with keys"
+        );
         Ok(())
     }
 
-    /// 全てのリレーから切断
+    pub async fn replace_relays(&mut self, relay_urls: Vec<String>) -> Result<()> {
+        self.configured_relays = normalize_relay_urls(relay_urls);
+
+        let client = self.client.read().await.as_ref().cloned();
+        if let Some(client) = client {
+            self.apply_relays_to_client(&client).await?;
+        }
+
+        info!(
+            relay_count = self.configured_relays.len(),
+            "Updated Nostr relay configuration"
+        );
+        Ok(())
+    }
+
+    async fn apply_relays_to_client(&self, client: &Client) -> Result<()> {
+        client.disconnect().await;
+        client.force_remove_all_relays().await;
+
+        for relay_url in &self.configured_relays {
+            client.add_relay(relay_url).await?;
+        }
+
+        if !self.configured_relays.is_empty() {
+            client.connect().await;
+            client
+                .wait_for_connection(relay_connect_wait_timeout())
+                .await;
+        }
+
+        Ok(())
+    }
+
     pub async fn disconnect(&self) -> Result<()> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
@@ -44,7 +103,6 @@ impl NostrClientManager {
         }
     }
 
-    /// カスタムイベントを投稿
     pub async fn publish_event(&self, event: Event) -> Result<EventId> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
@@ -57,7 +115,6 @@ impl NostrClientManager {
         }
     }
 
-    /// イベントをサブスクライブ
     pub async fn subscribe(&self, filters: Vec<Filter>) -> Result<()> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
@@ -71,9 +128,13 @@ impl NostrClientManager {
         }
     }
 
-    /// 公開鍵を取得
     pub fn get_public_key(&self) -> Option<PublicKey> {
         self.keys.as_ref().map(|k| k.public_key())
+    }
+
+    #[cfg(test)]
+    async fn configured_relays(&self) -> Vec<String> {
+        self.configured_relays.clone()
     }
 }
 
@@ -87,53 +148,111 @@ impl Default for NostrClientManager {
 mod tests {
     use super::*;
 
+    fn sample_secret_key(ch: char) -> SecretKey {
+        let hex: String = std::iter::repeat_n(ch, 64).collect();
+        SecretKey::parse(&hex).expect("valid secret key")
+    }
+
+    fn sample_event(secret_key: &SecretKey) -> Event {
+        let keys = Keys::new(secret_key.clone());
+        EventBuilder::text_note("hello")
+            .sign_with_keys(&keys)
+            .expect("event")
+    }
+
     #[tokio::test]
     async fn test_client_initialization() {
         let mut manager = NostrClientManager::new();
-        let secret_key = SecretKey::generate();
+        let secret_key = sample_secret_key('1');
 
-        assert!(manager.init_with_keys(&secret_key).await.is_ok());
-        assert!(manager.get_public_key().is_some());
+        manager
+            .init_with_keys(&secret_key)
+            .await
+            .expect("initialize client");
+
+        let client = manager.client.read().await;
+        assert!(client.is_some());
     }
 
     #[tokio::test]
     async fn test_client_not_initialized_error() {
         let manager = NostrClientManager::new();
+        let event = sample_event(&sample_secret_key('2'));
 
-        // クライアントが初期化されていない状態でのテスト
-        assert!(manager.disconnect().await.is_err());
+        let err = manager.publish_event(event).await.expect_err("should fail");
+        assert!(err.to_string().contains("Client not initialized"));
     }
 
     #[tokio::test]
     async fn test_public_key_generation() {
         let mut manager = NostrClientManager::new();
-        let secret_key = SecretKey::generate();
+        let secret_key = sample_secret_key('3');
+        let expected = Keys::new(secret_key.clone()).public_key();
 
-        // 初期化前は公開鍵がない
-        assert!(manager.get_public_key().is_none());
+        manager
+            .init_with_keys(&secret_key)
+            .await
+            .expect("initialize client");
 
-        // 初期化後は公開鍵が取得できる
-        manager.init_with_keys(&secret_key).await.unwrap();
-        let public_key = manager.get_public_key().unwrap();
-        assert_eq!(public_key, Keys::new(secret_key).public_key());
+        assert_eq!(manager.get_public_key(), Some(expected));
     }
 
     #[tokio::test]
     async fn test_client_reinitialization() {
         let mut manager = NostrClientManager::new();
-        let secret_key1 = SecretKey::generate();
-        let secret_key2 = SecretKey::generate();
+        let first_secret = sample_secret_key('4');
+        let second_secret = sample_secret_key('5');
 
-        // 最初の初期化
-        manager.init_with_keys(&secret_key1).await.unwrap();
-        let public_key1 = manager.get_public_key().unwrap();
+        manager
+            .init_with_keys(&first_secret)
+            .await
+            .expect("first init");
+        let first_pk = manager.get_public_key().expect("first public key");
 
-        // 再初期化
-        manager.init_with_keys(&secret_key2).await.unwrap();
-        let public_key2 = manager.get_public_key().unwrap();
+        manager
+            .init_with_keys(&second_secret)
+            .await
+            .expect("second init");
+        let second_pk = manager.get_public_key().expect("second public key");
 
-        // 公開鍵が更新されていることを確認
-        assert_ne!(public_key1, public_key2);
-        assert_eq!(public_key2, Keys::new(secret_key2).public_key());
+        assert_ne!(first_pk, second_pk);
+    }
+
+    #[tokio::test]
+    async fn test_replace_relays_is_applied_after_init() {
+        let mut manager = NostrClientManager::new();
+        manager
+            .replace_relays(vec![
+                "wss://relay.example".to_string(),
+                "wss://relay.example".to_string(),
+            ])
+            .await
+            .expect("store relays");
+
+        assert_eq!(
+            manager.configured_relays().await,
+            vec!["wss://relay.example".to_string()]
+        );
+
+        let secret_key = sample_secret_key('6');
+        manager
+            .init_with_keys(&secret_key)
+            .await
+            .expect("initialize client");
+
+        let client = manager
+            .client
+            .read()
+            .await
+            .as_ref()
+            .cloned()
+            .expect("client");
+        let relays = client.relays().await;
+        assert_eq!(relays.len(), 1);
+        assert!(
+            relays
+                .keys()
+                .any(|url| url.as_str().starts_with("wss://relay.example"))
+        );
     }
 }

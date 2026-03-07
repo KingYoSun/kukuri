@@ -55,7 +55,7 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     );
     let gossip = Gossip::builder().spawn(endpoint.clone());
     let router = Arc::new(
-        Router::builder(endpoint)
+        Router::builder(endpoint.clone())
             .accept(iroh_gossip::ALPN, gossip.clone())
             .spawn(),
     );
@@ -76,6 +76,7 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
         loop {
             if let Err(err) = sync_topics(
                 &sync_state,
+                &endpoint,
                 &gossip,
                 &senders,
                 &tasks,
@@ -149,6 +150,7 @@ fn apply_bind(
 
 async fn sync_topics(
     state: &AppState,
+    endpoint: &Endpoint,
     gossip: &Gossip,
     senders: &Arc<RwLock<HashMap<String, iroh_gossip::api::GossipSender>>>,
     tasks: &Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
@@ -211,7 +213,7 @@ async fn sync_topics(
             seed_with_addr = seed_with_addr,
             "resolved gossip join seed peers"
         );
-        register_seed_peers_in_address_lookup(state, &seed_peers).await;
+        connect_seed_peers(endpoint, &seed_peers).await;
         let seed_peer_ids = seed_peers
             .iter()
             .map(|peer| peer.node_id.clone())
@@ -405,10 +407,39 @@ fn collect_p2p_hints_from_bootstrap_event(event_json: &serde_json::Value) -> Vec
     hints
 }
 
-async fn register_seed_peers_in_address_lookup(
-    _state: &AppState,
-    _seed_peers: &[ResolvedSeedPeer],
-) {
+async fn connect_seed_peers(endpoint: &Endpoint, seed_peers: &[ResolvedSeedPeer]) {
+    for seed_peer in seed_peers {
+        let Some(node_addr) = seed_peer.node_addr.clone() else {
+            continue;
+        };
+
+        match tokio::time::timeout(
+            Duration::from_secs(3),
+            endpoint.connect(node_addr.clone(), iroh_gossip::ALPN),
+        )
+        .await
+        {
+            Ok(Ok(_conn)) => {
+                tracing::debug!(
+                    peer = %seed_peer.node_id,
+                    "connected seed peer before gossip subscribe"
+                );
+            }
+            Ok(Err(err)) => {
+                tracing::warn!(
+                    peer = %seed_peer.node_id,
+                    error = %err,
+                    "failed to connect seed peer before gossip subscribe"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    peer = %seed_peer.node_id,
+                    "timed out connecting seed peer before gossip subscribe"
+                );
+            }
+        }
+    }
 }
 
 async fn subscribe_topic_with_retry(
