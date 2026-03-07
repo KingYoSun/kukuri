@@ -16,6 +16,8 @@ Minimal community node services for kukuri.
 5. If you expose relay services through a VPS + WireGuard edge, see
    `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` and
    copy `kukuri-community-node/.env.home-vps-edge.example` to `.env` as a base.
+   The Home-side `cn-iroh-relay` also needs `7842/udp` and a public certificate/key
+   under `kukuri-community-node/docker/iroh-relay/certs/`.
 
 ## Service endpoints (default)
 

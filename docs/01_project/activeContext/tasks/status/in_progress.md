@@ -103,3 +103,6 @@
 - `scripts/vps/setup-home-relay-edge.sh` の Caddy import を `/etc/caddy/sites-enabled/*.caddy` に修正し、旧実装の backup (`*.bak.*`) が site 定義として再読込されて `ambiguous site definition` になる不具合を回避。移行用の退避手順も `home_vps_wireguard_edge.md` に追記。
 - 追加対応: `import /etc/caddy/sites-enabled/*.caddy` を再実行時に部分置換して `*.caddy.caddy` へ壊してしまう不具合を修正。既に壊れた VPS 向けの復旧手順も `home_vps_wireguard_edge.md` に追記。
 - `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` を追加し、DNS, VPS, Home, `kukuri-community-node` の設定値と確認手順を整理。
+- `cn-iroh-relay` を `7842/udp` 含みで本番相当に公開できるよう、compose / env / entrypoint を config mode + 手動証明書 + QUIC address discovery 前提へ拡張中。
+- `scripts/vps/setup-home-relay-edge.sh` / `home-relay-edge.env.example` / `home_vps_wireguard_edge.md` は `7842/udp` forward と `iroh-relay.kukuri.app` 証明書の Home 配置手順を追記中。
+- `iroh_gossip_service` は existing topic へ peer hint を後付けした場合、既存 handle の `join_peers` 再利用ではなく `TopicMesh` を引き継いだ fresh subscribe へ切り替える実装に着手。

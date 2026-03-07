@@ -32,7 +32,8 @@ flowchart LR
 - Home tunnel IP: `10.73.0.2`
 - public relay domain: `relay.kukuri.app`
 - public iroh relay domain: `iroh-relay.kukuri.app`
-- public UDP port: `11223/udp`
+- public relay UDP port: `11223/udp`
+- public iroh relay QUIC port: `7842/udp`
 - public WireGuard port: `51820/udp`
 
 ## VPS 側
@@ -42,6 +43,7 @@ flowchart LR
 - `relay.kukuri.app` を VPS の public IP に向ける
 - `iroh-relay.kukuri.app` を VPS の public IP に向ける
 - Cloudflare Proxy は `OFF` (`DNS only`)
+- VPS 側のパケットフィルタ / クラウド firewall では `22/tcp`, `80/tcp`, `443/tcp`, `51820/udp`, `11223/udp`, `7842/udp` を許可する
 
 ### 2. リポジトリを clone
 
@@ -70,6 +72,7 @@ IROH_RELAY_DOMAIN=iroh-relay.kukuri.app
 HOME_RELAY_HTTP_PORT=8082
 HOME_IROH_RELAY_HTTP_PORT=3340
 HOME_RELAY_UDP_PORT=11223
+HOME_IROH_RELAY_UDP_PORT=7842
 ```
 
 ### 4. セットアップ実行
@@ -151,6 +154,14 @@ RELAY_IROH_RELAY_URLS=https://iroh-relay.kukuri.app
 RELAY_HOST_BIND_IP=10.73.0.2
 RELAY_P2P_HOST_BIND_IP=10.73.0.2
 IROH_RELAY_HOST_BIND_IP=10.73.0.2
+IROH_RELAY_ENABLE_QUIC_ADDR_DISCOVERY=1
+IROH_RELAY_HTTP_BIND_ADDR=0.0.0.0:3340
+IROH_RELAY_HTTPS_BIND_ADDR=0.0.0.0:443
+IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
+IROH_RELAY_TLS_CERT_MODE=Manual
+IROH_RELAY_TLS_MANUAL_CERT_PATH=/certs/default.crt
+IROH_RELAY_TLS_MANUAL_KEY_PATH=/certs/default.key
+IROH_RELAY_CERTS_HOST_PATH=./docker/iroh-relay/certs
 ```
 
 意味:
@@ -159,6 +170,26 @@ IROH_RELAY_HOST_BIND_IP=10.73.0.2
 - `RELAY_P2P_PUBLIC_HOST` / `RELAY_P2P_PUBLIC_PORT`: `/v1/p2p/info` で広告する P2P 入口
 - `RELAY_IROH_RELAY_URLS`: kukuri client に配る custom relay URL
 - `*_HOST_BIND_IP`: Home 側 service を WireGuard IP のみに bind する
+- `IROH_RELAY_ENABLE_QUIC_ADDR_DISCOVERY` / `IROH_RELAY_QUIC_BIND_ADDR`: `7842/udp` で QUIC address discovery を有効化する
+- `IROH_RELAY_TLS_*`: Home 側 `cn-iroh-relay` が `iroh-relay.kukuri.app` 用の公開証明書を直接提示する
+
+### 2.1 `iroh-relay.kukuri.app` の証明書を Home 側へ配置
+
+`cn-iroh-relay` の `7842/udp` は Caddy を経由せず Home 側コンテナが直接応答するため、`iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を Home 側へ置く必要があります。
+
+VPS 上の Caddy が取得した証明書は通常この配下にあります。
+
+```bash
+sudo find /var/lib/caddy/.local/share/caddy/certificates -path '*iroh-relay.kukuri.app*'
+```
+
+見つかった `*.crt` / `*.key` を Home 側の `kukuri-community-node/docker/iroh-relay/certs/` に `default.crt` / `default.key` として配置してください。
+
+```bash
+mkdir -p kukuri-community-node/docker/iroh-relay/certs
+cp /path/to/iroh-relay.kukuri.app.crt kukuri-community-node/docker/iroh-relay/certs/default.crt
+cp /path/to/iroh-relay.kukuri.app.key kukuri-community-node/docker/iroh-relay/certs/default.key
+```
 
 ### 3. 起動
 
@@ -175,7 +206,7 @@ docker compose run --rm cn-cli config seed
 
 - `cn-relay` は `RELAY_P2P_PUBLIC_HOST` / `RELAY_P2P_PUBLIC_PORT` を優先して `/v1/p2p/info` を返す
 - `RELAY_PUBLIC_URL` と P2P advertised endpoint を分離した
-- `docker-compose.yml` は `RELAY_HOST_BIND_IP` / `RELAY_P2P_HOST_BIND_IP` / `IROH_RELAY_HOST_BIND_IP` を受け取る
+- `docker-compose.yml` は `RELAY_HOST_BIND_IP` / `RELAY_P2P_HOST_BIND_IP` / `IROH_RELAY_HOST_BIND_IP` を受け取り、`cn-iroh-relay` では `7842/udp` も公開できる
 
 ## 確認項目
 
@@ -193,7 +224,7 @@ curl -fsS https://relay.kukuri.app/v1/p2p/info | jq
 
 ```bash
 ip addr show wg0
-ss -ltnup | grep -E '(:8082|:3340|:11223)'
+ss -ltnup | grep -E '(:8082|:3340|:11223|:7842)'
 docker compose ps
 ```
 
@@ -202,3 +233,4 @@ docker compose ps
 - `relay.kukuri.app/v1/p2p/info` の `bootstrap_hints` が `relay.kukuri.app:11223` を返す
 - `relay_urls` が `https://iroh-relay.kukuri.app` を返す
 - Home 側の `8082/tcp`, `3340/tcp`, `11223/udp` は `10.73.0.2` に bind される
+- Home 側の `7842/udp` も `10.73.0.2` に bind される

@@ -16,7 +16,7 @@ Behavior:
   - supports Debian/Ubuntu and Rocky/Alma/RHEL-like hosts
   - configures wg0 on the VPS
   - configures Caddy for relay.kukuri.app and iroh-relay.kukuri.app
-  - forwards UDP 11223 from the VPS to the home relay over WireGuard
+  - forwards UDP 11223 and 7842 from the VPS to the home relay over WireGuard
 
 Prepare first:
   cp scripts/vps/home-relay-edge.env.example scripts/vps/home-relay-edge.env
@@ -67,6 +67,7 @@ required_vars=(
   HOME_RELAY_HTTP_PORT
   HOME_IROH_RELAY_HTTP_PORT
   HOME_RELAY_UDP_PORT
+  HOME_IROH_RELAY_UDP_PORT
 )
 
 for var_name in "${required_vars[@]}"; do
@@ -330,7 +331,7 @@ table inet filter {
     tcp dport ${SSH_PORT} accept
     udp dport ${WG_PORT} accept
     tcp dport { 80, 443 } accept
-    udp dport ${HOME_RELAY_UDP_PORT} accept
+    udp dport { ${HOME_RELAY_UDP_PORT}, ${HOME_IROH_RELAY_UDP_PORT} } accept
     iifname "${WG_IFACE}" ip saddr ${HOME_WG_IP} accept
     counter reject with icmpx type admin-prohibited
   }
@@ -338,8 +339,8 @@ table inet filter {
   chain forward {
     type filter hook forward priority 0; policy drop;
     ct state established,related accept
-    iifname "${PUBLIC_IFACE}" oifname "${WG_IFACE}" udp dport ${HOME_RELAY_UDP_PORT} accept
-    iifname "${WG_IFACE}" oifname "${PUBLIC_IFACE}" udp sport ${HOME_RELAY_UDP_PORT} accept
+    iifname "${PUBLIC_IFACE}" oifname "${WG_IFACE}" udp dport { ${HOME_RELAY_UDP_PORT}, ${HOME_IROH_RELAY_UDP_PORT} } accept
+    iifname "${WG_IFACE}" oifname "${PUBLIC_IFACE}" udp sport { ${HOME_RELAY_UDP_PORT}, ${HOME_IROH_RELAY_UDP_PORT} } accept
   }
 
   chain output {
@@ -351,11 +352,13 @@ table ip nat {
   chain prerouting {
     type nat hook prerouting priority dstnat; policy accept;
     iifname "${PUBLIC_IFACE}" udp dport ${HOME_RELAY_UDP_PORT} dnat to ${HOME_WG_IP}:${HOME_RELAY_UDP_PORT}
+    iifname "${PUBLIC_IFACE}" udp dport ${HOME_IROH_RELAY_UDP_PORT} dnat to ${HOME_WG_IP}:${HOME_IROH_RELAY_UDP_PORT}
   }
 
   chain postrouting {
     type nat hook postrouting priority srcnat; policy accept;
     oifname "${WG_IFACE}" ip daddr ${HOME_WG_IP} udp dport ${HOME_RELAY_UDP_PORT} masquerade
+    oifname "${WG_IFACE}" ip daddr ${HOME_WG_IP} udp dport ${HOME_IROH_RELAY_UDP_PORT} masquerade
   }
 }
 EOF
@@ -425,4 +428,5 @@ Next steps:
      - curl https://${RELAY_DOMAIN}/v1/p2p/info
      - systemctl status wg-quick@${WG_IFACE}
      - nft list ruleset
+     - copy the public certificate/key for ${IROH_RELAY_DOMAIN} to the home server before enabling QUIC discovery
 EOF

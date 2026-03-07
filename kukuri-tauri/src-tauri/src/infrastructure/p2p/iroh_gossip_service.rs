@@ -113,17 +113,24 @@ impl IrohGossipService {
         TopicId::from_bytes(bytes)
     }
 
-    async fn apply_initial_peers(
+    fn register_initial_peer_addrs(
         &self,
         topic: &str,
         parsed_peers: &[ParsedPeer],
-    ) -> Result<(), AppError> {
+        reuse_existing_topic: bool,
+    ) {
         if parsed_peers.is_empty() {
-            return Ok(());
+            return;
         }
 
+        let action = if reuse_existing_topic {
+            "re-applying"
+        } else {
+            "applying"
+        };
         eprintln!(
-            "[iroh_gossip_service] applying {} initial peers to existing topic {}",
+            "[iroh_gossip_service] {} {} initial peers for topic {}",
+            action,
             parsed_peers.len(),
             topic
         );
@@ -131,76 +138,34 @@ impl IrohGossipService {
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
                 eprintln!(
-                    "[iroh_gossip_service] re-applying node addr {} for topic {}",
-                    addr.id, topic
+                    "[iroh_gossip_service] {} node addr {} for topic {}",
+                    action, addr.id, topic
                 );
                 self.static_discovery.add_endpoint_info(addr.clone());
             }
         }
-
-        let peer_ids: Vec<_> = parsed_peers.iter().map(|p| p.node_id).collect();
-        if peer_ids.is_empty() {
-            return Ok(());
-        }
-
-        let topics = self.topics.read().await;
-        if let Some(handle) = topics.get(topic) {
-            let sender = handle.sender.clone();
-            drop(topics);
-            if let Err(e) = sender.lock().await.join_peers(peer_ids).await {
-                tracing::warn!("Failed to join peers for topic {}: {:?}", topic, e);
-            }
-        } else {
-            tracing::debug!("Topic {} not found when applying initial peers", topic);
-        }
-
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl GossipService for IrohGossipService {
-    fn local_peer_hint(&self) -> Option<String> {
-        IrohGossipService::local_peer_hint(self)
     }
 
-    async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
-        eprintln!(
-            "[iroh_gossip_service] join_topic start: {} (initial peers: {:?})",
-            topic, initial_peers
-        );
-        let parsed_peers: Vec<ParsedPeer> = initial_peers
-            .into_iter()
-            .filter_map(|entry| match parse_peer_hint(&entry) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => {
-                    tracing::warn!("Failed to parse initial peer '{}': {:?}", entry, e);
-                    None
-                }
-            })
-            .collect();
+    async fn remove_topic_handle(&self, topic: &str) -> Option<Arc<TopicMesh>> {
+        let existing_handle = {
+            let mut topics = self.topics.write().await;
+            topics.remove(topic)
+        };
 
-        eprintln!(
-            "[iroh_gossip_service] parsed {} peers for topic {}",
-            parsed_peers.len(),
-            topic
-        );
+        existing_handle.map(|handle| {
+            handle.receiver_task.abort();
+            drop(handle.sender);
+            handle.mesh
+        })
+    }
 
-        {
-            let topics = self.topics.read().await;
-            if topics.contains_key(topic) {
-                drop(topics);
-                self.apply_initial_peers(topic, &parsed_peers).await?;
-                return Ok(());
-            }
-            drop(topics);
-        }
-
-        for peer in &parsed_peers {
-            if let Some(addr) = &peer.node_addr {
-                self.static_discovery.add_endpoint_info(addr.clone());
-            }
-        }
+    async fn subscribe_topic(
+        &self,
+        topic: &str,
+        parsed_peers: &[ParsedPeer],
+        mesh: Option<Arc<TopicMesh>>,
+    ) -> Result<(), AppError> {
+        self.register_initial_peer_addrs(topic, parsed_peers, mesh.is_some());
 
         let canonical_topic = generate_topic_id(topic);
         let topic_id = Self::create_topic_id(&canonical_topic);
@@ -252,7 +217,7 @@ impl GossipService for IrohGossipService {
         }
 
         let sender = Arc::new(TokioMutex::new(sender_handle));
-        let mesh = Arc::new(TopicMesh::new(topic.to_string()));
+        let mesh = mesh.unwrap_or_else(|| Arc::new(TopicMesh::new(topic.to_string())));
 
         // 受信タスクを起動（UI配信用にサブスクライバへ配布 & 任意でP2PEventを送出）
         let topic_clone = topic.to_string();
@@ -395,6 +360,63 @@ impl GossipService for IrohGossipService {
         topics.insert(topic.to_string(), handle);
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl GossipService for IrohGossipService {
+    fn local_peer_hint(&self) -> Option<String> {
+        IrohGossipService::local_peer_hint(self)
+    }
+
+    async fn join_topic(&self, topic: &str, initial_peers: Vec<String>) -> Result<(), AppError> {
+        eprintln!(
+            "[iroh_gossip_service] join_topic start: {} (initial peers: {:?})",
+            topic, initial_peers
+        );
+        let parsed_peers: Vec<ParsedPeer> = initial_peers
+            .into_iter()
+            .filter_map(|entry| match parse_peer_hint(&entry) {
+                Ok(parsed) => Some(parsed),
+                Err(e) => {
+                    tracing::warn!("Failed to parse initial peer '{}': {:?}", entry, e);
+                    None
+                }
+            })
+            .collect();
+
+        eprintln!(
+            "[iroh_gossip_service] parsed {} peers for topic {}",
+            parsed_peers.len(),
+            topic
+        );
+
+        let topic_exists = {
+            let topics = self.topics.read().await;
+            topics.contains_key(topic)
+        };
+
+        if topic_exists {
+            if parsed_peers.is_empty() {
+                tracing::debug!(
+                    "Topic {} already joined and no new peer hints were provided",
+                    topic
+                );
+                return Ok(());
+            }
+
+            eprintln!(
+                "[iroh_gossip_service] rebuilding existing topic {} with {} peer hints",
+                topic,
+                parsed_peers.len()
+            );
+            let preserved_mesh = self.remove_topic_handle(topic).await;
+            return self
+                .subscribe_topic(topic, &parsed_peers, preserved_mesh)
+                .await;
+        }
+
+        self.subscribe_topic(topic, &parsed_peers, None).await
     }
 
     async fn leave_topic(&self, topic: &str) -> Result<(), AppError> {
@@ -611,5 +633,56 @@ mod tests {
         service.join_topic(topic, vec![]).await.unwrap();
         let result = service.leave_topic(topic).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_existing_topic_with_peer_hints_rebuilds_handle() {
+        if !should_run_p2p_tests("test_existing_topic_with_peer_hints_rebuilds_handle") {
+            return;
+        }
+
+        let discovery_a = Arc::new(MemoryLookup::new());
+        let endpoint_a = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(discovery_a.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service_a = IrohGossipService::new(endpoint_a, discovery_a).unwrap();
+
+        let discovery_b = Arc::new(MemoryLookup::new());
+        let endpoint_b = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(discovery_b.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service_b = IrohGossipService::new(endpoint_b, discovery_b).unwrap();
+
+        let topic = "test-topic-rebuild";
+        service_a.join_topic(topic, vec![]).await.unwrap();
+        service_b.join_topic(topic, vec![]).await.unwrap();
+
+        let sender_ptr_before = {
+            let topics = service_b.topics.read().await;
+            Arc::as_ptr(&topics.get(topic).unwrap().sender) as usize
+        };
+
+        let peer_hint = service_a
+            .local_peer_hint()
+            .expect("service_a should expose a local peer hint");
+        service_b.join_topic(topic, vec![peer_hint]).await.unwrap();
+
+        let sender_ptr_after = {
+            let topics = service_b.topics.read().await;
+            Arc::as_ptr(&topics.get(topic).unwrap().sender) as usize
+        };
+
+        assert_ne!(
+            sender_ptr_before, sender_ptr_after,
+            "existing topic handle should be replaced when peer hints are appended"
+        );
     }
 }
