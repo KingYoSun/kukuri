@@ -84,6 +84,14 @@ backup_if_exists() {
   fi
 }
 
+install_text_file() {
+  local target_path="$1"
+  local source_path="$2"
+  local mode="${3:-644}"
+
+  install -D -m "${mode}" "${source_path}" "${target_path}"
+}
+
 log() {
   printf '[setup-home-relay-edge] %s\n' "$*"
 }
@@ -235,8 +243,11 @@ ensure_caddy_import() {
   mkdir -p "${CADDY_SITES_DIR}"
 
   if [[ ! -f /etc/caddy/Caddyfile ]]; then
+    local tmp_caddyfile
+    tmp_caddyfile="$(mktemp)"
+
     if [[ -n "${CADDY_EMAIL:-}" ]]; then
-      cat > /etc/caddy/Caddyfile <<EOF
+      cat > "${tmp_caddyfile}" <<EOF
 {
 	email ${CADDY_EMAIL}
 }
@@ -244,10 +255,13 @@ ensure_caddy_import() {
 import ${CADDY_IMPORT_GLOB}
 EOF
     else
-      cat > /etc/caddy/Caddyfile <<'EOF'
+      cat > "${tmp_caddyfile}" <<'EOF'
 import /etc/caddy/sites-enabled/*.caddy
 EOF
     fi
+
+    install_text_file /etc/caddy/Caddyfile "${tmp_caddyfile}" 644
+    rm -f "${tmp_caddyfile}"
     return
   fi
 
@@ -275,14 +289,17 @@ EOF
     }
   ' /etc/caddy/Caddyfile > "${tmp_caddyfile}"
 
-  mv "${tmp_caddyfile}" /etc/caddy/Caddyfile
+  install_text_file /etc/caddy/Caddyfile "${tmp_caddyfile}" 644
+  rm -f "${tmp_caddyfile}"
 }
 
 write_caddy_site() {
   local caddy_site="/etc/caddy/sites-enabled/kukuri-home-relay-edge.caddy"
+  local tmp_caddy_site
   backup_if_exists "${caddy_site}"
+  tmp_caddy_site="$(mktemp)"
 
-  cat > "${caddy_site}" <<EOF
+  cat > "${tmp_caddy_site}" <<EOF
 ${RELAY_DOMAIN} {
 	encode zstd gzip
 	reverse_proxy http://${HOME_WG_IP}:${HOME_RELAY_HTTP_PORT} {
@@ -311,6 +328,9 @@ ${IROH_RELAY_DOMAIN} {
 	}
 }
 EOF
+
+  install_text_file "${caddy_site}" "${tmp_caddy_site}" 644
+  rm -f "${tmp_caddy_site}"
 
   caddy validate --config /etc/caddy/Caddyfile
 }
