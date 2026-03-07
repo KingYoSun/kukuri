@@ -63,7 +63,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
 
   if (!isJoined) {
     return (
-      <Card>
+      <Card data-testid="topic-mesh-card">
         <CardHeader>
           <CardTitle className="text-lg flex items-center space-x-2">
             <NetworkIcon className="h-5 w-5" />
@@ -75,7 +75,11 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
           <div className="text-center py-8 space-y-4">
             <NetworkIcon className="h-12 w-12 text-muted-foreground mx-auto" />
             <p className="text-sm text-muted-foreground">{t('topicMesh.notJoined')}</p>
-            <Button onClick={handleJoinTopic} disabled={isRefreshing}>
+            <Button
+              onClick={handleJoinTopic}
+              disabled={isRefreshing}
+              data-testid="topic-mesh-join-button"
+            >
               {isRefreshing ? (
                 <>
                   <RefreshCwIcon className="mr-2 h-4 w-4 animate-spin" />
@@ -92,7 +96,7 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
   }
 
   return (
-    <Card>
+    <Card data-testid="topic-mesh-card">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -108,7 +112,13 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
                 className={`h-4 w-4 ${autoRefresh ? 'text-green-500' : 'text-muted-foreground'}`}
               />
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleLeaveTopic} disabled={isRefreshing}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLeaveTopic}
+              disabled={isRefreshing}
+              data-testid="topic-mesh-leave-button"
+            >
               {t('topicMesh.disconnect')}
             </Button>
           </div>
@@ -122,14 +132,26 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
               <UsersIcon className="h-4 w-4" />
               <span>{t('topicMesh.connectedPeers')}</span>
             </div>
-            <p className="text-2xl font-bold">{topicStats?.peer_count || 0}</p>
+            <p
+              className="text-2xl font-bold"
+              data-testid="topic-mesh-peer-count"
+              data-count={topicStats?.peer_count || 0}
+            >
+              {topicStats?.peer_count || 0}
+            </p>
           </div>
           <div className="space-y-2">
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <MessageSquareIcon className="h-4 w-4" />
               <span>{t('topicMesh.messageCount')}</span>
             </div>
-            <p className="text-2xl font-bold">{topicStats?.message_count || 0}</p>
+            <p
+              className="text-2xl font-bold"
+              data-testid="topic-mesh-message-count"
+              data-count={topicStats?.message_count || 0}
+            >
+              {topicStats?.message_count || 0}
+            </p>
           </div>
         </div>
 
@@ -141,12 +163,17 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
             <h4 className="text-sm font-medium text-muted-foreground">
               {t('topicMesh.connectedPeersList')}
             </h4>
-            <ScrollArea className="h-32 w-full rounded-md border">
+            <ScrollArea
+              className="h-32 w-full rounded-md border"
+              data-testid="topic-mesh-connected-list"
+            >
               <div className="p-2 space-y-2">
                 {topicStats.connected_peers.map((peerId: string) => (
                   <div
                     key={peerId}
                     className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50"
+                    data-testid="topic-mesh-connected-peer"
+                    data-peer-id={peerId}
                   >
                     <div className="flex items-center space-x-2">
                       <CircleIcon className="h-2 w-2 fill-green-500 text-green-500" />
@@ -170,10 +197,18 @@ export function TopicMeshVisualization({ topicId }: TopicMeshVisualizationProps)
               <h4 className="text-sm font-medium text-muted-foreground">
                 {t('topicMesh.recentMessages')}
               </h4>
-              <ScrollArea className="h-48 w-full rounded-md border">
+              <ScrollArea
+                className="h-48 w-full rounded-md border"
+                data-testid="topic-mesh-recent-messages"
+              >
                 <div className="p-2 space-y-2">
                   {messages.slice(0, 10).map((message: P2PMessage) => (
-                    <div key={message.id} className="space-y-1 p-2 rounded-md hover:bg-muted/50">
+                    <div
+                      key={message.id}
+                      className="space-y-1 p-2 rounded-md hover:bg-muted/50"
+                      data-testid="topic-mesh-recent-message"
+                      data-message-id={message.id}
+                    >
                       <div className="flex items-center justify-between">
                         <code className="text-xs font-mono text-muted-foreground">
                           {message.author.slice(0, 8)}...

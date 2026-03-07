@@ -118,3 +118,16 @@
 - 対応（2026年03月07日）: `kukuri-community-node/crates/cn-relay/src/gossip.rs` の endpoint 構築で `Endpoint::empty_builder(relay_mode).clear_ip_transports()` を使い、`bind_addr(v4)` 時に不要な IPv6 transport を残さないよう修正。VPS 側 `sendmsg ... NetworkUnreachable` の直接原因を除去。
 - 追加切り分け（2026年03月07日）: 認証時の `wss://api.kukuri.app/relay` 404 は `CommunityNodeHandler::resolve_nostr_relay_urls_for_config()` が bootstrap descriptor `endpoints.ws` を拾った後でも `base_url + /relay` を無条件追加していたことが原因。descriptor `endpoints.http` と `config.base_url` を照合し、matching descriptor に `ws/wss` がある node では fallback を足さないよう修正に着手。
 - 検証（2026年03月07日）: `docker compose -f docker-compose.test.yml run --rm rust-test` PASS、`gh act --workflows .github/workflows/test.yml --job format-check` PASS、`gh act --workflows .github/workflows/test.yml --job native-test-linux` PASS、`gh act --workflows .github/workflows/test.yml --job community-node-tests` PASS。`./scripts/test-docker.ps1 rust` は `rust-test` サービス用イメージを再ビルドしない既存制約で `--locked` 失敗のため、同一 Compose 定義を直接実行して確認。
+### 重大インシデント対応メモ（2026年03月07日）
+- PR required レーンに含まれていなかった `desktop-e2e` を required 化し、Community Node の実経路 UX を担保する E2E を新設中。
+- `docker-compose.test.yml` に live `relay` を追加し、Community Node `user-api/bootstrap` が実 `cn-relay` の `/v1/p2p/info` を参照する test topology に切替。
+- bootstrap descriptor の `endpoints.http/ws` は `BOOTSTRAP_DESCRIPTOR_HTTP_URL` / `BOOTSTRAP_DESCRIPTOR_WS_URL` で test 実 URL を seed できるよう修正。
+- Community Node required E2E は bridge shortcut を使わず、UI から `Community Node追加 -> 認証 -> consent更新 -> #public参加 -> topic mesh join -> peer疎通確認 -> 投稿伝播確認` を通す構成へ差替え。
+- peer harness は実行中にも summary を逐次出力するよう変更し、remote listener が投稿を受信した事実を E2E からファイル観測できるようにした。
+- 2026年03月07日: required 化した `desktop-e2e` を実経路検証へ移行中。Docker 内 iroh が bridge/host 混在トポロジの直結アドレスを拾って green/fail を不安定化させていたため、`e2e-community-node` / `e2e-multi-peer` は relay-only transport profile と relay-only bootstrap hints を強制し、spec でも「Community Node 認証後に期待 Nostr relay が connected で、`api.kukuri.app/relay` fallback が残っていないこと」を待ってから topic mesh / peer 疎通 / 投稿伝播を検証するよう更新中。
+### 重大インシデント対応メモ（2026年03月07日・E2E required化）
+- desktop-e2e を PR required gate に組み込み、Community Node 実経路 E2E が失敗した場合に必ず赤く落ちるよう維持。
+- kukuri-tauri/src-tauri/src/infrastructure/p2p/iroh_network_service.rs で KUKURI_IROH_TRANSPORT_PROFILE=relay-only 時に clear_ip_transports() を適用し、direct discovery を無効化。ローカル endpoint の advertised address も relay-only hint のみに制限。
+- kukuri-tauri/tests/e2e/specs/community-node.end-to-end.spec.ts を強化し、Community Node 追加→認証→consent→#public 参加→topic mesh join→peer 接続→投稿伝播に加え、アプリ側/peer harness 側の hint が direct addr を含まないことまで検証。
+- 実測結果: ./scripts/test-docker.ps1 rust PASS、./scripts/test-docker.ps1 e2e-community-node PASS（	ests/e2e/specs/community-node.end-to-end.spec.ts、ログ: 	mp/logs/community-node-e2e/20260307-203142.log）。peer harness snapshot でも 
+ode_addresses は |relay=http://127.0.0.1:3340/ のみを確認。

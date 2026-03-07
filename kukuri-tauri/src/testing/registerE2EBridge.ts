@@ -68,6 +68,15 @@ interface DirectMessageSnapshot {
   isDialogOpen: boolean;
 }
 
+interface RelayStatusSnapshot {
+  relays: Array<{
+    url: string;
+    status: string;
+  }>;
+  error: string | null;
+  lastFetchedAt: number | null;
+}
+
 interface TrendingFixturePost {
   id?: string;
   title: string;
@@ -250,6 +259,7 @@ export interface E2EBridge {
   setTimelineUpdateMode: (payload: {
     mode: 'standard' | 'realtime';
   }) => Promise<{ mode: 'standard' | 'realtime' }>;
+  getRelayStatusSnapshot: () => Promise<RelayStatusSnapshot>;
   getP2PStatus: () => Promise<P2PStatus>;
   getP2PNodeAddresses: () => Promise<string[]>;
   getP2PMessageSnapshot: (payload?: { topicId?: string }) => Promise<{
@@ -1525,6 +1535,18 @@ export function registerE2EBridge(): void {
           useUIStore.getState().setTimelineUpdateMode(mode);
           return {
             mode: useUIStore.getState().timelineUpdateMode,
+          };
+        },
+        getRelayStatusSnapshot: async () => {
+          await refreshRelayStatusSafe();
+          const authState = useAuthStore.getState();
+          return {
+            relays: authState.relayStatus.map((relay) => ({
+              url: relay.url,
+              status: relay.status,
+            })),
+            error: authState.relayStatusError,
+            lastFetchedAt: authState.lastRelayStatusFetchedAt,
           };
         },
         getP2PStatus: async () => await p2pApi.getStatus(),

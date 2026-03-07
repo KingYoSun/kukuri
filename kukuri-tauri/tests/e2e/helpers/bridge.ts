@@ -38,6 +38,7 @@ export type BridgeAction =
   | 'clearBootstrapNodes'
   | 'getTimelineUpdateMode'
   | 'setTimelineUpdateMode'
+  | 'getRelayStatusSnapshot'
   | 'getP2PStatus'
   | 'getP2PNodeAddresses'
   | 'getP2PMessageSnapshot'
@@ -252,6 +253,15 @@ export interface TimelineUpdateModeSnapshot {
   mode: 'standard' | 'realtime';
 }
 
+export interface RelayStatusSnapshot {
+  relays: Array<{
+    url: string;
+    status: string;
+  }>;
+  error: string | null;
+  lastFetchedAt: number | null;
+}
+
 export interface CommunityNodeAuthFlowResult {
   config: CommunityNodeConfigResponse | null;
   auth: CommunityNodeAuthResponse;
@@ -345,6 +355,7 @@ type BridgeResultMap = {
   clearBootstrapNodes: BootstrapSnapshot;
   getTimelineUpdateMode: TimelineUpdateModeSnapshot;
   setTimelineUpdateMode: TimelineUpdateModeSnapshot;
+  getRelayStatusSnapshot: RelayStatusSnapshot;
   getP2PStatus: P2PStatus;
   getP2PNodeAddresses: string[];
   getP2PMessageSnapshot: P2PMessageSnapshot;
@@ -756,6 +767,10 @@ export async function setTimelineUpdateMode(
 
 export async function getP2PStatus(): Promise<P2PStatus> {
   return await callBridge('getP2PStatus');
+}
+
+export async function getRelayStatusSnapshot(): Promise<RelayStatusSnapshot> {
+  return await callBridge('getRelayStatusSnapshot');
 }
 
 export async function getP2PNodeAddresses(): Promise<string[]> {

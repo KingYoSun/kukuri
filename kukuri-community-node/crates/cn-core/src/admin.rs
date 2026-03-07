@@ -7,6 +7,22 @@ use sqlx::types::Json;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
+fn bootstrap_descriptor_http_url() -> String {
+    std::env::var("BOOTSTRAP_DESCRIPTOR_HTTP_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "http://localhost:8080".to_string())
+}
+
+fn bootstrap_descriptor_ws_url() -> String {
+    std::env::var("BOOTSTRAP_DESCRIPTOR_WS_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "ws://localhost:8082/relay".to_string())
+}
+
 pub async fn bootstrap_admin(
     pool: &Pool<Postgres>,
     username: &str,
@@ -99,6 +115,11 @@ pub async fn reset_admin_password(
 }
 
 pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> {
+    let descriptor_http_url = bootstrap_descriptor_http_url();
+    let descriptor_ws_url = bootstrap_descriptor_ws_url();
+    let should_override_bootstrap_descriptor = std::env::var("BOOTSTRAP_DESCRIPTOR_HTTP_URL")
+        .is_ok()
+        || std::env::var("BOOTSTRAP_DESCRIPTOR_WS_URL").is_ok();
     let seeds = vec![
         (
             "relay",
@@ -142,8 +163,8 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
                     "name": "Kukuri Community Node",
                     "roles": ["bootstrap", "relay"],
                     "endpoints": {
-                        "http": "http://localhost:8080",
-                        "ws": "ws://localhost:8082/relay"
+                        "http": descriptor_http_url,
+                        "ws": descriptor_ws_url
                     },
                     "policy_url": "",
                     "jurisdiction": "",
@@ -244,14 +265,35 @@ pub async fn seed_service_configs(pool: &Pool<Postgres>) -> Result<Vec<String>> 
 
     let mut inserted = Vec::new();
     for (service, config_json) in seeds {
-        let result = sqlx::query(
-            "INSERT INTO cn_admin.service_configs              (service, version, config_json, updated_by)              VALUES ($1, 1, $2, $3)              ON CONFLICT (service) DO NOTHING",
-        )
-        .bind(service)
-        .bind(Json(config_json))
-        .bind("system")
-        .execute(pool)
-        .await?;
+        let should_upsert = service == "bootstrap" && should_override_bootstrap_descriptor;
+        let result = if should_upsert {
+            sqlx::query(
+                "INSERT INTO cn_admin.service_configs \
+                 (service, version, config_json, updated_by) \
+                 VALUES ($1, 1, $2, $3) \
+                 ON CONFLICT (service) DO UPDATE SET \
+                   config_json = EXCLUDED.config_json, \
+                   updated_by = EXCLUDED.updated_by, \
+                   updated_at = now()",
+            )
+            .bind(service)
+            .bind(Json(config_json))
+            .bind("system")
+            .execute(pool)
+            .await?
+        } else {
+            sqlx::query(
+                "INSERT INTO cn_admin.service_configs \
+                 (service, version, config_json, updated_by) \
+                 VALUES ($1, 1, $2, $3) \
+                 ON CONFLICT (service) DO NOTHING",
+            )
+            .bind(service)
+            .bind(Json(config_json))
+            .bind("system")
+            .execute(pool)
+            .await?
+        };
 
         if result.rows_affected() > 0 {
             inserted.push(service.to_string());

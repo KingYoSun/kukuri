@@ -494,6 +494,30 @@ describe('authStore - Multiple Account Management', () => {
 
       expect(mockSecureStorageApi.addAccount).not.toHaveBeenCalled();
     });
+
+    it('should not start post-login initialization when deferInitialization is true', async () => {
+      const mockKeypairResponse = {
+        public_key: 'pubkey123',
+        npub: 'npub1example',
+        nsec: 'nsec1example',
+      };
+      mockTauriApi.generateKeypair = vi.fn().mockResolvedValue(mockKeypairResponse);
+      mockSecureStorageApi.addAccount = vi.fn().mockResolvedValue({
+        success: true,
+      });
+
+      await useAuthStore.getState().generateNewKeypair(true, { deferInitialization: true });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockNostrApi.initializeNostr).not.toHaveBeenCalled();
+      expect(mockNostrApi.getRelayStatus).not.toHaveBeenCalled();
+      expect(topicStoreState.fetchTopics).not.toHaveBeenCalled();
+      expect(mockTauriApi.fetchProfileAvatar).not.toHaveBeenCalled();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.currentUser?.npub).toBe('npub1example');
+    });
   });
 
   describe('switchAccount', () => {

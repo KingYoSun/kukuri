@@ -7,7 +7,10 @@ use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
-use iroh::{Endpoint, RelayMode, RelayUrl, address_lookup::MemoryLookup, protocol::Router};
+use iroh::{
+    Endpoint, RelayMode, RelayUrl, address_lookup::MemoryLookup, endpoint::QuicTransportConfig,
+    protocol::Router,
+};
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -16,6 +19,57 @@ use tracing;
 
 const KUKURI_IROH_RELAY_MODE_ENV: &str = "KUKURI_IROH_RELAY_MODE";
 const KUKURI_IROH_RELAY_URLS_ENV: &str = "KUKURI_IROH_RELAY_URLS";
+const KUKURI_IROH_TRANSPORT_PROFILE_ENV: &str = "KUKURI_IROH_TRANSPORT_PROFILE";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EndpointTransportProfile {
+    Default,
+    RelayOnly,
+}
+
+impl EndpointTransportProfile {
+    fn from_env_value(raw: Option<&str>) -> Result<Self, AppError> {
+        let Some(raw) = raw else {
+            return Ok(Self::Default);
+        };
+
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "default" => Ok(Self::Default),
+            "relay-only" | "relay_only" => Ok(Self::RelayOnly),
+            other => Err(AppError::ConfigurationError(format!(
+                "Invalid {KUKURI_IROH_TRANSPORT_PROFILE_ENV} value `{other}`"
+            ))),
+        }
+    }
+
+    fn quic_transport_config(self) -> Option<QuicTransportConfig> {
+        match self {
+            Self::Default => None,
+            Self::RelayOnly => Some(
+                QuicTransportConfig::builder()
+                    .enable_segmentation_offload(false)
+                    .send_observed_address_reports(false)
+                    .receive_observed_address_reports(false)
+                    .build(),
+            ),
+        }
+    }
+
+    fn apply_to_builder(self, builder: iroh::endpoint::Builder) -> iroh::endpoint::Builder {
+        match self {
+            Self::Default => builder,
+            Self::RelayOnly => builder.clear_ip_transports(),
+        }
+    }
+
+    fn allows_direct_discovery(self) -> bool {
+        matches!(self, Self::Default)
+    }
+
+    fn exposes_direct_addresses(self) -> bool {
+        matches!(self, Self::Default)
+    }
+}
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
@@ -30,6 +84,7 @@ pub struct IrohNetworkService {
     bootstrap_peers: Arc<RwLock<Vec<String>>>,
     bootstrap_source: Arc<RwLock<BootstrapSource>>,
     p2p_event_tx: Option<broadcast::Sender<P2PEvent>>,
+    transport_profile: EndpointTransportProfile,
 }
 
 impl IrohNetworkService {
@@ -42,8 +97,20 @@ impl IrohNetworkService {
         // Endpointの作成（設定に応じてディスカバリーを有効化）
         let static_discovery = Arc::new(MemoryLookup::new());
         let relay_mode = resolve_endpoint_relay_mode()?;
-        let builder = Endpoint::empty_builder(relay_mode).secret_key(secret_key);
-        let builder = discovery_options.apply_to_builder(builder);
+        let transport_profile = resolve_endpoint_transport_profile()?;
+        let builder = transport_profile
+            .apply_to_builder(Endpoint::empty_builder(relay_mode))
+            .secret_key(secret_key);
+        let builder = if let Some(transport_config) = transport_profile.quic_transport_config() {
+            builder.transport_config(transport_config)
+        } else {
+            builder
+        };
+        let builder = if transport_profile.allows_direct_discovery() {
+            discovery_options.apply_to_builder(builder)
+        } else {
+            builder
+        };
         let builder = builder.address_lookup(static_discovery.clone());
         let endpoint = builder
             .bind()
@@ -88,6 +155,7 @@ impl IrohNetworkService {
             bootstrap_peers: Arc::new(RwLock::new(net_cfg.bootstrap_peers.clone())),
             bootstrap_source: Arc::new(RwLock::new(net_cfg.bootstrap_source)),
             p2p_event_tx: event_tx,
+            transport_profile,
         };
 
         service.apply_bootstrap_peers_from_config().await;
@@ -213,7 +281,11 @@ impl IrohNetworkService {
         let node_addr = self.endpoint.addr();
         let node_id = node_addr.id.to_string();
         let mut out = Vec::new();
-        let direct_addrs: Vec<_> = node_addr.ip_addrs().cloned().collect();
+        let direct_addrs: Vec<_> = if self.transport_profile.exposes_direct_addresses() {
+            node_addr.ip_addrs().cloned().collect()
+        } else {
+            Vec::new()
+        };
         let relay_urls: Vec<_> = node_addr
             .relay_urls()
             .map(|relay_url| relay_url.to_string())
@@ -344,6 +416,14 @@ fn resolve_endpoint_relay_mode() -> Result<RelayMode, AppError> {
     )
 }
 
+fn resolve_endpoint_transport_profile() -> Result<EndpointTransportProfile, AppError> {
+    EndpointTransportProfile::from_env_value(
+        std::env::var(KUKURI_IROH_TRANSPORT_PROFILE_ENV)
+            .ok()
+            .as_deref(),
+    )
+}
+
 fn relay_mode_from_env_values(
     relay_mode_raw: Option<String>,
     relay_urls_raw: Option<String>,
@@ -390,7 +470,7 @@ fn parse_custom_relay_urls(raw: Option<&str>) -> Result<Vec<RelayUrl>, AppError>
 
 #[cfg(test)]
 mod relay_mode_tests {
-    use super::{parse_custom_relay_urls, relay_mode_from_env_values};
+    use super::{EndpointTransportProfile, parse_custom_relay_urls, relay_mode_from_env_values};
     use iroh::RelayMode;
 
     #[test]
@@ -422,6 +502,29 @@ mod relay_mode_tests {
         assert!(
             err.to_string()
                 .contains("Invalid KUKURI_IROH_RELAY_URLS entry")
+        );
+    }
+
+    #[test]
+    fn transport_profile_supports_relay_only() {
+        let profile = EndpointTransportProfile::from_env_value(Some("relay-only"))
+            .expect("transport profile should parse");
+        assert_eq!(profile, EndpointTransportProfile::RelayOnly);
+
+        let config = profile
+            .quic_transport_config()
+            .expect("relay-only config should be present");
+        let debug = format!("{config:?}");
+        assert!(debug.contains("enable_segmentation_offload: false"));
+    }
+
+    #[test]
+    fn transport_profile_rejects_unknown_values() {
+        let err = EndpointTransportProfile::from_env_value(Some("invalid-profile"))
+            .expect_err("invalid transport profile should fail");
+        assert!(
+            err.to_string()
+                .contains("Invalid KUKURI_IROH_TRANSPORT_PROFILE value")
         );
     }
 }

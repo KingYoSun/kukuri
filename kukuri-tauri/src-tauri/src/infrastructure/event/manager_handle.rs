@@ -41,6 +41,7 @@ pub trait EventManagerHandle: Send + Sync {
     async fn register_event_callback(&self, callback: Arc<dyn Fn(NostrEvent) + Send + Sync>);
     async fn initialize_with_keypair(&self, keypair: KeyPair) -> Result<()>;
     async fn replace_nostr_relays(&self, relay_urls: Vec<String>) -> Result<()>;
+    async fn get_nostr_relay_status(&self) -> Vec<(String, String)>;
 }
 
 #[derive(Clone)]
@@ -165,5 +166,9 @@ impl EventManagerHandle for LegacyEventManagerHandle {
 
     async fn replace_nostr_relays(&self, relay_urls: Vec<String>) -> Result<()> {
         self.inner.replace_nostr_relays(relay_urls).await
+    }
+
+    async fn get_nostr_relay_status(&self) -> Vec<(String, String)> {
+        self.inner.get_nostr_relay_status().await
     }
 }

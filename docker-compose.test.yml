@@ -23,7 +23,6 @@ services:
     build:
       context: ./kukuri-community-node/docker/iroh-relay
     container_name: kukuri-cn-iroh-relay
-    network_mode: host
     environment:
       IROH_RELAY_DEV: "${IROH_RELAY_DEV:-1}"
       IROH_RELAY_CONFIG_PATH: "${IROH_RELAY_CONFIG_PATH:-}"
@@ -34,6 +33,11 @@ services:
       timeout: 3s
       start_period: 5s
       retries: 10
+    ports:
+      - "${IROH_RELAY_HTTP_PORT:-3340}:3340"
+      - "${IROH_RELAY_QUIC_PORT:-7842}:7842/udp"
+    networks:
+      - community-node-network
 
   # Community node user API (E2E)
   community-node-postgres:
@@ -70,13 +74,48 @@ services:
       NODE_KEY_PATH: "/data/node_key.json"
       PERSONAL_DATA_EXPORT_DIR: "/data/personal_exports"
       PERSONAL_DATA_HMAC_SECRET: "${COMMUNITY_NODE_HMAC_SECRET:-change-me}"
+      RELAY_P2P_INFO_URL: "${COMMUNITY_NODE_RELAY_P2P_INFO_URL:-http://relay:8082/v1/p2p/info}"
+      BOOTSTRAP_DESCRIPTOR_HTTP_URL: "${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL:-http://127.0.0.1:18080}"
+      BOOTSTRAP_DESCRIPTOR_WS_URL: "${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL:-ws://127.0.0.1:18082/relay}"
     depends_on:
       community-node-postgres:
         condition: service_healthy
+      relay:
+        condition: service_started
     volumes:
       - community-node-data:/data
     ports:
       - "${COMMUNITY_NODE_USER_API_PORT:-18080}:8080"
+    networks:
+      - community-node-network
+
+  relay:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-relay
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn migrate && cn relay"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      RELAY_ADDR: "0.0.0.0:8082"
+      RELAY_P2P_BIND: "0.0.0.0:11223"
+      RELAY_PUBLIC_URL: "${COMMUNITY_NODE_RELAY_PUBLIC_URL:-ws://127.0.0.1:18082/relay}"
+      RELAY_P2P_PUBLIC_HOST: "${COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST:-127.0.0.1}"
+      RELAY_P2P_PUBLIC_PORT: "${COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT:-11223}"
+      RELAY_IROH_RELAY_URLS: "${COMMUNITY_NODE_RELAY_IROH_RELAY_URLS:-http://cn-iroh-relay:3340}"
+      RELAY_IROH_ADVERTISED_URLS: "${COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS:-http://127.0.0.1:3340}"
+      RELAY_IROH_RELAY_MODE: "${COMMUNITY_NODE_RELAY_IROH_RELAY_MODE:-custom}"
+      RELAY_IROH_TRANSPORT_PROFILE: "${COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE:-}"
+      RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS: "${COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS:-1}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+      cn-iroh-relay:
+        condition: service_healthy
+    ports:
+      - "${COMMUNITY_NODE_RELAY_HTTP_PORT:-18082}:8082"
+      - "${COMMUNITY_NODE_RELAY_P2P_PORT:-11223}:11223/udp"
     networks:
       - community-node-network
   community-node-bootstrap:
@@ -91,9 +130,14 @@ services:
       BOOTSTRAP_ADDR: "0.0.0.0:8083"
       NODE_KEY_PATH: "/data/node_key.json"
       BOOTSTRAP_REFRESH_SECONDS: "${COMMUNITY_NODE_BOOTSTRAP_REFRESH_SECONDS:-5}"
+      RELAY_P2P_INFO_URL: "${COMMUNITY_NODE_RELAY_P2P_INFO_URL:-http://relay:8082/v1/p2p/info}"
+      RELAY_HEALTH_URL: "${COMMUNITY_NODE_RELAY_HEALTH_URL:-http://relay:8082/healthz}"
+      USER_API_HEALTH_URL: "${COMMUNITY_NODE_USER_API_HEALTH_URL:-http://community-node-user-api:8080/healthz}"
     depends_on:
       community-node-postgres:
         condition: service_healthy
+      relay:
+        condition: service_started
     volumes:
       - community-node-data:/data
     networks:
@@ -138,6 +182,7 @@ services:
       KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
       KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
       KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
       KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
       KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
       KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
@@ -148,6 +193,7 @@ services:
       CI: "true"
       SCENARIO: "${SCENARIO:-}"
       E2E_SPEC_PATTERN: "${E2E_SPEC_PATTERN:-}"
+      E2E_FORBID_PENDING: "${E2E_FORBID_PENDING:-}"
       E2E_MOCHA_TIMEOUT_MS: "${E2E_MOCHA_TIMEOUT_MS:-420000}"
       E2E_MULTI_PEER_EXPECTED_MIN: "${E2E_MULTI_PEER_EXPECTED_MIN:-}"
       E2E_MULTI_PEER_PUBLISH_PREFIX: "${E2E_MULTI_PEER_PUBLISH_PREFIX:-}"
@@ -161,11 +207,13 @@ services:
       E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED: "${E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED:-}"
       E2E_DIRECT_PEER_SINGLE_POST_REQUIRE_STRICT: "${E2E_DIRECT_PEER_SINGLE_POST_REQUIRE_STRICT:-}"
       E2E_COMMUNITY_NODE_URL: "${E2E_COMMUNITY_NODE_URL:-}"
+      E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL: "${E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL:-}"
       E2E_COMMUNITY_NODE_INVITE_JSON: "${E2E_COMMUNITY_NODE_INVITE_JSON:-}"
       E2E_COMMUNITY_NODE_SEED_JSON: "${E2E_COMMUNITY_NODE_SEED_JSON:-}"
       E2E_COMMUNITY_NODE_TOPIC_NAME: "${E2E_COMMUNITY_NODE_TOPIC_NAME:-}"
       KUKURI_PEER_TOPIC: "${KUKURI_PEER_TOPIC:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-}"
+      KUKURI_PEER_PUBLISH_PREFIX: "${KUKURI_PEER_PUBLISH_PREFIX:-}"
     # host network used for UDP reachability between endpoints
 
   peer-client-1:
@@ -197,6 +245,7 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
       KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
       KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-1"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_1:-listener}"
@@ -238,6 +287,7 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
       KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
       KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-2"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_2:-publisher}"
@@ -283,6 +333,7 @@ services:
       KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
       KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
       KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
       KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
       KUKURI_PEER_NAME: "peer-client-3"
       KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_3:-listener}"

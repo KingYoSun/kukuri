@@ -18,4 +18,5 @@ pub mod search_runtime_flags;
 pub mod server;
 pub mod service_config;
 pub mod topic;
+pub mod topic_services;
 pub mod trust;

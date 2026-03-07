@@ -173,6 +173,16 @@ $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 $BootstrapDefaultPeer = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233"
 $BootstrapContainerName = "kukuri-p2p-bootstrap"
 $MultiPeerServices = @("cn-iroh-relay", "p2p-bootstrap", "peer-client-1", "peer-client-2", "peer-client-3")
+$CommunityNodePeerServices = @("peer-client-1", "peer-client-2")
+$CommunityNodeServices = @(
+    "peer-client-1",
+    "peer-client-2",
+    "community-node-bootstrap",
+    "community-node-user-api",
+    "relay",
+    "community-node-postgres",
+    "cn-iroh-relay"
+)
 
 # Docker Compose�R�}���h�̎��s
 function Invoke-DockerCompose {
@@ -1139,32 +1149,98 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     } else {
         $env:COMMUNITY_NODE_BASE_URL
     }
+    $relayUrl = if ([string]::IsNullOrWhiteSpace($env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL)) {
+        "ws://127.0.0.1:18082/relay"
+    } else {
+        $env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL
+    }
+    $relayP2PInfoUrl = "http://127.0.0.1:18082/v1/p2p/info"
 
     Write-Host "Running desktop E2E scenario (community node) via Docker..."
     $previousScenario = $env:SCENARIO
     $previousBaseUrl = $env:COMMUNITY_NODE_BASE_URL
     $previousE2EUrl = $env:E2E_COMMUNITY_NODE_URL
+    $previousExpectedRelayUrl = $env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL
+    $previousSpecPattern = $env:E2E_SPEC_PATTERN
+    $previousForbidPending = $env:E2E_FORBID_PENDING
     $previousInviteJson = $env:E2E_COMMUNITY_NODE_INVITE_JSON
     $previousSeedJson = $env:E2E_COMMUNITY_NODE_SEED_JSON
     $previousTopicName = $env:E2E_COMMUNITY_NODE_TOPIC_NAME
     $previousRelayUrls = $env:KUKURI_IROH_RELAY_URLS
     $previousRelayMode = $env:KUKURI_IROH_RELAY_MODE
+    $previousBootstrapPeers = $env:KUKURI_BOOTSTRAP_PEERS
+    $previousOutputGroup = $env:KUKURI_PEER_OUTPUT_GROUP
+    $previousPeerTopic = $env:KUKURI_PEER_TOPIC
+    $previousPeerPrefix = $env:KUKURI_PEER_PUBLISH_PREFIX
+    $previousMultiPeerPrefix = $env:E2E_MULTI_PEER_PUBLISH_PREFIX
+    $previousMode1 = $env:KUKURI_PEER_MODE_1
+    $previousMode2 = $env:KUKURI_PEER_MODE_2
+    $previousMetadata2 = $env:KUKURI_PEER_PUBLISH_METADATA_2
+    $previousProfileName2 = $env:KUKURI_PEER_PROFILE_NAME_2
+    $previousProfileAbout2 = $env:KUKURI_PEER_PROFILE_ABOUT_2
+    $previousStartupDelay2 = $env:KUKURI_PEER_STARTUP_DELAY_MS_2
+    $previousRelayPublicUrl = $env:COMMUNITY_NODE_RELAY_PUBLIC_URL
+    $previousRelayP2PInfoUrl = $env:COMMUNITY_NODE_RELAY_P2P_INFO_URL
+    $previousRelayHealthUrl = $env:COMMUNITY_NODE_RELAY_HEALTH_URL
+    $previousRelayUserApiHealthUrl = $env:COMMUNITY_NODE_USER_API_HEALTH_URL
+    $previousDescriptorHttpUrl = $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL
+    $previousDescriptorWsUrl = $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL
+    $previousRelayIrohUrls = $env:COMMUNITY_NODE_RELAY_IROH_RELAY_URLS
+    $previousRelayIrohAdvertisedUrls = $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS
+    $previousRelayIrohMode = $env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE
+    $previousRelayIrohTransportProfile = $env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE
+    $previousRelayIncludeDirectHints = $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS
+    $previousRelayPublicHost = $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST
+    $previousRelayPublicPort = $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT
+    $previousTransportProfile = $env:KUKURI_IROH_TRANSPORT_PROFILE
+
     $env:COMMUNITY_NODE_BASE_URL = $baseUrl
     $env:E2E_COMMUNITY_NODE_URL = $baseUrl
+    $env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL = $relayUrl
     $env:SCENARIO = "community-node-e2e"
+    $env:E2E_FORBID_PENDING = "1"
+    if ([string]::IsNullOrWhiteSpace($env:E2E_SPEC_PATTERN)) {
+        $env:E2E_SPEC_PATTERN = "./tests/e2e/specs/community-node.end-to-end.spec.ts"
+    }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
         $env:KUKURI_IROH_RELAY_URLS = "http://127.0.0.1:3340"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
         $env:KUKURI_IROH_RELAY_MODE = "custom"
     }
+    $env:KUKURI_IROH_TRANSPORT_PROFILE = "relay-only"
+    $env:COMMUNITY_NODE_RELAY_PUBLIC_URL = $relayUrl
+    $env:COMMUNITY_NODE_RELAY_P2P_INFO_URL = "http://relay:8082/v1/p2p/info"
+    $env:COMMUNITY_NODE_RELAY_HEALTH_URL = "http://relay:8082/healthz"
+    $env:COMMUNITY_NODE_USER_API_HEALTH_URL = "http://community-node-user-api:8080/healthz"
+    $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL = $baseUrl
+    $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL = $relayUrl
+    $env:COMMUNITY_NODE_RELAY_IROH_RELAY_URLS = "http://cn-iroh-relay:3340"
+    $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS = "http://127.0.0.1:3340"
+    $env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE = "custom"
+    $env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE = "relay-only"
+    $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS = "0"
+    $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST = "127.0.0.1"
+    $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT = "11223"
+    $env:KUKURI_PEER_OUTPUT_GROUP = "community-node-e2e"
+    $env:KUKURI_PEER_TOPIC = "kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0"
+    $env:KUKURI_PEER_PUBLISH_PREFIX = "community-node-peer-publisher"
+    $env:E2E_MULTI_PEER_PUBLISH_PREFIX = "community-node-peer-publisher"
+    $env:KUKURI_PEER_MODE_1 = "listener"
+    $env:KUKURI_PEER_MODE_2 = "publisher"
+    $env:KUKURI_PEER_PUBLISH_METADATA_2 = "1"
+    $env:KUKURI_PEER_PROFILE_NAME_2 = "community-node-peer-publisher-profile"
+    $env:KUKURI_PEER_PROFILE_ABOUT_2 = "community node e2e publisher profile"
+    $env:KUKURI_PEER_STARTUP_DELAY_MS_2 = "1000"
     try {
         Start-CommunityNode -BaseUrl $baseUrl
-        Invoke-CommunityNodeE2ESeed
+        $env:KUKURI_BOOTSTRAP_PEERS = Resolve-CommunityNodeBootstrapPeer -P2PInfoUrl $relayP2PInfoUrl
+        Write-Info "Using live Community Node bootstrap peer: $($env:KUKURI_BOOTSTRAP_PEERS)"
+        Start-CommunityNodePeerClients
         Invoke-DockerCompose @("run", "--rm", "test-runner")
     }
     finally {
-        Invoke-CommunityNodeE2ECleanup
+        Stop-CommunityNodePeerClients
         Stop-CommunityNode
         if ($null -ne $previousScenario) {
             $env:SCENARIO = $previousScenario
@@ -1180,6 +1256,21 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:E2E_COMMUNITY_NODE_URL = $previousE2EUrl
         } else {
             Remove-Item Env:E2E_COMMUNITY_NODE_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousExpectedRelayUrl) {
+            $env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL = $previousExpectedRelayUrl
+        } else {
+            Remove-Item Env:E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousSpecPattern) {
+            $env:E2E_SPEC_PATTERN = $previousSpecPattern
+        } else {
+            Remove-Item Env:E2E_SPEC_PATTERN -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousForbidPending) {
+            $env:E2E_FORBID_PENDING = $previousForbidPending
+        } else {
+            Remove-Item Env:E2E_FORBID_PENDING -ErrorAction SilentlyContinue
         }
         if ($null -ne $previousInviteJson) {
             $env:E2E_COMMUNITY_NODE_INVITE_JSON = $previousInviteJson
@@ -1205,6 +1296,131 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:KUKURI_IROH_RELAY_MODE = $previousRelayMode
         } else {
             Remove-Item Env:KUKURI_IROH_RELAY_MODE -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousBootstrapPeers) {
+            $env:KUKURI_BOOTSTRAP_PEERS = $previousBootstrapPeers
+        } else {
+            Remove-Item Env:KUKURI_BOOTSTRAP_PEERS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousOutputGroup) {
+            $env:KUKURI_PEER_OUTPUT_GROUP = $previousOutputGroup
+        } else {
+            Remove-Item Env:KUKURI_PEER_OUTPUT_GROUP -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousPeerTopic) {
+            $env:KUKURI_PEER_TOPIC = $previousPeerTopic
+        } else {
+            Remove-Item Env:KUKURI_PEER_TOPIC -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousPeerPrefix) {
+            $env:KUKURI_PEER_PUBLISH_PREFIX = $previousPeerPrefix
+        } else {
+            Remove-Item Env:KUKURI_PEER_PUBLISH_PREFIX -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousMultiPeerPrefix) {
+            $env:E2E_MULTI_PEER_PUBLISH_PREFIX = $previousMultiPeerPrefix
+        } else {
+            Remove-Item Env:E2E_MULTI_PEER_PUBLISH_PREFIX -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousMode1) {
+            $env:KUKURI_PEER_MODE_1 = $previousMode1
+        } else {
+            Remove-Item Env:KUKURI_PEER_MODE_1 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousMode2) {
+            $env:KUKURI_PEER_MODE_2 = $previousMode2
+        } else {
+            Remove-Item Env:KUKURI_PEER_MODE_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousMetadata2) {
+            $env:KUKURI_PEER_PUBLISH_METADATA_2 = $previousMetadata2
+        } else {
+            Remove-Item Env:KUKURI_PEER_PUBLISH_METADATA_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousProfileName2) {
+            $env:KUKURI_PEER_PROFILE_NAME_2 = $previousProfileName2
+        } else {
+            Remove-Item Env:KUKURI_PEER_PROFILE_NAME_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousProfileAbout2) {
+            $env:KUKURI_PEER_PROFILE_ABOUT_2 = $previousProfileAbout2
+        } else {
+            Remove-Item Env:KUKURI_PEER_PROFILE_ABOUT_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousStartupDelay2) {
+            $env:KUKURI_PEER_STARTUP_DELAY_MS_2 = $previousStartupDelay2
+        } else {
+            Remove-Item Env:KUKURI_PEER_STARTUP_DELAY_MS_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayPublicUrl) {
+            $env:COMMUNITY_NODE_RELAY_PUBLIC_URL = $previousRelayPublicUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_PUBLIC_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayP2PInfoUrl) {
+            $env:COMMUNITY_NODE_RELAY_P2P_INFO_URL = $previousRelayP2PInfoUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_P2P_INFO_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayHealthUrl) {
+            $env:COMMUNITY_NODE_RELAY_HEALTH_URL = $previousRelayHealthUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_HEALTH_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayUserApiHealthUrl) {
+            $env:COMMUNITY_NODE_USER_API_HEALTH_URL = $previousRelayUserApiHealthUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_USER_API_HEALTH_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousDescriptorHttpUrl) {
+            $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL = $previousDescriptorHttpUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousDescriptorWsUrl) {
+            $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL = $previousDescriptorWsUrl
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayIrohUrls) {
+            $env:COMMUNITY_NODE_RELAY_IROH_RELAY_URLS = $previousRelayIrohUrls
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_IROH_RELAY_URLS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayIrohAdvertisedUrls) {
+            $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS = $previousRelayIrohAdvertisedUrls
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayIrohMode) {
+            $env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE = $previousRelayIrohMode
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayIrohTransportProfile) {
+            $env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE = $previousRelayIrohTransportProfile
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayIncludeDirectHints) {
+            $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS = $previousRelayIncludeDirectHints
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayPublicHost) {
+            $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST = $previousRelayPublicHost
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousRelayPublicPort) {
+            $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT = $previousRelayPublicPort
+        } else {
+            Remove-Item Env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousTransportProfile) {
+            $env:KUKURI_IROH_TRANSPORT_PROFILE = $previousTransportProfile
+        } else {
+            Remove-Item Env:KUKURI_IROH_TRANSPORT_PROFILE -ErrorAction SilentlyContinue
         }
     }
 
@@ -1258,6 +1474,7 @@ function Invoke-DesktopE2EMultiPeerScenario {
     $previousOutputGroup = $env:KUKURI_PEER_OUTPUT_GROUP
     $previousRelayUrls = $env:KUKURI_IROH_RELAY_URLS
     $previousRelayMode = $env:KUKURI_IROH_RELAY_MODE
+    $previousTransportProfile = $env:KUKURI_IROH_TRANSPORT_PROFILE
 
     $env:SCENARIO = "multi-peer-e2e"
     if ([string]::IsNullOrWhiteSpace($env:E2E_SPEC_PATTERN)) {
@@ -1278,6 +1495,7 @@ function Invoke-DesktopE2EMultiPeerScenario {
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
         $env:KUKURI_IROH_RELAY_MODE = "custom"
     }
+    $env:KUKURI_IROH_TRANSPORT_PROFILE = "relay-only"
 
     try {
         Start-MultiPeerClients
@@ -1320,6 +1538,11 @@ function Invoke-DesktopE2EMultiPeerScenario {
             $env:KUKURI_IROH_RELAY_MODE = $previousRelayMode
         } else {
             Remove-Item Env:KUKURI_IROH_RELAY_MODE -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousTransportProfile) {
+            $env:KUKURI_IROH_TRANSPORT_PROFILE = $previousTransportProfile
+        } else {
+            Remove-Item Env:KUKURI_IROH_TRANSPORT_PROFILE -ErrorAction SilentlyContinue
         }
     }
 
@@ -1598,6 +1821,49 @@ function Wait-CommunityNodeHealthy {
     return $false
 }
 
+function Get-CommunityNodeRelayP2PInfo {
+    param(
+        [string]$P2PInfoUrl = "http://127.0.0.1:18082/v1/p2p/info",
+        [int]$TimeoutSeconds = 120
+    )
+
+    for ($i = 0; $i -lt $TimeoutSeconds; $i++) {
+        try {
+            $response = Invoke-RestMethod -Uri $P2PInfoUrl -TimeoutSec 5
+            $bootstrapHints = @($response.bootstrap_hints)
+            $bootstrapNodes = @($response.bootstrap_nodes)
+            if ($bootstrapHints.Count -gt 0 -or $bootstrapNodes.Count -gt 0) {
+                return $response
+            }
+        } catch {
+            # Wait and retry.
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    throw "Timed out waiting for relay P2P info: $P2PInfoUrl"
+}
+
+function Resolve-CommunityNodeBootstrapPeer {
+    param(
+        [string]$P2PInfoUrl = "http://127.0.0.1:18082/v1/p2p/info",
+        [int]$TimeoutSeconds = 120
+    )
+
+    $info = Get-CommunityNodeRelayP2PInfo -P2PInfoUrl $P2PInfoUrl -TimeoutSeconds $TimeoutSeconds
+    $bootstrapHints = @($info.bootstrap_hints)
+    if ($bootstrapHints.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($bootstrapHints[0])) {
+        return [string]$bootstrapHints[0]
+    }
+
+    $bootstrapNodes = @($info.bootstrap_nodes)
+    if ($bootstrapNodes.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($bootstrapNodes[0])) {
+        return [string]$bootstrapNodes[0]
+    }
+
+    throw "Relay P2P info did not contain bootstrap hints or nodes: $P2PInfoUrl"
+}
+
 function Start-CommunityNode {
     param(
         [Parameter(Mandatory = $true)]
@@ -1605,9 +1871,31 @@ function Start-CommunityNode {
     )
 
     if (-not $NoBuild) {
-        Write-Info "Building community-node-user-api image..."
-        Invoke-DockerCompose @("build", "community-node-user-api", "community-node-bootstrap")
+        Write-Info "Building test-runner image for community node E2E..."
+        Invoke-DockerCompose @("build", "test-runner")
+        Write-Info "Building community node E2E service images..."
+        Invoke-DockerCompose @("build", "cn-iroh-relay", "relay", "community-node-user-api", "community-node-bootstrap")
     }
+
+    Write-Info "Starting community-node-postgres service..."
+    $code = Invoke-DockerCompose @("up", "-d", "community-node-postgres") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start community-node-postgres (exit code $code)"
+    }
+
+    Write-Info "Starting cn-iroh-relay service..."
+    $code = Invoke-DockerCompose @("up", "-d", "cn-iroh-relay") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start cn-iroh-relay (exit code $code)"
+    }
+
+    Write-Info "Starting relay service..."
+    $code = Invoke-DockerCompose @("up", "-d", "relay") -IgnoreFailure
+    if ($code -ne 0) {
+        throw "Failed to start relay (exit code $code)"
+    }
+    $null = Get-CommunityNodeRelayP2PInfo
+    Write-Success "relay P2P info is ready"
 
     Write-Info "Starting community-node-user-api service..."
     $code = Invoke-DockerCompose @("up", "-d", "community-node-user-api") -IgnoreFailure
@@ -1624,6 +1912,29 @@ function Start-CommunityNode {
     if ($code -ne 0) {
         throw "Failed to start community-node-bootstrap (exit code $code)"
     }
+}
+
+function Start-CommunityNodePeerClients {
+    if (-not $NoBuild) {
+        Write-Info "Building community node peer client images..."
+        Invoke-DockerCompose @("build", "peer-client-1", "peer-client-2")
+    }
+
+    Write-Info "Starting community node peer clients..."
+    $cleanupArgs = @("rm", "-sf") + $CommunityNodePeerServices
+    Invoke-DockerCompose $cleanupArgs -IgnoreFailure | Out-Null
+    foreach ($service in $CommunityNodePeerServices) {
+        $code = Invoke-DockerCompose @("up", "-d", "--no-deps", $service) -IgnoreFailure
+        if ($code -ne 0) {
+            throw "Failed to start $service (exit code $code)"
+        }
+    }
+    Write-Success "Community node peer clients started."
+}
+
+function Stop-CommunityNodePeerClients {
+    $args = @("rm", "-sf") + $CommunityNodePeerServices
+    Invoke-DockerCompose $args -IgnoreFailure | Out-Null
 }
 
 function Invoke-CommunityNodeE2ESeed {
@@ -1704,13 +2015,8 @@ function Invoke-CommunityNodeE2ECleanup {
 
 function Stop-CommunityNode {
     Write-Host "Stopping community-node services..."
-    Invoke-DockerCompose -Arguments @(
-        "rm",
-        "-sf",
-        "community-node-user-api",
-        "community-node-bootstrap",
-        "community-node-postgres"
-    ) -IgnoreFailure | Out-Null
+    $args = @("rm", "-sf") + $CommunityNodeServices
+    Invoke-DockerCompose -Arguments $args -IgnoreFailure | Out-Null
 }
 
 function Get-CommunityNodeBackupMaxGenerations {

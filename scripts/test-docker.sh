@@ -17,6 +17,16 @@ PROMETHEUS_SERVICE="prometheus-trending"
 PROMETHEUS_METRICS_URL="${PROMETHEUS_METRICS_URL:-http://127.0.0.1:9898/metrics}"
 COMMUNITY_NODE_BASE_URL_DEFAULT="http://127.0.0.1:18080"
 MULTI_PEER_SERVICES=(cn-iroh-relay p2p-bootstrap peer-client-1 peer-client-2 peer-client-3)
+COMMUNITY_NODE_PEER_SERVICES=(peer-client-1 peer-client-2)
+COMMUNITY_NODE_SERVICES=(
+  peer-client-1
+  peer-client-2
+  community-node-bootstrap
+  community-node-user-api
+  relay
+  community-node-postgres
+  cn-iroh-relay
+)
 
 P2P_MAINLINE_TEST="${P2P_MAINLINE_TEST_TARGET:-p2p_mainline_smoke}"
 P2P_GOSSIP_TEST="${P2P_GOSSIP_TEST_TARGET:-p2p_gossip_smoke}"
@@ -799,12 +809,83 @@ wait_community_node() {
   return 1
 }
 
+get_community_node_relay_p2p_info() {
+  local p2p_info_url="${1:-http://127.0.0.1:18082/v1/p2p/info}"
+  local timeout="${2:-120}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo '[ERROR] jq is required to parse relay p2p info.' >&2
+    return 1
+  fi
+
+  for ((i = 0; i < timeout; i++)); do
+    local body=''
+    if command -v curl >/dev/null 2>&1; then
+      body=$(curl --silent --show-error --max-time 5 "${p2p_info_url}" 2>/dev/null || true)
+    elif command -v wget >/dev/null 2>&1; then
+      body=$(wget -q -T 5 -O - "${p2p_info_url}" 2>/dev/null || true)
+    else
+      echo '[ERROR] curl or wget is required to check relay p2p info.' >&2
+      return 1
+    fi
+
+    if [[ -n "$body" ]]; then
+      local hint_count node_count
+      hint_count=$(printf '%s' "$body" | jq '.bootstrap_hints | length' 2>/dev/null || echo 0)
+      node_count=$(printf '%s' "$body" | jq '.bootstrap_nodes | length' 2>/dev/null || echo 0)
+      if [[ "$hint_count" != "0" || "$node_count" != "0" ]]; then
+        printf '%s\n' "$body"
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for relay P2P info: ${p2p_info_url}" >&2
+  return 1
+}
+
+resolve_community_node_bootstrap_peer() {
+  local p2p_info_url="${1:-http://127.0.0.1:18082/v1/p2p/info}"
+  local timeout="${2:-120}"
+  local body
+  body="$(get_community_node_relay_p2p_info "$p2p_info_url" "$timeout")" || return 1
+
+  local peer
+  peer="$(printf '%s' "$body" | jq -r '.bootstrap_hints[0] // .bootstrap_nodes[0] // empty')"
+  if [[ -z "$peer" ]]; then
+    echo "Relay P2P info did not contain bootstrap hints or nodes: ${p2p_info_url}" >&2
+    return 1
+  fi
+  printf '%s\n' "$peer"
+}
+
 start_community_node() {
   local base_url="$1"
   if [[ $NO_BUILD -eq 0 ]]; then
-    echo 'Building community-node-user-api image...'
-    compose_run '' build community-node-user-api community-node-bootstrap
+    echo 'Building community node E2E service images...'
+    compose_run '' build cn-iroh-relay relay community-node-user-api community-node-bootstrap
   fi
+  echo 'Starting community-node-postgres service...'
+  if ! compose_run '' up -d community-node-postgres; then
+    echo 'Failed to start community-node-postgres service.' >&2
+    return 1
+  fi
+  echo 'Starting cn-iroh-relay service...'
+  if ! compose_run '' up -d cn-iroh-relay; then
+    echo 'Failed to start cn-iroh-relay service.' >&2
+    return 1
+  fi
+  echo 'Starting relay service...'
+  if ! compose_run '' up -d relay; then
+    echo 'Failed to start relay service.' >&2
+    return 1
+  fi
+  if ! get_community_node_relay_p2p_info >/dev/null; then
+    echo 'relay p2p info did not become ready.' >&2
+    return 1
+  fi
+  echo '[OK] relay P2P info is ready.'
   echo 'Starting community-node-user-api service...'
   if ! compose_run '' up -d community-node-user-api; then
     echo 'Failed to start community-node-user-api service.' >&2
@@ -821,6 +902,27 @@ start_community_node() {
     echo 'Failed to start community-node-bootstrap service.' >&2
     return 1
   fi
+}
+
+start_community_node_peer_clients() {
+  if [[ $NO_BUILD -eq 0 ]]; then
+    echo 'Building community node peer client images...'
+    compose_run '' build peer-client-1 peer-client-2
+  fi
+
+  echo 'Starting community node peer clients...'
+  compose_run '' rm -sf "${COMMUNITY_NODE_PEER_SERVICES[@]}" >/dev/null 2>&1 || true
+  for service in "${COMMUNITY_NODE_PEER_SERVICES[@]}"; do
+    if ! compose_run '' up -d --no-deps "$service"; then
+      echo "Failed to start ${service}." >&2
+      return 1
+    fi
+  done
+  echo '[OK] Community node peer clients started.'
+}
+
+stop_community_node_peer_clients() {
+  compose_run '' rm -sf "${COMMUNITY_NODE_PEER_SERVICES[@]}" >/dev/null 2>&1 || true
 }
 
 seed_community_node() {
@@ -897,7 +999,7 @@ cleanup_community_node() {
 
 stop_community_node() {
   echo 'Stopping community-node services...'
-  compose_run '' rm -sf community-node-user-api community-node-bootstrap community-node-postgres >/dev/null 2>&1 || true
+  compose_run '' rm -sf "${COMMUNITY_NODE_SERVICES[@]}" >/dev/null 2>&1 || true
 }
 
 run_desktop_e2e_community_node() {
@@ -905,34 +1007,104 @@ run_desktop_e2e_community_node() {
   echo 'Running desktop E2E tests (community node) via Docker...'
 
   local base_url="${COMMUNITY_NODE_BASE_URL:-$COMMUNITY_NODE_BASE_URL_DEFAULT}"
+  local relay_url="${E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL:-ws://127.0.0.1:18082/relay}"
+  local relay_p2p_info_url='http://127.0.0.1:18082/v1/p2p/info'
   local previous_scenario="${SCENARIO-}"
   local previous_base_url="${COMMUNITY_NODE_BASE_URL-}"
   local previous_e2e_url="${E2E_COMMUNITY_NODE_URL-}"
+  local previous_expected_relay_url="${E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL-}"
+  local previous_spec_pattern="${E2E_SPEC_PATTERN-}"
+  local previous_forbid_pending="${E2E_FORBID_PENDING-}"
   local previous_invite_json="${E2E_COMMUNITY_NODE_INVITE_JSON-}"
   local previous_seed_json="${E2E_COMMUNITY_NODE_SEED_JSON-}"
   local previous_topic_name="${E2E_COMMUNITY_NODE_TOPIC_NAME-}"
   local previous_relay_urls="${KUKURI_IROH_RELAY_URLS-}"
   local previous_relay_mode="${KUKURI_IROH_RELAY_MODE-}"
+  local previous_bootstrap_peers="${KUKURI_BOOTSTRAP_PEERS-}"
+  local previous_output_group="${KUKURI_PEER_OUTPUT_GROUP-}"
+  local previous_peer_topic="${KUKURI_PEER_TOPIC-}"
+  local previous_peer_prefix="${KUKURI_PEER_PUBLISH_PREFIX-}"
+  local previous_multi_peer_prefix="${E2E_MULTI_PEER_PUBLISH_PREFIX-}"
+  local previous_mode1="${KUKURI_PEER_MODE_1-}"
+  local previous_mode2="${KUKURI_PEER_MODE_2-}"
+  local previous_metadata2="${KUKURI_PEER_PUBLISH_METADATA_2-}"
+  local previous_profile_name2="${KUKURI_PEER_PROFILE_NAME_2-}"
+  local previous_profile_about2="${KUKURI_PEER_PROFILE_ABOUT_2-}"
+  local previous_startup_delay2="${KUKURI_PEER_STARTUP_DELAY_MS_2-}"
+  local previous_relay_public_url="${COMMUNITY_NODE_RELAY_PUBLIC_URL-}"
+  local previous_relay_p2p_info_url="${COMMUNITY_NODE_RELAY_P2P_INFO_URL-}"
+  local previous_relay_health_url="${COMMUNITY_NODE_RELAY_HEALTH_URL-}"
+  local previous_user_api_health_url="${COMMUNITY_NODE_USER_API_HEALTH_URL-}"
+  local previous_descriptor_http_url="${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL-}"
+  local previous_descriptor_ws_url="${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL-}"
+  local previous_relay_iroh_urls="${COMMUNITY_NODE_RELAY_IROH_RELAY_URLS-}"
+  local previous_relay_iroh_advertised_urls="${COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS-}"
+  local previous_relay_iroh_mode="${COMMUNITY_NODE_RELAY_IROH_RELAY_MODE-}"
+  local previous_relay_iroh_transport_profile="${COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE-}"
+  local previous_relay_include_direct_hints="${COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS-}"
+  local previous_relay_public_host="${COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST-}"
+  local previous_relay_public_port="${COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT-}"
+  local previous_transport_profile="${KUKURI_IROH_TRANSPORT_PROFILE-}"
 
   export COMMUNITY_NODE_BASE_URL="$base_url"
   export E2E_COMMUNITY_NODE_URL="$base_url"
+  export E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL="$relay_url"
   export SCENARIO="community-node-e2e"
+  export E2E_FORBID_PENDING='1'
+  export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.end-to-end.spec.ts}"
   export KUKURI_IROH_RELAY_URLS="${KUKURI_IROH_RELAY_URLS:-http://127.0.0.1:3340}"
   export KUKURI_IROH_RELAY_MODE="${KUKURI_IROH_RELAY_MODE:-custom}"
+  export KUKURI_IROH_TRANSPORT_PROFILE='relay-only'
+  export COMMUNITY_NODE_RELAY_PUBLIC_URL="$relay_url"
+  export COMMUNITY_NODE_RELAY_P2P_INFO_URL='http://relay:8082/v1/p2p/info'
+  export COMMUNITY_NODE_RELAY_HEALTH_URL='http://relay:8082/healthz'
+  export COMMUNITY_NODE_USER_API_HEALTH_URL='http://community-node-user-api:8080/healthz'
+  export COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL="$base_url"
+  export COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL="$relay_url"
+  export COMMUNITY_NODE_RELAY_IROH_RELAY_URLS='http://cn-iroh-relay:3340'
+  export COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS='http://127.0.0.1:3340'
+  export COMMUNITY_NODE_RELAY_IROH_RELAY_MODE='custom'
+  export COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE='relay-only'
+  export COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS='0'
+  export COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST='127.0.0.1'
+  export COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT='11223'
+  export KUKURI_PEER_OUTPUT_GROUP='community-node-e2e'
+  export KUKURI_PEER_TOPIC='kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0'
+  export KUKURI_PEER_PUBLISH_PREFIX='community-node-peer-publisher'
+  export E2E_MULTI_PEER_PUBLISH_PREFIX='community-node-peer-publisher'
+  export KUKURI_PEER_MODE_1='listener'
+  export KUKURI_PEER_MODE_2='publisher'
+  export KUKURI_PEER_PUBLISH_METADATA_2='1'
+  export KUKURI_PEER_PROFILE_NAME_2='community-node-peer-publisher-profile'
+  export KUKURI_PEER_PROFILE_ABOUT_2='community node e2e publisher profile'
+  export KUKURI_PEER_STARTUP_DELAY_MS_2='1000'
 
   local status=0
-  if ! start_community_node "$base_url"; then
+  local resolved_bootstrap_peer=''
+  if [[ $NO_BUILD -eq 0 ]]; then
+    echo '[INFO] Building test-runner image for community node E2E...'
+    compose_run '' build test-runner || status=$?
+  fi
+  if [[ $status -ne 0 ]]; then
+    :
+  elif ! start_community_node "$base_url"; then
     status=1
-  elif ! seed_community_node; then
+  elif ! resolved_bootstrap_peer="$(resolve_community_node_bootstrap_peer "$relay_p2p_info_url" 120)"; then
     status=1
   else
-    set +e
-    compose_run '' run --rm test-runner
-    status=$?
-    set -e
+    export KUKURI_BOOTSTRAP_PEERS="$resolved_bootstrap_peer"
+    if ! start_community_node_peer_clients; then
+      status=1
+    else
+      echo "[INFO] Using live Community Node bootstrap peer: ${KUKURI_BOOTSTRAP_PEERS}"
+      set +e
+      compose_run '' run --rm test-runner
+      status=$?
+      set -e
+    fi
   fi
 
-  cleanup_community_node
+  stop_community_node_peer_clients
   stop_community_node
 
   if [[ -n "${previous_scenario-}" ]]; then
@@ -949,6 +1121,21 @@ run_desktop_e2e_community_node() {
     export E2E_COMMUNITY_NODE_URL="$previous_e2e_url"
   else
     unset E2E_COMMUNITY_NODE_URL
+  fi
+  if [[ -n "${previous_expected_relay_url-}" ]]; then
+    export E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL="$previous_expected_relay_url"
+  else
+    unset E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL
+  fi
+  if [[ -n "${previous_spec_pattern-}" ]]; then
+    export E2E_SPEC_PATTERN="$previous_spec_pattern"
+  else
+    unset E2E_SPEC_PATTERN
+  fi
+  if [[ -n "${previous_forbid_pending-}" ]]; then
+    export E2E_FORBID_PENDING="$previous_forbid_pending"
+  else
+    unset E2E_FORBID_PENDING
   fi
   if [[ -n "${previous_invite_json-}" ]]; then
     export E2E_COMMUNITY_NODE_INVITE_JSON="$previous_invite_json"
@@ -974,6 +1161,131 @@ run_desktop_e2e_community_node() {
     export KUKURI_IROH_RELAY_MODE="$previous_relay_mode"
   else
     unset KUKURI_IROH_RELAY_MODE
+  fi
+  if [[ -n "${previous_bootstrap_peers-}" ]]; then
+    export KUKURI_BOOTSTRAP_PEERS="$previous_bootstrap_peers"
+  else
+    unset KUKURI_BOOTSTRAP_PEERS
+  fi
+  if [[ -n "${previous_output_group-}" ]]; then
+    export KUKURI_PEER_OUTPUT_GROUP="$previous_output_group"
+  else
+    unset KUKURI_PEER_OUTPUT_GROUP
+  fi
+  if [[ -n "${previous_peer_topic-}" ]]; then
+    export KUKURI_PEER_TOPIC="$previous_peer_topic"
+  else
+    unset KUKURI_PEER_TOPIC
+  fi
+  if [[ -n "${previous_peer_prefix-}" ]]; then
+    export KUKURI_PEER_PUBLISH_PREFIX="$previous_peer_prefix"
+  else
+    unset KUKURI_PEER_PUBLISH_PREFIX
+  fi
+  if [[ -n "${previous_multi_peer_prefix-}" ]]; then
+    export E2E_MULTI_PEER_PUBLISH_PREFIX="$previous_multi_peer_prefix"
+  else
+    unset E2E_MULTI_PEER_PUBLISH_PREFIX
+  fi
+  if [[ -n "${previous_mode1-}" ]]; then
+    export KUKURI_PEER_MODE_1="$previous_mode1"
+  else
+    unset KUKURI_PEER_MODE_1
+  fi
+  if [[ -n "${previous_mode2-}" ]]; then
+    export KUKURI_PEER_MODE_2="$previous_mode2"
+  else
+    unset KUKURI_PEER_MODE_2
+  fi
+  if [[ -n "${previous_metadata2-}" ]]; then
+    export KUKURI_PEER_PUBLISH_METADATA_2="$previous_metadata2"
+  else
+    unset KUKURI_PEER_PUBLISH_METADATA_2
+  fi
+  if [[ -n "${previous_profile_name2-}" ]]; then
+    export KUKURI_PEER_PROFILE_NAME_2="$previous_profile_name2"
+  else
+    unset KUKURI_PEER_PROFILE_NAME_2
+  fi
+  if [[ -n "${previous_profile_about2-}" ]]; then
+    export KUKURI_PEER_PROFILE_ABOUT_2="$previous_profile_about2"
+  else
+    unset KUKURI_PEER_PROFILE_ABOUT_2
+  fi
+  if [[ -n "${previous_startup_delay2-}" ]]; then
+    export KUKURI_PEER_STARTUP_DELAY_MS_2="$previous_startup_delay2"
+  else
+    unset KUKURI_PEER_STARTUP_DELAY_MS_2
+  fi
+  if [[ -n "${previous_relay_public_url-}" ]]; then
+    export COMMUNITY_NODE_RELAY_PUBLIC_URL="$previous_relay_public_url"
+  else
+    unset COMMUNITY_NODE_RELAY_PUBLIC_URL
+  fi
+  if [[ -n "${previous_relay_p2p_info_url-}" ]]; then
+    export COMMUNITY_NODE_RELAY_P2P_INFO_URL="$previous_relay_p2p_info_url"
+  else
+    unset COMMUNITY_NODE_RELAY_P2P_INFO_URL
+  fi
+  if [[ -n "${previous_relay_health_url-}" ]]; then
+    export COMMUNITY_NODE_RELAY_HEALTH_URL="$previous_relay_health_url"
+  else
+    unset COMMUNITY_NODE_RELAY_HEALTH_URL
+  fi
+  if [[ -n "${previous_user_api_health_url-}" ]]; then
+    export COMMUNITY_NODE_USER_API_HEALTH_URL="$previous_user_api_health_url"
+  else
+    unset COMMUNITY_NODE_USER_API_HEALTH_URL
+  fi
+  if [[ -n "${previous_descriptor_http_url-}" ]]; then
+    export COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL="$previous_descriptor_http_url"
+  else
+    unset COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL
+  fi
+  if [[ -n "${previous_descriptor_ws_url-}" ]]; then
+    export COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL="$previous_descriptor_ws_url"
+  else
+    unset COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL
+  fi
+  if [[ -n "${previous_relay_iroh_urls-}" ]]; then
+    export COMMUNITY_NODE_RELAY_IROH_RELAY_URLS="$previous_relay_iroh_urls"
+  else
+    unset COMMUNITY_NODE_RELAY_IROH_RELAY_URLS
+  fi
+  if [[ -n "${previous_relay_iroh_advertised_urls-}" ]]; then
+    export COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS="$previous_relay_iroh_advertised_urls"
+  else
+    unset COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS
+  fi
+  if [[ -n "${previous_relay_iroh_mode-}" ]]; then
+    export COMMUNITY_NODE_RELAY_IROH_RELAY_MODE="$previous_relay_iroh_mode"
+  else
+    unset COMMUNITY_NODE_RELAY_IROH_RELAY_MODE
+  fi
+  if [[ -n "${previous_relay_iroh_transport_profile-}" ]]; then
+    export COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE="$previous_relay_iroh_transport_profile"
+  else
+    unset COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE
+  fi
+  if [[ -n "${previous_relay_include_direct_hints-}" ]]; then
+    export COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS="$previous_relay_include_direct_hints"
+  else
+    unset COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS
+  fi
+  if [[ -n "${previous_relay_public_host-}" ]]; then
+    export COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST="$previous_relay_public_host"
+  else
+    unset COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST
+  fi
+  if [[ -n "${previous_relay_public_port-}" ]]; then
+    export COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT="$previous_relay_public_port"
+  else
+    unset COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT
+  fi
+  if [[ -n "${previous_transport_profile-}" ]]; then
+    export KUKURI_IROH_TRANSPORT_PROFILE="$previous_transport_profile"
+  else
+    unset KUKURI_IROH_TRANSPORT_PROFILE
   fi
 
   if [[ $status -ne 0 ]]; then
@@ -1046,6 +1358,7 @@ run_desktop_e2e_multi_peer() {
   local previous_output_group="${KUKURI_PEER_OUTPUT_GROUP-}"
   local previous_relay_urls="${KUKURI_IROH_RELAY_URLS-}"
   local previous_relay_mode="${KUKURI_IROH_RELAY_MODE-}"
+  local previous_transport_profile="${KUKURI_IROH_TRANSPORT_PROFILE-}"
 
   export SCENARIO="multi-peer-e2e"
   export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.multi-peer.spec.ts}"
@@ -1054,6 +1367,7 @@ run_desktop_e2e_multi_peer() {
   export KUKURI_PEER_OUTPUT_GROUP="${KUKURI_PEER_OUTPUT_GROUP:-multi-peer-e2e}"
   export KUKURI_IROH_RELAY_URLS="${KUKURI_IROH_RELAY_URLS:-http://127.0.0.1:3340}"
   export KUKURI_IROH_RELAY_MODE="${KUKURI_IROH_RELAY_MODE:-custom}"
+  export KUKURI_IROH_TRANSPORT_PROFILE='relay-only'
 
   local status=0
   if ! start_multi_peer_clients; then
@@ -1101,6 +1415,11 @@ run_desktop_e2e_multi_peer() {
     export KUKURI_IROH_RELAY_MODE="$previous_relay_mode"
   else
     unset KUKURI_IROH_RELAY_MODE
+  fi
+  if [[ -n "${previous_transport_profile-}" ]]; then
+    export KUKURI_IROH_TRANSPORT_PROFILE="$previous_transport_profile"
+  else
+    unset KUKURI_IROH_TRANSPORT_PROFILE
   fi
 
   if [[ $status -ne 0 ]]; then

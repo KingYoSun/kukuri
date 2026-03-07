@@ -1188,23 +1188,28 @@ impl CommunityNodeHandler {
     ) -> Result<Vec<String>, AppError> {
         let now = Utc::now().timestamp();
         let cache = self.load_bootstrap_cache().await?;
-        let descriptors =
+        let cached_descriptors =
             sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &cache.nodes.items, now, None);
+        let has_bootstrap_nodes = config.nodes.iter().any(|node| node.roles.bootstrap);
+        let mut live_descriptors: Option<Vec<serde_json::Value>> = None;
         let mut resolved = Vec::new();
 
         for node in &config.nodes {
-            let mut node_relays = Vec::new();
+            let mut node_relays = collect_nostr_relay_urls_for_node(node, &cached_descriptors, now);
+            let has_cached_descriptor =
+                has_matching_bootstrap_descriptor(node, &cached_descriptors, now);
 
-            for item in &descriptors {
-                if !descriptor_matches_base_url(item, &node.base_url, now) {
-                    continue;
+            if node_relays.is_empty() && has_bootstrap_nodes && !has_cached_descriptor {
+                if live_descriptors.is_none() {
+                    live_descriptors = Some(
+                        self.refresh_bootstrap_descriptors_for_config(config)
+                            .await?,
+                    );
                 }
-
-                for relay_url in extract_nostr_relay_urls_from_descriptor(item, now) {
-                    if !node_relays.contains(&relay_url) {
-                        node_relays.push(relay_url);
-                    }
-                }
+                let descriptors = live_descriptors
+                    .as_ref()
+                    .expect("live descriptors should be cached after refresh");
+                node_relays = collect_nostr_relay_urls_for_node(node, descriptors, now);
             }
 
             if node_relays.is_empty()
@@ -1221,6 +1226,34 @@ impl CommunityNodeHandler {
         }
 
         Ok(resolved)
+    }
+
+    async fn refresh_bootstrap_descriptors_for_config(
+        &self,
+        config: &CommunityNodeConfig,
+    ) -> Result<Vec<serde_json::Value>, AppError> {
+        let nodes =
+            select_nodes_for_role(config, None, CommunityNodeRole::Bootstrap).unwrap_or_default();
+        if nodes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let now = Utc::now().timestamp();
+        let result = self
+            .aggregate_bootstrap(nodes, "/v1/bootstrap/nodes")
+            .await?;
+        let items = sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &result.items, now, None);
+
+        let mut cache = self.load_bootstrap_cache().await?;
+        cache.nodes = BootstrapCacheEntry {
+            items: items.clone(),
+            next_refresh_at: result.next_refresh_at,
+            updated_at: Some(now),
+            stale: false,
+        };
+        self.save_bootstrap_cache(&cache).await?;
+
+        Ok(items)
     }
 
     async fn authorized_request(
@@ -1433,7 +1466,9 @@ impl CommunityNodeHandler {
         for node in nodes {
             let url = build_url(&node.base_url, path);
             let builder = match self.authorized_request(node, Method::GET, url, false).await {
-                Ok(builder) => builder,
+                Ok(builder) => builder.timeout(Duration::from_secs(
+                    COMMUNITY_NODE_BOOTSTRAP_REQUEST_TIMEOUT_SECS,
+                )),
                 Err(err) => {
                     last_error = Some(err);
                     continue;
@@ -1850,6 +1885,38 @@ fn extract_nostr_relay_urls_from_descriptor(
         }
     }
     deduped
+}
+
+fn collect_nostr_relay_urls_for_node(
+    node: &CommunityNodeConfigNode,
+    descriptors: &[serde_json::Value],
+    now: i64,
+) -> Vec<String> {
+    let mut node_relays = Vec::new();
+
+    for item in descriptors {
+        if !descriptor_matches_base_url(item, &node.base_url, now) {
+            continue;
+        }
+
+        for relay_url in extract_nostr_relay_urls_from_descriptor(item, now) {
+            if !node_relays.contains(&relay_url) {
+                node_relays.push(relay_url);
+            }
+        }
+    }
+
+    node_relays
+}
+
+fn has_matching_bootstrap_descriptor(
+    node: &CommunityNodeConfigNode,
+    descriptors: &[serde_json::Value],
+    now: i64,
+) -> bool {
+    descriptors
+        .iter()
+        .any(|item| descriptor_matches_base_url(item, &node.base_url, now))
 }
 
 fn descriptor_matches_base_url(
@@ -2985,6 +3052,58 @@ mod community_node_handler_tests {
         (base_url, rx, handle)
     }
 
+    fn spawn_json_sequence_server_with_builder<F>(
+        response_builder: F,
+    ) -> (
+        String,
+        mpsc::Receiver<CapturedRequest>,
+        thread::JoinHandle<()>,
+    )
+    where
+        F: FnOnce(&str) -> Vec<MockHttpResponse>,
+    {
+        let server = Server::http("127.0.0.1:0").expect("server");
+        let base_url = format!("http://{}", server.server_addr());
+        let responses = response_builder(&base_url);
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            for response_spec in responses.into_iter() {
+                let request = match server.recv_timeout(MOCK_SERVER_RECV_TIMEOUT) {
+                    Ok(Some(request)) => request,
+                    Ok(None) => break,
+                    Err(_) => break,
+                };
+
+                let url = request.url();
+                let parsed = Url::parse(&format!("http://localhost{url}")).expect("request url");
+                let params = parsed
+                    .query_pairs()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect();
+                let captured = CapturedRequest {
+                    path: parsed.path().to_string(),
+                    params,
+                };
+                let _ = tx.send(captured);
+
+                let mut response = match response_spec.body {
+                    Some(body) => {
+                        let mut response = Response::from_string(body.to_string());
+                        response.add_header(
+                            Header::from_bytes("Content-Type", "application/json")
+                                .expect("json content-type header"),
+                        );
+                        response
+                    }
+                    None => Response::from_string(String::new()),
+                };
+                response = response.with_status_code(response_spec.status);
+                let _ = request.respond(response);
+            }
+        });
+        (base_url, rx, handle)
+    }
+
     fn build_config_node(
         base_url: String,
         roles: CommunityNodeRoleConfig,
@@ -3465,6 +3584,110 @@ mod community_node_handler_tests {
             .await
             .expect("resolve nostr relays");
         assert_eq!(relay_urls, vec!["wss://relay.example/ws".to_string()]);
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn resolve_nostr_relay_urls_refreshes_live_bootstrap_descriptors_before_fallback() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("nostr-relays-live-refresh");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let (base_url, rx, handle) = spawn_json_sequence_server_with_builder(|base_url| {
+            let bootstrap_without_descriptor = json!({
+                "items": [],
+                "next_refresh_at": Utc::now().timestamp() + 600
+            });
+            let live_descriptor = build_bootstrap_descriptor_event_with_ws(
+                base_url,
+                Some("wss://relay.example/live"),
+                &[],
+            );
+            let bootstrap_with_descriptor = json!({
+                "items": [live_descriptor],
+                "next_refresh_at": Utc::now().timestamp() + 600
+            });
+            vec![
+                MockHttpResponse::json(200, bootstrap_without_descriptor),
+                MockHttpResponse::json(200, bootstrap_with_descriptor),
+            ]
+        });
+
+        let handler = test_handler();
+        handler
+            .set_config(CommunityNodeConfigRequest {
+                nodes: vec![CommunityNodeConfigNodeRequest {
+                    base_url: base_url.clone(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: false,
+                        trust: false,
+                        search: false,
+                        bootstrap: true,
+                    }),
+                }],
+            })
+            .await
+            .expect("set config");
+
+        let req1 = rx.recv_timeout(Duration::from_secs(2)).expect("request 1");
+        assert_eq!(req1.path, "/v1/bootstrap/nodes");
+
+        let relay_urls = handler
+            .resolve_nostr_relay_urls_from_saved_config()
+            .await
+            .expect("resolve nostr relays");
+        assert_eq!(relay_urls, vec!["wss://relay.example/live".to_string()]);
+
+        let req2 = rx.recv_timeout(Duration::from_secs(2)).expect("request 2");
+        assert_eq!(req2.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn resolve_nostr_relay_urls_errors_when_live_bootstrap_refresh_fails() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("nostr-relays-live-failure");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let bootstrap_without_descriptor = json!({
+            "items": [],
+            "next_refresh_at": Utc::now().timestamp() + 600
+        });
+        let (base_url, rx, handle) = spawn_json_server(bootstrap_without_descriptor);
+
+        let handler = test_handler();
+        handler
+            .set_config(CommunityNodeConfigRequest {
+                nodes: vec![CommunityNodeConfigNodeRequest {
+                    base_url: base_url.clone(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: false,
+                        trust: false,
+                        search: false,
+                        bootstrap: true,
+                    }),
+                }],
+            })
+            .await
+            .expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let err = handler
+            .resolve_nostr_relay_urls_from_saved_config()
+            .await
+            .expect_err("live refresh should fail");
+        assert!(matches!(
+            err,
+            AppError::Network(_) | AppError::NotFound(_) | AppError::Internal(_)
+        ));
 
         let _ = fs::remove_dir_all(&data_dir);
     }

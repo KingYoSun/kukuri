@@ -280,6 +280,19 @@ async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &st
     .expect("insert service health");
 }
 
+async fn fetch_active_topic_services(pool: &Pool<Postgres>, topic_id: &str) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT role || ':' || scope
+         FROM cn_admin.topic_services
+         WHERE topic_id = $1 AND is_active = TRUE
+         ORDER BY role, scope",
+    )
+    .bind(topic_id)
+    .fetch_all(pool)
+    .await
+    .expect("fetch active topic services")
+}
+
 async fn upsert_service_config(pool: &Pool<Postgres>, service: &str, config_json: Value) {
     sqlx::query(
         "INSERT INTO cn_admin.service_configs          (service, version, config_json, updated_by)          VALUES ($1, 1, $2, 'contract-test')          ON CONFLICT (service) DO UPDATE SET config_json = EXCLUDED.config_json, version = cn_admin.service_configs.version + 1, updated_by = EXCLUDED.updated_by, updated_at = NOW()",
@@ -3539,6 +3552,10 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
             .map(std::vec::Vec::len),
         Some(0)
     );
+    assert_eq!(
+        fetch_active_topic_services(&state.pool, &manual_topic_id).await,
+        vec!["bootstrap:public".to_string(), "relay:public".to_string()]
+    );
 
     let (status, payload) = post_json(
         app.clone(),
@@ -3620,6 +3637,10 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         node_row.get("connected_user_count").and_then(Value::as_i64),
         Some(1)
     );
+    assert_eq!(
+        fetch_active_topic_services(&state.pool, &approve_topic_id).await,
+        vec!["bootstrap:public".to_string(), "relay:public".to_string()]
+    );
     let connected_users = node_row
         .get("connected_users")
         .and_then(Value::as_array)
@@ -3671,6 +3692,9 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         ingest_policy.get("allow_backfill").and_then(Value::as_bool),
         Some(false)
     );
+    assert!(fetch_active_topic_services(&state.pool, &approve_topic_id)
+        .await
+        .is_empty());
 
     let (status, payload) = put_json(
         app.clone(),
@@ -3690,6 +3714,10 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
             .get("allow_backfill")
             .and_then(Value::as_bool),
         Some(false)
+    );
+    assert_eq!(
+        fetch_active_topic_services(&state.pool, &approve_topic_id).await,
+        vec!["bootstrap:public".to_string(), "relay:public".to_string()]
     );
 
     let (status, payload) = delete_with_session(
@@ -3715,6 +3743,9 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         payload.get("status").and_then(Value::as_str),
         Some("deleted")
     );
+    assert!(fetch_active_topic_services(&state.pool, &manual_topic_id)
+        .await
+        .is_empty());
 
     let stored_policy: Value = sqlx::query_scalar(
         "SELECT ingest_policy FROM cn_admin.node_subscriptions WHERE topic_id = $1",

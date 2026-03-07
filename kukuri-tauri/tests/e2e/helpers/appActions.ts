@@ -6,9 +6,68 @@ export interface ProfileInfo {
   about: string;
 }
 
+async function setControlledInputValue(selector: string, value: string): Promise<void> {
+  const input = await $(selector);
+  await input.waitForDisplayed({ timeout: 15000 });
+  await input.clearValue();
+  await input.setValue(value);
+  await browser.waitUntil(
+    async () => (await input.getValue()) === value,
+    {
+      timeout: 10000,
+      interval: 200,
+      timeoutMsg: `Input ${selector} did not retain expected value`,
+    },
+  );
+}
+
 export async function waitForWelcome(): Promise<void> {
   const welcome = await $('[data-testid="welcome-screen"]');
   await welcome.waitForDisplayed();
+}
+
+export async function startCreateAccountFlow(): Promise<void> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const createButton = await $('[data-testid="welcome-create-account"]');
+      await createButton.waitForDisplayed({ timeout: 15000 });
+      await createButton.waitForClickable({ timeout: 15000 });
+      await createButton.scrollIntoView();
+      await createButton.click();
+    } catch {
+      await browser.pause(500);
+    }
+
+    try {
+      await browser.waitUntil(
+        async () => {
+          const pathname = await browser.execute(() => window.location.pathname);
+          if (pathname === '/profile-setup') {
+            return true;
+          }
+          const form = await $('[data-testid="profile-form"]');
+          return await form.isExisting();
+        },
+        {
+          timeout: 15000,
+          interval: 300,
+          timeoutMsg: 'Profile setup route did not activate',
+        },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      await browser.pause(500);
+    }
+  }
+
+  throw new Error(
+    `Failed to start create-account flow: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
 }
 
 export async function completeProfileSetup(profile: ProfileInfo): Promise<void> {
@@ -29,52 +88,17 @@ export async function completeProfileSetup(profile: ProfileInfo): Promise<void> 
     );
   }
 
-  await $('[data-testid="profile-name"]').setValue(profile.name);
-  await $('[data-testid="profile-display-name"]').setValue(profile.displayName);
-  await $('[data-testid="profile-about"]').setValue(profile.about);
+  await setControlledInputValue('[data-testid="profile-name"]', profile.name);
+  await setControlledInputValue('[data-testid="profile-display-name"]', profile.displayName);
+  await setControlledInputValue('[data-testid="profile-about"]', profile.about);
   await $('[data-testid="profile-submit"]').click();
 }
 
 export async function waitForHome(): Promise<void> {
   const home = await $('[data-testid="home-page"]');
-  let appliedFallback = false;
   try {
-    await home.waitForDisplayed();
+    await home.waitForDisplayed({ timeout: 20000 });
   } catch {
-    const bootstrapFallback = async () => {
-      if (appliedFallback) {
-        return null;
-      }
-      const snapshot = await browser.execute<{
-        location: string;
-        lastLog: string | null;
-        pageError: string | null;
-      }>(() => {
-        return {
-          location: window.location.pathname,
-          lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
-          pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
-        };
-      });
-      if (
-        snapshot.location?.includes('/profile-setup') &&
-        (snapshot.lastLog?.includes('Profile setup failed') ||
-          snapshot.lastLog?.includes('Nostr operation failed'))
-      ) {
-        appliedFallback = true;
-        await browser.execute(() => {
-          try {
-            window.history.pushState({}, '', '/');
-          } catch {
-            window.location.replace('/');
-          }
-        });
-        await browser.pause(200);
-        return snapshot;
-      }
-      return snapshot;
-    };
-
     const debugSnapshot = await browser.execute(() => {
       return {
         location: window.location.pathname,
@@ -83,13 +107,6 @@ export async function waitForHome(): Promise<void> {
         pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
       };
     });
-    await bootstrapFallback();
-    try {
-      await home.waitForDisplayed({ timeout: 10000 });
-      return;
-    } catch {
-      void 0;
-    }
     throw new Error(
       `home-page not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog}, pageError=${debugSnapshot.pageError})`,
     );
@@ -101,22 +118,14 @@ export async function openSettings(): Promise<void> {
   const settingsPage = () => $('[data-testid="settings-page"]');
 
   const triggerNavigation = async () => {
-    try {
-      const button = await openButton();
-      await button.waitForClickable({ timeout: 7000 });
-      await button.click();
-    } catch {
-      await browser.execute(() => {
-        const el = document.querySelector(
-          '[data-testid="open-settings-button"]',
-        ) as HTMLButtonElement | null;
-        el?.click();
-      });
-    }
+    const button = await openButton();
+    await button.waitForClickable({ timeout: 7000 });
+    await button.scrollIntoView();
+    await button.click();
   };
 
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       await triggerNavigation();
       await browser.waitUntil(
@@ -134,37 +143,26 @@ export async function openSettings(): Promise<void> {
     }
   }
 
-  // Fallback: force navigation in case the click was swallowed by the app
-  await browser.execute(() => {
-    try {
-      window.history.pushState({}, '', '/settings');
-    } catch {
-      window.location.assign('/settings');
-    }
-  });
-  await (await settingsPage()).waitForDisplayed({
-    timeout: 20000,
-    timeoutMsg: `settings-page not visible after fallback (lastError=${
+  throw new Error(
+    `settings-page not visible after user navigation attempts (lastError=${
       lastError instanceof Error ? lastError.message : String(lastError)
     })`,
-  });
+  );
 }
 
 export async function openAccountMenu(): Promise<void> {
-  const trigger = await $('[data-testid="account-switcher-trigger"]');
   const menu = () => $('[data-testid="account-menu-go-login"]');
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      const trigger = await $('[data-testid="account-switcher-trigger"]');
       await trigger.waitForClickable({ timeout: 7000 });
+      await trigger.scrollIntoView();
       await trigger.click();
     } catch {
-      await browser.execute(() => {
-        const el = document.querySelector(
-          '[data-testid="account-switcher-trigger"]',
-        ) as HTMLButtonElement | null;
-        el?.click();
-      });
+      if (attempt === 2) {
+        throw new Error('Account menu trigger was not clickable');
+      }
     }
     try {
       await (await menu()).waitForDisplayed({ timeout: 7000 });

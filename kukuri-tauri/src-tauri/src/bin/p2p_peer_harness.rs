@@ -69,7 +69,7 @@ struct HarnessConfig {
     profile_about: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Clone)]
 struct HarnessStats {
     published_count: u64,
     metadata_published_count: u64,
@@ -110,6 +110,38 @@ fn parse_env_list(raw: Option<String>) -> Vec<String> {
 
 fn parse_optional_u64(raw: Option<String>) -> Option<u64> {
     raw.and_then(|value| value.trim().parse::<u64>().ok())
+}
+
+struct SummaryContext<'a> {
+    cfg: &'a HarnessConfig,
+    started_at: &'a DateTime<Utc>,
+    start_instant: &'a Instant,
+    node_addresses: &'a [String],
+    relay_urls: &'a [String],
+    connection_hints: &'a [String],
+    preferred_address: &'a str,
+    stats: &'a HarnessStats,
+    status_peer_count: usize,
+    status_connection: String,
+}
+
+fn build_summary(context: SummaryContext<'_>) -> HarnessSummary {
+    HarnessSummary {
+        peer_name: context.cfg.peer_name.clone(),
+        mode: context.cfg.mode.as_str().to_string(),
+        topic_id: context.cfg.topic_id.clone(),
+        bootstrap_peers: context.cfg.bootstrap_peers.clone(),
+        node_addresses: context.node_addresses.to_vec(),
+        relay_urls: context.relay_urls.to_vec(),
+        connection_hints: context.connection_hints.to_vec(),
+        preferred_address: context.preferred_address.to_string(),
+        started_at: context.started_at.to_owned(),
+        finished_at: Utc::now(),
+        uptime_ms: context.start_instant.elapsed().as_millis() as u64,
+        status_peer_count: context.status_peer_count,
+        status_connection: context.status_connection,
+        stats: context.stats.clone(),
+    }
 }
 
 fn parse_optional_string(raw: Option<String>) -> Option<String> {
@@ -517,7 +549,9 @@ async fn main() -> anyhow::Result<()> {
     let mut seen_events = HashSet::new();
     let mut publish_enabled = cfg.mode == PeerMode::Publisher && !cfg.publish_on_peer_join;
     let mut publish_tick = tokio::time::interval(Duration::from_millis(cfg.publish_interval_ms));
+    let mut summary_tick = tokio::time::interval(Duration::from_secs(1));
     publish_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    summary_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let node_addresses = match stack.p2p_service.get_node_addresses().await {
         Ok(addresses) => addresses,
@@ -591,6 +625,43 @@ async fn main() -> anyhow::Result<()> {
                     warn!(peer = %cfg.peer_name, error = %err, "Periodic publish failed");
                 }
             }
+            _ = summary_tick.tick(), if cfg.summary_path.is_some() => {
+                match stack.p2p_service.get_status().await {
+                    Ok(status) => {
+                        let summary = build_summary(SummaryContext {
+                            cfg: &cfg,
+                            started_at: &started_at,
+                            start_instant: &start_instant,
+                            node_addresses: &node_addresses,
+                            relay_urls: &relay_urls,
+                            connection_hints: &connection_hints,
+                            preferred_address: &preferred_address,
+                            stats: &stats,
+                            status_peer_count: status.peers.len(),
+                            status_connection: format!("{:?}", status.connection_status)
+                                .to_ascii_lowercase(),
+                        });
+                        if let Some(path) = &cfg.summary_path
+                            && let Err(err) = write_summary(path, &summary).await
+                        {
+                            warn!(
+                                peer = %cfg.peer_name,
+                                path = %path.display(),
+                                error = %err,
+                                "Failed to write runtime peer summary"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        stats.last_error = Some(err.to_string());
+                        warn!(
+                            peer = %cfg.peer_name,
+                            error = %err,
+                            "Failed to capture runtime peer status"
+                        );
+                    }
+                }
+            }
             maybe_event = subscription.recv() => {
                 match maybe_event {
                     Some(event) => {
@@ -637,22 +708,18 @@ async fn main() -> anyhow::Result<()> {
     stats.unique_event_ids = seen_events.len();
 
     let status = stack.p2p_service.get_status().await?;
-    let summary = HarnessSummary {
-        peer_name: cfg.peer_name.clone(),
-        mode: cfg.mode.as_str().to_string(),
-        topic_id: cfg.topic_id.clone(),
-        bootstrap_peers: cfg.bootstrap_peers.clone(),
-        node_addresses,
-        relay_urls,
-        connection_hints,
-        preferred_address,
-        started_at,
-        finished_at: Utc::now(),
-        uptime_ms: start_instant.elapsed().as_millis() as u64,
+    let summary = build_summary(SummaryContext {
+        cfg: &cfg,
+        started_at: &started_at,
+        start_instant: &start_instant,
+        node_addresses: &node_addresses,
+        relay_urls: &relay_urls,
+        connection_hints: &connection_hints,
+        preferred_address: &preferred_address,
+        stats: &stats,
         status_peer_count: status.peers.len(),
         status_connection: format!("{:?}", status.connection_status).to_ascii_lowercase(),
-        stats,
-    };
+    });
 
     info!(
         peer = %cfg.peer_name,

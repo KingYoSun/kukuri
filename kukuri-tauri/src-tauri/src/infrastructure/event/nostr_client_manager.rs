@@ -1,6 +1,6 @@
 use anyhow::Result;
 use nostr_sdk::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -27,6 +27,15 @@ fn normalize_relay_urls(relay_urls: Vec<String>) -> Vec<String> {
         }
     }
     normalized
+}
+
+async fn connected_relay_urls(client: &Client) -> Vec<String> {
+    client
+        .relays()
+        .await
+        .into_iter()
+        .filter_map(|(url, relay)| relay.is_connected().then(|| url.to_string()))
+        .collect()
 }
 
 pub struct NostrClientManager {
@@ -87,9 +96,55 @@ impl NostrClientManager {
             client
                 .wait_for_connection(relay_connect_wait_timeout())
                 .await;
+
+            let connected_relays = connected_relay_urls(client).await;
+            if connected_relays.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "No configured Nostr relay connected within {:?}: {}",
+                    relay_connect_wait_timeout(),
+                    self.configured_relays.join(", ")
+                ));
+            }
         }
 
         Ok(())
+    }
+
+    pub async fn relay_statuses(&self) -> Vec<(String, String)> {
+        let configured_relays = self.configured_relays.clone();
+        let client = self.client.read().await.as_ref().cloned();
+        let mut statuses = Vec::new();
+        let mut seen = HashSet::new();
+        let mut client_statuses: HashMap<String, String> = HashMap::new();
+
+        if let Some(client) = client {
+            for (url, relay) in client.relays().await {
+                let status = if relay.is_connected() {
+                    "connected"
+                } else {
+                    "disconnected"
+                };
+                client_statuses.insert(url.to_string(), status.to_string());
+            }
+        }
+
+        for relay_url in configured_relays {
+            let status = client_statuses
+                .get(&relay_url)
+                .cloned()
+                .unwrap_or_else(|| "disconnected".to_string());
+            if seen.insert(relay_url.clone()) {
+                statuses.push((relay_url, status));
+            }
+        }
+
+        for (relay_url, status) in client_statuses {
+            if seen.insert(relay_url.clone()) {
+                statuses.push((relay_url, status));
+            }
+        }
+
+        statuses
     }
 
     pub async fn disconnect(&self) -> Result<()> {
@@ -219,7 +274,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_replace_relays_is_applied_after_init() {
+    async fn test_replace_relays_deduplicates_before_init() {
         let mut manager = NostrClientManager::new();
         manager
             .replace_relays(vec![
@@ -233,26 +288,39 @@ mod tests {
             manager.configured_relays().await,
             vec!["wss://relay.example".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn test_relay_statuses_report_configured_relays_when_client_is_not_initialized() {
+        let mut manager = NostrClientManager::new();
+        manager
+            .replace_relays(vec!["ws://127.0.0.1:1".to_string()])
+            .await
+            .expect("replace relays should succeed without initialized client");
+
+        assert_eq!(
+            manager.relay_statuses().await,
+            vec![("ws://127.0.0.1:1".to_string(), "disconnected".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_init_with_keys_fails_when_configured_relays_do_not_connect() {
+        let mut manager = NostrClientManager::new();
+        manager
+            .replace_relays(vec!["ws://127.0.0.1:1".to_string()])
+            .await
+            .expect("store relays");
 
         let secret_key = sample_secret_key('6');
-        manager
+        let err = manager
             .init_with_keys(&secret_key)
             .await
-            .expect("initialize client");
+            .expect_err("initialization should fail when no relay connects");
 
-        let client = manager
-            .client
-            .read()
-            .await
-            .as_ref()
-            .cloned()
-            .expect("client");
-        let relays = client.relays().await;
-        assert_eq!(relays.len(), 1);
         assert!(
-            relays
-                .keys()
-                .any(|url| url.as_str().starts_with("wss://relay.example"))
+            err.to_string()
+                .contains("No configured Nostr relay connected")
         );
     }
 }

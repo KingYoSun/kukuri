@@ -2,7 +2,10 @@ use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use cn_core::{metrics, topic};
 use futures_util::StreamExt;
-use iroh::{protocol::Router, Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl, SecretKey};
+use iroh::{
+    endpoint::QuicTransportConfig, protocol::Router, Endpoint, EndpointAddr, EndpointId, RelayMode,
+    RelayUrl, SecretKey,
+};
 use iroh_gossip::{
     api::{Event, GossipTopic},
     Gossip, TopicId,
@@ -28,6 +31,7 @@ const GOSSIP_JOIN_REASON_OK: &str = "ok";
 const GOSSIP_JOIN_REASON_SUBSCRIBE_FAILED: &str = "subscribe_failed";
 const GOSSIP_JOIN_REASON_SUBSCRIBE_RETRY: &str = "subscribe_retry";
 const GOSSIP_JOIN_REASON_SEED_RESOLUTION_FAILED: &str = "seed_resolution_failed";
+const RELAY_IROH_TRANSPORT_PROFILE_ENV: &str = "RELAY_IROH_TRANSPORT_PROFILE";
 
 #[derive(Debug, serde::Deserialize)]
 struct BootstrapHintPayload {
@@ -99,6 +103,9 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
 async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
     let relay_mode = resolve_relay_mode(config)?;
     let mut builder = Endpoint::empty_builder(relay_mode).clear_ip_transports();
+    if let Some(transport_config) = resolve_transport_config()? {
+        builder = builder.transport_config(transport_config);
+    }
     builder = apply_bind(builder, config.p2p_bind_addr)?;
     if let Some(secret) = &config.p2p_secret_key {
         let decoded = BASE64_STANDARD
@@ -136,6 +143,34 @@ fn resolve_relay_mode(config: &RelayConfig) -> Result<RelayMode> {
     }
 
     Ok(RelayMode::custom(relay_urls))
+}
+
+fn resolve_transport_config() -> Result<Option<QuicTransportConfig>> {
+    transport_config_from_env_value(
+        std::env::var(RELAY_IROH_TRANSPORT_PROFILE_ENV)
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn transport_config_from_env_value(raw: Option<&str>) -> Result<Option<QuicTransportConfig>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "default" => Ok(None),
+        "relay-only" | "relay_only" => Ok(Some(
+            QuicTransportConfig::builder()
+                .enable_segmentation_offload(false)
+                .send_observed_address_reports(false)
+                .receive_observed_address_reports(false)
+                .build(),
+        )),
+        other => Err(anyhow!(
+            "invalid {RELAY_IROH_TRANSPORT_PROFILE_ENV} value `{other}`"
+        )),
+    }
 }
 
 fn apply_bind(
@@ -839,6 +874,7 @@ mod tests {
             p2p_node_id: Arc::new(RwLock::new(None)),
             p2p_bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
             p2p_relay_urls: Arc::new(Vec::new()),
+            p2p_advertised_relay_urls: Arc::new(Vec::new()),
             p2p_router: Arc::new(RwLock::new(None)),
             bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
         }
@@ -855,6 +891,7 @@ mod tests {
             p2p_public_port: None,
             p2p_secret_key: None,
             p2p_relay_urls: Vec::new(),
+            p2p_advertised_relay_urls: Vec::new(),
             p2p_relay_mode_default: false,
             topic_poll_seconds: 60,
             config_poll_seconds: 60,
@@ -897,6 +934,7 @@ mod tests {
             p2p_public_port: None,
             p2p_secret_key: None,
             p2p_relay_urls: vec!["https://relay.example".to_string()],
+            p2p_advertised_relay_urls: vec!["https://public-relay.example".to_string()],
             p2p_relay_mode_default: false,
             topic_poll_seconds: 60,
             config_poll_seconds: 60,
@@ -904,5 +942,24 @@ mod tests {
         };
         let mode = resolve_relay_mode(&config).expect("relay mode");
         assert!(matches!(mode, RelayMode::Custom(_)));
+    }
+
+    #[test]
+    fn transport_profile_supports_relay_only() {
+        let config = transport_config_from_env_value(Some("relay-only"))
+            .expect("transport config should parse")
+            .expect("relay-only config should be present");
+
+        let debug = format!("{config:?}");
+        assert!(debug.contains("enable_segmentation_offload: false"));
+    }
+
+    #[test]
+    fn transport_profile_rejects_unknown_values() {
+        let err = transport_config_from_env_value(Some("invalid-profile"))
+            .expect_err("invalid transport profile should fail");
+        assert!(err
+            .to_string()
+            .contains("invalid RELAY_IROH_TRANSPORT_PROFILE value"));
     }
 }

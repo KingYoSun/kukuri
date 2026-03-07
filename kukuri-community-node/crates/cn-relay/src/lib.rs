@@ -42,6 +42,7 @@ pub(crate) struct AppState {
     pub p2p_node_id: Arc<RwLock<Option<String>>>,
     pub p2p_bind_addr: SocketAddr,
     pub p2p_relay_urls: Arc<Vec<String>>,
+    pub p2p_advertised_relay_urls: Arc<Vec<String>>,
     pub p2p_router: Arc<RwLock<Option<Arc<IrohRouter>>>>,
     pub bootstrap_hint_rejoin_requests: Arc<RwLock<HashSet<String>>>,
 }
@@ -97,6 +98,7 @@ pub struct RelayConfig {
     pub p2p_public_port: Option<u16>,
     pub p2p_secret_key: Option<String>,
     pub p2p_relay_urls: Vec<String>,
+    pub p2p_advertised_relay_urls: Vec<String>,
     pub p2p_relay_mode_default: bool,
     pub topic_poll_seconds: u64,
     pub config_poll_seconds: u64,
@@ -123,6 +125,7 @@ pub fn load_config() -> Result<RelayConfig> {
         .transpose()?;
     let p2p_secret_key = std::env::var("RELAY_P2P_SECRET_KEY").ok();
     let p2p_relay_urls = parse_csv_env("RELAY_IROH_RELAY_URLS");
+    let p2p_advertised_relay_urls = parse_csv_env("RELAY_IROH_ADVERTISED_URLS");
     let p2p_relay_mode_default = std::env::var("RELAY_IROH_RELAY_MODE")
         .ok()
         .map(|value| relay_mode_uses_default(&value))
@@ -145,6 +148,7 @@ pub fn load_config() -> Result<RelayConfig> {
         p2p_public_port,
         p2p_secret_key,
         p2p_relay_urls,
+        p2p_advertised_relay_urls,
         p2p_relay_mode_default,
         topic_poll_seconds,
         config_poll_seconds,
@@ -213,6 +217,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         p2p_node_id: Arc::new(RwLock::new(None)),
         p2p_bind_addr: config.p2p_bind_addr,
         p2p_relay_urls: Arc::new(config.p2p_relay_urls.clone()),
+        p2p_advertised_relay_urls: Arc::new(config.p2p_advertised_relay_urls.clone()),
         p2p_router: Arc::new(RwLock::new(None)),
         bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
     };
@@ -232,6 +237,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
 }
 
 async fn ensure_default_public_node_subscription(pool: &Pool<Postgres>) -> Result<()> {
+    let mut tx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count)
          VALUES ($1, TRUE, 1)
@@ -241,8 +247,16 @@ async fn ensure_default_public_node_subscription(pool: &Pool<Postgres>) -> Resul
                  updated_at = NOW()",
     )
     .bind(cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    cn_core::topic_services::sync_default_topic_services(
+        &mut *tx,
+        cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID,
+        true,
+        "cn-relay.startup",
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -383,37 +397,13 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     let advertised_host = resolve_advertised_host(&state);
     let advertised_port = resolve_advertised_port(&state);
     let relay_urls = resolve_p2p_relay_urls_for_info(&state);
-    let bootstrap_nodes = match (
+    let (bootstrap_nodes, bootstrap_hints) = build_bootstrap_endpoint_hints(
         node_id.as_deref(),
         advertised_host.as_deref(),
         advertised_port,
-    ) {
-        (Some(node_id), Some(host), Some(port)) => {
-            let endpoint = format_host_port(host, port);
-            vec![format!("{node_id}@{endpoint}")]
-        }
-        _ => Vec::new(),
-    };
-    let bootstrap_hints = match (
-        node_id.as_deref(),
-        advertised_host.as_deref(),
-        advertised_port,
-    ) {
-        (Some(node_id), Some(host), Some(port)) => {
-            let endpoint = format_host_port(host, port);
-            if relay_urls.is_empty() {
-                vec![format!("{node_id}@{endpoint}")]
-            } else {
-                let mut hints = Vec::new();
-                for relay_url in &relay_urls {
-                    hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
-                    hints.push(format!("{node_id}|relay={relay_url}"));
-                }
-                hints
-            }
-        }
-        _ => Vec::new(),
-    };
+        &relay_urls,
+        include_direct_addr_hints_for_info(),
+    );
 
     Json(RelayP2pInfoResponse {
         node_id,
@@ -425,7 +415,11 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 fn resolve_p2p_relay_urls_for_info(state: &AppState) -> Vec<String> {
-    let mut relay_urls = state.p2p_relay_urls.as_ref().clone();
+    let mut relay_urls = if state.p2p_advertised_relay_urls.is_empty() {
+        state.p2p_relay_urls.as_ref().clone()
+    } else {
+        state.p2p_advertised_relay_urls.as_ref().clone()
+    };
     if relay_urls.is_empty() {
         if let Some(relay_hint_url) = state
             .relay_public_url
@@ -436,6 +430,51 @@ fn resolve_p2p_relay_urls_for_info(state: &AppState) -> Vec<String> {
         }
     }
     dedupe_in_order(relay_urls)
+}
+
+fn include_direct_addr_hints_for_info() -> bool {
+    match std::env::var("RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS") {
+        Ok(value) => !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "no" | "off"
+        ),
+        Err(_) => true,
+    }
+}
+
+fn build_bootstrap_endpoint_hints(
+    node_id: Option<&str>,
+    advertised_host: Option<&str>,
+    advertised_port: Option<u16>,
+    relay_urls: &[String],
+    include_direct_addr_hints: bool,
+) -> (Vec<String>, Vec<String>) {
+    let (Some(node_id), Some(host), Some(port)) = (node_id, advertised_host, advertised_port)
+    else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let endpoint = format_host_port(host, port);
+    if relay_urls.is_empty() {
+        let direct = format!("{node_id}@{endpoint}");
+        return (vec![direct.clone()], vec![direct]);
+    }
+
+    let bootstrap_nodes = if include_direct_addr_hints {
+        vec![format!("{node_id}@{endpoint}")]
+    } else {
+        Vec::new()
+    };
+
+    let mut bootstrap_hints = Vec::new();
+    for relay_url in relay_urls {
+        if include_direct_addr_hints {
+            bootstrap_hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
+        }
+        bootstrap_hints.push(format!("{node_id}|relay={relay_url}"));
+    }
+
+    (bootstrap_nodes, bootstrap_hints)
 }
 
 fn format_host_port(host: &str, port: u16) -> String {
@@ -579,9 +618,10 @@ fn extract_host_from_url_like(raw: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        dedupe_in_order, extract_host_from_url_like, format_host_port,
-        normalize_relay_url_for_hint, relay_mode_uses_default, resolve_advertised_host,
-        resolve_advertised_port, AppState,
+        build_bootstrap_endpoint_hints, dedupe_in_order, extract_host_from_url_like,
+        format_host_port, normalize_relay_url_for_hint, relay_mode_uses_default,
+        resolve_advertised_host, resolve_advertised_port, resolve_p2p_relay_urls_for_info,
+        AppState,
     };
     use cn_core::rate_limit;
     use cn_core::service_config;
@@ -607,6 +647,7 @@ mod tests {
             p2p_node_id: Arc::new(RwLock::new(None)),
             p2p_bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 11223),
             p2p_relay_urls: Arc::new(Vec::new()),
+            p2p_advertised_relay_urls: Arc::new(Vec::new()),
             p2p_router: Arc::new(RwLock::new(None)),
             bootstrap_hint_rejoin_requests: Arc::new(RwLock::new(HashSet::new())),
         }
@@ -701,6 +742,55 @@ mod tests {
                 "https://relay-a.example/".to_string(),
                 "https://relay-b.example/".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn relay_info_prefers_explicit_advertised_relay_urls() {
+        let mut state = app_state_for_advertised_endpoint();
+        state.p2p_relay_urls = Arc::new(vec!["http://internal-relay:3340".to_string()]);
+        state.p2p_advertised_relay_urls = Arc::new(vec!["http://127.0.0.1:3340".to_string()]);
+
+        assert_eq!(
+            resolve_p2p_relay_urls_for_info(&state),
+            vec!["http://127.0.0.1:3340".to_string()]
+        );
+    }
+
+    #[test]
+    fn bootstrap_hints_include_direct_addr_when_enabled() {
+        let (bootstrap_nodes, bootstrap_hints) = build_bootstrap_endpoint_hints(
+            Some("node"),
+            Some("127.0.0.1"),
+            Some(11223),
+            &["http://127.0.0.1:3340".to_string()],
+            true,
+        );
+
+        assert_eq!(bootstrap_nodes, vec!["node@127.0.0.1:11223".to_string()]);
+        assert_eq!(
+            bootstrap_hints,
+            vec![
+                "node|relay=http://127.0.0.1:3340|addr=127.0.0.1:11223".to_string(),
+                "node|relay=http://127.0.0.1:3340".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn bootstrap_hints_can_be_forced_to_relay_only() {
+        let (bootstrap_nodes, bootstrap_hints) = build_bootstrap_endpoint_hints(
+            Some("node"),
+            Some("127.0.0.1"),
+            Some(11223),
+            &["http://127.0.0.1:3340".to_string()],
+            false,
+        );
+
+        assert!(bootstrap_nodes.is_empty());
+        assert_eq!(
+            bootstrap_hints,
+            vec!["node|relay=http://127.0.0.1:3340".to_string()]
         );
     }
 }

@@ -99,6 +99,11 @@ impl EventManager {
         client_manager.replace_relays(relay_urls).await
     }
 
+    pub async fn get_nostr_relay_status(&self) -> Vec<(String, String)> {
+        let client_manager = self.client_manager.read().await;
+        client_manager.relay_statuses().await
+    }
+
     /// KeyManagerからの秘密鍵でマネージャーを初期化
     pub async fn initialize_with_key_manager(
         &self,

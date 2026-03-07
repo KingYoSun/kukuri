@@ -21,6 +21,8 @@ use crate::policies::require_consents;
 use crate::{ApiError, ApiResult, AppState};
 use cn_core::trust::{CLAIM_COMMUNICATION_DENSITY, CLAIM_REPORT_BASED};
 
+const TOPIC_SERVICE_UPDATED_BY_DELETE: &str = "cn-user-api.subscription.delete";
+
 const DEFAULT_MAX_PENDING_SUBSCRIPTION_REQUESTS_PER_PUBKEY: i64 = 5;
 const TOPIC_SUBSCRIPTION_PENDING_LOCK_CONTEXT: &[u8] =
     b"cn-user-api.topic-subscription-request.pending-limit";
@@ -392,13 +394,31 @@ pub async fn delete_topic_subscription(
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
 
-    sqlx::query(
-        "UPDATE cn_admin.node_subscriptions          SET ref_count = GREATEST(ref_count - 1, 0),              enabled = CASE WHEN ref_count - 1 > 0 THEN TRUE ELSE FALSE END,              updated_at = NOW()          WHERE topic_id = $1",
+    let node_subscription_row = sqlx::query(
+        "UPDATE cn_admin.node_subscriptions          SET ref_count = GREATEST(ref_count - 1, 0),              enabled = CASE WHEN ref_count - 1 > 0 THEN TRUE ELSE FALSE END,              updated_at = NOW()          WHERE topic_id = $1          RETURNING enabled",
     )
     .bind(&topic_id)
-    .execute(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    if let Some(row) = node_subscription_row {
+        let enabled: bool = row.try_get("enabled")?;
+        cn_core::topic_services::sync_default_topic_services(
+            &mut *tx,
+            &topic_id,
+            enabled,
+            TOPIC_SERVICE_UPDATED_BY_DELETE,
+        )
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+    }
 
     tx.commit().await.map_err(|err| {
         ApiError::new(

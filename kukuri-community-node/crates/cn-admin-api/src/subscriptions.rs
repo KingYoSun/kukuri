@@ -10,6 +10,11 @@ use utoipa::ToSchema;
 use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
+const TOPIC_SERVICE_UPDATED_BY_APPROVE: &str = "cn-admin-api.subscription.approve";
+const TOPIC_SERVICE_UPDATED_BY_CREATE: &str = "cn-admin-api.node-subscription.create";
+const TOPIC_SERVICE_UPDATED_BY_UPDATE: &str = "cn-admin-api.node-subscription.update";
+const TOPIC_SERVICE_UPDATED_BY_DELETE: &str = "cn-admin-api.node-subscription.delete";
+
 const NODE_SUBSCRIPTION_LIMIT_LOCK_CONTEXT: &[u8] =
     b"cn-admin-api.subscription-request.approve.node-subscription-limit";
 
@@ -233,6 +238,21 @@ pub async fn approve_subscription_request(
     .execute(&mut *tx)
     .await
     .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR", err.to_string()))?;
+
+    cn_core::topic_services::sync_default_topic_services(
+        &mut *tx,
+        &topic_id,
+        true,
+        TOPIC_SERVICE_UPDATED_BY_APPROVE,
+    )
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     crate::log_admin_audit_tx(
         &mut tx,
@@ -516,6 +536,21 @@ pub async fn create_node_subscription(
         )
     })?;
 
+    cn_core::topic_services::sync_default_topic_services(
+        &mut *tx,
+        &topic_id,
+        enabled,
+        TOPIC_SERVICE_UPDATED_BY_CREATE,
+    )
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
     crate::log_admin_audit_tx(
         &mut tx,
         &admin.admin_user_id,
@@ -583,6 +618,39 @@ pub async fn update_node_subscription(
         .as_ref()
         .map(validate_and_normalize_ingest_policy)
         .transpose()?;
+    let mut tx = state.pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    let existing_enabled = sqlx::query_scalar::<_, bool>(
+        "SELECT enabled FROM cn_admin.node_subscriptions WHERE topic_id = $1 FOR UPDATE",
+    )
+    .bind(&topic_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+    let Some(existing_enabled) = existing_enabled else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "topic not found",
+        ));
+    };
+
+    if payload.enabled && !existing_enabled {
+        enforce_node_subscription_topic_limit(&mut tx, &topic_id).await?;
+    }
+
     let row = sqlx::query(
         "UPDATE cn_admin.node_subscriptions \
          SET enabled = $1, \
@@ -594,7 +662,7 @@ pub async fn update_node_subscription(
     .bind(payload.enabled)
     .bind(ingest_policy_json.clone())
     .bind(&topic_id)
-    .fetch_optional(&state.pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| {
         ApiError::new(
@@ -603,16 +671,25 @@ pub async fn update_node_subscription(
             err.to_string(),
         )
     })?;
-    let Some(row) = row else {
-        return Err(ApiError::new(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            "topic not found",
-        ));
-    };
 
-    crate::log_admin_audit(
-        &state.pool,
+    let enabled: bool = row.try_get("enabled")?;
+    cn_core::topic_services::sync_default_topic_services(
+        &mut *tx,
+        &topic_id,
+        enabled,
+        TOPIC_SERVICE_UPDATED_BY_UPDATE,
+    )
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    crate::log_admin_audit_tx(
+        &mut tx,
         &admin.admin_user_id,
         "node_subscription.update",
         &format!("topic:{topic_id}"),
@@ -624,6 +701,14 @@ pub async fn update_node_subscription(
     )
     .await?;
 
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
     let connected_nodes = load_connected_nodes_by_topic(&state.pool, Some(&topic_id))
         .await?
         .remove(&topic_id)
@@ -633,7 +718,6 @@ pub async fn update_node_subscription(
         .remove(&topic_id)
         .unwrap_or_default();
     let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
-    let enabled: bool = row.try_get("enabled")?;
     let ref_count: i64 = row.try_get("ref_count")?;
     let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
         apply_runtime_connectivity_fallback(
@@ -716,6 +800,21 @@ pub async fn delete_node_subscription(
                 err.to_string(),
             )
         })?;
+
+    cn_core::topic_services::sync_default_topic_services(
+        &mut *tx,
+        &topic_id,
+        false,
+        TOPIC_SERVICE_UPDATED_BY_DELETE,
+    )
+    .await
+    .map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
 
     crate::log_admin_audit_tx(
         &mut tx,

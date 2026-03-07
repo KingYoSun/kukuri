@@ -14,6 +14,7 @@ use crate::{ApiError, ApiResult, AppState};
 
 const AUTH_KIND: u32 = 22242;
 const AUTHENTICATE_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
+const DEFAULT_PUBLIC_TOPIC_UPDATED_BY: &str = "cn-user-api.auth";
 
 #[derive(Deserialize)]
 pub struct AuthChallengeRequest {
@@ -301,6 +302,14 @@ async fn ensure_default_public_topic_subscription(
     pubkey: &str,
 ) -> ApiResult<bool> {
     let topic_id = cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID;
+    let mut tx = pool.begin().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
     let activated = sqlx::query_scalar::<_, i64>(
         "WITH upsert AS ( \
             INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status, ended_at) \
@@ -315,7 +324,7 @@ async fn ensure_default_public_topic_subscription(
     )
     .bind(topic_id)
     .bind(pubkey)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| {
         ApiError::new(
@@ -325,21 +334,11 @@ async fn ensure_default_public_topic_subscription(
         )
     })?;
 
-    if activated <= 0 {
-        return Ok(false);
-    }
-
-    sqlx::query(
-        "INSERT INTO cn_admin.node_subscriptions \
-         (topic_id, enabled, ref_count) \
-         VALUES ($1, TRUE, 1) \
-         ON CONFLICT (topic_id) DO UPDATE \
-             SET ref_count = cn_admin.node_subscriptions.ref_count + 1, \
-                 enabled = TRUE, \
-                 updated_at = NOW()",
+    let node_subscription_enabled = sqlx::query_scalar::<_, bool>(
+        "SELECT enabled FROM cn_admin.node_subscriptions WHERE topic_id = $1",
     )
     .bind(topic_id)
-    .execute(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|err| {
         ApiError::new(
@@ -348,8 +347,111 @@ async fn ensure_default_public_topic_subscription(
             err.to_string(),
         )
     })?;
+    let topic_services_active =
+        cn_core::topic_services::default_topic_services_are_active(&mut *tx, topic_id)
+            .await
+            .map_err(|err| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    err.to_string(),
+                )
+            })?;
 
-    Ok(true)
+    if activated > 0 {
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions \
+             (topic_id, enabled, ref_count) \
+             VALUES ($1, TRUE, 1) \
+             ON CONFLICT (topic_id) DO UPDATE \
+                 SET ref_count = cn_admin.node_subscriptions.ref_count + 1, \
+                     enabled = TRUE, \
+                     updated_at = NOW()",
+        )
+        .bind(topic_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+        cn_core::topic_services::sync_default_topic_services(
+            &mut *tx,
+            topic_id,
+            true,
+            DEFAULT_PUBLIC_TOPIC_UPDATED_BY,
+        )
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+
+        tx.commit().await.map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+        return Ok(true);
+    }
+
+    if node_subscription_enabled != Some(true) {
+        sqlx::query(
+            "INSERT INTO cn_admin.node_subscriptions \
+             (topic_id, enabled, ref_count) \
+             VALUES ($1, TRUE, 1) \
+             ON CONFLICT (topic_id) DO UPDATE \
+                 SET enabled = TRUE, \
+                     ref_count = GREATEST(cn_admin.node_subscriptions.ref_count, 1), \
+                     updated_at = NOW()",
+        )
+        .bind(topic_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+    }
+
+    if node_subscription_enabled != Some(true) || !topic_services_active {
+        cn_core::topic_services::sync_default_topic_services(
+            &mut *tx,
+            topic_id,
+            true,
+            DEFAULT_PUBLIC_TOPIC_UPDATED_BY,
+        )
+        .await
+        .map_err(|err| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                err.to_string(),
+            )
+        })?;
+    }
+
+    tx.commit().await.map_err(|err| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            err.to_string(),
+        )
+    })?;
+
+    Ok(false)
 }
 
 pub(crate) async fn current_rate_limit(state: &AppState) -> UserRateLimitConfig {
@@ -490,6 +592,21 @@ mod tests {
         .expect("load node subscription");
         assert_eq!(enabled, Some(true));
 
+        let topic_services = sqlx::query_scalar::<_, String>(
+            "SELECT role || ':' || scope \
+             FROM cn_admin.topic_services \
+             WHERE topic_id = $1 AND is_active = TRUE \
+             ORDER BY role, scope",
+        )
+        .bind(topic_id)
+        .fetch_all(&pool)
+        .await
+        .expect("load active topic services");
+        assert_eq!(
+            topic_services,
+            vec!["bootstrap:public".to_string(), "relay:public".to_string()]
+        );
+
         sqlx::query(
             "DELETE FROM cn_user.topic_subscriptions \
              WHERE topic_id = $1 AND subscriber_pubkey = $2",
@@ -513,5 +630,15 @@ mod tests {
             .await
             .expect("cleanup node subscription ref_count");
         }
+
+        sqlx::query(
+            "UPDATE cn_admin.topic_services \
+             SET is_active = FALSE, updated_at = NOW(), updated_by = 'auth-test-cleanup' \
+             WHERE topic_id = $1",
+        )
+        .bind(topic_id)
+        .execute(&pool)
+        .await
+        .expect("cleanup topic services");
     }
 }

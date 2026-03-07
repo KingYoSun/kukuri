@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   createQueryWrapper,
@@ -7,9 +7,9 @@ import {
   mockNavigate,
   stubObjectUrl,
 } from './__utils__/profileTestUtils';
-import { ProfileSetup } from '@/components/auth/ProfileSetup';
+import { ProfileSetup, PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS } from '@/components/auth/ProfileSetup';
 import { useAuthStore } from '@/stores/authStore';
-import { updateNostrMetadata } from '@/lib/api/nostr';
+import { initializeNostr, updateNostrMetadata } from '@/lib/api/nostr';
 import { toast } from 'sonner';
 import { errorHandler } from '@/lib/errorHandler';
 
@@ -82,6 +82,7 @@ describe('ProfileSetup', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -399,6 +400,52 @@ describe('ProfileSetup', () => {
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
     });
   });
+
+  it('Nostr 初期化が応答しなくても入力値を保持したままタイムアウト後にホーム遷移する', async () => {
+    (initializeNostr as vi.Mock).mockImplementation(
+      () =>
+        new Promise<void>(() => {
+          // intentionally unresolved
+        }),
+    );
+    (updateNostrMetadata as vi.Mock).mockResolvedValue(undefined);
+
+    render(<ProfileSetup />, { wrapper: createWrapper() });
+
+    fireEvent.change(screen.getByLabelText('名前 *'), { target: { value: 'テストユーザー' } });
+    fireEvent.change(screen.getByLabelText('表示名'), { target: { value: '@testuser' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '設定を完了' }));
+
+    expect(screen.getByDisplayValue('テストユーザー')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('@testuser')).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        expect(mockUpdateUserProfile).toHaveBeenCalledWith(
+          expect.objectContaining({
+            npub: mockCurrentUser.npub,
+            name: 'テストユーザー',
+            displayName: '@testuser',
+          }),
+        );
+      },
+      { timeout: PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS + 10000 },
+    );
+    await waitFor(
+      () => {
+        expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+      },
+      { timeout: PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS + 10000 },
+    );
+    expect(errorHandler.log).toHaveBeenCalledWith(
+      'Failed to initialize Nostr for profile setup',
+      expect.any(Error),
+      {
+        context: 'ProfileSetup.handleSubmit.initializeNostr',
+      },
+    );
+  }, 20000);
 
   it('アバターのイニシャルが正しく表示される', async () => {
     const user = userEvent.setup();

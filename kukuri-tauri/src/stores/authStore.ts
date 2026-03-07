@@ -531,11 +531,6 @@ export const useAuthStore = create<AuthStore>()(
               'AuthStore.generateNewKeypair',
               { npub: user.npub },
             );
-            void runPostLoginTasks().catch((postLoginError) => {
-              errorHandler.log('Post-login initialization failed', postLoginError, {
-                context: 'AuthStore.generateNewKeypair.postLoginTasks',
-              });
-            });
             return { nsec: response.nsec };
           }
 

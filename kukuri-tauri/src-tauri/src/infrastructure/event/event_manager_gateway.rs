@@ -190,6 +190,10 @@ mod tests {
         async fn replace_nostr_relays(&self, _: Vec<String>) -> anyhow::Result<()> {
             Ok(())
         }
+
+        async fn get_nostr_relay_status(&self) -> Vec<(String, String)> {
+            Vec::new()
+        }
     }
 
     fn sample_nostr_event_id(ch: char) -> NostrEventId {

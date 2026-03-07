@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next';
-import { useRef, useState } from 'react';
+﻿import { useTranslation } from 'react-i18next';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,31 @@ import { useTheme } from '@/hooks/useTheme';
 import { buildProfileSavePayload, collectUniqueSaveErrors } from '@/lib/profile/profileSave';
 import { syncProfileQueryCaches } from '@/lib/profile/profileQuerySync';
 
+export const PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS = 5_000;
+export const PROFILE_SETUP_LOCAL_STEP_TIMEOUT_MS = 8_000;
+
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 export function ProfileSetup() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -25,21 +50,29 @@ export function ProfileSetup() {
   useTheme(); // Apply theme to HTML element
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
-  const [showForm, setShowForm] = useState(true);
   const shouldNavigateRef = useRef(false);
   const { syncNow: syncAvatar } = useProfileAvatarSync({ autoStart: false });
 
-  const initialProfile: ProfileFormValues = {
-    name: currentUser?.name || '',
-    displayName: currentUser?.displayName || '',
-    about: currentUser?.about || '',
-    picture: currentUser?.picture || '',
-    nip05: currentUser?.nip05 || '',
-  };
+  const initialProfile: ProfileFormValues = useMemo(
+    () => ({
+      name: currentUser?.name || '',
+      displayName: currentUser?.displayName || '',
+      about: currentUser?.about || '',
+      picture: currentUser?.picture || '',
+      nip05: currentUser?.nip05 || '',
+    }),
+    [
+      currentUser?.about,
+      currentUser?.displayName,
+      currentUser?.name,
+      currentUser?.nip05,
+      currentUser?.picture,
+    ],
+  );
 
-  const navigateHome = () => {
+  const navigateHome = async () => {
     try {
-      navigate({ to: '/' });
+      await navigate({ to: '/' });
     } catch (navError) {
       errorHandler.log('ProfileSetup.navigateFailed', navError, {
         context: 'ProfileSetup.navigateHome',
@@ -50,11 +83,6 @@ export function ProfileSetup() {
         // ルーターが動かない場合のフォールバック
       }
     }
-  };
-
-  const hideFormAndNavigate = () => {
-    setShowForm(false);
-    navigateHome();
   };
 
   const handleSubmit = async (profile: ProfileFormSubmitPayload) => {
@@ -81,7 +109,11 @@ export function ProfileSetup() {
 
     try {
       try {
-        await initializeNostr();
+        await withTimeout(
+          initializeNostr(),
+          PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+          'initializeNostr',
+        );
       } catch (nostrInitError) {
         pushSaveError(t('auth.profileSaveStepNostrInitialize'), nostrInitError);
         errorHandler.log('Failed to initialize Nostr for profile setup', nostrInitError, {
@@ -91,11 +123,15 @@ export function ProfileSetup() {
 
       if (currentUser?.npub) {
         try {
-          await TauriApi.updatePrivacySettings({
-            npub: currentUser.npub,
-            publicProfile,
-            showOnlineStatus,
-          });
+          await withTimeout(
+            TauriApi.updatePrivacySettings({
+              npub: currentUser.npub,
+              publicProfile,
+              showOnlineStatus,
+            }),
+            PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+            'updatePrivacySettings',
+          );
         } catch (privacyError) {
           pushSaveError(t('auth.profileSaveStepPrivacy'), privacyError);
           // プライバシー更新に失敗してもログだけ出して続行
@@ -111,13 +147,21 @@ export function ProfileSetup() {
         }
 
         try {
-          const uploadResult = await TauriApi.uploadProfileAvatar({
-            npub: currentUser.npub,
-            data: profile.avatarFile.bytes,
-            format: profile.avatarFile.format,
-            accessLevel: 'contacts_only',
-          });
-          const fetched = await TauriApi.fetchProfileAvatar(currentUser.npub);
+          const uploadResult = await withTimeout(
+            TauriApi.uploadProfileAvatar({
+              npub: currentUser.npub,
+              data: profile.avatarFile.bytes,
+              format: profile.avatarFile.format,
+              accessLevel: 'contacts_only',
+            }),
+            PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+            'uploadProfileAvatar',
+          );
+          const fetched = await withTimeout(
+            TauriApi.fetchProfileAvatar(currentUser.npub),
+            PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+            'fetchProfileAvatar',
+          );
           updatedPicture = buildAvatarDataUrl(fetched.format, fetched.data_base64);
           updatedAvatar = buildUserAvatarMetadata(currentUser.npub, uploadResult);
           nostrPicture = updatedAvatar.nostrUri;
@@ -148,7 +192,11 @@ export function ProfileSetup() {
       });
 
       try {
-        await TauriApi.updateUserProfile(payload.localProfile);
+        await withTimeout(
+          TauriApi.updateUserProfile(payload.localProfile),
+          PROFILE_SETUP_LOCAL_STEP_TIMEOUT_MS,
+          'updateUserProfile',
+        );
       } catch (localProfileError) {
         pushSaveError(t('auth.profileSaveStepLocalProfile'), localProfileError);
         errorHandler.log('ProfileSetup.localProfileUpdateFailed', localProfileError, {
@@ -157,7 +205,11 @@ export function ProfileSetup() {
       }
 
       try {
-        await updateNostrMetadata(payload.nostrMetadata);
+        await withTimeout(
+          updateNostrMetadata(payload.nostrMetadata),
+          PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+          'updateNostrMetadata',
+        );
       } catch (nostrError) {
         pushSaveError(t('auth.profileSaveStepNostrMetadata'), nostrError);
         errorHandler.log('Failed to update Nostr metadata', nostrError, {
@@ -190,7 +242,11 @@ export function ProfileSetup() {
       syncProfileQueryCaches(queryClient, updatedUser);
 
       try {
-        await syncAvatar({ force: true });
+        await withTimeout(
+          syncAvatar({ force: true }),
+          PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS,
+          'syncAvatar',
+        );
       } catch (syncError) {
         pushSaveError(t('auth.profileSaveStepAvatarSync'), syncError);
         errorHandler.log('ProfileSetup.avatarSyncFailed', syncError, {
@@ -219,18 +275,14 @@ export function ProfileSetup() {
     } finally {
       setIsLoading(false);
       if (shouldNavigateRef.current) {
-        hideFormAndNavigate();
+        await navigateHome();
       }
     }
   };
 
   const handleSkip = () => {
-    hideFormAndNavigate();
+    void navigateHome();
   };
-
-  if (!showForm) {
-    return null;
-  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -243,19 +295,6 @@ export function ProfileSetup() {
           <ProfileForm
             initialValues={initialProfile}
             onSubmit={handleSubmit}
-            onSubmitFinally={() => {
-              if (!shouldNavigateRef.current) {
-                return;
-              }
-              // プロフィール送信後にホーム遷移（失敗しても処理は継続）
-              try {
-                navigate({ to: '/' });
-              } catch (navError) {
-                errorHandler.log('ProfileSetup.finallyNavigateFailed', navError, {
-                  context: 'ProfileSetup.onSubmitFinally',
-                });
-              }
-            }}
             onSkip={handleSkip}
             skipLabel={t('auth.setupLater')}
             submitLabel={isLoading ? t('auth.saving') : t('auth.completeSetup')}
