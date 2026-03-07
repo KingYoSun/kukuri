@@ -1188,21 +1188,35 @@ impl CommunityNodeHandler {
     ) -> Result<Vec<String>, AppError> {
         let now = Utc::now().timestamp();
         let cache = self.load_bootstrap_cache().await?;
+        let descriptors =
+            sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &cache.nodes.items, now, None);
         let mut resolved = Vec::new();
 
-        for item in sanitize_bootstrap_items(NODE_DESCRIPTOR_KIND, &cache.nodes.items, now, None) {
-            for relay_url in extract_nostr_relay_urls_from_descriptor(&item, now) {
+        for node in &config.nodes {
+            let mut node_relays = Vec::new();
+
+            for item in &descriptors {
+                if !descriptor_matches_base_url(item, &node.base_url, now) {
+                    continue;
+                }
+
+                for relay_url in extract_nostr_relay_urls_from_descriptor(item, now) {
+                    if !node_relays.contains(&relay_url) {
+                        node_relays.push(relay_url);
+                    }
+                }
+            }
+
+            if node_relays.is_empty()
+                && let Some(relay_url) = build_nostr_relay_url_from_base_url(&node.base_url)
+            {
+                node_relays.push(relay_url);
+            }
+
+            for relay_url in node_relays {
                 if !resolved.contains(&relay_url) {
                     resolved.push(relay_url);
                 }
-            }
-        }
-
-        for node in &config.nodes {
-            if let Some(relay_url) = build_nostr_relay_url_from_base_url(&node.base_url)
-                && !resolved.contains(&relay_url)
-            {
-                resolved.push(relay_url);
             }
         }
 
@@ -1836,6 +1850,26 @@ fn extract_nostr_relay_urls_from_descriptor(
         }
     }
     deduped
+}
+
+fn descriptor_matches_base_url(
+    event_json: &serde_json::Value,
+    expected_base_url: &str,
+    now: i64,
+) -> bool {
+    extract_descriptor_http_base_url(event_json, now)
+        .map(|base_url| base_url == expected_base_url)
+        .unwrap_or(false)
+}
+
+fn extract_descriptor_http_base_url(event_json: &serde_json::Value, now: i64) -> Option<String> {
+    let event = validate_kip_event_json(event_json, NODE_DESCRIPTOR_KIND, None, now)?;
+    let content = serde_json::from_str::<serde_json::Value>(event.content.trim()).ok()?;
+    let raw = content
+        .get("endpoints")
+        .and_then(|endpoints| endpoints.get("http"))
+        .and_then(|value| value.as_str())?;
+    normalize_base_url(raw).ok()
 }
 
 fn build_nostr_relay_url_from_base_url(base_url: &str) -> Option<String> {
@@ -3382,19 +3416,14 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
-    async fn resolve_nostr_relay_urls_prefers_descriptor_ws_and_keeps_base_url_fallback() {
+    async fn resolve_nostr_relay_urls_prefers_matching_descriptor_ws_over_base_url_fallback() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays");
         let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
-        let descriptor = build_bootstrap_descriptor_event_with_ws(
-            "https://node.example",
-            Some("wss://relay.example/ws"),
-            &[],
-        );
         let response = json!({
-            "items": [descriptor],
+            "items": [],
             "next_refresh_at": Utc::now().timestamp() + 600
         });
         let (base_url, rx, handle) = spawn_json_server(response);
@@ -3419,6 +3448,11 @@ mod community_node_handler_tests {
         assert_eq!(req.path, "/v1/bootstrap/nodes");
         join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
 
+        let descriptor = build_bootstrap_descriptor_event_with_ws(
+            &base_url,
+            Some("wss://relay.example/ws"),
+            &[],
+        );
         let descriptor_event: NostrEvent =
             serde_json::from_value(descriptor.clone()).expect("descriptor event");
         handler
@@ -3430,10 +3464,60 @@ mod community_node_handler_tests {
             .resolve_nostr_relay_urls_from_saved_config()
             .await
             .expect("resolve nostr relays");
-        assert!(relay_urls.contains(&"wss://relay.example/ws".to_string()));
-        assert!(relay_urls.contains(
-            &build_nostr_relay_url_from_base_url(&base_url).expect("base url fallback relay")
-        ));
+        assert_eq!(relay_urls, vec!["wss://relay.example/ws".to_string()]);
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn resolve_nostr_relay_urls_falls_back_to_base_url_when_matching_descriptor_has_no_ws() {
+        let _env_guard = lock_bootstrap_env();
+        let data_dir = temp_bootstrap_data_dir("nostr-relays-fallback");
+        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
+
+        let response = json!({
+            "items": [],
+            "next_refresh_at": Utc::now().timestamp() + 600
+        });
+        let (base_url, rx, handle) = spawn_json_server(response);
+
+        let handler = test_handler();
+        handler
+            .set_config(CommunityNodeConfigRequest {
+                nodes: vec![CommunityNodeConfigNodeRequest {
+                    base_url: base_url.clone(),
+                    roles: Some(CommunityNodeRoleConfig {
+                        labels: false,
+                        trust: false,
+                        search: false,
+                        bootstrap: true,
+                    }),
+                }],
+            })
+            .await
+            .expect("set config");
+
+        let req = rx.recv_timeout(Duration::from_secs(2)).expect("request");
+        assert_eq!(req.path, "/v1/bootstrap/nodes");
+        join_with_timeout(handle, Duration::from_secs(3)).expect("server join");
+
+        let descriptor = build_bootstrap_descriptor_event_with_ws(&base_url, None, &[]);
+        let descriptor_event: NostrEvent =
+            serde_json::from_value(descriptor.clone()).expect("descriptor event");
+        handler
+            .ingest_bootstrap_event(&to_domain_event(&descriptor_event))
+            .await
+            .expect("ingest bootstrap descriptor");
+
+        let relay_urls = handler
+            .resolve_nostr_relay_urls_from_saved_config()
+            .await
+            .expect("resolve nostr relays");
+        assert_eq!(
+            relay_urls,
+            vec![build_nostr_relay_url_from_base_url(&base_url).expect("base url fallback relay")]
+        );
 
         let _ = fs::remove_dir_all(&data_dir);
     }
