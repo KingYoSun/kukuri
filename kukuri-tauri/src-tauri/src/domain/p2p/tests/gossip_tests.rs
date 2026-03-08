@@ -23,7 +23,7 @@ mod tests {
             .bind()
             .await
             .unwrap();
-    IrohGossipService::new(Arc::new(endpoint), static_discovery, true).unwrap()
+        IrohGossipService::new(Arc::new(endpoint), static_discovery, true).unwrap()
     }
 
     #[tokio::test]

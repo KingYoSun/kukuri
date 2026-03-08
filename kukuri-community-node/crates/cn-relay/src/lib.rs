@@ -436,7 +436,8 @@ async fn p2p_status(State(state): State<AppState>) -> impl IntoResponse {
     let runtime = config::RelayRuntimeConfig::from_json(&config_snapshot.config_json);
     let status = evaluate_relay_ready_status(&state).await;
     let desired_topics =
-        match load_enabled_topics(&state.pool, runtime.node_subscription.max_concurrent_topics).await
+        match load_enabled_topics(&state.pool, runtime.node_subscription.max_concurrent_topics)
+            .await
         {
             Ok(topics) => topics,
             Err(err) => {
@@ -454,7 +455,7 @@ async fn p2p_status(State(state): State<AppState>) -> impl IntoResponse {
                     },
                     router_ready: state.p2p_router.read().await.is_some(),
                 })
-                    .into_response();
+                .into_response();
             }
         };
     let node_topics = state.node_topics.read().await.clone();
@@ -474,7 +475,7 @@ async fn p2p_status(State(state): State<AppState>) -> impl IntoResponse {
         gossip_topics: sorted_strings(gossip_topics),
         router_ready,
     })
-        .into_response()
+    .into_response()
 }
 
 fn resolve_p2p_relay_urls_for_info(state: &AppState) -> Vec<String> {
@@ -816,8 +817,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn relay_info_prefers_explicit_advertised_relay_urls() {
+    #[tokio::test]
+    async fn relay_info_prefers_explicit_advertised_relay_urls() {
         let mut state = app_state_for_advertised_endpoint();
         state.p2p_relay_urls = Arc::new(vec!["http://internal-relay:3340".to_string()]);
         state.p2p_advertised_relay_urls = Arc::new(vec!["http://127.0.0.1:3340".to_string()]);

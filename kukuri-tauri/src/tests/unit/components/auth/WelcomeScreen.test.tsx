@@ -47,23 +47,13 @@ describe('WelcomeScreen', () => {
   it('renders welcome content', () => {
     render(<WelcomeScreen />);
 
-    expect(screen.getByText('kukuri縺ｸ繧医≧縺薙◎')).toBeInTheDocument();
-    expect(
-      screen.getByText('蛻・淵蝙九ヨ繝斐ャ繧ｯ荳ｭ蠢・た繝ｼ繧ｷ繝｣繝ｫ繧｢繝励Μ繧ｱ繝ｼ繧ｷ繝ｧ繝ｳ'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('繝ｻ繝医ヴ繝・け繝吶・繧ｹ縺ｮ繧ｿ繧､繝繝ｩ繧､繝ｳ縺ｧ諠・ｱ繧貞・譛・'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('繝ｻP2P繝阪ャ繝医Ρ繝ｼ繧ｯ縺ｫ繧医ｋ讀憺夢閠先ｧ')).toBeInTheDocument();
-    expect(
-      screen.getByText('繝ｻNostr繝励Ο繝医さ繝ｫ縺ｫ繧医ｋ蛻・淵蝙九い繝ｼ繧ｭ繝・け繝√Ε'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: '譁ｰ隕上い繧ｫ繧ｦ繝ｳ繝井ｽ懈・' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: '譌｢蟄倥・骰ｵ縺ｧ繝ｭ繧ｰ繧､繝ｳ' }),
-    ).toBeInTheDocument();
+    expect(screen.getByText('kukuriへようこそ')).toBeInTheDocument();
+    expect(screen.getByText('分散型トピック中心ソーシャルアプリケーション')).toBeInTheDocument();
+    expect(screen.getByText('・トピックベースのタイムラインで情報を共有')).toBeInTheDocument();
+    expect(screen.getByText('・P2Pネットワークによる検閲耐性')).toBeInTheDocument();
+    expect(screen.getByText('・Nostrプロトコルによる分散型アーキテクチャ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新規アカウント作成' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '既存の鍵でログイン' })).toBeInTheDocument();
   });
 
   it('creates an account and navigates to profile setup', async () => {
@@ -72,7 +62,7 @@ describe('WelcomeScreen', () => {
 
     render(<WelcomeScreen />);
 
-    const createButton = screen.getByRole('button', { name: '譁ｰ隕上い繧ｫ繧ｦ繝ｳ繝井ｽ懈・' });
+    const createButton = screen.getByRole('button', { name: '新規アカウント作成' });
     await user.click(createButton);
 
     await waitFor(() => {
@@ -97,8 +87,8 @@ describe('WelcomeScreen', () => {
 
     render(<WelcomeScreen />);
 
-    const createButton = screen.getByRole('button', { name: '譁ｰ隕上い繧ｫ繧ｦ繝ｳ繝井ｽ懈・' });
-    const loginButton = screen.getByRole('button', { name: '譌｢蟄倥・骰ｵ縺ｧ繝ｭ繧ｰ繧､繝ｳ' });
+    const createButton = screen.getByRole('button', { name: '新規アカウント作成' });
+    const loginButton = screen.getByRole('button', { name: '既存の鍵でログイン' });
 
     await user.click(createButton);
     await user.click(createButton);
@@ -121,11 +111,11 @@ describe('WelcomeScreen', () => {
 
     render(<WelcomeScreen />);
 
-    const createButton = screen.getByRole('button', { name: '譁ｰ隕上い繧ｫ繧ｦ繝ｳ繝井ｽ懈・' });
+    const createButton = screen.getByRole('button', { name: '新規アカウント作成' });
     await user.click(createButton);
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('繧｢繧ｫ繧ｦ繝ｳ繝医・菴懈・縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+      expect(toast.error).toHaveBeenCalledWith('アカウントの作成に失敗しました');
     });
 
     expect(errorHandler.log).toHaveBeenCalledWith('Failed to create account', error, {
@@ -139,7 +129,7 @@ describe('WelcomeScreen', () => {
 
     render(<WelcomeScreen />);
 
-    const loginButton = screen.getByRole('button', { name: '譌｢蟄倥・骰ｵ縺ｧ繝ｭ繧ｰ繧､繝ｳ' });
+    const loginButton = screen.getByRole('button', { name: '既存の鍵でログイン' });
     await user.click(loginButton);
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/login' });

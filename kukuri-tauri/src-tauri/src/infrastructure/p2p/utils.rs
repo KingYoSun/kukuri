@@ -31,6 +31,87 @@ pub fn normalize_endpoint_addr(
     normalized
 }
 
+pub fn sanitize_remote_endpoint_addr(
+    endpoint_addr: &EndpointAddr,
+    allow_direct_addrs: bool,
+) -> EndpointAddr {
+    let relay_urls: Vec<_> = endpoint_addr.relay_urls().cloned().collect();
+    let mut normalized = EndpointAddr::new(endpoint_addr.id);
+
+    for relay_url in &relay_urls {
+        normalized = normalized.with_relay_url(relay_url.clone());
+    }
+
+    for socket_addr in endpoint_addr.ip_addrs().cloned() {
+        if allow_direct_addrs
+            || relay_urls.is_empty()
+            || is_globally_reachable_socket_addr(&socket_addr)
+        {
+            normalized = normalized.with_ip_addr(socket_addr);
+        }
+    }
+
+    normalized
+}
+
+fn is_globally_reachable_socket_addr(socket_addr: &SocketAddr) -> bool {
+    match socket_addr.ip() {
+        IpAddr::V4(ip) => is_globally_reachable_ipv4(ip),
+        IpAddr::V6(ip) => is_globally_reachable_ipv6(ip),
+    }
+}
+
+fn is_globally_reachable_ipv4(ip: Ipv4Addr) -> bool {
+    if ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+    {
+        return false;
+    }
+
+    let octets = ip.octets();
+    if octets[0] == 0 {
+        return false;
+    }
+    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
+        return false;
+    }
+    if octets[0] == 169 && octets[1] == 254 {
+        return false;
+    }
+    if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
+        return false;
+    }
+    if octets[0] >= 240 {
+        return false;
+    }
+
+    true
+}
+
+fn is_globally_reachable_ipv6(ip: std::net::Ipv6Addr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
+        return false;
+    }
+
+    let segments = ip.segments();
+    if (segments[0] & 0xfe00) == 0xfc00 {
+        return false;
+    }
+    if (segments[0] & 0xffc0) == 0xfe80 {
+        return false;
+    }
+    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        return false;
+    }
+
+    true
+}
+
 fn parse_endpoint_id(value: &str) -> Result<EndpointId, AppError> {
     EndpointId::from_str(value.trim())
         .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {e}")))
@@ -350,5 +431,37 @@ mod tests {
 
         assert_eq!(normalized.ip_addrs().count(), 1);
         assert_eq!(normalized.relay_urls().count(), 0);
+    }
+
+    #[test]
+    fn sanitize_remote_endpoint_addr_drops_loopback_addrs_when_relay_present() {
+        let node_id = EndpointId::from_str(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let endpoint_addr = EndpointAddr::new(node_id)
+            .with_relay_url(RelayUrl::from_str("https://relay.example").unwrap())
+            .with_ip_addr("127.0.0.1:11223".parse().unwrap());
+
+        let normalized = sanitize_remote_endpoint_addr(&endpoint_addr, false);
+
+        assert_eq!(normalized.relay_urls().count(), 1);
+        assert_eq!(normalized.ip_addrs().count(), 0);
+    }
+
+    #[test]
+    fn sanitize_remote_endpoint_addr_keeps_public_addrs_when_relay_present() {
+        let node_id = EndpointId::from_str(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let endpoint_addr = EndpointAddr::new(node_id)
+            .with_relay_url(RelayUrl::from_str("https://relay.example").unwrap())
+            .with_ip_addr("1.1.1.1:11223".parse().unwrap());
+
+        let normalized = sanitize_remote_endpoint_addr(&endpoint_addr, false);
+
+        assert_eq!(normalized.relay_urls().count(), 1);
+        assert_eq!(normalized.ip_addrs().count(), 1);
     }
 }

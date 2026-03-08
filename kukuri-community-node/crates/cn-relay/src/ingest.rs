@@ -872,8 +872,8 @@ mod tests {
     use super::*;
     use cn_core::rate_limit::RateLimiter;
     use cn_core::service_config;
-    use iroh::address_lookup::MemoryLookup;
     use cn_kip_types::KIND_NODE_TOPIC_SERVICE;
+    use iroh::address_lookup::MemoryLookup;
     use nostr_sdk::prelude::Keys;
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;

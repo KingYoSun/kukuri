@@ -1,6 +1,8 @@
 use super::GossipService;
 use crate::domain::entities::Event;
-use crate::infrastructure::p2p::utils::{ParsedPeer, normalize_endpoint_addr, parse_peer_hint};
+use crate::infrastructure::p2p::utils::{
+    ParsedPeer, normalize_endpoint_addr, parse_peer_hint, sanitize_remote_endpoint_addr,
+};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -144,12 +146,14 @@ impl IrohGossipService {
 
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
+                let sanitized_addr = sanitize_remote_endpoint_addr(addr, self.allow_direct_addrs);
                 eprintln!(
                     "[iroh_gossip_service] {} node addr {} for topic {}",
-                    action, addr.id, topic
+                    action, sanitized_addr.id, topic
                 );
-                self.static_discovery.add_endpoint_info(addr.clone());
-                registered.push(addr.clone());
+                self.static_discovery
+                    .add_endpoint_info(sanitized_addr.clone());
+                registered.push(sanitized_addr);
             }
         }
 
@@ -240,9 +244,12 @@ impl IrohGossipService {
         let (sender_handle, mut receiver) = gossip_topic.split();
 
         if !peer_ids.is_empty() {
-            sender_handle.join_peers(peer_ids.clone()).await.map_err(|e| {
-                AppError::P2PError(format!("Failed to join gossip bootstrap peers: {e:?}"))
-            })?;
+            sender_handle
+                .join_peers(peer_ids.clone())
+                .await
+                .map_err(|e| {
+                    AppError::P2PError(format!("Failed to join gossip bootstrap peers: {e:?}"))
+                })?;
             eprintln!(
                 "[iroh_gossip_service] join_peers issued for topic {} ({} peers)",
                 topic,
@@ -253,9 +260,7 @@ impl IrohGossipService {
         let wait_duration = Duration::from_secs(12);
         match timeout(wait_duration, receiver.joined()).await {
             Ok(Ok(())) => {
-                eprintln!(
-                    "[iroh_gossip_service] first neighbor joined for topic {topic}"
-                );
+                eprintln!("[iroh_gossip_service] first neighbor joined for topic {topic}");
                 initial_neighbors = receiver
                     .neighbors()
                     .map(|neighbor| neighbor.as_bytes().to_vec())
@@ -275,7 +280,10 @@ impl IrohGossipService {
 
         for neighbor in receiver.neighbors() {
             let peer_bytes = neighbor.as_bytes().to_vec();
-            if !initial_neighbors.iter().any(|existing| existing == &peer_bytes) {
+            if !initial_neighbors
+                .iter()
+                .any(|existing| existing == &peer_bytes)
+            {
                 initial_neighbors.push(peer_bytes);
             }
         }
@@ -779,7 +787,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_relay_only_registration_preserves_remote_direct_addr() {
+    async fn test_relay_only_registration_preserves_public_remote_direct_addr() {
+        let static_discovery = Arc::new(MemoryLookup::new());
+        let endpoint = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(static_discovery.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service = IrohGossipService::new(endpoint, static_discovery.clone(), false).unwrap();
+
+        let parsed_peer = parse_peer_hint(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example|addr=1.1.1.1:11223",
+        )
+        .expect("relay+addr peer hint should parse");
+
+        let registered =
+            service.register_initial_peer_addrs("topic", &[parsed_peer.clone()], false);
+
+        assert_eq!(registered.len(), 1);
+        assert_eq!(registered[0].ip_addrs().count(), 1);
+        assert_eq!(registered[0].relay_urls().count(), 1);
+
+        let stored = static_discovery
+            .get_endpoint_info(parsed_peer.node_id)
+            .expect("peer should be stored in discovery")
+            .into_endpoint_addr();
+        assert_eq!(stored.ip_addrs().count(), 1);
+        assert_eq!(stored.relay_urls().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_relay_only_registration_drops_private_remote_direct_addr() {
         let static_discovery = Arc::new(MemoryLookup::new());
         let endpoint = Arc::new(
             Endpoint::empty_builder(iroh::RelayMode::Default)
@@ -799,14 +839,14 @@ mod tests {
             service.register_initial_peer_addrs("topic", &[parsed_peer.clone()], false);
 
         assert_eq!(registered.len(), 1);
-        assert_eq!(registered[0].ip_addrs().count(), 1);
+        assert_eq!(registered[0].ip_addrs().count(), 0);
         assert_eq!(registered[0].relay_urls().count(), 1);
 
         let stored = static_discovery
             .get_endpoint_info(parsed_peer.node_id)
             .expect("peer should be stored in discovery")
             .into_endpoint_addr();
-        assert_eq!(stored.ip_addrs().count(), 1);
+        assert_eq!(stored.ip_addrs().count(), 0);
         assert_eq!(stored.relay_urls().count(), 1);
     }
 }

@@ -11,14 +11,11 @@ async function setControlledInputValue(selector: string, value: string): Promise
   await input.waitForDisplayed({ timeout: 15000 });
   await input.clearValue();
   await input.setValue(value);
-  await browser.waitUntil(
-    async () => (await input.getValue()) === value,
-    {
-      timeout: 10000,
-      interval: 200,
-      timeoutMsg: `Input ${selector} did not retain expected value`,
-    },
-  );
+  await browser.waitUntil(async () => (await input.getValue()) === value, {
+    timeout: 10000,
+    interval: 200,
+    timeoutMsg: `Input ${selector} did not retain expected value`,
+  });
 }
 
 export async function waitForWelcome(): Promise<void> {
@@ -68,6 +65,9 @@ export async function startCreateAccountFlow(): Promise<void> {
       `Failed to start create-account flow: ${
         error instanceof Error ? error.message : String(error)
       }; snapshot=${JSON.stringify(debugSnapshot)}`,
+      {
+        cause: error,
+      },
     );
   }
 }

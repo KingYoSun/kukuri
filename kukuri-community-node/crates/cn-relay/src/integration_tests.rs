@@ -948,27 +948,26 @@ async fn p2p_status_contract_reports_runtime_topics() {
     let response = super::p2p_status(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
     let payload = response_json(response).await;
-    assert_eq!(payload.get("status").and_then(|value| value.as_str()), Some("unavailable"));
+    assert_eq!(
+        payload.get("status").and_then(|value| value.as_str()),
+        Some("unavailable")
+    );
     let desired_topics = payload
         .get("desired_topics")
         .and_then(|value| value.as_array())
         .expect("desired_topics array");
-    assert!(
-        desired_topics
-            .iter()
-            .filter_map(|value| value.as_str())
-            .any(|value| value == topic_id)
-    );
+    assert!(desired_topics
+        .iter()
+        .filter_map(|value| value.as_str())
+        .any(|value| value == topic_id));
     let node_topics = payload
         .get("node_topics")
         .and_then(|value| value.as_array())
         .expect("node_topics array");
-    assert!(
-        node_topics
-            .iter()
-            .filter_map(|value| value.as_str())
-            .any(|value| value == topic_id)
-    );
+    assert!(node_topics
+        .iter()
+        .filter_map(|value| value.as_str())
+        .any(|value| value == topic_id));
     let gossip_topics = payload
         .get("gossip_topics")
         .and_then(|value| value.as_array())

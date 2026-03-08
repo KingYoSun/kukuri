@@ -1027,4 +1027,3 @@ export const useAuthStore = create<AuthStore>()(
     };
   }, createAuthPersistConfig<AuthStore>()),
 );
-

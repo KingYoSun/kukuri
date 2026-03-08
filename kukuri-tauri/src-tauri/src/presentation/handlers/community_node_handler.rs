@@ -2835,12 +2835,12 @@ mod community_node_handler_tests {
     const KUKURI_BOOTSTRAP_PEERS_ENV: &str = "KUKURI_BOOTSTRAP_PEERS";
     static BOOTSTRAP_ENV_GUARD: OnceLock<StdMutex<()>> = OnceLock::new();
 
-fn lock_bootstrap_env() -> MutexGuard<'static, ()> {
-    BOOTSTRAP_ENV_GUARD
-        .get_or_init(|| StdMutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
+    fn lock_bootstrap_env() -> MutexGuard<'static, ()> {
+        BOOTSTRAP_ENV_GUARD
+            .get_or_init(|| StdMutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     struct ScopedEnvVar {
         key: &'static str,

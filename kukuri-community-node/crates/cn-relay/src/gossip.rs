@@ -3,9 +3,8 @@ use base64::prelude::*;
 use cn_core::{metrics, topic};
 use futures_util::StreamExt;
 use iroh::{
-    address_lookup::MemoryLookup,
-    endpoint::QuicTransportConfig, protocol::Router, Endpoint, EndpointAddr, EndpointId, RelayMode,
-    RelayUrl, SecretKey,
+    address_lookup::MemoryLookup, endpoint::QuicTransportConfig, protocol::Router, Endpoint,
+    EndpointAddr, EndpointId, RelayMode, RelayUrl, SecretKey,
 };
 use iroh_gossip::{
     api::{Event, GossipTopic},
@@ -314,9 +313,7 @@ async fn sync_topics(
                     .join_peers(seed_peer_ids.clone())
                     .await
                     .map_err(|err| {
-                        anyhow!(
-                            "failed to join gossip seed peers for topic `{topic_id}`: {err}"
-                        )
+                        anyhow!("failed to join gossip seed peers for topic `{topic_id}`: {err}")
                     })?;
                 tracing::debug!(
                     topic = %topic_id,
@@ -1049,7 +1046,7 @@ mod tests {
 
         let debug = format!("{config:?}");
         assert!(debug.contains("enable_segmentation_offload: false"));
-        assert!(!profile.allows_direct_ip_bind());
+        assert!(profile.allows_direct_ip_bind());
     }
 
     #[test]
@@ -1080,10 +1077,7 @@ mod tests {
             .bind()
             .await
             .expect("unreachable endpoint");
-        let topic_id = format!(
-            "kukuri:relay-subscribe-retry-test:{}",
-            uuid::Uuid::new_v4()
-        );
+        let topic_id = format!("kukuri:relay-subscribe-retry-test:{}", uuid::Uuid::new_v4());
 
         let topic = timeout(
             Duration::from_secs(2),

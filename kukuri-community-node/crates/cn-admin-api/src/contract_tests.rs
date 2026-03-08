@@ -25,6 +25,10 @@ fn relay_subscription_approval_test_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+fn canonical_topic_id(topic_id: &str) -> String {
+    cn_core::topic::normalize_topic_id(topic_id).expect("normalize contract test topic id")
+}
+
 fn database_url() -> String {
     std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/postgres".to_string())
@@ -105,10 +109,11 @@ async fn insert_admin_user(pool: &Pool<Postgres>, password: &str) -> (String, St
 }
 
 async fn insert_membership(pool: &Pool<Postgres>, topic_id: &str, scope: &str, pubkey: &str) {
+    let topic_id = canonical_topic_id(topic_id);
     sqlx::query(
         "INSERT INTO cn_user.topic_memberships          (topic_id, scope, pubkey, status)          VALUES ($1, $2, $3, 'active')          ON CONFLICT (topic_id, scope, pubkey) DO NOTHING",
     )
-    .bind(topic_id)
+    .bind(&topic_id)
     .bind(scope)
     .bind(pubkey)
     .execute(pool)
@@ -281,13 +286,14 @@ async fn insert_service_health(pool: &Pool<Postgres>, service: &str, status: &st
 }
 
 async fn fetch_active_topic_services(pool: &Pool<Postgres>, topic_id: &str) -> Vec<String> {
+    let topic_id = canonical_topic_id(topic_id);
     sqlx::query_scalar::<_, String>(
         "SELECT role || ':' || scope
          FROM cn_admin.topic_services
          WHERE topic_id = $1 AND is_active = TRUE
          ORDER BY role, scope",
     )
-    .bind(topic_id)
+    .bind(&topic_id)
     .fetch_all(pool)
     .await
     .expect("fetch active topic services")
@@ -409,13 +415,14 @@ async fn insert_subscription_request(
     topic_id: &str,
     requested_services: Value,
 ) -> String {
+    let topic_id = canonical_topic_id(topic_id);
     let request_id = Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO cn_user.topic_subscription_requests          (request_id, requester_pubkey, topic_id, requested_services, status)          VALUES ($1, $2, $3, $4, 'pending')",
     )
     .bind(&request_id)
     .bind(requester_pubkey)
-    .bind(topic_id)
+    .bind(&topic_id)
     .bind(requested_services)
     .execute(pool)
     .await
@@ -777,6 +784,7 @@ async fn access_control_rotate_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+    let canonical_topic_id = canonical_topic_id(&topic_id);
     let scope = "invite";
     let member_pubkey = Keys::generate().public_key().to_hex();
     insert_membership(&state.pool, &topic_id, scope, &member_pubkey).await;
@@ -802,7 +810,7 @@ async fn access_control_rotate_contract_success() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         payload.get("topic_id").and_then(Value::as_str),
-        Some(topic_id.as_str())
+        Some(canonical_topic_id.as_str())
     );
     assert_eq!(payload.get("scope").and_then(Value::as_str), Some(scope));
     assert_eq!(payload.get("recipients").and_then(Value::as_u64), Some(1));
@@ -841,6 +849,7 @@ async fn access_control_revoke_contract_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+    let canonical_topic_id = canonical_topic_id(&topic_id);
     let scope = "friend";
     let member_pubkey = Keys::generate().public_key().to_hex();
     insert_membership(&state.pool, &topic_id, scope, &member_pubkey).await;
@@ -868,7 +877,7 @@ async fn access_control_revoke_contract_success() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         payload.get("topic_id").and_then(Value::as_str),
-        Some(topic_id.as_str())
+        Some(canonical_topic_id.as_str())
     );
     assert_eq!(payload.get("scope").and_then(Value::as_str), Some(scope));
     assert_eq!(
@@ -893,6 +902,7 @@ async fn access_control_memberships_contract_search_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let topic_id = format!("kukuri:contract-{}", Uuid::new_v4());
+    let canonical_topic_id = canonical_topic_id(&topic_id);
     let invite_pubkey = Keys::generate().public_key().to_hex();
     let friend_pubkey = Keys::generate().public_key().to_hex();
     insert_membership(&state.pool, &topic_id, "invite", &invite_pubkey).await;
@@ -906,7 +916,7 @@ async fn access_control_memberships_contract_search_success() {
         .with_state(state);
 
     let uri = format!(
-        "/v1/admin/access-control/memberships?topic_id={topic_id}&scope=invite&pubkey={invite_pubkey}&limit=10"
+        "/v1/admin/access-control/memberships?topic_id={canonical_topic_id}&scope=invite&pubkey={invite_pubkey}&limit=10"
     );
     let (status, payload) = get_json_with_session(app, &uri, &session_id).await;
 
@@ -915,7 +925,7 @@ async fn access_control_memberships_contract_search_success() {
     assert_eq!(rows.len(), 1);
     assert_eq!(
         rows[0].get("topic_id").and_then(Value::as_str),
-        Some(topic_id.as_str())
+        Some(canonical_topic_id.as_str())
     );
     assert_eq!(rows[0].get("scope").and_then(Value::as_str), Some("invite"));
     assert_eq!(
@@ -988,6 +998,7 @@ async fn access_control_invite_contract_issue_list_revoke_success() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
     let topic_id = format!("kukuri:invite-contract:{}", Uuid::new_v4());
+    let canonical_topic_id = canonical_topic_id(&topic_id);
     let nonce = format!("invite-{}", Uuid::new_v4().simple());
 
     let app = Router::new()
@@ -1030,7 +1041,7 @@ async fn access_control_invite_contract_issue_list_revoke_success() {
 
     let (status, payload) = get_json_with_session(
         app.clone(),
-        &format!("/v1/admin/access-control/invites?status=active&topic_id={topic_id}"),
+        &format!("/v1/admin/access-control/invites?status=active&topic_id={canonical_topic_id}"),
         &session_id,
     )
     .await;
@@ -1038,6 +1049,7 @@ async fn access_control_invite_contract_issue_list_revoke_success() {
     let rows = payload.as_array().expect("array payload");
     assert!(rows.iter().any(|row| {
         row.get("nonce").and_then(Value::as_str) == Some(issued_nonce.as_str())
+            && row.get("topic_id").and_then(Value::as_str) == Some(canonical_topic_id.as_str())
             && row.get("status").and_then(Value::as_str) == Some("active")
     }));
 
@@ -1056,7 +1068,7 @@ async fn access_control_invite_contract_issue_list_revoke_success() {
 
     let (status, payload) = get_json_with_session(
         app,
-        &format!("/v1/admin/access-control/invites?status=revoked&topic_id={topic_id}"),
+        &format!("/v1/admin/access-control/invites?status=revoked&topic_id={canonical_topic_id}"),
         &session_id,
     )
     .await;
@@ -1064,6 +1076,7 @@ async fn access_control_invite_contract_issue_list_revoke_success() {
     let rows = payload.as_array().expect("array payload");
     assert!(rows.iter().any(|row| {
         row.get("nonce").and_then(Value::as_str) == Some(issued_nonce.as_str())
+            && row.get("topic_id").and_then(Value::as_str) == Some(canonical_topic_id.as_str())
             && row.get("status").and_then(Value::as_str) == Some("revoked")
     }));
 }
@@ -1822,11 +1835,12 @@ async fn admin_mutations_fail_when_audit_log_write_fails() {
     assert_audit_log_required(status, &payload);
 
     let reindex_topic_id = format!("kukuri:topic:reindex-audit-fail:{}", Uuid::new_v4());
+    let canonical_reindex_topic_id = canonical_topic_id(&reindex_topic_id);
     register_audit_failure(
         &state.pool,
         "index.reindex.request",
         "index:reindex",
-        Some(json!({ "topic_id": reindex_topic_id })),
+        Some(json!({ "topic_id": canonical_reindex_topic_id })),
     )
     .await;
     let (status, payload) = post_json(
@@ -3471,6 +3485,8 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     let approve_topic_id = format!("kukuri:topic:approve:{}", Uuid::new_v4());
     let reject_topic_id = format!("kukuri:topic:reject:{}", Uuid::new_v4());
     let manual_topic_id = format!("kukuri:topic:manual:{}", Uuid::new_v4());
+    let canonical_approve_topic_id = canonical_topic_id(&approve_topic_id);
+    let canonical_manual_topic_id = canonical_topic_id(&manual_topic_id);
     let approve_request_id = insert_subscription_request(
         &state.pool,
         &requester_approve,
@@ -3537,7 +3553,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         payload.get("topic_id").and_then(Value::as_str),
-        Some(manual_topic_id.as_str())
+        Some(canonical_manual_topic_id.as_str())
     );
     assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(true));
     assert_eq!(payload.get("ref_count").and_then(Value::as_i64), Some(0));
@@ -3599,7 +3615,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         .expect("approved row");
     assert_eq!(
         approved_row.get("topic_id").and_then(Value::as_str),
-        Some(approve_topic_id.as_str())
+        Some(canonical_approve_topic_id.as_str())
     );
     assert_eq!(
         approved_row.get("requester_pubkey").and_then(Value::as_str),
@@ -3620,7 +3636,9 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     let node_rows = payload.as_array().expect("array payload");
     let node_row = node_rows
         .iter()
-        .find(|row| row.get("topic_id").and_then(Value::as_str) == Some(approve_topic_id.as_str()))
+        .find(|row| {
+            row.get("topic_id").and_then(Value::as_str) == Some(canonical_approve_topic_id.as_str())
+        })
         .expect("node subscription row");
     assert_eq!(node_row.get("enabled").and_then(Value::as_bool), Some(true));
     assert!(node_row.get("ref_count").and_then(Value::as_i64).is_some());
@@ -3652,7 +3670,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
 
     let (status, payload) = put_json(
         app.clone(),
-        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        &format!("/v1/admin/node-subscriptions/{canonical_approve_topic_id}"),
         json!({
             "enabled": false,
             "ingest_policy": {
@@ -3668,7 +3686,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         payload.get("topic_id").and_then(Value::as_str),
-        Some(approve_topic_id.as_str())
+        Some(canonical_approve_topic_id.as_str())
     );
     assert_eq!(payload.get("enabled").and_then(Value::as_bool), Some(false));
     assert!(payload.get("ref_count").and_then(Value::as_i64).is_some());
@@ -3698,7 +3716,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
 
     let (status, payload) = put_json(
         app.clone(),
-        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        &format!("/v1/admin/node-subscriptions/{canonical_approve_topic_id}"),
         json!({ "enabled": true }),
         &session_id,
     )
@@ -3722,7 +3740,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
 
     let (status, payload) = delete_with_session(
         app.clone(),
-        &format!("/v1/admin/node-subscriptions/{approve_topic_id}"),
+        &format!("/v1/admin/node-subscriptions/{canonical_approve_topic_id}"),
         &session_id,
     )
     .await;
@@ -3734,7 +3752,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
 
     let (status, payload) = delete_with_session(
         app.clone(),
-        &format!("/v1/admin/node-subscriptions/{manual_topic_id}"),
+        &format!("/v1/admin/node-subscriptions/{canonical_manual_topic_id}"),
         &session_id,
     )
     .await;
@@ -3750,7 +3768,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
     let stored_policy: Value = sqlx::query_scalar(
         "SELECT ingest_policy FROM cn_admin.node_subscriptions WHERE topic_id = $1",
     )
-    .bind(&approve_topic_id)
+    .bind(&canonical_approve_topic_id)
     .fetch_one(&state.pool)
     .await
     .expect("load stored ingest policy");

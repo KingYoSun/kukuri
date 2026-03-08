@@ -528,7 +528,8 @@ mod tests {
     #[tokio::test]
     async fn rotate_epoch_records_failed_distribution_for_invalid_pubkey() {
         let pool = connect_pool().await;
-        let topic_id = format!("kukuri:core-contract:{}", Uuid::new_v4());
+        let raw_topic_id = format!("kukuri:core-contract:{}", Uuid::new_v4());
+        let topic_id = topic::normalize_topic_id(&raw_topic_id).expect("normalize topic id");
         let scope = "invite";
         let valid_pubkey = Keys::generate().public_key().to_hex();
         let invalid_pubkey = "invalid-pubkey-for-contract-test";

@@ -1,7 +1,7 @@
 use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
-    utils::{normalize_endpoint_addr, parse_peer_hint},
+    utils::{normalize_endpoint_addr, parse_peer_hint, sanitize_remote_endpoint_addr},
 };
 use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
@@ -255,6 +255,10 @@ impl IrohNetworkService {
         address: &str,
         node_addr: iroh::EndpointAddr,
     ) -> Result<(), AppError> {
+        let node_addr = sanitize_remote_endpoint_addr(
+            &node_addr,
+            self.transport_profile.exposes_direct_addresses(),
+        );
         self.static_discovery.add_endpoint_info(node_addr.clone());
         self.upsert_known_peer(node_id, address).await;
         tracing::debug!(
@@ -321,8 +325,12 @@ impl IrohNetworkService {
             Vec::new()
         };
         let relay_urls = effective_node_relay_urls(
-            node_addr.relay_urls().map(|relay_url| relay_url.to_string()),
-            configured_custom_relay_url_strings().ok().unwrap_or_default(),
+            node_addr
+                .relay_urls()
+                .map(|relay_url| relay_url.to_string()),
+            configured_custom_relay_url_strings()
+                .ok()
+                .unwrap_or_default(),
         );
 
         if !relay_urls.is_empty() {
@@ -482,10 +490,12 @@ fn resolve_endpoint_transport_profile() -> Result<EndpointTransportProfile, AppE
 }
 
 pub fn configured_custom_relay_url_strings() -> Result<Vec<String>, AppError> {
-    Ok(parse_custom_relay_urls(std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok().as_deref())?
-        .into_iter()
-        .map(|relay_url| relay_url.to_string())
-        .collect())
+    Ok(
+        parse_custom_relay_urls(std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok().as_deref())?
+            .into_iter()
+            .map(|relay_url| relay_url.to_string())
+            .collect(),
+    )
 }
 
 fn effective_node_relay_urls<I>(
@@ -642,8 +652,10 @@ mod relay_mode_tests {
     fn relay_only_profile_disables_mainline_even_if_discovery_requests_it() {
         let profile = EndpointTransportProfile::RelayOnly;
         assert!(!profile.supports_mainline(DiscoveryOptions::new(true, true, false)));
-        assert!(EndpointTransportProfile::Default
-            .supports_mainline(DiscoveryOptions::new(true, true, false)));
+        assert!(
+            EndpointTransportProfile::Default
+                .supports_mainline(DiscoveryOptions::new(true, true, false))
+        );
     }
 
     #[test]
@@ -669,14 +681,7 @@ mod connectivity_tests {
         SecretKey::from_bytes(&[seed; 32])
     }
 
-    async fn spawn_gossip_peer(
-        seed: u8,
-    ) -> (
-        Endpoint,
-        Gossip,
-        Router,
-        String,
-    ) {
+    async fn spawn_gossip_peer(seed: u8) -> (Endpoint, Gossip, Router, String) {
         let endpoint = Endpoint::empty_builder(RelayMode::Disabled)
             .secret_key(test_secret_key(seed))
             .bind()
@@ -723,7 +728,8 @@ mod connectivity_tests {
 
     #[tokio::test]
     async fn add_peer_keeps_unreachable_hint_for_future_gossip_dial() {
-        let (remote_endpoint, remote_gossip, remote_router, peer_hint) = spawn_gossip_peer(33).await;
+        let (remote_endpoint, remote_gossip, remote_router, peer_hint) =
+            spawn_gossip_peer(33).await;
         let remote_node_id = remote_endpoint.id();
         drop(remote_router);
         drop(remote_gossip);
@@ -750,13 +756,14 @@ mod connectivity_tests {
     }
 
     #[tokio::test]
-    async fn relay_only_add_peer_preserves_remote_direct_addr_in_lookup() {
+    async fn relay_only_add_peer_preserves_public_remote_direct_addr_in_lookup() {
         let (_remote_endpoint, _remote_gossip, _remote_router, direct_peer_hint) =
             spawn_gossip_peer(55).await;
-        let (node_id, endpoint) = direct_peer_hint
+        let (node_id, _endpoint) = direct_peer_hint
             .split_once('@')
             .expect("peer hint should contain endpoint");
-        let relay_and_addr_hint = format!("{node_id}|relay=https://relay.example|addr={endpoint}");
+        let relay_and_addr_hint =
+            format!("{node_id}|relay=https://relay.example|addr=1.1.1.1:11223");
         let remote_node_id = node_id.parse().expect("remote node id");
 
         let mut service = IrohNetworkService::new(
@@ -781,6 +788,42 @@ mod connectivity_tests {
             .into_endpoint_addr();
 
         assert_eq!(stored.ip_addrs().count(), 1);
+        assert_eq!(stored.relay_urls().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn relay_only_add_peer_drops_private_remote_direct_addr_in_lookup() {
+        let (_remote_endpoint, _remote_gossip, _remote_router, direct_peer_hint) =
+            spawn_gossip_peer(77).await;
+        let (node_id, _endpoint) = direct_peer_hint
+            .split_once('@')
+            .expect("peer hint should contain endpoint");
+        let relay_and_addr_hint =
+            format!("{node_id}|relay=https://relay.example|addr=127.0.0.1:11223");
+        let remote_node_id = node_id.parse().expect("remote node id");
+
+        let mut service = IrohNetworkService::new(
+            test_secret_key(88),
+            AppConfig::default().network,
+            DiscoveryOptions::default(),
+            None,
+        )
+        .await
+        .expect("network service");
+        service.transport_profile = super::EndpointTransportProfile::RelayOnly;
+
+        service
+            .add_peer(&relay_and_addr_hint)
+            .await
+            .expect("relay-only add_peer should strip private direct addr");
+
+        let stored = service
+            .static_discovery
+            .get_endpoint_info(remote_node_id)
+            .expect("peer should be stored in address lookup")
+            .into_endpoint_addr();
+
+        assert_eq!(stored.ip_addrs().count(), 0);
         assert_eq!(stored.relay_urls().count(), 1);
     }
 }
@@ -843,7 +886,8 @@ impl NetworkService for IrohNetworkService {
         let node_id = parsed_peer.node_id.to_string();
 
         if let Some(node_addr) = parsed_peer.node_addr {
-            self.register_peer_endpoint(&node_id, address, node_addr).await?;
+            self.register_peer_endpoint(&node_id, address, node_addr)
+                .await?;
         } else {
             tracing::info!(
                 node_id = %node_id,
