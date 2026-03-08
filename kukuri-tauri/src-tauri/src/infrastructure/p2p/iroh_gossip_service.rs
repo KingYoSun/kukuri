@@ -12,7 +12,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex as TokioMutex, RwLock, broadcast, mpsc};
@@ -124,9 +124,9 @@ impl IrohGossipService {
         topic: &str,
         parsed_peers: &[ParsedPeer],
         reuse_existing_topic: bool,
-    ) {
+    ) -> Vec<iroh::EndpointAddr> {
         if parsed_peers.is_empty() {
-            return;
+            return Vec::new();
         }
 
         let action = if reuse_existing_topic {
@@ -134,6 +134,7 @@ impl IrohGossipService {
         } else {
             "applying"
         };
+        let mut registered = Vec::new();
         eprintln!(
             "[iroh_gossip_service] {} {} initial peers for topic {}",
             action,
@@ -148,7 +149,49 @@ impl IrohGossipService {
                     "[iroh_gossip_service] {} node addr {} for topic {}",
                     action, normalized_addr.id, topic
                 );
-                self.static_discovery.add_endpoint_info(normalized_addr);
+                self.static_discovery.add_endpoint_info(normalized_addr.clone());
+                registered.push(normalized_addr);
+            }
+        }
+
+        registered
+    }
+
+    async fn preconnect_initial_peers(&self, topic: &str, peer_addrs: &[iroh::EndpointAddr]) {
+        let mut connected = HashSet::new();
+        for node_addr in peer_addrs {
+            if !connected.insert(node_addr.id) {
+                continue;
+            }
+
+            match timeout(
+                Duration::from_secs(5),
+                self.endpoint.connect(node_addr.clone(), GOSSIP_ALPN),
+            )
+            .await
+            {
+                Ok(Ok(_connection)) => {
+                    tracing::debug!(
+                        topic = %topic,
+                        peer = %node_addr.id,
+                        "Preconnected gossip peer from initial hint"
+                    );
+                }
+                Ok(Err(error)) => {
+                    tracing::warn!(
+                        topic = %topic,
+                        peer = %node_addr.id,
+                        error = %error,
+                        "Failed to preconnect gossip peer from initial hint"
+                    );
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        topic = %topic,
+                        peer = %node_addr.id,
+                        "Timed out preconnecting gossip peer from initial hint"
+                    );
+                }
             }
         }
     }
@@ -172,7 +215,10 @@ impl IrohGossipService {
         parsed_peers: &[ParsedPeer],
         mesh: Option<Arc<TopicMesh>>,
     ) -> Result<(), AppError> {
-        self.register_initial_peer_addrs(topic, parsed_peers, mesh.is_some());
+        let registered_peer_addrs =
+            self.register_initial_peer_addrs(topic, parsed_peers, mesh.is_some());
+        self.preconnect_initial_peers(topic, &registered_peer_addrs)
+            .await;
 
         let canonical_topic = generate_topic_id(topic);
         let topic_id = Self::create_topic_id(&canonical_topic);

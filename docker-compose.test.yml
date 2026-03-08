@@ -156,6 +156,8 @@ services:
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
     volumes:
       # テスト結果の出力用
       - ./test-results:/app/test-results
@@ -228,6 +230,8 @@ services:
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
     volumes:
       - ./test-results:/app/test-results
       - ./tmp/logs:/app/tmp/logs
@@ -270,6 +274,8 @@ services:
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
     volumes:
       - ./test-results:/app/test-results
       - ./tmp/logs:/app/tmp/logs
@@ -316,6 +322,8 @@ services:
       p2p-bootstrap:
         condition: service_healthy
     network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
     volumes:
       - ./test-results:/app/test-results
       - ./tmp/logs:/app/tmp/logs

@@ -124,10 +124,12 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     let poll_interval = Duration::from_secs(config.topic_poll_seconds);
 
     let sync_state = state.clone();
+    let sync_endpoint = endpoint.clone();
     tokio::spawn(async move {
         loop {
             if let Err(err) = sync_topics(
                 &sync_state,
+                &sync_endpoint,
                 &gossip,
                 &senders,
                 &tasks,
@@ -237,6 +239,7 @@ fn apply_bind(
 
 async fn sync_topics(
     state: &AppState,
+    endpoint: &Endpoint,
     gossip: &Gossip,
     senders: &Arc<RwLock<HashMap<String, iroh_gossip::api::GossipSender>>>,
     tasks: &Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
@@ -290,6 +293,12 @@ async fn sync_topics(
             topic = %topic_id,
             registered_seed_addrs = registered_seed_addrs,
             "registered gossip join seed peer addresses"
+        );
+        let preconnected_seed_peers = preconnect_seed_peers(endpoint, &topic_id, &seed_peers).await;
+        tracing::debug!(
+            topic = %topic_id,
+            preconnected_seed_peers = preconnected_seed_peers,
+            "preconnected gossip join seed peers"
         );
         let seed_peer_ids = seed_peers
             .iter()
@@ -410,6 +419,57 @@ fn register_seed_peer_addrs(
         }
     }
     registered
+}
+
+async fn preconnect_seed_peers(
+    endpoint: &Endpoint,
+    topic_id: &str,
+    seed_peers: &[ResolvedSeedPeer],
+) -> usize {
+    let mut connected = 0usize;
+    let mut seen = HashSet::new();
+
+    for seed_peer in seed_peers {
+        let Some(node_addr) = seed_peer.node_addr.clone() else {
+            continue;
+        };
+        if !seen.insert(node_addr.id) {
+            continue;
+        }
+
+        match tokio::time::timeout(
+            Duration::from_secs(5),
+            endpoint.connect(node_addr.clone(), iroh_gossip::ALPN),
+        )
+        .await
+        {
+            Ok(Ok(_connection)) => {
+                connected += 1;
+                tracing::debug!(
+                    topic = %topic_id,
+                    peer = %node_addr.id,
+                    "preconnected gossip seed peer"
+                );
+            }
+            Ok(Err(err)) => {
+                tracing::warn!(
+                    topic = %topic_id,
+                    peer = %node_addr.id,
+                    error = %err,
+                    "failed to preconnect gossip seed peer"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    topic = %topic_id,
+                    peer = %node_addr.id,
+                    "timed out preconnecting gossip seed peer"
+                );
+            }
+        }
+    }
+
+    connected
 }
 
 async fn remove_topic_runtime(

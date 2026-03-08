@@ -1203,7 +1203,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
         $env:E2E_SPEC_PATTERN = "./tests/e2e/specs/community-node.end-to-end.spec.ts"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
-        $env:KUKURI_IROH_RELAY_URLS = "http://127.0.0.1:3340"
+        $env:KUKURI_IROH_RELAY_URLS = "http://cn-iroh-relay:3340"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
         $env:KUKURI_IROH_RELAY_MODE = "custom"
@@ -1216,7 +1216,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL = $baseUrl
     $env:COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL = $relayUrl
     $env:COMMUNITY_NODE_RELAY_IROH_RELAY_URLS = "http://cn-iroh-relay:3340"
-    $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS = "http://127.0.0.1:3340"
+    $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS = "http://cn-iroh-relay:3340"
     $env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE = "custom"
     $env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE = "relay-only"
     $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS = "0"
@@ -1490,7 +1490,7 @@ function Invoke-DesktopE2EMultiPeerScenario {
         $env:KUKURI_PEER_OUTPUT_GROUP = "multi-peer-e2e"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
-        $env:KUKURI_IROH_RELAY_URLS = "http://127.0.0.1:3340"
+        $env:KUKURI_IROH_RELAY_URLS = "http://cn-iroh-relay:3340"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_MODE)) {
         $env:KUKURI_IROH_RELAY_MODE = "custom"

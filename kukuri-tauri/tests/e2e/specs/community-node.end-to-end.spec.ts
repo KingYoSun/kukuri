@@ -519,7 +519,7 @@ describe('Community Node end-to-end UX', () => {
     );
     const expectedIrohRelayUrl = resolveEnvString(
       process.env.KUKURI_IROH_RELAY_URLS,
-      'http://127.0.0.1:3340',
+      'http://cn-iroh-relay:3340',
     );
 
     const publishPrefix = resolveEnvString(
