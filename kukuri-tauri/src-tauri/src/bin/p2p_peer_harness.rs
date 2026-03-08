@@ -9,7 +9,9 @@ use iroh::SecretKey as IrohSecretKey;
 use kukuri_lib::test_support::application::services::p2p_service::{P2PService, P2PStack};
 use kukuri_lib::test_support::application::shared::nostr::EventPublisher;
 use kukuri_lib::test_support::domain::entities::Event as DomainEvent;
-use kukuri_lib::test_support::infrastructure::p2p::iroh_network_service::IrohNetworkService;
+use kukuri_lib::test_support::infrastructure::p2p::iroh_network_service::{
+    IrohNetworkService, configured_custom_relay_url_strings,
+};
 use kukuri_lib::test_support::shared::config::{AppConfig, BootstrapSource, NetworkConfig};
 use nostr_sdk::prelude::{
     Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey,
@@ -460,6 +462,11 @@ async fn resolve_relay_urls(stack: &P2PStack) -> Vec<String> {
     let relay_urls = endpoint_addr
         .relay_urls()
         .map(|relay_url| relay_url.to_string())
+        .chain(
+            configured_custom_relay_url_strings()
+                .unwrap_or_default()
+                .into_iter(),
+        )
         .collect::<Vec<_>>();
     dedupe_in_order(relay_urls)
 }

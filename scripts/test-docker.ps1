@@ -1219,7 +1219,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS = "http://cn-iroh-relay:3340"
     $env:COMMUNITY_NODE_RELAY_IROH_RELAY_MODE = "custom"
     $env:COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE = "relay-only"
-    $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS = "0"
+    $env:COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS = "1"
     $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST = "127.0.0.1"
     $env:COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT = "11223"
     $env:KUKURI_PEER_OUTPUT_GROUP = "community-node-e2e"
@@ -1232,6 +1232,15 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:KUKURI_PEER_PROFILE_NAME_2 = "community-node-peer-publisher-profile"
     $env:KUKURI_PEER_PROFILE_ABOUT_2 = "community node e2e publisher profile"
     $env:KUKURI_PEER_STARTUP_DELAY_MS_2 = "1000"
+    $communityNodeResultDir = Join-Path $repositoryRoot "test-results/community-node-e2e"
+    if (Test-Path $communityNodeResultDir) {
+        Remove-Item -Recurse -Force $communityNodeResultDir
+    }
+    $communityNodeLogDir = Join-Path $repositoryRoot "tmp/logs/community-node-e2e"
+    if (Test-Path $communityNodeLogDir) {
+        Get-ChildItem -Path $communityNodeLogDir -Filter "peer-client-*.log" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
     try {
         Start-CommunityNode -BaseUrl $baseUrl
         $env:KUKURI_BOOTSTRAP_PEERS = Resolve-CommunityNodeBootstrapPeer -P2PInfoUrl $relayP2PInfoUrl

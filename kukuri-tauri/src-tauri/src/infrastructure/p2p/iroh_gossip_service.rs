@@ -144,13 +144,12 @@ impl IrohGossipService {
 
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
-                let normalized_addr = normalize_endpoint_addr(addr, self.allow_direct_addrs);
                 eprintln!(
                     "[iroh_gossip_service] {} node addr {} for topic {}",
-                    action, normalized_addr.id, topic
+                    action, addr.id, topic
                 );
-                self.static_discovery.add_endpoint_info(normalized_addr.clone());
-                registered.push(normalized_addr);
+                self.static_discovery.add_endpoint_info(addr.clone());
+                registered.push(addr.clone());
             }
         }
 
@@ -777,5 +776,37 @@ mod tests {
             );
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_relay_only_registration_preserves_remote_direct_addr() {
+        let static_discovery = Arc::new(MemoryLookup::new());
+        let endpoint = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(static_discovery.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service = IrohGossipService::new(endpoint, static_discovery.clone(), false).unwrap();
+
+        let parsed_peer = parse_peer_hint(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://relay.example|addr=127.0.0.1:11223",
+        )
+        .expect("relay+addr peer hint should parse");
+
+        let registered =
+            service.register_initial_peer_addrs("topic", &[parsed_peer.clone()], false);
+
+        assert_eq!(registered.len(), 1);
+        assert_eq!(registered[0].ip_addrs().count(), 1);
+        assert_eq!(registered[0].relay_urls().count(), 1);
+
+        let stored = static_discovery
+            .get_endpoint_info(parsed_peer.node_id)
+            .expect("peer should be stored in discovery")
+            .into_endpoint_addr();
+        assert_eq!(stored.ip_addrs().count(), 1);
+        assert_eq!(stored.relay_urls().count(), 1);
     }
 }

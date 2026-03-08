@@ -58,8 +58,9 @@ impl EndpointTransportProfile {
 
     fn apply_to_builder(self, builder: iroh::endpoint::Builder) -> iroh::endpoint::Builder {
         match self {
-            Self::Default => builder,
-            Self::RelayOnly => builder.clear_ip_transports(),
+            // Relay-only mode hides direct address hints and disables direct discovery,
+            // but keeps local sockets bound so the endpoint can fully initialize on the relay.
+            Self::Default | Self::RelayOnly => builder,
         }
     }
 
@@ -77,7 +78,7 @@ impl EndpointTransportProfile {
     }
 
     fn allows_direct_ip_bind(self) -> bool {
-        matches!(self, Self::Default)
+        true
     }
 }
 

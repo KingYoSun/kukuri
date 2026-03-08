@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
+use tokio::time::{Duration, timeout};
 use tracing;
 
 const KUKURI_IROH_RELAY_MODE_ENV: &str = "KUKURI_IROH_RELAY_MODE";
@@ -56,8 +57,10 @@ impl EndpointTransportProfile {
 
     fn apply_to_builder(self, builder: iroh::endpoint::Builder) -> iroh::endpoint::Builder {
         match self {
-            Self::Default => builder,
-            Self::RelayOnly => builder.clear_ip_transports(),
+            // Keep the underlying IP transports bound even in relay-only mode.
+            // We suppress direct discovery and direct address advertisement at the app layer,
+            // but the endpoint still needs local sockets for relay initialization and gossip.
+            Self::Default | Self::RelayOnly => builder,
         }
     }
 
@@ -301,7 +304,14 @@ impl IrohNetworkService {
     }
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
         // Resolve local endpoint hints in `node_id@ip:port` and relay hint formats.
-        self.endpoint.online().await;
+        if timeout(Duration::from_secs(10), self.endpoint.online())
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                "Timed out waiting for endpoint online state while resolving node addresses; using current endpoint addr snapshot"
+            );
+        }
         let node_addr = self.endpoint.addr();
         let node_id = node_addr.id.to_string();
         let mut out = Vec::new();
@@ -310,10 +320,10 @@ impl IrohNetworkService {
         } else {
             Vec::new()
         };
-        let relay_urls: Vec<_> = node_addr
-            .relay_urls()
-            .map(|relay_url| relay_url.to_string())
-            .collect();
+        let relay_urls = effective_node_relay_urls(
+            node_addr.relay_urls().map(|relay_url| relay_url.to_string()),
+            configured_custom_relay_url_strings().ok().unwrap_or_default(),
+        );
 
         if !relay_urls.is_empty() {
             if direct_addrs.is_empty() {
@@ -471,6 +481,34 @@ fn resolve_endpoint_transport_profile() -> Result<EndpointTransportProfile, AppE
     )
 }
 
+pub fn configured_custom_relay_url_strings() -> Result<Vec<String>, AppError> {
+    Ok(parse_custom_relay_urls(std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok().as_deref())?
+        .into_iter()
+        .map(|relay_url| relay_url.to_string())
+        .collect())
+}
+
+fn effective_node_relay_urls<I>(
+    endpoint_relay_urls: I,
+    configured_relay_urls: Vec<String>,
+) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut relay_urls = Vec::new();
+    for relay_url in endpoint_relay_urls.into_iter().chain(configured_relay_urls) {
+        let trimmed = relay_url.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let normalized = trimmed.to_string();
+        if !relay_urls.contains(&normalized) {
+            relay_urls.push(normalized);
+        }
+    }
+    relay_urls
+}
+
 fn relay_mode_from_env_values(
     relay_mode_raw: Option<String>,
     relay_urls_raw: Option<String>,
@@ -517,7 +555,10 @@ fn parse_custom_relay_urls(raw: Option<&str>) -> Result<Vec<RelayUrl>, AppError>
 
 #[cfg(test)]
 mod relay_mode_tests {
-    use super::{EndpointTransportProfile, parse_custom_relay_urls, relay_mode_from_env_values};
+    use super::{
+        EndpointTransportProfile, effective_node_relay_urls, parse_custom_relay_urls,
+        relay_mode_from_env_values,
+    };
     use crate::infrastructure::p2p::DiscoveryOptions;
     use iroh::RelayMode;
 
@@ -542,6 +583,37 @@ mod relay_mode_tests {
         let mode = relay_mode_from_env_values(None, Some("https://relay.example".to_string()))
             .expect("relay mode");
         assert!(matches!(mode, RelayMode::Custom(_)));
+    }
+
+    #[test]
+    fn effective_node_relay_urls_falls_back_to_configured_urls() {
+        let effective = effective_node_relay_urls(
+            std::iter::empty(),
+            vec!["https://relay.example".to_string()],
+        );
+        assert_eq!(effective, vec!["https://relay.example".to_string()]);
+    }
+
+    #[test]
+    fn effective_node_relay_urls_dedupes_endpoint_and_configured_entries() {
+        let effective = effective_node_relay_urls(
+            vec![
+                "https://relay.example".to_string(),
+                "https://relay.example/".to_string(),
+            ],
+            vec![
+                "https://relay.example".to_string(),
+                "https://relay-backup.example".to_string(),
+            ],
+        );
+        assert_eq!(
+            effective,
+            vec![
+                "https://relay.example".to_string(),
+                "https://relay.example/".to_string(),
+                "https://relay-backup.example".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -676,6 +748,41 @@ mod connectivity_tests {
         assert_eq!(peers[0].id, remote_node_id.to_string());
         assert_eq!(peers[0].address, peer_hint);
     }
+
+    #[tokio::test]
+    async fn relay_only_add_peer_preserves_remote_direct_addr_in_lookup() {
+        let (_remote_endpoint, _remote_gossip, _remote_router, direct_peer_hint) =
+            spawn_gossip_peer(55).await;
+        let (node_id, endpoint) = direct_peer_hint
+            .split_once('@')
+            .expect("peer hint should contain endpoint");
+        let relay_and_addr_hint = format!("{node_id}|relay=https://relay.example|addr={endpoint}");
+        let remote_node_id = node_id.parse().expect("remote node id");
+
+        let mut service = IrohNetworkService::new(
+            test_secret_key(66),
+            AppConfig::default().network,
+            DiscoveryOptions::default(),
+            None,
+        )
+        .await
+        .expect("network service");
+        service.transport_profile = super::EndpointTransportProfile::RelayOnly;
+
+        service
+            .add_peer(&relay_and_addr_hint)
+            .await
+            .expect("relay-only add_peer should preserve remote addr");
+
+        let stored = service
+            .static_discovery
+            .get_endpoint_info(remote_node_id)
+            .expect("peer should be stored in address lookup")
+            .into_endpoint_addr();
+
+        assert_eq!(stored.ip_addrs().count(), 1);
+        assert_eq!(stored.relay_urls().count(), 1);
+    }
 }
 
 #[async_trait]
@@ -736,8 +843,6 @@ impl NetworkService for IrohNetworkService {
         let node_id = parsed_peer.node_id.to_string();
 
         if let Some(node_addr) = parsed_peer.node_addr {
-            let node_addr =
-                normalize_endpoint_addr(&node_addr, self.transport_profile.exposes_direct_addresses());
             self.register_peer_endpoint(&node_id, address, node_addr).await?;
         } else {
             tracing::info!(

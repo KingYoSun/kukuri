@@ -9,6 +9,8 @@ pub struct ParsedPeer {
     pub node_addr: Option<EndpointAddr>,
 }
 
+// Local hint publication may suppress direct addresses in relay-only mode,
+// but remote peer registration must keep the original EndpointAddr intact.
 pub fn normalize_endpoint_addr(
     endpoint_addr: &EndpointAddr,
     allow_direct_addrs: bool,

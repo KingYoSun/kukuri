@@ -36,16 +36,20 @@ impl DefaultAuthLifecycle {
         self.topic_service.ensure_public_topic().await
     }
 
-    async fn join_default_topics(&self, user_pubkey: &str) {
-        for topic in &self.default_topics {
-            if let Err(err) = self.topic_service.join_topic(topic, user_pubkey).await {
-                debug!(
-                    topic = %topic,
-                    pubkey = %user_pubkey,
-                    error = %err,
-                    "failed to join default topic (ignored)"
-                );
-            }
+    fn join_default_topics(&self, user_pubkey: &str) {
+        for topic in self.default_topics.clone() {
+            let topic_service = Arc::clone(&self.topic_service);
+            let user_pubkey = user_pubkey.to_string();
+            tokio::spawn(async move {
+                if let Err(err) = topic_service.join_topic(&topic, &user_pubkey).await {
+                    debug!(
+                        topic = %topic,
+                        pubkey = %user_pubkey,
+                        error = %err,
+                        "failed to join default topic (ignored)"
+                    );
+                }
+            });
         }
     }
 
@@ -55,7 +59,7 @@ impl DefaultAuthLifecycle {
             .user_service
             .create_user(account.npub.clone(), account.public_key.clone())
             .await?;
-        self.join_default_topics(&account.public_key).await;
+        self.join_default_topics(&account.public_key);
         Ok(user)
     }
 
@@ -69,7 +73,7 @@ impl DefaultAuthLifecycle {
                     .await?
             }
         };
-        self.join_default_topics(&account.public_key).await;
+        self.join_default_topics(&account.public_key);
         Ok(user)
     }
 }
