@@ -3,7 +3,7 @@ use crate::application::services::p2p_service::status::ConnectionStatus;
 use crate::domain::constants::TOPIC_NAMESPACE;
 use crate::domain::p2p::TopicStats;
 use crate::infrastructure::p2p::network_service::Peer;
-use crate::infrastructure::p2p::{GossipService, NetworkService, metrics};
+use crate::infrastructure::p2p::{DiscoveryOptions, GossipService, NetworkService, metrics};
 use crate::shared::{AppError, config::BootstrapSource};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -220,7 +220,12 @@ async fn test_initialize() {
 #[tokio::test]
 async fn test_apply_bootstrap_nodes_forwards_to_network() {
     let network = Arc::new(MockNetworkServ::new());
-    let gossip = Arc::new(MockGossipServ::new());
+    let mut mock_gossip = MockGossipServ::new();
+    mock_gossip
+        .expect_get_joined_topics()
+        .times(1)
+        .return_once(|| Ok(Vec::new()));
+    let gossip = Arc::new(mock_gossip);
     let service = P2PService::new(
         Arc::clone(&network) as Arc<dyn NetworkService>,
         gossip as Arc<dyn GossipService>,
@@ -240,6 +245,62 @@ async fn test_apply_bootstrap_nodes_forwards_to_network() {
     assert_eq!(
         network.applied_bootstrap_source(),
         Some(BootstrapSource::User)
+    );
+}
+
+#[tokio::test]
+async fn test_apply_bootstrap_nodes_rejoins_existing_topics_with_new_hints() {
+    let network = Arc::new(MockNetworkServ::new());
+    let mut mock_gossip = MockGossipServ::new();
+    mock_gossip
+        .expect_get_joined_topics()
+        .times(1)
+        .return_once(|| Ok(vec!["topic-a".to_string(), "topic-b".to_string()]));
+    mock_gossip
+        .expect_join_topic()
+        .with(
+            eq("topic-a"),
+            eq(vec![
+                "node1|relay=http://relay.example".to_string(),
+                "node2|relay=http://relay.example".to_string(),
+            ]),
+        )
+        .times(1)
+        .return_once(|_, _| Ok(()));
+    mock_gossip
+        .expect_join_topic()
+        .with(
+            eq("topic-b"),
+            eq(vec![
+                "node1|relay=http://relay.example".to_string(),
+                "node2|relay=http://relay.example".to_string(),
+            ]),
+        )
+        .times(1)
+        .return_once(|_, _| Ok(()));
+
+    let service = P2PService::new(
+        Arc::clone(&network) as Arc<dyn NetworkService>,
+        Arc::new(mock_gossip) as Arc<dyn GossipService>,
+    );
+
+    let nodes = vec![
+        "node2|relay=http://relay.example".to_string(),
+        "node1|relay=http://relay.example".to_string(),
+        " node1|relay=http://relay.example ".to_string(),
+    ];
+
+    service
+        .apply_bootstrap_nodes(nodes, BootstrapSource::User)
+        .await
+        .expect("apply bootstrap nodes");
+
+    assert_eq!(
+        network.applied_bootstrap_nodes(),
+        vec![
+            "node1|relay=http://relay.example".to_string(),
+            "node2|relay=http://relay.example".to_string(),
+        ]
     );
 }
 
@@ -264,6 +325,30 @@ async fn test_join_topic_success() {
         .await;
     assert!(result.is_ok());
     assert_eq!(network.join_dht_calls(), vec!["test_topic".to_string()]);
+}
+
+#[tokio::test]
+async fn test_join_topic_skips_dht_when_mainline_disabled() {
+    let network = Arc::new(MockNetworkServ::new());
+    let mut mock_gossip = MockGossipServ::new();
+
+    mock_gossip
+        .expect_join_topic()
+        .with(eq("relay_only_topic"), eq(vec!["peer1".to_string()]))
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    let service = P2PService::with_discovery(
+        network.clone(),
+        Arc::new(mock_gossip),
+        DiscoveryOptions::new(true, false, false),
+    );
+
+    let result = service
+        .join_topic("relay_only_topic", vec!["peer1".to_string()])
+        .await;
+    assert!(result.is_ok());
+    assert!(network.join_dht_calls().is_empty());
 }
 
 #[tokio::test]
@@ -384,6 +469,36 @@ async fn test_broadcast_message() {
     assert_eq!(broadcast_calls.len(), 1);
     assert_eq!(broadcast_calls[0].0, "test_topic".to_string());
     assert_eq!(String::from_utf8_lossy(&broadcast_calls[0].1), test_content);
+}
+
+#[tokio::test]
+async fn test_broadcast_message_skips_dht_when_mainline_disabled() {
+    let network = Arc::new(MockNetworkServ::new());
+    let mut mock_gossip = MockGossipServ::new();
+
+    mock_gossip
+        .expect_get_joined_topics()
+        .times(1)
+        .returning(|| Ok(vec!["relay_only_topic".to_string()]));
+
+    mock_gossip
+        .expect_broadcast_message()
+        .with(eq("relay_only_topic"), eq("relay payload".as_bytes()))
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    let service = P2PService::with_discovery(
+        network.clone(),
+        Arc::new(mock_gossip),
+        DiscoveryOptions::new(true, false, false),
+    );
+
+    let result = service
+        .broadcast_message("relay_only_topic", "relay payload")
+        .await;
+    assert!(result.is_ok());
+    assert!(network.join_dht_calls().is_empty());
+    assert!(network.broadcast_dht_calls().is_empty());
 }
 
 #[tokio::test]

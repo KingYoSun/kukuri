@@ -3,6 +3,7 @@ use base64::prelude::*;
 use cn_core::{metrics, topic};
 use futures_util::StreamExt;
 use iroh::{
+    address_lookup::MemoryLookup,
     endpoint::QuicTransportConfig, protocol::Router, Endpoint, EndpointAddr, EndpointId, RelayMode,
     RelayUrl, SecretKey,
 };
@@ -32,6 +33,53 @@ const GOSSIP_JOIN_REASON_SUBSCRIBE_FAILED: &str = "subscribe_failed";
 const GOSSIP_JOIN_REASON_SUBSCRIBE_RETRY: &str = "subscribe_retry";
 const GOSSIP_JOIN_REASON_SEED_RESOLUTION_FAILED: &str = "seed_resolution_failed";
 const RELAY_IROH_TRANSPORT_PROFILE_ENV: &str = "RELAY_IROH_TRANSPORT_PROFILE";
+const ENDPOINT_ONLINE_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EndpointTransportProfile {
+    Default,
+    RelayOnly,
+}
+
+impl EndpointTransportProfile {
+    fn from_env_value(raw: Option<&str>) -> Result<Self> {
+        let Some(raw) = raw else {
+            return Ok(Self::Default);
+        };
+
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "default" => Ok(Self::Default),
+            "relay-only" | "relay_only" => Ok(Self::RelayOnly),
+            other => Err(anyhow!(
+                "invalid {RELAY_IROH_TRANSPORT_PROFILE_ENV} value `{other}`"
+            )),
+        }
+    }
+
+    fn apply_to_builder(self, builder: iroh::endpoint::Builder) -> iroh::endpoint::Builder {
+        match self {
+            Self::Default => builder,
+            Self::RelayOnly => builder.clear_ip_transports(),
+        }
+    }
+
+    fn quic_transport_config(self) -> Option<QuicTransportConfig> {
+        match self {
+            Self::Default => None,
+            Self::RelayOnly => Some(
+                QuicTransportConfig::builder()
+                    .enable_segmentation_offload(false)
+                    .send_observed_address_reports(false)
+                    .receive_observed_address_reports(false)
+                    .build(),
+            ),
+        }
+    }
+
+    fn allows_direct_ip_bind(self) -> bool {
+        matches!(self, Self::Default)
+    }
+}
 
 #[derive(Debug, serde::Deserialize)]
 struct BootstrapHintPayload {
@@ -46,7 +94,8 @@ struct ResolvedSeedPeer {
 }
 
 pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
-    let endpoint = build_endpoint(&config).await?;
+    let endpoint = build_endpoint(&state, &config).await?;
+    wait_for_endpoint_online(&endpoint).await;
     let node_id = endpoint.id().to_string();
     {
         let mut guard = state.p2p_node_id.write().await;
@@ -70,7 +119,6 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
 
     let senders = Arc::clone(&state.gossip_senders);
     let node_topics = Arc::clone(&state.node_topics);
-    let rejoin_requests = Arc::clone(&state.bootstrap_hint_rejoin_requests);
     let tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>> =
         Arc::new(RwLock::new(HashMap::new()));
     let poll_interval = Duration::from_secs(config.topic_poll_seconds);
@@ -80,12 +128,10 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
         loop {
             if let Err(err) = sync_topics(
                 &sync_state,
-                &endpoint,
                 &gossip,
                 &senders,
                 &tasks,
                 &node_topics,
-                &rejoin_requests,
             )
             .await
             {
@@ -100,13 +146,39 @@ pub async fn start_gossip(state: AppState, config: RelayConfig) -> Result<()> {
     Ok(())
 }
 
-async fn build_endpoint(config: &RelayConfig) -> Result<Endpoint> {
+async fn wait_for_endpoint_online(endpoint: &Endpoint) {
+    match tokio::time::timeout(ENDPOINT_ONLINE_TIMEOUT, endpoint.online()).await {
+        Ok(()) => {
+            let addr = endpoint.addr();
+            tracing::info!(
+                endpoint_id = %endpoint.id(),
+                relay_urls = ?addr.relay_urls().collect::<Vec<_>>(),
+                ip_addrs = ?addr.ip_addrs().collect::<Vec<_>>(),
+                "relay p2p endpoint reported online"
+            );
+        }
+        Err(_) => {
+            tracing::warn!(
+                endpoint_id = %endpoint.id(),
+                timeout_secs = ENDPOINT_ONLINE_TIMEOUT.as_secs(),
+                "timed out waiting for relay p2p endpoint to report online"
+            );
+        }
+    }
+}
+
+async fn build_endpoint(state: &AppState, config: &RelayConfig) -> Result<Endpoint> {
     let relay_mode = resolve_relay_mode(config)?;
-    let mut builder = Endpoint::empty_builder(relay_mode).clear_ip_transports();
-    if let Some(transport_config) = resolve_transport_config()? {
+    let transport_profile = resolve_transport_profile()?;
+    let mut builder = transport_profile
+        .apply_to_builder(Endpoint::empty_builder(relay_mode))
+        .address_lookup(state.p2p_address_lookup.as_ref().clone());
+    if let Some(transport_config) = transport_profile.quic_transport_config() {
         builder = builder.transport_config(transport_config);
     }
-    builder = apply_bind(builder, config.p2p_bind_addr)?;
+    if transport_profile.allows_direct_ip_bind() {
+        builder = apply_bind(builder, config.p2p_bind_addr)?;
+    }
     if let Some(secret) = &config.p2p_secret_key {
         let decoded = BASE64_STANDARD
             .decode(secret.trim())
@@ -145,32 +217,12 @@ fn resolve_relay_mode(config: &RelayConfig) -> Result<RelayMode> {
     Ok(RelayMode::custom(relay_urls))
 }
 
-fn resolve_transport_config() -> Result<Option<QuicTransportConfig>> {
-    transport_config_from_env_value(
+fn resolve_transport_profile() -> Result<EndpointTransportProfile> {
+    EndpointTransportProfile::from_env_value(
         std::env::var(RELAY_IROH_TRANSPORT_PROFILE_ENV)
             .ok()
             .as_deref(),
     )
-}
-
-fn transport_config_from_env_value(raw: Option<&str>) -> Result<Option<QuicTransportConfig>> {
-    let Some(raw) = raw else {
-        return Ok(None);
-    };
-
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "" | "default" => Ok(None),
-        "relay-only" | "relay_only" => Ok(Some(
-            QuicTransportConfig::builder()
-                .enable_segmentation_offload(false)
-                .send_observed_address_reports(false)
-                .receive_observed_address_reports(false)
-                .build(),
-        )),
-        other => Err(anyhow!(
-            "invalid {RELAY_IROH_TRANSPORT_PROFILE_ENV} value `{other}`"
-        )),
-    }
 }
 
 fn apply_bind(
@@ -185,12 +237,10 @@ fn apply_bind(
 
 async fn sync_topics(
     state: &AppState,
-    endpoint: &Endpoint,
     gossip: &Gossip,
     senders: &Arc<RwLock<HashMap<String, iroh_gossip::api::GossipSender>>>,
     tasks: &Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     node_topics: &Arc<RwLock<HashSet<String>>>,
-    rejoin_requests: &Arc<RwLock<HashSet<String>>>,
 ) -> Result<()> {
     let runtime_snapshot = state.config.get().await;
     let runtime = RelayRuntimeConfig::from_json(&runtime_snapshot.config_json);
@@ -205,20 +255,6 @@ async fn sync_topics(
         let guard = senders.read().await;
         guard.keys().cloned().collect::<HashSet<_>>()
     };
-
-    let requested_rejoin_topics = {
-        let mut guard = rejoin_requests.write().await;
-        let snapshot = guard.clone();
-        guard.clear();
-        snapshot
-    };
-
-    for topic_id in requested_rejoin_topics {
-        if desired.contains(&topic_id) && current.contains(&topic_id) {
-            remove_topic_runtime(&topic_id, senders, tasks).await;
-            current.remove(&topic_id);
-        }
-    }
 
     let to_add: Vec<String> = desired.difference(&current).cloned().collect();
     for topic_id in to_add {
@@ -248,15 +284,36 @@ async fn sync_topics(
             seed_with_addr = seed_with_addr,
             "resolved gossip join seed peers"
         );
-        connect_seed_peers(endpoint, &seed_peers).await;
+        let registered_seed_addrs =
+            register_seed_peer_addrs(state.p2p_address_lookup.as_ref(), &seed_peers);
+        tracing::debug!(
+            topic = %topic_id,
+            registered_seed_addrs = registered_seed_addrs,
+            "registered gossip join seed peer addresses"
+        );
         let seed_peer_ids = seed_peers
             .iter()
             .map(|peer| peer.node_id.clone())
             .collect::<Vec<_>>();
 
         let sender_handle = {
-            let topic = subscribe_topic_with_retry(gossip, &topic_id, seed_peer_ids).await?;
+            let topic = subscribe_topic_with_retry(gossip, &topic_id, &seed_peer_ids).await?;
             let (sender, mut receiver) = topic.split();
+            if !seed_peer_ids.is_empty() {
+                sender
+                    .join_peers(seed_peer_ids.clone())
+                    .await
+                    .map_err(|err| {
+                        anyhow!(
+                            "failed to join gossip seed peers for topic `{topic_id}`: {err}"
+                        )
+                    })?;
+                tracing::debug!(
+                    topic = %topic_id,
+                    seed_peer_count = seed_peer_ids.len(),
+                    "issued gossip join_peers for resolved seed peers"
+                );
+            }
             let ingest_state = state.clone();
             let topic_clone = topic_id.clone();
             let handle = tokio::spawn(async move {
@@ -339,6 +396,20 @@ async fn sync_topics(
     }
 
     Ok(())
+}
+
+fn register_seed_peer_addrs(
+    address_lookup: &MemoryLookup,
+    seed_peers: &[ResolvedSeedPeer],
+) -> usize {
+    let mut registered = 0usize;
+    for seed_peer in seed_peers {
+        if let Some(node_addr) = seed_peer.node_addr.clone() {
+            address_lookup.add_endpoint_info(node_addr);
+            registered += 1;
+        }
+    }
+    registered
 }
 
 async fn remove_topic_runtime(
@@ -442,45 +513,10 @@ fn collect_p2p_hints_from_bootstrap_event(event_json: &serde_json::Value) -> Vec
     hints
 }
 
-async fn connect_seed_peers(endpoint: &Endpoint, seed_peers: &[ResolvedSeedPeer]) {
-    for seed_peer in seed_peers {
-        let Some(node_addr) = seed_peer.node_addr.clone() else {
-            continue;
-        };
-
-        match tokio::time::timeout(
-            Duration::from_secs(3),
-            endpoint.connect(node_addr.clone(), iroh_gossip::ALPN),
-        )
-        .await
-        {
-            Ok(Ok(_conn)) => {
-                tracing::debug!(
-                    peer = %seed_peer.node_id,
-                    "connected seed peer before gossip subscribe"
-                );
-            }
-            Ok(Err(err)) => {
-                tracing::warn!(
-                    peer = %seed_peer.node_id,
-                    error = %err,
-                    "failed to connect seed peer before gossip subscribe"
-                );
-            }
-            Err(_) => {
-                tracing::warn!(
-                    peer = %seed_peer.node_id,
-                    "timed out connecting seed peer before gossip subscribe"
-                );
-            }
-        }
-    }
-}
-
 async fn subscribe_topic_with_retry(
     gossip: &Gossip,
     topic_id: &str,
-    seed_peer_ids: Vec<EndpointId>,
+    bootstrap_peers: &[EndpointId],
 ) -> Result<GossipTopic> {
     let started_at = Instant::now();
     let mut attempt = 0usize;
@@ -488,18 +524,18 @@ async fn subscribe_topic_with_retry(
     loop {
         attempt += 1;
         let topic_bytes = topic::topic_id_to_gossip_bytes(topic_id)?;
-        let subscribe_result = if seed_peer_ids.is_empty() {
-            gossip
-                .subscribe(TopicId::from(topic_bytes), Vec::new())
-                .await
-        } else {
-            gossip
-                .subscribe_and_join(TopicId::from(topic_bytes), seed_peer_ids.clone())
-                .await
-        };
+        let subscribe_result = gossip
+            .subscribe(TopicId::from(topic_bytes), bootstrap_peers.to_vec())
+            .await;
 
         match subscribe_result {
             Ok(topic) => {
+                tracing::debug!(
+                    topic = %topic_id,
+                    bootstrap_peer_count = bootstrap_peers.len(),
+                    attempt = attempt,
+                    "subscribed gossip topic without blocking on immediate neighbor establishment"
+                );
                 metrics::inc_gossip_join_total(
                     super::SERVICE_NAME,
                     GOSSIP_JOIN_RESULT_SUCCESS,
@@ -753,11 +789,6 @@ pub(crate) fn spawn_bootstrap_hint_bridge(state: AppState) -> oneshot::Receiver<
                 if let Err(err) = publish_bootstrap_events_to_topic(&state, &topic_id).await {
                     tracing::warn!(error = %err, topic_id = %topic_id, "bootstrap hint bridge publish failed");
                 }
-                state
-                    .bootstrap_hint_rejoin_requests
-                    .write()
-                    .await
-                    .insert(topic_id);
             }
         }
     });
@@ -838,11 +869,13 @@ mod tests {
     use super::*;
     use cn_core::rate_limit::RateLimiter;
     use cn_core::service_config;
+    use iroh::address_lookup::MemoryLookup;
     use serde_json::json;
     use sqlx::postgres::PgPoolOptions;
     use std::collections::{HashMap, HashSet};
     use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
     use tokio::sync::{broadcast, RwLock};
+    use tokio::time::timeout;
 
     fn test_state() -> AppState {
         let pool = PgPoolOptions::new()
@@ -872,6 +905,7 @@ mod tests {
             p2p_public_host: None,
             p2p_public_port: None,
             p2p_node_id: Arc::new(RwLock::new(None)),
+            p2p_address_lookup: Arc::new(MemoryLookup::new()),
             p2p_bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
             p2p_relay_urls: Arc::new(Vec::new()),
             p2p_advertised_relay_urls: Arc::new(Vec::new()),
@@ -946,20 +980,59 @@ mod tests {
 
     #[test]
     fn transport_profile_supports_relay_only() {
-        let config = transport_config_from_env_value(Some("relay-only"))
-            .expect("transport config should parse")
+        let profile =
+            EndpointTransportProfile::from_env_value(Some("relay-only")).expect("profile parse");
+        let config = profile
+            .quic_transport_config()
             .expect("relay-only config should be present");
 
         let debug = format!("{config:?}");
         assert!(debug.contains("enable_segmentation_offload: false"));
+        assert!(!profile.allows_direct_ip_bind());
     }
 
     #[test]
     fn transport_profile_rejects_unknown_values() {
-        let err = transport_config_from_env_value(Some("invalid-profile"))
+        let err = EndpointTransportProfile::from_env_value(Some("invalid-profile"))
             .expect_err("invalid transport profile should fail");
         assert!(err
             .to_string()
             .contains("invalid RELAY_IROH_TRANSPORT_PROFILE value"));
+    }
+
+    #[tokio::test]
+    async fn subscribe_topic_with_retry_does_not_block_on_unreachable_bootstrap_peer() {
+        let endpoint = Endpoint::empty_builder(RelayMode::Disabled)
+            .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .expect("bind addr")
+            .bind()
+            .await
+            .expect("endpoint");
+        let gossip = Gossip::builder().spawn(endpoint.clone());
+        let router = Router::builder(endpoint)
+            .accept(iroh_gossip::ALPN, gossip.clone())
+            .spawn();
+
+        let unreachable_endpoint = Endpoint::empty_builder(RelayMode::Disabled)
+            .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .expect("bind addr b")
+            .bind()
+            .await
+            .expect("unreachable endpoint");
+        let topic_id = format!(
+            "kukuri:relay-subscribe-retry-test:{}",
+            uuid::Uuid::new_v4()
+        );
+
+        let topic = timeout(
+            Duration::from_secs(2),
+            subscribe_topic_with_retry(&gossip, &topic_id, &[unreachable_endpoint.id()]),
+        )
+        .await
+        .expect("subscribe should not block on unreachable bootstrap peer")
+        .expect("subscribe topic");
+
+        drop(topic);
+        let _ = timeout(Duration::from_secs(2), router.shutdown()).await;
     }
 }

@@ -1,4 +1,4 @@
-﻿import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -46,7 +46,7 @@ export function ProfileSetup() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentUser, updateUser } = useAuthStore();
+  const { currentUser, updateUser, finalizeDeferredInitialization } = useAuthStore();
   useTheme(); // Apply theme to HTML element
   const { publicProfile, showOnlineStatus } = usePrivacySettingsStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -72,7 +72,7 @@ export function ProfileSetup() {
 
   const navigateHome = async () => {
     try {
-      await navigate({ to: '/' });
+      await navigate({ to: '/', replace: true });
     } catch (navError) {
       errorHandler.log('ProfileSetup.navigateFailed', navError, {
         context: 'ProfileSetup.navigateHome',
@@ -266,6 +266,11 @@ export function ProfileSetup() {
       } else {
         toast.success(t('auth.profileSetupSuccess'));
       }
+      await withTimeout(
+        finalizeDeferredInitialization(currentUser.npub),
+        PROFILE_SETUP_LOCAL_STEP_TIMEOUT_MS,
+        'finalizeDeferredInitialization',
+      );
       shouldNavigateRef.current = true;
     } catch (error) {
       toast.error(t('auth.profileSetupFailed'));
@@ -281,7 +286,7 @@ export function ProfileSetup() {
   };
 
   const handleSkip = () => {
-    void navigateHome();
+    void navigate({ to: '/', replace: true });
   };
 
   return (

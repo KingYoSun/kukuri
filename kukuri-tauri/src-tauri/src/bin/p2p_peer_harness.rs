@@ -374,6 +374,13 @@ fn parse_node_id_from_address(address: &str) -> Option<String> {
     if trimmed.is_empty() {
         return None;
     }
+    if let Some((node_id, _)) = trimmed.split_once('|') {
+        let node_id = node_id.trim();
+        if !node_id.is_empty() {
+            return Some(node_id.to_string());
+        }
+        return None;
+    }
     if let Some((node_id, _)) = trimmed.split_once('@') {
         let node_id = node_id.trim();
         if !node_id.is_empty() {
@@ -385,6 +392,15 @@ fn parse_node_id_from_address(address: &str) -> Option<String> {
 }
 
 fn parse_endpoint_from_address(address: &str) -> Option<String> {
+    for segment in address.split('|').skip(1) {
+        let (key, value) = segment.split_once('=')?;
+        if key.trim().eq_ignore_ascii_case("addr") {
+            let endpoint = value.trim();
+            if !endpoint.is_empty() {
+                return Some(endpoint.to_string());
+            }
+        }
+    }
     let (_, endpoint) = address.split_once('@')?;
     let endpoint = endpoint.trim();
     if endpoint.is_empty() {
@@ -397,7 +413,7 @@ fn build_connection_hints(node_addresses: &[String], relay_urls: &[String]) -> V
     let node_id = node_addresses
         .iter()
         .find_map(|address| parse_node_id_from_address(address));
-    let mut hints = Vec::new();
+    let mut hints = node_addresses.to_vec();
 
     if let Some(node_id) = node_id {
         let endpoints: Vec<_> = node_addresses
@@ -405,17 +421,23 @@ fn build_connection_hints(node_addresses: &[String], relay_urls: &[String]) -> V
             .filter_map(|address| parse_endpoint_from_address(address))
             .collect();
 
-        for endpoint in endpoints {
-            for relay_url in relay_urls {
-                hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
+        if !endpoints.is_empty() {
+            for endpoint in endpoints {
+                for relay_url in relay_urls {
+                    hints.push(format!("{node_id}|relay={relay_url}|addr={endpoint}"));
+                }
             }
         }
-        for relay_url in relay_urls {
-            hints.push(format!("{node_id}|relay={relay_url}"));
+
+        let has_relay_only_hint = node_addresses
+            .iter()
+            .any(|address| address.contains("|relay=") && !address.contains("|addr="));
+        if !has_relay_only_hint {
+            for relay_url in relay_urls {
+                hints.push(format!("{node_id}|relay={relay_url}"));
+            }
         }
     }
-
-    hints.extend(node_addresses.iter().cloned());
     dedupe_in_order(hints)
 }
 

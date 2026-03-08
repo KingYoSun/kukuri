@@ -103,6 +103,7 @@ fn build_state_with_config(pool: Pool<Postgres>, config_json: serde_json::Value)
         p2p_public_host: None,
         p2p_public_port: None,
         p2p_node_id: Arc::new(RwLock::new(None)),
+        p2p_address_lookup: Arc::new(MemoryLookup::new()),
         p2p_bind_addr: "0.0.0.0:11223".parse().expect("p2p bind addr"),
         p2p_relay_urls: Arc::new(Vec::new()),
         p2p_advertised_relay_urls: Arc::new(Vec::new()),
@@ -927,6 +928,52 @@ async fn healthz_contract_topic_sync_degraded_shape_compatible() {
         payload.get("status").and_then(|value| value.as_str()),
         Some("degraded")
     );
+}
+
+#[tokio::test]
+async fn p2p_status_contract_reports_runtime_topics() {
+    let _guard = acquire_integration_test_lock().await;
+
+    let pool = PgPoolOptions::new()
+        .connect(&database_url())
+        .await
+        .expect("connect database");
+    ensure_migrated(&pool).await;
+    let state = build_state(pool.clone());
+    reset_topic_health_state(&pool, &state).await;
+
+    let topic_id = format!("kukuri:relay-p2p-status-it-{}", Uuid::new_v4());
+    enable_topic(&pool, &state, &topic_id).await;
+
+    let response = super::p2p_status(State(state)).await.into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await;
+    assert_eq!(payload.get("status").and_then(|value| value.as_str()), Some("unavailable"));
+    let desired_topics = payload
+        .get("desired_topics")
+        .and_then(|value| value.as_array())
+        .expect("desired_topics array");
+    assert!(
+        desired_topics
+            .iter()
+            .filter_map(|value| value.as_str())
+            .any(|value| value == topic_id)
+    );
+    let node_topics = payload
+        .get("node_topics")
+        .and_then(|value| value.as_array())
+        .expect("node_topics array");
+    assert!(
+        node_topics
+            .iter()
+            .filter_map(|value| value.as_str())
+            .any(|value| value == topic_id)
+    );
+    let gossip_topics = payload
+        .get("gossip_topics")
+        .and_then(|value| value.as_array())
+        .expect("gossip_topics array");
+    assert!(gossip_topics.is_empty());
 }
 
 #[tokio::test]
@@ -3141,6 +3188,7 @@ async fn bootstrap_hint_notify_bridges_bootstrap_events_to_gossip() {
         &[descriptor.id.as_str(), topic_service.id.as_str()],
     )
     .await;
+    assert!(state.gossip_senders.read().await.contains_key(&topic_id));
 
     let _ = timeout(WAIT_TIMEOUT, harness.router_a.shutdown()).await;
     let _ = timeout(WAIT_TIMEOUT, harness.router_b.shutdown()).await;

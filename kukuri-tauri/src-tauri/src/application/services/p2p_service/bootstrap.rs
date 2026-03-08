@@ -80,18 +80,27 @@ impl P2PServiceBuilder {
         );
         let endpoint_arc = iroh_network.endpoint().clone();
         let static_discovery = iroh_network.static_discovery();
-        let mut gossip_inner = IrohGossipService::new(endpoint_arc, static_discovery)?;
+        let mut gossip_inner = IrohGossipService::new(
+            endpoint_arc,
+            static_discovery,
+            iroh_network.exposes_direct_addresses(),
+        )?;
         if let Some(tx) = gossip_event_sender {
             gossip_inner.set_event_sender(tx);
         }
         let iroh_gossip = Arc::new(gossip_inner);
+        let effective_discovery_options = if iroh_network.supports_mainline() {
+            discovery_options
+        } else {
+            discovery_options.with_mainline(false)
+        };
 
         let network_service_dyn: Arc<dyn NetworkService> = iroh_network.clone();
         let gossip_service_dyn: Arc<dyn GossipService> = iroh_gossip.clone();
         let p2p_service: Arc<dyn P2PServiceTrait> = Arc::new(P2PService::with_discovery(
             Arc::clone(&network_service_dyn),
             Arc::clone(&gossip_service_dyn),
-            discovery_options,
+            effective_discovery_options,
         ));
 
         Ok(P2PStack {

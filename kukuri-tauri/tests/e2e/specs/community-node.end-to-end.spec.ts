@@ -78,36 +78,116 @@ const normalizeRelayUrl = (value: string): string => value.trim().replace(/\/+$/
 const usesDirectAddrHint = (value: string): boolean =>
   value.includes('@') || value.includes('|addr=');
 
-const collectCommunityNodeSnapshot = async (topicId: string) => {
-  const [bootstrap, relay, p2p, bootstrapNodes, bootstrapServices, page] = await Promise.all([
-    getBootstrapSnapshot(),
-    getRelayStatusSnapshot(),
-    getP2PStatus(),
-    communityNodeListBootstrapNodes().catch((error) => ({
-      error: error instanceof Error ? error.message : String(error),
-    })),
-    communityNodeListBootstrapServices(topicId).catch((error) => ({
-      error: error instanceof Error ? error.message : String(error),
-    })),
-    browser.execute(() => {
-      const peerCount = document.querySelector('[data-testid="topic-mesh-peer-count"]');
-      const joinButton = document.querySelector('[data-testid="topic-mesh-join-button"]');
-      const meshCard = document.querySelector('[data-testid="topic-mesh-card"]');
-      return {
-        pathname: window.location.pathname,
-        meshCardPresent: Boolean(meshCard),
-        joinButtonPresent: Boolean(joinButton),
-        peerCountPresent: Boolean(peerCount),
-        peerCountText: peerCount?.textContent ?? null,
-        bodyText: document.body?.innerText?.slice(0, 2000) ?? '',
-      };
-    }),
-  ]);
+interface CommunityNodeP2PStatusSnapshot {
+  status: string;
+  node_id: string | null;
+  bind_addr: string;
+  relay_urls: string[];
+  desired_topics: string[];
+  node_topics: string[];
+  gossip_topics: string[];
+  router_ready: boolean;
+}
+
+const deriveCommunityNodeP2PStatusUrls = (
+  baseUrl: string,
+  relayUrl?: string,
+): string[] => {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const pushCandidate = (value: string) => {
+    if (!seen.has(value)) {
+      seen.add(value);
+      candidates.push(value);
+    }
+  };
+
+  pushCandidate(new URL('/v1/p2p/status', baseUrl).toString());
+
+  if (relayUrl) {
+    try {
+      const relayEndpoint = new URL(relayUrl);
+      relayEndpoint.protocol =
+        relayEndpoint.protocol === 'wss:' ? 'https:' : relayEndpoint.protocol === 'ws:' ? 'http:' : relayEndpoint.protocol;
+      relayEndpoint.pathname = '/v1/p2p/status';
+      relayEndpoint.search = '';
+      relayEndpoint.hash = '';
+      pushCandidate(relayEndpoint.toString());
+    } catch {
+      // Ignore invalid relay URL; the primary baseUrl candidate is still available.
+    }
+  }
+
+  return candidates;
+};
+
+const fetchCommunityNodeP2PStatus = async (
+  baseUrl: string,
+  relayUrl?: string,
+): Promise<CommunityNodeP2PStatusSnapshot> => {
+  let lastError: Error | null = null;
+  for (const candidateUrl of deriveCommunityNodeP2PStatusUrls(baseUrl, relayUrl)) {
+    try {
+      const response = await fetch(candidateUrl, {
+        headers: {
+          accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        lastError = new Error(`community node p2p status ${response.status} from ${candidateUrl}: ${body}`);
+        continue;
+      }
+
+      return (await response.json()) as CommunityNodeP2PStatusSnapshot;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error('community node p2p status was unavailable');
+};
+
+const collectCommunityNodeSnapshot = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+) => {
+  const [bootstrap, relay, p2p, communityNodeP2P, bootstrapNodes, bootstrapServices, page] =
+    await Promise.all([
+      getBootstrapSnapshot(),
+      getRelayStatusSnapshot(),
+      getP2PStatus(),
+      fetchCommunityNodeP2PStatus(baseUrl, relayUrl).catch((error) => ({
+        error: error instanceof Error ? error.message : String(error),
+      })),
+      communityNodeListBootstrapNodes().catch((error) => ({
+        error: error instanceof Error ? error.message : String(error),
+      })),
+      communityNodeListBootstrapServices(topicId).catch((error) => ({
+        error: error instanceof Error ? error.message : String(error),
+      })),
+      browser.execute(() => {
+        const peerCount = document.querySelector('[data-testid="topic-mesh-peer-count"]');
+        const joinButton = document.querySelector('[data-testid="topic-mesh-join-button"]');
+        const meshCard = document.querySelector('[data-testid="topic-mesh-card"]');
+        return {
+          pathname: window.location.pathname,
+          meshCardPresent: Boolean(meshCard),
+          joinButtonPresent: Boolean(joinButton),
+          peerCountPresent: Boolean(peerCount),
+          peerCountText: peerCount?.textContent ?? null,
+          bodyText: document.body?.innerText?.slice(0, 2000) ?? '',
+        };
+      }),
+    ]);
 
   return {
     bootstrap,
     relay,
     p2p,
+    communityNodeP2P,
     bootstrapNodes,
     bootstrapServices,
     page,
@@ -154,7 +234,9 @@ const waitForExpectedRelayConnection = async (expectedRelayUrl: string): Promise
     )
     .catch((error) => {
       const snapshotText = latestSnapshot ? JSON.stringify(latestSnapshot) : 'null';
-      throw new Error(`${error instanceof Error ? error.message : String(error)}; relayStatus=${snapshotText}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; relayStatus=${snapshotText}`,
+      );
     });
 
   if (!latestSnapshot) {
@@ -243,7 +325,11 @@ const waitForRelayOnlyPeerHarness = async (
   );
 };
 
-const waitForCommunityNodeBootstrap = async (topicId: string): Promise<void> => {
+const waitForCommunityNodeBootstrap = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+): Promise<void> => {
   let lastError: string | null = null;
   try {
     await browser.waitUntil(
@@ -273,7 +359,7 @@ const waitForCommunityNodeBootstrap = async (topicId: string): Promise<void> => 
       },
     );
   } catch (error) {
-    const snapshot = await collectCommunityNodeSnapshot(topicId);
+    const snapshot = await collectCommunityNodeSnapshot(baseUrl, topicId, relayUrl);
     const suffix = lastError ? `; lastError=${lastError}` : '';
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}${suffix}; snapshot=${JSON.stringify(snapshot)}`,
@@ -282,7 +368,42 @@ const waitForCommunityNodeBootstrap = async (topicId: string): Promise<void> => 
   }
 };
 
-const waitForActiveTopic = async (topicId: string): Promise<void> => {
+const waitForCommunityNodeTopicSubscription = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+): Promise<void> => {
+  try {
+    await browser.waitUntil(
+      async () => {
+        const status = await fetchCommunityNodeP2PStatus(baseUrl, relayUrl);
+        return (
+          status.router_ready &&
+          status.desired_topics.includes(topicId) &&
+          status.node_topics.includes(topicId) &&
+          status.gossip_topics.includes(topicId)
+        );
+      },
+      {
+        timeout: 120000,
+        interval: 1000,
+        timeoutMsg: `Community node did not subscribe to gossip topic ${topicId}`,
+      },
+    );
+  } catch (error) {
+    const snapshot = await collectCommunityNodeSnapshot(baseUrl, topicId, relayUrl);
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; snapshot=${JSON.stringify(snapshot)}`,
+      { cause: error },
+    );
+  }
+};
+
+const waitForActiveTopic = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+): Promise<void> => {
   try {
     await browser.waitUntil(
       async () => {
@@ -296,7 +417,7 @@ const waitForActiveTopic = async (topicId: string): Promise<void> => {
       },
     );
   } catch (error) {
-    const snapshot = await collectCommunityNodeSnapshot(topicId);
+    const snapshot = await collectCommunityNodeSnapshot(baseUrl, topicId, relayUrl);
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}; snapshot=${JSON.stringify(snapshot)}`,
       { cause: error },
@@ -304,7 +425,11 @@ const waitForActiveTopic = async (topicId: string): Promise<void> => {
   }
 };
 
-const waitForBackendPeerConnectivity = async (topicId: string): Promise<void> => {
+const waitForBackendPeerConnectivity = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+): Promise<void> => {
   try {
     await browser.waitUntil(
       async () => {
@@ -319,7 +444,7 @@ const waitForBackendPeerConnectivity = async (topicId: string): Promise<void> =>
       },
     );
   } catch (error) {
-    const snapshot = await collectCommunityNodeSnapshot(topicId);
+    const snapshot = await collectCommunityNodeSnapshot(baseUrl, topicId, relayUrl);
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}; snapshot=${JSON.stringify(snapshot)}`,
       { cause: error },
@@ -327,7 +452,11 @@ const waitForBackendPeerConnectivity = async (topicId: string): Promise<void> =>
   }
 };
 
-const waitForTopicMeshPeerCount = async (topicId: string): Promise<void> => {
+const waitForTopicMeshPeerCount = async (
+  baseUrl: string,
+  topicId: string,
+  relayUrl?: string,
+): Promise<void> => {
   try {
     await browser.waitUntil(
       async () => (await parseIntAttribute('[data-testid="topic-mesh-peer-count"]')) > 0,
@@ -338,7 +467,7 @@ const waitForTopicMeshPeerCount = async (topicId: string): Promise<void> => {
       },
     );
   } catch (error) {
-    const snapshot = await collectCommunityNodeSnapshot(topicId);
+    const snapshot = await collectCommunityNodeSnapshot(baseUrl, topicId, relayUrl);
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}; snapshot=${JSON.stringify(snapshot)}`,
       { cause: error },
@@ -410,7 +539,8 @@ describe('Community Node end-to-end UX', () => {
 
     await runCommunityNodeAuthFlow(baseUrl);
     await waitForExpectedRelayConnection(expectedRelayUrl);
-    await waitForCommunityNodeBootstrap(DEFAULT_PUBLIC_TOPIC_ID);
+    await waitForCommunityNodeBootstrap(baseUrl, DEFAULT_PUBLIC_TOPIC_ID, expectedRelayUrl);
+    await waitForCommunityNodeTopicSubscription(baseUrl, DEFAULT_PUBLIC_TOPIC_ID, expectedRelayUrl);
     await waitForRelayOnlyNodeAddresses(expectedIrohRelayUrl);
     await waitForRelayOnlyPeerHarness('peer-client-1', outputGroup, expectedIrohRelayUrl);
     await waitForRelayOnlyPeerHarness('peer-client-2', outputGroup, expectedIrohRelayUrl);
@@ -438,9 +568,9 @@ describe('Community Node end-to-end UX', () => {
       await joinButton.click();
     }
 
-    await waitForActiveTopic(DEFAULT_PUBLIC_TOPIC_ID);
-    await waitForBackendPeerConnectivity(DEFAULT_PUBLIC_TOPIC_ID);
-    await waitForTopicMeshPeerCount(DEFAULT_PUBLIC_TOPIC_ID);
+    await waitForActiveTopic(baseUrl, DEFAULT_PUBLIC_TOPIC_ID, expectedRelayUrl);
+    await waitForBackendPeerConnectivity(baseUrl, DEFAULT_PUBLIC_TOPIC_ID, expectedRelayUrl);
+    await waitForTopicMeshPeerCount(baseUrl, DEFAULT_PUBLIC_TOPIC_ID, expectedRelayUrl);
     await waitForRecentMeshMessage(publishPrefix);
 
     await browser.waitUntil(

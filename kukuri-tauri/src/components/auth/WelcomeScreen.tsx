@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
@@ -11,9 +12,21 @@ export function WelcomeScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { generateNewKeypair } = useAuthStore();
+  const isCreatingRef = useRef(false);
+  const [isCreating, setIsCreating] = useState(false);
   useTheme(); // Apply theme to HTML element
 
   const handleCreateAccount = async () => {
+    if (isCreatingRef.current) {
+      errorHandler.info(
+        'Ignoring duplicate create-account request while one is already in progress',
+        'WelcomeScreen.handleCreateAccount',
+      );
+      return;
+    }
+
+    isCreatingRef.current = true;
+    setIsCreating(true);
     errorHandler.info('Starting account creation...', 'WelcomeScreen.handleCreateAccount');
     try {
       const result = await generateNewKeypair(true, { deferInitialization: true });
@@ -35,6 +48,8 @@ export function WelcomeScreen() {
         'WelcomeScreen.handleCreateAccount',
       );
     } catch (error) {
+      isCreatingRef.current = false;
+      setIsCreating(false);
       toast.error(t('auth.createAccountFailed'));
       errorHandler.log('Failed to create account', error, {
         context: 'WelcomeScreen.handleCreateAccount',
@@ -73,6 +88,7 @@ export function WelcomeScreen() {
               className="w-full"
               size="lg"
               data-testid="welcome-create-account"
+              disabled={isCreating}
             >
               {t('auth.createAccount')}
             </Button>
@@ -82,6 +98,7 @@ export function WelcomeScreen() {
               className="w-full"
               size="lg"
               data-testid="welcome-login"
+              disabled={isCreating}
             >
               {t('auth.loginWithExisting')}
             </Button>

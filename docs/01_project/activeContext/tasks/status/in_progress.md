@@ -131,3 +131,9 @@
 - kukuri-tauri/tests/e2e/specs/community-node.end-to-end.spec.ts を強化し、Community Node 追加→認証→consent→#public 参加→topic mesh join→peer 接続→投稿伝播に加え、アプリ側/peer harness 側の hint が direct addr を含まないことまで検証。
 - 実測結果: ./scripts/test-docker.ps1 rust PASS、./scripts/test-docker.ps1 e2e-community-node PASS（	ests/e2e/specs/community-node.end-to-end.spec.ts、ログ: 	mp/logs/community-node-e2e/20260307-203142.log）。peer harness snapshot でも 
 ode_addresses は |relay=http://127.0.0.1:3340/ のみを確認。
+
+### 進捗メモ（2026年03月08日）
+- live path の `peer_count: 0` を再調査。client 側 snapshot では endpoint transport は `connected` だが topic `peer_count` は 0 のままで、gossip overlay join 失敗に絞り込んだ。
+- `cn-relay` の未コミット差分で `subscribe_and_join` / `connect_seed_peers` が外れていたため、seed peer あり経路では `endpoint.connect(..., iroh_gossip::ALPN)` と `subscribe_and_join(...)` を復元。MemoryLookup と `endpoint.online()` 待機は維持。
+- `cn-relay` に `/v1/p2p/status` を追加し、`desired_topics` / `node_topics` / `gossip_topics` / `router_ready` を HTTP から観測できるようにした。今後の E2E 失敗時に server 側 runtime を snapshot へ含める。
+- `community-node.end-to-end.spec.ts` は `Community Node bootstrap ready` 後に `/v1/p2p/status` で server が対象 topic を gossip 参加済みであることを待ってから client join へ進むよう更新。失敗 snapshot に server 側 `communityNodeP2P` 状態も含める。

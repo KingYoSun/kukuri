@@ -1747,12 +1747,14 @@ fn merge_unique_bootstrap_nodes(target: &mut Vec<String>, additional: Vec<String
 fn merge_bootstrap_nodes_by_node_id(target: &mut Vec<String>, additional: Vec<String>) {
     for candidate in additional {
         if let Some(candidate_node_id) = extract_bootstrap_node_id(&candidate) {
-            let exists_same_node_id = target.iter().any(|existing| {
+            if let Some(existing_index) = target.iter().position(|existing| {
                 extract_bootstrap_node_id(existing)
                     .map(|node_id| node_id == candidate_node_id)
                     .unwrap_or(false)
-            });
-            if exists_same_node_id {
+            }) {
+                if bootstrap_node_candidate_is_richer(&candidate, &target[existing_index]) {
+                    target[existing_index] = candidate;
+                }
                 continue;
             }
         } else if target.contains(&candidate) {
@@ -1763,6 +1765,43 @@ fn merge_bootstrap_nodes_by_node_id(target: &mut Vec<String>, additional: Vec<St
             target.push(candidate);
         }
     }
+}
+
+fn bootstrap_node_candidate_is_richer(candidate: &str, existing: &str) -> bool {
+    bootstrap_node_candidate_quality(candidate) > bootstrap_node_candidate_quality(existing)
+}
+
+fn bootstrap_node_candidate_quality(candidate: &str) -> (u8, u8, u8, usize) {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return (0, 0, 0, 0);
+    }
+
+    if let Ok(parsed) = crate::infrastructure::p2p::utils::parse_peer_hint(trimmed) {
+        let mut has_direct_addr = false;
+        let mut has_relay = false;
+        if let Some(node_addr) = parsed.node_addr {
+            has_direct_addr = node_addr.ip_addrs().next().is_some();
+            has_relay = node_addr.relay_urls().next().is_some();
+        }
+        let endpoint_count = u8::from(has_direct_addr) + u8::from(has_relay);
+        return (
+            endpoint_count,
+            u8::from(has_relay),
+            u8::from(has_direct_addr),
+            trimmed.len(),
+        );
+    }
+
+    let has_direct_addr = trimmed.contains('@');
+    let has_relay = trimmed.contains("|relay=");
+    let endpoint_count = u8::from(has_direct_addr) + u8::from(has_relay);
+    (
+        endpoint_count,
+        u8::from(has_relay),
+        u8::from(has_direct_addr),
+        trimmed.len(),
+    )
 }
 
 fn extract_bootstrap_node_id(candidate: &str) -> Option<String> {
@@ -2796,12 +2835,12 @@ mod community_node_handler_tests {
     const KUKURI_BOOTSTRAP_PEERS_ENV: &str = "KUKURI_BOOTSTRAP_PEERS";
     static BOOTSTRAP_ENV_GUARD: OnceLock<StdMutex<()>> = OnceLock::new();
 
-    fn lock_bootstrap_env() -> MutexGuard<'static, ()> {
-        BOOTSTRAP_ENV_GUARD
-            .get_or_init(|| StdMutex::new(()))
-            .lock()
-            .expect("bootstrap env guard poisoned")
-    }
+fn lock_bootstrap_env() -> MutexGuard<'static, ()> {
+    BOOTSTRAP_ENV_GUARD
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
     struct ScopedEnvVar {
         key: &'static str,
@@ -3532,6 +3571,20 @@ mod community_node_handler_tests {
         assert!(nodes.contains(&runtime_node_2.to_string()));
 
         let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[test]
+    fn merge_bootstrap_nodes_by_node_id_prefers_richer_runtime_hint() {
+        let node_id = "5656565656565656565656565656565656565656565656565656565656565656";
+        let relay_only = format!("{node_id}|relay=https://relay.example");
+        let relay_with_addr =
+            format!("{node_id}|relay=https://relay.example|addr=bootstrap.example.com:11223");
+
+        let mut nodes = vec![relay_only.clone()];
+        merge_bootstrap_nodes_by_node_id(&mut nodes, vec![relay_with_addr.clone()]);
+        merge_bootstrap_nodes_by_node_id(&mut nodes, vec![relay_only]);
+
+        assert_eq!(nodes, vec![relay_with_addr]);
     }
 
     #[tokio::test]

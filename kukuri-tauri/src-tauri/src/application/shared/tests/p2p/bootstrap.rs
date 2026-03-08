@@ -36,14 +36,11 @@ pub async fn create_service(ctx: &BootstrapContext) -> IrohGossipService {
     for addr in &ctx.node_addrs {
         log_step!("adding bootstrap node addr {}", addr.id);
         static_discovery.add_endpoint_info(addr.clone());
-        match endpoint.connect(addr.clone(), iroh_gossip::ALPN).await {
-            Ok(_) => log_step!("connected to bootstrap {}", addr.id),
-            Err(err) => log_step!("failed to connect to bootstrap {}: {:?}", addr.id, err),
-        }
     }
     log_step!("endpoint ready, building gossip service");
     sleep(Duration::from_millis(200)).await;
-    IrohGossipService::new(endpoint, static_discovery).expect("failed to create gossip service")
+    IrohGossipService::new(endpoint, static_discovery, true)
+        .expect("failed to create gossip service")
 }
 
 pub fn build_peer_hints(

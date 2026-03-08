@@ -9,6 +9,26 @@ pub struct ParsedPeer {
     pub node_addr: Option<EndpointAddr>,
 }
 
+pub fn normalize_endpoint_addr(
+    endpoint_addr: &EndpointAddr,
+    allow_direct_addrs: bool,
+) -> EndpointAddr {
+    let relay_urls: Vec<_> = endpoint_addr.relay_urls().cloned().collect();
+    let mut normalized = EndpointAddr::new(endpoint_addr.id);
+
+    for relay_url in &relay_urls {
+        normalized = normalized.with_relay_url(relay_url.clone());
+    }
+
+    if allow_direct_addrs || relay_urls.is_empty() {
+        for socket_addr in endpoint_addr.ip_addrs().cloned() {
+            normalized = normalized.with_ip_addr(socket_addr);
+        }
+    }
+
+    normalized
+}
+
 fn parse_endpoint_id(value: &str) -> Result<EndpointId, AppError> {
     EndpointId::from_str(value.trim())
         .map_err(|e| AppError::P2PError(format!("Failed to parse node ID: {e}")))
@@ -297,5 +317,36 @@ mod tests {
         let ipv4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 32145);
         let prioritized = prioritize_socket_addrs(vec![ipv6, ipv4]);
         assert_eq!(prioritized, vec![ipv4, ipv6]);
+    }
+
+    #[test]
+    fn normalize_endpoint_addr_strips_direct_addrs_when_relay_present() {
+        let node_id = EndpointId::from_str(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let endpoint_addr = EndpointAddr::new(node_id)
+            .with_relay_url(RelayUrl::from_str("https://relay.example").unwrap())
+            .with_ip_addr("127.0.0.1:11223".parse().unwrap());
+
+        let normalized = normalize_endpoint_addr(&endpoint_addr, false);
+
+        assert_eq!(normalized.relay_urls().count(), 1);
+        assert_eq!(normalized.ip_addrs().count(), 0);
+    }
+
+    #[test]
+    fn normalize_endpoint_addr_keeps_direct_addrs_without_relay() {
+        let node_id = EndpointId::from_str(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let endpoint_addr =
+            EndpointAddr::new(node_id).with_ip_addr("127.0.0.1:11223".parse().unwrap());
+
+        let normalized = normalize_endpoint_addr(&endpoint_addr, false);
+
+        assert_eq!(normalized.ip_addrs().count(), 1);
+        assert_eq!(normalized.relay_urls().count(), 0);
     }
 }

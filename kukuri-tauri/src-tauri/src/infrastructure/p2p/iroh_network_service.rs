@@ -1,7 +1,7 @@
 use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
-    utils::parse_peer_hint,
+    utils::{normalize_endpoint_addr, parse_peer_hint},
 };
 use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
@@ -9,7 +9,6 @@ use crate::shared::error::AppError;
 use async_trait::async_trait;
 use iroh::{
     Endpoint, RelayMode, RelayUrl, address_lookup::MemoryLookup, endpoint::QuicTransportConfig,
-    protocol::Router,
 };
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -69,16 +68,20 @@ impl EndpointTransportProfile {
     fn exposes_direct_addresses(self) -> bool {
         matches!(self, Self::Default)
     }
+
+    fn supports_mainline(self, discovery_options: DiscoveryOptions) -> bool {
+        matches!(self, Self::Default) && discovery_options.enable_mainline()
+    }
 }
 
 pub struct IrohNetworkService {
     endpoint: Arc<Endpoint>,
-    router: Arc<Router>,
     static_discovery: Arc<MemoryLookup>,
     connected: Arc<RwLock<bool>>,
     peers: Arc<RwLock<Vec<Peer>>>,
     stats: Arc<RwLock<NetworkStats>>,
     dht_gossip: Option<Arc<DhtGossip>>,
+    mainline_enabled: bool,
     discovery_options: Arc<RwLock<DiscoveryOptions>>,
     network_config: Arc<RwLock<AppNetworkConfig>>,
     bootstrap_peers: Arc<RwLock<Vec<String>>>,
@@ -94,7 +97,7 @@ impl IrohNetworkService {
         discovery_options: DiscoveryOptions,
         event_tx: Option<broadcast::Sender<P2PEvent>>,
     ) -> Result<Self, AppError> {
-        // Endpointの作成（設定に応じてディスカバリーを有効化）
+        // Configure the endpoint and discovery lookups for the selected transport profile.
         let static_discovery = Arc::new(MemoryLookup::new());
         let relay_mode = resolve_endpoint_relay_mode()?;
         let transport_profile = resolve_endpoint_transport_profile()?;
@@ -117,28 +120,30 @@ impl IrohNetworkService {
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to bind endpoint: {e:?}")))?;
 
-        // Routerの作成（Gossipプロトコルは別で設定）
-        let router = Router::builder(endpoint.clone()).spawn();
-
-        // ブートストラップ設定の検証（警告/件数ログのみ）
+        // Validate persisted bootstrap configuration for diagnostics.
         if let Err(e) = super::bootstrap_config::validate_bootstrap_config() {
             tracing::warn!("bootstrap_nodes.json validation failed: {:?}", e);
         }
 
-        // DhtGossipの初期化
-        let dht_gossip = match DhtGossip::new(Arc::new(endpoint.clone())).await {
-            Ok(service) => Some(Arc::new(service)),
-            Err(e) => {
-                tracing::warn!("Failed to initialize DhtGossip: {:?}", e);
-                None
+        let mainline_enabled = transport_profile.supports_mainline(discovery_options);
+
+        // Initialize DHT gossip only when mainline transport is enabled.
+        let dht_gossip = if mainline_enabled {
+            match DhtGossip::new(Arc::new(endpoint.clone())).await {
+                Ok(service) => Some(Arc::new(service)),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize DhtGossip: {:?}", e);
+                    None
+                }
             }
+        } else {
+            None
         };
 
         let network_config = Arc::new(RwLock::new(net_cfg.clone()));
         let endpoint = Arc::new(endpoint);
         let service = Self {
             endpoint: Arc::clone(&endpoint),
-            router: Arc::new(router),
             static_discovery,
             connected: Arc::new(RwLock::new(false)),
             peers: Arc::new(RwLock::new(Vec::new())),
@@ -150,6 +155,7 @@ impl IrohNetworkService {
                 bandwidth_down: 0,
             })),
             dht_gossip,
+            mainline_enabled,
             discovery_options: Arc::new(RwLock::new(discovery_options)),
             network_config: Arc::clone(&network_config),
             bootstrap_peers: Arc::new(RwLock::new(net_cfg.bootstrap_peers.clone())),
@@ -171,8 +177,12 @@ impl IrohNetworkService {
         Arc::clone(&self.static_discovery)
     }
 
-    pub fn router(&self) -> &Arc<Router> {
-        &self.router
+    pub fn exposes_direct_addresses(&self) -> bool {
+        self.transport_profile.exposes_direct_addresses()
+    }
+
+    pub fn supports_mainline(&self) -> bool {
+        self.mainline_enabled
     }
 
     fn emit_event(&self, event: P2PEvent) {
@@ -204,10 +214,10 @@ impl IrohNetworkService {
             match self.add_peer(trimmed).await {
                 Ok(_) => {
                     success_count += 1;
-                    tracing::info!("Connected to bootstrap peer from config: {}", trimmed);
+                    tracing::info!("Registered bootstrap peer from config: {}", trimmed);
                 }
                 Err(err) => {
-                    tracing::warn!("Failed to connect to bootstrap peer '{}': {}", trimmed, err);
+                    tracing::warn!("Failed to register bootstrap peer '{}': {}", trimmed, err);
                 }
             }
         }
@@ -234,6 +244,21 @@ impl IrohNetworkService {
         let mut stats = self.stats.write().await;
         stats.connected_peers = connected_count;
         super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
+    }
+
+    async fn register_peer_endpoint(
+        &self,
+        node_id: &str,
+        address: &str,
+        node_addr: iroh::EndpointAddr,
+    ) -> Result<(), AppError> {
+        self.static_discovery.add_endpoint_info(node_addr.clone());
+        self.upsert_known_peer(node_id, address).await;
+        tracing::debug!(
+            node_id = %node_id,
+            "Registered peer endpoint for future gossip joins"
+        );
+        Ok(())
     }
 
     fn bootstrap_node_id(candidate: &str) -> Option<String> {
@@ -274,9 +299,8 @@ impl IrohNetworkService {
     pub async fn discovery_options(&self) -> DiscoveryOptions {
         *self.discovery_options.read().await
     }
-
     pub async fn node_addr(&self) -> Result<Vec<String>, AppError> {
-        // 直接アドレスを解決し、`node_id@ip:port` 形式で返却
+        // Resolve local endpoint hints in `node_id@ip:port` and relay hint formats.
         self.endpoint.online().await;
         let node_addr = self.endpoint.addr();
         let node_id = node_addr.id.to_string();
@@ -316,8 +340,15 @@ impl IrohNetworkService {
         Ok(out)
     }
 
-    /// DHT????????????
+    /// Join a DHT topic when mainline transport is available.
     pub async fn join_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
+        if !self.mainline_enabled {
+            tracing::debug!(
+                "Skipping DHT topic join for {} because mainline is disabled",
+                topic_name
+            );
+            return Ok(());
+        }
         let canonical = generate_topic_id(topic_name);
         let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
@@ -329,14 +360,17 @@ impl IrohNetworkService {
             );
         } else {
             tracing::warn!("DHT service not available, using fallback");
-            // ?????????????
+            // Fall back to configured bootstrap peers when DHT initialization failed.
             self.connect_fallback().await?;
         }
         Ok(())
     }
 
-    /// DHT?????????????
+    /// Leave a DHT topic when mainline transport is available.
     pub async fn leave_dht_topic(&self, topic_name: &str) -> Result<(), AppError> {
+        if !self.mainline_enabled {
+            return Ok(());
+        }
         let canonical = generate_topic_id(topic_name);
         let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
@@ -345,8 +379,16 @@ impl IrohNetworkService {
         }
         Ok(())
     }
-    /// DHT???????????????????
+
+    /// Broadcast a message over the DHT topic when mainline transport is available.
     pub async fn broadcast_dht(&self, topic_name: &str, message: Vec<u8>) -> Result<(), AppError> {
+        if !self.mainline_enabled {
+            tracing::debug!(
+                "Skipping DHT broadcast for {} because mainline is disabled",
+                topic_name
+            );
+            return Ok(());
+        }
         let canonical = generate_topic_id(topic_name);
         let topic_bytes = topic_id_bytes(&canonical);
         if let Some(ref dht_gossip) = self.dht_gossip {
@@ -356,14 +398,15 @@ impl IrohNetworkService {
         }
         Ok(())
     }
-    /// フォールバックモードでピアに接続
+
+    /// Connect to fallback bootstrap peers when DHT is unavailable.
     async fn connect_fallback(&self) -> Result<(), AppError> {
-        // 1) 設定ファイルからのブートストラップ接続を優先
+        // Prefer configured bootstrap peers before using the built-in fallback set.
         let fallback_peers =
             match super::dht_bootstrap::fallback::connect_from_config(&self.endpoint).await {
                 Ok(peers) => peers,
                 Err(_) => {
-                    // 2) ハードコードされたフォールバックに接続（なければ失敗）
+                    // Fall back to the built-in peer list if configured bootstrap peers fail.
                     match super::dht_bootstrap::fallback::connect_to_fallback(&self.endpoint).await
                     {
                         Ok(peers) => peers,
@@ -377,11 +420,15 @@ impl IrohNetworkService {
 
         super::metrics::record_mainline_reconnect_success();
 
-        // フォールバックピアをピアリストに追加
+        // Add fallback peers to the in-memory peer list and discovery lookup.
         let mut peers = self.peers.write().await;
         let now = chrono::Utc::now().timestamp();
 
         for node_addr in fallback_peers {
+            let node_addr = normalize_endpoint_addr(
+                &node_addr,
+                self.transport_profile.exposes_direct_addresses(),
+            );
             peers.push(Peer {
                 id: node_addr.id.to_string(),
                 address: format!("{}@fallback", node_addr.id),
@@ -391,7 +438,7 @@ impl IrohNetworkService {
             self.static_discovery.add_endpoint_info(node_addr);
         }
 
-        // 統計を更新
+        // Refresh connection metrics.
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
         super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);
@@ -399,7 +446,7 @@ impl IrohNetworkService {
         Ok(())
     }
 
-    /// 共有シークレットをローテーション
+    /// Rotate the shared secret used by DHT fallback peers.
     pub async fn rotate_dht_secret(&self) -> Result<(), AppError> {
         secret::rotate_secret()
             .await
@@ -471,6 +518,7 @@ fn parse_custom_relay_urls(raw: Option<&str>) -> Result<Vec<RelayUrl>, AppError>
 #[cfg(test)]
 mod relay_mode_tests {
     use super::{EndpointTransportProfile, parse_custom_relay_urls, relay_mode_from_env_values};
+    use crate::infrastructure::p2p::DiscoveryOptions;
     use iroh::RelayMode;
 
     #[test]
@@ -519,6 +567,14 @@ mod relay_mode_tests {
     }
 
     #[test]
+    fn relay_only_profile_disables_mainline_even_if_discovery_requests_it() {
+        let profile = EndpointTransportProfile::RelayOnly;
+        assert!(!profile.supports_mainline(DiscoveryOptions::new(true, true, false)));
+        assert!(EndpointTransportProfile::Default
+            .supports_mainline(DiscoveryOptions::new(true, true, false)));
+    }
+
+    #[test]
     fn transport_profile_rejects_unknown_values() {
         let err = EndpointTransportProfile::from_env_value(Some("invalid-profile"))
             .expect_err("invalid transport profile should fail");
@@ -526,6 +582,99 @@ mod relay_mode_tests {
             err.to_string()
                 .contains("Invalid KUKURI_IROH_TRANSPORT_PROFILE value")
         );
+    }
+}
+
+#[cfg(test)]
+mod connectivity_tests {
+    use super::IrohNetworkService;
+    use crate::infrastructure::p2p::{DiscoveryOptions, NetworkService};
+    use crate::shared::config::AppConfig;
+    use iroh::{Endpoint, RelayMode, SecretKey, protocol::Router};
+    use iroh_gossip::Gossip;
+
+    fn test_secret_key(seed: u8) -> SecretKey {
+        SecretKey::from_bytes(&[seed; 32])
+    }
+
+    async fn spawn_gossip_peer(
+        seed: u8,
+    ) -> (
+        Endpoint,
+        Gossip,
+        Router,
+        String,
+    ) {
+        let endpoint = Endpoint::empty_builder(RelayMode::Disabled)
+            .secret_key(test_secret_key(seed))
+            .bind()
+            .await
+            .expect("bind endpoint");
+        let gossip = Gossip::builder().spawn(endpoint.clone());
+        let router = Router::builder(endpoint.clone())
+            .accept(iroh_gossip::ALPN, gossip.clone())
+            .spawn();
+        let socket_addr = endpoint
+            .addr()
+            .ip_addrs()
+            .next()
+            .cloned()
+            .expect("endpoint should expose direct address");
+        let peer_hint = format!("{}@{}", endpoint.id(), socket_addr);
+
+        (endpoint, gossip, router, peer_hint)
+    }
+
+    #[tokio::test]
+    async fn add_peer_registers_peer_hint_without_immediate_dial() {
+        let (_remote_endpoint, _remote_gossip, _remote_router, peer_hint) =
+            spawn_gossip_peer(11).await;
+
+        let service = IrohNetworkService::new(
+            test_secret_key(22),
+            AppConfig::default().network,
+            DiscoveryOptions::default(),
+            None,
+        )
+        .await
+        .expect("network service");
+
+        service
+            .add_peer(&peer_hint)
+            .await
+            .expect("register reachable peer hint");
+
+        let peers = service.get_peers().await.expect("peers");
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].address, peer_hint);
+    }
+
+    #[tokio::test]
+    async fn add_peer_keeps_unreachable_hint_for_future_gossip_dial() {
+        let (remote_endpoint, remote_gossip, remote_router, peer_hint) = spawn_gossip_peer(33).await;
+        let remote_node_id = remote_endpoint.id();
+        drop(remote_router);
+        drop(remote_gossip);
+        drop(remote_endpoint);
+
+        let service = IrohNetworkService::new(
+            test_secret_key(44),
+            AppConfig::default().network,
+            DiscoveryOptions::default(),
+            None,
+        )
+        .await
+        .expect("network service");
+
+        service
+            .add_peer(&peer_hint)
+            .await
+            .expect("unreachable peer hint should still be registered");
+
+        let peers = service.get_peers().await.expect("peers");
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].id, remote_node_id.to_string());
+        assert_eq!(peers[0].address, peer_hint);
     }
 }
 
@@ -561,7 +710,7 @@ impl NetworkService for IrohNetworkService {
         *connected = false;
         drop(connected);
 
-        // ピアリストをクリア
+        // Clear the tracked peer list on disconnect.
         let mut peers = self.peers.write().await;
         peers.clear();
         super::metrics::set_mainline_connected_peers(0);
@@ -587,17 +736,9 @@ impl NetworkService for IrohNetworkService {
         let node_id = parsed_peer.node_id.to_string();
 
         if let Some(node_addr) = parsed_peer.node_addr {
-            self.static_discovery.add_endpoint_info(node_addr.clone());
-            self.upsert_known_peer(&node_id, address).await;
-
-            // ピアに接続
-            self.endpoint
-                .connect(node_addr, iroh_gossip::ALPN)
-                .await
-                .map_err(|e| {
-                    super::metrics::record_mainline_connection_failure();
-                    AppError::from(format!("Failed to connect to peer: {e}"))
-                })?;
+            let node_addr =
+                normalize_endpoint_addr(&node_addr, self.transport_profile.exposes_direct_addresses());
+            self.register_peer_endpoint(&node_id, address, node_addr).await?;
         } else {
             tracing::info!(
                 node_id = %node_id,
@@ -615,7 +756,7 @@ impl NetworkService for IrohNetworkService {
         let mut peers = self.peers.write().await;
         peers.retain(|p| p.id != peer_id);
 
-        // 統計を更新
+        // Refresh connection metrics after peer removal.
         let mut stats = self.stats.write().await;
         stats.connected_peers = peers.len();
         super::metrics::set_mainline_connected_peers(stats.connected_peers as u64);

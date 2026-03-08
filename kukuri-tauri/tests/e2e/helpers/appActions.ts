@@ -27,47 +27,49 @@ export async function waitForWelcome(): Promise<void> {
 }
 
 export async function startCreateAccountFlow(): Promise<void> {
-  let lastError: unknown = null;
+  const createButton = await $('[data-testid="welcome-create-account"]');
+  await createButton.waitForDisplayed({ timeout: 15000 });
+  await createButton.waitForClickable({ timeout: 15000 });
+  await createButton.scrollIntoView();
+  await createButton.click();
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const createButton = await $('[data-testid="welcome-create-account"]');
-      await createButton.waitForDisplayed({ timeout: 15000 });
-      await createButton.waitForClickable({ timeout: 15000 });
-      await createButton.scrollIntoView();
-      await createButton.click();
-    } catch {
-      await browser.pause(500);
-    }
-
-    try {
-      await browser.waitUntil(
-        async () => {
-          const pathname = await browser.execute(() => window.location.pathname);
-          if (pathname === '/profile-setup') {
-            return true;
-          }
-          const form = await $('[data-testid="profile-form"]');
-          return await form.isExisting();
-        },
-        {
-          timeout: 15000,
-          interval: 300,
-          timeoutMsg: 'Profile setup route did not activate',
-        },
-      );
-      return;
-    } catch (error) {
-      lastError = error;
-      await browser.pause(500);
-    }
+  try {
+    await browser.waitUntil(
+      async () => {
+        const pathname = await browser.execute(() => window.location.pathname);
+        if (pathname === '/profile-setup') {
+          return true;
+        }
+        const form = await $('[data-testid="profile-form"]');
+        return await form.isExisting();
+      },
+      {
+        timeout: 30000,
+        interval: 300,
+        timeoutMsg: 'Profile setup route did not activate',
+      },
+    );
+  } catch (error) {
+    const debugSnapshot = await browser.execute(() => {
+      const doc = document.documentElement;
+      return {
+        location: window.location.pathname,
+        auth: doc?.getAttribute('data-e2e-auth') ?? null,
+        lastLog: doc?.getAttribute('data-e2e-last-log') ?? null,
+        pageError: doc?.getAttribute('data-kukuri-e2e-error') ?? null,
+        createButtonDisabled:
+          document
+            .querySelector('[data-testid="welcome-create-account"]')
+            ?.getAttribute('disabled') !== null,
+        authSnapshot: window.__KUKURI_E2E__?.getAuthSnapshot?.() ?? null,
+      };
+    });
+    throw new Error(
+      `Failed to start create-account flow: ${
+        error instanceof Error ? error.message : String(error)
+      }; snapshot=${JSON.stringify(debugSnapshot)}`,
+    );
   }
-
-  throw new Error(
-    `Failed to start create-account flow: ${
-      lastError instanceof Error ? lastError.message : String(lastError)
-    }`,
-  );
 }
 
 export async function completeProfileSetup(profile: ProfileInfo): Promise<void> {

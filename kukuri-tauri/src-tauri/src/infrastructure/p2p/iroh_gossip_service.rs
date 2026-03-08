@@ -1,6 +1,6 @@
 use super::GossipService;
 use crate::domain::entities::Event;
-use crate::infrastructure::p2p::utils::{ParsedPeer, parse_peer_hint};
+use crate::infrastructure::p2p::utils::{ParsedPeer, normalize_endpoint_addr, parse_peer_hint};
 use crate::shared::error::AppError;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -32,6 +32,7 @@ pub struct IrohGossipService {
     _router: Arc<Router>,
     topics: Arc<RwLock<HashMap<String, TopicHandle>>>,
     event_tx: Option<broadcast::Sender<P2PEvent>>,
+    allow_direct_addrs: bool,
 }
 
 struct TopicHandle {
@@ -76,6 +77,7 @@ impl IrohGossipService {
     pub fn new(
         endpoint: Arc<iroh::Endpoint>,
         static_discovery: Arc<MemoryLookup>,
+        allow_direct_addrs: bool,
     ) -> Result<Self, AppError> {
         // Gossipインスタンスの作成
         let gossip = Gossip::builder().spawn((*endpoint).clone());
@@ -92,6 +94,7 @@ impl IrohGossipService {
             _router: Arc::new(router),
             topics: Arc::new(RwLock::new(HashMap::new())),
             event_tx: None,
+            allow_direct_addrs,
         })
     }
 
@@ -100,12 +103,15 @@ impl IrohGossipService {
     }
 
     pub fn local_peer_hint(&self) -> Option<String> {
-        let node_addr = self.endpoint.addr();
+        let node_addr = normalize_endpoint_addr(&self.endpoint.addr(), self.allow_direct_addrs);
         let node_id = node_addr.id.to_string();
+        if let Some(addr) = node_addr.ip_addrs().next() {
+            return Some(format!("{node_id}@{addr}"));
+        }
         node_addr
-            .ip_addrs()
+            .relay_urls()
             .next()
-            .map(|addr| format!("{node_id}@{addr}"))
+            .map(|relay_url| format!("{node_id}|relay={relay_url}"))
     }
 
     fn create_topic_id(topic: &str) -> TopicId {
@@ -137,11 +143,12 @@ impl IrohGossipService {
 
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
+                let normalized_addr = normalize_endpoint_addr(addr, self.allow_direct_addrs);
                 eprintln!(
                     "[iroh_gossip_service] {} node addr {} for topic {}",
-                    action, addr.id, topic
+                    action, normalized_addr.id, topic
                 );
-                self.static_discovery.add_endpoint_info(addr.clone());
+                self.static_discovery.add_endpoint_info(normalized_addr);
             }
         }
     }
@@ -183,26 +190,31 @@ impl IrohGossipService {
             .await
             .map_err(|e| AppError::P2PError(format!("Failed to subscribe to topic: {e:?}")))?;
 
+        let mesh = mesh.unwrap_or_else(|| Arc::new(TopicMesh::new(topic.to_string())));
+        let mut initial_neighbors = Vec::new();
         let (sender_handle, mut receiver) = gossip_topic.split();
 
         if !peer_ids.is_empty() {
-            if let Err(e) = sender_handle.join_peers(peer_ids.clone()).await {
-                tracing::warn!("Failed to join peers for topic {}: {:?}", topic, e);
-            } else {
-                eprintln!(
-                    "[iroh_gossip_service] join_peers issued for topic {} ({} peers)",
-                    topic,
-                    peer_ids.len()
-                );
-            }
+            sender_handle.join_peers(peer_ids.clone()).await.map_err(|e| {
+                AppError::P2PError(format!("Failed to join gossip bootstrap peers: {e:?}"))
+            })?;
+            eprintln!(
+                "[iroh_gossip_service] join_peers issued for topic {} ({} peers)",
+                topic,
+                peer_ids.len()
+            );
         }
 
         let wait_duration = Duration::from_secs(12);
         match timeout(wait_duration, receiver.joined()).await {
-            Ok(Ok(peer)) => {
+            Ok(Ok(())) => {
                 eprintln!(
-                    "[iroh_gossip_service] first neighbor joined for topic {topic} ({peer:?})"
+                    "[iroh_gossip_service] first neighbor joined for topic {topic}"
                 );
+                initial_neighbors = receiver
+                    .neighbors()
+                    .map(|neighbor| neighbor.as_bytes().to_vec())
+                    .collect();
             }
             Ok(Err(e)) => {
                 tracing::debug!("Waiting for neighbor on {} returned error: {:?}", topic, e);
@@ -216,8 +228,25 @@ impl IrohGossipService {
             }
         }
 
+        for neighbor in receiver.neighbors() {
+            let peer_bytes = neighbor.as_bytes().to_vec();
+            if !initial_neighbors.iter().any(|existing| existing == &peer_bytes) {
+                initial_neighbors.push(peer_bytes);
+            }
+        }
+
+        if !initial_neighbors.is_empty() {
+            for peer in &initial_neighbors {
+                mesh.update_peer_status(peer.clone(), true).await;
+            }
+            eprintln!(
+                "[iroh_gossip_service] synced {} existing neighbors into mesh for topic {}",
+                initial_neighbors.len(),
+                topic
+            );
+        }
+
         let sender = Arc::new(TokioMutex::new(sender_handle));
-        let mesh = mesh.unwrap_or_else(|| Arc::new(TopicMesh::new(topic.to_string())));
 
         // 受信タスクを起動（UI配信用にサブスクライバへ配布 & 任意でP2PEventを送出）
         let topic_clone = topic.to_string();
@@ -602,7 +631,7 @@ mod tests {
                 .await
                 .unwrap(),
         );
-        let service = IrohGossipService::new(endpoint, static_discovery).unwrap();
+        let service = IrohGossipService::new(endpoint, static_discovery, true).unwrap();
 
         // トピック参加
         let topic = "test-topic-ig";
@@ -627,7 +656,7 @@ mod tests {
                 .await
                 .unwrap(),
         );
-        let service = IrohGossipService::new(endpoint, static_discovery).unwrap();
+        let service = IrohGossipService::new(endpoint, static_discovery, true).unwrap();
 
         let topic = "test-topic-leave";
         service.join_topic(topic, vec![]).await.unwrap();
@@ -649,7 +678,7 @@ mod tests {
                 .await
                 .unwrap(),
         );
-        let service_a = IrohGossipService::new(endpoint_a, discovery_a).unwrap();
+        let service_a = IrohGossipService::new(endpoint_a, discovery_a, true).unwrap();
 
         let discovery_b = Arc::new(MemoryLookup::new());
         let endpoint_b = Arc::new(
@@ -659,7 +688,7 @@ mod tests {
                 .await
                 .unwrap(),
         );
-        let service_b = IrohGossipService::new(endpoint_b, discovery_b).unwrap();
+        let service_b = IrohGossipService::new(endpoint_b, discovery_b, true).unwrap();
 
         let topic = "test-topic-rebuild";
         service_a.join_topic(topic, vec![]).await.unwrap();
@@ -684,5 +713,23 @@ mod tests {
             sender_ptr_before, sender_ptr_after,
             "existing topic handle should be replaced when peer hints are appended"
         );
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let stats = service_b
+                .get_topic_stats(topic)
+                .await
+                .unwrap()
+                .expect("topic stats");
+            if stats.peer_count > 0 {
+                break;
+            }
+
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "rebuilt topic should observe at least one neighbor"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 }

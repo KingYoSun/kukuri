@@ -872,6 +872,7 @@ mod tests {
     use super::*;
     use cn_core::rate_limit::RateLimiter;
     use cn_core::service_config;
+    use iroh::address_lookup::MemoryLookup;
     use cn_kip_types::KIND_NODE_TOPIC_SERVICE;
     use nostr_sdk::prelude::Keys;
     use serde_json::json;
@@ -908,6 +909,7 @@ mod tests {
             p2p_public_host: None,
             p2p_public_port: None,
             p2p_node_id: Arc::new(RwLock::new(None)),
+            p2p_address_lookup: Arc::new(MemoryLookup::new()),
             p2p_bind_addr: "0.0.0.0:11223".parse().expect("p2p bind addr"),
             p2p_relay_urls: Arc::new(Vec::new()),
             p2p_advertised_relay_urls: Arc::new(Vec::new()),

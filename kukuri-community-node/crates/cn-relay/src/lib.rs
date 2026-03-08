@@ -7,6 +7,7 @@ use axum::{Json, Router};
 use cn_core::{
     config as core_config, db, http, logging, metrics, rate_limit, server, service_config,
 };
+use iroh::address_lookup::MemoryLookup;
 use iroh::protocol::Router as IrohRouter;
 use serde::Serialize;
 use sqlx::{Pool, Postgres, Row};
@@ -40,6 +41,7 @@ pub(crate) struct AppState {
     pub p2p_public_host: Option<String>,
     pub p2p_public_port: Option<u16>,
     pub p2p_node_id: Arc<RwLock<Option<String>>>,
+    pub p2p_address_lookup: Arc<MemoryLookup>,
     pub p2p_bind_addr: SocketAddr,
     pub p2p_relay_urls: Arc<Vec<String>>,
     pub p2p_advertised_relay_urls: Arc<Vec<String>>,
@@ -59,6 +61,18 @@ struct RelayP2pInfoResponse {
     bootstrap_nodes: Vec<String>,
     bootstrap_hints: Vec<String>,
     relay_urls: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct RelayP2pStatusResponse {
+    status: String,
+    node_id: Option<String>,
+    bind_addr: String,
+    relay_urls: Vec<String>,
+    desired_topics: Vec<String>,
+    node_topics: Vec<String>,
+    gossip_topics: Vec<String>,
+    router_ready: bool,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -204,6 +218,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
     .await?;
 
     let (realtime_tx, _) = broadcast::channel(1024);
+    let p2p_address_lookup = Arc::new(MemoryLookup::new());
     let state = AppState {
         pool: pool.clone(),
         config: config_handle,
@@ -215,6 +230,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         p2p_public_host: config.p2p_public_host.clone(),
         p2p_public_port: config.p2p_public_port,
         p2p_node_id: Arc::new(RwLock::new(None)),
+        p2p_address_lookup,
         p2p_bind_addr: config.p2p_bind_addr,
         p2p_relay_urls: Arc::new(config.p2p_relay_urls.clone()),
         p2p_advertised_relay_urls: Arc::new(config.p2p_advertised_relay_urls.clone()),
@@ -229,6 +245,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
         .route("/healthz", get(healthz))
         .route("/metrics", get(metrics_endpoint))
         .route("/v1/p2p/info", get(p2p_info))
+        .route("/v1/p2p/status", get(p2p_status))
         .route("/relay", get(ws::ws_handler))
         .with_state(state);
 
@@ -414,6 +431,52 @@ async fn p2p_info(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
+async fn p2p_status(State(state): State<AppState>) -> impl IntoResponse {
+    let config_snapshot = state.config.get().await;
+    let runtime = config::RelayRuntimeConfig::from_json(&config_snapshot.config_json);
+    let status = evaluate_relay_ready_status(&state).await;
+    let desired_topics =
+        match load_enabled_topics(&state.pool, runtime.node_subscription.max_concurrent_topics).await
+        {
+            Ok(topics) => topics,
+            Err(err) => {
+                tracing::warn!(error = %err, "p2p status failed to load enabled topics");
+                return Json(RelayP2pStatusResponse {
+                    status: ReadyStatus::Unavailable.as_str().into(),
+                    node_id: state.p2p_node_id.read().await.clone(),
+                    bind_addr: state.p2p_bind_addr.to_string(),
+                    relay_urls: resolve_p2p_relay_urls_for_info(&state),
+                    desired_topics: Vec::new(),
+                    node_topics: sorted_strings(state.node_topics.read().await.clone()),
+                    gossip_topics: {
+                        let senders = state.gossip_senders.read().await;
+                        sorted_strings(senders.keys().cloned().collect::<HashSet<_>>())
+                    },
+                    router_ready: state.p2p_router.read().await.is_some(),
+                })
+                    .into_response();
+            }
+        };
+    let node_topics = state.node_topics.read().await.clone();
+    let gossip_topics = {
+        let senders = state.gossip_senders.read().await;
+        senders.keys().cloned().collect::<HashSet<_>>()
+    };
+    let router_ready = state.p2p_router.read().await.is_some();
+
+    Json(RelayP2pStatusResponse {
+        status: status.as_str().into(),
+        node_id: state.p2p_node_id.read().await.clone(),
+        bind_addr: state.p2p_bind_addr.to_string(),
+        relay_urls: resolve_p2p_relay_urls_for_info(&state),
+        desired_topics: sorted_strings(desired_topics),
+        node_topics: sorted_strings(node_topics),
+        gossip_topics: sorted_strings(gossip_topics),
+        router_ready,
+    })
+        .into_response()
+}
+
 fn resolve_p2p_relay_urls_for_info(state: &AppState) -> Vec<String> {
     let mut relay_urls = if state.p2p_advertised_relay_urls.is_empty() {
         state.p2p_relay_urls.as_ref().clone()
@@ -535,6 +598,12 @@ fn dedupe_in_order(values: Vec<String>) -> Vec<String> {
     out
 }
 
+fn sorted_strings(values: HashSet<String>) -> Vec<String> {
+    let mut items = values.into_iter().collect::<Vec<_>>();
+    items.sort();
+    items
+}
+
 fn resolve_advertised_host(state: &AppState) -> Option<String> {
     if let Some(host) = state.p2p_public_host.as_ref() {
         let host = host.trim();
@@ -625,6 +694,7 @@ mod tests {
     };
     use cn_core::rate_limit;
     use cn_core::service_config;
+    use iroh::address_lookup::MemoryLookup;
     use std::collections::{HashMap, HashSet};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::Arc;
@@ -645,6 +715,7 @@ mod tests {
             p2p_public_host: None,
             p2p_public_port: None,
             p2p_node_id: Arc::new(RwLock::new(None)),
+            p2p_address_lookup: Arc::new(MemoryLookup::new()),
             p2p_bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 11223),
             p2p_relay_urls: Arc::new(Vec::new()),
             p2p_advertised_relay_urls: Arc::new(Vec::new()),

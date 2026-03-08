@@ -8,6 +8,9 @@ type CommunityNodeSnapshot = {
   lastLog: string | null;
   pageError: string | null;
   bodyText: string;
+  e2eStatus: string | null;
+  authSnapshot: unknown;
+  persistedAuth: string | null;
   nodes: Array<{
     index: number;
     text: string;
@@ -17,9 +20,10 @@ type CommunityNodeSnapshot = {
 };
 
 const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+const AUTH_PERSIST_KEY = 'auth-storage';
 
 const captureCommunityNodeSnapshot = async (): Promise<CommunityNodeSnapshot> => {
-  return await browser.execute(() => {
+  return await browser.execute((persistKey: string) => {
     const doc = document.documentElement;
     const nodes = Array.from(document.querySelectorAll('[data-testid^="community-node-node-"]'))
       .map((node, index) => {
@@ -37,10 +41,13 @@ const captureCommunityNodeSnapshot = async (): Promise<CommunityNodeSnapshot> =>
       auth: doc?.getAttribute('data-e2e-auth') ?? null,
       lastLog: doc?.getAttribute('data-e2e-last-log') ?? null,
       pageError: doc?.getAttribute('data-kukuri-e2e-error') ?? null,
+      e2eStatus: doc?.getAttribute('data-kukuri-e2e-status') ?? null,
+      authSnapshot: window.__KUKURI_E2E__?.getAuthSnapshot?.() ?? null,
+      persistedAuth: window.localStorage?.getItem(persistKey) ?? null,
       bodyText: document.body?.innerText?.slice(0, 2000) ?? '',
       nodes,
     };
-  });
+  }, AUTH_PERSIST_KEY);
 };
 
 const formatSnapshot = (snapshot: CommunityNodeSnapshot): string =>
@@ -50,6 +57,9 @@ const formatSnapshot = (snapshot: CommunityNodeSnapshot): string =>
       auth: snapshot.auth,
       lastLog: snapshot.lastLog,
       pageError: snapshot.pageError,
+      e2eStatus: snapshot.e2eStatus,
+      authSnapshot: snapshot.authSnapshot,
+      persistedAuth: snapshot.persistedAuth,
       nodes: snapshot.nodes,
       bodyText: snapshot.bodyText,
     },
@@ -79,9 +89,11 @@ const waitForNodeIndex = async (
   timeoutMsg: string,
 ): Promise<number> => {
   let matchedIndex: number | undefined;
+  let lastSnapshot: CommunityNodeSnapshot | null = null;
   await browser.waitUntil(
     async () => {
       const snapshot = await captureCommunityNodeSnapshot();
+      lastSnapshot = snapshot;
       matchedIndex = findNodeIndex(snapshot, normalizedBaseUrl);
       return matchedIndex !== undefined;
     },
@@ -93,7 +105,9 @@ const waitForNodeIndex = async (
   );
 
   if (matchedIndex === undefined) {
-    throw new Error(timeoutMsg);
+    throw new Error(
+      `${timeoutMsg}: ${lastSnapshot ? formatSnapshot(lastSnapshot) : 'snapshot unavailable'}`,
+    );
   }
 
   return matchedIndex;

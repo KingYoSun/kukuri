@@ -278,8 +278,34 @@ impl P2PServiceTrait for P2PService {
         nodes: Vec<String>,
         source: BootstrapSource,
     ) -> Result<(), AppError> {
+        let mut normalized_nodes = nodes
+            .into_iter()
+            .map(|entry| entry.trim().to_string())
+            .filter(|entry| !entry.is_empty())
+            .collect::<Vec<_>>();
+        normalized_nodes.sort();
+        normalized_nodes.dedup();
+
         self.network_service
-            .apply_bootstrap_nodes(nodes, source)
+            .apply_bootstrap_nodes(normalized_nodes.clone(), source)
+            .await?;
+
+        if normalized_nodes.is_empty() {
+            return Ok(());
+        }
+
+        let joined_topics = self
+            .gossip_service
+            .get_joined_topics()
             .await
+            .map_err(|e| AppError::P2PError(e.to_string()))?;
+        for topic in joined_topics {
+            self.gossip_service
+                .join_topic(&topic, normalized_nodes.clone())
+                .await
+                .map_err(|e| AppError::P2PError(e.to_string()))?;
+        }
+
+        Ok(())
     }
 }

@@ -46,6 +46,7 @@ afterAll(() => {
 
 describe('ProfileSetup', () => {
   const mockUpdateUser = vi.fn();
+  const mockFinalizeDeferredInitialization = vi.fn();
   const mockCurrentUser = {
     id: 'test-id',
     pubkey: 'test-pubkey',
@@ -78,6 +79,7 @@ describe('ProfileSetup', () => {
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       currentUser: mockCurrentUser,
       updateUser: mockUpdateUser,
+      finalizeDeferredInitialization: mockFinalizeDeferredInitialization,
     });
   });
 
@@ -124,6 +126,7 @@ describe('ProfileSetup', () => {
     (useAuthStore as unknown as vi.Mock).mockReturnValue({
       currentUser: existingUser,
       updateUser: mockUpdateUser,
+      finalizeDeferredInitialization: mockFinalizeDeferredInitialization,
     });
 
     render(<ProfileSetup />, { wrapper: createWrapper() });
@@ -143,7 +146,7 @@ describe('ProfileSetup', () => {
     const skipButton = screen.getByRole('button', { name: '後で設定' });
     await user.click(skipButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/', replace: true });
   });
 
   it('名前が未入力の場合、エラーを表示する', async () => {
@@ -236,8 +239,9 @@ describe('ProfileSetup', () => {
 
     // ホーム画面への遷移
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/', replace: true });
     });
+    expect(mockFinalizeDeferredInitialization).toHaveBeenCalledWith(mockCurrentUser.npub);
   });
 
   it('画像をアップロードして保存すると Tauri API が呼び出される', async () => {
@@ -397,7 +401,7 @@ describe('ProfileSetup', () => {
 
     // ナビゲーションが発生する
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/', replace: true });
     });
   });
 
@@ -434,7 +438,8 @@ describe('ProfileSetup', () => {
     );
     await waitFor(
       () => {
-        expect(mockNavigate).toHaveBeenCalledWith({ to: '/' });
+        expect(mockNavigate).toHaveBeenCalledWith({ to: '/', replace: true });
+        expect(mockFinalizeDeferredInitialization).toHaveBeenCalledWith(mockCurrentUser.npub);
       },
       { timeout: PROFILE_SETUP_REMOTE_STEP_TIMEOUT_MS + 10000 },
     );

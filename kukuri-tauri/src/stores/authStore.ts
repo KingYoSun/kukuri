@@ -207,6 +207,7 @@ interface AuthStore extends AuthState {
   switchAccount: (npub: string) => Promise<void>;
   removeAccount: (npub: string) => Promise<void>;
   loadAccounts: () => Promise<void>;
+  finalizeDeferredInitialization: (npub?: string) => Promise<void>;
   addAccount: (
     nsec: string,
     name?: string,
@@ -307,6 +308,49 @@ export const useAuthStore = create<AuthStore>()(
       })();
     };
 
+    const finalizeAuthenticatedSession = async (expectedNpub?: string) => {
+      const sessionNpub = expectedNpub ?? get().currentUser?.npub ?? null;
+      if (!sessionNpub) {
+        return;
+      }
+
+      const hasActiveSession = () => {
+        const state = useAuthStore.getState();
+        return state.isAuthenticated && state.currentUser?.npub === sessionNpub;
+      };
+
+      const runIfSessionActive = async (task: () => Promise<void>) => {
+        if (!hasActiveSession()) {
+          return;
+        }
+        await task();
+      };
+
+      try {
+        await initializeNostr();
+      } catch (nostrError) {
+        errorHandler.log('Failed to initialize Nostr', nostrError, {
+          context: 'AuthStore.finalizeDeferredInitialization.initializeNostr',
+        });
+      }
+
+      if (!hasActiveSession()) {
+        errorHandler.info(
+          'Skipped deferred initialization because session changed',
+          'AuthStore.finalizeDeferredInitialization',
+          { npub: sessionNpub },
+        );
+        return;
+      }
+
+      await Promise.allSettled([
+        runIfSessionActive(() => useAuthStore.getState().updateRelayStatus()),
+        runIfSessionActive(() => useAuthStore.getState().loadAccounts()),
+        runIfSessionActive(() => bootstrapTopics()),
+        runIfSessionActive(() => fetchAndApplyAvatar(sessionNpub)),
+      ]);
+    };
+
     return {
       isAuthenticated: false,
       currentUser: null,
@@ -394,30 +438,7 @@ export const useAuthStore = create<AuthStore>()(
             saveToSecureStorage,
           });
 
-          try {
-            await initializeNostr();
-          } catch (nostrError) {
-            errorHandler.log('Failed to initialize Nostr', nostrError, {
-              context: 'AuthStore.loginWithNsec.initializeNostr',
-            });
-          }
-          try {
-            await useAuthStore.getState().updateRelayStatus();
-          } catch (relayError) {
-            errorHandler.log('Failed to update relay status', relayError, {
-              context: 'AuthStore.loginWithNsec.updateRelayStatus',
-            });
-          }
-          try {
-            await useAuthStore.getState().loadAccounts();
-          } catch (loadError) {
-            errorHandler.log('Failed to load accounts', loadError, {
-              context: 'AuthStore.loginWithNsec.loadAccounts',
-            });
-          }
-
-          await bootstrapTopics();
-          await fetchAndApplyAvatar(response.npub);
+          await finalizeAuthenticatedSession(response.npub);
         } catch (error) {
           errorHandler.log('Login failed', error, {
             context: 'AuthStore.loginWithNsec',
@@ -494,37 +515,6 @@ export const useAuthStore = create<AuthStore>()(
             },
           );
 
-          const runPostLoginTasks = async () => {
-            // Nostrクライアントを初期化
-            try {
-              await initializeNostr();
-            } catch (nostrError) {
-              errorHandler.log('Failed to initialize Nostr', nostrError, {
-                context: 'AuthStore.generateNewKeypair.initializeNostr',
-              });
-            }
-            // リレー状態を更新
-            try {
-              await useAuthStore.getState().updateRelayStatus();
-            } catch (relayError) {
-              errorHandler.log('Failed to update relay status', relayError, {
-                context: 'AuthStore.generateNewKeypair.updateRelayStatus',
-              });
-            }
-            // アカウントリストを更新
-            try {
-              await useAuthStore.getState().loadAccounts();
-            } catch (loadError) {
-              errorHandler.log('Failed to load accounts', loadError, {
-                context: 'AuthStore.generateNewKeypair.loadAccounts',
-              });
-            }
-
-            await bootstrapTopics();
-
-            await fetchAndApplyAvatar(response.npub);
-          };
-
           if (options?.deferInitialization) {
             errorHandler.info(
               'Deferring post-login initialization after keypair generation',
@@ -534,7 +524,7 @@ export const useAuthStore = create<AuthStore>()(
             return { nsec: response.nsec };
           }
 
-          await runPostLoginTasks();
+          await finalizeAuthenticatedSession(response.npub);
 
           return { nsec: response.nsec };
         } catch (error) {
@@ -852,10 +842,7 @@ export const useAuthStore = create<AuthStore>()(
 
             hydratePrivacyFromUser(fallbackUser);
             try {
-              await initializeNostr();
-              await useAuthStore.getState().updateRelayStatus();
-              await bootstrapTopics();
-              await fetchAndApplyAvatar(accountMetadata.npub);
+              await finalizeAuthenticatedSession(accountMetadata.npub);
             } catch (fallbackError) {
               errorHandler.log('Fallback account switch initialization failed', fallbackError, {
                 context: 'AuthStore.switchAccount.fallbackInitialize',
@@ -912,11 +899,7 @@ export const useAuthStore = create<AuthStore>()(
           });
           persistCurrentUserPubkey(mergedUser.pubkey);
 
-          await initializeNostr();
-          await useAuthStore.getState().updateRelayStatus();
-          await bootstrapTopics();
-
-          await fetchAndApplyAvatar(response.npub);
+          await finalizeAuthenticatedSession(response.npub);
 
           errorHandler.info('Switched account via secure storage', 'AuthStore.switchAccount', {
             npub,
@@ -1034,9 +1017,14 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
+      finalizeDeferredInitialization: async (npub?: string) => {
+        await finalizeAuthenticatedSession(npub);
+      },
+
       get isLoggedIn() {
         return get().isAuthenticated;
       },
     };
   }, createAuthPersistConfig<AuthStore>()),
 );
+
