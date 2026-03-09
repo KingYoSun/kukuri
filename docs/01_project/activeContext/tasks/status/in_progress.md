@@ -9,7 +9,7 @@
 - Tauri v2 では E2E が困難なため、層別テスト（単体・結合/契約＋スモーク最小限）でカバレッジを確保。
 
 ## 現在のタスク
-- P2Pトピック同期の不具合調査と修正（直結 multi-peer / IPv6 条件でのリアルタイム反映、プロフィール表示解決、reply/thread 導線の差分切り分け）
+- P2Pトピック同期の不具合調査と修正（直結 multi-peer / IPv6 条件でのリアルタイム反映、reply/thread 導線の差分切り分け）
 - Community Node 実機UXの未解決項目の実機確認（profile 伝播、Windows reload stability、Admin UI runtime 表示）
 - Community Node relay 公開構成の VPS + WireGuard edge 化（Cloudflare Tunnel 依存の除去、Home bind 制御、運用スクリプト整備）
 
@@ -40,10 +40,6 @@
   - 現状: Community Node 経路では修正済み。`p2p.direct-peer.regression.spec.ts` の 2026年03月09日再実行では `renderedWithoutReload` の期待は既定モード / `E2E_DIRECT_PEER_CONNECT_MODE=direct` の両方で通過し、現行の multi-peer E2E では stale render は未再現だった。
   - 未解決点: 2026年03月02日に再現した IPv6 強制条件の stale render を再確認する専用の実機相当テストはまだない。
   - 次アクション: IPv6-only 強制条件を現行 E2E に再導入して再確認する。
-- 相手プロフィール表示名解決
-  - 現状: Community Node 経路では profile 伝播 E2E を固定済み。
-  - 検証（2026年03月09日）: `E2E_SPEC_PATTERN=./tests/e2e/specs/p2p.direct-peer.regression.spec.ts ./scripts/test-docker.ps1 e2e-multi-peer` と `E2E_DIRECT_PEER_CONNECT_MODE=direct` 付き再実行の両方で FAIL。失敗箇所はいずれも `p2p.direct-peer.regression.spec.ts:785` の `profileResolved === true` 期待で、表示名解決は未解消。
-  - 次アクション: direct peer 経路の author metadata 解決差分を切り分ける。
 - reply 投稿失敗 / thread 導線不整合
   - 現状: community-node E2E では未再現だが、direct multi-peer / IPv6 条件との差分が未整理。
   - テスト状況（2026年03月09日確認）: `community-node.thread-preview-replies.spec.ts` など Community Node 経路の E2E はあるが、direct multi-peer / IPv6 条件で reply/thread 導線を確認する実機相当 E2E は未整備。

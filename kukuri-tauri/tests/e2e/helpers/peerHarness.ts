@@ -33,6 +33,7 @@ export interface PeerHarnessCommandResult {
   content?: string | null;
   event_id?: string | null;
   published_count?: number;
+  metadata_published_count?: number;
   error?: string | null;
 }
 
@@ -88,6 +89,28 @@ export const peerHarnessCommandResultCandidates = (
   peerHarnessCommandDirCandidates(peerName, outputGroup).map((dir) =>
     resolve(dir, `${commandId}.result.json`),
   );
+
+const enqueuePeerHarnessCommand = (
+  peerName: string,
+  commandPayload: Record<string, unknown>,
+  outputGroup?: string,
+): { commandId: string } => {
+  const commandId = String(commandPayload.command_id);
+  const commandDirs = peerHarnessCommandDirCandidates(peerName, outputGroup);
+  const targetDir = commandDirs[0];
+  const commandPath = resolve(targetDir, `${commandId}.json`);
+  const tempPath = resolve(targetDir, `${commandId}.json.tmp`);
+  const resultPath = resolve(targetDir, `${commandId}.result.json`);
+
+  mkdirSync(targetDir, { recursive: true });
+  rmSync(commandPath, { force: true });
+  rmSync(tempPath, { force: true });
+  rmSync(resultPath, { force: true });
+  writeFileSync(tempPath, JSON.stringify(commandPayload, null, 2), 'utf-8');
+  renameSync(tempPath, commandPath);
+
+  return { commandId };
+};
 
 export const loadPeerHarnessSummary = (
   peerName: string,
@@ -213,21 +236,7 @@ export function enqueuePeerHarnessPublishCommand(options: {
     content: options.content,
     reply_to_event_id: options.replyToEventId ?? null,
   };
-
-  const commandDirs = peerHarnessCommandDirCandidates(options.peerName, options.outputGroup);
-  const targetDir = commandDirs[0];
-  const commandPath = resolve(targetDir, `${commandId}.json`);
-  const tempPath = resolve(targetDir, `${commandId}.json.tmp`);
-  const resultPath = resolve(targetDir, `${commandId}.result.json`);
-
-  mkdirSync(targetDir, { recursive: true });
-  rmSync(commandPath, { force: true });
-  rmSync(tempPath, { force: true });
-  rmSync(resultPath, { force: true });
-  writeFileSync(tempPath, JSON.stringify(commandPayload, null, 2), 'utf-8');
-  renameSync(tempPath, commandPath);
-
-  return { commandId };
+  return enqueuePeerHarnessCommand(options.peerName, commandPayload, options.outputGroup);
 }
 
 export async function waitForPeerHarnessCommandResult(options: {

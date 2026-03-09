@@ -130,6 +130,7 @@ struct PeerCommandResult {
     content: Option<String>,
     event_id: Option<String>,
     published_count: u64,
+    metadata_published_count: u64,
     error: Option<String>,
 }
 
@@ -674,6 +675,7 @@ async fn process_peer_commands(
                             content: Some(request.content),
                             event_id: Some(event_id),
                             published_count: stats.published_count,
+                            metadata_published_count: stats.metadata_published_count,
                             error: None,
                         })
                     }
@@ -685,6 +687,7 @@ async fn process_peer_commands(
                         content: command.content,
                         event_id: None,
                         published_count: stats.published_count,
+                        metadata_published_count: stats.metadata_published_count,
                         error: Some(format!("unsupported peer command action: {other}")),
                     }),
                 };
@@ -702,6 +705,7 @@ async fn process_peer_commands(
                 content: None,
                 event_id: None,
                 published_count: stats.published_count,
+                metadata_published_count: stats.metadata_published_count,
                 error: Some(format!("failed to parse peer command: {err}")),
             },
         };
@@ -947,6 +951,17 @@ async fn main() -> anyhow::Result<()> {
                 match evt {
                     Ok(kukuri_lib::test_support::domain::p2p::P2PEvent::PeerJoined { .. }) => {
                         stats.peer_joined_events += 1;
+                        if cfg.publish_metadata
+                            && let Err(err) =
+                                publish_profile_metadata(&publisher, &stack, &cfg, &mut stats).await
+                        {
+                            stats.last_error = Some(err.to_string());
+                            warn!(
+                                peer = %cfg.peer_name,
+                                error = %err,
+                                "Peer-joined metadata publish failed"
+                            );
+                        }
                         if cfg.mode == PeerMode::Publisher && cfg.publish_on_peer_join && !publish_enabled {
                             publish_enabled = true;
                             if let Err(err) = publish_topic_event(

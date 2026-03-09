@@ -764,6 +764,18 @@ describe('Direct peer realtime propagation', () => {
       expect(renderedWithoutReload).toBe(true);
     }
 
+    const profileResolvedBeforeMetadataSync = await waitForBodyText(expectedProfileName, 1000);
+    const profileResolvedWithoutReload = await waitForBodyText(
+      expectedProfileName,
+      expectProfileUnresolved ? 1000 : 30000,
+    );
+
+    if (expectProfileUnresolved) {
+      expect(profileResolvedWithoutReload).toBe(false);
+    } else {
+      expect(profileResolvedWithoutReload).toBe(true);
+    }
+
     await browser.refresh();
     await waitForAppReady();
     await openTopic(topicId);
@@ -776,9 +788,9 @@ describe('Direct peer realtime propagation', () => {
     const renderedAfterReload = await waitForBodyText(resolvedPropagationContentMarker, 60000);
     expect(renderedAfterReload).toBe(true);
     const bodyContainsPrefixAfterReload = await waitForBodyText(publishPrefix, 60000);
-
-    const bodyText = await $('body').getText();
-    const profileResolved = bodyText.includes(expectedProfileName);
+    const profileResolved = expectProfileUnresolved
+      ? await waitForBodyText(expectedProfileName, 1000)
+      : await waitForBodyText(expectedProfileName, 60000);
     if (expectProfileUnresolved) {
       expect(profileResolved).toBe(false);
     } else {
@@ -837,6 +849,8 @@ describe('Direct peer realtime propagation', () => {
       bodyContainsPrefixWithoutLocalAction,
       bodyContainsPrefixWithoutReload,
       bodyContainsPrefixAfterReload,
+      profileResolvedBeforeMetadataSync,
+      profileResolvedWithoutReload,
       profileResolved,
     });
   });
