@@ -11,7 +11,8 @@ Minimal community node services for kukuri.
    `docker compose run --rm cn-cli migrate`
    `docker compose run --rm cn-cli config seed`
    `docker compose run --rm cn-cli admin bootstrap --username admin --password change-me`
-4. If custom relay mode is enabled, start bootstrap profile:
+4. If you want to use the bundled custom iroh relay, set
+   `RELAY_IROH_RELAY_MODE=custom` in `.env` and start bootstrap profile:
    `docker compose --profile bootstrap up -d`
 5. If you expose relay services through a VPS + WireGuard edge, see
    `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` and

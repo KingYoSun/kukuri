@@ -1,5 +1,3 @@
-version: "3.9"
-
 x-cn-service: &cn-service
   build:
     context: .
@@ -38,9 +36,6 @@ services:
   relay:
     <<: *cn-service
     command: ["relay"]
-    depends_on:
-      - postgres
-      - cn-iroh-relay
     environment:
       RELAY_ADDR: ${RELAY_ADDR}
     expose:

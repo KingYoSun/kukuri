@@ -37,6 +37,7 @@
 
 ### Community Node relay 公開構成の VPS + WireGuard edge 化
 - 現状: `VPS + WireGuard edge` 方針、bind 制御、セットアップスクリプト、運用ドキュメント整備までは完了。
+- 対応メモ（2026年03月09日）: `kukuri-community-node/docker-compose.yml` の `relay -> cn-iroh-relay` 依存を外し、`.env.example` の既定を `RELAY_IROH_RELAY_MODE=default` に修正。`docker compose build` / `docker compose up -d` と `--profile bootstrap` 付き起動が通ることを確認した。
 - テスト状況（2026年03月09日確認）: `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` と関連セットアップスクリプトは整備済みだが、VPS + WireGuard edge を対象にした実機相当の自動テストは未整備。
 - 未解決点: `cn-iroh-relay` を `7842/udp` 含みで本番相当に公開する経路と、実機 stack での gossip join / health 遷移確認が未了。
 - 次アクション: relay 本番構成を適用し、live stack で疎通と health を確認する。

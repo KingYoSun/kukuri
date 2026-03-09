@@ -13,7 +13,7 @@
 
 - **コア（profiles無しで常時起動を推奨）**: `postgres` / `relay` / `user-api`
 - `admin`: `admin-api` / `admin-console`
-- `bootstrap`: bootstrap サービス
+- `bootstrap`: `bootstrap` と `cn-iroh-relay`（custom iroh relay）
 - `index`: index サービス（Postgres検索派生同期）
 - `moderation`: moderation サービス（必要に応じて `llm-*` と併用）
 - `trust`: trust サービス（Apache AGE を利用）
@@ -25,6 +25,7 @@
 
 補足:
 - v1 は redis/valkey profile は持たない（rate limit は in-mem を正とする。詳細: `docs/03_implementation/community_nodes/rate_limit_design.md`）
+- `relay` は core 常時起動サービスで、`cn-iroh-relay` には `depends_on` しない。custom relay を使う場合だけ `RELAY_IROH_RELAY_MODE=custom` と `bootstrap` profile を併用する。
 
 ## 起動コマンド例
 
