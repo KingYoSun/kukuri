@@ -14,15 +14,16 @@
 - Community Node relay 公開構成の VPS + WireGuard edge 化（Cloudflare Tunnel 依存の除去、Home bind 制御、運用スクリプト整備）
 
 ### Community Node 実機UXの未解決項目
-- 公開 Community Node relay 経路の timeline / 投稿伝播 live-path 確認
-  - 現状: 公開 `base_url` に対して descriptor が loopback relay (`ws://localhost:8082/relay`) を返す場合は破棄し、`base_url` 由来の relay URL を優先するよう修正した。未同期 event 抽出時の UUID 混入と startup sync の `EventManager not initialized` も修正し、関連 Rust tests は PASS。
-  - 未解決点: `https://api.kukuri.app` を使う実機構成で、post 作成直後の timeline 反映と再起動後の再同期が継続して成功するかの live-path 確認は未了。
-  - 次アクション: 公開 Community Node を設定したデスクトップ実機で post 作成、再起動、再同期を順に確認する。
+- 公開 Community Node relay 警告の切り分け
+  - 実機検証（2026年03月10日）: `https://api.kukuri.app` を設定したデスクトップ実機で、peer 間接続、投稿伝播、realtime mode での timeline 自動更新は確認できた。
+  - 実機ログ（2026年03月09日 16:17:13Z / 16:17:15Z）: `wss://api.kukuri.app/relay` への接続は `HTTP error: 404 Not Found` で失敗し、`No configured Nostr relay connected within 3s` warning も出ている。ただし P2P 経路の post 伝播自体は継続している。
+  - 未解決点: 公開 relay が本来必要な構成か、descriptor / server routing / warning 条件のどこに不整合があるかは未整理。
+  - 次アクション: `api.kukuri.app` 側の relay 公開有無と bootstrap descriptor の返却内容を照合し、warning を不具合として扱うべきかを切り分ける。
 - プロフィール伝播不具合
-  - 現状: `useP2PEventListener` / profile save toast 修正と `community-node.profile-propagation.spec.ts` の live-path E2E は PASS。
-  - 検証（2026年03月09日）: `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.profile-propagation.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS。
-  - 未解決点: 実機 multi-node 構成で success toast のみ表示され、相手側 timeline/thread の表示名・avatar が反映されるか未確認。
-  - 次アクション: 実機 multi-node で metadata(kind=0) 伝播を再確認する。
+  - 実機検証（2026年03月10日）: 両クライアントで事前に自分自身のプロフィールをローカル保存した状態から投稿すると、peer 間接続・投稿伝播・realtime timeline 更新は成功する一方、相手側 timeline/thread の表示名・avatar は反映されなかった。
+  - テスト監査（2026年03月10日確認）: `community-node.profile-propagation.spec.ts` は local docker の `http://127.0.0.1:18080` / `ws://127.0.0.1:18082/relay` を前提に、profile update アクション実行後の `getAuthSnapshot()` と `waitForPeerHarnessSummary()` だけを見ている。今回の「profile update なしで既存プロフィールを解決する」実機シナリオは担保していない。
+  - 未解決点: 実機で失敗したユースケースに対応する実機相当 E2E が存在せず、「実機無視のテストPASS」が発生している。
+  - 次アクション: profile update を伴わない 2-client 実機相当 E2E を追加し、相手側 timeline/thread で display name / avatar が解決されることを直接検証する。
 - Windows Tauri リロードクラッシュ
   - 現状: `community-node.reload-stability.spec.ts` と関連 Rust tests は PASS。`IrohGossipService` の peer hint 再joinは idempotent 化済み。
   - 検証（2026年03月09日）: `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.reload-stability.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS。

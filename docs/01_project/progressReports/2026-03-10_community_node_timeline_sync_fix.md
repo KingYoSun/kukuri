@@ -84,6 +84,18 @@
 - `docs/01_project/activeContext/tasks/status/in_progress.md`
   - 完了したコード修正は未完了一覧から切り離し、残る live-path 確認のみを未解決項目として記録した。
 
-## 6. 残課題
+## 6. 実機検証差分（2026年03月10日）
 
-- `https://api.kukuri.app` を指定した実機構成で、post 作成直後の timeline 反映と app 再起動後の再同期を live-path で再確認する。
+- `https://api.kukuri.app` を設定したデスクトップ実機で、peer 間接続、投稿伝播、realtime mode での timeline 自動更新は確認できた。
+- 一方、実機ログでは以下の relay warning が継続している。
+  - `2026-03-09T16:17:13.991662Z ERROR nostr_relay_pool::relay::inner: Connection failed. url=wss://api.kukuri.app/relay error=HTTP error: 404 Not Found`
+  - `2026-03-09T16:17:15.424673Z WARN kukuri_lib::presentation::commands::community_node_commands: Failed to apply community node Nostr relay configuration error=No configured Nostr relay connected within 3s: wss://api.kukuri.app/relay relay_count=1 reason="authenticate"`
+- つまり、前回まで未確認だった timeline / post 伝播の live-path 自体は通っているが、relay 設定警告と profile 伝播は別途残っている。
+
+## 7. 残課題
+
+- `wss://api.kukuri.app/relay` の 404 と `No configured Nostr relay connected within 3s` warning の切り分け
+- profile update を伴わない通常投稿シナリオで、相手側 timeline/thread の display name / avatar が反映されない問題
+- 上記ユースケースを担保できていない Community Node profile propagation E2E の補強
+
+関連レポート: `docs/01_project/progressReports/2026-03-10_community_node_profile_propagation_gap.md`
