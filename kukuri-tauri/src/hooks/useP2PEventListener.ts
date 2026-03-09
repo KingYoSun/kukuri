@@ -16,6 +16,8 @@ import i18n from '@/i18n';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
 import { TauriApi } from '@/lib/api/tauri';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
+import { rememberKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
+import { toUserProfileDto } from '@/lib/profile/profileQuerySync';
 import type { TopicTimelineEntry } from './usePosts';
 
 interface P2PRawMessageEvent {
@@ -43,6 +45,9 @@ const upsertPostIntoList = (posts: Post[] | undefined, post: Post): Post[] => {
 
 const sortTimelineEntries = (entries: TopicTimelineEntry[]): TopicTimelineEntry[] =>
   [...entries].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+
+const sortThreadPosts = (posts: Post[]): Post[] =>
+  [...posts].sort((a, b) => a.created_at - b.created_at);
 
 const upsertTimelineEntry = (
   entries: TopicTimelineEntry[] | undefined,
@@ -228,21 +233,101 @@ interface ThreadDetails {
   isReply: boolean;
 }
 
-const resolveThreadDetails = (topicId: string, message: P2PMessage): ThreadDetails => {
-  const tags = normalizeMessageTags(message.tags);
+const trimNonEmpty = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const getTopicPostsFromStore = (topicId: string): Post[] => {
+  const postStore = usePostStore.getState();
+  const topicPostIds = postStore.postsByTopic.get(topicId) ?? [];
+  return topicPostIds
+    .map((postId) => postStore.posts.get(postId))
+    .filter((post): post is Post => Boolean(post));
+};
+
+const matchesEventReference = (post: Post, eventId: string): boolean => {
+  const target = eventId.trim();
+  if (!target) {
+    return false;
+  }
+  return post.id === target || post.eventId?.trim() === target;
+};
+
+const matchesRootReference = (post: Post, eventId: string): boolean =>
+  matchesEventReference(post, eventId) || post.threadRootEventId?.trim() === eventId.trim();
+
+const resolveStoredThreadContext = (
+  topicId: string,
+  topicPosts: Post[],
+  rootEventId: string | null,
+  parentEventId: string | null,
+): {
+  threadUuid: string;
+  threadNamespace: string;
+  threadRootEventId: string;
+  threadParentEventId: string | null;
+} | null => {
+  const parentTarget = trimNonEmpty(parentEventId);
+  const rootTarget = trimNonEmpty(rootEventId);
+  const matchedParent = parentTarget
+    ? (topicPosts.find((post) => matchesEventReference(post, parentTarget)) ?? null)
+    : null;
+  const matchedRoot = rootTarget
+    ? (topicPosts.find((post) => matchesRootReference(post, rootTarget)) ?? null)
+    : null;
+  const source = matchedParent ?? matchedRoot;
+  if (!source) {
+    return null;
+  }
+
+  const threadRootEventId =
+    trimNonEmpty(source.threadRootEventId) ?? trimNonEmpty(source.eventId) ?? source.id;
   const threadUuid =
-    extractThreadUuidFromTags(tags, topicId) ?? deriveThreadUuidFromEventId(message.id);
+    trimNonEmpty(source.threadUuid) ?? deriveThreadUuidFromEventId(threadRootEventId);
   const threadNamespace =
-    findTagValue(tags, 'thread') ?? `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+    trimNonEmpty(source.threadNamespace) ?? `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+
+  return {
+    threadUuid,
+    threadNamespace,
+    threadRootEventId,
+    threadParentEventId: parentTarget,
+  };
+};
+
+const resolveThreadDetails = (
+  topicId: string,
+  message: P2PMessage,
+  topicPosts: Post[],
+): ThreadDetails => {
+  const tags = normalizeMessageTags(message.tags);
   const { rootEventId, parentEventId } = extractThreadRelationFromTags(tags);
-  const isReply = parentEventId !== null;
+  const storedThreadContext = resolveStoredThreadContext(
+    topicId,
+    topicPosts,
+    rootEventId,
+    parentEventId,
+  );
+  const threadRootEventId =
+    storedThreadContext?.threadRootEventId ?? rootEventId ?? parentEventId ?? message.id;
+  const threadUuid =
+    extractThreadUuidFromTags(tags, topicId) ??
+    storedThreadContext?.threadUuid ??
+    deriveThreadUuidFromEventId(threadRootEventId);
+  const threadNamespace =
+    findTagValue(tags, 'thread') ??
+    storedThreadContext?.threadNamespace ??
+    `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+  const threadParentEventId = parentEventId ?? storedThreadContext?.threadParentEventId ?? null;
+  const isReply = threadParentEventId !== null;
 
   return {
     tags,
     threadUuid,
     threadNamespace,
-    threadRootEventId: rootEventId ?? parentEventId ?? message.id,
-    threadParentEventId: parentEventId,
+    threadRootEventId,
+    threadParentEventId,
     isReply,
   };
 };
@@ -366,6 +451,70 @@ const resolveAuthorNpub = async (author: string): Promise<string> => {
   return await pubkeyToNpub(author);
 };
 
+const buildFallbackAuthor = (author: string): User =>
+  applyKnownUserMetadata({
+    id: author,
+    pubkey: author,
+    npub: isHexFormat(author) ? author : author,
+    name: shortenIdentifier(author),
+    displayName: shortenIdentifier(author),
+    about: '',
+    picture: '',
+    nip05: '',
+    avatar: null,
+    publicProfile: true,
+    showOnlineStatus: false,
+  });
+
+const matchesAuthorIdentity = (candidate: User, reference: User): boolean => {
+  const candidatePubkey = candidate.pubkey?.trim().toLowerCase();
+  const candidateNpub = candidate.npub?.trim().toLowerCase();
+  const referencePubkey = reference.pubkey?.trim().toLowerCase();
+  const referenceNpub = reference.npub?.trim().toLowerCase();
+
+  return Boolean(
+    (candidatePubkey && referencePubkey && candidatePubkey === referencePubkey) ||
+    (candidateNpub && referenceNpub && candidateNpub === referenceNpub),
+  );
+};
+
+const replaceAuthorInPost = (post: Post, resolvedAuthor: User): Post => {
+  const sourceReplies = Array.isArray(post.replies) ? post.replies : [];
+  const updatedReplies = sourceReplies.map((reply) => replaceAuthorInPost(reply, resolvedAuthor));
+  const authorMatches = matchesAuthorIdentity(post.author, resolvedAuthor);
+  const repliesChanged = updatedReplies.some((reply, index) => reply !== sourceReplies[index]);
+
+  if (!authorMatches && !repliesChanged) {
+    return post;
+  }
+
+  return {
+    ...post,
+    author: authorMatches ? resolvedAuthor : post.author,
+    replies: updatedReplies,
+  };
+};
+
+const replaceAuthorInTimelineEntry = (
+  entry: TopicTimelineEntry,
+  resolvedAuthor: User,
+): TopicTimelineEntry => {
+  const nextParent = replaceAuthorInPost(entry.parentPost, resolvedAuthor);
+  const nextFirstReply = entry.firstReply
+    ? replaceAuthorInPost(entry.firstReply, resolvedAuthor)
+    : null;
+
+  if (nextParent === entry.parentPost && nextFirstReply === entry.firstReply) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    parentPost: nextParent,
+    firstReply: nextFirstReply,
+  };
+};
+
 export function useP2PEventListener() {
   const queryClient = useQueryClient();
   const { addMessage, updatePeer, removePeer, refreshStatus } = useP2PStore();
@@ -376,6 +525,56 @@ export function useP2PEventListener() {
   const authorProfileCache = useRef<Map<string, User>>(new Map());
   const authorProfileMissedAt = useRef<Map<string, number>>(new Map());
   const authorProfileInFlight = useRef<Map<string, Promise<User | null>>>(new Map());
+
+  const syncResolvedAuthorAcrossCaches = useCallback(
+    (resolvedAuthor: User) => {
+      const remembered = rememberKnownUserMetadata(resolvedAuthor);
+      const profileDto = toUserProfileDto(remembered);
+      const profileKeys = [remembered.npub, remembered.pubkey]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value));
+
+      for (const key of profileKeys) {
+        queryClient.setQueryData(['userProfile', key], profileDto);
+      }
+
+      if (remembered.npub) {
+        usePostStore.getState().refreshAuthorMetadata(remembered.npub);
+      }
+      if (remembered.pubkey && remembered.pubkey !== remembered.npub) {
+        usePostStore.getState().refreshAuthorMetadata(remembered.pubkey);
+      }
+
+      queryClient.setQueryData<Post[]>(['timeline'], (prev) =>
+        (prev ?? []).map((post) => replaceAuthorInPost(post, remembered)),
+      );
+
+      for (const query of queryClient.getQueryCache().findAll({ queryKey: ['posts'] })) {
+        queryClient.setQueryData<Post[]>(query.queryKey, (prev) =>
+          (prev ?? []).map((post) => replaceAuthorInPost(post, remembered)),
+        );
+      }
+
+      for (const query of queryClient.getQueryCache().findAll({ queryKey: ['threadPosts'] })) {
+        queryClient.setQueryData<Post[]>(query.queryKey, (prev) =>
+          (prev ?? []).map((post) => replaceAuthorInPost(post, remembered)),
+        );
+      }
+
+      for (const query of queryClient.getQueryCache().findAll({ queryKey: ['topicTimeline'] })) {
+        queryClient.setQueryData<TopicTimelineEntry[]>(query.queryKey, (prev) =>
+          (prev ?? []).map((entry) => replaceAuthorInTimelineEntry(entry, remembered)),
+        );
+      }
+
+      for (const query of queryClient.getQueryCache().findAll({ queryKey: ['topicThreads'] })) {
+        queryClient.setQueryData<TopicTimelineEntry[]>(query.queryKey, (prev) =>
+          (prev ?? []).map((entry) => replaceAuthorInTimelineEntry(entry, remembered)),
+        );
+      }
+    },
+    [queryClient],
+  );
 
   const shouldHandleMessage = useCallback((messageId: string): boolean => {
     if (recentMessageIds.current.has(messageId)) {
@@ -445,9 +644,10 @@ export function useP2PEventListener() {
         }
         const mapped = mapUserProfileToUser(profile);
         const enriched = applyKnownUserMetadata(mapped);
-        authorProfileCache.current.set(cacheKey, enriched);
+        const remembered = rememberKnownUserMetadata(enriched);
+        authorProfileCache.current.set(cacheKey, remembered);
         authorProfileMissedAt.current.delete(cacheKey);
-        return enriched;
+        return remembered;
       } catch (error) {
         errorHandler.log('Failed to resolve author profile for P2P message', error, {
           context: 'useP2PEventListener.resolveAuthor',
@@ -469,20 +669,136 @@ export function useP2PEventListener() {
     }
   }, []);
 
+  const loadPersistedAuthorProfile = useCallback(async (author: string): Promise<User | null> => {
+    const byPubkey = isHexFormat(author) ? await TauriApi.getUserProfileByPubkey(author) : null;
+    const byNpub =
+      !byPubkey && author.startsWith('npub1') ? await TauriApi.getUserProfile(author) : null;
+    const profile = byPubkey ?? byNpub;
+    return profile ? mapUserProfileToUser(profile) : null;
+  }, []);
+
+  const parseMetadataAuthor = useCallback(
+    async (author: string, content: string): Promise<User | null> => {
+      try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        const privacy =
+          parsed.kukuri_privacy && typeof parsed.kukuri_privacy === 'object'
+            ? (parsed.kukuri_privacy as Record<string, unknown>)
+            : null;
+        const authorNpub = await resolveAuthorNpub(author);
+        const fallbackName = shortenIdentifier(authorNpub || author);
+        return {
+          id: author,
+          pubkey: author,
+          npub: authorNpub,
+          name: typeof parsed.name === 'string' ? parsed.name : fallbackName,
+          displayName:
+            typeof parsed.display_name === 'string'
+              ? parsed.display_name
+              : typeof parsed.name === 'string'
+                ? parsed.name
+                : fallbackName,
+          picture: typeof parsed.picture === 'string' ? parsed.picture : '',
+          about: typeof parsed.about === 'string' ? parsed.about : '',
+          nip05: typeof parsed.nip05 === 'string' ? parsed.nip05 : '',
+          avatar: null,
+          publicProfile:
+            typeof privacy?.public_profile === 'boolean' ? privacy.public_profile : true,
+          showOnlineStatus:
+            typeof privacy?.show_online_status === 'boolean' ? privacy.show_online_status : false,
+        };
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  const handleP2PMetadataMessage = useCallback(
+    async (message: P2PMessage) => {
+      try {
+        const optimistic = await parseMetadataAuthor(message.author, message.content);
+        if (optimistic) {
+          syncResolvedAuthorAcrossCaches(optimistic);
+        }
+
+        const persisted = await loadPersistedAuthorProfile(message.author);
+        if (persisted) {
+          syncResolvedAuthorAcrossCaches(persisted);
+        }
+      } catch (error) {
+        errorHandler.log('Failed to process P2P metadata message', error, {
+          context: 'useP2PEventListener.handleP2PMetadataMessage',
+          showToast: false,
+          metadata: { author: message.author, eventId: message.id },
+        });
+      }
+    },
+    [loadPersistedAuthorProfile, parseMetadataAuthor, syncResolvedAuthorAcrossCaches],
+  );
+
+  const syncTopicThreadCachesFromStore = useCallback(
+    (topicId: string) => {
+      const postStore = usePostStore.getState();
+      const topicPostIds = postStore.postsByTopic.get(topicId) ?? [];
+      const topicPosts = topicPostIds
+        .map((postId) => postStore.posts.get(postId))
+        .filter((post): post is Post => Boolean(post));
+
+      const groupedByThread = new Map<string, Post[]>();
+      topicPosts.forEach((post) => {
+        const threadKey = post.threadUuid?.trim() || post.threadRootEventId?.trim() || post.id;
+        const existing = groupedByThread.get(threadKey) ?? [];
+        existing.push(post);
+        groupedByThread.set(threadKey, existing);
+      });
+
+      const entries: TopicTimelineEntry[] = [];
+      groupedByThread.forEach((posts, threadUuid) => {
+        const sortedPosts = sortThreadPosts(posts);
+        const parentPost =
+          sortedPosts.find(
+            (post) => !post.threadParentEventId || post.id === post.threadRootEventId,
+          ) ?? sortedPosts[0];
+        if (!parentPost) {
+          return;
+        }
+
+        const replies = sortedPosts.filter((post) => post.id !== parentPost.id);
+        entries.push({
+          threadUuid,
+          parentPost,
+          firstReply: replies[0] ?? null,
+          replyCount: replies.length,
+          lastActivityAt: Math.max(...sortedPosts.map((post) => post.created_at)),
+        });
+
+        queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], sortedPosts);
+      });
+
+      const nextEntries = sortTimelineEntries(entries);
+      queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], nextEntries);
+      queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], nextEntries);
+    },
+    [queryClient],
+  );
+
   const handleP2PMessageAsPost = useCallback(
     async (message: P2PMessage, topicId: string) => {
       try {
-        const author = await resolveAuthor(message.author);
-        const threadDetails = resolveThreadDetails(topicId, message);
+        const topicPosts = getTopicPostsFromStore(topicId);
+        const threadDetails = resolveThreadDetails(topicId, message, topicPosts);
         const createdAt =
           message.timestamp > 1_000_000_000_000
             ? Math.floor(message.timestamp / 1000)
             : Math.floor(message.timestamp);
+        const fallbackAuthor = buildFallbackAuthor(message.author);
 
         const post: Post = {
           id: message.id,
+          eventId: message.id,
           content: message.content,
-          author: author,
+          author: fallbackAuthor,
           topicId,
           threadNamespace: threadDetails.threadNamespace,
           threadUuid: threadDetails.threadUuid,
@@ -496,6 +812,11 @@ export function useP2PEventListener() {
           isSynced: true,
         };
 
+        await Promise.all([
+          queryClient.cancelQueries({ queryKey: ['topicTimeline', topicId] }),
+          queryClient.cancelQueries({ queryKey: ['topicThreads', topicId] }),
+          queryClient.cancelQueries({ queryKey: ['threadPosts', topicId] }),
+        ]);
         addPost(post);
         queryClient.setQueryData<Post[]>(['timeline'], (prev) => upsertPostIntoList(prev, post));
         queryClient.setQueryData<Post[]>(['posts', 'all'], (prev) =>
@@ -514,6 +835,26 @@ export function useP2PEventListener() {
         queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], (prev) =>
           upsertPostIntoList(prev, post),
         );
+        syncTopicThreadCachesFromStore(topicId);
+        void resolveAuthor(message.author)
+          .then((resolvedAuthor) => {
+            const hasResolvedProfile =
+              resolvedAuthor.displayName !== fallbackAuthor.displayName ||
+              resolvedAuthor.name !== fallbackAuthor.name ||
+              resolvedAuthor.avatar !== fallbackAuthor.avatar ||
+              resolvedAuthor.nip05 !== fallbackAuthor.nip05;
+            if (!hasResolvedProfile) {
+              return;
+            }
+            syncResolvedAuthorAcrossCaches(resolvedAuthor);
+          })
+          .catch((error) => {
+            errorHandler.log('Failed to hydrate author profile for P2P message', error, {
+              context: 'useP2PEventListener.resolveAuthorBackground',
+              showToast: false,
+              metadata: { author: message.author, postId: message.id },
+            });
+          });
         const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
         if (timelineUpdateMode === 'realtime') {
           const realtimeTags = [...threadDetails.tags];
@@ -541,10 +882,22 @@ export function useP2PEventListener() {
               tags: realtimeTags,
             },
           });
+          window.setTimeout(() => {
+            try {
+              syncTopicThreadCachesFromStore(topicId);
+            } catch (error) {
+              errorHandler.log('Failed to resync realtime timeline caches from post store', error, {
+                context: 'useP2PEventListener.syncTopicThreadCachesFromStore',
+                showToast: false,
+                metadata: { topicId },
+              });
+            }
+          }, 250);
         }
         updateTopicPostCount(topicId, 1);
+        const refetchType = timelineUpdateMode === 'realtime' ? 'none' : 'active';
         const invalidateInBackground = (queryKey: readonly unknown[]) =>
-          queryClient.invalidateQueries({ queryKey, refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey, refetchType });
         void invalidateInBackground(['posts', topicId]);
         void invalidateInBackground(['topicTimeline', topicId]);
         void invalidateInBackground(['topicThreads', topicId]);
@@ -556,7 +909,14 @@ export function useP2PEventListener() {
         });
       }
     },
-    [addPost, queryClient, resolveAuthor, updateTopicPostCount],
+    [
+      addPost,
+      queryClient,
+      resolveAuthor,
+      syncResolvedAuthorAcrossCaches,
+      syncTopicThreadCachesFromStore,
+      updateTopicPostCount,
+    ],
   );
 
   const handleIncomingP2PMessage = useCallback(
@@ -579,6 +939,11 @@ export function useP2PEventListener() {
         topic_id,
       };
 
+      if (p2pMessage.kind === NostrEventKind.Metadata) {
+        void handleP2PMetadataMessage(p2pMessage);
+        return;
+      }
+
       if (!isTopicPostMessage(topic_id, p2pMessage)) {
         return;
       }
@@ -594,7 +959,7 @@ export function useP2PEventListener() {
       void handleP2PMessageAsPost(p2pMessage, topic_id);
       window.dispatchEvent(new Event('realtime-update'));
     },
-    [addMessage, handleP2PMessageAsPost, shouldHandleMessage],
+    [addMessage, handleP2PMessageAsPost, handleP2PMetadataMessage, shouldHandleMessage],
   );
 
   useEffect(() => {

@@ -161,6 +161,14 @@ impl NostrClientManager {
     pub async fn publish_event(&self, event: Event) -> Result<EventId> {
         let client_guard = self.client.read().await;
         if let Some(client) = client_guard.as_ref() {
+            if self.configured_relays.is_empty() {
+                return Err(anyhow::anyhow!("no relays specified"));
+            }
+
+            if connected_relay_urls(client).await.is_empty() {
+                return Err(anyhow::anyhow!("not connected to any relays"));
+            }
+
             let output = client.send_event(&event).await?;
             let event_id = output.id();
             info!("Published event: {}", event_id);
@@ -322,5 +330,23 @@ mod tests {
             err.to_string()
                 .contains("No configured Nostr relay connected")
         );
+    }
+
+    #[tokio::test]
+    async fn test_publish_event_without_relays_returns_fast_error() {
+        let mut manager = NostrClientManager::new();
+        let secret_key = sample_secret_key('7');
+        manager
+            .init_with_keys(&secret_key)
+            .await
+            .expect("initialize client without relays");
+
+        let event = sample_event(&secret_key);
+        let err = tokio::time::timeout(Duration::from_millis(100), manager.publish_event(event))
+            .await
+            .expect("publish should not hang")
+            .expect_err("publish should fail without relays");
+
+        assert!(err.to_string().contains("no relays specified"));
     }
 }

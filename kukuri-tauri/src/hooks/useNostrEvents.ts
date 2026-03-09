@@ -4,8 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { errorHandler } from '@/lib/errorHandler';
 import { usePostStore } from '@/stores/postStore';
 import { useTopicStore } from '@/stores/topicStore';
-import { useUIStore } from '@/stores/uiStore';
-import type { NostrEventPayload } from '@/types/nostr';
+import { NostrEventKind, type NostrEventPayload } from '@/types/nostr';
 import { isTauriRuntime } from '@/lib/utils/tauriEnvironment';
 import { dispatchTimelineRealtimeDelta } from '@/lib/realtime/timelineRealtimeEvents';
 
@@ -24,27 +23,22 @@ export function useNostrEvents() {
     (payload: NostrEventPayload) => {
       try {
         // 新規投稿（kind: 1 または kind: 30078）
-        if (payload.kind === 1 || payload.kind === 30078) {
+        if (payload.kind === NostrEventKind.TextNote || payload.kind === NostrEventKind.TopicPost) {
           // React Queryのキャッシュを無効化して最新データを取得
           queryClient.invalidateQueries({ queryKey: ['posts'] });
-          const timelineUpdateMode = useUIStore.getState().timelineUpdateMode;
-          if (timelineUpdateMode === 'standard') {
-            queryClient.invalidateQueries({ queryKey: ['topicTimeline'] });
-            queryClient.invalidateQueries({ queryKey: ['topicThreads'] });
-            queryClient.invalidateQueries({ queryKey: ['threadPosts'] });
-          }
+          queryClient.invalidateQueries({ queryKey: ['topicTimeline'], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['topicThreads'], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['threadPosts'], refetchType: 'active' });
 
           // トピック投稿の場合、トピックの投稿数を更新
-          if (payload.kind === 30078) {
-            const topicTag = payload.tags.find((tag) => tag[0] === 't');
-            if (topicTag?.[1]) {
-              updateTopicPostCount(topicTag[1], 1);
-            }
-            dispatchTimelineRealtimeDelta({
-              source: 'nostr',
-              payload,
-            });
+          const topicTag = payload.tags.find((tag) => tag[0] === 't');
+          if (topicTag?.[1]) {
+            updateTopicPostCount(topicTag[1], 1);
           }
+          dispatchTimelineRealtimeDelta({
+            source: 'nostr',
+            payload,
+          });
 
           // リアルタイム更新イベントを発火
           window.dispatchEvent(new Event('realtime-update'));

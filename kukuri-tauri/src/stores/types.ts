@@ -47,6 +47,7 @@ export type PostScope = 'public' | 'friend_plus' | 'friend' | 'invite';
 
 export interface Post {
   id: string;
+  eventId?: string | null;
   content: string;
   author: User;
   topicId: string;

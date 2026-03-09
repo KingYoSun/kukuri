@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router';
 import { Loader2, ListTree } from 'lucide-react';
 import { useTopicThreads } from '@/hooks';
 import { useTopicStore } from '@/stores';
@@ -7,12 +7,32 @@ import { TimelineThreadCard } from '@/components/posts/TimelineThreadCard';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
+const decodePathname = (pathname: string): string => {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+};
+
 export const Route = createFileRoute('/topics/$topicId/threads')({
   component: TopicThreadsRoute,
 });
 
-function TopicThreadsRoute() {
+export function TopicThreadsRoute() {
   const { topicId } = Route.useParams();
+  const currentPathname = useLocation({ select: (location) => location.pathname });
+  const encodedTopicId = encodeURIComponent(topicId);
+  const decodedPathname = decodePathname(currentPathname);
+  const isThreadDetailRoute =
+    currentPathname.startsWith(`/topics/${topicId}/threads/`) ||
+    currentPathname.startsWith(`/topics/${encodedTopicId}/threads/`) ||
+    decodedPathname.startsWith(`/topics/${topicId}/threads/`);
+
+  if (isThreadDetailRoute) {
+    return <Outlet />;
+  }
+
   return <TopicThreadsPage topicId={topicId} />;
 }
 

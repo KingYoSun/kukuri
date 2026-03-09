@@ -1,7 +1,9 @@
 use super::GossipService;
+use super::iroh_network_service::configured_custom_relay_urls;
 use crate::domain::entities::Event;
 use crate::infrastructure::p2p::utils::{
-    ParsedPeer, normalize_endpoint_addr, parse_peer_hint, sanitize_remote_endpoint_addr,
+    ParsedPeer, normalize_endpoint_addr, parse_peer_hint,
+    sanitize_remote_endpoint_addr_with_preferred_relays,
 };
 use crate::shared::error::AppError;
 use async_trait::async_trait;
@@ -41,6 +43,7 @@ struct TopicHandle {
     sender: Arc<TokioMutex<GossipSender>>, // GossipSenderでbroadcast可能
     receiver_task: tokio::task::JoinHandle<()>,
     mesh: Arc<TopicMesh>,
+    peer_hint_keys: HashSet<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,7 +78,59 @@ fn parse_domain_event_payload(payload: &[u8]) -> Result<Event, String> {
     })
 }
 
+fn build_peer_hint_keys(
+    parsed_peers: &[ParsedPeer],
+    allow_direct_addrs: bool,
+    preferred_relay_urls: &[iroh::RelayUrl],
+) -> HashSet<String> {
+    parsed_peers
+        .iter()
+        .map(|peer| {
+            let mut key = peer.node_id.to_string();
+            if let Some(node_addr) = &peer.node_addr {
+                let sanitized = sanitize_remote_endpoint_addr_with_preferred_relays(
+                    node_addr,
+                    allow_direct_addrs,
+                    preferred_relay_urls,
+                );
+
+                let mut relay_urls: Vec<_> = sanitized
+                    .relay_urls()
+                    .map(|relay_url| relay_url.to_string())
+                    .collect();
+                relay_urls.sort();
+                relay_urls.dedup();
+                for relay_url in relay_urls {
+                    key.push_str("|relay=");
+                    key.push_str(&relay_url);
+                }
+
+                let mut ip_addrs: Vec<_> = sanitized
+                    .ip_addrs()
+                    .map(|socket_addr| socket_addr.to_string())
+                    .collect();
+                ip_addrs.sort();
+                ip_addrs.dedup();
+                for socket_addr in ip_addrs {
+                    key.push_str("|addr=");
+                    key.push_str(&socket_addr);
+                }
+            }
+            key
+        })
+        .collect()
+}
+
 impl IrohGossipService {
+    fn peer_hint_keys(&self, parsed_peers: &[ParsedPeer]) -> HashSet<String> {
+        let preferred_relay_urls = configured_custom_relay_urls().unwrap_or_default();
+        build_peer_hint_keys(
+            parsed_peers,
+            self.allow_direct_addrs,
+            preferred_relay_urls.as_slice(),
+        )
+    }
+
     pub fn new(
         endpoint: Arc<iroh::Endpoint>,
         static_discovery: Arc<MemoryLookup>,
@@ -137,6 +192,7 @@ impl IrohGossipService {
             "applying"
         };
         let mut registered = Vec::new();
+        let preferred_relay_urls = configured_custom_relay_urls().unwrap_or_default();
         eprintln!(
             "[iroh_gossip_service] {} {} initial peers for topic {}",
             action,
@@ -146,7 +202,11 @@ impl IrohGossipService {
 
         for peer in parsed_peers {
             if let Some(addr) = &peer.node_addr {
-                let sanitized_addr = sanitize_remote_endpoint_addr(addr, self.allow_direct_addrs);
+                let sanitized_addr = sanitize_remote_endpoint_addr_with_preferred_relays(
+                    addr,
+                    self.allow_direct_addrs,
+                    &preferred_relay_urls,
+                );
                 eprintln!(
                     "[iroh_gossip_service] {} node addr {} for topic {}",
                     action, sanitized_addr.id, topic
@@ -218,6 +278,7 @@ impl IrohGossipService {
         parsed_peers: &[ParsedPeer],
         mesh: Option<Arc<TopicMesh>>,
     ) -> Result<(), AppError> {
+        let peer_hint_keys = self.peer_hint_keys(parsed_peers);
         let registered_peer_addrs =
             self.register_initial_peer_addrs(topic, parsed_peers, mesh.is_some());
         self.preconnect_initial_peers(topic, &registered_peer_addrs)
@@ -436,6 +497,7 @@ impl IrohGossipService {
             sender,
             receiver_task,
             mesh,
+            peer_hint_keys,
         };
 
         let mut topics = self.topics.write().await;
@@ -483,6 +545,23 @@ impl GossipService for IrohGossipService {
                 tracing::debug!(
                     "Topic {} already joined and no new peer hints were provided",
                     topic
+                );
+                return Ok(());
+            }
+
+            let incoming_peer_hint_keys = self.peer_hint_keys(&parsed_peers);
+            let existing_peer_hint_keys = {
+                let topics = self.topics.read().await;
+                topics
+                    .get(topic)
+                    .map(|handle| handle.peer_hint_keys.clone())
+                    .unwrap_or_default()
+            };
+            if incoming_peer_hint_keys == existing_peer_hint_keys {
+                tracing::debug!(
+                    topic = %topic,
+                    peer_hint_count = incoming_peer_hint_keys.len(),
+                    "Topic already joined with identical peer hints; skipping rebuild"
                 );
                 return Ok(());
             }
@@ -659,7 +738,8 @@ impl GossipService for IrohGossipService {
 mod tests {
     use super::*;
     use crate::domain::entities::Event;
-    use iroh::Endpoint;
+    use iroh::{Endpoint, RelayUrl};
+    use std::str::FromStr;
 
     fn should_run_p2p_tests(test_name: &str) -> bool {
         if std::env::var("ENABLE_P2P_INTEGRATION").unwrap_or_default() != "1" {
@@ -787,6 +867,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_existing_topic_with_same_peer_hints_keeps_handle() {
+        let discovery_a = Arc::new(MemoryLookup::new());
+        let endpoint_a = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(discovery_a.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service_a = IrohGossipService::new(endpoint_a, discovery_a, true).unwrap();
+
+        let discovery_b = Arc::new(MemoryLookup::new());
+        let endpoint_b = Arc::new(
+            Endpoint::empty_builder(iroh::RelayMode::Default)
+                .address_lookup(discovery_b.clone())
+                .bind()
+                .await
+                .unwrap(),
+        );
+        let service_b = IrohGossipService::new(endpoint_b, discovery_b, true).unwrap();
+
+        let topic = "test-topic-idempotent";
+        let peer_hint = service_a
+            .local_peer_hint()
+            .expect("service_a should expose a local peer hint");
+
+        service_b
+            .join_topic(topic, vec![peer_hint.clone()])
+            .await
+            .expect("initial join with peer hint");
+
+        let sender_ptr_before = {
+            let topics = service_b.topics.read().await;
+            Arc::as_ptr(&topics.get(topic).unwrap().sender) as usize
+        };
+
+        service_b
+            .join_topic(topic, vec![peer_hint])
+            .await
+            .expect("same peer hint join should be idempotent");
+
+        let sender_ptr_after = {
+            let topics = service_b.topics.read().await;
+            Arc::as_ptr(&topics.get(topic).unwrap().sender) as usize
+        };
+
+        assert_eq!(
+            sender_ptr_before, sender_ptr_after,
+            "identical peer hints should not rebuild an existing topic handle"
+        );
+    }
+
+    #[tokio::test]
     async fn test_relay_only_registration_preserves_public_remote_direct_addr() {
         let static_discovery = Arc::new(MemoryLookup::new());
         let endpoint = Arc::new(
@@ -848,5 +981,23 @@ mod tests {
             .into_endpoint_addr();
         assert_eq!(stored.ip_addrs().count(), 0);
         assert_eq!(stored.relay_urls().count(), 1);
+    }
+
+    #[test]
+    fn test_build_peer_hint_keys_prefers_configured_relays_for_equivalent_hints() {
+        let preferred = [RelayUrl::from_str("https://iroh-relay.kukuri.app").unwrap()];
+        let first = parse_peer_hint(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://usw1-1.relay.n0.iroh-canary.iroh.link|relay=https://iroh-relay.kukuri.app|addr=1.1.1.1:11223",
+        )
+        .expect("first peer hint should parse");
+        let second = parse_peer_hint(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|relay=https://iroh-relay.kukuri.app|addr=1.1.1.1:11223",
+        )
+        .expect("second peer hint should parse");
+
+        let keys_first = build_peer_hint_keys(&[first], false, &preferred);
+        let keys_second = build_peer_hint_keys(&[second], false, &preferred);
+
+        assert_eq!(keys_first, keys_second);
     }
 }

@@ -388,10 +388,10 @@ describe('ProfileSetup', () => {
 
     // 部分的な失敗メッセージ
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
+      expect(toast.warning).toHaveBeenCalledWith(
         expect.stringContaining('プロフィールの保存中に一部失敗しました'),
       );
-      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
+      expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
     });
 
     // errorHandlerが呼ばれる

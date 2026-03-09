@@ -20,6 +20,7 @@ use nostr_sdk::prelude::*;
 use sqlx::Row;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
+use tokio::time::{Duration, sleep};
 
 #[tokio::test]
 async fn handle_p2p_event_persists_rows() -> Result<()> {
@@ -106,6 +107,17 @@ async fn update_metadata_succeeds_without_relays_and_broadcasts_to_p2p() -> Resu
     let metadata = Metadata::new().name("phase5-local-profile");
     let event_id = manager.update_metadata(metadata).await?;
     assert!(!event_id.to_hex().is_empty());
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if !ctx.gossip.broadcasts().await.is_empty() {
+                break;
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("metadata broadcast should complete asynchronously");
 
     let joined = ctx.gossip.joined_topics().await;
     assert!(joined.iter().any(|topic| topic == DEFAULT_PUBLIC_TOPIC_ID));

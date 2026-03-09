@@ -9,12 +9,22 @@ import {
   type ProfileInfo,
 } from '../helpers/appActions';
 import { runCommunityNodeAuthFlow } from '../helpers/communityNodeAuth';
+import {
+  expectNoToastMatching,
+  waitForToastsToClear,
+} from '../helpers/toasts';
 
 const profile: ProfileInfo = {
   name: 'E2E Community',
   displayName: 'community-node',
   about: 'Community Node settings flow',
 };
+
+async function getSwitchState(selector: string): Promise<string | null> {
+  const element = await $(selector);
+  await element.waitForDisplayed({ timeout: 10000 });
+  return await element.getAttribute('data-state');
+}
 
 describe('Community Node settings', () => {
   before(async () => {
@@ -36,11 +46,16 @@ describe('Community Node settings', () => {
     await waitForHome();
 
     await openSettings();
+    await waitForToastsToClear().catch(() => {});
 
     const baseInput = await $('[data-testid="community-node-base-url"]');
     await baseInput.waitForDisplayed({ timeout: 20000 });
     await baseInput.setValue(baseUrl);
     await $('[data-testid="community-node-save-config"]').click();
+    await expectNoToastMatching({
+      patterns: ['Community Node の追加に失敗しました'],
+      description: 'community node config save should not show failure toast',
+    });
 
     const authButton = await $('[data-testid="community-node-authenticate-0"]');
     await browser.waitUntil(async () => await authButton.isEnabled(), {
@@ -61,6 +76,30 @@ describe('Community Node settings', () => {
     );
     const pubkey = await status.getAttribute('data-pubkey');
     expect(pubkey).toBeTruthy();
+    await expectNoToastMatching({
+      patterns: ['Community Node 認証に失敗しました', 'Trust Provider の取得に失敗しました'],
+      durationMs: 5000,
+      description: 'community node authenticate should not show false failure toast',
+    });
+
+    const searchSwitchSelector = '#community-node-role-search-0';
+    const beforeSearchState = await getSwitchState(searchSwitchSelector);
+    await $(searchSwitchSelector).click();
+    await browser.waitUntil(
+      async () => {
+        const nextState = await getSwitchState(searchSwitchSelector);
+        return nextState !== beforeSearchState;
+      },
+      {
+        timeout: 20000,
+        interval: 300,
+        timeoutMsg: 'Community node role toggle did not update',
+      },
+    );
+    await expectNoToastMatching({
+      patterns: ['Community Node ロール更新に失敗しました'],
+      description: 'community node role toggle should not show false failure toast',
+    });
 
     const consents = await $('[data-testid="community-node-consents"]');
     await browser.waitUntil(

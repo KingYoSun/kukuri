@@ -1,7 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { User } from '@/stores/types';
+import { rememberKnownUserMetadata } from './knownUserMetadata';
 
-function toUserProfileDto(user: User) {
+export function toUserProfileDto(user: User) {
   return {
     npub: user.npub,
     pubkey: user.pubkey,
@@ -18,6 +19,7 @@ function toUserProfileDto(user: User) {
 }
 
 export function syncProfileQueryCaches(queryClient: QueryClient, user: User): void {
+  rememberKnownUserMetadata(user);
   const dto = toUserProfileDto(user);
 
   queryClient.setQueryData(['userProfile', user.npub], dto);

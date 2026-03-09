@@ -41,6 +41,7 @@ impl PostHandler {
 
         PostResponse {
             id: post.id.to_string(),
+            event_id: post.event_id.clone(),
             content: post.content,
             author_pubkey: author_pubkey.clone(),
             author_npub: npub,

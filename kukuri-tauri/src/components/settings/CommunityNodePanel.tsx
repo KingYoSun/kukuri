@@ -142,7 +142,7 @@ export function CommunityNodePanel() {
         reportTrustProviderQuery.error,
         {
           context: 'CommunityNodePanel.trustProvider',
-          showToast: true,
+          showToast: false,
           toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
         },
       );
@@ -153,7 +153,7 @@ export function CommunityNodePanel() {
         communicationTrustProviderQuery.error,
         {
           context: 'CommunityNodePanel.trustProvider',
-          showToast: true,
+          showToast: false,
           toastTitle: t('communityNodePanel.toastTrustProviderFetchFailed'),
         },
       );
@@ -169,7 +169,7 @@ export function CommunityNodePanel() {
     if (pendingJoinRequestsQuery.isError) {
       errorHandler.log('Failed to load pending join requests', pendingJoinRequestsQuery.error, {
         context: 'CommunityNodePanel.joinRequests',
-        showToast: true,
+        showToast: false,
         toastTitle: t('communityNodePanel.toastJoinApproveFailed'),
       });
     }

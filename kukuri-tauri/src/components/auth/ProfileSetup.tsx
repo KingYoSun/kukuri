@@ -106,6 +106,7 @@ export function ProfileSetup() {
     let nostrPicture =
       profile.picture || currentUser?.avatar?.nostrUri || currentUser?.picture || '';
     const accountNpub = currentUser?.npub?.trim() || '';
+    let localProfileSaved = false;
 
     try {
       try {
@@ -197,6 +198,7 @@ export function ProfileSetup() {
           PROFILE_SETUP_LOCAL_STEP_TIMEOUT_MS,
           'updateUserProfile',
         );
+        localProfileSaved = true;
       } catch (localProfileError) {
         pushSaveError(t('auth.profileSaveStepLocalProfile'), localProfileError);
         errorHandler.log('ProfileSetup.localProfileUpdateFailed', localProfileError, {
@@ -215,6 +217,10 @@ export function ProfileSetup() {
         errorHandler.log('Failed to update Nostr metadata', nostrError, {
           context: 'ProfileSetup.handleSubmit.updateNostrMetadata',
         });
+      }
+
+      if (!localProfileSaved) {
+        throw new Error('Local profile save did not complete');
       }
 
       const updatedUser = {
@@ -258,7 +264,7 @@ export function ProfileSetup() {
 
       const uniqueErrors = collectUniqueSaveErrors(saveErrors);
       if (uniqueErrors.length > 0) {
-        toast.error(
+        toast.warning(
           t('auth.profileUpdateFailedWithDetails', {
             details: uniqueErrors.join(' / '),
           }),

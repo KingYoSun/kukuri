@@ -43,6 +43,8 @@ export type BridgeAction =
   | 'getP2PNodeAddresses'
   | 'getP2PMessageSnapshot'
   | 'getPostStoreSnapshot'
+  | 'findTopicContent'
+  | 'getTopicTimelineQuerySnapshot'
   | 'joinP2PTopic'
   | 'leaveP2PTopic'
   | 'connectToP2PPeer'
@@ -246,7 +248,20 @@ export interface PostStoreSnapshot {
   topicId: string;
   count: number;
   recentPostIds: string[];
+  recentEventIds: Array<string | null>;
   recentContents: string[];
+}
+
+export interface TopicContentSearchResult {
+  topicId: string;
+  needle: string;
+  p2pCount: number;
+  p2pMessageIds: string[];
+  p2pContents: string[];
+  postCount: number;
+  postIds: string[];
+  postEventIds: Array<string | null>;
+  postContents: string[];
 }
 
 export interface TimelineUpdateModeSnapshot {
@@ -332,6 +347,17 @@ export interface AccessControlApproveJoinRequestResult {
   key_envelope_event_json: unknown;
 }
 
+export interface TopicTimelineQuerySnapshot {
+  topicId: string;
+  count: number;
+  threadUuids: string[];
+  parentContents: string[];
+  firstReplyContents: string[];
+  dataUpdatedAt: number;
+  fetchStatus: string;
+  status: string;
+}
+
 type BridgeResultMap = {
   resetAppState: null;
   getAuthSnapshot: AuthSnapshot;
@@ -360,6 +386,7 @@ type BridgeResultMap = {
   getP2PNodeAddresses: string[];
   getP2PMessageSnapshot: P2PMessageSnapshot;
   getPostStoreSnapshot: PostStoreSnapshot;
+  getTopicTimelineQuerySnapshot: TopicTimelineQuerySnapshot;
   joinP2PTopic: null;
   leaveP2PTopic: null;
   connectToP2PPeer: null;
@@ -783,6 +810,19 @@ export async function getP2PMessageSnapshot(topicId: string): Promise<P2PMessage
 
 export async function getPostStoreSnapshot(topicId: string): Promise<PostStoreSnapshot> {
   return await callBridge('getPostStoreSnapshot', { topicId });
+}
+
+export async function findTopicContent(
+  topicId: string,
+  needle: string,
+): Promise<TopicContentSearchResult> {
+  return await callBridge('findTopicContent', { topicId, needle });
+}
+
+export async function getTopicTimelineQuerySnapshot(
+  topicId: string,
+): Promise<TopicTimelineQuerySnapshot> {
+  return await callBridge('getTopicTimelineQuerySnapshot', { topicId });
 }
 
 export async function joinP2PTopic(topicId: string, initialPeers: string[] = []): Promise<void> {

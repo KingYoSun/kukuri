@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import i18n from '@/i18n';
+import { clearKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
 
 // リセット関数のセット
 const storeResetFns = new Set<() => void>();
@@ -118,6 +119,7 @@ afterEach(() => {
     storeResetFns.forEach((resetFn) => {
       resetFn();
     });
+    clearKnownUserMetadata();
   });
 });
 

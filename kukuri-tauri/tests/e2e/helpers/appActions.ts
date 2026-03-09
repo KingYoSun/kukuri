@@ -115,6 +115,27 @@ export async function waitForHome(): Promise<void> {
   }
 }
 
+export async function waitForSettings(): Promise<void> {
+  const settings = await $('[data-testid="settings-page"]');
+  try {
+    await settings.waitForDisplayed({ timeout: 20000 });
+  } catch {
+    const debugSnapshot = await browser.execute(() => {
+      return {
+        location: window.location.pathname,
+        auth: document.documentElement?.getAttribute('data-e2e-auth') ?? null,
+        lastLog: document.documentElement?.getAttribute('data-e2e-last-log') ?? null,
+        pageError: document.documentElement?.getAttribute('data-kukuri-e2e-error') ?? null,
+        appErrorBoundary:
+          document.querySelector('[data-testid="app-error-boundary"]')?.textContent ?? null,
+      };
+    });
+    throw new Error(
+      `settings-page not visible (location=${debugSnapshot.location}, auth=${debugSnapshot.auth}, lastLog=${debugSnapshot.lastLog}, pageError=${debugSnapshot.pageError}, appErrorBoundary=${debugSnapshot.appErrorBoundary})`,
+    );
+  }
+}
+
 export async function openSettings(): Promise<void> {
   const openButton = () => $('[data-testid="open-settings-button"]');
   const settingsPage = () => $('[data-testid="settings-page"]');

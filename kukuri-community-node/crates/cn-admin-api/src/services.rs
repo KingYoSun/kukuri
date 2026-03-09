@@ -1,8 +1,9 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
+use cn_core::{db, health};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -12,6 +13,7 @@ use crate::auth::require_admin;
 use crate::{ApiError, ApiResult, AppState};
 
 const SECRET_CONFIG_PREVIEW_LIMIT: usize = 3;
+const ADMIN_API_SERVICE_KEY: &str = "admin-api";
 const RELAY_SERVICE_KEY: &str = "relay";
 
 #[derive(Serialize, ToSchema)]
@@ -245,11 +247,17 @@ pub async fn list_services(
             },
         );
     }
+    health_map.insert(
+        ADMIN_API_SERVICE_KEY.to_string(),
+        build_admin_api_self_health(&state).await,
+    );
 
+    let mut configured_services = HashMap::new();
     let mut services = Vec::new();
     for row in rows {
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
         let service: String = row.try_get("service")?;
+        configured_services.insert(service.clone(), ());
         services.push(ServiceInfo {
             service: service.clone(),
             version: row.try_get("version")?,
@@ -260,7 +268,89 @@ pub async fn list_services(
         });
     }
 
+    if !configured_services.contains_key(ADMIN_API_SERVICE_KEY) {
+        let admin_config = state.admin_config.get().await;
+        services.push(ServiceInfo {
+            service: ADMIN_API_SERVICE_KEY.to_string(),
+            version: admin_config.version,
+            config_json: admin_config.config_json,
+            updated_at: chrono::Utc::now().timestamp(),
+            updated_by: "self".to_string(),
+            health: health_map.remove(ADMIN_API_SERVICE_KEY),
+        });
+        configured_services.insert(ADMIN_API_SERVICE_KEY.to_string(), ());
+    }
+
+    for (service, health) in health_map {
+        configured_services.insert(service.clone(), ());
+        services.push(ServiceInfo {
+            service,
+            version: 0,
+            config_json: json!({}),
+            updated_at: health.checked_at,
+            updated_by: "health-poll".to_string(),
+            health: Some(health),
+        });
+    }
+
+    for service in state.health_targets.keys() {
+        if configured_services.contains_key(service) {
+            continue;
+        }
+        services.push(ServiceInfo {
+            service: service.clone(),
+            version: 0,
+            config_json: json!({}),
+            updated_at: 0,
+            updated_by: "health-poll".to_string(),
+            health: None,
+        });
+    }
+
+    services.sort_by(|left, right| left.service.cmp(&right.service));
     Ok(Json(services))
+}
+
+async fn build_admin_api_self_health(state: &AppState) -> ServiceHealth {
+    let checked_at = chrono::Utc::now().timestamp();
+    let mut errors = Vec::new();
+
+    if let Err(err) = db::check_ready(&state.pool).await {
+        errors.push(json!({
+            "component": "database",
+            "error": err.to_string()
+        }));
+    }
+
+    if let Err(err) =
+        health::ensure_health_targets_ready(&state.health_client, &state.health_targets).await
+    {
+        errors.push(json!({
+            "component": "dependencies",
+            "error": err.to_string()
+        }));
+    }
+
+    if errors.is_empty() {
+        ServiceHealth {
+            status: "healthy".to_string(),
+            checked_at,
+            details: Some(json!({
+                "source": "self",
+                "status": 200
+            })),
+        }
+    } else {
+        ServiceHealth {
+            status: "degraded".to_string(),
+            checked_at,
+            details: Some(json!({
+                "source": "self",
+                "status": 503,
+                "errors": errors
+            })),
+        }
+    }
 }
 
 pub async fn get_service_config(

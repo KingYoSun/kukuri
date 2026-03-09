@@ -10,10 +10,11 @@ import {
   type TimelineRealtimeDelta,
 } from '@/lib/realtime/timelineRealtimeEvents';
 import type { TimelineUpdateMode } from '@/stores/uiStore';
-import type { NostrEventPayload } from '@/types/nostr';
+import { NostrEventKind, type NostrEventPayload } from '@/types/nostr';
 import { collectTimelineStorePosts, type TopicTimelineEntry } from './usePosts';
 
 const REALTIME_BATCH_INTERVAL_MS = 750;
+const REALTIME_DISCONNECTED_FALLBACK_GRACE_MS = 15_000;
 const THREAD_PATH_SEGMENT = '/threads/';
 
 interface UseRealtimeTimelineOptions {
@@ -32,6 +33,27 @@ const toUnixSeconds = (timestamp: number): number =>
 
 const sortTimelineEntries = (entries: TopicTimelineEntry[]): TopicTimelineEntry[] =>
   [...entries].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+
+const deriveThreadUuidFromEventId = (eventId: string): string => {
+  const normalizedHex = eventId
+    .toLowerCase()
+    .replace(/[^0-9a-f]/g, '')
+    .padEnd(32, '0')
+    .slice(0, 32);
+  const bytes = new Uint8Array(16);
+  for (let index = 0; index < 16; index += 1) {
+    const byteHex = normalizedHex.slice(index * 2, index * 2 + 2);
+    const parsed = Number.parseInt(byteHex, 16);
+    bytes[index] = Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const toHex = (value: number): string => value.toString(16).padStart(2, '0');
+  const digest = Array.from(bytes, toHex).join('');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+};
 
 const shortenAuthorLabel = (value: string): string => {
   const trimmed = value.trim();
@@ -114,6 +136,104 @@ const extractThreadRelation = (
   return { rootEventId, parentEventId };
 };
 
+const trimNonEmpty = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const getTopicPostsFromStore = (topicId: string): Post[] => {
+  const postStore = usePostStore.getState();
+  const topicPostIds = postStore.postsByTopic.get(topicId) ?? [];
+  return topicPostIds
+    .map((postId) => postStore.posts.get(postId))
+    .filter((post): post is Post => Boolean(post));
+};
+
+const matchesEventReference = (post: Post, eventId: string): boolean => {
+  const target = eventId.trim();
+  if (!target) {
+    return false;
+  }
+  return post.id === target || post.eventId?.trim() === target;
+};
+
+const matchesRootReference = (post: Post, eventId: string): boolean =>
+  matchesEventReference(post, eventId) || post.threadRootEventId?.trim() === eventId.trim();
+
+const resolveStoredThreadContext = (
+  topicId: string,
+  rootEventId: string | null,
+  parentEventId: string | null,
+): {
+  threadUuid: string;
+  threadNamespace: string;
+  threadRootEventId: string;
+  threadParentEventId: string | null;
+} | null => {
+  const topicPosts = getTopicPostsFromStore(topicId);
+  const parentTarget = trimNonEmpty(parentEventId);
+  const rootTarget = trimNonEmpty(rootEventId);
+  const matchedParent = parentTarget
+    ? (topicPosts.find((post) => matchesEventReference(post, parentTarget)) ?? null)
+    : null;
+  const matchedRoot = rootTarget
+    ? (topicPosts.find((post) => matchesRootReference(post, rootTarget)) ?? null)
+    : null;
+  const source = matchedParent ?? matchedRoot;
+  if (!source) {
+    return null;
+  }
+
+  const threadRootEventId =
+    trimNonEmpty(source.threadRootEventId) ?? trimNonEmpty(source.eventId) ?? source.id;
+  const threadUuid =
+    trimNonEmpty(source.threadUuid) ?? deriveThreadUuidFromEventId(threadRootEventId);
+  const threadNamespace =
+    trimNonEmpty(source.threadNamespace) ?? `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+
+  return {
+    threadUuid,
+    threadNamespace,
+    threadRootEventId,
+    threadParentEventId: parentTarget,
+  };
+};
+
+interface RealtimeThreadDetails {
+  threadUuid: string;
+  threadNamespace: string;
+  threadRootEventId: string;
+  threadParentEventId: string | null;
+  isReply: boolean;
+}
+
+const resolveRealtimeThreadDetails = (
+  payload: NostrEventPayload,
+  topicId: string,
+): RealtimeThreadDetails => {
+  const { rootEventId, parentEventId } = extractThreadRelation(payload.tags);
+  const storedThreadContext = resolveStoredThreadContext(topicId, rootEventId, parentEventId);
+  const threadRootEventId =
+    storedThreadContext?.threadRootEventId ?? rootEventId ?? parentEventId ?? payload.id;
+  const threadUuid =
+    extractThreadUuid(payload.tags, topicId) ??
+    storedThreadContext?.threadUuid ??
+    deriveThreadUuidFromEventId(threadRootEventId);
+  const threadNamespace =
+    findTagValue(payload.tags, 'thread') ??
+    storedThreadContext?.threadNamespace ??
+    `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`;
+  const threadParentEventId = parentEventId ?? storedThreadContext?.threadParentEventId ?? null;
+
+  return {
+    threadUuid,
+    threadNamespace,
+    threadRootEventId,
+    threadParentEventId,
+    isReply: threadParentEventId !== null,
+  };
+};
+
 const resolveFallbackAuthor = (
   entries: TopicTimelineEntry[],
   authorPubkey: string,
@@ -148,21 +268,21 @@ const resolveFallbackAuthor = (
 const toRealtimePost = (
   payload: NostrEventPayload,
   topicId: string,
-  threadUuid: string,
+  threadDetails: RealtimeThreadDetails,
   entries: TopicTimelineEntry[],
 ): Post => {
-  const { rootEventId, parentEventId } = extractThreadRelation(payload.tags);
   const createdAt = toUnixSeconds(payload.created_at);
 
   return {
     id: payload.id,
+    eventId: payload.id,
     content: payload.content,
     author: resolveFallbackAuthor(entries, payload.author, shortenAuthorLabel(payload.author)),
     topicId,
-    threadNamespace: `${topicId}${THREAD_PATH_SEGMENT}${threadUuid}`,
-    threadUuid,
-    threadRootEventId: rootEventId ?? payload.id,
-    threadParentEventId: parentEventId,
+    threadNamespace: threadDetails.threadNamespace,
+    threadUuid: threadDetails.threadUuid,
+    threadRootEventId: threadDetails.threadRootEventId,
+    threadParentEventId: threadDetails.threadParentEventId,
     created_at: createdAt,
     tags: payload.tags.map((tag) => tag.join(':')),
     likes: 0,
@@ -178,7 +298,7 @@ const applyNostrDeltaToTimeline = (
   payload: NostrEventPayload,
   topicId: string,
 ): DeltaApplyResult => {
-  if (payload.kind !== 30078) {
+  if (payload.kind !== NostrEventKind.TopicPost && payload.kind !== NostrEventKind.TextNote) {
     return { status: 'ignored' };
   }
 
@@ -187,19 +307,14 @@ const applyNostrDeltaToTimeline = (
     return { status: 'ignored' };
   }
 
-  const threadUuid = extractThreadUuid(payload.tags, topicId);
-  if (!threadUuid) {
-    return { status: 'requires_refetch' };
-  }
-
-  const { parentEventId } = extractThreadRelation(payload.tags);
-  const isReply = parentEventId !== null;
+  const threadDetails = resolveRealtimeThreadDetails(payload, topicId);
   const createdAt = toUnixSeconds(payload.created_at);
-  const realtimePost = toRealtimePost(payload, topicId, threadUuid, entries);
+  const realtimePost = toRealtimePost(payload, topicId, threadDetails, entries);
+  const threadUuid = threadDetails.threadUuid;
 
   const existingIndex = entries.findIndex((entry) => entry.threadUuid === threadUuid);
   if (existingIndex < 0) {
-    if (isReply) {
+    if (threadDetails.isReply) {
       return { status: 'requires_refetch' };
     }
 
@@ -221,7 +336,7 @@ const applyNostrDeltaToTimeline = (
     return { status: 'ignored' };
   }
 
-  const updatedEntry: TopicTimelineEntry = isReply
+  const updatedEntry: TopicTimelineEntry = threadDetails.isReply
     ? {
         ...currentEntry,
         firstReply: currentEntry.firstReply ?? realtimePost,
@@ -250,10 +365,14 @@ export function useRealtimeTimeline({
   const queryClient = useQueryClient();
   const setPosts = usePostStore((state) => state.setPosts);
   const connectionStatus = useP2PStore((state) => state.connectionStatus);
+  const activeTopicStats = useP2PStore((state) =>
+    topicId ? (state.activeTopics.get(topicId) ?? null) : null,
+  );
   const queuedDeltasRef = useRef<TimelineRealtimeDelta[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenRealtimePostIdsRef = useRef<Set<string>>(new Set());
   const fallbackTriggeredRef = useRef(false);
+  const realtimeActivatedAtRef = useRef<number | null>(null);
 
   const flushRealtimeQueue = useCallback(() => {
     flushTimerRef.current = null;
@@ -351,7 +470,10 @@ export function useRealtimeTimeline({
 
     if (mode === 'realtime') {
       fallbackTriggeredRef.current = false;
+      realtimeActivatedAtRef.current = Date.now();
+      return;
     }
+    realtimeActivatedAtRef.current = null;
   }, [mode, topicId]);
 
   useEffect(() => {
@@ -359,9 +481,14 @@ export function useRealtimeTimeline({
       return;
     }
 
+    const hasTopicActivity =
+      (activeTopicStats?.peer_count ?? 0) > 0 || (activeTopicStats?.message_count ?? 0) > 0;
+    const disconnectedGraceElapsed =
+      realtimeActivatedAtRef.current !== null &&
+      Date.now() - realtimeActivatedAtRef.current >= REALTIME_DISCONNECTED_FALLBACK_GRACE_MS;
     const shouldFallback =
-      connectionStatus === 'disconnected' ||
       connectionStatus === 'error' ||
+      (connectionStatus === 'disconnected' && disconnectedGraceElapsed && !hasTopicActivity) ||
       (typeof navigator !== 'undefined' && navigator.onLine === false);
 
     if (!shouldFallback || fallbackTriggeredRef.current) {
@@ -370,7 +497,7 @@ export function useRealtimeTimeline({
 
     fallbackTriggeredRef.current = true;
     onFallbackToStandard();
-  }, [connectionStatus, mode, onFallbackToStandard]);
+  }, [activeTopicStats, connectionStatus, mode, onFallbackToStandard]);
 
   useEffect(() => {
     if (mode !== 'realtime') {

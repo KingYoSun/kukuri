@@ -96,6 +96,7 @@ export interface EnqueueTopicCreationResponse {
 // ポスト関連の型定義
 export interface Post {
   id: string;
+  event_id?: string | null;
   content: string;
   author_pubkey: string;
   author_npub: string;

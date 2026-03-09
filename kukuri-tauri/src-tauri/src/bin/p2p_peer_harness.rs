@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
@@ -16,7 +16,7 @@ use kukuri_lib::test_support::shared::config::{AppConfig, BootstrapSource, Netwo
 use nostr_sdk::prelude::{
     Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
@@ -59,10 +59,13 @@ struct HarnessConfig {
     publish_interval_ms: u64,
     publish_max: Option<u64>,
     publish_prefix: String,
+    publish_content: Option<String>,
+    reply_to_event_id: Option<String>,
     startup_delay_ms: u64,
     run_seconds: Option<u64>,
     summary_path: Option<PathBuf>,
     node_address_path: Option<PathBuf>,
+    command_dir: Option<PathBuf>,
     iroh_secret_key_b64: Option<String>,
     nostr_secret_key_b64: Option<String>,
     publish_metadata: bool,
@@ -100,6 +103,34 @@ struct HarnessSummary {
     status_peer_count: usize,
     status_connection: String,
     stats: HarnessStats,
+}
+
+#[derive(Debug, Clone)]
+struct TopicPublishRequest {
+    topic_id: String,
+    content: String,
+    reply_to_event_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerCommand {
+    command_id: String,
+    action: String,
+    topic_id: Option<String>,
+    content: Option<String>,
+    reply_to_event_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PeerCommandResult {
+    command_id: String,
+    ok: bool,
+    processed_at: DateTime<Utc>,
+    topic_id: Option<String>,
+    content: Option<String>,
+    event_id: Option<String>,
+    published_count: u64,
+    error: Option<String>,
 }
 
 fn parse_env_list(raw: Option<String>) -> Vec<String> {
@@ -200,6 +231,10 @@ fn build_config() -> HarnessConfig {
         .max(100),
         publish_max: parse_optional_u64(std::env::var("KUKURI_PEER_PUBLISH_MAX").ok()),
         publish_prefix: parse_required_string("KUKURI_PEER_PUBLISH_PREFIX", "multi-peer-publisher"),
+        publish_content: parse_optional_string(std::env::var("KUKURI_PEER_PUBLISH_CONTENT").ok()),
+        reply_to_event_id: parse_optional_string(
+            std::env::var("KUKURI_PEER_REPLY_TO_EVENT_ID").ok(),
+        ),
         startup_delay_ms: parse_optional_u64(std::env::var("KUKURI_PEER_STARTUP_DELAY_MS").ok())
             .unwrap_or(0),
         run_seconds: parse_optional_u64(std::env::var("KUKURI_PEER_RUN_SECONDS").ok()),
@@ -209,6 +244,11 @@ fn build_config() -> HarnessConfig {
             .filter(|path| !path.is_empty())
             .map(PathBuf::from),
         node_address_path: std::env::var("KUKURI_PEER_NODE_ADDRESS_PATH")
+            .ok()
+            .map(|path| path.trim().to_string())
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from),
+        command_dir: std::env::var("KUKURI_PEER_COMMAND_DIR")
             .ok()
             .map(|path| path.trim().to_string())
             .filter(|path| !path.is_empty())
@@ -287,29 +327,32 @@ async fn publish_topic_event(
     publisher: &EventPublisher,
     stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
     cfg: &HarnessConfig,
+    request: &TopicPublishRequest,
     stats: &mut HarnessStats,
-) -> anyhow::Result<()> {
-    let content = format!(
-        "{} [{}] {}",
-        cfg.publish_prefix,
-        cfg.peer_name,
-        Utc::now().to_rfc3339()
-    );
-    let nostr_event = publisher.create_topic_post(&cfg.topic_id, &content, None, None, None)?;
+) -> anyhow::Result<String> {
+    let reply_to = match request.reply_to_event_id.as_deref() {
+        Some(raw) => Some(
+            nostr_sdk::prelude::EventId::from_hex(raw)
+                .map_err(|err| anyhow::anyhow!("invalid reply_to event id: {err}"))?,
+        ),
+        None => None,
+    };
+    let nostr_event =
+        publisher.create_topic_post(&request.topic_id, &request.content, reply_to, None, None)?;
     let domain_event = convert_nostr_event(&nostr_event)?;
     stack
         .gossip_service
-        .broadcast(&cfg.topic_id, &domain_event)
+        .broadcast(&request.topic_id, &domain_event)
         .await?;
     stats.published_count += 1;
     info!(
         peer = %cfg.peer_name,
-        topic = %cfg.topic_id,
+        topic = %request.topic_id,
         event_id = %domain_event.id,
         published = stats.published_count,
         "Peer harness published topic event"
     );
-    Ok(())
+    Ok(domain_event.id)
 }
 
 async fn publish_profile_metadata(
@@ -348,6 +391,21 @@ fn push_recent_content(stats: &mut HarnessStats, content: &str) {
         stats.recent_contents.remove(0);
     }
     stats.recent_contents.push(content.to_string());
+}
+
+fn build_default_publish_request(cfg: &HarnessConfig) -> TopicPublishRequest {
+    TopicPublishRequest {
+        topic_id: cfg.topic_id.clone(),
+        content: cfg.publish_content.clone().unwrap_or_else(|| {
+            format!(
+                "{} [{}] {}",
+                cfg.publish_prefix,
+                cfg.peer_name,
+                Utc::now().to_rfc3339()
+            )
+        }),
+        reply_to_event_id: cfg.reply_to_event_id.clone(),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -503,7 +561,7 @@ fn pick_preferred_address(addresses: &[String]) -> Option<String> {
 }
 
 async fn write_node_address_snapshot(
-    path: &PathBuf,
+    path: &Path,
     snapshot: &NodeAddressSnapshot,
 ) -> anyhow::Result<()> {
     if let Some(parent) = path.parent()
@@ -515,13 +573,158 @@ async fn write_node_address_snapshot(
     Ok(())
 }
 
-async fn write_summary(path: &PathBuf, summary: &HarnessSummary) -> anyhow::Result<()> {
+async fn write_summary(path: &Path, summary: &HarnessSummary) -> anyhow::Result<()> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, serde_json::to_vec_pretty(summary)?)?;
+    Ok(())
+}
+
+fn peer_command_result_path(command_path: &Path) -> PathBuf {
+    let file_name = command_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("command.json");
+    let stem = file_name.strip_suffix(".json").unwrap_or(file_name);
+    command_path.with_file_name(format!("{stem}.result.json"))
+}
+
+fn load_pending_command_paths(command_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    if !command_dir.exists() {
+        fs::create_dir_all(command_dir)?;
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(command_dir)? {
+        let path = entry?.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !file_name.ends_with(".json") || file_name.ends_with(".result.json") {
+            continue;
+        }
+        entries.push(path);
+    }
+    entries.sort();
+    Ok(entries)
+}
+
+fn build_publish_request_from_command(
+    cfg: &HarnessConfig,
+    command: &PeerCommand,
+) -> anyhow::Result<TopicPublishRequest> {
+    let topic_id = command
+        .topic_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(cfg.topic_id.as_str())
+        .to_string();
+    let content = command
+        .content
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("command content is required"))?
+        .to_string();
+    let reply_to_event_id = command
+        .reply_to_event_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    Ok(TopicPublishRequest {
+        topic_id,
+        content,
+        reply_to_event_id,
+    })
+}
+
+async fn process_peer_commands(
+    command_dir: &Path,
+    publisher: &EventPublisher,
+    stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
+    cfg: &HarnessConfig,
+    stats: &mut HarnessStats,
+) -> anyhow::Result<()> {
+    for command_path in load_pending_command_paths(command_dir)? {
+        let command_result_path = peer_command_result_path(&command_path);
+        let raw = fs::read_to_string(&command_path)?;
+        let parsed = serde_json::from_str::<PeerCommand>(&raw);
+        let result = match parsed {
+            Ok(command) => {
+                let execution: anyhow::Result<PeerCommandResult> = match command.action.trim() {
+                    "publish_topic_event" => {
+                        let request = build_publish_request_from_command(cfg, &command)?;
+                        let event_id =
+                            publish_topic_event(publisher, stack, cfg, &request, stats).await?;
+                        Ok(PeerCommandResult {
+                            command_id: command.command_id,
+                            ok: true,
+                            processed_at: Utc::now(),
+                            topic_id: Some(request.topic_id),
+                            content: Some(request.content),
+                            event_id: Some(event_id),
+                            published_count: stats.published_count,
+                            error: None,
+                        })
+                    }
+                    other => Ok(PeerCommandResult {
+                        command_id: command.command_id,
+                        ok: false,
+                        processed_at: Utc::now(),
+                        topic_id: command.topic_id,
+                        content: command.content,
+                        event_id: None,
+                        published_count: stats.published_count,
+                        error: Some(format!("unsupported peer command action: {other}")),
+                    }),
+                };
+                execution?
+            }
+            Err(err) => PeerCommandResult {
+                command_id: command_path
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("invalid-command")
+                    .to_string(),
+                ok: false,
+                processed_at: Utc::now(),
+                topic_id: None,
+                content: None,
+                event_id: None,
+                published_count: stats.published_count,
+                error: Some(format!("failed to parse peer command: {err}")),
+            },
+        };
+
+        fs::write(&command_result_path, serde_json::to_vec_pretty(&result)?)?;
+        fs::remove_file(&command_path)?;
+        if let Some(error) = &result.error {
+            stats.last_error = Some(error.clone());
+            warn!(
+                peer = %cfg.peer_name,
+                command_id = %result.command_id,
+                error = %error,
+                "Peer harness command failed"
+            );
+        } else {
+            info!(
+                peer = %cfg.peer_name,
+                command_id = %result.command_id,
+                published = stats.published_count,
+                "Peer harness command completed"
+            );
+        }
+    }
     Ok(())
 }
 
@@ -579,8 +782,10 @@ async fn main() -> anyhow::Result<()> {
     let mut publish_enabled = cfg.mode == PeerMode::Publisher && !cfg.publish_on_peer_join;
     let mut publish_tick = tokio::time::interval(Duration::from_millis(cfg.publish_interval_ms));
     let mut summary_tick = tokio::time::interval(Duration::from_secs(1));
+    let mut command_tick = tokio::time::interval(Duration::from_millis(250));
     publish_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     summary_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    command_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let node_addresses = match stack.p2p_service.get_node_addresses().await {
         Ok(addresses) => addresses,
@@ -626,7 +831,14 @@ async fn main() -> anyhow::Result<()> {
 
     if cfg.mode == PeerMode::Publisher
         && publish_enabled
-        && let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await
+        && let Err(err) = publish_topic_event(
+            &publisher,
+            &stack,
+            &cfg,
+            &build_default_publish_request(&cfg),
+            &mut stats,
+        )
+        .await
     {
         stats.last_error = Some(err.to_string());
         warn!(peer = %cfg.peer_name, error = %err, "Initial publish failed");
@@ -649,9 +861,29 @@ async fn main() -> anyhow::Result<()> {
                 break "ctrl_c";
             }
             _ = publish_tick.tick(), if cfg.mode == PeerMode::Publisher && publish_enabled => {
-                if let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await {
+                if let Err(err) = publish_topic_event(
+                    &publisher,
+                    &stack,
+                    &cfg,
+                    &build_default_publish_request(&cfg),
+                    &mut stats,
+                ).await {
                     stats.last_error = Some(err.to_string());
                     warn!(peer = %cfg.peer_name, error = %err, "Periodic publish failed");
+                }
+            }
+            _ = command_tick.tick(), if cfg.command_dir.is_some() => {
+                if let Some(command_dir) = &cfg.command_dir
+                    && let Err(err) = process_peer_commands(
+                        command_dir,
+                        &publisher,
+                        &stack,
+                        &cfg,
+                        &mut stats,
+                    ).await
+                {
+                    stats.last_error = Some(err.to_string());
+                    warn!(peer = %cfg.peer_name, error = %err, "Peer command processing failed");
                 }
             }
             _ = summary_tick.tick(), if cfg.summary_path.is_some() => {
@@ -717,7 +949,13 @@ async fn main() -> anyhow::Result<()> {
                         stats.peer_joined_events += 1;
                         if cfg.mode == PeerMode::Publisher && cfg.publish_on_peer_join && !publish_enabled {
                             publish_enabled = true;
-                            if let Err(err) = publish_topic_event(&publisher, &stack, &cfg, &mut stats).await {
+                            if let Err(err) = publish_topic_event(
+                                &publisher,
+                                &stack,
+                                &cfg,
+                                &build_default_publish_request(&cfg),
+                                &mut stats,
+                            ).await {
                                 stats.last_error = Some(err.to_string());
                                 warn!(peer = %cfg.peer_name, error = %err, "Peer-joined publish failed");
                             }

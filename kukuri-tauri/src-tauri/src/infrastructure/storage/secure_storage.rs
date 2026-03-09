@@ -18,36 +18,128 @@ use nostr_sdk::{
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tracing::{debug, error, warn};
 
 const SERVICE_NAME: &str = "kukuri";
 const ACCOUNTS_KEY: &str = "accounts_metadata";
 const KEY_MANAGER_LEDGER_KEY: &str = "key_manager_ledger";
+const KEYRING_DISABLE_ENV: &str = "KUKURI_DISABLE_KEYRING";
+const FALLBACK_DIR_OVERRIDE_ENV: &str = "KUKURI_SECURE_STORAGE_FALLBACK_DIR";
+const FALLBACK_FILE_NAME: &str = "secure_storage_fallback.json";
 
-static FALLBACK_STORE: Lazy<Mutex<HashMap<String, String>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+#[derive(Default)]
+struct FallbackStoreState {
+    loaded: bool,
+    values: HashMap<String, String>,
+}
+
+static FALLBACK_STORE: Lazy<Mutex<FallbackStoreState>> =
+    Lazy::new(|| Mutex::new(FallbackStoreState::default()));
+
+fn keyring_disabled() -> bool {
+    std::env::var(KEYRING_DISABLE_ENV)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn fallback_store_path() -> Result<PathBuf> {
+    let mut base_dir = if let Ok(override_dir) = std::env::var(FALLBACK_DIR_OVERRIDE_ENV) {
+        let trimmed = override_dir.trim();
+        if trimmed.is_empty() {
+            return Err(anyhow!(
+                "Fallback directory override is empty: {}",
+                FALLBACK_DIR_OVERRIDE_ENV
+            ));
+        }
+        PathBuf::from(trimmed)
+    } else {
+        dirs::data_local_dir()
+            .or_else(dirs::data_dir)
+            .ok_or_else(|| anyhow!("Failed to resolve secure storage fallback directory"))?
+            .join(SERVICE_NAME)
+    };
+
+    fs::create_dir_all(&base_dir).context("Failed to create secure storage fallback directory")?;
+    base_dir.push(FALLBACK_FILE_NAME);
+    Ok(base_dir)
+}
+
+fn load_fallback_store_from_disk() -> Result<HashMap<String, String>> {
+    let path = fallback_store_path()?;
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let json = fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read fallback store file at {:?}", path))?;
+    serde_json::from_str(&json).context("Failed to deserialize secure storage fallback file")
+}
+
+fn persist_fallback_store_to_disk(values: &HashMap<String, String>) -> Result<()> {
+    let path = fallback_store_path()?;
+    if values.is_empty() {
+        if path.exists() {
+            fs::remove_file(&path)
+                .with_context(|| format!("Failed to remove fallback store file at {:?}", path))?;
+        }
+        return Ok(());
+    }
+
+    let json = serde_json::to_string(values).context("Failed to serialize fallback store")?;
+    let temp_path = path.with_extension("tmp");
+    fs::write(&temp_path, json)
+        .with_context(|| format!("Failed to write fallback temp file at {:?}", temp_path))?;
+    fs::rename(&temp_path, &path)
+        .or_else(|_| {
+            fs::copy(&temp_path, &path)?;
+            fs::remove_file(&temp_path)?;
+            Ok::<(), std::io::Error>(())
+        })
+        .with_context(|| format!("Failed to persist fallback store file at {:?}", path))?;
+    Ok(())
+}
+
+fn ensure_fallback_store_loaded(state: &mut FallbackStoreState) -> Result<()> {
+    if state.loaded {
+        return Ok(());
+    }
+    state.values = load_fallback_store_from_disk()?;
+    state.loaded = true;
+    Ok(())
+}
 
 fn fallback_store(key: &str, value: &str) -> Result<()> {
     let mut guard = FALLBACK_STORE
         .lock()
         .map_err(|_| anyhow!("Failed to lock fallback store"))?;
-    guard.insert(key.to_string(), value.to_string());
+    ensure_fallback_store_loaded(&mut guard)?;
+    guard.values.insert(key.to_string(), value.to_string());
+    persist_fallback_store_to_disk(&guard.values)?;
     Ok(())
 }
 
 fn fallback_get(key: &str) -> Option<String> {
-    FALLBACK_STORE
-        .lock()
-        .ok()
-        .and_then(|guard| guard.get(key).cloned())
+    FALLBACK_STORE.lock().ok().and_then(|mut guard| {
+        ensure_fallback_store_loaded(&mut guard).ok()?;
+        guard.values.get(key).cloned()
+    })
 }
 
 fn fallback_delete(key: &str) -> Result<()> {
     let mut guard = FALLBACK_STORE
         .lock()
         .map_err(|_| anyhow!("Failed to lock fallback store"))?;
-    guard.remove(key);
+    ensure_fallback_store_loaded(&mut guard)?;
+    guard.values.remove(key);
+    persist_fallback_store_to_disk(&guard.values)?;
     Ok(())
 }
 
@@ -55,7 +147,10 @@ fn fallback_has(key: &str) -> bool {
     FALLBACK_STORE
         .lock()
         .ok()
-        .map(|guard| guard.contains_key(key))
+        .and_then(|mut guard| {
+            ensure_fallback_store_loaded(&mut guard).ok()?;
+            Some(guard.values.contains_key(key))
+        })
         .unwrap_or(false)
 }
 
@@ -63,93 +158,113 @@ fn fallback_clear() -> Result<()> {
     let mut guard = FALLBACK_STORE
         .lock()
         .map_err(|_| anyhow!("Failed to lock fallback store"))?;
-    guard.clear();
+    guard.values.clear();
+    guard.loaded = true;
+    persist_fallback_store_to_disk(&guard.values)?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn fallback_reset_loaded_state_for_test() -> Result<()> {
+    let mut guard = FALLBACK_STORE
+        .lock()
+        .map_err(|_| anyhow!("Failed to lock fallback store"))?;
+    guard.loaded = false;
+    guard.values.clear();
     Ok(())
 }
 
 fn store_with_fallback(key: &str, value: &str) -> Result<()> {
-    match Entry::new(SERVICE_NAME, key) {
-        Ok(entry) => {
-            if let Err(err) = entry.set_password(value) {
+    if !keyring_disabled() {
+        match Entry::new(SERVICE_NAME, key) {
+            Ok(entry) => {
+                if let Err(err) = entry.set_password(value) {
+                    warn!(
+                        "SecureStorage: keyring set_password failed for key {}: {err:?}",
+                        key
+                    );
+                }
+            }
+            Err(err) => {
                 warn!(
-                    "SecureStorage: keyring set_password failed for key {}: {err:?}",
+                    "SecureStorage: keyring entry creation failed for key {}: {err:?}",
                     key
                 );
             }
-        }
-        Err(err) => {
-            warn!(
-                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
-                key
-            );
         }
     }
     fallback_store(key, value)
 }
 
 fn retrieve_with_fallback(key: &str) -> Result<Option<String>> {
-    match Entry::new(SERVICE_NAME, key) {
-        Ok(entry) => match entry.get_password() {
-            Ok(password) => {
-                let _ = fallback_store(key, &password);
-                return Ok(Some(password));
-            }
-            Err(keyring::Error::NoEntry) => {}
+    if !keyring_disabled() {
+        match Entry::new(SERVICE_NAME, key) {
+            Ok(entry) => match entry.get_password() {
+                Ok(password) => {
+                    let _ = fallback_store(key, &password);
+                    return Ok(Some(password));
+                }
+                Err(keyring::Error::NoEntry) => {}
+                Err(err) => {
+                    warn!(
+                        "SecureStorage: keyring get_password failed for key {}: {err:?}",
+                        key
+                    );
+                }
+            },
             Err(err) => {
                 warn!(
-                    "SecureStorage: keyring get_password failed for key {}: {err:?}",
+                    "SecureStorage: keyring entry creation failed for key {}: {err:?}",
                     key
                 );
             }
-        },
-        Err(err) => {
-            warn!(
-                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
-                key
-            );
         }
     }
     Ok(fallback_get(key))
 }
 
 fn delete_with_fallback(key: &str) -> Result<()> {
-    match Entry::new(SERVICE_NAME, key) {
-        Ok(entry) => match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
+    if !keyring_disabled() {
+        match Entry::new(SERVICE_NAME, key) {
+            Ok(entry) => match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(err) => {
+                    warn!(
+                        "SecureStorage: keyring delete failed for key {}: {err:?}",
+                        key
+                    );
+                }
+            },
             Err(err) => {
                 warn!(
-                    "SecureStorage: keyring delete failed for key {}: {err:?}",
+                    "SecureStorage: keyring entry creation failed for key {}: {err:?}",
                     key
                 );
             }
-        },
-        Err(err) => {
-            warn!(
-                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
-                key
-            );
         }
     }
     fallback_delete(key)
 }
 
 fn exists_with_fallback(key: &str) -> Result<bool> {
-    match Entry::new(SERVICE_NAME, key) {
-        Ok(entry) => match entry.get_password() {
-            Ok(_) => return Ok(true),
-            Err(keyring::Error::NoEntry) => {}
+    if !keyring_disabled() {
+        match Entry::new(SERVICE_NAME, key) {
+            Ok(entry) => match entry.get_password() {
+                Ok(_) => return Ok(true),
+                Err(keyring::Error::NoEntry) => {}
+                Err(err) => {
+                    warn!(
+                        "SecureStorage: keyring exists check failed for key {}: {err:?}",
+                        key
+                    );
+                }
+            },
             Err(err) => {
                 warn!(
-                    "SecureStorage: keyring exists check failed for key {}: {err:?}",
+                    "SecureStorage: keyring entry creation failed for key {}: {err:?}",
                     key
                 );
             }
-        },
-        Err(err) => {
-            warn!(
-                "SecureStorage: keyring entry creation failed for key {}: {err:?}",
-                key
-            );
         }
     }
     Ok(fallback_has(key))
@@ -530,6 +645,81 @@ impl KeyMaterialStore for DefaultSecureStorage {
             }
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod fallback_persistence_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    static TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    struct ScopedEnvVar {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl ScopedEnvVar {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            unsafe { std::env::set_var(key, value) };
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for ScopedEnvVar {
+        fn drop(&mut self) {
+            match self.previous.as_deref() {
+                Some(value) => unsafe { std::env::set_var(self.key, value) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
+    }
+
+    fn sample_registration(npub: &str) -> AccountRegistration {
+        AccountRegistration {
+            npub: npub.to_string(),
+            nsec: "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsyqcyq5rqwzqfka".to_string(),
+            pubkey: format!("pubkey_{npub}"),
+            name: "linux-user".to_string(),
+            display_name: "Linux User".to_string(),
+            picture: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn fallback_persistence_restores_current_account_after_in_memory_reset() {
+        let _guard = TEST_LOCK.lock().expect("lock");
+        let temp_dir = TempDir::new().expect("temp dir");
+        let _fallback_dir = ScopedEnvVar::set(
+            FALLBACK_DIR_OVERRIDE_ENV,
+            temp_dir.path().to_string_lossy().as_ref(),
+        );
+        let _disable_keyring = ScopedEnvVar::set(KEYRING_DISABLE_ENV, "1");
+
+        fallback_clear().expect("clear fallback");
+        fallback_reset_loaded_state_for_test().expect("reset fallback state");
+
+        let storage = DefaultSecureStorage::new();
+        let registration = sample_registration("npub1linuxpersist");
+        let expected_npub = registration.npub.clone();
+
+        SecureAccountStore::add_account(&storage, registration)
+            .await
+            .expect("add account");
+
+        fallback_reset_loaded_state_for_test().expect("simulate restart");
+
+        let current = SecureAccountStore::current_account(&storage)
+            .await
+            .expect("load current account after reset")
+            .expect("current account should persist");
+        assert_eq!(current.metadata.npub, expected_npub);
+        assert_eq!(
+            current.nsec,
+            "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsyqcyq5rqwzqfka"
+        );
     }
 }
 

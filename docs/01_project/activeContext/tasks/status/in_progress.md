@@ -1,6 +1,6 @@
-[title] 作業中タスク（in_progress）
+﻿[title] 作業中タスク（in_progress）
 
-最終更新日: 2026年03月05日
+最終更新日: 2026年03月09日
 
 ## 方針（2025年09月15日 更新）
 
@@ -11,6 +11,35 @@
 ## 現在のタスク
 - P2Pトピック同期の不具合調査と修正（bootstrap反映、受信投稿のリアルタイム反映、プロフィール表示改善）
 - Community Node relay 公開構成の VPS + WireGuard edge 化（Cloudflare Tunnel 依存の除去、Home bind 制御、運用スクリプト整備）
+
+### Community Node 実機UX不具合の再現・修正（2026年03月08日 着手）
+- プロフィール伝播不具合: profile 保存はローカル成功するが failure toast が出て、相手側へ metadata が伝播しない。
+  - 再現条件: profile setup / profile update 実行後に toast、local profile、相手側 author 表示を確認する。
+  - 完了条件: success toast のみが出て、相手側 timeline/thread でも表示名・avatar が反映される。
+  - 進捗（2026年03月08日）: `useP2PEventListener` の unit reproducer を追加し、`p2p://message/raw` の metadata(kind=0) 受信時に `timeline` / `topicTimeline` / `topicThreads` / `threadPosts` / post store の author metadata を即時更新する修正を反映。`ProfileSetup` / `ProfileEditDialog` は local save 成功後の remote 失敗を failure ではなく warning toast に変更し、関連 19 tests の個別実行で PASS を確認。
+  - 進捗（2026年03月08日・live path）: `community-node.profile-propagation.spec.ts` を追加して false failure toast と metadata 未伝播を E2E で再現後、同 spec を success 条件へ更新した。`./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.profile-propagation.spec.ts`）で PASS を確認。残作業は実機 multi-node 構成での再確認のみ。
+- Community Node 操作 toast 不整合: 設定保存・認証・role 変更で failure toast が出るが、reload 後は成功状態になっている。
+  - 再現条件: settings 画面から config save / authenticate / role change を順に実施し、toast と state snapshot を比較する。
+  - 完了条件: 実際に成功した操作では failure toast が出ず、UI 状態と backend state が一致する。
+  - 進捗（2026年03月08日）: `CommunityNodePanel` の unit reproducer を追加し、成功した認証後の trust provider refresh 失敗が `showToast: true` で user-facing error になっていたことを固定。`trust provider` / `pending join requests` の背景 query 失敗はログのみ（`showToast: false`）へ変更し、`CommunityNodePanel.test.tsx` 10 tests PASS を確認。
+  - 進捗（2026年03月08日・live path）: `community-node.settings.spec.ts` で config save / authenticate / role change を実経路で再現し、false failure toast が出ないことを確認。`./scripts/test-docker.ps1 e2e-community-node`（`E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.settings.spec.ts`）で PASS。
+- Windows Tauri リロードクラッシュ: 複数回 reload 後に `iroh-quinn ... PoisonError` でクライアントが落ちる。
+  - 再現条件: Windows で Community Node 設定済みクライアントを連続 reload し、Rust panic を監視する。
+  - 完了条件: reload 耐性テストで panic が再現せず、endpoint 再初期化が idempotent である。
+  - 進捗（2026年03月09日）: `community-node.reload-stability.spec.ts` を追加し、Community Node 認証済みクライアントを settings route 上で 5 回連続 reload しても token / pubkey / `endpoint_id` / `connection_status` が維持されることを live-path で再現・固定した。失敗時は `home-page` 復帰前提の spec が `/settings` 残留で誤検知していたため、reload 後は `settings-page` 維持を正常系に変更。
+  - 進捗（2026年03月09日・根因修正）: `IrohGossipService` に peer hint 同一集合の再joinを idempotent に扱う判定を追加し、既存 topic に同じ Community Node peer hint が再投入された場合は handle rebuild をスキップするよう修正。`test_existing_topic_with_same_peer_hints_keeps_handle` / `test_build_peer_hint_keys_prefers_configured_relays_for_equivalent_hints` を追加し、`./scripts/test-docker.ps1 rust` と `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.reload-stability.spec.ts ./scripts/test-docker.ps1 e2e-community-node` で PASS を確認。残作業は実機 Windows で panic ログが再発しないことの確認のみ。
+- Admin UI connected users 表示不整合: Relay / Bootstrap の Users が現在接続ではなく累積を表示している。
+  - 再現条件: user の接続・切断を繰り返し、Admin UI 表示と runtime status を比較する。
+  - 完了条件: 現在接続中の user のみ表示される。
+  - 進捗（2026年03月08日）: `cn-admin-api` が `cn_user.topic_subscriptions` の active 行を current connected users と誤読していたため、contract test `node_subscriptions_list_does_not_treat_active_subscriptions_as_current_connected_users` を追加して再現。`connected_users` は runtime current users を直接持たず、`connected_user_count` は relay runtime fallback のみ反映するよう修正した。`cargo test -p cn-admin-api ...` と Admin Console page tests で PASS を確認。残作業は実機 Admin UI での表示確認のみ。
+- Admin UI health 不具合:
+  - `admin-api` が `unknown`
+  - `moderation` が `unreachable (build error)`
+  - `trust` が `degraded (503)`
+  - 完了条件: health source を切り分け、各 service が実状態に応じて `healthy` もしくは妥当な degraded 理由を返す。
+  - 進捗（2026年03月08日）: `apps/admin-console/vite.config.ts` の `VITE_ALLOWED_HOSTS.split(',')` 例外で Moderation/Trust/Services page test が build 前に落ちていたため、未設定時も安全に評価するよう修正し、関連 page tests 14 files / 27 tests PASS を確認。
+  - 進捗（2026年03月08日・backend）: `cn-admin-api` の `/v1/admin/services` が `service_configs` 起点のみで `admin-api` self row と health-only service を返していなかったため、contract test `services_list_includes_health_only_services_and_admin_api_self_status` を追加して再現。`admin-api` は self health を合成し、health-only service も version 0/config `{}` で返すよう修正した。`cargo test -p cn-admin-api ...` で PASS。
+  - 進捗（2026年03月08日・compose）: `trust` profile 単独では `moderation` が起動せず `trust /healthz -> 503` になり得るため、`docker-compose.yml` で `moderation` を `trust` profile にも含め、`trust` は `depends_on: [postgres, moderation]` に変更した。`docker compose --profile trust --profile bootstrap -f kukuri-community-node/docker-compose.yml config --services` で `moderation` / `trust` の同時展開を確認。残作業は実機 stack で `trust` が `healthy` へ遷移することの確認。
 
 ### 残タスク（2026年03月02日）
 - 直接接続時でも `/topics/${topicId}` の `TimelineThreadCard` とスレッド一覧がリアルタイム差分更新されない（再読み込みや自端末操作が必要）。
@@ -137,3 +166,14 @@ ode_addresses は |relay=http://127.0.0.1:3340/ のみを確認。
 - `cn-relay` の未コミット差分で `subscribe_and_join` / `connect_seed_peers` が外れていたため、seed peer あり経路では `endpoint.connect(..., iroh_gossip::ALPN)` と `subscribe_and_join(...)` を復元。MemoryLookup と `endpoint.online()` 待機は維持。
 - `cn-relay` に `/v1/p2p/status` を追加し、`desired_topics` / `node_topics` / `gossip_topics` / `router_ready` を HTTP から観測できるようにした。今後の E2E 失敗時に server 側 runtime を snapshot へ含める。
 - `community-node.end-to-end.spec.ts` は `Community Node bootstrap ready` 後に `/v1/p2p/status` で server が対象 topic を gossip 参加済みであることを待ってから client join へ進むよう更新。失敗 snapshot に server 側 `communityNodeP2P` 状態も含める。
+- Community Node 実機UXの先頭課題だった「リアルタイムモードのタイムライン即時反映」と「スレッド右ペイン導線」は、live-path E2E を追加して再現・修正まで完了。
+  - 追加テスト:
+    - `kukuri-tauri/tests/e2e/specs/community-node.timeline-thread-realtime.spec.ts`
+    - `kukuri-tauri/tests/e2e/specs/community-node.thread-preview-replies.spec.ts`
+  - 修正概要:
+    - `useRealtimeTimeline.ts` / `useP2PEventListener.ts` で P2P 受信 event の `eventId` と thread 関連情報を store fallback で補完し、reload なしで `TimelineThreadCard` と thread preview が更新されるよう修正。
+    - `topics.$topicId.threads.tsx` で `/topics/$topicId/threads/$threadUuid` を右ペイン詳細導線として扱い、`「スレッドを開く」` 押下時に thread 一覧へ戻らないよう修正。
+    - `p2p_peer_harness` と E2E helper を拡張し、persistent peer への command file 注入で external reply を安定再現できるようにした。
+  - 実測:
+    - `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.thread-preview-replies.spec.ts ./scripts/test-docker.ps1 e2e-community-node` PASS（ログ: `tmp/logs/community-node-e2e/20260308-183533.log`）
+    - `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.timeline-thread-realtime.spec.ts ./scripts/test-docker.ps1 e2e-community-node` PASS（ログ: `tmp/logs/community-node-e2e/20260308-183827.log`）

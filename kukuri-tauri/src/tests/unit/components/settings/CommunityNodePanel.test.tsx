@@ -303,8 +303,48 @@ describe('CommunityNodePanel', () => {
       expect(mockErrorHandler.log).toHaveBeenCalledWith(
         'Failed to load community node trust provider',
         expect.any(Error),
-        expect.objectContaining({ context: 'CommunityNodePanel.trustProvider' }),
+        expect.objectContaining({
+          context: 'CommunityNodePanel.trustProvider',
+          showToast: false,
+        }),
       );
     });
+  });
+
+  it('keeps authenticate success path when trust provider refresh fails afterwards', async () => {
+    const user = userEvent.setup();
+    let failTrustProviderRefresh = false;
+    mockCommunityNodeApi.getTrustProvider.mockImplementation(async () => {
+      if (failTrustProviderRefresh) {
+        throw new Error('temporary trust provider refresh failure');
+      }
+      return null;
+    });
+
+    renderPanel();
+
+    await screen.findByTestId('community-node-node-0');
+    failTrustProviderRefresh = true;
+    await user.click(screen.getByTestId('community-node-authenticate-0'));
+
+    await waitFor(() => {
+      expect(mockCommunityNodeApi.authenticate).toHaveBeenCalledWith('https://community.example');
+      expect(mockToast.success).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(mockErrorHandler.log).toHaveBeenCalledWith(
+        'Failed to load community node trust provider',
+        expect.any(Error),
+        expect.objectContaining({
+          context: 'CommunityNodePanel.trustProvider',
+          showToast: false,
+        }),
+      );
+    });
+
+    expect(
+      mockErrorHandler.log.mock.calls.find(([message]) => message === 'Community node auth failed'),
+    ).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import type { UserProfile } from '@/lib/api/tauri';
 import type { User } from '@/stores/types';
 import { applyKnownUserMetadata } from './userMetadata';
+import { rememberKnownUserProfile } from './knownUserMetadata';
 
 export function mapUserProfileToUser(profile: UserProfile): User {
   const base: User = {
@@ -17,5 +18,6 @@ export function mapUserProfileToUser(profile: UserProfile): User {
     avatar: null,
   };
 
+  rememberKnownUserProfile(profile);
   return applyKnownUserMetadata(base);
 }

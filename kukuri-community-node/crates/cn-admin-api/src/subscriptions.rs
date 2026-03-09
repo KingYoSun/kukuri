@@ -413,7 +413,6 @@ pub async fn list_node_subscriptions(
 ) -> ApiResult<Json<Vec<NodeSubscription>>> {
     require_admin(&state, &jar).await?;
     let connected_nodes_by_topic = load_connected_nodes_by_topic(&state.pool, None).await?;
-    let connected_users_by_topic = load_connected_users_by_topic(&state.pool, None).await?;
     let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
 
     let rows = sqlx::query(
@@ -441,16 +440,11 @@ pub async fn list_node_subscriptions(
             .get(&topic_id)
             .cloned()
             .unwrap_or_default();
-        let connected_users = connected_users_by_topic
-            .get(&topic_id)
-            .cloned()
-            .unwrap_or_default();
-        let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+        let (connected_nodes, connected_node_count, connected_user_count) =
             apply_runtime_connectivity_fallback(
                 enabled,
                 ref_count,
                 connected_nodes,
-                connected_users,
                 &relay_runtime,
                 &topic_id,
             );
@@ -462,7 +456,7 @@ pub async fn list_node_subscriptions(
             connected_node_count,
             connected_nodes,
             connected_user_count,
-            connected_users,
+            connected_users: Vec::new(),
             updated_at: updated_at.timestamp(),
         });
     }
@@ -576,19 +570,14 @@ pub async fn create_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
-    let connected_users = load_connected_users_by_topic(&state.pool, Some(&topic_id))
-        .await?
-        .remove(&topic_id)
-        .unwrap_or_default();
     let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
     let enabled: bool = row.try_get("enabled")?;
     let ref_count: i64 = row.try_get("ref_count")?;
-    let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+    let (connected_nodes, connected_node_count, connected_user_count) =
         apply_runtime_connectivity_fallback(
             enabled,
             ref_count,
             connected_nodes,
-            connected_users,
             &relay_runtime,
             &topic_id,
         );
@@ -601,7 +590,7 @@ pub async fn create_node_subscription(
         connected_node_count,
         connected_nodes,
         connected_user_count,
-        connected_users,
+        connected_users: Vec::new(),
         updated_at: updated_at.timestamp(),
     }))
 }
@@ -713,18 +702,13 @@ pub async fn update_node_subscription(
         .await?
         .remove(&topic_id)
         .unwrap_or_default();
-    let connected_users = load_connected_users_by_topic(&state.pool, Some(&topic_id))
-        .await?
-        .remove(&topic_id)
-        .unwrap_or_default();
     let relay_runtime = load_relay_runtime_connectivity(&state.pool).await?;
     let ref_count: i64 = row.try_get("ref_count")?;
-    let (connected_nodes, connected_node_count, connected_users, connected_user_count) =
+    let (connected_nodes, connected_node_count, connected_user_count) =
         apply_runtime_connectivity_fallback(
             enabled,
             ref_count,
             connected_nodes,
-            connected_users,
             &relay_runtime,
             &topic_id,
         );
@@ -737,7 +721,7 @@ pub async fn update_node_subscription(
         connected_node_count,
         connected_nodes,
         connected_user_count,
-        connected_users,
+        connected_users: Vec::new(),
         updated_at: updated_at.timestamp(),
     }))
 }
@@ -958,10 +942,9 @@ fn apply_runtime_connectivity_fallback(
     enabled: bool,
     ref_count: i64,
     mut connected_nodes: Vec<String>,
-    connected_users: Vec<String>,
     relay_runtime: &RelayRuntimeConnectivity,
     topic_id: &str,
-) -> (Vec<String>, i64, Vec<String>, i64) {
+) -> (Vec<String>, i64, i64) {
     if enabled
         && ref_count > 0
         && connected_nodes.is_empty()
@@ -973,21 +956,15 @@ fn apply_runtime_connectivity_fallback(
 
     let runtime_ws_fallback_applied = enabled
         && ref_count > 0
-        && connected_users.is_empty()
         && relay_runtime.ws_connections > 0
         && topic_id == cn_core::topic::DEFAULT_PUBLIC_TOPIC_ID;
     let connected_user_count = if runtime_ws_fallback_applied {
         relay_runtime.ws_connections
     } else {
-        connected_users.len() as i64
+        0
     };
 
-    (
-        connected_nodes,
-        connected_node_count,
-        connected_users,
-        connected_user_count,
-    )
+    (connected_nodes, connected_node_count, connected_user_count)
 }
 
 async fn load_connected_nodes_by_topic(
@@ -1069,55 +1046,6 @@ async fn load_connected_nodes_by_topic(
     Ok(grouped
         .into_iter()
         .map(|(topic_id, nodes)| (topic_id, nodes.into_iter().collect()))
-        .collect())
-}
-
-async fn load_connected_users_by_topic(
-    pool: &sqlx::Pool<sqlx::Postgres>,
-    topic_id_filter: Option<&str>,
-) -> ApiResult<HashMap<String, Vec<String>>> {
-    let rows = if let Some(topic_id) = topic_id_filter {
-        sqlx::query(
-            "SELECT topic_id, subscriber_pubkey \
-             FROM cn_user.topic_subscriptions \
-             WHERE status = 'active' AND ended_at IS NULL AND topic_id = $1",
-        )
-        .bind(topic_id)
-        .fetch_all(pool)
-        .await
-    } else {
-        sqlx::query(
-            "SELECT topic_id, subscriber_pubkey \
-             FROM cn_user.topic_subscriptions \
-             WHERE status = 'active' AND ended_at IS NULL",
-        )
-        .fetch_all(pool)
-        .await
-    }
-    .map_err(|err| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            err.to_string(),
-        )
-    })?;
-
-    let mut grouped = HashMap::<String, BTreeSet<String>>::new();
-    for row in rows {
-        let topic_id: String = row.try_get("topic_id")?;
-        let subscriber_pubkey: String = row.try_get("subscriber_pubkey")?;
-        if topic_id.is_empty() || subscriber_pubkey.trim().is_empty() {
-            continue;
-        }
-        grouped
-            .entry(topic_id)
-            .or_default()
-            .insert(subscriber_pubkey.trim().to_string());
-    }
-
-    Ok(grouped
-        .into_iter()
-        .map(|(topic_id, users)| (topic_id, users.into_iter().collect()))
         .collect())
 }
 

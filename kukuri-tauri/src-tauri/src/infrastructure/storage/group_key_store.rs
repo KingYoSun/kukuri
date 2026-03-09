@@ -128,11 +128,60 @@ impl GroupKeyStore for SecureGroupKeyStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::storage::secure_storage::DefaultSecureStorage;
+    use std::collections::HashMap;
+    use tokio::sync::Mutex;
+
+    #[derive(Default)]
+    struct InMemorySecureStorage {
+        values: Mutex<HashMap<String, String>>,
+    }
+
+    #[async_trait]
+    impl SecureStorage for InMemorySecureStorage {
+        async fn store(
+            &self,
+            key: &str,
+            value: &str,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.values
+                .lock()
+                .await
+                .insert(key.to_string(), value.to_string());
+            Ok(())
+        }
+
+        async fn retrieve(
+            &self,
+            key: &str,
+        ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.values.lock().await.get(key).cloned())
+        }
+
+        async fn delete(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.values.lock().await.remove(key);
+            Ok(())
+        }
+
+        async fn exists(
+            &self,
+            key: &str,
+        ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.values.lock().await.contains_key(key))
+        }
+
+        async fn list_keys(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.values.lock().await.keys().cloned().collect())
+        }
+
+        async fn clear(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            self.values.lock().await.clear();
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn store_and_load_group_key_index() {
-        let secure = Arc::new(DefaultSecureStorage::new());
+        let secure = Arc::new(InMemorySecureStorage::default());
         let store = SecureGroupKeyStore::new(secure);
         let record = GroupKeyRecord {
             topic_id: "kukuri:topic1".to_string(),

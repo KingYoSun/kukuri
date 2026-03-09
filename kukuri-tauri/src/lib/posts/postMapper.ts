@@ -3,6 +3,7 @@ import type { Post, User } from '@/stores/types';
 import { pubkeyToNpub } from '@/lib/utils/nostr';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
+import { rememberKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
 
 const AUTHOR_PROFILE_MISS_TTL_MS = 60_000;
 const authorProfileCache = new Map<string, User>();
@@ -55,9 +56,10 @@ const resolveAuthorProfile = async (
         return null;
       }
       const mapped = mapUserProfileToUser(profile);
-      authorProfileCache.set(cacheKey, mapped);
+      const remembered = rememberKnownUserMetadata(mapped);
+      authorProfileCache.set(cacheKey, remembered);
       authorProfileMissedAt.delete(cacheKey);
-      return mapped;
+      return remembered;
     } catch {
       authorProfileMissedAt.set(cacheKey, Date.now());
       return null;
@@ -113,6 +115,7 @@ export async function mapPostResponseToDomain(apiPost: ApiPost): Promise<Post> {
 
   return {
     id: apiPost.id,
+    eventId: apiPost.event_id ?? null,
     content: apiPost.content,
     author,
     topicId: apiPost.topic_id,

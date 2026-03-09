@@ -143,6 +143,7 @@ services:
     command: ["moderation"]
     profiles:
       - moderation
+      - trust
     environment:
       MODERATION_ADDR: ${MODERATION_ADDR}
     volumes:
@@ -166,6 +167,9 @@ services:
     command: ["trust"]
     profiles:
       - trust
+    depends_on:
+      - postgres
+      - moderation
     environment:
       TRUST_ADDR: ${TRUST_ADDR}
     volumes:

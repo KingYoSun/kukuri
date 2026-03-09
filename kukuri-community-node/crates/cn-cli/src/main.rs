@@ -326,6 +326,15 @@ enum P2pCommand {
         /// Post content
         #[arg(long)]
         content: String,
+        /// Explicit thread UUID (for timeline/thread E2E)
+        #[arg(long)]
+        thread_uuid: Option<String>,
+        /// Root event id for NIP-10 root tag
+        #[arg(long)]
+        root_event_id: Option<String>,
+        /// Parent event id for NIP-10 reply tag
+        #[arg(long)]
+        reply_to: Option<String>,
         /// Bootstrap peers (format: node_id@host:port). If omitted, env/file fallback is used.
         #[arg(long)]
         peers: Vec<String>,
@@ -697,6 +706,9 @@ async fn handle_p2p(command: P2pCommand) -> Result<()> {
             args,
             topic,
             content,
+            thread_uuid,
+            root_event_id,
+            reply_to,
             peers,
             repeat,
             interval_ms,
@@ -709,6 +721,9 @@ async fn handle_p2p(command: P2pCommand) -> Result<()> {
                 &args,
                 &topic,
                 &content,
+                thread_uuid,
+                root_event_id,
+                reply_to,
                 peers,
                 repeat,
                 interval_ms,
@@ -1049,6 +1064,9 @@ async fn run_publish_event(
     args: &P2pPublishArgs,
     topic: &str,
     content: &str,
+    thread_uuid: Option<String>,
+    root_event_id: Option<String>,
+    reply_to: Option<String>,
     peers: Vec<String>,
     repeat: u16,
     interval_ms: u64,
@@ -1133,8 +1151,14 @@ async fn run_publish_event(
         } else {
             format!("{content} [#{:02}]", index + 1)
         };
-        let raw_event =
-            build_publish_raw_event(&canonical_topic, &attempt_content, &args.secret_key)?;
+        let raw_event = build_publish_raw_event(
+            &canonical_topic,
+            &attempt_content,
+            &args.secret_key,
+            thread_uuid.as_deref(),
+            root_event_id.as_deref(),
+            reply_to.as_deref(),
+        )?;
         let event_payload = raw_event_to_publish_domain(&raw_event)?;
         let payload = serde_json::to_vec(&event_payload)?;
         let message = CliGossipMessage::new_nostr_event(payload, sender_id.clone());
@@ -1190,6 +1214,9 @@ fn build_publish_raw_event(
     topic_id: &str,
     content: &str,
     secret_key: &Option<String>,
+    thread_uuid: Option<&str>,
+    root_event_id: Option<&str>,
+    reply_to: Option<&str>,
 ) -> Result<cn_core::nostr::RawEvent> {
     let keys = if let Some(encoded) = secret_key {
         let secret_bytes = decode_base64_secret_key(encoded)?;
@@ -1199,11 +1226,44 @@ fn build_publish_raw_event(
     } else {
         NostrKeys::generate()
     };
-    let tags = vec![
+    let mut tags = vec![
         vec!["t".to_string(), topic_id.to_string()],
         vec!["client".to_string(), "cn-cli".to_string()],
         vec!["source".to_string(), "cn-cli:p2p:publish".to_string()],
     ];
+    if let Some(thread_uuid) = thread_uuid.map(str::trim).filter(|value| !value.is_empty()) {
+        tags.push(vec!["thread_uuid".to_string(), thread_uuid.to_string()]);
+        tags.push(vec![
+            "thread".to_string(),
+            format!("{topic_id}/threads/{thread_uuid}"),
+        ]);
+    }
+    let normalized_root_event_id = root_event_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            reply_to
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        });
+    if let Some(root_event_id) = normalized_root_event_id {
+        tags.push(vec![
+            "e".to_string(),
+            root_event_id,
+            String::new(),
+            "root".to_string(),
+        ]);
+    }
+    if let Some(reply_to) = reply_to.map(str::trim).filter(|value| !value.is_empty()) {
+        tags.push(vec![
+            "e".to_string(),
+            reply_to.to_string(),
+            String::new(),
+            "reply".to_string(),
+        ]);
+    }
     cn_core::nostr::build_signed_event(&keys, 1, tags, content.to_string())
 }
 
@@ -1464,6 +1524,42 @@ mod tests {
             panic!("expected publish subcommand");
         };
         assert_eq!(args.bind, "127.0.0.1:0");
+    }
+
+    #[test]
+    fn build_publish_raw_event_includes_thread_and_reply_tags_when_requested() {
+        let root_event_id = "r".repeat(64);
+        let reply_event_id = "p".repeat(64);
+        let raw = build_publish_raw_event(
+            DEFAULT_PUBLIC_TOPIC_ID,
+            "reply payload",
+            &None,
+            Some("thread-uuid-1"),
+            Some(root_event_id.as_str()),
+            Some(reply_event_id.as_str()),
+        )
+        .expect("build publish raw event");
+
+        assert!(raw.tags.contains(&vec![
+            "thread_uuid".to_string(),
+            "thread-uuid-1".to_string()
+        ]));
+        assert!(raw.tags.contains(&vec![
+            "thread".to_string(),
+            format!("{DEFAULT_PUBLIC_TOPIC_ID}/threads/thread-uuid-1"),
+        ]));
+        assert!(raw.tags.contains(&vec![
+            "e".to_string(),
+            root_event_id,
+            String::new(),
+            "root".to_string(),
+        ]));
+        assert!(raw.tags.contains(&vec![
+            "e".to_string(),
+            reply_event_id,
+            String::new(),
+            "reply".to_string(),
+        ]));
     }
 
     #[test]

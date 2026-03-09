@@ -1,10 +1,15 @@
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
+use tokio::sync::RwLock;
 use tracing::error;
 
 use super::EventManager;
+use crate::infrastructure::event::nostr_client_manager::NostrClientManager;
+use crate::infrastructure::p2p::GossipService;
 
 fn allow_no_relay_publish(message: &str) -> bool {
     std::env::var("KUKURI_ALLOW_NO_RELAY")
@@ -12,6 +17,88 @@ fn allow_no_relay_publish(message: &str) -> bool {
         .unwrap_or(false)
         || message.contains("no relays specified")
         || message.contains("not connected to any relays")
+}
+
+fn metadata_relay_publish_timeout() -> Duration {
+    if cfg!(test) {
+        Duration::from_millis(100)
+    } else {
+        Duration::from_secs(3)
+    }
+}
+
+async fn broadcast_metadata_to_topics(
+    gossip: Arc<dyn GossipService>,
+    topics: Vec<String>,
+    event: Event,
+) {
+    let mut uniq = HashSet::new();
+    for topic in topics {
+        if !topic.is_empty() {
+            uniq.insert(topic);
+        }
+    }
+    if uniq.is_empty() {
+        return;
+    }
+
+    let domain_event =
+        match crate::application::shared::mappers::nostr_event_to_domain_event(&event) {
+            Ok(event) => event,
+            Err(err) => {
+                error!(
+                    "Failed to convert metadata event for P2P broadcast: {}",
+                    err
+                );
+                return;
+            }
+        };
+
+    for topic in uniq {
+        let _ = gossip.join_topic(&topic, vec![]).await;
+        if let Err(err) = gossip.broadcast(&topic, &domain_event).await {
+            error!("Failed to broadcast metadata to topic {}: {}", topic, err);
+        }
+    }
+}
+
+async fn publish_metadata_to_relays_best_effort(
+    client_manager: Arc<RwLock<NostrClientManager>>,
+    event: Event,
+) {
+    let client_manager = client_manager.read().await;
+    match tokio::time::timeout(
+        metadata_relay_publish_timeout(),
+        client_manager.publish_event(event.clone()),
+    )
+    .await
+    {
+        Ok(Ok(event_id)) => {
+            tracing::debug!(
+                target: "event_manager",
+                "metadata relay publish completed: {}",
+                event_id
+            );
+        }
+        Ok(Err(err)) => {
+            let msg = err.to_string();
+            if allow_no_relay_publish(&msg) {
+                tracing::warn!(
+                    target: "event_manager",
+                    "metadata relay publish skipped (no relay connected): {msg}"
+                );
+            } else {
+                error!("Failed to publish metadata to relay: {}", err);
+            }
+        }
+        Err(_) => {
+            tracing::warn!(
+                target: "event_manager",
+                "metadata relay publish timed out after {:?}",
+                metadata_relay_publish_timeout()
+            );
+        }
+    }
 }
 
 impl EventManager {
@@ -247,31 +334,47 @@ impl EventManager {
         let event = publisher.create_metadata(metadata)?;
         drop(publisher);
 
+        let result_id = event.id;
+        let gossip = self.gossip_service.read().await.as_ref().cloned();
+        let topics = self.default_topics_with_user_topic().await;
+
+        if let Some(gossip) = gossip {
+            let event_for_p2p = event.clone();
+            let event_for_relay = event.clone();
+            let client_manager = self.client_manager.clone();
+            tokio::spawn(async move {
+                broadcast_metadata_to_topics(gossip, topics, event_for_p2p).await;
+            });
+            tokio::spawn(async move {
+                publish_metadata_to_relays_best_effort(client_manager, event_for_relay).await;
+            });
+            return Ok(result_id);
+        }
+
         let client_manager = self.client_manager.read().await;
-        let result_id = match client_manager.publish_event(event.clone()).await {
-            Ok(id) => id,
-            Err(e) => {
-                let msg = e.to_string();
+        match tokio::time::timeout(
+            metadata_relay_publish_timeout(),
+            client_manager.publish_event(event.clone()),
+        )
+        .await
+        {
+            Ok(Ok(id)) => Ok(id),
+            Ok(Err(err)) => {
+                let msg = err.to_string();
                 if allow_no_relay_publish(&msg) {
                     tracing::warn!(
                         target: "event_manager",
                         "metadata publish skipped (no relay connected): {msg}"
                     );
-                    event.id
+                    Ok(result_id)
                 } else {
-                    return Err(e);
+                    Err(err)
                 }
             }
-        };
-        drop(client_manager);
-
-        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
-            let topics = self.default_topics_with_user_topic().await;
-            if let Err(e) = self.broadcast_to_topics(&gossip, &topics, &event).await {
-                error!("Failed to broadcast metadata to P2P: {}", e);
-            }
+            Err(_) => Err(anyhow!(
+                "metadata relay publish timed out after {:?}",
+                metadata_relay_publish_timeout()
+            )),
         }
-
-        Ok(result_id)
     }
 }

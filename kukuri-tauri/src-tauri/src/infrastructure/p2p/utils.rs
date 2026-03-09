@@ -35,7 +35,21 @@ pub fn sanitize_remote_endpoint_addr(
     endpoint_addr: &EndpointAddr,
     allow_direct_addrs: bool,
 ) -> EndpointAddr {
-    let relay_urls: Vec<_> = endpoint_addr.relay_urls().cloned().collect();
+    sanitize_remote_endpoint_addr_with_preferred_relays(endpoint_addr, allow_direct_addrs, &[])
+}
+
+pub fn sanitize_remote_endpoint_addr_with_preferred_relays(
+    endpoint_addr: &EndpointAddr,
+    allow_direct_addrs: bool,
+    preferred_relay_urls: &[RelayUrl],
+) -> EndpointAddr {
+    let endpoint_relay_urls: Vec<_> = endpoint_addr.relay_urls().cloned().collect();
+    let relay_urls: Vec<_> = if !preferred_relay_urls.is_empty() && !endpoint_relay_urls.is_empty()
+    {
+        preferred_relay_urls.to_vec()
+    } else {
+        endpoint_relay_urls
+    };
     let mut normalized = EndpointAddr::new(endpoint_addr.id);
 
     for relay_url in &relay_urls {
@@ -463,5 +477,31 @@ mod tests {
 
         assert_eq!(normalized.relay_urls().count(), 1);
         assert_eq!(normalized.ip_addrs().count(), 1);
+    }
+
+    #[test]
+    fn sanitize_remote_endpoint_addr_prefers_configured_relay_urls_when_present() {
+        let node_id = EndpointId::from_str(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let endpoint_addr = EndpointAddr::new(node_id)
+            .with_relay_url(
+                RelayUrl::from_str("https://usw1-1.relay.n0.iroh-canary.iroh.link").unwrap(),
+            )
+            .with_relay_url(RelayUrl::from_str("https://iroh-relay.kukuri.app").unwrap());
+        let preferred = [RelayUrl::from_str("https://iroh-relay.kukuri.app").unwrap()];
+
+        let normalized =
+            sanitize_remote_endpoint_addr_with_preferred_relays(&endpoint_addr, false, &preferred);
+        let relay_urls: Vec<_> = normalized
+            .relay_urls()
+            .map(|relay_url| relay_url.to_string())
+            .collect();
+
+        assert_eq!(
+            relay_urls,
+            vec!["https://iroh-relay.kukuri.app/".to_string()]
+        );
     }
 }

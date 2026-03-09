@@ -261,6 +261,7 @@ services:
       KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_1:-0}"
       KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.json"
       KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.commands"
 
   peer-client-2:
     build:
@@ -309,6 +310,7 @@ services:
       KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_2:-800}"
       KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.json"
       KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.commands"
 
   peer-client-3:
     build:
@@ -353,6 +355,7 @@ services:
       KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_3:-1500}"
       KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.json"
       KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.commands"
 
   # 個別のRustテスト実行
   rust-test:

@@ -87,6 +87,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     shouldCloseOnFinallyRef.current = true;
     setIsSubmitting(true);
     const saveErrors: string[] = [];
+    let localProfileSaved = false;
     const pushSaveError = (stepLabel: string, error?: unknown) => {
       const details =
         error instanceof Error && error.message.trim().length > 0
@@ -154,6 +155,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
       try {
         await TauriApi.updateUserProfile(payload.localProfile);
+        localProfileSaved = true;
       } catch (error) {
         pushSaveError(t('auth.profileSaveStepLocalProfile'), error);
         errorHandler.log('ProfileEditDialog.localProfileUpdateFailed', error, {
@@ -168,6 +170,10 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         errorHandler.log('ProfileEditDialog.submitFailed', error, {
           context: 'ProfileEditDialog.handleSubmit',
         });
+      }
+
+      if (!localProfileSaved) {
+        throw new Error('Local profile save did not complete');
       }
 
       const updatedUser = {
@@ -207,7 +213,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
       const uniqueErrors = collectUniqueSaveErrors(saveErrors);
       if (uniqueErrors.length > 0) {
-        toast.error(
+        toast.warning(
           t('auth.profileUpdateFailedWithDetails', {
             details: uniqueErrors.join(' / '),
           }),

@@ -1,5 +1,5 @@
 import { browser } from '@wdio/globals';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export interface PeerHarnessSummary {
@@ -23,6 +23,17 @@ export interface PeerHarnessAddressSnapshot {
   relay_urls?: string[];
   connection_hints?: string[];
   preferred_address?: string;
+}
+
+export interface PeerHarnessCommandResult {
+  command_id?: string;
+  ok?: boolean;
+  processed_at?: string;
+  topic_id?: string | null;
+  content?: string | null;
+  event_id?: string | null;
+  published_count?: number;
+  error?: string | null;
 }
 
 const resolveEnvString = (value: string | undefined, fallback: string): string => {
@@ -57,6 +68,27 @@ export const peerHarnessAddressCandidates = (
   ];
 };
 
+export const peerHarnessCommandDirCandidates = (peerName: string, outputGroup?: string): string[] => {
+  const resolvedOutputGroup = resolveEnvString(
+    outputGroup,
+    process.env.KUKURI_PEER_OUTPUT_GROUP ?? 'multi-peer-e2e',
+  );
+  const dirName = `${peerName}.commands`;
+  return [
+    resolve('/app/test-results', resolvedOutputGroup, dirName),
+    resolve(process.cwd(), '..', 'test-results', resolvedOutputGroup, dirName),
+  ];
+};
+
+export const peerHarnessCommandResultCandidates = (
+  peerName: string,
+  commandId: string,
+  outputGroup?: string,
+): string[] =>
+  peerHarnessCommandDirCandidates(peerName, outputGroup).map((dir) =>
+    resolve(dir, `${commandId}.result.json`),
+  );
+
 export const loadPeerHarnessSummary = (
   peerName: string,
   outputGroup?: string,
@@ -84,6 +116,24 @@ export const loadPeerHarnessAddressSnapshot = (
     }
     try {
       return JSON.parse(readFileSync(candidate, 'utf-8')) as PeerHarnessAddressSnapshot;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
+
+export const loadPeerHarnessCommandResult = (
+  peerName: string,
+  commandId: string,
+  outputGroup?: string,
+): PeerHarnessCommandResult | null => {
+  for (const candidate of peerHarnessCommandResultCandidates(peerName, commandId, outputGroup)) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    try {
+      return JSON.parse(readFileSync(candidate, 'utf-8')) as PeerHarnessCommandResult;
     } catch {
       continue;
     }
@@ -145,5 +195,73 @@ export async function waitForPeerHarnessAddressSnapshot(options: {
   if (!latest) {
     throw new Error(`Peer harness address snapshot was not found: ${options.peerName}`);
   }
+  return latest;
+}
+
+export function enqueuePeerHarnessPublishCommand(options: {
+  peerName: string;
+  topicId: string;
+  content: string;
+  replyToEventId?: string;
+  outputGroup?: string;
+}): { commandId: string } {
+  const commandId = `publish-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const commandPayload = {
+    command_id: commandId,
+    action: 'publish_topic_event',
+    topic_id: options.topicId,
+    content: options.content,
+    reply_to_event_id: options.replyToEventId ?? null,
+  };
+
+  const commandDirs = peerHarnessCommandDirCandidates(options.peerName, options.outputGroup);
+  const targetDir = commandDirs[0];
+  const commandPath = resolve(targetDir, `${commandId}.json`);
+  const tempPath = resolve(targetDir, `${commandId}.json.tmp`);
+  const resultPath = resolve(targetDir, `${commandId}.result.json`);
+
+  mkdirSync(targetDir, { recursive: true });
+  rmSync(commandPath, { force: true });
+  rmSync(tempPath, { force: true });
+  rmSync(resultPath, { force: true });
+  writeFileSync(tempPath, JSON.stringify(commandPayload, null, 2), 'utf-8');
+  renameSync(tempPath, commandPath);
+
+  return { commandId };
+}
+
+export async function waitForPeerHarnessCommandResult(options: {
+  peerName: string;
+  commandId: string;
+  outputGroup?: string;
+  timeoutMs?: number;
+  description: string;
+}): Promise<PeerHarnessCommandResult> {
+  const timeoutMs = options.timeoutMs ?? 120000;
+  let latest: PeerHarnessCommandResult | null = null;
+  await browser.waitUntil(
+    async () => {
+      latest = loadPeerHarnessCommandResult(options.peerName, options.commandId, options.outputGroup);
+      return latest !== null;
+    },
+    {
+      timeout: timeoutMs,
+      interval: 1000,
+      timeoutMsg: `Peer harness command result did not arrive: ${options.description}`,
+    },
+  );
+
+  if (!latest) {
+    throw new Error(
+      `Peer harness command result was not found: ${options.peerName} / ${options.commandId}`,
+    );
+  }
+
+  if (!latest.ok) {
+    throw new Error(
+      `Peer harness command failed: ${options.description}; result=${JSON.stringify(latest)}`,
+    );
+  }
+
   return latest;
 }

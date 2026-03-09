@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PostResponse {
     pub id: String,
+    pub event_id: Option<String>,
     pub content: String,
     pub author_pubkey: String,
     pub author_npub: String,

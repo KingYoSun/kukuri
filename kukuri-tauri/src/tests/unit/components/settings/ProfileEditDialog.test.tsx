@@ -303,10 +303,10 @@ describe('ProfileEditDialog', () => {
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
+      expect(toast.warning).toHaveBeenCalledWith(
         expect.stringContaining('プロフィールの保存中に一部失敗しました'),
       );
-      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
+      expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('Nostr メタデータ保存'));
     });
     expect(errorHandler.log).toHaveBeenCalledWith(
       'ProfileEditDialog.submitFailed',

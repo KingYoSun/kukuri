@@ -1,6 +1,7 @@
 import type { User } from '@/stores/types';
 import type { AccountMetadata } from '@/lib/api/secureStorage';
 import { useAuthStore } from '@/stores/authStore';
+import { resolveKnownUserMetadata } from './knownUserMetadata';
 
 function isSameUser(target: User, reference: User | AccountMetadata): boolean {
   const targetNpub = target.npub?.toLowerCase();
@@ -53,6 +54,25 @@ export function applyKnownUserMetadata(user: User): User {
       name: account.name || base.name,
       displayName: account.display_name || account.name || base.displayName,
       picture: account.picture?.trim() ? account.picture : base.picture,
+    };
+  }
+
+  const knownUser = resolveKnownUserMetadata(base);
+  if (knownUser) {
+    return {
+      ...base,
+      name: knownUser.name || base.name,
+      displayName: knownUser.displayName || knownUser.name || base.displayName,
+      about: knownUser.about ?? base.about,
+      picture: knownUser.picture?.trim() ? knownUser.picture : base.picture,
+      nip05: knownUser.nip05 || base.nip05,
+      avatar: knownUser.avatar ?? base.avatar ?? null,
+      publicProfile:
+        typeof knownUser.publicProfile === 'boolean' ? knownUser.publicProfile : base.publicProfile,
+      showOnlineStatus:
+        typeof knownUser.showOnlineStatus === 'boolean'
+          ? knownUser.showOnlineStatus
+          : base.showOnlineStatus,
     };
   }
 

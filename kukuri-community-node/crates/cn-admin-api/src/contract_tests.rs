@@ -2506,6 +2506,90 @@ async fn services_contract_success_and_shape() {
 }
 
 #[tokio::test]
+async fn services_list_includes_health_only_services_and_admin_api_self_status() {
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let health_only_service = format!("health-only-{}", Uuid::new_v4());
+
+    insert_service_health(
+        &state.pool,
+        &health_only_service,
+        "degraded",
+        json!({
+            "status": 503,
+            "source": "contract-test"
+        }),
+    )
+    .await;
+
+    let app = Router::new()
+        .route("/v1/admin/services", get(services::list_services))
+        .with_state(state.clone());
+
+    let (status, payload) = get_json_with_session(app, "/v1/admin/services", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("services list");
+
+    let admin_api_row = rows
+        .iter()
+        .find(|row| row.get("service").and_then(Value::as_str) == Some("admin-api"))
+        .expect("admin-api row");
+    assert!(admin_api_row
+        .get("version")
+        .and_then(Value::as_i64)
+        .is_some_and(|version| version >= 0));
+    assert_eq!(
+        admin_api_row
+            .get("config_json")
+            .and_then(|config| config.get("session_cookie"))
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        admin_api_row
+            .get("health")
+            .and_then(|health| health.get("status"))
+            .and_then(Value::as_str),
+        Some("healthy")
+    );
+    assert_eq!(
+        admin_api_row
+            .get("health")
+            .and_then(|health| health.get("details"))
+            .and_then(|details| details.get("source"))
+            .and_then(Value::as_str),
+        Some("self")
+    );
+
+    let health_only_row = rows
+        .iter()
+        .find(|row| {
+            row.get("service").and_then(Value::as_str) == Some(health_only_service.as_str())
+        })
+        .expect("health-only row");
+    assert_eq!(
+        health_only_row.get("version").and_then(Value::as_i64),
+        Some(0)
+    );
+    assert_eq!(health_only_row.get("config_json"), Some(&json!({})));
+    assert_eq!(
+        health_only_row
+            .get("health")
+            .and_then(|health| health.get("status"))
+            .and_then(Value::as_str),
+        Some("degraded")
+    );
+    assert_eq!(
+        health_only_row
+            .get("health")
+            .and_then(|health| health.get("details"))
+            .and_then(|details| details.get("status"))
+            .and_then(Value::as_u64),
+        Some(503)
+    );
+}
+
+#[tokio::test]
 async fn services_update_contract_rejects_secret_keys_and_preserves_storage() {
     let state = test_state().await;
     let session_id = insert_admin_session(&state.pool).await;
@@ -3653,7 +3737,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         .is_some());
     assert_eq!(
         node_row.get("connected_user_count").and_then(Value::as_i64),
-        Some(1)
+        Some(0)
     );
     assert_eq!(
         fetch_active_topic_services(&state.pool, &approve_topic_id).await,
@@ -3663,9 +3747,7 @@ async fn subscription_requests_and_node_subscriptions_contract_success() {
         .get("connected_users")
         .and_then(Value::as_array)
         .expect("connected_users array");
-    assert!(connected_users
-        .iter()
-        .any(|value| value.as_str() == Some(requester_approve.as_str())));
+    assert!(connected_users.is_empty());
     assert!(node_row.get("updated_at").and_then(Value::as_i64).is_some());
 
     let (status, payload) = put_json(
@@ -3918,6 +4000,10 @@ async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_d
         .execute(&state.pool)
         .await
         .expect("clear topic subscriptions for runtime fallback test");
+    sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind IN (39000, 39001)")
+        .execute(&state.pool)
+        .await
+        .expect("clear bootstrap events for runtime fallback test");
 
     insert_service_health(
         &state.pool,
@@ -3977,6 +4063,60 @@ async fn node_subscriptions_list_falls_back_to_runtime_connectivity_when_topic_d
 }
 
 #[tokio::test]
+async fn node_subscriptions_list_does_not_treat_active_subscriptions_as_current_connected_users() {
+    let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
+    let state = test_state().await;
+    let session_id = insert_admin_session(&state.pool).await;
+    let topic_id = format!("kukuri:topic:connected-users-{}", Uuid::new_v4());
+
+    sqlx::query(
+        "INSERT INTO cn_admin.node_subscriptions (topic_id, enabled, ref_count, updated_at)
+         VALUES ($1, TRUE, 1, NOW())",
+    )
+    .bind(&topic_id)
+    .execute(&state.pool)
+    .await
+    .expect("insert node subscription row");
+
+    sqlx::query(
+        "INSERT INTO cn_user.topic_subscriptions (topic_id, subscriber_pubkey, status, ended_at)
+         VALUES ($1, $2, 'active', NULL)",
+    )
+    .bind(&topic_id)
+    .bind(Keys::generate().public_key().to_hex())
+    .execute(&state.pool)
+    .await
+    .expect("insert active topic subscription row");
+
+    let app = Router::new()
+        .route(
+            "/v1/admin/node-subscriptions",
+            get(subscriptions::list_node_subscriptions),
+        )
+        .with_state(state.clone());
+
+    let (status, payload) =
+        get_json_with_session(app, "/v1/admin/node-subscriptions", &session_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let rows = payload.as_array().expect("node subscription list");
+    let row = rows
+        .iter()
+        .find(|entry| entry.get("topic_id").and_then(Value::as_str) == Some(topic_id.as_str()))
+        .expect("node subscription row");
+
+    assert_eq!(
+        row.get("connected_user_count").and_then(Value::as_i64),
+        Some(0)
+    );
+    assert_eq!(
+        row.get("connected_users")
+            .and_then(Value::as_array)
+            .map(std::vec::Vec::len),
+        Some(0)
+    );
+}
+
+#[tokio::test]
 async fn node_subscriptions_list_applies_runtime_ws_fallback_only_once() {
     let _relay_subscription_guard = relay_subscription_approval_test_lock().lock().await;
     let state = test_state().await;
@@ -4005,6 +4145,10 @@ async fn node_subscriptions_list_applies_runtime_ws_fallback_only_once() {
     .execute(&state.pool)
     .await
     .expect("insert secondary runtime fallback topic");
+    sqlx::query("DELETE FROM cn_bootstrap.events WHERE kind IN (39000, 39001)")
+        .execute(&state.pool)
+        .await
+        .expect("clear bootstrap events for multi-topic runtime fallback test");
 
     insert_service_health(
         &state.pool,

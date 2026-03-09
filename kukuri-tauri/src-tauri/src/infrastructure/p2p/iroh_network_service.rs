@@ -1,7 +1,10 @@
 use super::{
     DiscoveryOptions, NetworkService, NetworkStats, Peer,
     dht_bootstrap::{DhtGossip, secret},
-    utils::{normalize_endpoint_addr, parse_peer_hint, sanitize_remote_endpoint_addr},
+    utils::{
+        normalize_endpoint_addr, parse_peer_hint,
+        sanitize_remote_endpoint_addr_with_preferred_relays,
+    },
 };
 use crate::domain::p2p::{P2PEvent, generate_topic_id, topic_id_bytes};
 use crate::shared::config::{BootstrapSource, NetworkConfig as AppNetworkConfig};
@@ -255,9 +258,11 @@ impl IrohNetworkService {
         address: &str,
         node_addr: iroh::EndpointAddr,
     ) -> Result<(), AppError> {
-        let node_addr = sanitize_remote_endpoint_addr(
+        let preferred_relay_urls = configured_custom_relay_urls().unwrap_or_default();
+        let node_addr = sanitize_remote_endpoint_addr_with_preferred_relays(
             &node_addr,
             self.transport_profile.exposes_direct_addresses(),
+            &preferred_relay_urls,
         );
         self.static_discovery.add_endpoint_info(node_addr.clone());
         self.upsert_known_peer(node_id, address).await;
@@ -490,12 +495,14 @@ fn resolve_endpoint_transport_profile() -> Result<EndpointTransportProfile, AppE
 }
 
 pub fn configured_custom_relay_url_strings() -> Result<Vec<String>, AppError> {
-    Ok(
-        parse_custom_relay_urls(std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok().as_deref())?
-            .into_iter()
-            .map(|relay_url| relay_url.to_string())
-            .collect(),
-    )
+    Ok(configured_custom_relay_urls()?
+        .into_iter()
+        .map(|relay_url| relay_url.to_string())
+        .collect())
+}
+
+pub(crate) fn configured_custom_relay_urls() -> Result<Vec<RelayUrl>, AppError> {
+    parse_custom_relay_urls(std::env::var(KUKURI_IROH_RELAY_URLS_ENV).ok().as_deref())
 }
 
 fn effective_node_relay_urls<I>(
@@ -506,7 +513,12 @@ where
     I: IntoIterator<Item = String>,
 {
     let mut relay_urls = Vec::new();
-    for relay_url in endpoint_relay_urls.into_iter().chain(configured_relay_urls) {
+    let relay_source: Vec<String> = if configured_relay_urls.is_empty() {
+        endpoint_relay_urls.into_iter().collect()
+    } else {
+        configured_relay_urls
+    };
+    for relay_url in relay_source {
         let trimmed = relay_url.trim();
         if trimmed.is_empty() {
             continue;
@@ -608,18 +620,17 @@ mod relay_mode_tests {
     fn effective_node_relay_urls_dedupes_endpoint_and_configured_entries() {
         let effective = effective_node_relay_urls(
             vec![
+                "https://usw1-1.relay.n0.iroh-canary.iroh.link".to_string(),
                 "https://relay.example".to_string(),
-                "https://relay.example/".to_string(),
             ],
             vec![
-                "https://relay.example".to_string(),
+                "https://relay.example/".to_string(),
                 "https://relay-backup.example".to_string(),
             ],
         );
         assert_eq!(
             effective,
             vec![
-                "https://relay.example".to_string(),
                 "https://relay.example/".to_string(),
                 "https://relay-backup.example".to_string(),
             ]
@@ -671,11 +682,45 @@ mod relay_mode_tests {
 
 #[cfg(test)]
 mod connectivity_tests {
-    use super::IrohNetworkService;
+    use super::{IrohNetworkService, KUKURI_IROH_RELAY_URLS_ENV};
     use crate::infrastructure::p2p::{DiscoveryOptions, NetworkService};
     use crate::shared::config::AppConfig;
     use iroh::{Endpoint, RelayMode, SecretKey, protocol::Router};
     use iroh_gossip::Gossip;
+    use std::sync::{Mutex, OnceLock};
+
+    fn relay_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct ScopedEnvVar {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl ScopedEnvVar {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for ScopedEnvVar {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => unsafe {
+                    std::env::set_var(self.key, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(self.key);
+                },
+            }
+        }
+    }
 
     fn test_secret_key(seed: u8) -> SecretKey {
         SecretKey::from_bytes(&[seed; 32])
@@ -825,6 +870,52 @@ mod connectivity_tests {
 
         assert_eq!(stored.ip_addrs().count(), 0);
         assert_eq!(stored.relay_urls().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn relay_only_add_peer_prefers_configured_custom_relay_in_lookup() {
+        let _relay_env_guard = relay_env_lock().lock().expect("relay env lock");
+        let _relay_urls =
+            ScopedEnvVar::set(KUKURI_IROH_RELAY_URLS_ENV, "https://iroh-relay.kukuri.app");
+        let (_remote_endpoint, _remote_gossip, _remote_router, direct_peer_hint) =
+            spawn_gossip_peer(99).await;
+        let (node_id, _endpoint) = direct_peer_hint
+            .split_once('@')
+            .expect("peer hint should contain endpoint");
+        let relay_and_addr_hint = format!(
+            "{node_id}|relay=https://usw1-1.relay.n0.iroh-canary.iroh.link|relay=https://iroh-relay.kukuri.app|addr=1.1.1.1:11223"
+        );
+        let remote_node_id = node_id.parse().expect("remote node id");
+
+        let mut service = IrohNetworkService::new(
+            test_secret_key(111),
+            AppConfig::default().network,
+            DiscoveryOptions::default(),
+            None,
+        )
+        .await
+        .expect("network service");
+        service.transport_profile = super::EndpointTransportProfile::RelayOnly;
+
+        service
+            .add_peer(&relay_and_addr_hint)
+            .await
+            .expect("relay-only add_peer should prefer configured relay");
+
+        let stored = service
+            .static_discovery
+            .get_endpoint_info(remote_node_id)
+            .expect("peer should be stored in address lookup")
+            .into_endpoint_addr();
+        let relay_urls: Vec<_> = stored
+            .relay_urls()
+            .map(|relay_url| relay_url.to_string())
+            .collect();
+
+        assert_eq!(
+            relay_urls,
+            vec!["https://iroh-relay.kukuri.app/".to_string()]
+        );
     }
 }
 

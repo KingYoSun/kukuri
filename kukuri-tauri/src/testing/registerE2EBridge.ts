@@ -25,6 +25,7 @@ import {
   type TrendingPostsResult,
   type TrendingTopicsResult,
 } from '@/hooks/useTrendingFeeds';
+import type { TopicTimelineEntry } from '@/hooks/usePosts';
 import { queryClient } from '@/lib/queryClient';
 import { persistKeys } from '@/stores/config/persist';
 import {
@@ -272,7 +273,29 @@ export interface E2EBridge {
     topicId: string;
     count: number;
     recentPostIds: string[];
+    recentEventIds: Array<string | null>;
     recentContents: string[];
+  }>;
+  findTopicContent: (payload: { topicId: string; needle: string }) => Promise<{
+    topicId: string;
+    needle: string;
+    p2pCount: number;
+    p2pMessageIds: string[];
+    p2pContents: string[];
+    postCount: number;
+    postIds: string[];
+    postEventIds: Array<string | null>;
+    postContents: string[];
+  }>;
+  getTopicTimelineQuerySnapshot: (payload?: { topicId?: string }) => Promise<{
+    topicId: string;
+    count: number;
+    threadUuids: string[];
+    parentContents: string[];
+    firstReplyContents: string[];
+    dataUpdatedAt: number;
+    fetchStatus: string;
+    status: string;
   }>;
   joinP2PTopic: (payload: { topicId: string; initialPeers?: string[] }) => Promise<void>;
   leaveP2PTopic: (payload: { topicId: string }) => Promise<void>;
@@ -1580,7 +1603,78 @@ export function registerE2EBridge(): void {
             topicId,
             count: postIds.length,
             recentPostIds: recentPosts.map((post) => post.id),
+            recentEventIds: recentPosts.map((post) => post.eventId ?? null),
             recentContents: recentPosts.map((post) => post.content),
+          };
+        },
+        findTopicContent: async (payload: { topicId: string; needle: string }) => {
+          const topicId = payload?.topicId?.trim();
+          const needle = payload?.needle?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          if (!needle) {
+            throw new Error('needle is required');
+          }
+
+          const topicMessages = useP2PStore.getState().messages.get(topicId) ?? [];
+          const matchedMessages = topicMessages.filter((message) =>
+            message.content.includes(needle),
+          );
+
+          const postStore = usePostStore.getState();
+          const topicPostIds = postStore.postsByTopic.get(topicId) ?? [];
+          const matchedPosts = topicPostIds
+            .map((id) => postStore.posts.get(id))
+            .filter((post): post is Post => Boolean(post))
+            .filter((post) => post.content.includes(needle));
+
+          return {
+            topicId,
+            needle,
+            p2pCount: matchedMessages.length,
+            p2pMessageIds: matchedMessages
+              .slice(-20)
+              .reverse()
+              .map((message) => message.id),
+            p2pContents: matchedMessages
+              .slice(-20)
+              .reverse()
+              .map((message) => message.content),
+            postCount: matchedPosts.length,
+            postIds: matchedPosts
+              .slice(-20)
+              .reverse()
+              .map((post) => post.id),
+            postEventIds: matchedPosts
+              .slice(-20)
+              .reverse()
+              .map((post) => post.eventId ?? null),
+            postContents: matchedPosts
+              .slice(-20)
+              .reverse()
+              .map((post) => post.content),
+          };
+        },
+        getTopicTimelineQuerySnapshot: async (payload?: { topicId?: string }) => {
+          const topicId = payload?.topicId?.trim();
+          if (!topicId) {
+            throw new Error('topicId is required');
+          }
+          const queryKey = ['topicTimeline', topicId] as const;
+          const timelineEntries = queryClient.getQueryData<TopicTimelineEntry[]>(queryKey) ?? [];
+          const queryState = queryClient.getQueryState<TopicTimelineEntry[]>(queryKey);
+          return {
+            topicId,
+            count: timelineEntries.length,
+            threadUuids: timelineEntries.slice(0, 10).map((entry) => entry.threadUuid),
+            parentContents: timelineEntries.slice(0, 10).map((entry) => entry.parentPost.content),
+            firstReplyContents: timelineEntries
+              .slice(0, 10)
+              .map((entry) => entry.firstReply?.content ?? ''),
+            dataUpdatedAt: queryState?.dataUpdatedAt ?? 0,
+            fetchStatus: queryState?.fetchStatus ?? 'idle',
+            status: queryState?.status ?? 'pending',
           };
         },
         joinP2PTopic: async (payload: { topicId: string; initialPeers?: string[] }) => {
