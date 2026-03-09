@@ -3,9 +3,12 @@ import { vi, beforeEach, afterEach } from 'vitest';
 import { act } from '@testing-library/react';
 import i18n from '@/i18n';
 import { clearKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
+import { clearResolvedAuthorProfileCacheState } from '@/lib/profile/authorProfileResolverCache';
 
 // リセット関数のセット
-const storeResetFns = new Set<() => void>();
+const { storeResetFns } = vi.hoisted(() => ({
+  storeResetFns: new Set<() => void>(),
+}));
 const TEST_LOCALE = 'ja';
 
 if (typeof window !== 'undefined' && window.localStorage) {
@@ -120,6 +123,7 @@ afterEach(() => {
       resetFn();
     });
     clearKnownUserMetadata();
+    clearResolvedAuthorProfileCacheState();
   });
 });
 

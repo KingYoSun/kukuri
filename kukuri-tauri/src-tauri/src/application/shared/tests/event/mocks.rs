@@ -34,6 +34,10 @@ impl TestGossipService {
             .map(|(t, _)| t.clone())
             .collect()
     }
+
+    pub async fn broadcasts(&self) -> Vec<(String, domain::Event)> {
+        self.broadcasts.read().await.clone()
+    }
 }
 
 impl Default for TestGossipService {

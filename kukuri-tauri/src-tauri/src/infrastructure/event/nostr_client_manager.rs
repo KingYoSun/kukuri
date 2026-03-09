@@ -191,6 +191,24 @@ impl NostrClientManager {
         }
     }
 
+    pub async fn fetch_events(&self, filter: Filter, timeout: Duration) -> Result<Events> {
+        let client_guard = self.client.read().await;
+        if let Some(client) = client_guard.as_ref() {
+            if self.configured_relays.is_empty() {
+                return Err(anyhow::anyhow!("no relays specified"));
+            }
+
+            if connected_relay_urls(client).await.is_empty() {
+                return Err(anyhow::anyhow!("not connected to any relays"));
+            }
+
+            let events = client.fetch_events(filter, timeout).await?;
+            Ok(events)
+        } else {
+            Err(anyhow::anyhow!("Client not initialized"))
+        }
+    }
+
     pub fn get_public_key(&self) -> Option<PublicKey> {
         self.keys.as_ref().map(|k| k.public_key())
     }

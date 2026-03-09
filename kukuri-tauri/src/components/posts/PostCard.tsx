@@ -567,7 +567,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-1 items-start gap-3">
-            <Avatar>
+            <Avatar data-testid={`${baseTestId}-author-avatar`} data-avatar-src={authorAvatarSrc}>
               <AvatarImage src={authorAvatarSrc} />
               <AvatarFallback>
                 {getInitials(post.author.displayName || post.author.name || 'U')}
@@ -575,7 +575,7 @@ export function PostCard({ post, 'data-testid': dataTestId }: PostCardProps) {
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h4 className="font-semibold">
+                <h4 className="font-semibold" data-testid={`${baseTestId}-author-name`}>
                   {post.author.displayName || post.author.name || t('posts.user')}
                 </h4>
                 <span className="text-sm text-muted-foreground">{timeAgo}</span>

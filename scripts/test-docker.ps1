@@ -1176,8 +1176,11 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $previousMode1 = $env:KUKURI_PEER_MODE_1
     $previousMode2 = $env:KUKURI_PEER_MODE_2
     $previousMetadata2 = $env:KUKURI_PEER_PUBLISH_METADATA_2
+    $previousRepublishMetadataOnPeerJoin2 = $env:KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2
+    $previousNostrRelayUrls2 = $env:KUKURI_PEER_NOSTR_RELAY_URLS_2
     $previousProfileName2 = $env:KUKURI_PEER_PROFILE_NAME_2
     $previousProfileAbout2 = $env:KUKURI_PEER_PROFILE_ABOUT_2
+    $previousProfilePicture2 = $env:KUKURI_PEER_PROFILE_PICTURE_2
     $previousStartupDelay2 = $env:KUKURI_PEER_STARTUP_DELAY_MS_2
     $previousRelayPublicUrl = $env:COMMUNITY_NODE_RELAY_PUBLIC_URL
     $previousRelayP2PInfoUrl = $env:COMMUNITY_NODE_RELAY_P2P_INFO_URL
@@ -1200,7 +1203,7 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:SCENARIO = "community-node-e2e"
     $env:E2E_FORBID_PENDING = "1"
     if ([string]::IsNullOrWhiteSpace($env:E2E_SPEC_PATTERN)) {
-        $env:E2E_SPEC_PATTERN = "./tests/e2e/specs/community-node.end-to-end.spec.ts"
+        $env:E2E_SPEC_PATTERN = "./tests/e2e/specs/community-node.end-to-end.spec.ts,./tests/e2e/specs/community-node.profile-resolution.spec.ts"
     }
     if ([string]::IsNullOrWhiteSpace($env:KUKURI_IROH_RELAY_URLS)) {
         $env:KUKURI_IROH_RELAY_URLS = "http://cn-iroh-relay:3340"
@@ -1229,8 +1232,11 @@ function Invoke-DesktopE2ECommunityNodeScenario {
     $env:KUKURI_PEER_MODE_1 = "listener"
     $env:KUKURI_PEER_MODE_2 = "publisher"
     $env:KUKURI_PEER_PUBLISH_METADATA_2 = "1"
+    $env:KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2 = "0"
+    $env:KUKURI_PEER_NOSTR_RELAY_URLS_2 = $relayUrl
     $env:KUKURI_PEER_PROFILE_NAME_2 = "community-node-peer-publisher-profile"
     $env:KUKURI_PEER_PROFILE_ABOUT_2 = "community node e2e publisher profile"
+    $env:KUKURI_PEER_PROFILE_PICTURE_2 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgwJ/l7hR9QAAAABJRU5ErkJggg=="
     $env:KUKURI_PEER_STARTUP_DELAY_MS_2 = "1000"
     $communityNodeResultDir = Join-Path $repositoryRoot "test-results/community-node-e2e"
     if (Test-Path $communityNodeResultDir) {
@@ -1346,6 +1352,16 @@ function Invoke-DesktopE2ECommunityNodeScenario {
         } else {
             Remove-Item Env:KUKURI_PEER_PUBLISH_METADATA_2 -ErrorAction SilentlyContinue
         }
+        if ($null -ne $previousRepublishMetadataOnPeerJoin2) {
+            $env:KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2 = $previousRepublishMetadataOnPeerJoin2
+        } else {
+            Remove-Item Env:KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousNostrRelayUrls2) {
+            $env:KUKURI_PEER_NOSTR_RELAY_URLS_2 = $previousNostrRelayUrls2
+        } else {
+            Remove-Item Env:KUKURI_PEER_NOSTR_RELAY_URLS_2 -ErrorAction SilentlyContinue
+        }
         if ($null -ne $previousProfileName2) {
             $env:KUKURI_PEER_PROFILE_NAME_2 = $previousProfileName2
         } else {
@@ -1355,6 +1371,11 @@ function Invoke-DesktopE2ECommunityNodeScenario {
             $env:KUKURI_PEER_PROFILE_ABOUT_2 = $previousProfileAbout2
         } else {
             Remove-Item Env:KUKURI_PEER_PROFILE_ABOUT_2 -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousProfilePicture2) {
+            $env:KUKURI_PEER_PROFILE_PICTURE_2 = $previousProfilePicture2
+        } else {
+            Remove-Item Env:KUKURI_PEER_PROFILE_PICTURE_2 -ErrorAction SilentlyContinue
         }
         if ($null -ne $previousStartupDelay2) {
             $env:KUKURI_PEER_STARTUP_DELAY_MS_2 = $previousStartupDelay2

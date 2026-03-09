@@ -10,6 +10,10 @@ const { listeners, listenMock } = vi.hoisted(() => ({
   listenMock: vi.fn(),
 }));
 
+const { resolveAuthorProfileWithRelayFallbackMock } = vi.hoisted(() => ({
+  resolveAuthorProfileWithRelayFallbackMock: vi.fn(),
+}));
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: listenMock.mockImplementation(
     async (event: string, handler: (event: { payload: unknown }) => void) => {
@@ -30,6 +34,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@/lib/utils/tauriEnvironment', () => ({
   isTauriRuntime: () => true,
+}));
+
+vi.mock('@/lib/profile/authorProfileResolver', () => ({
+  resolveAuthorProfileWithRelayFallback: resolveAuthorProfileWithRelayFallbackMock,
 }));
 
 import { useP2PEventListener } from '@/hooks/useP2PEventListener';
@@ -118,6 +126,7 @@ describe('useP2PEventListener', () => {
     vi.clearAllMocks();
     vi.spyOn(TauriApi, 'getUserProfileByPubkey').mockResolvedValue(null);
     vi.spyOn(TauriApi, 'getUserProfile').mockResolvedValue(null);
+    resolveAuthorProfileWithRelayFallbackMock.mockResolvedValue(null);
     usePostStore.getState().setPosts([basePost]);
   });
 
@@ -231,5 +240,65 @@ describe('useP2PEventListener', () => {
     const state = usePostStore.getState();
     expect(state.posts.has(propagatedEventId)).toBe(true);
     expect(state.postsByTopic.get(topicId)).toEqual([basePost.id, propagatedEventId]);
+  });
+
+  it('topic post 受信時に relay pull で author metadata を補完する', async () => {
+    const queryClient = buildQueryClient();
+    queryClient.setQueryData<Post[]>(['timeline'], [basePost]);
+    queryClient.setQueryData<Post[]>(['posts', topicId], [basePost]);
+    queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], [basePost]);
+    queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], [baseEntry]);
+    queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], [baseEntry]);
+
+    resolveAuthorProfileWithRelayFallbackMock.mockResolvedValue({
+      id: authorId,
+      pubkey: authorId,
+      npub: 'npub1relayauthor',
+      name: 'relay-author',
+      displayName: 'Relay Author',
+      about: 'relay resolved profile',
+      picture:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgwJ/l7hR9QAAAABJRU5ErkJggg==',
+      nip05: 'relay@example.com',
+      avatar: null,
+      publicProfile: true,
+      showOnlineStatus: false,
+    });
+
+    renderHook(() => useP2PEventListener(), {
+      wrapper: buildWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect((listeners.get('p2p://message/raw') ?? []).length).toBeGreaterThan(0);
+    });
+
+    const propagatedEventId = 'f'.repeat(64);
+    await emitToListeners('p2p://message/raw', {
+      topic_id: topicId,
+      payload: JSON.stringify({
+        id: propagatedEventId,
+        pubkey: authorId,
+        content: 'relay hydrated post',
+        sig: 'd'.repeat(128),
+        kind: 30078,
+        tags: [
+          ['t', topicId],
+          ['thread', `${topicId}/threads/${threadUuid}`],
+          ['thread_uuid', threadUuid],
+        ],
+        created_at: 1_700_000_300,
+      }),
+      timestamp: 1_700_000_300,
+    });
+
+    await waitFor(() => {
+      const storedPost = usePostStore.getState().posts.get(propagatedEventId);
+      expect(storedPost?.author.displayName).toBe('Relay Author');
+      expect(storedPost?.author.picture).toContain('data:image/png;base64,');
+    });
+
+    const timeline = queryClient.getQueryData<Post[]>(['timeline']);
+    expect(timeline?.some((post) => post.author.displayName === 'Relay Author')).toBe(true);
   });
 });

@@ -65,8 +65,7 @@ describe('PostCard', () => {
     expect(postContent?.textContent).toBe('テスト投稿です');
 
     // 投稿者名はh4タグ内のものを取得
-    const authorName = container.querySelector('h4.font-semibold');
-    expect(authorName?.textContent).toBe('Test User');
+    expect(screen.getByTestId('post-1-author-name')).toHaveTextContent('Test User');
     expect(screen.getByText('npub1test...')).toBeInTheDocument();
   });
 
@@ -101,11 +100,11 @@ describe('PostCard', () => {
 
     renderWithQueryClient(<PostCard post={postWithAvatar} />);
 
-    // PostCardコンポーネントが正しく画像URLを渡していることを確認
-    // 実際の画像読み込みはテスト環境では確認できないため、
-    // AvatarImageに正しいpropsが渡されていることを間接的に確認
-    const avatarContainer = screen.getByText('TU').closest('[data-slot="avatar"]');
-    expect(avatarContainer).toBeInTheDocument();
+    // Radix Avatar の画像ロード状態に依存せず、表示用 src が解決されたことを確認する
+    expect(screen.getByTestId('post-1-author-avatar')).toHaveAttribute(
+      'data-avatar-src',
+      'https://example.com/avatar.jpg',
+    );
   });
 
   it('いいねボタンをクリックできる', async () => {

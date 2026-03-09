@@ -22,8 +22,9 @@
 - プロフィール伝播不具合
   - 実機検証（2026年03月10日）: 両クライアントで事前に自分自身のプロフィールをローカル保存した状態から投稿すると、peer 間接続・投稿伝播・realtime timeline 更新は成功する一方、相手側 timeline/thread の表示名・avatar は反映されなかった。
   - テスト監査（2026年03月10日確認）: `community-node.profile-propagation.spec.ts` は local docker の `http://127.0.0.1:18080` / `ws://127.0.0.1:18082/relay` を前提に、profile update アクション実行後の `getAuthSnapshot()` と `waitForPeerHarnessSummary()` だけを見ている。今回の「profile update なしで既存プロフィールを解決する」実機シナリオは担保していない。
-  - 未解決点: 実機で失敗したユースケースに対応する実機相当 E2E が存在せず、「実機無視のテストPASS」が発生している。
-  - 次アクション: profile update を伴わない 2-client 実機相当 E2E を追加し、相手側 timeline/thread で display name / avatar が解決されることを直接検証する。
+  - 実装・検証（2026年03月10日）: 投稿時に保存済みローカル profile metadata を topic へ自動伝播するよう Rust 側を修正し、`community-node.profile-resolution.spec.ts` で profile update なしの 2-client 実機相当 E2E を追加した。受信側 timeline/thread の display name / avatar を直接 assertion し、`./scripts/test-docker.ps1 rust` / `ts` / `e2e-community-node` と `gh act --workflows .github/workflows/test.yml --job format-check` / `native-test-linux` / `community-node-tests` は PASS。
+  - 未解決点: 修正後コードで `https://api.kukuri.app` 実機を再検証していないため、公開 Community Node 上でプロフィール伝播が解消したこと自体は未確認。
+  - 次アクション: `https://api.kukuri.app` を使った実機再検証で profile 伝播を確認し、失敗が残る場合は relay warning と切り分けて追加調査する。
 - Windows Tauri リロードクラッシュ
   - 現状: `community-node.reload-stability.spec.ts` と関連 Rust tests は PASS。`IrohGossipService` の peer hint 再joinは idempotent 化済み。
   - 検証（2026年03月09日）: `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.reload-stability.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS。

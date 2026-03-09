@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mapPostResponseToDomain } from '@/lib/posts/postMapper';
-import { TauriApi } from '@/lib/api/tauri';
+import { resolveAuthorProfileWithRelayFallback } from '@/lib/profile/authorProfileResolver';
 
-vi.mock('@/lib/api/tauri', () => ({
-  TauriApi: {
-    getUserProfileByPubkey: vi.fn(),
-    getUserProfile: vi.fn(),
-  },
+vi.mock('@/lib/profile/authorProfileResolver', () => ({
+  resolveAuthorProfileWithRelayFallback: vi.fn(),
 }));
 
 vi.mock('@/lib/utils/nostr', () => ({
@@ -33,20 +30,19 @@ describe('postMapper', () => {
   });
 
   it('author pubkey でプロフィール取得できる場合は表示名を反映する', async () => {
-    vi.mocked(TauriApi.getUserProfileByPubkey).mockResolvedValue({
+    vi.mocked(resolveAuthorProfileWithRelayFallback).mockResolvedValue({
+      id: '0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a',
       npub: 'npub1alice',
       pubkey: '0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a',
       name: 'alice',
-      display_name: 'Alice',
+      displayName: 'Alice',
       about: 'profile',
       picture: 'https://example.com/avatar.png',
-      banner: null,
-      website: null,
       nip05: 'alice@example.com',
-      is_profile_public: true,
-      show_online_status: false,
+      avatar: null,
+      publicProfile: true,
+      showOnlineStatus: false,
     });
-    vi.mocked(TauriApi.getUserProfile).mockResolvedValue(null);
 
     const mapped = await mapPostResponseToDomain(buildApiPost());
 
@@ -58,8 +54,7 @@ describe('postMapper', () => {
   });
 
   it('プロフィール未取得時は短縮IDフォールバックを返す', async () => {
-    vi.mocked(TauriApi.getUserProfileByPubkey).mockResolvedValue(null);
-    vi.mocked(TauriApi.getUserProfile).mockResolvedValue(null);
+    vi.mocked(resolveAuthorProfileWithRelayFallback).mockResolvedValue(null);
 
     const mapped = await mapPostResponseToDomain(
       buildApiPost({
@@ -70,5 +65,27 @@ describe('postMapper', () => {
 
     expect(mapped.author.displayName).toBe('npub1abc...aaaa');
     expect(mapped.author.name).toBe('npub1abc...aaaa');
+  });
+
+  it('relay 経由で解決した avatar を反映する', async () => {
+    vi.mocked(resolveAuthorProfileWithRelayFallback).mockResolvedValue({
+      id: '0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a',
+      npub: 'npub1alice',
+      pubkey: '0830776847a7987c050fe9e6d466c155335a01d17c1844877e4b1fdc17bc446a',
+      name: 'alice',
+      displayName: 'Alice Relay',
+      about: 'relay profile',
+      picture:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgwJ/l7hR9QAAAABJRU5ErkJggg==',
+      nip05: '',
+      avatar: null,
+      publicProfile: true,
+      showOnlineStatus: false,
+    });
+
+    const mapped = await mapPostResponseToDomain(buildApiPost());
+
+    expect(mapped.author.displayName).toBe('Alice Relay');
+    expect(mapped.author.picture).toContain('data:image/png;base64,');
   });
 });

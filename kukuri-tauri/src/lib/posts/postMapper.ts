@@ -1,14 +1,8 @@
-import { TauriApi, type Post as ApiPost } from '@/lib/api/tauri';
+import type { Post as ApiPost } from '@/lib/api/tauri';
 import type { Post, User } from '@/stores/types';
 import { pubkeyToNpub } from '@/lib/utils/nostr';
 import { applyKnownUserMetadata } from '@/lib/profile/userMetadata';
-import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
-import { rememberKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
-
-const AUTHOR_PROFILE_MISS_TTL_MS = 60_000;
-const authorProfileCache = new Map<string, User>();
-const authorProfileInFlight = new Map<string, Promise<User | null>>();
-const authorProfileMissedAt = new Map<string, number>();
+import { resolveAuthorProfileWithRelayFallback } from '@/lib/profile/authorProfileResolver';
 
 const shortenAuthorLabel = (value: string): string => {
   const trimmed = value.trim();
@@ -21,58 +15,8 @@ const shortenAuthorLabel = (value: string): string => {
   return `${trimmed.slice(0, 8)}...${trimmed.slice(-4)}`;
 };
 
-const normalizeCacheKey = (value: string): string => value.trim().toLowerCase();
-
-const resolveAuthorProfile = async (
-  authorPubkey: string,
-  authorNpub: string,
-): Promise<User | null> => {
-  const cacheKey = normalizeCacheKey(authorPubkey);
-  const cached = authorProfileCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const missAt = authorProfileMissedAt.get(cacheKey);
-  if (missAt && Date.now() - missAt < AUTHOR_PROFILE_MISS_TTL_MS) {
-    return null;
-  }
-
-  const inFlight = authorProfileInFlight.get(cacheKey);
-  if (inFlight) {
-    return await inFlight;
-  }
-
-  const loader = (async (): Promise<User | null> => {
-    try {
-      const byPubkey = await TauriApi.getUserProfileByPubkey(authorPubkey);
-      const byNpub =
-        !byPubkey && authorNpub.startsWith('npub1')
-          ? await TauriApi.getUserProfile(authorNpub)
-          : null;
-      const profile = byPubkey ?? byNpub;
-      if (!profile) {
-        authorProfileMissedAt.set(cacheKey, Date.now());
-        return null;
-      }
-      const mapped = mapUserProfileToUser(profile);
-      const remembered = rememberKnownUserMetadata(mapped);
-      authorProfileCache.set(cacheKey, remembered);
-      authorProfileMissedAt.delete(cacheKey);
-      return remembered;
-    } catch {
-      authorProfileMissedAt.set(cacheKey, Date.now());
-      return null;
-    }
-  })();
-
-  authorProfileInFlight.set(cacheKey, loader);
-  try {
-    return await loader;
-  } finally {
-    authorProfileInFlight.delete(cacheKey);
-  }
-};
+const resolveAuthorProfile = async (authorPubkey: string): Promise<User | null> =>
+  await resolveAuthorProfileWithRelayFallback(authorPubkey);
 
 export async function mapPostResponseToDomain(apiPost: ApiPost): Promise<Post> {
   const npub =
@@ -80,7 +24,7 @@ export async function mapPostResponseToDomain(apiPost: ApiPost): Promise<Post> {
       ? apiPost.author_npub
       : await pubkeyToNpub(apiPost.author_pubkey);
   const fallbackAuthorLabel = shortenAuthorLabel(npub || apiPost.author_pubkey);
-  const resolvedProfile = await resolveAuthorProfile(apiPost.author_pubkey, npub);
+  const resolvedProfile = await resolveAuthorProfile(apiPost.author_pubkey);
 
   const baseAuthor: User = {
     id: apiPost.author_pubkey,

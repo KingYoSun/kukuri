@@ -13,6 +13,7 @@ use crate::infrastructure::p2p::GossipService;
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -22,11 +23,20 @@ pub struct EventManager {
     pub(crate) event_handler: Arc<EventHandler>,
     pub(crate) event_publisher: Arc<RwLock<EventPublisher>>,
     pub(crate) default_topics: Arc<DefaultTopicsRegistry>,
+    pub(crate) connection_pool: Option<ConnectionPool>,
     is_initialized: Arc<RwLock<bool>>,
     /// P2P配信用のGossipService（任意）
     pub(crate) gossip_service: Arc<RwLock<Option<Arc<dyn GossipService>>>>,
     /// 参照トピック解決用のEventTopicStore（任意）
     pub(crate) event_topic_store: Arc<RwLock<Option<Arc<dyn EventTopicStore>>>>,
+}
+
+fn user_metadata_fetch_timeout() -> Duration {
+    if cfg!(test) {
+        Duration::from_millis(100)
+    } else {
+        Duration::from_secs(3)
+    }
 }
 
 impl EventManager {
@@ -39,6 +49,7 @@ impl EventManager {
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics([
                 DEFAULT_PUBLIC_TOPIC_ID.to_string(),
             ])),
+            connection_pool: None,
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_topic_store: Arc::new(RwLock::new(None)),
@@ -48,7 +59,7 @@ impl EventManager {
     /// 新しいEventManagerインスタンスをConnectionPoolと共に作成
     pub fn new_with_connection_pool(pool: ConnectionPool) -> Self {
         let mut event_handler = EventHandler::new();
-        event_handler.set_connection_pool(pool);
+        event_handler.set_connection_pool(pool.clone());
 
         Self {
             client_manager: Arc::new(RwLock::new(NostrClientManager::new())),
@@ -57,6 +68,7 @@ impl EventManager {
             default_topics: Arc::new(DefaultTopicsRegistry::with_topics([
                 DEFAULT_PUBLIC_TOPIC_ID.to_string(),
             ])),
+            connection_pool: Some(pool),
             is_initialized: Arc::new(RwLock::new(false)),
             gossip_service: Arc::new(RwLock::new(None)),
             event_topic_store: Arc::new(RwLock::new(None)),
@@ -160,13 +172,28 @@ impl EventManager {
     ) -> Result<()> {
         self.ensure_initialized().await?;
 
-        let mut filter = Filter::new().author(pubkey).kind(Kind::TextNote);
+        let mut text_note_filter = Filter::new().author(pubkey).kind(Kind::TextNote);
+        let mut metadata_filter = Filter::new().author(pubkey).kind(Kind::Metadata);
         if let Some(since_ts) = since {
-            filter = filter.since(since_ts);
+            text_note_filter = text_note_filter.since(since_ts);
+            metadata_filter = metadata_filter.since(since_ts);
         }
 
         let client_manager = self.client_manager.read().await;
-        client_manager.subscribe(vec![filter]).await?;
+        client_manager
+            .subscribe(vec![text_note_filter, metadata_filter])
+            .await?;
+        let fetched_metadata = client_manager
+            .fetch_events(
+                Filter::new().author(pubkey).kind(Kind::Metadata).limit(1),
+                user_metadata_fetch_timeout(),
+            )
+            .await?;
+        drop(client_manager);
+
+        if let Some(event) = fetched_metadata.first().cloned() {
+            self.event_handler.handle_event(event).await?;
+        }
 
         info!("Subscribed to user: {}", pubkey);
         Ok(())

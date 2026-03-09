@@ -1028,8 +1028,11 @@ run_desktop_e2e_community_node() {
   local previous_mode1="${KUKURI_PEER_MODE_1-}"
   local previous_mode2="${KUKURI_PEER_MODE_2-}"
   local previous_metadata2="${KUKURI_PEER_PUBLISH_METADATA_2-}"
+  local previous_republish_metadata_on_peer_join2="${KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2-}"
+  local previous_nostr_relay_urls2="${KUKURI_PEER_NOSTR_RELAY_URLS_2-}"
   local previous_profile_name2="${KUKURI_PEER_PROFILE_NAME_2-}"
   local previous_profile_about2="${KUKURI_PEER_PROFILE_ABOUT_2-}"
+  local previous_profile_picture2="${KUKURI_PEER_PROFILE_PICTURE_2-}"
   local previous_startup_delay2="${KUKURI_PEER_STARTUP_DELAY_MS_2-}"
   local previous_relay_public_url="${COMMUNITY_NODE_RELAY_PUBLIC_URL-}"
   local previous_relay_p2p_info_url="${COMMUNITY_NODE_RELAY_P2P_INFO_URL-}"
@@ -1051,7 +1054,7 @@ run_desktop_e2e_community_node() {
   export E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL="$relay_url"
   export SCENARIO="community-node-e2e"
   export E2E_FORBID_PENDING='1'
-  export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.end-to-end.spec.ts}"
+  export E2E_SPEC_PATTERN="${E2E_SPEC_PATTERN:-./tests/e2e/specs/community-node.end-to-end.spec.ts,./tests/e2e/specs/community-node.profile-resolution.spec.ts}"
   export KUKURI_IROH_RELAY_URLS="${KUKURI_IROH_RELAY_URLS:-http://127.0.0.1:3340}"
   export KUKURI_IROH_RELAY_MODE="${KUKURI_IROH_RELAY_MODE:-custom}"
   export KUKURI_IROH_TRANSPORT_PROFILE='relay-only'
@@ -1075,8 +1078,11 @@ run_desktop_e2e_community_node() {
   export KUKURI_PEER_MODE_1='listener'
   export KUKURI_PEER_MODE_2='publisher'
   export KUKURI_PEER_PUBLISH_METADATA_2='1'
+  export KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2='0'
+  export KUKURI_PEER_NOSTR_RELAY_URLS_2="$relay_url"
   export KUKURI_PEER_PROFILE_NAME_2='community-node-peer-publisher-profile'
   export KUKURI_PEER_PROFILE_ABOUT_2='community node e2e publisher profile'
+  export KUKURI_PEER_PROFILE_PICTURE_2='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgwJ/l7hR9QAAAABJRU5ErkJggg=='
   export KUKURI_PEER_STARTUP_DELAY_MS_2='1000'
 
   local status=0
@@ -1202,6 +1208,16 @@ run_desktop_e2e_community_node() {
   else
     unset KUKURI_PEER_PUBLISH_METADATA_2
   fi
+  if [[ -n "${previous_republish_metadata_on_peer_join2-}" ]]; then
+    export KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2="$previous_republish_metadata_on_peer_join2"
+  else
+    unset KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2
+  fi
+  if [[ -n "${previous_nostr_relay_urls2-}" ]]; then
+    export KUKURI_PEER_NOSTR_RELAY_URLS_2="$previous_nostr_relay_urls2"
+  else
+    unset KUKURI_PEER_NOSTR_RELAY_URLS_2
+  fi
   if [[ -n "${previous_profile_name2-}" ]]; then
     export KUKURI_PEER_PROFILE_NAME_2="$previous_profile_name2"
   else
@@ -1211,6 +1227,11 @@ run_desktop_e2e_community_node() {
     export KUKURI_PEER_PROFILE_ABOUT_2="$previous_profile_about2"
   else
     unset KUKURI_PEER_PROFILE_ABOUT_2
+  fi
+  if [[ -n "${previous_profile_picture2-}" ]]; then
+    export KUKURI_PEER_PROFILE_PICTURE_2="$previous_profile_picture2"
+  else
+    unset KUKURI_PEER_PROFILE_PICTURE_2
   fi
   if [[ -n "${previous_startup_delay2-}" ]]; then
     export KUKURI_PEER_STARTUP_DELAY_MS_2="$previous_startup_delay2"

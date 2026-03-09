@@ -12,6 +12,7 @@ export interface PeerHarnessSummary {
     published_count?: number;
     metadata_published_count?: number;
     received_count?: number;
+    peer_joined_events?: number;
     recent_contents?: string[];
     last_error?: string | null;
   };

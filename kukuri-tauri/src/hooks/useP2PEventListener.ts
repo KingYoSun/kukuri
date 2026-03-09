@@ -18,6 +18,7 @@ import { TauriApi } from '@/lib/api/tauri';
 import { mapUserProfileToUser } from '@/lib/profile/profileMapper';
 import { rememberKnownUserMetadata } from '@/lib/profile/knownUserMetadata';
 import { toUserProfileDto } from '@/lib/profile/profileQuerySync';
+import { resolveAuthorProfileWithRelayFallback } from '@/lib/profile/authorProfileResolver';
 import type { TopicTimelineEntry } from './usePosts';
 
 interface P2PRawMessageEvent {
@@ -635,17 +636,12 @@ export function useP2PEventListener() {
 
     const loader = (async (): Promise<User | null> => {
       try {
-        const profile = isHexFormat(author)
-          ? await TauriApi.getUserProfileByPubkey(author)
-          : author.startsWith('npub1')
-            ? await TauriApi.getUserProfile(author)
-            : null;
+        const profile = await resolveAuthorProfileWithRelayFallback(author);
         if (!profile) {
           authorProfileMissedAt.current.set(cacheKey, Date.now());
           return null;
         }
-        const mapped = mapUserProfileToUser(profile);
-        const enriched = applyKnownUserMetadata(mapped);
+        const enriched = applyKnownUserMetadata(profile);
         const remembered = rememberKnownUserMetadata(enriched);
         authorProfileCache.current.set(cacheKey, remembered);
         authorProfileMissedAt.current.delete(cacheKey);

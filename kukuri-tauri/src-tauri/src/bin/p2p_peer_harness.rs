@@ -14,7 +14,7 @@ use kukuri_lib::test_support::infrastructure::p2p::iroh_network_service::{
 };
 use kukuri_lib::test_support::shared::config::{AppConfig, BootstrapSource, NetworkConfig};
 use nostr_sdk::prelude::{
-    Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey,
+    Client, Event as NostrEvent, Keys as NostrKeys, Metadata, SecretKey as NostrSecretKey, Url,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -56,6 +56,7 @@ struct HarnessConfig {
     mode: PeerMode,
     topic_id: String,
     bootstrap_peers: Vec<String>,
+    nostr_relay_urls: Vec<String>,
     publish_interval_ms: u64,
     publish_max: Option<u64>,
     publish_prefix: String,
@@ -70,8 +71,10 @@ struct HarnessConfig {
     nostr_secret_key_b64: Option<String>,
     publish_metadata: bool,
     publish_on_peer_join: bool,
+    republish_metadata_on_peer_join: bool,
     profile_name: Option<String>,
     profile_about: Option<String>,
+    profile_picture: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Clone)]
@@ -225,6 +228,7 @@ fn build_config() -> HarnessConfig {
         ),
         topic_id: parse_required_string("KUKURI_PEER_TOPIC", DEFAULT_TOPIC_ID),
         bootstrap_peers,
+        nostr_relay_urls: parse_env_list(std::env::var("KUKURI_PEER_NOSTR_RELAY_URLS").ok()),
         publish_interval_ms: parse_optional_u64(
             std::env::var("KUKURI_PEER_PUBLISH_INTERVAL_MS").ok(),
         )
@@ -261,8 +265,13 @@ fn build_config() -> HarnessConfig {
             std::env::var("KUKURI_PEER_PUBLISH_ON_PEER_JOIN").ok(),
             false,
         ),
+        republish_metadata_on_peer_join: parse_env_bool(
+            std::env::var("KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN").ok(),
+            true,
+        ),
         profile_name: parse_optional_string(std::env::var("KUKURI_PEER_PROFILE_NAME").ok()),
         profile_about: parse_optional_string(std::env::var("KUKURI_PEER_PROFILE_ABOUT").ok()),
+        profile_picture: parse_optional_string(std::env::var("KUKURI_PEER_PROFILE_PICTURE").ok()),
     }
 }
 
@@ -324,13 +333,62 @@ fn build_network_config(cfg: &HarnessConfig) -> NetworkConfig {
     network
 }
 
+async fn connected_nostr_relay_urls(client: &Client) -> Vec<String> {
+    client
+        .relays()
+        .await
+        .into_iter()
+        .filter_map(|(url, relay)| relay.is_connected().then(|| url.to_string()))
+        .collect()
+}
+
+async fn build_nostr_client(
+    keys: &NostrKeys,
+    relay_urls: &[String],
+) -> anyhow::Result<Option<Client>> {
+    if relay_urls.is_empty() {
+        return Ok(None);
+    }
+
+    let client = Client::new(keys.clone());
+    for relay_url in relay_urls {
+        client.add_relay(relay_url).await?;
+    }
+
+    client.connect().await;
+    client.wait_for_connection(Duration::from_secs(3)).await;
+
+    let connected_relays = connected_nostr_relay_urls(&client).await;
+    if connected_relays.is_empty() {
+        return Err(anyhow::anyhow!(
+            "no configured nostr relay connected within 3s: {}",
+            relay_urls.join(", ")
+        ));
+    }
+
+    Ok(Some(client))
+}
+
 async fn publish_topic_event(
     publisher: &EventPublisher,
+    nostr_client: Option<&Client>,
     stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
     cfg: &HarnessConfig,
     request: &TopicPublishRequest,
     stats: &mut HarnessStats,
 ) -> anyhow::Result<String> {
+    if cfg.publish_metadata {
+        publish_profile_metadata(
+            publisher,
+            nostr_client,
+            stack,
+            cfg,
+            &request.topic_id,
+            stats,
+        )
+        .await?;
+    }
+
     let reply_to = match request.reply_to_event_id.as_deref() {
         Some(raw) => Some(
             nostr_sdk::prelude::EventId::from_hex(raw)
@@ -358,8 +416,10 @@ async fn publish_topic_event(
 
 async fn publish_profile_metadata(
     publisher: &EventPublisher,
+    nostr_client: Option<&Client>,
     stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
     cfg: &HarnessConfig,
+    topic_id: &str,
     stats: &mut HarnessStats,
 ) -> anyhow::Result<()> {
     let mut metadata = Metadata::new().name(
@@ -370,16 +430,30 @@ async fn publish_profile_metadata(
     if let Some(about) = cfg.profile_about.as_deref() {
         metadata = metadata.about(about);
     }
+    if let Some(picture) = cfg.profile_picture.as_deref() {
+        let picture_url = Url::parse(picture)
+            .map_err(|err| anyhow::anyhow!("invalid profile picture url: {err}"))?;
+        metadata = metadata.picture(picture_url);
+    }
     let metadata_event = publisher.create_metadata(metadata)?;
     let domain_event = convert_nostr_event(&metadata_event)?;
+    if let Some(client) = nostr_client {
+        client.send_event(&metadata_event).await?;
+        info!(
+            peer = %cfg.peer_name,
+            relay_count = connected_nostr_relay_urls(client).await.len(),
+            event_id = %metadata_event.id,
+            "Peer harness published metadata event to Nostr relays"
+        );
+    }
     stack
         .gossip_service
-        .broadcast(&cfg.topic_id, &domain_event)
+        .broadcast(topic_id, &domain_event)
         .await?;
     stats.metadata_published_count += 1;
     info!(
         peer = %cfg.peer_name,
-        topic = %cfg.topic_id,
+        topic = %topic_id,
         event_id = %domain_event.id,
         metadata_published = stats.metadata_published_count,
         "Peer harness published metadata event"
@@ -652,6 +726,7 @@ fn build_publish_request_from_command(
 async fn process_peer_commands(
     command_dir: &Path,
     publisher: &EventPublisher,
+    nostr_client: Option<&Client>,
     stack: &kukuri_lib::test_support::application::services::p2p_service::P2PStack,
     cfg: &HarnessConfig,
     stats: &mut HarnessStats,
@@ -665,8 +740,15 @@ async fn process_peer_commands(
                 let execution: anyhow::Result<PeerCommandResult> = match command.action.trim() {
                     "publish_topic_event" => {
                         let request = build_publish_request_from_command(cfg, &command)?;
-                        let event_id =
-                            publish_topic_event(publisher, stack, cfg, &request, stats).await?;
+                        let event_id = publish_topic_event(
+                            publisher,
+                            nostr_client,
+                            stack,
+                            cfg,
+                            &request,
+                            stats,
+                        )
+                        .await?;
                         Ok(PeerCommandResult {
                             command_id: command.command_id,
                             ok: true,
@@ -751,8 +833,10 @@ async fn main() -> anyhow::Result<()> {
         peer = %cfg.peer_name,
         mode = %cfg.mode.as_str(),
         topic = %cfg.topic_id,
+        nostr_relays = %cfg.nostr_relay_urls.join(","),
         publish_metadata = cfg.publish_metadata,
         publish_on_peer_join = cfg.publish_on_peer_join,
+        republish_metadata_on_peer_join = cfg.republish_metadata_on_peer_join,
         bootstrap_peers = %cfg.bootstrap_peers.join(","),
         "Starting p2p peer harness"
     );
@@ -763,9 +847,10 @@ async fn main() -> anyhow::Result<()> {
 
     let iroh_secret = build_iroh_secret(cfg.iroh_secret_key_b64.as_deref())?;
     let nostr_keys = build_nostr_keys(cfg.nostr_secret_key_b64.as_deref())?;
+    let nostr_client = build_nostr_client(&nostr_keys, &cfg.nostr_relay_urls).await?;
     let own_pubkey = nostr_keys.public_key().to_string();
     let mut publisher = EventPublisher::new();
-    publisher.set_keys(nostr_keys);
+    publisher.set_keys(nostr_keys.clone());
 
     let network_config = build_network_config(&cfg);
     let (event_tx, mut event_rx) = broadcast::channel(1024);
@@ -827,7 +912,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if cfg.publish_metadata
-        && let Err(err) = publish_profile_metadata(&publisher, &stack, &cfg, &mut stats).await
+        && let Err(err) = publish_profile_metadata(
+            &publisher,
+            nostr_client.as_ref(),
+            &stack,
+            &cfg,
+            &cfg.topic_id,
+            &mut stats,
+        )
+        .await
     {
         stats.last_error = Some(err.to_string());
         warn!(peer = %cfg.peer_name, error = %err, "Initial metadata publish failed");
@@ -837,6 +930,7 @@ async fn main() -> anyhow::Result<()> {
         && publish_enabled
         && let Err(err) = publish_topic_event(
             &publisher,
+            nostr_client.as_ref(),
             &stack,
             &cfg,
             &build_default_publish_request(&cfg),
@@ -867,6 +961,7 @@ async fn main() -> anyhow::Result<()> {
             _ = publish_tick.tick(), if cfg.mode == PeerMode::Publisher && publish_enabled => {
                 if let Err(err) = publish_topic_event(
                     &publisher,
+                    nostr_client.as_ref(),
                     &stack,
                     &cfg,
                     &build_default_publish_request(&cfg),
@@ -881,6 +976,7 @@ async fn main() -> anyhow::Result<()> {
                     && let Err(err) = process_peer_commands(
                         command_dir,
                         &publisher,
+                        nostr_client.as_ref(),
                         &stack,
                         &cfg,
                         &mut stats,
@@ -952,8 +1048,16 @@ async fn main() -> anyhow::Result<()> {
                     Ok(kukuri_lib::test_support::domain::p2p::P2PEvent::PeerJoined { .. }) => {
                         stats.peer_joined_events += 1;
                         if cfg.publish_metadata
-                            && let Err(err) =
-                                publish_profile_metadata(&publisher, &stack, &cfg, &mut stats).await
+                            && cfg.republish_metadata_on_peer_join
+                            && let Err(err) = publish_profile_metadata(
+                                &publisher,
+                                nostr_client.as_ref(),
+                                &stack,
+                                &cfg,
+                                &cfg.topic_id,
+                                &mut stats,
+                            )
+                            .await
                         {
                             stats.last_error = Some(err.to_string());
                             warn!(
@@ -966,6 +1070,7 @@ async fn main() -> anyhow::Result<()> {
                             publish_enabled = true;
                             if let Err(err) = publish_topic_event(
                                 &publisher,
+                                nostr_client.as_ref(),
                                 &stack,
                                 &cfg,
                                 &build_default_publish_request(&cfg),

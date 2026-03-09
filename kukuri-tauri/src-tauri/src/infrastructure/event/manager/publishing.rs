@@ -4,10 +4,13 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use nostr_sdk::prelude::*;
+use sqlx::Row;
 use tokio::sync::RwLock;
-use tracing::error;
+use tracing::{error, warn};
 
 use super::EventManager;
+use crate::application::shared::mappers::profile_metadata_to_nostr;
+use crate::domain::entities::event_gateway::{PrivacyPreferences, ProfileMetadata};
 use crate::infrastructure::event::nostr_client_manager::NostrClientManager;
 use crate::infrastructure::p2p::GossipService;
 
@@ -101,7 +104,217 @@ async fn publish_metadata_to_relays_best_effort(
     }
 }
 
+fn trim_non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
 impl EventManager {
+    async fn load_current_profile_metadata(&self) -> Option<Metadata> {
+        let pool = self.connection_pool.as_ref()?;
+        let public_key = self.get_public_key().await.map(|pk| pk.to_string())?;
+
+        let user_row = match sqlx::query(
+            r#"
+            SELECT
+                name,
+                display_name,
+                bio,
+                avatar_url,
+                nip05,
+                is_profile_public,
+                show_online_status
+            FROM users
+            WHERE pubkey = ?1
+            LIMIT 1
+            "#,
+        )
+        .bind(&public_key)
+        .fetch_optional(pool.get_pool())
+        .await
+        {
+            Ok(row) => row,
+            Err(err) => {
+                warn!(
+                    target: "event_manager",
+                    error = %err,
+                    pubkey = %public_key,
+                    "Failed to load current profile from users table"
+                );
+                None
+            }
+        };
+
+        let (name, display_name, about, picture, banner, nip05, public_profile, show_online_status) =
+            if let Some(row) = user_row {
+                (
+                    trim_non_empty(row.try_get::<Option<String>, _>("name").ok().flatten()),
+                    trim_non_empty(
+                        row.try_get::<Option<String>, _>("display_name")
+                            .ok()
+                            .flatten(),
+                    ),
+                    trim_non_empty(row.try_get::<Option<String>, _>("bio").ok().flatten()),
+                    trim_non_empty(
+                        row.try_get::<Option<String>, _>("avatar_url")
+                            .ok()
+                            .flatten(),
+                    ),
+                    None,
+                    trim_non_empty(row.try_get::<Option<String>, _>("nip05").ok().flatten()),
+                    row.try_get::<i64, _>("is_profile_public")
+                        .ok()
+                        .map(|value| value != 0)
+                        .unwrap_or(true),
+                    row.try_get::<i64, _>("show_online_status")
+                        .ok()
+                        .map(|value| value != 0)
+                        .unwrap_or(false),
+                )
+            } else {
+                let profile_row = match sqlx::query(
+                    r#"
+                    SELECT
+                        display_name,
+                        about,
+                        picture_url,
+                        banner_url,
+                        nip05
+                    FROM profiles
+                    WHERE public_key = ?1
+                    LIMIT 1
+                    "#,
+                )
+                .bind(&public_key)
+                .fetch_optional(pool.get_pool())
+                .await
+                {
+                    Ok(row) => row,
+                    Err(err) => {
+                        warn!(
+                            target: "event_manager",
+                            error = %err,
+                            pubkey = %public_key,
+                            "Failed to load current profile from profiles table"
+                        );
+                        None
+                    }
+                };
+                let row = profile_row?;
+                (
+                    None,
+                    trim_non_empty(
+                        row.try_get::<Option<String>, _>("display_name")
+                            .ok()
+                            .flatten(),
+                    ),
+                    trim_non_empty(row.try_get::<Option<String>, _>("about").ok().flatten()),
+                    trim_non_empty(
+                        row.try_get::<Option<String>, _>("picture_url")
+                            .ok()
+                            .flatten(),
+                    ),
+                    trim_non_empty(
+                        row.try_get::<Option<String>, _>("banner_url")
+                            .ok()
+                            .flatten(),
+                    ),
+                    trim_non_empty(row.try_get::<Option<String>, _>("nip05").ok().flatten()),
+                    true,
+                    false,
+                )
+            };
+
+        let has_profile_payload = name.is_some()
+            || display_name.is_some()
+            || about.is_some()
+            || picture.is_some()
+            || banner.is_some()
+            || nip05.is_some()
+            || !public_profile
+            || show_online_status;
+        if !has_profile_payload {
+            return None;
+        }
+
+        let profile = match ProfileMetadata::new(
+            name,
+            display_name,
+            about,
+            picture,
+            banner,
+            nip05,
+            None,
+            None,
+            None,
+            Some(PrivacyPreferences {
+                public_profile,
+                show_online_status,
+            }),
+        ) {
+            Ok(profile) => profile,
+            Err(err) => {
+                warn!(
+                    target: "event_manager",
+                    error = %err,
+                    pubkey = %public_key,
+                    "Failed to build current profile metadata"
+                );
+                return None;
+            }
+        };
+
+        match profile_metadata_to_nostr(&profile) {
+            Ok(metadata) => Some(metadata),
+            Err(err) => {
+                warn!(
+                    target: "event_manager",
+                    error = %err,
+                    pubkey = %public_key,
+                    "Failed to convert current profile metadata to nostr metadata"
+                );
+                None
+            }
+        }
+    }
+
+    async fn publish_current_profile_metadata_to_topic_best_effort(&self, topic_id: &str) {
+        let Some(metadata) = self.load_current_profile_metadata().await else {
+            return;
+        };
+
+        let publisher = self.event_publisher.read().await;
+        let metadata_event = match publisher.create_metadata(metadata) {
+            Ok(event) => event,
+            Err(err) => {
+                warn!(
+                    target: "event_manager",
+                    error = %err,
+                    topic_id,
+                    "Failed to create current profile metadata event"
+                );
+                return;
+            }
+        };
+        drop(publisher);
+
+        if let Some(gossip) = self.gossip_service.read().await.as_ref().cloned() {
+            broadcast_metadata_to_topics(
+                gossip,
+                vec![topic_id.to_string()],
+                metadata_event.clone(),
+            )
+            .await;
+        }
+
+        let client_manager = self.client_manager.clone();
+        tokio::spawn(async move {
+            publish_metadata_to_relays_best_effort(client_manager, metadata_event).await;
+        });
+    }
+
     /// テキストノートを投稿
     pub async fn publish_text_note(&self, content: &str) -> Result<EventId> {
         self.ensure_initialized().await?;
@@ -148,6 +361,8 @@ impl EventManager {
         epoch: Option<i64>,
     ) -> Result<EventId> {
         self.ensure_initialized().await?;
+        self.publish_current_profile_metadata_to_topic_best_effort(topic_id)
+            .await;
 
         let publisher = self.event_publisher.read().await;
         let event = publisher.create_topic_post(topic_id, content, reply_to, scope, epoch)?;

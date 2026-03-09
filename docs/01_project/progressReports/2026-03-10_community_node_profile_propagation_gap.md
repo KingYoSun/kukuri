@@ -66,11 +66,24 @@
 - `community-node.profile-propagation.spec.ts` の PASS は、今回の実機シナリオに対する品質保証にはならない。
 - 本件は「実機無視のテストPASS」が発生した重大インシデントとして扱い、live-path に対応した test gap fill を優先する必要がある。
 
-## 6. 必要な次アクション
+## 6. 2026年03月10日の対応
 
-- profile update を伴わない 2-client 実機相当 E2E を追加する。
-  - 前提: 両 client は事前に自分自身の profile をローカル保存済み
-  - 操作: そのまま post を publish
-  - 期待: 相手側 timeline/thread で author display name / avatar が reload なしに解決される
-- peer harness receipt ではなく、受信側 client UI そのものを assertion 対象にする。
-- `api.kukuri.app` の relay 404 / auth warning は profile 伝播不具合と分離して切り分ける。
+- Rust 側で、topic post publish 時に保存済みローカル profile metadata を同一 topic へ先行 broadcast する処理を追加した。
+- `community-node.profile-resolution.spec.ts` を追加し、profile update を伴わない 2-client 実機相当シナリオを固定した。
+  - 前提: publisher / listener がそれぞれ自分自身の profile をローカル保持済み
+  - 操作: publisher が通常の topic post を publish
+  - 期待: listener 側の timeline/thread で author display name / avatar が自動解決される
+- 同 E2E では peer harness summary の固定 count 前提を避け、post-time metadata propagation が timeline/thread 描画へ反映されることを直接 assertion する。
+- 検証結果:
+  - `./scripts/test-docker.ps1 rust`: PASS
+  - `./scripts/test-docker.ps1 ts`: PASS
+  - `./scripts/test-docker.ps1 e2e-community-node`: PASS
+  - `gh act --workflows .github/workflows/test.yml --job format-check`: PASS
+  - `gh act --workflows .github/workflows/test.yml --job native-test-linux`: PASS
+  - `gh act --workflows .github/workflows/test.yml --job community-node-tests`: PASS
+
+## 7. 残る確認事項
+
+- `https://api.kukuri.app` を使った実機再検証が未了である。
+- relay 404 / auth warning は依然として別途切り分けが必要であり、profile 伝播修正後も残る可能性がある。
+- 次の live-path 確認では、profile update アクションなしで受信側 timeline/thread の display name / avatar が反映されることを実機で再度確認する。
