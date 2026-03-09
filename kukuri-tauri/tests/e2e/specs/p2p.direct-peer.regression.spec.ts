@@ -12,6 +12,7 @@ import {
 import {
   connectToP2PPeer,
   ensureTestTopic,
+  findTopicContent,
   getBootstrapSnapshot,
   getP2PMessageSnapshot,
   getP2PStatus,
@@ -20,6 +21,10 @@ import {
   resetAppState,
   setTimelineUpdateMode,
 } from '../helpers/bridge';
+import {
+  enqueuePeerHarnessPublishCommand,
+  waitForPeerHarnessCommandResult,
+} from '../helpers/peerHarness';
 
 const DEFAULT_TOPIC_ID =
   'kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0';
@@ -31,6 +36,7 @@ const DEFAULT_EXPECTED_PROFILE_NAME = 'multi-peer-publisher-profile';
 const DEFAULT_DIRECT_PEER_NAME = 'peer-client-2';
 const DEFAULT_OUTPUT_GROUP = 'multi-peer-e2e';
 const DEFAULT_DIRECT_PEER_TIMEOUT_MS = 120000;
+const HEX_64_PATTERN = /^[0-9a-f]{64}$/i;
 
 interface PeerAddressSnapshot {
   peer_name?: string;
@@ -54,6 +60,25 @@ interface TimelineThreadSnapshot {
   count: number;
   textDigest: string;
   containsNeedle: boolean;
+}
+
+interface PublishSummary {
+  command_id?: string;
+  event_id?: string | null;
+  published_count?: number;
+  processed_at?: string;
+  topic_id?: string | null;
+  content?: string | null;
+}
+
+interface TopicContentState {
+  p2pCount: number;
+  p2pMessageIds: string[];
+  p2pContents: string[];
+  postCount: number;
+  postIds: string[];
+  postEventIds: Array<string | null>;
+  postContents: string[];
 }
 
 const profile: ProfileInfo = {
@@ -103,6 +128,59 @@ const parseOptionalInt = (value: string | undefined): number | null => {
     return null;
   }
   return Math.floor(parsed);
+};
+
+const runPeerHarnessPublish = async (options: {
+  peerName: string;
+  outputGroup: string;
+  topicId: string;
+  content: string;
+  replyTo?: string;
+}): Promise<PublishSummary> => {
+  const { commandId } = enqueuePeerHarnessPublishCommand({
+    peerName: options.peerName,
+    outputGroup: options.outputGroup,
+    topicId: options.topicId,
+    content: options.content,
+    replyToEventId: options.replyTo,
+  });
+
+  const result = await waitForPeerHarnessCommandResult({
+    peerName: options.peerName,
+    outputGroup: options.outputGroup,
+    commandId,
+    timeoutMs: 120000,
+    description: `${options.peerName} should publish ${options.content}`,
+  });
+
+  return {
+    command_id: result.command_id,
+    event_id: result.event_id,
+    published_count: result.published_count,
+    processed_at: result.processed_at,
+    topic_id: result.topic_id,
+    content: result.content,
+  };
+};
+
+const waitForTopicContent = async (topicId: string, needle: string): Promise<TopicContentState> => {
+  let latest = await findTopicContent(topicId, needle);
+
+  await browser.waitUntil(
+    async () => {
+      latest = await findTopicContent(topicId, needle);
+      return latest.p2pCount > 0 || latest.postCount > 0;
+    },
+    {
+      timeout: 60000,
+      interval: 1000,
+      timeoutMsg: `Thread content did not reach topic stores: ${needle}; latest=${JSON.stringify(
+        latest,
+      )}`,
+    },
+  );
+
+  return latest;
 };
 
 type DirectPeerConnectMode = 'bootstrap' | 'direct' | 'both';
@@ -609,7 +687,7 @@ describe('Direct peer realtime propagation', () => {
     await resetAppState();
   });
 
-  it('updates timeline in realtime and resolves profile label without reload', async function () {
+  it('does not stale-render under relay-only direct-peer propagation and resolves profile label without reload', async function () {
     this.timeout(420000);
 
     if (process.env.SCENARIO !== 'multi-peer-e2e') {
@@ -642,6 +720,10 @@ describe('Direct peer realtime propagation', () => {
       process.env.E2E_MULTI_PEER_EXPECTED_PROFILE_NAME,
       DEFAULT_EXPECTED_PROFILE_NAME,
     );
+    const outputGroup = resolveEnvString(
+      process.env.KUKURI_PEER_OUTPUT_GROUP,
+      DEFAULT_OUTPUT_GROUP,
+    );
     const bootstrapPeers = parseBootstrapPeers();
     const requireZeroPeersBeforeConnect =
       parseOptionalBool(process.env.E2E_DIRECT_PEER_REQUIRE_ZERO_BEFORE_CONNECT) ?? false;
@@ -669,6 +751,7 @@ describe('Direct peer realtime propagation', () => {
     }
 
     const peerAddress = await waitForPeerAddress();
+    expect(hasRelayHint(peerAddress)).toBe(true);
     const targetPeerNodeId = parsePeerAddressNodeId(peerAddress);
     const joinInitialPeers = useDirectJoinHints ? [peerAddress] : [];
 
@@ -735,6 +818,41 @@ describe('Direct peer realtime propagation', () => {
         const peerSummary = await waitForPeerSummary();
         strictPublishedCount = peerSummary.stats?.published_count ?? 0;
         expect(strictPublishedCount).toBe(1);
+      }
+      const baselineSingleArrivalPostIds = new Set(baselinePostStoreSnapshot.recentPostIds);
+      const baselineSingleArrivalEventIds = new Set(
+        baselinePostStoreSnapshot.recentEventIds.filter(
+          (eventId): eventId is string => typeof eventId === 'string' && eventId.length > 0,
+        ),
+      );
+      const singleArrivalEventIds = postStoreAfterSingleArrival.recentEventIds.filter(
+        (eventId): eventId is string => typeof eventId === 'string' && eventId.length > 0,
+      );
+      const newSingleArrivalPostIds = postStoreAfterSingleArrival.recentPostIds.filter(
+        (postId) => !baselineSingleArrivalPostIds.has(postId),
+      );
+      const newSingleArrivalEventIds = singleArrivalEventIds.filter(
+        (eventId) => !baselineSingleArrivalEventIds.has(eventId),
+      );
+      const postStoreSingleArrivalDelta =
+        postStoreAfterSingleArrival.count - baselinePostStoreSnapshot.count;
+      const p2pSingleArrivalDelta = p2pAfterSingleArrival.count - baselineP2PSnapshot.count;
+      const uniqueSingleArrivalPostIds = new Set(newSingleArrivalPostIds);
+      const uniqueSingleArrivalEventIds = new Set(newSingleArrivalEventIds);
+      if (postStoreSingleArrivalDelta !== p2pSingleArrivalDelta) {
+        throw new Error(
+          `Direct peer topic store delta diverged from P2P snapshot after one propagated event: postStoreDelta=${postStoreSingleArrivalDelta}; p2pDelta=${p2pSingleArrivalDelta}; baselinePostStoreCount=${baselinePostStoreSnapshot.count}; latestPostStoreCount=${postStoreAfterSingleArrival.count}; baselineP2PCount=${baselineP2PSnapshot.count}; latestP2PCount=${p2pAfterSingleArrival.count}; recentPostIds=${postStoreAfterSingleArrival.recentPostIds.join(',')}; recentEventIds=${singleArrivalEventIds.join(',')}`,
+        );
+      }
+      if (uniqueSingleArrivalPostIds.size !== newSingleArrivalPostIds.length) {
+        throw new Error(
+          `Direct peer topic store duplicated new post ids after one propagated event: newPostIds=${newSingleArrivalPostIds.join(',')}; recentPostIds=${postStoreAfterSingleArrival.recentPostIds.join(',')}`,
+        );
+      }
+      if (uniqueSingleArrivalEventIds.size !== newSingleArrivalEventIds.length) {
+        throw new Error(
+          `Direct peer topic store duplicated new event ids after one propagated event: newEventIds=${newSingleArrivalEventIds.join(',')}; recentEventIds=${singleArrivalEventIds.join(',')}`,
+        );
       }
       expect(renderedOnSingleArrivalWithoutLocalAction).toBe(expectedSinglePostRendered);
     }
@@ -814,6 +932,9 @@ describe('Direct peer realtime propagation', () => {
       scenario: process.env.SCENARIO ?? null,
       topicId,
       peerAddress,
+      outputGroup,
+      selectedPeerHasRelayHint: hasRelayHint(peerAddress),
+      selectedPeerHost: parsePeerAddressHost(peerAddress),
       targetPeerNodeId,
       connectMode,
       useDirectJoinHints,
@@ -853,5 +974,260 @@ describe('Direct peer realtime propagation', () => {
       profileResolvedWithoutReload,
       profileResolved,
     });
+  });
+
+  it('updates thread preview and full thread detail with propagated replies under relay-only direct-peer conditions', async function () {
+    this.timeout(480000);
+
+    if (process.env.SCENARIO !== 'multi-peer-e2e') {
+      this.skip();
+      return;
+    }
+
+    const topicId = resolveEnvString(process.env.KUKURI_PEER_TOPIC, DEFAULT_TOPIC_ID);
+    const connectMode = resolveConnectMode();
+    const useDirectJoinHints = shouldUseDirectJoinHints(connectMode);
+    const callDirectConnect = shouldCallDirectConnect(connectMode);
+    const bootstrapPeers = parseBootstrapPeers();
+    const outputGroup = resolveEnvString(
+      process.env.KUKURI_PEER_OUTPUT_GROUP,
+      DEFAULT_OUTPUT_GROUP,
+    );
+    const replyPeerName = resolveEnvString(
+      process.env.E2E_DIRECT_PEER_REPLY_PEER,
+      DEFAULT_DIRECT_PEER_NAME,
+    );
+    let bootstrapSnapshot = await getBootstrapSnapshot();
+
+    if (bootstrapPeers.length > 0) {
+      await browser.waitUntil(
+        async () => {
+          bootstrapSnapshot = await getBootstrapSnapshot();
+          if (bootstrapSnapshot.effectiveNodes.length === 0) {
+            return false;
+          }
+          return hasExpectedBootstrapNode(bootstrapSnapshot.effectiveNodes, bootstrapPeers);
+        },
+        {
+          timeout: 60000,
+          interval: 1000,
+          timeoutMsg: `Effective bootstrap nodes were not ready: expected=${JSON.stringify(
+            bootstrapPeers,
+          )}`,
+        },
+      );
+    }
+
+    const peerAddress = await waitForPeerAddress();
+    expect(hasRelayHint(peerAddress)).toBe(true);
+    const targetPeerNodeId = parsePeerAddressNodeId(peerAddress);
+    const joinInitialPeers = useDirectJoinHints ? [peerAddress] : [];
+
+    await setupTopicPageForDirectPeer(topicId, joinInitialPeers);
+
+    if (callDirectConnect) {
+      await connectToP2PPeer(peerAddress);
+    }
+
+    await browser.waitUntil(
+      async () => isTargetPeerConnected(await getP2PStatus(), topicId, targetPeerNodeId),
+      {
+        timeout: 120000,
+        interval: 1000,
+        timeoutMsg: `Peer connection did not become active for ${peerAddress} (mode=${connectMode})`,
+      },
+    );
+
+    const rootContent = `direct-peer-thread-root-${Date.now()}`;
+    const replyContent = `direct-peer-thread-reply-${Date.now()}`;
+
+    await $('[data-testid="create-post-button"]').click();
+    const postInput = await $('[data-testid="post-input"]');
+    await postInput.waitForDisplayed({ timeout: 20000 });
+    await postInput.setValue(rootContent);
+    await $('[data-testid="submit-post-button"]').click();
+
+    let resolvedThreadUuid: string | null = null;
+    await browser.waitUntil(
+      async () => {
+        const cards = await $$('[data-testid^="timeline-thread-card-"]');
+        for (const card of cards) {
+          if (!(await card.isExisting())) {
+            continue;
+          }
+          const text = await card.getText();
+          if (!text.includes(rootContent)) {
+            continue;
+          }
+          const testId = await card.getAttribute('data-testid');
+          if (!testId) {
+            continue;
+          }
+          resolvedThreadUuid = testId.replace('timeline-thread-card-', '');
+          return resolvedThreadUuid.length > 0;
+        }
+        return false;
+      },
+      {
+        timeout: 60000,
+        interval: 500,
+        timeoutMsg: `Locally created thread root did not render in timeline: ${rootContent}`,
+      },
+    );
+    if (!resolvedThreadUuid) {
+      throw new Error(`Thread UUID could not be resolved from timeline card: ${rootContent}`);
+    }
+
+    let rootSnapshot: TopicContentState | null = null;
+    let rootEventId: string | null = null;
+    await browser.waitUntil(
+      async () => {
+        rootSnapshot = await findTopicContent(topicId, rootContent);
+        if (rootSnapshot.postCount === 0) {
+          return false;
+        }
+        const candidate = rootSnapshot.postEventIds.find(
+          (value): value is string => typeof value === 'string' && HEX_64_PATTERN.test(value),
+        );
+        if (!candidate) {
+          return false;
+        }
+        rootEventId = candidate;
+        return true;
+      },
+      {
+        timeout: 60000,
+        interval: 500,
+        timeoutMsg: `Locally created root did not resolve to persisted event id: ${rootContent}`,
+      },
+    );
+    if (!rootEventId) {
+      throw new Error(`Root event id could not be resolved from post store: ${rootContent}`);
+    }
+
+    const parentCard = await $(`[data-testid="timeline-thread-parent-${resolvedThreadUuid}"]`);
+    await parentCard.waitForClickable({ timeout: 20000 });
+    await parentCard.click();
+
+    const previewPane = await $('[data-testid="thread-preview-pane"]');
+    await previewPane.waitForDisplayed({ timeout: 20000 });
+    await browser.waitUntil(async () => (await previewPane.getText()).includes(rootContent), {
+      timeout: 20000,
+      interval: 500,
+      timeoutMsg: `Thread preview did not render root content: ${rootContent}`,
+    });
+
+    let replySnapshot: TopicContentState | null = null;
+    let replySummary: PublishSummary | null = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      replySummary = await runPeerHarnessPublish({
+        peerName: replyPeerName,
+        outputGroup,
+        topicId,
+        content: replyContent,
+        replyTo: rootEventId,
+      });
+
+      try {
+        replySnapshot = await waitForTopicContent(topicId, replyContent);
+        break;
+      } catch (error) {
+        if (attempt === 2) {
+          throw new Error(
+            `${error instanceof Error ? error.message : String(error)}; lastSummary=${JSON.stringify(
+              replySummary,
+            )}`,
+            { cause: error },
+          );
+        }
+      }
+    }
+    if (!replySnapshot) {
+      throw new Error(
+        `Reply publish did not reach snapshots: ${replyContent}; lastSummary=${JSON.stringify(
+          replySummary,
+        )}`,
+      );
+    }
+
+    await browser.waitUntil(
+      async () => {
+        const target = await $(`[data-testid="timeline-thread-first-reply-${resolvedThreadUuid}"]`);
+        if (!(await target.isExisting())) {
+          return false;
+        }
+        return (await target.getText()).includes(replyContent);
+      },
+      {
+        timeout: 180000,
+        interval: 1000,
+        timeoutMsg: `Timeline preview reply did not update in realtime: ${replyContent}; replySnapshot=${JSON.stringify(
+          replySnapshot,
+        )}`,
+      },
+    );
+
+    await browser.waitUntil(async () => (await previewPane.getText()).includes(replyContent), {
+      timeout: 180000,
+      interval: 1000,
+      timeoutMsg: `Thread preview pane did not update in realtime: ${replyContent}`,
+    });
+
+    const openFullButton = await $('[data-testid="thread-preview-open-full"]');
+    await openFullButton.waitForClickable({ timeout: 20000 });
+    await openFullButton.click();
+
+    await browser.waitUntil(
+      async () =>
+        decodeURIComponent(await browser.getUrl()).includes(
+          `/topics/${topicId}/threads/${resolvedThreadUuid}`,
+        ),
+      {
+        timeout: 20000,
+        interval: 500,
+        timeoutMsg: `Full thread route did not open for ${resolvedThreadUuid}`,
+      },
+    );
+
+    const threadDetailTitle = await $('[data-testid="thread-detail-title"]');
+    await threadDetailTitle.waitForDisplayed({ timeout: 20000 });
+
+    await browser.waitUntil(
+      async () => {
+        const bodyText = await $('body').getText();
+        return bodyText.includes(rootContent) && bodyText.includes(replyContent);
+      },
+      {
+        timeout: 60000,
+        interval: 1000,
+        timeoutMsg: `Full thread detail did not render root/reply content: root=${rootContent}; reply=${replyContent}`,
+      },
+    );
+
+    writeDiagnostics(
+      {
+        scenario: process.env.SCENARIO ?? null,
+        topicId,
+        connectMode,
+        peerAddress,
+        selectedPeerHasRelayHint: hasRelayHint(peerAddress),
+        selectedPeerHost: parsePeerAddressHost(peerAddress),
+        targetPeerNodeId,
+        joinInitialPeers,
+        bootstrapSnapshot,
+        replyPeerName,
+        rootContent,
+        rootEventId,
+        rootSnapshot,
+        resolvedThreadUuid,
+        replyContent,
+        replySummary,
+        replySnapshot,
+        finalUrl: decodeURIComponent(await browser.getUrl()),
+      },
+      'direct-peer-thread-preview-replies.json',
+    );
+
+    await expect($('[data-testid="thread-list-title"]')).not.toBeDisplayed();
   });
 });

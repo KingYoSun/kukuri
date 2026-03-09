@@ -6,16 +6,23 @@ import type { ReactNode } from 'react';
 vi.unmock('@/hooks/useP2PEventListener');
 
 const { listeners, listenMock } = vi.hoisted(() => ({
-  listeners: new Map<string, (event: { payload: unknown }) => void>(),
+  listeners: new Map<string, Array<(event: { payload: unknown }) => void>>(),
   listenMock: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: listenMock.mockImplementation(
     async (event: string, handler: (event: { payload: unknown }) => void) => {
-      listeners.set(event, handler);
+      const registered = listeners.get(event) ?? [];
+      listeners.set(event, [...registered, handler]);
       return () => {
-        listeners.delete(event);
+        const current = listeners.get(event) ?? [];
+        const next = current.filter((candidate) => candidate !== handler);
+        if (next.length === 0) {
+          listeners.delete(event);
+          return;
+        }
+        listeners.set(event, next);
       };
     },
   ),
@@ -95,6 +102,16 @@ const flushPromises = async () => {
   await Promise.resolve();
 };
 
+const emitToListeners = async (event: string, payload: unknown) => {
+  const handlers = listeners.get(event) ?? [];
+  for (const handler of handlers) {
+    await act(async () => {
+      handler({ payload });
+      await flushPromises();
+    });
+  }
+};
+
 describe('useP2PEventListener', () => {
   beforeEach(() => {
     listeners.clear();
@@ -123,39 +140,31 @@ describe('useP2PEventListener', () => {
 
     await waitFor(() => {
       expect(listenMock).toHaveBeenCalled();
-      expect(listeners.has('p2p://message/raw')).toBe(true);
+      expect((listeners.get('p2p://message/raw') ?? []).length).toBeGreaterThan(0);
     });
 
-    const rawHandler = listeners.get('p2p://message/raw');
-    expect(rawHandler).toBeDefined();
-
-    await act(async () => {
-      rawHandler?.({
-        payload: {
-          topic_id: topicId,
-          payload: JSON.stringify({
-            id: metadataEventId,
-            pubkey: authorId,
-            content: JSON.stringify({
-              name: 'Updated Name',
-              display_name: 'Updated Display',
-              about: 'Updated bio',
-              picture: 'https://example.com/avatar.png',
-              nip05: 'updated@example.com',
-              kukuri_privacy: {
-                public_profile: true,
-                show_online_status: false,
-              },
-            }),
-            sig: metadataSignature,
-            kind: 0,
-            tags: [['t', topicId]],
-            created_at: 1_700_000_100,
-          }),
-          timestamp: 1_700_000_100,
-        },
-      });
-      await flushPromises();
+    await emitToListeners('p2p://message/raw', {
+      topic_id: topicId,
+      payload: JSON.stringify({
+        id: metadataEventId,
+        pubkey: authorId,
+        content: JSON.stringify({
+          name: 'Updated Name',
+          display_name: 'Updated Display',
+          about: 'Updated bio',
+          picture: 'https://example.com/avatar.png',
+          nip05: 'updated@example.com',
+          kukuri_privacy: {
+            public_profile: true,
+            show_online_status: false,
+          },
+        }),
+        sig: metadataSignature,
+        kind: 0,
+        tags: [['t', topicId]],
+        created_at: 1_700_000_100,
+      }),
+      timestamp: 1_700_000_100,
     });
 
     const storedPost = usePostStore.getState().posts.get(basePost.id);
@@ -178,5 +187,49 @@ describe('useP2PEventListener', () => {
 
     const topicThreads = queryClient.getQueryData<TopicTimelineEntry[]>(['topicThreads', topicId]);
     expect(topicThreads?.[0].parentPost.author.picture).toBe('https://example.com/avatar.png');
+  });
+
+  it('複数 mount されても listener を共有し、topic post を重複登録しない', async () => {
+    const queryClient = buildQueryClient();
+    queryClient.setQueryData<Post[]>(['timeline'], [basePost]);
+    queryClient.setQueryData<Post[]>(['posts', topicId], [basePost]);
+    queryClient.setQueryData<Post[]>(['threadPosts', topicId, threadUuid], [basePost]);
+    queryClient.setQueryData<TopicTimelineEntry[]>(['topicTimeline', topicId], [baseEntry]);
+    queryClient.setQueryData<TopicTimelineEntry[]>(['topicThreads', topicId], [baseEntry]);
+
+    renderHook(() => useP2PEventListener(), {
+      wrapper: buildWrapper(queryClient),
+    });
+    renderHook(() => useP2PEventListener(), {
+      wrapper: buildWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(listenMock).toHaveBeenCalledTimes(4);
+      expect((listeners.get('p2p://message/raw') ?? []).length).toBe(1);
+    });
+
+    const propagatedEventId = 'd'.repeat(64);
+    await emitToListeners('p2p://message/raw', {
+      topic_id: topicId,
+      payload: JSON.stringify({
+        id: propagatedEventId,
+        pubkey: authorId,
+        content: 'propagated topic post',
+        sig: 'e'.repeat(128),
+        kind: 30078,
+        tags: [
+          ['t', topicId],
+          ['thread', `${topicId}/threads/${threadUuid}`],
+          ['thread_uuid', threadUuid],
+        ],
+        created_at: 1_700_000_200,
+      }),
+      timestamp: 1_700_000_200,
+    });
+
+    const state = usePostStore.getState();
+    expect(state.posts.has(propagatedEventId)).toBe(true);
+    expect(state.postsByTopic.get(topicId)).toEqual([basePost.id, propagatedEventId]);
   });
 });

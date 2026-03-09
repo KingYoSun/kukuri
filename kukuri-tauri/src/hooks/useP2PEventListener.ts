@@ -98,6 +98,8 @@ const textDecoder = new TextDecoder();
 const RECENT_MESSAGE_ID_LIMIT = 2000;
 const AUTHOR_PROFILE_MISS_TTL_MS = 60_000;
 const THREAD_PATH_SEGMENT = '/threads/';
+let sharedP2PListenerMountCount = 0;
+let disposeSharedP2PListeners: (() => void) | null = null;
 
 const normalizeTimestampMillis = (value: unknown, fallbackSeconds: number): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -967,7 +969,42 @@ export function useP2PEventListener() {
       return;
     }
 
+    sharedP2PListenerMountCount += 1;
+    if (disposeSharedP2PListeners) {
+      return () => {
+        sharedP2PListenerMountCount = Math.max(0, sharedP2PListenerMountCount - 1);
+        if (sharedP2PListenerMountCount === 0) {
+          const dispose = disposeSharedP2PListeners;
+          disposeSharedP2PListeners = null;
+          dispose?.();
+        }
+      };
+    }
+
     const unlisteners: Array<() => void> = [];
+    let disposed = false;
+
+    const disposeListeners = () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      unlisteners.forEach((unlisten) => {
+        try {
+          unlisten();
+        } catch (error) {
+          errorHandler.log('P2P event cleanup failed', error, {
+            context: 'useP2PEventListener.cleanup',
+          });
+        }
+      });
+    };
+
+    // useP2P() is consumed from multiple components; keep only one live Tauri subscription.
+    disposeSharedP2PListeners = () => {
+      disposeSharedP2PListeners = null;
+      disposeListeners();
+    };
 
     const registerListener = async <T>(
       event: string,
@@ -976,6 +1013,14 @@ export function useP2PEventListener() {
     ) => {
       try {
         const unlisten = await listen<T>(event, (evt) => handler(evt.payload));
+        if (disposed) {
+          try {
+            unlisten();
+          } catch (error) {
+            errorHandler.log('P2P event unlisten failed', error, { context });
+          }
+          return;
+        }
         unlisteners.push(() => {
           try {
             unlisten();
@@ -1065,15 +1110,12 @@ export function useP2PEventListener() {
     );
 
     return () => {
-      unlisteners.forEach((unlisten) => {
-        try {
-          unlisten();
-        } catch (error) {
-          errorHandler.log('P2P event cleanup failed', error, {
-            context: 'useP2PEventListener.cleanup',
-          });
-        }
-      });
+      sharedP2PListenerMountCount = Math.max(0, sharedP2PListenerMountCount - 1);
+      if (sharedP2PListenerMountCount === 0) {
+        const dispose = disposeSharedP2PListeners;
+        disposeSharedP2PListeners = null;
+        dispose?.();
+      }
     };
   }, [updatePeer, removePeer, refreshStatus, handleIncomingP2PMessage]);
 }

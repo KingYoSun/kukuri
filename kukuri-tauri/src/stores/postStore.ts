@@ -18,6 +18,9 @@ const NOSTR_EVENT_ID_PATTERN = /^[0-9a-f]{64}$/i;
 const sortPostsDesc = (posts: Post[]): Post[] =>
   [...posts].sort((a, b) => b.created_at - a.created_at);
 
+const appendUniquePostId = (postIds: string[], postId: string): string[] =>
+  postIds.includes(postId) ? postIds : [...postIds, postId];
+
 const upsertPostIntoList = (posts: Post[] | undefined, post: Post): Post[] => {
   const filtered = (posts ?? []).filter((item) => item.id !== post.id);
   return sortPostsDesc([post, ...filtered]);
@@ -236,7 +239,7 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
       posts.forEach((post) => {
         const existing = postsByTopicMap.get(post.topicId) || [];
-        postsByTopicMap.set(post.topicId, [...existing, post.id]);
+        postsByTopicMap.set(post.topicId, appendUniquePostId(existing, post.id));
       });
 
       set({
@@ -255,12 +258,16 @@ export const usePostStore = create<PostStore>()((set, get) => ({
 
   addPost: (post: Post) =>
     set((state) => {
+      const normalizedPost = normalizePost(enrichPostAuthorMetadata(post));
       const newPosts = new Map(state.posts);
-      newPosts.set(post.id, normalizePost(enrichPostAuthorMetadata(post)));
+      newPosts.set(post.id, normalizedPost);
 
       const newPostsByTopic = new Map(state.postsByTopic);
-      const topicPosts = newPostsByTopic.get(post.topicId) || [];
-      newPostsByTopic.set(post.topicId, [...topicPosts, post.id]);
+      const topicPosts = newPostsByTopic.get(normalizedPost.topicId) || [];
+      newPostsByTopic.set(
+        normalizedPost.topicId,
+        appendUniquePostId(topicPosts, normalizedPost.id),
+      );
 
       return {
         posts: newPosts,

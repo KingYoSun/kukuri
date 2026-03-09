@@ -35,16 +35,6 @@
   - 未解決点: 実機 stack で `trust` が `healthy` へ遷移することの確認が未了。
   - 次アクション: `trust` profile を含む実機 stack で health を確認する。
 
-### 直結 multi-peer / IPv6 条件で未解決の P2P トピック同期
-- リアルタイム差分更新
-  - 現状: Community Node 経路では修正済み。`p2p.direct-peer.regression.spec.ts` の 2026年03月09日再実行では `renderedWithoutReload` の期待は既定モード / `E2E_DIRECT_PEER_CONNECT_MODE=direct` の両方で通過し、現行の multi-peer E2E では stale render は未再現だった。
-  - 未解決点: 2026年03月02日に再現した IPv6 強制条件の stale render を再確認する専用の実機相当テストはまだない。
-  - 次アクション: IPv6-only 強制条件を現行 E2E に再導入して再確認する。
-- reply 投稿失敗 / thread 導線不整合
-  - 現状: community-node E2E では未再現だが、direct multi-peer / IPv6 条件との差分が未整理。
-  - テスト状況（2026年03月09日確認）: `community-node.thread-preview-replies.spec.ts` など Community Node 経路の E2E はあるが、direct multi-peer / IPv6 条件で reply/thread 導線を確認する実機相当 E2E は未整備。
-  - 次アクション: `reply_to` キャッシュ解決と thread route 更新の再現条件を分離して確認する。
-
 ### Community Node relay 公開構成の VPS + WireGuard edge 化
 - 現状: `VPS + WireGuard edge` 方針、bind 制御、セットアップスクリプト、運用ドキュメント整備までは完了。
 - テスト状況（2026年03月09日確認）: `docs/03_implementation/community_nodes/home_vps_wireguard_edge.md` と関連セットアップスクリプトは整備済みだが、VPS + WireGuard edge を対象にした実機相当の自動テストは未整備。

@@ -158,6 +158,19 @@ describe('postStore', () => {
     expect(state.postsByTopic.get('topic1')).toEqual(['post1']);
   });
 
+  it('addPost で同じ post id を再投入しても topic 内で重複しない', () => {
+    usePostStore.getState().addPost(mockPost1);
+    usePostStore.getState().addPost({
+      ...mockPost1,
+      content: 'updated content',
+    });
+
+    const state = usePostStore.getState();
+    expect(state.posts.size).toBe(1);
+    expect(state.posts.get('post1')?.content).toBe('updated content');
+    expect(state.postsByTopic.get('topic1')).toEqual(['post1']);
+  });
+
   it('updatePost繝｡繧ｽ繝・ラ縺梧ｭ｣縺励￥蜍穂ｽ懊☆繧九％縺ｨ', () => {
     usePostStore.setState({
       posts: new Map([['post1', mockPost1]]),
