@@ -633,7 +633,9 @@ pub(super) const MARK_EVENT_DELETED: &str = r#"
 pub(super) const SELECT_UNSYNC_EVENTS: &str = r#"
     SELECT event_id, public_key, content, kind, tags, created_at, sig
     FROM events
-    WHERE sync_status IS NULL OR sync_status = 0
+    WHERE (sync_status IS NULL OR sync_status = 0)
+      AND length(event_id) = 64
+      AND event_id NOT GLOB '*[^0-9A-Fa-f]*'
     ORDER BY created_at DESC
 "#;
 

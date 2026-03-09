@@ -55,29 +55,39 @@ impl SyncService {
     }
 
     pub async fn start_sync(&self) -> Result<(), AppError> {
-        let mut status = self.status.write().await;
+        {
+            let mut status = self.status.write().await;
 
-        if status.is_syncing {
-            return Ok(());
+            if status.is_syncing {
+                return Ok(());
+            }
+
+            status.is_syncing = true;
         }
 
-        status.is_syncing = true;
-        drop(status);
+        let result = async {
+            if !self.network.is_connected().await {
+                self.network.connect().await?;
+            }
 
-        if !self.network.is_connected().await {
-            self.network.connect().await?;
+            let synced_posts = self.post_participant.sync_pending().await?;
+            let synced_events = self.event_participant.sync_pending().await?;
+            Ok((synced_posts, synced_events))
         }
-
-        let synced_posts = self.post_participant.sync_pending().await?;
-        let synced_events = self.event_participant.sync_pending().await?;
+        .await;
 
         let mut status = self.status.write().await;
         status.is_syncing = false;
-        status.last_sync = Some(chrono::Utc::now().timestamp());
-        status.pending_posts = status.pending_posts.saturating_sub(synced_posts);
-        status.pending_events = status.pending_events.saturating_sub(synced_events);
 
-        Ok(())
+        match result {
+            Ok((synced_posts, synced_events)) => {
+                status.last_sync = Some(chrono::Utc::now().timestamp());
+                status.pending_posts = status.pending_posts.saturating_sub(synced_posts);
+                status.pending_events = status.pending_events.saturating_sub(synced_events);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
 
     pub async fn stop_sync(&self) -> Result<(), AppError> {
@@ -148,5 +158,136 @@ impl SyncServiceTrait for SyncService {
 
     async fn schedule_sync(&self, interval_secs: u64) {
         SyncService::schedule_sync(self, interval_secs).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::p2p::{NetworkStats, Peer};
+    use crate::shared::config::BootstrapSource;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Mutex;
+
+    struct StubNetworkService {
+        connected: bool,
+        connect_calls: AtomicUsize,
+    }
+
+    impl StubNetworkService {
+        fn new(connected: bool) -> Self {
+            Self {
+                connected,
+                connect_calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl NetworkService for StubNetworkService {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        async fn connect(&self) -> Result<(), AppError> {
+            self.connect_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn disconnect(&self) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn get_peers(&self) -> Result<Vec<Peer>, AppError> {
+            Ok(Vec::new())
+        }
+
+        async fn add_peer(&self, _: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn remove_peer(&self, _: &str) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn get_stats(&self) -> Result<NetworkStats, AppError> {
+            Ok(NetworkStats {
+                connected_peers: 0,
+                total_messages_sent: 0,
+                total_messages_received: 0,
+                bandwidth_up: 0,
+                bandwidth_down: 0,
+            })
+        }
+
+        async fn is_connected(&self) -> bool {
+            self.connected
+        }
+
+        async fn get_node_id(&self) -> Result<String, AppError> {
+            Ok("node".to_string())
+        }
+
+        async fn get_addresses(&self) -> Result<Vec<String>, AppError> {
+            Ok(Vec::new())
+        }
+
+        async fn apply_bootstrap_nodes(
+            &self,
+            _: Vec<String>,
+            _: BootstrapSource,
+        ) -> Result<(), AppError> {
+            Ok(())
+        }
+    }
+
+    struct SequenceParticipant {
+        results: Mutex<Vec<Result<u32, AppError>>>,
+        calls: AtomicUsize,
+    }
+
+    impl SequenceParticipant {
+        fn new(results: Vec<Result<u32, AppError>>) -> Self {
+            Self {
+                results: Mutex::new(results),
+                calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn call_count(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl SyncParticipant for SequenceParticipant {
+        async fn sync_pending(&self) -> Result<u32, AppError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.results.lock().await.remove(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn start_sync_resets_is_syncing_after_failure() {
+        let network = Arc::new(StubNetworkService::new(true));
+        let post_participant = Arc::new(SequenceParticipant::new(vec![
+            Err(AppError::Internal("boom".to_string())),
+            Ok(1),
+        ]));
+        let event_participant = Arc::new(SequenceParticipant::new(vec![Ok(0)]));
+        let service = SyncService::new(network, post_participant.clone(), event_participant);
+
+        let first = service.start_sync().await;
+        assert!(first.is_err());
+        assert!(!service.get_status().await.is_syncing);
+
+        service
+            .start_sync()
+            .await
+            .expect("second sync should retry");
+        let status = service.get_status().await;
+        assert!(!status.is_syncing);
+        assert!(status.last_sync.is_some());
+        assert_eq!(post_participant.call_count(), 2);
     }
 }

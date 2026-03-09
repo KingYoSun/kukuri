@@ -267,6 +267,14 @@ impl AppState {
         event_manager
             .set_event_topic_store(Arc::clone(&event_topic_store))
             .await;
+        if let Ok(keypair) = key_manager.current_keypair().await {
+            if let Err(err) = event_manager.initialize_with_keypair(keypair).await {
+                tracing::warn!(
+                    error = %err,
+                    "Failed to initialize EventManager with active account during startup"
+                );
+            }
+        }
 
         // UserServiceを先に初期化（他のサービスの依存）
         let user_service = Arc::new(UserService::new(

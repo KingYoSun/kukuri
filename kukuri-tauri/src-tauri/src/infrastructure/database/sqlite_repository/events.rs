@@ -221,3 +221,64 @@ impl EventRepository for SqliteRepository {
         Ok(topics)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::value_objects::EventId;
+    use crate::infrastructure::database::{Repository, connection_pool::ConnectionPool};
+
+    async fn setup_repository() -> SqliteRepository {
+        let pool = ConnectionPool::new("sqlite::memory:?cache=shared")
+            .await
+            .expect("failed to create pool");
+        let repository = SqliteRepository::new(pool);
+        repository.initialize().await.expect("initialize schema");
+        repository
+    }
+
+    fn repeating_hex(ch: char) -> String {
+        std::iter::repeat(ch).take(64).collect()
+    }
+
+    fn sample_event() -> Event {
+        Event::new_with_id(
+            EventId::from_hex(&repeating_hex('a')).expect("valid event id"),
+            repeating_hex('b'),
+            "domain event".to_string(),
+            30078,
+            vec![vec!["t".to_string(), "public".to_string()]],
+            Utc::now(),
+            repeating_hex('c'),
+        )
+    }
+
+    #[tokio::test]
+    async fn get_unsync_events_skips_local_uuid_posts() {
+        let repository = setup_repository().await;
+        let domain_event = sample_event();
+        repository
+            .create_event(&domain_event)
+            .await
+            .expect("create domain event");
+
+        sqlx::query(INSERT_EVENT)
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(repeating_hex('d'))
+            .bind("local pending post")
+            .bind(1_i64)
+            .bind("[]")
+            .bind(Utc::now().timestamp_millis())
+            .bind(String::new())
+            .execute(repository.pool.get_pool())
+            .await
+            .expect("insert local post row");
+
+        let unsynced = repository
+            .get_unsync_events()
+            .await
+            .expect("load unsynced events");
+        assert_eq!(unsynced.len(), 1);
+        assert_eq!(unsynced[0].id, domain_event.id);
+    }
+}

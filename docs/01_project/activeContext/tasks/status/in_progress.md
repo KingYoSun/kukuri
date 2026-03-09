@@ -1,6 +1,6 @@
 [title] 作業中タスク（in_progress）
 
-最終更新日: 2026年03月09日
+最終更新日: 2026年03月10日
 
 ## 方針（2025年09月15日 更新）
 
@@ -14,6 +14,10 @@
 - Community Node relay 公開構成の VPS + WireGuard edge 化（Cloudflare Tunnel 依存の除去、Home bind 制御、運用スクリプト整備）
 
 ### Community Node 実機UXの未解決項目
+- 公開 Community Node relay 経路の timeline / 投稿伝播 live-path 確認
+  - 現状: 公開 `base_url` に対して descriptor が loopback relay (`ws://localhost:8082/relay`) を返す場合は破棄し、`base_url` 由来の relay URL を優先するよう修正した。未同期 event 抽出時の UUID 混入と startup sync の `EventManager not initialized` も修正し、関連 Rust tests は PASS。
+  - 未解決点: `https://api.kukuri.app` を使う実機構成で、post 作成直後の timeline 反映と再起動後の再同期が継続して成功するかの live-path 確認は未了。
+  - 次アクション: 公開 Community Node を設定したデスクトップ実機で post 作成、再起動、再同期を順に確認する。
 - プロフィール伝播不具合
   - 現状: `useP2PEventListener` / profile save toast 修正と `community-node.profile-propagation.spec.ts` の live-path E2E は PASS。
   - 検証（2026年03月09日）: `E2E_SPEC_PATTERN=./tests/e2e/specs/community-node.profile-propagation.spec.ts ./scripts/test-docker.ps1 e2e-community-node` を再実行し PASS。
