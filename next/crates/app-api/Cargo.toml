@@ -1,0 +1,17 @@
+[package]
+name = "next-app-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+futures-util.workspace = true
+nostr-sdk.workspace = true
+serde.workspace = true
+tokio.workspace = true
+next-core = { path = "../core" }
+next-store = { path = "../store" }
+next-transport = { path = "../transport" }
+

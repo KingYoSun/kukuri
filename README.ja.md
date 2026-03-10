@@ -2,163 +2,56 @@
 
 # kukuri
 
-Nostr と iroh-gossip、BitTorrent Mainline DHT を基盤にした、完全分散型のトピック指向ソーシャルアプリです。
+Linux-first で再構築中の、Nostr ベースの topic-first social app です。
 
-## これは何か
+## 現在の入口
 
-kukuri は Tauri デスクトップアプリと周辺サービスで構成され、中央サーバーに依存しないトピック共有体験を提供します。イベント配信は iroh-gossip、ピア発見は DHT、データモデルは Nostr 互換イベントを採用しています。
-
-## クイックスタート
-
-### 前提
-
-- Node.js 20+
-- pnpm（Corepack 経由）
-- Rust toolchain
-- Docker（Docker テストランナーと community node 用）
-
-### インストール
+新規開発は `next/` を対象にします。
 
 ```bash
-chmod +x scripts/install-dev-tools.sh
-./scripts/install-dev-tools.sh
+cargo xtask doctor
+cargo xtask check
+cargo xtask test
+cargo xtask e2e-smoke
 
-corepack enable pnpm
-cd kukuri-tauri
-corepack pnpm install --frozen-lockfile
+cd next/apps/desktop
+npx pnpm@10.16.1 install
+npx pnpm@10.16.1 dev
 ```
 
-### 起動（デスクトップアプリ）
+## 現在の構成
 
-```bash
-cd kukuri-tauri
-corepack pnpm tauri dev
-```
-
-### テスト / Lint（最小）
-
-```bash
-# Docker でフルテスト
-./scripts/test-docker.sh all
-
-# フロントエンドテスト（Linux/macOS/WSL2）
-cd kukuri-tauri
-pnpm test
-
-# Rust テスト（Linux/macOS/WSL2）
-cd kukuri-tauri/src-tauri
-cargo test
-
-# Community node テスト/ビルド（全OS既定: コンテナ実行）
-docker compose -f docker-compose.test.yml up -d community-node-postgres
-docker compose -f docker-compose.test.yml build test-runner
-docker run --rm --network kukuri_community-node-network \
-  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-  -v "$(git rev-parse --show-toplevel):/workspace" \
-  -w /workspace/kukuri-community-node \
-  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
-```
-
-> Community node テストは全OSでコンテナ実行を既定とします。  
-> **Windows**: Tauri 側も含め、`pnpm test` / `cargo test` のホスト直実行は避け、`./scripts/test-docker.ps1 <suite>` を使用してください。
-
-## モノレポ構成
-
-```
+```text
 .
-├── kukuri-tauri/           # デスクトップアプリ（React + Tauri）
-├── kukuri-community-node/  # community node サービス
-├── docs/                   # 設計/実装/運用ドキュメント
-├── scripts/                # 開発/テスト自動化
-└── docker/                 # Docker 関連
+├── next/                 # 新しい Linux-first MVP
+├── next/docs/            # 現行ドキュメント
+├── legacy/               # 旧 docs / scripts / docker / workflow / AGENTS
+├── kukuri-tauri/         # pre-cutover の旧 app tree（参照用）
+├── kukuri-community-node/# pre-cutover の旧 service tree（参照用）
+└── .github/workflows/    # next-fast.yml / next-nightly.yml
 ```
 
-| 名称 | パス | 役割 | 起動 / テスト |
-| --- | --- | --- | --- |
-| デスクトップアプリ | `kukuri-tauri/` | Tauri + React クライアント | `cd kukuri-tauri && pnpm tauri dev` / `pnpm test` |
-| Rust コア（Tauri） | `kukuri-tauri/src-tauri/` | Rust バックエンド + SQLite | `cd kukuri-tauri/src-tauri && cargo test` |
-| Community node | `kukuri-community-node/` | Community node サービス群 + `cn` CLI（`p2p bootstrap/relay`） | コンテナ既定: `docker compose -f docker-compose.test.yml up -d community-node-postgres` + `docker compose -f docker-compose.test.yml build test-runner` + `docker run ... kukuri-test-runner ... cargo test --workspace --all-features` |
+## ルール
 
-## 開発フロー
+- `next/` が実装対象です。
+- `legacy/` は参照専用です。
+- MVP 中は Linux だけを required target にします。
+- Windows、DHT、community-node 連携は後続フェーズです。
 
-### 主要コマンド
+## ドキュメント
 
-```bash
-# デスクトップアプリ
-cd kukuri-tauri
-pnpm tauri dev
-pnpm tauri build
-pnpm lint
-pnpm format
-pnpm type-check
-pnpm test
+- overview: `next/docs/README.md`
+- decision: `next/docs/adr/0001-linux-first-mvp.md`
+- runbook: `next/docs/runbooks/dev.md`
+- progress: `next/docs/progress/2026-03-10-foundation.md`
 
-# Rust（Tauri）
-cd kukuri-tauri/src-tauri
-cargo test
-cargo clippy -D warnings
+## 検証済み entrypoint
 
-# Community node / cn-cli
-docker compose -f docker-compose.test.yml up -d community-node-postgres
-docker compose -f docker-compose.test.yml build test-runner
-docker run --rm --network kukuri_community-node-network \
-  -e DATABASE_URL=postgres://cn:cn_password@community-node-postgres:5432/cn \
-  -v "$(git rev-parse --show-toplevel):/workspace" \
-  -w /workspace/kukuri-community-node \
-  kukuri-test-runner bash -lc "set -euo pipefail; source /usr/local/cargo/env; cargo test --workspace --all-features; cargo build --release -p cn-cli"
-```
-
-### Docker テストランナー
-
-```bash
-# Docker で全テスト
-./scripts/test-docker.sh all
-
-# Windows（PowerShell）
-./scripts/test-docker.ps1 all
-```
-
-## 設定
-
-### 環境変数ファイル
-
-- `./.env.example`（ブートストラップ/リレーのシークレット等）
-- `./kukuri-community-node/.env.example`（community node サービス設定）
-
-#### Community node のセットアップ
-
-```bash
-cd kukuri-community-node
-cp .env.example .env
-```
-
-#### 手動検証用 P2P ブートストラップ（任意）
-
-```bash
-docker compose -f docker-compose.test.yml up -d p2p-bootstrap
-# ...検証後...
-docker compose -f docker-compose.test.yml down --remove-orphans
-```
-
-## アーキテクチャ（概要）
-
-```mermaid
-graph TD
-  A[Client: Tauri App] --> B[Discovery: BitTorrent DHT]
-  A --> C[P2P Network: iroh-gossip]
-  C --> D[Marketplace: Search/Suggestion Nodes]
-```
-
-## CI
-
-CI は `./.github/workflows/test.yml` で定義されており、Docker テスト、Linux ネイティブテスト（Rust + TS）、community node テスト、フォーマットチェック、Windows ビルドチェック、デスクトップ E2E を含みます。community node のローカル検証も上記のコンテナ経路を既定にしてください。
-
-## 貢献・サポート
-
-- 大きな変更の前に Issue で相談してください。
-- 変更内容は `./docs/` の方針に合わせて整理してください。
-- 変更対象に応じたテストを実行してください（Quickstart / 開発フロー参照）。
+- `cargo xtask doctor`
+- `cargo xtask check`
+- `cargo xtask test`
+- `cargo xtask e2e-smoke`
 
 ## ライセンス
 
-MIT。詳細は [LICENSE](./LICENSE) を参照してください。
+MIT

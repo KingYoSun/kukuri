@@ -1,0 +1,531 @@
+services:
+  # P2P統合テスト用 ブートストラップノード
+  p2p-bootstrap:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-p2p-bootstrap
+    network_mode: host
+    environment:
+      LOG_LEVEL: info
+      BIND_ADDRESS: 0.0.0.0:11233
+      KUKURI_SECRET_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    command: ["p2p", "bootstrap"]
+
+  # P2P統合テスト用 iroh relay
+  cn-iroh-relay:
+    build:
+      context: ./kukuri-community-node/docker/iroh-relay
+    container_name: kukuri-cn-iroh-relay
+    environment:
+      IROH_RELAY_DEV: "${IROH_RELAY_DEV:-1}"
+      IROH_RELAY_CONFIG_PATH: "${IROH_RELAY_CONFIG_PATH:-}"
+      RUST_LOG: "${IROH_RELAY_LOG_LEVEL:-info}"
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    ports:
+      - "${IROH_RELAY_HTTP_PORT:-3340}:3340"
+      - "${IROH_RELAY_QUIC_PORT:-7842}:7842/udp"
+    networks:
+      - community-node-network
+
+  # Community node user API (E2E)
+  community-node-postgres:
+    build:
+      context: ./kukuri-community-node/docker/postgres-age
+    container_name: kukuri-community-node-postgres
+    environment:
+      POSTGRES_USER: cn
+      POSTGRES_PASSWORD: cn_password
+      POSTGRES_DB: cn
+    volumes:
+      - community-node-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cn -d cn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - community-node-network
+
+  community-node-user-api:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-user-api
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn migrate && cn config seed && cn user-api"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      PUBLIC_BASE_URL: "${COMMUNITY_NODE_BASE_URL:-http://127.0.0.1:18080}"
+      USER_API_ADDR: "0.0.0.0:8080"
+      USER_JWT_SECRET: "${COMMUNITY_NODE_JWT_SECRET:-change-me}"
+      USER_JWT_TTL_SECONDS: "${COMMUNITY_NODE_JWT_TTL_SECONDS:-900}"
+      NODE_KEY_PATH: "/data/node_key.json"
+      PERSONAL_DATA_EXPORT_DIR: "/data/personal_exports"
+      PERSONAL_DATA_HMAC_SECRET: "${COMMUNITY_NODE_HMAC_SECRET:-change-me}"
+      RELAY_P2P_INFO_URL: "${COMMUNITY_NODE_RELAY_P2P_INFO_URL:-http://relay:8082/v1/p2p/info}"
+      BOOTSTRAP_DESCRIPTOR_HTTP_URL: "${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_HTTP_URL:-http://127.0.0.1:18080}"
+      BOOTSTRAP_DESCRIPTOR_WS_URL: "${COMMUNITY_NODE_BOOTSTRAP_DESCRIPTOR_WS_URL:-ws://127.0.0.1:18082/relay}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+      relay:
+        condition: service_started
+    volumes:
+      - community-node-data:/data
+    ports:
+      - "${COMMUNITY_NODE_USER_API_PORT:-18080}:8080"
+    networks:
+      - community-node-network
+
+  relay:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-relay
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn migrate && cn relay"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      RELAY_ADDR: "0.0.0.0:8082"
+      RELAY_P2P_BIND: "0.0.0.0:11223"
+      RELAY_PUBLIC_URL: "${COMMUNITY_NODE_RELAY_PUBLIC_URL:-ws://127.0.0.1:18082/relay}"
+      RELAY_P2P_PUBLIC_HOST: "${COMMUNITY_NODE_RELAY_P2P_PUBLIC_HOST:-127.0.0.1}"
+      RELAY_P2P_PUBLIC_PORT: "${COMMUNITY_NODE_RELAY_P2P_PUBLIC_PORT:-11223}"
+      RELAY_IROH_RELAY_URLS: "${COMMUNITY_NODE_RELAY_IROH_RELAY_URLS:-http://cn-iroh-relay:3340}"
+      RELAY_IROH_ADVERTISED_URLS: "${COMMUNITY_NODE_RELAY_IROH_ADVERTISED_URLS:-http://127.0.0.1:3340}"
+      RELAY_IROH_RELAY_MODE: "${COMMUNITY_NODE_RELAY_IROH_RELAY_MODE:-custom}"
+      RELAY_IROH_TRANSPORT_PROFILE: "${COMMUNITY_NODE_RELAY_IROH_TRANSPORT_PROFILE:-}"
+      RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS: "${COMMUNITY_NODE_RELAY_P2P_INCLUDE_DIRECT_ADDR_HINTS:-1}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+      cn-iroh-relay:
+        condition: service_healthy
+    ports:
+      - "${COMMUNITY_NODE_RELAY_HTTP_PORT:-18082}:8082"
+      - "${COMMUNITY_NODE_RELAY_P2P_PORT:-11223}:11223/udp"
+    networks:
+      - community-node-network
+  community-node-bootstrap:
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-community-node-bootstrap
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cn bootstrap"]
+    environment:
+      DATABASE_URL: "postgres://cn:cn_password@community-node-postgres:5432/cn"
+      BOOTSTRAP_ADDR: "0.0.0.0:8083"
+      NODE_KEY_PATH: "/data/node_key.json"
+      BOOTSTRAP_REFRESH_SECONDS: "${COMMUNITY_NODE_BOOTSTRAP_REFRESH_SECONDS:-5}"
+      RELAY_P2P_INFO_URL: "${COMMUNITY_NODE_RELAY_P2P_INFO_URL:-http://relay:8082/v1/p2p/info}"
+      RELAY_HEALTH_URL: "${COMMUNITY_NODE_RELAY_HEALTH_URL:-http://relay:8082/healthz}"
+      USER_API_HEALTH_URL: "${COMMUNITY_NODE_USER_API_HEALTH_URL:-http://community-node-user-api:8080/healthz}"
+    depends_on:
+      community-node-postgres:
+        condition: service_healthy
+      relay:
+        condition: service_started
+    volumes:
+      - community-node-data:/data
+    networks:
+      - community-node-network
+
+
+  # テスト実行サービス
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-test-runner
+    depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
+      p2p-bootstrap:
+        condition: service_healthy
+    network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
+    volumes:
+      # テスト結果の出力用
+      - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
+      # Cargoキャッシュの永続化
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+      # pnpmキャッシュの永続化
+      - pnpm-store:/root/.local/share/pnpm/store
+    environment:
+      # Rust環境変数
+      RUST_BACKTRACE: 1
+      RUST_LOG: "${RUST_LOG:-debug}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      ENABLE_P2P_INTEGRATION: "${ENABLE_P2P_INTEGRATION:-1}"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "${KUKURI_FORCE_LOCALHOST_ADDRS:-0}"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_BOOTSTRAP_HOST: "${KUKURI_BOOTSTRAP_HOST:-127.0.0.1}"
+      KUKURI_BOOTSTRAP_PORT: "${KUKURI_BOOTSTRAP_PORT:-11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
+      KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
+      KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
+      KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
+      KUKURI_METRICS_EMIT_HISTOGRAM: "${KUKURI_METRICS_EMIT_HISTOGRAM:-true}"
+      # Node.js環境変数
+      NODE_ENV: test
+      # CI環境を示す（一部のテストで必要）
+      CI: "true"
+      SCENARIO: "${SCENARIO:-}"
+      E2E_SPEC_PATTERN: "${E2E_SPEC_PATTERN:-}"
+      E2E_FORBID_PENDING: "${E2E_FORBID_PENDING:-}"
+      E2E_MOCHA_TIMEOUT_MS: "${E2E_MOCHA_TIMEOUT_MS:-420000}"
+      E2E_MULTI_PEER_EXPECTED_MIN: "${E2E_MULTI_PEER_EXPECTED_MIN:-}"
+      E2E_MULTI_PEER_PUBLISH_PREFIX: "${E2E_MULTI_PEER_PUBLISH_PREFIX:-}"
+      E2E_MULTI_PEER_SCREENSHOT_PATH: "${E2E_MULTI_PEER_SCREENSHOT_PATH:-}"
+      E2E_DIRECT_PEER_EXPECT_STALE: "${E2E_DIRECT_PEER_EXPECT_STALE:-}"
+      E2E_DIRECT_PEER_EXPECT_PROFILE_UNRESOLVED: "${E2E_DIRECT_PEER_EXPECT_PROFILE_UNRESOLVED:-}"
+      E2E_DIRECT_PEER_ADDRESS_TIMEOUT_MS: "${E2E_DIRECT_PEER_ADDRESS_TIMEOUT_MS:-120000}"
+      E2E_DIRECT_PEER_SUMMARY_TIMEOUT_MS: "${E2E_DIRECT_PEER_SUMMARY_TIMEOUT_MS:-120000}"
+      E2E_DIRECT_PEER_SINGLE_POST_CASE: "${E2E_DIRECT_PEER_SINGLE_POST_CASE:-}"
+      E2E_DIRECT_PEER_SINGLE_POST_TIMEOUT_MS: "${E2E_DIRECT_PEER_SINGLE_POST_TIMEOUT_MS:-120000}"
+      E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED: "${E2E_DIRECT_PEER_SINGLE_POST_EXPECT_RENDERED:-}"
+      E2E_DIRECT_PEER_SINGLE_POST_REQUIRE_STRICT: "${E2E_DIRECT_PEER_SINGLE_POST_REQUIRE_STRICT:-}"
+      E2E_COMMUNITY_NODE_URL: "${E2E_COMMUNITY_NODE_URL:-}"
+      E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL: "${E2E_COMMUNITY_NODE_EXPECTED_RELAY_URL:-}"
+      E2E_COMMUNITY_NODE_INVITE_JSON: "${E2E_COMMUNITY_NODE_INVITE_JSON:-}"
+      E2E_COMMUNITY_NODE_SEED_JSON: "${E2E_COMMUNITY_NODE_SEED_JSON:-}"
+      E2E_COMMUNITY_NODE_TOPIC_NAME: "${E2E_COMMUNITY_NODE_TOPIC_NAME:-}"
+      KUKURI_PEER_TOPIC: "${KUKURI_PEER_TOPIC:-}"
+      KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-}"
+      KUKURI_PEER_PUBLISH_PREFIX: "${KUKURI_PEER_PUBLISH_PREFIX:-}"
+    # host network used for UDP reachability between endpoints
+
+  peer-client-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-peer-client-1
+    entrypoint: ["/app/run-multi-peer-manual.sh"]
+    depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
+      p2p-bootstrap:
+        condition: service_healthy
+    network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
+    volumes:
+      - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: 1
+      RUST_LOG: "${RUST_LOG:-info}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
+      KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
+      KUKURI_PEER_NAME: "peer-client-1"
+      KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_1:-listener}"
+      KUKURI_PEER_TOPIC: "${KUKURI_PEER_TOPIC:-kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0}"
+      KUKURI_PEER_PUBLISH_PREFIX: "${KUKURI_PEER_PUBLISH_PREFIX:-multi-peer-publisher}"
+      KUKURI_PEER_PUBLISH_INTERVAL_MS: "${KUKURI_PEER_PUBLISH_INTERVAL_MS:-1500}"
+      KUKURI_PEER_PUBLISH_MAX: "${KUKURI_PEER_PUBLISH_MAX:-}"
+      KUKURI_PEER_RUN_SECONDS: "${KUKURI_PEER_RUN_SECONDS:-}"
+      KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_1:-0}"
+      KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.json"
+      KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-1.commands"
+
+  peer-client-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-peer-client-2
+    entrypoint: ["/app/run-multi-peer-manual.sh"]
+    depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
+      p2p-bootstrap:
+        condition: service_healthy
+    network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
+    volumes:
+      - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: 1
+      RUST_LOG: "${RUST_LOG:-info}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
+      KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
+      KUKURI_PEER_NAME: "peer-client-2"
+      KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_2:-publisher}"
+      KUKURI_PEER_TOPIC: "${KUKURI_PEER_TOPIC:-kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0}"
+      KUKURI_PEER_PUBLISH_PREFIX: "${KUKURI_PEER_PUBLISH_PREFIX:-multi-peer-publisher}"
+      KUKURI_PEER_PUBLISH_INTERVAL_MS: "${KUKURI_PEER_PUBLISH_INTERVAL_MS:-1500}"
+      KUKURI_PEER_PUBLISH_MAX: "${KUKURI_PEER_PUBLISH_MAX:-}"
+      KUKURI_PEER_PUBLISH_ON_PEER_JOIN: "${KUKURI_PEER_PUBLISH_ON_PEER_JOIN_2:-0}"
+      KUKURI_PEER_PUBLISH_METADATA: "${KUKURI_PEER_PUBLISH_METADATA_2:-1}"
+      KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN: "${KUKURI_PEER_REPUBLISH_METADATA_ON_PEER_JOIN_2:-1}"
+      KUKURI_PEER_NOSTR_RELAY_URLS: "${KUKURI_PEER_NOSTR_RELAY_URLS_2:-}"
+      KUKURI_PEER_PROFILE_NAME: "${KUKURI_PEER_PROFILE_NAME_2:-multi-peer-publisher-profile}"
+      KUKURI_PEER_PROFILE_ABOUT: "${KUKURI_PEER_PROFILE_ABOUT_2:-multi-peer publisher profile}"
+      KUKURI_PEER_PROFILE_PICTURE: "${KUKURI_PEER_PROFILE_PICTURE_2:-}"
+      KUKURI_PEER_RUN_SECONDS: "${KUKURI_PEER_RUN_SECONDS:-}"
+      KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_2:-800}"
+      KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.json"
+      KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-2.commands"
+
+  peer-client-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-peer-client-3
+    entrypoint: ["/app/run-multi-peer-manual.sh"]
+    depends_on:
+      cn-iroh-relay:
+        condition: service_healthy
+      p2p-bootstrap:
+        condition: service_healthy
+    network_mode: host
+    extra_hosts:
+      - "cn-iroh-relay:127.0.0.1"
+    volumes:
+      - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: 1
+      RUST_LOG: "${RUST_LOG:-info}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@127.0.0.1:11233}"
+      KUKURI_IROH_RELAY_URLS: "${KUKURI_IROH_RELAY_URLS:-}"
+      KUKURI_IROH_RELAY_MODE: "${KUKURI_IROH_RELAY_MODE:-}"
+      KUKURI_IROH_TRANSPORT_PROFILE: "${KUKURI_IROH_TRANSPORT_PROFILE:-}"
+      KUKURI_PEER_OUTPUT_GROUP: "${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}"
+      KUKURI_PEER_NAME: "peer-client-3"
+      KUKURI_PEER_MODE: "${KUKURI_PEER_MODE_3:-listener}"
+      KUKURI_PEER_TOPIC: "${KUKURI_PEER_TOPIC:-kukuri:tauri:731051a1c14a65ee3735ee4ab3b97198cae1633700f9b87fcde205e64c5a56b0}"
+      KUKURI_PEER_PUBLISH_PREFIX: "${KUKURI_PEER_PUBLISH_PREFIX:-multi-peer-publisher}"
+      KUKURI_PEER_PUBLISH_INTERVAL_MS: "${KUKURI_PEER_PUBLISH_INTERVAL_MS:-1500}"
+      KUKURI_PEER_PUBLISH_MAX: "${KUKURI_PEER_PUBLISH_MAX:-}"
+      KUKURI_PEER_RUN_SECONDS: "${KUKURI_PEER_RUN_SECONDS:-}"
+      KUKURI_PEER_STARTUP_DELAY_MS: "${KUKURI_PEER_STARTUP_DELAY_MS_3:-1500}"
+      KUKURI_PEER_SUMMARY_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.json"
+      KUKURI_PEER_NODE_ADDRESS_PATH: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.address.json"
+      KUKURI_PEER_COMMAND_DIR: "/app/test-results/${KUKURI_PEER_OUTPUT_GROUP:-multi-peer}/peer-client-3.commands"
+
+  # 個別のRustテスト実行
+  rust-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-rust-test
+    working_dir: /app/kukuri-tauri/src-tauri
+    network_mode: host
+    command: /bin/sh -c "cargo test --locked --workspace --all-features -- --nocapture"
+    volumes:
+      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
+      - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
+      - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
+      - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro
+      - ./kukuri-tauri/src-tauri/migrations:/app/kukuri-tauri/src-tauri/migrations:ro
+      - ./test-results:/app/test-results
+      # Cargoキャッシュの永続化
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: full
+      RUST_LOG: "${RUST_LOG:-debug}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      ENABLE_P2P_INTEGRATION: "${ENABLE_P2P_INTEGRATION:-0}"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "${KUKURI_FORCE_LOCALHOST_ADDRS:-1}"
+      KUKURI_BOOTSTRAP_PEERS: "${KUKURI_BOOTSTRAP_PEERS:-}"
+      KUKURI_IROH_BIN: "${KUKURI_IROH_BIN:-}"
+      KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
+      KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
+      KUKURI_METRICS_EMIT_HISTOGRAM: "${KUKURI_METRICS_EMIT_HISTOGRAM:-true}"
+
+  # Rust カバレッジ計測（cargo tarpaulin）
+  rust-coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-rust-coverage
+    working_dir: /app/kukuri-tauri/src-tauri
+    network_mode: host
+    command: >
+      /bin/sh -c "
+        set -eu
+        mkdir -p /app/test-results/tarpaulin
+        rm -f /app/test-results/tarpaulin/tarpaulin-report.*
+        cargo tarpaulin --locked --all-features --skip-clean --out Json --out Lcov --output-dir /app/test-results/tarpaulin --timeout 1800
+      "
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - ./kukuri-tauri/src-tauri/src:/app/kukuri-tauri/src-tauri/src:ro
+      - ./kukuri-tauri/src-tauri/tests:/app/kukuri-tauri/src-tauri/tests:ro
+      - ./kukuri-tauri/src-tauri/Cargo.toml:/app/kukuri-tauri/src-tauri/Cargo.toml:ro
+      - ./kukuri-tauri/src-tauri/build.rs:/app/kukuri-tauri/src-tauri/build.rs:ro
+      - ./kukuri-tauri/src-tauri/tauri.conf.json:/app/kukuri-tauri/src-tauri/tauri.conf.json:ro
+      - ./kukuri-tauri/src-tauri/migrations:/app/kukuri-tauri/src-tauri/migrations:ro
+      - ./kukuri-tauri/src-tauri/.sqlx:/app/kukuri-tauri/src-tauri/.sqlx:ro
+      - ./test-results:/app/test-results
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      RUST_BACKTRACE: full
+      RUST_LOG: "${RUST_LOG:-info}"
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      ENABLE_P2P_INTEGRATION: "0"
+      KUKURI_FORCE_LOCALHOST_ADDRS: "1"
+      KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
+      KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
+      KUKURI_METRICS_EMIT_HISTOGRAM: "${KUKURI_METRICS_EMIT_HISTOGRAM:-true}"
+
+  # 個別のTypeScriptテスト実行
+  ts-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-ts-test
+    working_dir: /app/kukuri-tauri
+    entrypoint: ["/app/scripts/docker/ts-test-entrypoint.sh"]
+    command: ["pnpm", "test"]
+    volumes:
+      - ./test-results:/app/test-results
+      - ./tmp/logs:/app/tmp/logs
+      # pnpmキャッシュの永続化
+      - pnpm-store:/root/.local/share/pnpm/store
+    environment:
+      NODE_ENV: test
+      CI: "true"
+    networks:
+      - test-network
+
+  # リントとフォーマットチェック
+  lint-check:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kukuri-lint-check
+    working_dir: /app
+    command: |
+      bash -c "
+        echo '=== Rust format check ===' &&
+        cd kukuri-tauri/src-tauri &&
+        cargo fmt -- --check &&
+        echo '=== Rust clippy ===' &&
+        cargo clippy --locked --workspace --all-features -- -D warnings &&
+        echo '=== TypeScript lint ===' &&
+        cd /app/kukuri-tauri &&
+        pnpm lint &&
+        echo '=== TypeScript format check ===' &&
+        pnpm format:check
+      "
+    volumes:
+      # Cargoキャッシュの永続化（clippyのため）
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/app/kukuri-tauri/src-tauri/target
+    environment:
+      CARGO_HOME: /usr/local/cargo
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      RUSTFLAGS: "-C strip=debuginfo"
+      KUKURI_METRICS_ENABLED: "${KUKURI_METRICS_ENABLED:-true}"
+      KUKURI_METRICS_PROMETHEUS_PORT: "${KUKURI_METRICS_PROMETHEUS_PORT:-9898}"
+      KUKURI_METRICS_EMIT_HISTOGRAM: "${KUKURI_METRICS_EMIT_HISTOGRAM:-true}"
+    networks:
+      - test-network
+
+  prometheus-trending:
+    image: prom/prometheus:v2.53.0
+    container_name: kukuri-prometheus-trending
+    network_mode: host
+    volumes:
+      - ./docker/prometheus/trending/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+# 名前付きボリューム（キャッシュの永続化）
+volumes:
+  cargo-registry:
+    name: kukuri-cargo-registry
+  cargo-git:
+    name: kukuri-cargo-git
+  cargo-target:
+    name: kukuri-cargo-target
+  pnpm-store:
+    name: kukuri-pnpm-store
+  community-node-postgres:
+    name: kukuri-community-node-postgres
+  community-node-data:
+    name: kukuri-community-node-data
+
+networks:
+  test-network:
+    driver: bridge
+  community-node-network:
+    driver: bridge
+

@@ -1,0 +1,21 @@
+name: desktop_smoke_post_persist
+fixtures:
+  seed: 12345
+  topic: kukuri:topic:demo
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:demo
+  - action: create_post
+    content: hello
+  - action: assert_timeline_contains
+    text: hello
+  - action: restart_desktop
+  - action: assert_timeline_contains
+    text: hello
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

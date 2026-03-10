@@ -1,0 +1,136 @@
+# Phase 5 ユーザー導線サマリー
+作成日: 2025年11月03日  
+最終更新: 2025年11月20日
+
+## 概要
+- Phase 5 時点でアプリ UI から到達できる体験を俯瞰し、欠落導線や改善ポイントを即座に把握できるようにする。
+- 詳細なフロー・API 連携・設計メモは `phase5_user_flow_inventory.md` を参照し、本書では意思決定に必要なサマリーのみを掲載。
+- 導線の状態は「稼働中」「改善中」「未実装」の 3 区分で整理し、次の対応タスクを明示する。
+
+## MVP完了ハイライト（2025年11月20日更新）
+- **トレンド/フォロー**: Summary Panel・`TrendingSummaryPanel` の `generated_at` ラグ表示と DM カードを組み込み、`scripts/test-docker.{sh,ps1} ts --scenario trending-feed` が `test-results/trending-feed/{reports,prometheus,metrics}` を常時生成。`tmp/logs/trending_metrics_job_stage4_<timestamp>.log` / `test-results/trending-feed/prometheus/` を Nightly artefact 化し、`phase5_ci_path_audit.md` から Runbook へ直接リンクできる状態になった。
+- **Direct Message / Inbox**: `useDirectMessageBootstrap` と TanStack Virtualizer による会話リストが安定。2025年11月19日の `list_direct_message_conversations` カーソル対応と contract テスト（`kukuri-tauri/src-tauri/tests/contract/direct_messages.rs`）で多端末既読同期を保証。`nightly.direct-message-{logs,reports}` artefact には `tmp/logs/vitest_direct_message_<timestamp>.log` / `test-results/direct-message/*.json` を収集済み。
+- **プロフィール/設定**: Stage4（Service Worker + Offline ログ）を `nightly.profile-avatar-sync` で再現し、`profileAvatarSyncSW.ts` の指数バックオフや `offlineApi.addToSyncQueue` ログを `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` に集約。`ProfileEditDialog` / `ProfileSetup` は `update_privacy_settings` → `upload_profile_avatar` → `useProfileAvatarSync` を直列化済み。
+- **ユーザー検索**: `useUserSearchQuery` は rate limit/allowIncomplete/cooldown を持つ状態機械で、`scripts/test-docker.{sh,ps1} ts --scenario user-search-pagination --no-build` が `test-results/user-search-pagination/{reports,logs,search-error}` を生成。補助検索と `retryAfter` の解除は `user-search-pagination-search-error` artefact で確認でき、導線は「稼働中」に集約された。
+
+## 部分利用導線マトリクス（2025年11月18日更新）
+
+`phase5_feature_usage_map.md` 3章で列挙した「部分的に導線が存在する機能」を、Inventory（5.6 / 5.8 / 5.11）と Runbook / Nightly artefact で突合できるように整理した。テーブルの `Docs` 列は Inventory / Runbook / progressReports の該当箇所を指す。
+
+| Flow / Route | 稼働中の導線 | 未配線/残タスク | Docs | テストID / Artefact |
+| --- | --- | --- | --- | --- |
+| `/profile/$userId`（Inv 5.6.x） | `DirectMessageDialog`・`DirectMessageInbox`・`UserSearchResults` を共有し、Kind4 IPC・フォロー/フォロー解除・プロフィール編集（`update_privacy_settings`→`upload_profile_avatar`→`useProfileAvatarSync`）は UI から到達可能。React Query キャッシュ同期と Stage4 (Service Worker) まで実装済み。 | 会話既読の多端末反映／`direct_message_conversations` の 50 件超ページング／フォロワー/フォロー一覧のカーソル API が未整備。DM まわりの Nightly は `nightly.direct-message` 追加待ちのため、`tmp/logs/vitest_direct_message_*.log` を手動採取し続ける必要がある。 | `phase5_user_flow_inventory.md` 5.6 / 5.6.1 / 5.6.2、`docs/01_project/progressReports/nightly.partial-feature-usage.md#profile-ルート` | `nightly.profile-avatar-sync`（Service Worker/Docログ）、`nightly.direct-message`（準備中、Docker: `./scripts/test-docker.{ps1,sh} ts --scenario direct-message --no-build`）、`test-results/direct-message/*.json`、`tmp/logs/vitest_direct_message_*.log` |
+| `/search`（Inv 5.8） | `useUserSearchQuery` による Infinite Query / ソート（関連度・最新順） / `allow_incomplete` フォールバック / レートリミット UI / SearchBar 警告スタイルを実装済み。DM Inbox など他画面も同一 API を再利用。 | ✅ 2025年11月19日: 2文字未満補助検索→`retryAfter` 自動解除→`SearchErrorState` までを Nightly artefact 化。`phase5_ci_path_audit.md` と progressReports を連携済み。 | `phase5_user_flow_inventory.md` 5.8、`docs/01_project/progressReports/nightly.partial-feature-usage.md#search` | `nightly.user-search-pagination`（`./scripts/test-docker.{ps1,sh} ts --scenario user-search-pagination --no-build`）、`user-search-pagination-logs` / `user-search-pagination-log-archive` / `user-search-pagination-reports` / `user-search-pagination-search-error`、`tmp/logs/user_search_pagination_*.log` |
+| SyncStatusIndicator / Offline Sync（Inv 5.11） | Stage4 で Doc/Blob 対応 `cache_metadata` マイグレーション・Service Worker・Doc/Blob 競合バナー・`offline-sync` Docker シナリオを実装。ヘッダー CTA と `OfflineIndicator` も Stage4 仕様で統一。Stage5.1 では `pendingActionSummary` UI と `errorHandler SyncStatus.*` テレメトリを追加し、UI から `sync_queue` / `offline_actions` / `retryMetrics` を Nightly artefact へ保存できるようにした。 | ✅ Topic/Post/Follow/DM それぞれの OfflineAction を `offlineSyncTelemetry.test.tsx` で再現し、`./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --offline-category <cat>` で Nightly artefact `sync-status-indicator-{topic,post,follow,dm}`（`tmp/logs/sync_status_indicator_stage4_{cat}_<timestamp>.log` / `test-results/offline-sync/{cat}/${timestamp}-*.json`）を生成する運用へ移行。`profile-avatar-sync` 以外の Service Worker backlog も別タスクへ切り出し済み。 | `phase5_user_flow_inventory.md` 5.11、`docs/01_project/progressReports/nightly.partial-feature-usage.md#syncstatusindicator` | `nightly.sync-status-indicator.{topic,post,follow,dm}`（`./scripts/test-docker.{ps1,sh} ts --scenario offline-sync --offline-category <cat>`）、`sync-status-indicator-{topic,post,follow,dm}`、`profile-avatar-sync-logs`（Doc/Blob テレメトリ連動） |
+
+### Tauriコマンド導線チェックリスト（2025年11月14日更新）
+- `scripts/check-tauri-commands.mjs` で `src-tauri/src/presentation/commands/**/*.rs` の `#[tauri::command]` と `src/**/*.{ts,tsx}` での `invoke`/`invokeCommand` 呼び出しを照合できるようにした。`pnpm run check:tauri-commands`（または `node ../scripts/check-tauri-commands.mjs`）を実行し、`tmp/logs/check_tauri_commands_<timestamp>.log` に結果を保存して Runbook / `phase5_ci_path_audit.md` へリンクする。
+- 新規コマンド追加時は ①Rust 側へ実装→`presentation::commands` へ登録、②`TauriApi`/`p2pApi`/`secureStorageApi` など既存ラッパーに配線、③`phase5_user_flow_inventory.md` の該当セクションへ導線/テスト ID/ログパスを追記、④上記スクリプトを再実行し `phase5_ci_path_audit.md` に棚卸し結果を記す、という 4 ステップを必須とする。
+- 2025年11月18日: DevTools 限定の `clear_all_accounts_for_test` コマンドをフロント (`SecureStorageApi`) / Rust (`secure_storage_commands.rs` / `lib.rs`) から削除し、Keyring クリア処理も `DefaultSecureStorage` から廃止したため、デバッグ専用導線は 0 件となった。
+- **Offline sync**: 2025年11月11日に Stage4（Doc/Blob 対応 `cache_metadata` + 競合バナー + Service Worker + Docker `offline-sync`）を完了。`cache_types` に `doc_version` / `blob_hash` / `payload_bytes` を返すよう Rust 側を拡張し、`SyncStatusIndicator` へ Doc/Blob サマリーと競合バナーを追加。`npx vitest run src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx` および `./scripts/test-docker.sh ts --scenario offline-sync --no-build`（PowerShell 版あり）を実行し、`tmp/logs/sync_status_indicator_stage4_<timestamp>.log` を Runbook Chapter5 に保存。2025年11月12日: Topic/Post 系 OfflineAction の Docker シナリオとして `ts --scenario topic-create` / `post-delete-cache` を追加し、`tmp/logs/topic_create_20251112-125226.log` / `post_delete_cache_20251112-125301.log` と `test-results/topic-create/*.json` を Nightly artefact に登録。2025年11月13日: `post_delete_cache` Stage4 を完了し、`tmp/logs/post_delete_cache_20251113-085756.log`・`tmp/logs/post-delete-cache_docker_20251113-002140.log`・`test-results/post-delete-cache/20251113-002140.json` を Nightly/Runbook へ反映。2025年11月16日: PowerShell から `corepack enable pnpm` → `./scripts/test-docker.ps1 ts -Scenario topic-create` / `post-delete-cache` を再取得し、`tmp/logs/topic_create_20251116-014614.log` と `tmp/logs/post_delete_cache_20251116-014422.log`、および `test-results/{topic-create,post-delete-cache}/20251116-0146*.json` を最新版 artefact として Runbook/CI にリンクした。
+- **Topic create（Stage4）**: 2025年11月12日に `TopicService::enqueue_topic_creation` / `topics_pending` / `PendingTopicRepository` を追加し、オフライン作成を `OfflineActionType::CREATE_TOPIC` として保存→同期後に `mark_pending_topic_synced|failed` を呼び出せるようにした。`topicStore.pendingTopics` と `TopicSelector` の「保留中のトピック」表示、`TopicFormModal` のオフライン経路（`watchPendingTopic` → `resolvePendingTopic`）を整備し、`Input` を `forwardRef` 化して Radix ref 警告を解消。`npx pnpm vitest run … | Tee-Object -FilePath ../tmp/logs/topic_create_host_20251112-231141.log` と `./scripts/test-docker.ps1 ts -Scenario topic-create`（`tmp/logs/topic_create_20251112-231334.log`, `test-results/topic-create/20251112-231334-*.json`）で TopicSelector/PostComposer/Sidebar/Scenario の 47 ケースを再取得し、Runbook Chapter5 / `phase5_ci_path_audit.md` に採取パスを登録した。
+- **Mainline DHT / EventGateway**: Runbook Chapter10 / RelayStatus リンクに加え、2025年11月11日に `apply_cli_bootstrap_nodes` から `NetworkService::apply_bootstrap_nodes` を呼び出してランタイムでブートストラップリストを差し替える実装を追加。`cn-cli --export-path` → `RelayStatus` → 「最新リストを適用」でアプリ再起動なしに Mainline DHT 接続先を更新でき、2025年11月12日には PoC ログ（`tmp/logs/relay_status_cli_bootstrap_20251112-094500.log`）を Runbook 10.3/10.4・`phase5_ci_path_audit.md` と同期。同日、`RelayStatus` のバックオフ更新/再試行/CLI 適用を一つの `refreshRelaySnapshot`（`src/components/RelayStatus.tsx`）へまとめ、`p2pApi.getBootstrapConfig` を毎回再取得することで CLI リストの差分を即座に UI へ反映。`pnpm vitest run src/tests/unit/components/RelayStatus.test.tsx` と `cargo test`（`kukuri-tauri/src-tauri`, `cn-cli`）で回帰し、`phase5_dependency_inventory_template.md` / `phase5_event_gateway_design.md` も更新済み。
+- **Ops / CI**: `docs/01_project/setup_guide.md`（Ops / CI Onboarding 節）に `cmd.exe /c "corepack enable pnpm"`／`corepack pnpm --version` を追加し、Windows/WSL/Unix いずれでも Corepack 経由で `pnpm install --frozen-lockfile` を行う手順を固定。`nightly.yml` も Corepack で pnpm を有効化し、新たに `sync-status-indicator` ジョブ（`./scripts/test-docker.sh ts --scenario offline-sync`）を追加して `tmp/logs/sync_status_indicator_stage4_<timestamp>.log` artefact を採取するよう統一した。`profile-avatar-sync` / `trending-feed` / `user-search-pagination` / `post-delete-cache` 各ジョブは artefact 名（`*-logs`, `*-reports`, `trending-metrics-*`）と `tmp/logs/<scenario>_<timestamp>.log` を揃え、Runbook 6.4 と `phase5_ci_path_audit.md` にテスト ID（`nightly.<job>`）＋ログパスを登録。MVP Exit Checklist Ops/CI 行は Onboarding/artefact ギャップが解消済みのため、残タスクは CLI/Runbook 変更時の同期確認のみ。
+
+## MVP Exit Checklist（2025年11月12日版）
+
+| カテゴリ | ゴール | 2025年11月10日時点のブロッカー | 次アクション | 参照 |
+| --- | --- | --- | --- | --- |
+| UX/体験導線 | `/trending` `/following` `/profile/$userId` `/direct-messages` `/search` を横断し、サイドバー/グローバルコンポーザーから同一導線を完走できる状態 | `DirectMessageInbox` の既読共有・会話検索、`UserSearchResults` の Docker `user-search-pagination` シナリオが未完。`topic_create` Stage4 は 2025年11月12日に完了し、`tmp/logs/topic_create_host_20251112-231141.log` / `tmp/logs/topic_create_20251112-231334.log` と `test-results/topic-create/20251112-231334-*.json` を Nightly artefact に追加済み（2025年11月16日: `tmp/logs/topic_create_20251116-014614.log` / `test-results/topic-create/20251116-014614-*.json` へ差し替え）。Post 削除 Stage4 は 2025年11月13日に完了し、`tmp/logs/post_delete_cache_20251113-085756.log` / `tmp/logs/post-delete-cache_docker_20251113-002140.log` と `test-results/post-delete-cache/20251113-002140.json` を Runbook/CI へ登録（2025年11月16日: `tmp/logs/post_delete_cache_20251116-014422.log` / `test-results/post-delete-cache/20251116-014422-*.json` を Nightly artefact に更新）。プロフィール Stage4（Service Worker + Offline ログ）は `tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` / `profile-avatar-sync-logs` artefact で追跡中。 | 次は DM/Search/Post backlog（`phase5_user_flow_inventory.md` Sec.5.4/5.6/5.7/5.10/5.11）を解消。`user-search-pagination` を Nightly 常設シナリオに昇格させたので、DM 既読共有の contract テストと Runbook 更新を進める。 | `phase5_user_flow_inventory.md` Sec.5.1/5.4/5.7/5.9/5.10/5.11, `tauri_app_implementation_plan.md` Phase3 |
+| P2P & Discovery | EventGateway と P2PService Stack を抽象化し、Mainline DHT Runbook / `cn-cli` ブートストラップを UI から辿れる状態 | Runbook Chapter10 と RelayStatus からの遷移に加え、`cn-cli --export-path` → `RelayStatus` の「最新リストを適用」ボタンで CLI ブートストラップリストを切り替えられる PoC を実装。2025年11月12日: `refreshRelaySnapshot` によりバックオフ更新・再試行・CLI 適用後の再取得が同じコードパスとなり、`p2pApi.getBootstrapConfig` が毎回再読込されるため、CLI の JSON を更新するだけで UI の「CLI 提供」表示が同期される。Gateway/mapper 差分は `phase5_event_gateway_design.md` に沿って順次反映中。 | Gateway 実装タスクを `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md`（アーカイブ済み） Phase5 と `roadmap.md` KPI に再マッピングし、Runbook Chapter10 の CLI 手順と `phase5_dependency_inventory_template.md` P2P 行をメンテナンス対象に追加。 | `phase5_event_gateway_design.md`, `phase5_dependency_inventory_template.md`, `docs/03_implementation/p2p_mainline_runbook.md` |
+| データ/同期 & メトリクス | sync_queue Stage3/4 と `trending_metrics_job` を Runbook / CI で再現できる状態 | プロフィール Doc/Blob Stage4 は `cache_metadata` TTL 30 分・`profile-avatar-sync-logs` への採取まで完了。残課題は SyncStatus conflict バナー UI（Phase4）と `scripts/test-docker.{sh,ps1} --scenario trending-feed` の安定化（Prometheus Export / artefact `trending-metrics-logs` 更新）、`SyncStatusIndicator` / `post-delete-cache` / `offline-sync` ジョブの artefact 整備。 | Inventory 5.5/5.11 を Stage4 実装版へ更新し、CI 監査に `scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker`・`rust -Test profile_avatar_sync`・`--scenario trending-feed` を登録。`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` と `curl http://localhost:<port>/metrics` 採取手順を Runbook / `phase5_ci_path_audit.md` へ記載。 | `phase5_user_flow_inventory.md` 5.5/5.11, `tauri_app_implementation_plan.md` Phase4, `phase5_ci_path_audit.md` |
+| Ops / CI | Nightly / GitHub Actions で MVP 導線を再現し、Runbook で復旧できる状態 | ✅ 2025年11月12日: `docs/01_project/setup_guide.md` Onboarding に `corepack enable pnpm` / `corepack pnpm --version` を明記し、`nightly.yml` でも Corepack を有効化。`profile-avatar-sync` / `trending-feed` / `sync-status-indicator` / `user-search-pagination` / `post-delete-cache` の各ジョブへ artefact 名と `tmp/logs/<scenario>_<timestamp>.log` を登録し、Runbook 6.4 / `phase5_ci_path_audit.md` にテスト ID（`nightly.<job>`）＋ログパスを追記。 | CLI/Runbook 更新や新シナリオ追加時は `nightly.<job>` テスト ID・`tmp/logs` パス・artefact 名をセットで更新する運用を継続。現状の Nightly artefact（`*-logs`, `*-reports`, `trending-metrics-*`）が欠損した場合は該当ジョブを rerun し、`phase5_ci_path_audit.md` の行に調査ログをリンクする。 | `phase5_ci_path_audit.md`, `.github/workflows/nightly.yml`, `docs/03_implementation/p2p_mainline_runbook.md` 6.4, `docs/01_project/setup_guide.md` |
+
+共通の検証手順
+- `corepack enable pnpm && pnpm vitest run src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`（同期導線）
+- `corepack enable pnpm && pnpm vitest run src/tests/unit/components/topics/TopicSelector.test.tsx src/tests/unit/components/posts/PostCard.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx`（グローバルコンポーザー/投稿削除/トレンド導線）
+- `./scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` / `./scripts/test-docker.ps1 rust -Test profile_avatar_sync -NoBuild`（プロフィール Doc/Blob Stage4 + Service Worker）
+- `cargo test -p cn-cli -- test_bootstrap_runbook` / `./scripts/test-docker.ps1 rust -NoBuild`（Mainline DHT / Rust 側）
+
+## 1. 画面別導線サマリー
+
+### 1.1 オンボーディング & 認証
+| 画面 | パス | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| Welcome | `/welcome` | 新規アカウント作成、ログイン導線 | 稼働中 | `generate_keypair` で鍵を生成、SecureStorage 登録まで完了 |
+| Login | `/login` | nsec ログイン、セキュア保存、リレー接続表示 | 稼働中 | `login`/`add_account`/`initialize_nostr` 連携、保存後の自動ログインあり |
+| Profile Setup | `/profile-setup` | プロフィール入力、画像選択（ローカルファイル） | 稼働中 | Stage3（Doc/Blob + privacy）により `update_privacy_settings` → `upload_profile_avatar` → `useProfileAvatarSync` を直列実行し、`profile_avatar_sync` コマンドで Doc/Blob を常駐同期。プライバシー設定は `usePrivacySettingsStore` と `authStore.updateUser` へ即時反映。 |
+
+### 1.2 認証後の主要導線
+| セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| Home タイムライン | `/` | 投稿閲覧、いいね・ブースト・ブックマーク、グローバルコンポーザー | 稼働中 | `PostComposer` 下書き保存、`PostCard` アクション完備。投稿削除時は `useDeletePost` が React Query（`timeline`/`posts/*`/トレンド/フォロー中）と `topicStore.updateTopicPostCount` を即時更新（Inventory 5.10 完了）。 |
+| サイドバー | 共通 | 参加トピック一覧、未読バッジ、「新規投稿」ボタン | 改善中 | カテゴリーは `useUIStore.activeSidebarCategory` で同期。参加トピックがゼロの場合は `TopicFormModal` (`mode=create-from-composer`) を先に開き、作成完了後に `openComposer({ topicId })` へ遷移する。`prefetchTrendingCategory`/`prefetchFollowingCategory` でレスポンスも最適化済み。 |
+| ヘッダー | 共通 | `SyncStatusIndicator`、`RealtimeIndicator`、`AccountSwitcher`、DM 未読バッジ | 稼働中 | アカウント切替/追加/削除、同期状態表示、未読メッセージのバッジ表示と DM モーダル呼び出しを提供 |
+| Global Composer | 共通（モーダル） | どの画面からでも投稿／トピック選択 | 稼働中 | `TopicSelector` に「新しいトピックを作成」ショートカットを追加。`TopicFormModal` (`create-from-composer`) + `useComposerStore.applyTopicAndResume` で作成直後に選択した状態のまま投稿を続行できる。 |
+| トレンドフィード | `/trending` | トレンドスコア上位トピックのランキングカード、最新投稿プレビュー | 改善中 | `list_trending_topics`/`list_trending_posts`（limit=10/per_topic=3, staleTime=60s）。`generated_at` は `topic_metrics` の最新 `window_end`（`trending_metrics_job` が 5 分間隔で更新）を共有し、Summary Panel / Docker `trending-feed` シナリオでも同値となる。 |
+| フォロー中フィード | `/following` | フォロー中ユーザーの専用タイムライン、無限スクロール | 改善中 | `list_following_feed`（limit=20, cursor=`{created_at}:{event_id}`）を `useInfiniteQuery` で表示。Summary Panel に DM 未読カードを追加し、Prefetch + Retry 導線と `routes/following.test.tsx` のカバレッジあり。 |
+| プロフィール詳細 | `/profile/$userId` | プロフィール表示、フォロー/フォロー解除、投稿一覧、DM モーダル起動 | 改善中 | `DirectMessageDialog` は Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。フォロワー/フォロー一覧にはソート（最新/古い/名前）、検索、件数表示を追加済み。既読同期の多端末共有とページング拡張が backlog。 |
+
+### 1.3 トピック関連
+| 画面 | パス | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| Topics 一覧 | `/topics` | トピック検索、参加切替、新規作成 | 稼働中 | `TopicFormModal` の共通化完了。`mode='create-from-composer'` はグローバル導線から利用し、通常一覧では `mode='create'` を維持。統計は `get_topic_stats` を使用。 |
+| トピック詳細 | `/topics/$topicId` | 投稿一覧、P2P メッシュ表示、参加/離脱 | 改善中 | 最終更新表示は修正済み。トピック削除・編集はモーダル導線あり |
+| P2P Mesh | `/topics/$topicId` 内 | `TopicMeshVisualization` で Gossip/Mainline 状態を表示 | 改善中 | ステータス更新のリトライは今後の改善項目 |
+
+### 1.4 検索
+| タブ | パス | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| 投稿 | `/search` (posts) | フロント側フィルタで投稿検索 | 稼働中 | 初回ロードで `get_posts` 呼び出し |
+| トピック | `/search` (topics) | トピック名/説明で検索 | 稼働中 | `get_topics` 再利用 |
+| ユーザー | `/search` (users) | `search_users` で実ユーザー検索、フォロー/解除ボタン | 稼働中 | フォロー結果と Infinite Query は稼働中。2025年11月10日に関連度/最新順トグル・`allow_incomplete` フォールバック・SearchBar 警告スタイルを実装し、`npx pnpm vitest run src/tests/unit/hooks/useUserSearchQuery.test.tsx src/tests/unit/components/search/UserSearchResults.test.tsx`（`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log`）と Docker `./scripts/test-docker.sh ts --scenario user-search-pagination --no-build`（`tmp/logs/user_search_pagination_20251110-142854.log`）で回帰を取得済み。2025年11月12日に `nightly.yml` へ `nightly.user-search-pagination` ジョブを追加し、`tmp/logs/user_search_pagination_<timestamp>.log` を `user-search-pagination-logs`、`test-results/user-search-pagination/*.json` を `user-search-pagination-reports` artefact として保存する運用を確立（`phase5_ci_path_audit.md` / Runbook 6.4 に登録）。 |
+
+### 1.5 設定 & デバッグ
+| セクション | パス | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| 外観 | `/settings` | テーマ切替（ライト/ダーク） | 稼働中 | `useUIStore` 経由で永続化 |
+| アカウント | `/settings` | プロフィール編集モーダル、鍵管理ダイアログ（エクスポート/インポート/履歴） | 稼働中 | 2025年11月17日: `KeyManagementDialog` が `TauriApi.exportPrivateKey` / `authStore.loginWithNsec` と連動。2025年11月19日: `errorHandler.info('KeyManagementDialog.*')` テレメトリと Docker `./scripts/test-docker.ps1 ts` / `./scripts/test-docker.ps1 rust -Test key_management` で導線を再検証（Inventory 5.4 / 5.13 参照）。 |
+| プライバシー | `/settings` | 公開設定／オンライン表示トグル | 稼働中 | Stage4（2025年11月12日）で Service Worker / BroadcastChannel / `cache_metadata` TTL 30 分 / `offlineApi.addToSyncQueue` ログを実装し、`scripts/test-docker.{sh,ps1} ts --scenario profile-avatar-sync --service-worker` / `./scripts/test-docker.ps1 rust -Test profile_avatar_sync` / `pnpm vitest run ...ProfileAvatarSyncWorker.test.ts` を再実行。`tmp/logs/profile_avatar_sync_stage4_<timestamp>.log` は `nightly.profile-avatar-sync` artefact として Runbook Chapter4 / `phase5_ci_path_audit.md` に連携済み。 |
+| P2P 接続 | `/settings` | `PeerConnectionPanel` で手動接続/履歴管理 | 稼働中 | `connect_to_peer` コマンドに紐づく |
+| Bootstrap 設定 | `/settings` | ブートストラップノード一覧の取得/登録/リセット | 稼働中 | `set_bootstrap_nodes` などと連携 |
+| 開発者ツール (DEV) | `/settings`（開発モード） | `NostrTestPanel`, `P2PDebugPanel` | 改善中 | UI は Dev 限定。計測ログとテスト誘導の整理が backlog |
+
+### 1.6 ダイレクトメッセージ
+| セクション | パス/配置 | 主な機能 | 導線状態 | 備考 |
+| --- | --- | --- | --- | --- |
+| プロフィール起点 | `/profile/$userId` | `メッセージ` ボタン→`DirectMessageDialog` モーダル、履歴ロード・送信・再送ボタン | 稼働中 | Kind4 IPC に加えて多端末既読同期を実装済み。`tmp/logs/direct_message_inbox_20251113-140827.log`（Vitest）と `tmp/logs/rust_docker_20251113-141846.log`（Docker `./scripts/test-docker.ps1 rust`）で Dialog/Store/contract テストを再実行し、`mark_direct_message_conversation_read` のレプリケーションを確認。 |
+| グローバル導線 | ヘッダー右上 | `MessageCircle` ボタンで最新会話またはアクティブ会話を開き、隣の `Plus` アイコンから `DirectMessageInbox`（会話一覧 + 宛先入力）を起動 | 稼働中 | `useDirectMessageBadge` と共有する Inbox が会話検索/補完・Enter での自動起動・`@tanstack/react-virtual` の実測スクロール・未読/同期バッジを備え、`tmp/logs/direct_message_inbox_20251113-140827.log` で UI 回帰を監視。 |
+| Summary Panel | `/trending`, `/following` | `TrendingSummaryPanel` / `FollowingSummaryPanel` の DM カードに未読件数・最終受信時刻・`DM Inbox を開く` CTA を表示 | 稼働中 | CTA から開いた Inbox が SQLite の会話サマリ/既読タイムスタンプを即座に反映し、ヘッダーと同じストアで多端末共有・検索・仮想スクロールが完結する。2025年11月15日: `generatedAt` 由来のラグ表示・プレビュー更新カード・DM 会話ラベルを追加し、`test-results/trending-feed/reports/*.json` / `metrics/*.json` と突合できるようになった。Docker Rust ログ `tmp/logs/rust_docker_20251113-141846.log` で `tests/contract/direct_messages.rs` を含む一連の DM 契約テストを確認。 |
+
+## 2. グローバル要素
+- **ステータスカード**: `RelayStatus` / `P2PStatus` が 30 秒間隔でステータス取得。フェイルオーバー時のバックオフと手動再試行を実装。
+- **同期系 UI**: `SyncStatusIndicator`（Inventory 5.11）と `OfflineIndicator` が `offlineStore` / `syncEngine` の状態を共有し、オンライン復帰後 2 秒の自動同期・5 分ごとの定期同期・手動同期ボタン・競合解決ダイアログを提供。2025年11月07日: `get_cache_status` を 60 秒間隔＋手動操作で取得し、キャッシュ合計/ステール件数とタイプ別統計をポップオーバーに表示。ステールなタイプには「再送キュー」ボタンを表示し、`add_to_sync_queue`（`action_type=manual_sync_refresh`）で手動再送を登録できるようになった。2025年11月09日: `cache_types.metadata`（要求者/要求時刻/Queue ID/発行元）整形と OfflineIndicator の誘導コピーに加え、`list_sync_queue_items` を介した再送履歴（Queue ID フィルタ、最新 ID ハイライト、ステータス別バッジ、要求者/要求時刻/発行元/再試行回数、エラーメッセージ）をポップオーバーに追加。
+- **リアルタイム更新**: `RealtimeIndicator` と `useP2PEventListener` で投稿受信を通知し、`topicStore` の未読管理を更新。
+- **グローバルコンポーザー**: `useComposerStore` で Home/Sidebar/Topic から共通モーダルを制御し、投稿完了後にストアをリセット。2025年11月10日: `TopicSelector` に「新しいトピックを作成」ショートカット、`TopicFormModal(mode='create-from-composer')`、`useComposerStore.applyTopicAndResume` を実装し、作成直後に投稿継続できるようにした。`pnpm` 不足で `TopicSelector.test.tsx` / `PostCard.test.tsx` を再実行できていないため、`corepack enable pnpm` ＋ Docker ルートでの検証が必要（Inventory 5.9 / `phase5_ci_path_audit.md`）。
+- **プロフィール導線**: `UserSearchResults` と `/profile/$userId` が連携し、フォロー操作後に React Query キャッシュを即時更新。`DirectMessageDialog` は React Query ベースの履歴ロード・未読リセット・無限スクロールに加え、`mark_direct_message_conversation_read` で同期された `lastReadAt` を即時にストアへ反映する。ヘッダー右上の `MessageCircle` ボタン／`Plus` ボタン、および `/trending` `/following` の Summary Panel CTA は `useDirectMessageBadge` と `useDirectMessageStore` を共有し、既存会話なら即座にモーダルを開き、未読が無い場合でも `DirectMessageInbox` から宛先入力・会話検索・Enter 補完で新規 DM を開始できる。2025年11月13日: `direct_message_conversations` ハイドレートに `lastReadAt` を含め、`DirectMessageInbox` へ仮想スクロール最適化/多端末既読バッジ/検索ログ（`tmp/logs/direct_message_inbox_20251113-140827.log`）を追加。Rust 側は `tests/contract/direct_messages.rs` を Docker 実行（`tmp/logs/rust_docker_20251113-141846.log`）で監視し、バックログは送信レート制御と再送バックオフに絞られた。
+- **ユーザー検索**: `UserSearchResults` の状態遷移（idle/typing/ready/loading/success/empty/rateLimited/error）と `SearchErrorState` ハンドリング、`query` バリデーション（2〜64文字、制御文字除去、連続スペース正規化）を Inventory 5.8 と `error_handling_guidelines.md` に記録。2025年11月10日: 関連度/最新順トグルを追加し、`useUserSearchQuery` が `sort` オプションをキャッシュキーと Tauri API に伝播するよう更新。`npx pnpm vitest …`（`tmp/logs/vitest_user_search_allow_incomplete_20251110132951.log`）に加え、Docker `user-search-pagination` シナリオ（`tmp/logs/user_search_pagination_20251110-142854.log`）でも回帰を取得。
+- **孤立コンポーネント監査**: 2025年11月19日に Sidebar > `/trending` `/following` の Summary Panel、ヘッダー常駐の `SyncStatusIndicator` / `DirectMessageInbox`、Settings > 鍵管理モーダルの導線を棚卸し、Inventory 5.13 / Runbook Chapter4.4 にテレメトリ (`KeyManagementDialog.*`, `SyncStatusIndicator.*`) と Docker シナリオ（`./scripts/test-docker.ps1 ts -Scenario trending-feed` / `./scripts/test-docker.ps1 ts -Scenario offline-sync` / `./scripts/test-docker.ps1 rust -Test key_management`）の証跡を追記。`docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` KPI「孤立コンポーネント0件」を達成済み。
+
+## 3. 導線ギャップ Quick View
+1. `/trending`・`/following` ルートは実装済み（Inventory 5.7 参照）。Summary Panel / DM 未読カード / QA は 2025年11月07日までに完了。現在は `corepack pnpm` 不足で `TrendingSummaryPanel.test.tsx` / Docker `--scenario trending-feed` を再実行できず、`trending_metrics_job` 常駐フックの改修が止まっている。`phase5_ci_path_audit.md` と `tauri_app_implementation_plan.md` Phase3 にギャップを記録済み。
+2. `/profile/$userId` はフォロー導線とフォロワー/フォロー一覧（ソート・検索・件数表示）を備え、DirectMessageDialog も Kind4 IPC によるリアルタイム受信・未読管理・再送ボタンを提供。引き続き既読同期の多端末共有とページング拡張を Inventory 5.6.1/5.6.2 に沿って進める。
+3. ヘッダーの `MessageCircle` + `Plus` ボタン、Summary Panel の CTA から `DirectMessageInbox` を開けるようになり、2025年11月08日時点で `direct_message_conversations` テーブル経由の会話一覧・未読永続化と既読 API が稼働。残課題は会話検索/補完、Limit 超過時のページング、仮想スクロールの最適化。
+4. 投稿削除フローは 2025年11月03日に `delete_post` を UI に配線済み。Inventory 5.10 で React Query キャッシュ無効化・Docker シナリオ・統合テストのフォローアップを整理済み。
+5. 2025年11月19日: 設定 > 鍵管理ボタンは `KeyManagementDialog` を起動し、`export_private_key` / `authStore.loginWithNsec` / `useKeyManagementStore` を通じてバックアップと復旧を完結できる。Inventory 5.4/5.13 と Runbook Chapter4.4 に導線・テレメトリ・Docker テストの証跡を追記済み。
+6. プライバシー設定のローカル値をバックエンドへ同期する API が未提供。
+7. ユーザー検索タブは `search_users` で動作するが、無限スクロール/状態遷移/エラーUIは未実装（Inventory 5.8 に状態機械・入力バリデーション・SearchErrorState 設計を追記済み、`error_handling_guidelines.md` にメッセージ鍵を登録済み）。
+8. ホーム/サイドバーからのトピック作成導線は Inventory 5.9 で仕様化中。Global Composer の TopicSelector ショートカットと `createAndJoinTopic` 連携を整備する。
+9. `SyncStatusIndicator` は `get_cache_status` / `add_to_sync_queue` / `list_sync_queue_items` を取り込み、キャッシュ統計・手動キュー登録・再送履歴可視化を提供済み。今後は `sync_engine` 側で処理完了イベントと Docker ログの参照先を `cache_metadata` に記録し、履歴カードから Runbook ／ログへ遷移できる導線を追加する。
+10. 2025年11月18日: `add_relay` / `join_topic_by_name` / `delete_events` / `get_nostr_pubkey` に続き、`clear_all_accounts_for_test` も Tauri + フロントエンド双方から撤去し、未接続 API リストを 0 件に更新。Inventory 3.2/3.3 と Feature Usage Map へ撤去ログを反映済み。同日 `node scripts/check-tauri-commands.mjs`（CLI 出力: "Tauri コマンド 84 件はすべてフロントエンドから呼び出されています。"）を再実行し、84/84 件が UI/Hook/テスト片から参照されることを確認。CI ジョブ `check:tauri-commands`（`pnpm run check:tauri-commands`）でも同スクリプトを用いる運用を継続する。
+
+## 4. テストカバレッジ概要
+- フロントエンド: `pnpm test:unit`（Home/Sidebar/RelayStatus/P2PStatus/Composer/Settings のユニットテストを含む）、`pnpm vitest run src/tests/integration/profileAvatarSync.test.ts`、`npx vitest run src/tests/unit/components/directMessages/DirectMessageDialog.test.tsx src/tests/unit/routes/trending.test.tsx src/tests/unit/routes/following.test.tsx src/tests/unit/components/layout/Header.test.tsx src/tests/unit/hooks/useSyncManager.test.tsx src/tests/unit/components/SyncStatusIndicator.test.tsx src/tests/unit/components/OfflineIndicator.test.tsx`。
+- Rust: `cargo test`（`kukuri-tauri/src-tauri` と `cn-cli`）で P2P ステータスおよびプロフィール同期を検証。
+- Docker: `./scripts/test-docker.sh p2p`・`./scripts/test-docker.ps1 rust` で Gossip/Mainline スモークを再現。`./scripts/test-docker.sh ts --scenario trending-feed` / `.\scripts\test-docker.ps1 ts -Scenario trending-feed` でトレンド/フォロー導線の Vitest を Docker 上で実行（フィクスチャは `tests/fixtures/trending/default.json`）。
+
+## 5. 関連資料
+- `phase5_user_flow_inventory.md` — 詳細な導線/コマンド対応表・設計メモ。
+- `tauri_app_implementation_plan.md` Phase 5 — 導線改善タスクとスケジュール。
+- `phase5_ci_path_audit.md` — 関連テストと CI パスの依存関係。
+- `docs/01_project/deprecated/refactoring_plan_2025-08-08_v3.md` 2.5 節 — 導線指標と未対応項目チェックリスト。
+- `docs/03_implementation/trending_metrics_job.md` — トレンドメトリクス集計ジョブの設計案と監視手順ドラフト。
+
+## 6. Post-MVP backlog（2025年11月20日）
+
+MVP Exit Criteria に紐づく未実装項目は 0 件。今後は Phase 7（リリース準備）とベータに向けた改善のみを扱う。Post-MVP の検討事項は `phase5_user_flow_inventory.md` と `tauri_app_implementation_plan.md` の backlog セクションで管理する。

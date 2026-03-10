@@ -1,0 +1,64 @@
+services:
+  kukuri-bootstrap:
+    env_file:
+      - .env
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-bootstrap-dev
+    environment:
+      KUKURI_SECRET_KEY: ${KUKURI_BOOTSTRAP_SECRET_KEY:?Set KUKURI_BOOTSTRAP_SECRET_KEY in .env}
+      LOG_LEVEL: ${BOOTSTRAP_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${BOOTSTRAP_BIND_ADDRESS:-0.0.0.0:11223}
+    ports:
+      - "11223:11223"
+    volumes:
+      - bootstrap-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ["p2p", "bootstrap"]
+
+  kukuri-relay:
+    env_file:
+      - .env
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-relay-dev
+    depends_on:
+      - kukuri-bootstrap
+    environment:
+      KUKURI_SECRET_KEY: ${KUKURI_RELAY_SECRET_KEY:?Set KUKURI_RELAY_SECRET_KEY in .env}
+      LOG_LEVEL: ${RELAY_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${RELAY_BIND_ADDRESS:-0.0.0.0:11225}
+      RELAY_TOPICS: ${RELAY_TOPICS:-public}
+    ports:
+      - "11225:11225"
+    volumes:
+      - relay-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ["p2p", "relay"]
+
+  # Relay using n0 bootstrap discovery (no local bootstrap dependency)
+  kukuri-relay-n0:
+    env_file:
+      - .env
+    build:
+      context: ./kukuri-community-node
+      dockerfile: Dockerfile
+    container_name: kukuri-relay-n0
+    environment:
+      KUKURI_SECRET_KEY: ${KUKURI_RELAY_N0_SECRET_KEY:?Set KUKURI_RELAY_N0_SECRET_KEY in .env}
+      LOG_LEVEL: ${RELAY_N0_LOG_LEVEL:-info}
+      BIND_ADDRESS: ${RELAY_N0_BIND_ADDRESS:-0.0.0.0:11226}
+      RELAY_TOPICS: ${RELAY_N0_TOPICS:-public}
+    ports:
+      - "11226:11226"
+    volumes:
+      - relay-n0-data:/home/kukuri/data
+    restart: unless-stopped
+    command: ["p2p", "relay"]
+
+volumes:
+  bootstrap-data:
+  relay-data:
+  relay-n0-data:

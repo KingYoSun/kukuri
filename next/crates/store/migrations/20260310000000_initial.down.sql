@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS thread_edges;
+DROP TABLE IF EXISTS topic_posts;
+DROP TABLE IF EXISTS events;
