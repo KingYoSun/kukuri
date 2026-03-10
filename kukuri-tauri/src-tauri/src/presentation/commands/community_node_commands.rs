@@ -12,38 +12,35 @@ use crate::shared::config::BootstrapSource;
 use crate::state::AppState;
 use tauri::State;
 
-async fn sync_community_node_nostr_relays(
-    state: &AppState,
-    reason: &'static str,
-) -> Result<(), AppError> {
-    let relay_urls = state
+async fn sync_community_node_nostr_relays(state: &AppState, reason: &'static str) {
+    let relay_urls = match state
         .community_node_handler
         .resolve_nostr_relay_urls_from_saved_config()
         .await
-        .map_err(|err| {
+    {
+        Ok(relay_urls) => relay_urls,
+        Err(err) => {
             tracing::warn!(
                 error = %err,
                 reason,
                 "Failed to resolve community node Nostr relay configuration"
             );
-            err
-        })?;
+            return;
+        }
+    };
 
-    state
+    if let Err(err) = state
         .event_manager
         .replace_nostr_relays(relay_urls.clone())
         .await
-        .map_err(|err| {
-            tracing::warn!(
-                error = %err,
-                relay_count = relay_urls.len(),
-                reason,
-                "Failed to apply community node Nostr relay configuration"
-            );
-            AppError::NostrError(err.to_string())
-        })?;
-
-    Ok(())
+    {
+        tracing::warn!(
+            error = %err,
+            relay_count = relay_urls.len(),
+            reason,
+            "Failed to apply community node Nostr relay configuration"
+        );
+    }
 }
 
 fn has_user_bootstrap_nodes(selection: &BootstrapSelection) -> bool {
@@ -92,7 +89,7 @@ pub async fn set_community_node_config(
         );
     }
 
-    sync_community_node_nostr_relays(&state, "set_config").await?;
+    sync_community_node_nostr_relays(&state, "set_config").await;
 
     Ok(ApiResponse::success(config))
 }
@@ -110,7 +107,7 @@ pub async fn clear_community_node_config(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<()>, AppError> {
     state.community_node_handler.clear_config().await?;
-    sync_community_node_nostr_relays(&state, "clear_config").await?;
+    sync_community_node_nostr_relays(&state, "clear_config").await;
     Ok(ApiResponse::success(()))
 }
 
@@ -136,7 +133,7 @@ pub async fn community_node_authenticate(
         );
     }
 
-    sync_community_node_nostr_relays(&state, "authenticate").await?;
+    sync_community_node_nostr_relays(&state, "authenticate").await;
 
     Ok(ApiResponse::success(auth_response))
 }

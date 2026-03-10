@@ -2084,9 +2084,9 @@ fn filter_descriptor_nostr_relay_urls(base_url: &str, relay_urls: Vec<String>) -
 fn should_fallback_to_base_url_nostr_relay(
     node: &CommunityNodeConfigNode,
     config: &CommunityNodeConfig,
-    has_matching_descriptor: bool,
+    _has_matching_descriptor: bool,
 ) -> bool {
-    has_matching_descriptor || node.roles.bootstrap || config.nodes.len() == 1
+    config.nodes.len() == 1 && !node.roles.bootstrap
 }
 
 fn normalize_nostr_relay_url_candidate(raw: &str) -> Option<String> {
@@ -3853,7 +3853,7 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
-    async fn resolve_nostr_relay_urls_falls_back_to_base_url_when_matching_descriptor_has_no_ws() {
+    async fn resolve_nostr_relay_urls_returns_empty_when_bootstrap_descriptor_has_no_ws() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-fallback");
         let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
@@ -3897,10 +3897,7 @@ mod community_node_handler_tests {
             .resolve_nostr_relay_urls_from_saved_config()
             .await
             .expect("resolve nostr relays");
-        assert_eq!(
-            relay_urls,
-            vec![build_nostr_relay_url_from_base_url(&base_url).expect("base url fallback relay")]
-        );
+        assert!(relay_urls.is_empty());
 
         let _ = fs::remove_dir_all(&data_dir);
     }
@@ -4078,7 +4075,8 @@ mod community_node_handler_tests {
     }
 
     #[tokio::test]
-    async fn resolve_nostr_relay_urls_ignores_loopback_descriptor_ws_for_public_base_url() {
+    async fn resolve_nostr_relay_urls_does_not_fallback_for_public_bootstrap_node_when_descriptor_ws_is_loopback()
+     {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-ignore-loopback");
         let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
@@ -4121,10 +4119,7 @@ mod community_node_handler_tests {
             .resolve_nostr_relay_urls_from_saved_config()
             .await
             .expect("resolve nostr relays");
-        assert_eq!(
-            relay_urls,
-            vec![build_nostr_relay_url_from_base_url(&base_url).expect("base url fallback relay")]
-        );
+        assert!(relay_urls.is_empty());
 
         let _ = fs::remove_dir_all(&data_dir);
     }

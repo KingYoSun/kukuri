@@ -17,8 +17,9 @@
 - 公開 Community Node relay 警告の切り分け
   - 実機検証（2026年03月10日）: `https://api.kukuri.app` を設定したデスクトップ実機で、peer 間接続、投稿伝播、realtime mode での timeline 自動更新は確認できた。
   - 実機ログ（2026年03月09日 16:17:13Z / 16:17:15Z）: `wss://api.kukuri.app/relay` への接続は `HTTP error: 404 Not Found` で失敗し、`No configured Nostr relay connected within 3s` warning も出ている。ただし P2P 経路の post 伝播自体は継続している。
-  - 未解決点: 公開 relay が本来必要な構成か、descriptor / server routing / warning 条件のどこに不整合があるかは未整理。
-  - 次アクション: `api.kukuri.app` 側の relay 公開有無と bootstrap descriptor の返却内容を照合し、warning を不具合として扱うべきかを切り分ける。
+  - 実装・検証（2026年03月10日）: 原因は 2 つあり、Community Node 側の bootstrap descriptor seed が `BOOTSTRAP_DESCRIPTOR_*` 未設定時に `localhost` 固定へ落ちていたことと、クライアント側が bootstrap node でも `base_url + /relay` fallback を使っていたことだった。`cn-core::admin` で descriptor `http/ws` を `PUBLIC_BASE_URL` / `RELAY_PUBLIC_URL` から自動導出しつつ既存 bootstrap config の descriptor endpoint を部分更新するよう修正し、Tauri 側では bootstrap node の `base_url + /relay` fallback を廃止し、Community Node 認証時の relay 同期失敗も best-effort 化した。`./scripts/test-docker.ps1 rust` / `e2e-community-node` と `gh act --workflows .github/workflows/test.yml --job format-check` / `native-test-linux` / `community-node-tests` は PASS。
+  - 未解決点: 修正後コードで `https://api.kukuri.app` 実機を再検証していないため、公開 descriptor が `wss://relay.kukuri.app/relay` を返し、認証 warning が解消したこと自体は未確認。
+  - 次アクション: `api.kukuri.app` の live-path で Community Node 認証を再実施し、relay status が `relay.kukuri.app` を向くことと `wss://api.kukuri.app/relay` 404 / auth warning が消えることを確認する。
 - プロフィール伝播不具合
   - 実機検証（2026年03月10日）: 両クライアントで事前に自分自身のプロフィールをローカル保存した状態から投稿すると、peer 間接続・投稿伝播・realtime timeline 更新は成功する一方、相手側 timeline/thread の表示名・avatar は反映されなかった。
   - テスト監査（2026年03月10日確認）: `community-node.profile-propagation.spec.ts` は local docker の `http://127.0.0.1:18080` / `ws://127.0.0.1:18082/relay` を前提に、profile update アクション実行後の `getAuthSnapshot()` と `waitForPeerHarnessSummary()` だけを見ている。今回の「profile update なしで既存プロフィールを解決する」実機シナリオは担保していない。
