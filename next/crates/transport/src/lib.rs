@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
@@ -16,7 +17,7 @@ use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use next_core::{Event, TopicId};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_stream::wrappers::BroadcastStream;
@@ -152,6 +153,8 @@ impl Transport for FakeTransport {
 struct TopicState {
     sender: Arc<Mutex<GossipSender>>,
     broadcaster: broadcast::Sender<EventEnvelope>,
+    joined: Arc<AtomicBool>,
+    joined_notify: Arc<Notify>,
     _receiver_task: JoinHandle<()>,
 }
 
@@ -165,26 +168,24 @@ pub struct IrohGossipTransport {
     connected_peers: Arc<RwLock<BTreeSet<String>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
-    local_ticket: String,
 }
 
 impl IrohGossipTransport {
     pub async fn bind_local() -> Result<Self> {
+        let discovery = Arc::new(MemoryLookup::new());
         let endpoint = Endpoint::empty_builder(RelayMode::Disabled)
+            .address_lookup(discovery.clone())
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .context("failed to bind local endpoint address")?
             .bind()
             .await
             .context("failed to bind iroh endpoint")?;
-        let discovery = Arc::new(MemoryLookup::new());
         discovery.add_endpoint_info(endpoint.addr());
-        endpoint.address_lookup().add(discovery.clone());
 
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
             .accept(GOSSIP_ALPN, gossip.clone())
             .spawn();
-        let local_ticket = encode_ticket(&endpoint.addr())?;
 
         Ok(Self {
             endpoint,
@@ -195,7 +196,6 @@ impl IrohGossipTransport {
             connected_peers: Arc::new(RwLock::new(BTreeSet::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
-            local_ticket,
         })
     }
 
@@ -216,11 +216,6 @@ impl IrohGossipTransport {
 
         for peer in &imported {
             self.discovery.add_endpoint_info(peer.clone());
-            let _ = timeout(
-                Duration::from_secs(2),
-                self.endpoint.connect(peer.clone(), GOSSIP_ALPN),
-            )
-            .await;
         }
 
         let topic_handle = self
@@ -229,18 +224,24 @@ impl IrohGossipTransport {
             .await
             .context("failed to subscribe gossip topic")?;
         let (sender, mut receiver) = topic_handle.split();
-        if !imported.is_empty() {
-            sender
-                .join_peers(imported.iter().map(|peer| peer.id).collect::<Vec<_>>())
-                .await
-                .context("failed to join imported gossip peers")?;
-            let _ = timeout(Duration::from_secs(5), receiver.joined()).await;
-        }
         let (broadcaster, _) = broadcast::channel(256);
         let outbound = broadcaster.clone();
         let peers = Arc::clone(&self.connected_peers);
+        let joined = Arc::new(AtomicBool::new(imported.is_empty()));
+        let joined_notify = Arc::new(Notify::new());
+        let joined_task_state = Arc::clone(&joined);
+        let joined_task_notify = Arc::clone(&joined_notify);
+        let imported_count = imported.len();
 
         let task = tokio::spawn(async move {
+            if imported_count > 0
+                && timeout(Duration::from_secs(15), receiver.joined())
+                    .await
+                    .is_ok_and(|result| result.is_ok())
+            {
+                joined_task_state.store(true, Ordering::SeqCst);
+                joined_task_notify.notify_waiters();
+            }
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipEvent::Received(message)) => {
@@ -270,6 +271,8 @@ impl IrohGossipTransport {
             TopicState {
                 sender: Arc::new(Mutex::new(sender)),
                 broadcaster: broadcaster.clone(),
+                joined,
+                joined_notify,
                 _receiver_task: task,
             },
         );
@@ -304,11 +307,13 @@ impl Transport for IrohGossipTransport {
         let state = states
             .get(topic.as_str())
             .ok_or_else(|| anyhow!("missing topic sender"))?;
+        if !peer_ids.is_empty() && !state.joined.load(Ordering::SeqCst) {
+            timeout(Duration::from_secs(10), state.joined_notify.notified())
+                .await
+                .context("timed out waiting for gossip topic join")?;
+        }
         let payload = serde_json::to_vec(&event)?;
         let sender = state.sender.lock().await;
-        if !peer_ids.is_empty() {
-            let _ = sender.join_peers(peer_ids).await;
-        }
         sender
             .broadcast(payload.into())
             .await
@@ -342,7 +347,7 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn export_ticket(&self) -> Result<Option<String>> {
-        Ok(Some(self.local_ticket.clone()))
+        Ok(Some(encode_ticket(&self.endpoint.addr())?))
     }
 
     async fn import_ticket(&self, ticket: &str) -> Result<()> {
@@ -383,9 +388,9 @@ fn parse_ticket(ticket: &str) -> Result<EndpointAddr> {
 mod tests {
     use super::*;
     use next_core::{TopicId, build_text_note, generate_keys};
+    use std::net::{Ipv4Addr, SocketAddrV4};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "iroh mesh handshake is still unstable in the local harness"]
     async fn transport_two_process_roundtrip_static_peer() {
         let transport_a = IrohGossipTransport::bind_local()
             .await
@@ -411,10 +416,10 @@ mod tests {
             .import_ticket(&ticket_a)
             .await
             .expect("import a");
-
         let topic = TopicId::new("kukuri:topic:transport");
-        let _stream_a = transport_a.subscribe(&topic).await.expect("subscribe a");
-        let mut stream_b = transport_b.subscribe(&topic).await.expect("subscribe b");
+        let (_stream_a, mut stream_b) =
+            tokio::try_join!(transport_a.subscribe(&topic), transport_b.subscribe(&topic))
+                .expect("subscribe both");
         let event =
             build_text_note(&generate_keys(), &topic, "hello transport", None).expect("event");
 
@@ -429,6 +434,120 @@ mod tests {
 
         assert_eq!(envelope.event.id, event.id);
         assert_eq!(envelope.event.content, "hello transport");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn gossip_low_level_roundtrip_baseline() {
+        let endpoint_a = Endpoint::empty_builder(RelayMode::Disabled)
+            .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .expect("bind addr a")
+            .bind()
+            .await
+            .expect("endpoint a");
+        let gossip_a = Gossip::builder().spawn(endpoint_a.clone());
+        let _router_a = Router::builder(endpoint_a.clone())
+            .accept(GOSSIP_ALPN, gossip_a.clone())
+            .spawn();
+
+        let endpoint_b = Endpoint::empty_builder(RelayMode::Disabled)
+            .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .expect("bind addr b")
+            .bind()
+            .await
+            .expect("endpoint b");
+        let gossip_b = Gossip::builder().spawn(endpoint_b.clone());
+        let _router_b = Router::builder(endpoint_b.clone())
+            .accept(GOSSIP_ALPN, gossip_b.clone())
+            .spawn();
+
+        let discovery = MemoryLookup::new();
+        discovery.add_endpoint_info(endpoint_a.addr());
+        discovery.add_endpoint_info(endpoint_b.addr());
+        endpoint_a.address_lookup().add(discovery.clone());
+        endpoint_b.address_lookup().add(discovery);
+
+        let topic = topic_to_gossip_id(&TopicId::new("kukuri:topic:baseline"));
+        let peer_a = endpoint_a.id();
+        let peer_b = endpoint_b.id();
+        let topic_a = gossip_a
+            .subscribe(topic, vec![peer_b])
+            .await
+            .expect("subscribe a");
+        let (sender_a, mut receiver_a) = topic_a.split();
+        let topic_b = gossip_b
+            .subscribe(topic, vec![peer_a])
+            .await
+            .expect("subscribe b");
+        let (_sender_b, mut receiver_b) = topic_b.split();
+
+        timeout(Duration::from_secs(10), receiver_a.joined())
+            .await
+            .expect("join a timeout")
+            .expect("join a");
+        timeout(Duration::from_secs(10), receiver_b.joined())
+            .await
+            .expect("join b timeout")
+            .expect("join b");
+
+        let event = build_text_note(
+            &generate_keys(),
+            &TopicId::new("kukuri:topic:baseline"),
+            "hello baseline",
+            None,
+        )
+        .expect("event");
+        sender_a
+            .broadcast(serde_json::to_vec(&event).expect("serialize").into())
+            .await
+            .expect("broadcast");
+
+        let received = timeout(Duration::from_secs(10), async {
+            while let Some(message) = receiver_b.next().await {
+                match message.expect("gossip event") {
+                    GossipEvent::Received(message) => {
+                        let parsed: Event =
+                            serde_json::from_slice(&message.content).expect("parse event");
+                        return parsed;
+                    }
+                    GossipEvent::Lagged => continue,
+                    _ => {}
+                }
+            }
+            panic!("receiver b closed");
+        })
+        .await
+        .expect("receive timeout");
+
+        assert_eq!(received.id, event.id);
+        assert_eq!(received.content, "hello baseline");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_static_peer_can_connect_endpoint() {
+        let transport_a = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport b");
+        let ticket_b = transport_b
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        transport_a
+            .import_ticket(&ticket_b)
+            .await
+            .expect("import b");
+        let addr_b = parse_ticket(&ticket_b).expect("parse ticket b");
+        timeout(
+            Duration::from_secs(5),
+            transport_a.endpoint.connect(addr_b, GOSSIP_ALPN),
+        )
+        .await
+        .expect("connect timeout")
+        .expect("connect");
     }
 
     #[tokio::test]

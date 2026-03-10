@@ -185,7 +185,8 @@ impl AppService {
 mod tests {
     use super::*;
     use next_store::MemoryStore;
-    use next_transport::{FakeNetwork, FakeTransport};
+    use next_transport::{FakeNetwork, FakeTransport, IrohGossipTransport};
+    use tokio::time::{Duration, sleep, timeout};
 
     #[tokio::test]
     async fn create_post_and_list_timeline() {
@@ -205,5 +206,78 @@ mod tests {
         assert_eq!(timeline.items.len(), 1);
         assert_eq!(timeline.items[0].id, event_id);
         assert_eq!(timeline.items[0].content, "hello app");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iroh_transport_syncs_post_between_apps() {
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let transport_a = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport a should bind"),
+        );
+        let transport_b = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport b should bind"),
+        );
+        let app_a = AppService::new(store_a, transport_a.clone());
+        let app_b = AppService::new(store_b, transport_b.clone());
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let topic = "kukuri:topic:app-api-iroh";
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("app b should subscribe to topic");
+
+        let event_id = app_a
+            .create_post(topic, "hello over iroh transport", None)
+            .await
+            .expect("app a should create post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline should load");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("timeline sync timeout");
+
+        assert_eq!(received.content, "hello over iroh transport");
+        let status_b = app_b.get_sync_status().await.expect("sync status b");
+        assert!(status_b.last_sync_ts.is_some());
+        assert!(
+            status_b
+                .subscribed_topics
+                .iter()
+                .any(|value| value == topic)
+        );
     }
 }

@@ -224,7 +224,10 @@ impl Store for SqliteStore {
                 OR e.created_at > ?3
                 OR (e.created_at = ?3 AND e.event_id > ?4)
               )
-            ORDER BY e.created_at ASC, e.event_id ASC
+            ORDER BY
+              CASE WHEN e.event_id = te.root_event_id THEN 0 ELSE 1 END ASC,
+              e.created_at ASC,
+              e.event_id ASC
             LIMIT ?5
             "#,
         )
@@ -393,8 +396,12 @@ impl Store for MemoryStore {
             })
             .collect::<Vec<_>>();
         items.sort_by(|left, right| {
-            left.created_at
-                .cmp(&right.created_at)
+            let left_root = left.id == *thread_id;
+            let right_root = right.id == *thread_id;
+            left_root
+                .cmp(&right_root)
+                .reverse()
+                .then_with(|| left.created_at.cmp(&right.created_at))
                 .then_with(|| left.id.cmp(&right.id))
         });
         let filtered = apply_asc_cursor(items, cursor, limit);

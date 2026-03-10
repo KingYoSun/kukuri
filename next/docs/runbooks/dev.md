@@ -21,5 +21,6 @@ npx pnpm@10.16.1 test
 ```
 
 ## 現在の注意点
-- `next-transport` の `transport_two_process_roundtrip_static_peer` は local harness ではまだ不安定で `#[ignore]`。
+- `next-transport` の `transport_static_peer_can_connect_endpoint` は required。
+- `next-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。
 - deterministic な required lane は `FakeTransport` と `next-harness` が担う。
