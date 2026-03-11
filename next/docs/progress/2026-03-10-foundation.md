@@ -28,6 +28,7 @@
 - Linux 実機 2 台で片側だけ購読している topic はその topic 行だけ `joined: false / peers: 0` になることを確認
 - Linux 実機 2 台で共通購読 topic を片側で解除した後、その topic 行だけ `joined: false / peers: 0` になることを確認
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
+- Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
@@ -36,4 +37,4 @@
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `status_detail / last_error` が実機で期待どおり更新されるかの確認。
+- Tauri backend binding は導入済み。次の実機確認は `status_detail / last_error` が接続失敗時や再接続時にも期待どおり更新されるかの確認。

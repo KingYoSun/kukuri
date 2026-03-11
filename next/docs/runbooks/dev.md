@@ -52,6 +52,7 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立
 - Linux 実機 2 台で `post -> reply -> thread` と複数 topic の双方向伝播が成立
 - Linux 実機 2 台で topic 単位の unsubscribe と peer diagnostics 表示が期待どおりに機能
+- Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。
