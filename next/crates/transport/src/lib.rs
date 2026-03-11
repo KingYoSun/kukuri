@@ -106,6 +106,7 @@ impl TransportNetworkConfig {
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn subscribe(&self, topic: &TopicId) -> Result<EventStream>;
+    async fn unsubscribe(&self, topic: &TopicId) -> Result<()>;
     async fn publish(&self, topic: &TopicId, event: Event) -> Result<()>;
     async fn peers(&self) -> Result<PeerSnapshot>;
     async fn export_ticket(&self) -> Result<Option<String>>;
@@ -157,6 +158,11 @@ impl Transport for FakeTransport {
         self.subscribed_topics.lock().await.insert(topic.0.clone());
         let sender = self.topic_sender(topic).await;
         Ok(Self::stream_from_sender(&sender))
+    }
+
+    async fn unsubscribe(&self, topic: &TopicId) -> Result<()> {
+        self.subscribed_topics.lock().await.remove(topic.as_str());
+        Ok(())
     }
 
     async fn publish(&self, topic: &TopicId, event: Event) -> Result<()> {
@@ -290,6 +296,7 @@ impl IrohGossipTransport {
             state._receiver_task.abort();
             drop(state.sender);
         }
+        self.subscribed_topics.lock().await.remove(topic);
     }
 
     async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
@@ -419,6 +426,11 @@ impl Transport for IrohGossipTransport {
     async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
         let sender = self.ensure_topic(topic).await?;
         Ok(Self::stream_from_sender(&sender))
+    }
+
+    async fn unsubscribe(&self, topic: &TopicId) -> Result<()> {
+        self.remove_topic_state(topic.as_str()).await;
+        Ok(())
     }
 
     async fn publish(&self, topic: &TopicId, event: Event) -> Result<()> {

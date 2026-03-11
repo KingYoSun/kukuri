@@ -49,6 +49,7 @@ export interface DesktopApi {
   ): Promise<TimelineView>;
   getSyncStatus(): Promise<SyncStatus>;
   importPeerTicket(ticket: string): Promise<void>;
+  unsubscribeTopic(topic: string): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
 }
 
@@ -113,6 +114,16 @@ export const runtimeApi: DesktopApi = {
     return invoke<void>('import_peer_ticket', {
       request: {
         ticket,
+      },
+    }).catch(() => unavailable());
+  },
+  unsubscribeTopic: async (topic) => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.unsubscribeTopic(topic);
+    }
+    return invoke<void>('unsubscribe_topic', {
+      request: {
+        topic,
       },
     }).catch(() => unavailable());
   },

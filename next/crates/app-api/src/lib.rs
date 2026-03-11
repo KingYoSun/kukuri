@@ -167,6 +167,13 @@ impl AppService {
         Ok(())
     }
 
+    pub async fn unsubscribe_topic(&self, topic_id: &str) -> Result<()> {
+        if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
+            handle.abort();
+        }
+        self.transport.unsubscribe(&TopicId::new(topic_id)).await
+    }
+
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
         self.transport.export_ticket().await
     }
@@ -298,6 +305,39 @@ mod tests {
                 .topic_diagnostics
                 .iter()
                 .any(|topic| topic.topic == "kukuri:topic:two")
+        );
+    }
+
+    #[tokio::test]
+    async fn unsubscribe_topic_removes_subscription_from_sync_status() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+
+        let _ = app
+            .list_timeline("kukuri:topic:one", None, 10)
+            .await
+            .expect("timeline one");
+        let _ = app
+            .list_timeline("kukuri:topic:two", None, 10)
+            .await
+            .expect("timeline two");
+        app.unsubscribe_topic("kukuri:topic:two")
+            .await
+            .expect("unsubscribe topic");
+        let status = app.get_sync_status().await.expect("sync status");
+
+        assert!(
+            status
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == "kukuri:topic:one")
+        );
+        assert!(
+            !status
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == "kukuri:topic:two")
         );
     }
 
@@ -530,5 +570,91 @@ mod tests {
             .expect("reply in thread");
         assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
         assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iroh_transport_syncs_multiple_topics_bidirectionally() {
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let transport_a = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport a should bind"),
+        );
+        let transport_b = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport b should bind"),
+        );
+        let app_a = AppService::new(store_a, transport_a);
+        let app_b = AppService::new(store_b, transport_b);
+        let topic_one = "kukuri:topic:one";
+        let topic_two = "kukuri:topic:two";
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let _ = app_a
+            .list_timeline(topic_one, None, 20)
+            .await
+            .expect("subscribe a topic one");
+        let _ = app_a
+            .list_timeline(topic_two, None, 20)
+            .await
+            .expect("subscribe a topic two");
+        let _ = app_b
+            .list_timeline(topic_one, None, 20)
+            .await
+            .expect("subscribe b topic one");
+        let _ = app_b
+            .list_timeline(topic_two, None, 20)
+            .await
+            .expect("subscribe b topic two");
+
+        let id_one = app_a
+            .create_post(topic_one, "topic one from a", None)
+            .await
+            .expect("post one");
+        let id_two = app_b
+            .create_post(topic_two, "topic two from b", None)
+            .await
+            .expect("post two");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline_b = app_b
+                    .list_timeline(topic_one, None, 20)
+                    .await
+                    .expect("timeline b");
+                let timeline_a = app_a
+                    .list_timeline(topic_two, None, 20)
+                    .await
+                    .expect("timeline a");
+                let has_one = timeline_b.items.iter().any(|post| post.id == id_one);
+                let has_two = timeline_a.items.iter().any(|post| post.id == id_two);
+                if has_one && has_two {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("multi topic propagation timeout");
     }
 }

@@ -141,6 +141,7 @@ export function App({ api = runtimeApi }: AppProps) {
     }
     const nextTopics = trackedTopics.filter((value) => value !== topic);
     const nextActiveTopic = activeTopic === topic ? nextTopics[0] : activeTopic;
+    await api.unsubscribeTopic(topic);
     setTrackedTopics(nextTopics);
     setActiveTopic(nextActiveTopic);
     clearThreadContext();

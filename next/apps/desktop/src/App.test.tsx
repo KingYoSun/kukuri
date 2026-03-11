@@ -82,6 +82,11 @@ function createMockApi() {
       return syncStatus;
     },
     async importPeerTicket() {},
+    async unsubscribeTopic(topic) {
+      delete postsByTopic[topic];
+      syncStatus.subscribed_topics = syncStatus.subscribed_topics.filter((value) => value !== topic);
+      syncStatus.topic_diagnostics = syncStatus.topic_diagnostics.filter((value) => value.topic !== topic);
+    },
     async getLocalPeerTicket() {
       return 'peer1@127.0.0.1:7777';
     },
