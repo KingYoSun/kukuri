@@ -44,8 +44,9 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 8. timeline または thread pane の `Reply` ボタンから返信し、相手側の thread に反映されることを確認する。
 9. `Add Topic` で 2 つ以上の topic を登録し、切り替えながら各 timeline が維持されることを確認する。
 10. peer 接続中に複数 topic へ post し、相手側で各 topic の timeline に反映されることを確認する。
-11. tracked topic 一覧の各 topic について `joined / peers / expected / missing / last_received_at` が妥当な値になることを確認する。
+11. tracked topic 一覧の各 topic について `joined / peers / expected / missing / last_received_at / status_detail` が妥当な値になることを確認する。
 12. 共通購読 topic を片側で解除し、その topic 行だけ `joined: false / peers: 0` になることを確認する。
+13. invalid な `Peer Ticket` を import したときに global `Last Error` が更新されることを確認する。
 
 実機確認済み:
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立

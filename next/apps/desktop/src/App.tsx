@@ -26,6 +26,8 @@ export function App({ api = runtimeApi }: AppProps) {
     connected: false,
     peer_count: 0,
     pending_events: 0,
+    status_detail: 'No peer tickets imported',
+    last_error: null,
     configured_peers: [],
     subscribed_topics: [],
     topic_diagnostics: [],
@@ -260,12 +262,22 @@ export function App({ api = runtimeApi }: AppProps) {
             <p>{syncStatus.configured_peers.length > 0 ? syncStatus.configured_peers.join(', ') : 'none'}</p>
           </div>
           <div className='diagnostic-block'>
+            <strong>Connection Detail</strong>
+            <p>{syncStatus.status_detail}</p>
+          </div>
+          <div className='diagnostic-block'>
             <strong>Connected Peers</strong>
             <p>
               {syncStatus.topic_diagnostics
                 .flatMap((diagnostic) => diagnostic.connected_peers)
                 .filter((peer, index, peers) => peers.indexOf(peer) === index)
                 .join(', ') || 'none'}
+            </p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Last Error</strong>
+            <p className={syncStatus.last_error ? 'diagnostic-error' : undefined}>
+              {syncStatus.last_error ?? 'none'}
             </p>
           </div>
           <label className='field'>
@@ -333,6 +345,16 @@ export function App({ api = runtimeApi }: AppProps) {
                       {(topicDiagnostics[topic]?.missing_peer_ids.length ?? 0)}
                     </span>
                   </div>
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>
+                      {topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}
+                    </span>
+                  </div>
+                  {topicDiagnostics[topic]?.last_error ? (
+                    <div className='topic-diagnostic topic-diagnostic-error'>
+                      <span>error: {topicDiagnostics[topic].last_error}</span>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

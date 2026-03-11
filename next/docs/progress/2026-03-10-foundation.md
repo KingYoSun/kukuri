@@ -13,6 +13,7 @@
 - desktop UI に reply モードと thread pane からの reply 導線を追加した
 - desktop UI を `trackedTopics + activeTopic + timelinesByTopic` 構成へ拡張し、複数 topic を同時購読できるようにした
 - `peer診断表示の拡充` として topic ごとの `joined / peers / last_received_at` を UI 表示できるようにした
+- `peer診断表示` に global/topic ごとの `status_detail / last_error` を追加し、接続待ちと直近エラー理由を UI 表示できるようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -31,7 +32,8 @@
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
 - app-api と frontend test で topic ごとの diagnostics 表示を確認
+- app-api test で invalid ticket import 時に `last_error` が diagnostics へ反映されることを確認
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `エラー理由の可視化` と `diagnostics の詳細化`。
+- Tauri backend binding は導入済み。次の実機確認は `status_detail / last_error` が実機で期待どおり更新されるかの確認。

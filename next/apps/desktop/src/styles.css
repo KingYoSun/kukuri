@@ -237,6 +237,10 @@ textarea {
   color: rgba(246, 241, 232, 0.52);
 }
 
+.topic-diagnostic-error {
+  color: #ffb48a;
+}
+
 .diagnostic-block {
   margin: 0.75rem 0;
   color: rgba(246, 241, 232, 0.72);
@@ -246,6 +250,10 @@ textarea {
   margin: 0.35rem 0 0;
   word-break: break-all;
   color: rgba(246, 241, 232, 0.58);
+}
+
+.diagnostic-error {
+  color: #ffb48a !important;
 }
 
 .post-list,

@@ -35,6 +35,8 @@ pub struct SyncStatus {
     pub last_sync_ts: Option<i64>,
     pub peer_count: usize,
     pub pending_events: usize,
+    pub status_detail: String,
+    pub last_error: Option<String>,
     pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub topic_diagnostics: Vec<TopicSyncStatus>,
@@ -49,6 +51,8 @@ pub struct TopicSyncStatus {
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
+    pub status_detail: String,
+    pub last_error: Option<String>,
 }
 
 pub struct AppService {
@@ -126,6 +130,8 @@ impl AppService {
             configured_peers,
             subscribed_topics,
             pending_events,
+            status_detail,
+            last_error,
             topic_diagnostics,
         } = self.transport.peers().await?;
 
@@ -134,6 +140,8 @@ impl AppService {
             last_sync_ts: *self.last_sync_ts.lock().await,
             peer_count,
             pending_events,
+            status_detail,
+            last_error,
             configured_peers,
             subscribed_topics,
             topic_diagnostics: topic_diagnostics
@@ -147,6 +155,8 @@ impl AppService {
                          configured_peer_ids,
                          missing_peer_ids,
                          last_received_at,
+                         status_detail,
+                         last_error,
                      }| TopicSyncStatus {
                         topic,
                         joined,
@@ -155,6 +165,8 @@ impl AppService {
                         configured_peer_ids,
                         missing_peer_ids,
                         last_received_at,
+                        status_detail,
+                        last_error,
                     },
                 )
                 .collect(),
@@ -314,6 +326,44 @@ mod tests {
                 .topic_diagnostics
                 .iter()
                 .any(|topic| topic.topic == "kukuri:topic:two")
+        );
+        assert_eq!(status.status_detail, "No peer tickets imported");
+        assert!(
+            status
+                .topic_diagnostics
+                .iter()
+                .all(|topic| !topic.status_detail.is_empty())
+        );
+        assert!(
+            status
+                .topic_diagnostics
+                .iter()
+                .all(|topic| topic.last_error.is_none())
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn invalid_ticket_updates_sync_status_error_reason() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport should bind"),
+        );
+        let app = AppService::new(store, transport);
+
+        let error = app
+            .import_peer_ticket("not-a-ticket")
+            .await
+            .expect_err("invalid ticket should fail");
+        let status = app.get_sync_status().await.expect("sync status");
+
+        assert!(error.to_string().contains("failed to import peer ticket"));
+        assert!(
+            status
+                .last_error
+                .as_deref()
+                .is_some_and(|message| message.contains("failed to import peer ticket"))
         );
     }
 

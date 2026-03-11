@@ -40,6 +40,8 @@ pub struct PeerSnapshot {
     pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub pending_events: usize,
+    pub status_detail: String,
+    pub last_error: Option<String>,
     pub topic_diagnostics: Vec<TopicPeerSnapshot>,
 }
 
@@ -52,6 +54,8 @@ pub struct TopicPeerSnapshot {
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
+    pub status_detail: String,
+    pub last_error: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -204,15 +208,31 @@ impl Transport for FakeTransport {
                 configured_peer_ids: imported.clone(),
                 missing_peer_ids: Vec::new(),
                 last_received_at: None,
+                status_detail: topic_status_detail(imported.len(), imported.len()),
+                last_error: None,
             })
             .collect::<Vec<_>>();
         Ok(PeerSnapshot {
             connected: !imported.is_empty(),
             peer_count: imported.len(),
-            connected_peers: imported,
-            configured_peers: Vec::new(),
+            connected_peers: imported.clone(),
+            configured_peers: imported,
             subscribed_topics: topics,
             pending_events: 0,
+            status_detail: peer_status_detail(
+                topic_diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.configured_peer_ids.len())
+                    .max()
+                    .unwrap_or(0),
+                topic_diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.connected_peers.len())
+                    .max()
+                    .unwrap_or(0),
+                topic_diagnostics.len(),
+            ),
+            last_error: None,
             topic_diagnostics,
         })
     }
@@ -245,6 +265,7 @@ struct TopicState {
     bootstrap_peer_ids: BTreeSet<String>,
     neighbors: Arc<RwLock<BTreeSet<String>>>,
     last_received_at: Arc<Mutex<Option<i64>>>,
+    last_error: Arc<Mutex<Option<String>>>,
     _receiver_task: JoinHandle<()>,
 }
 
@@ -258,6 +279,7 @@ pub struct IrohGossipTransport {
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
+    last_error: Arc<Mutex<Option<String>>>,
 }
 
 impl IrohGossipTransport {
@@ -286,6 +308,7 @@ impl IrohGossipTransport {
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
+            last_error: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -339,11 +362,18 @@ impl IrohGossipTransport {
             self.discovery.add_endpoint_info(peer.clone());
         }
 
-        let topic_handle = self
+        let topic_handle = match self
             .gossip
             .subscribe(topic_to_gossip_id(topic), bootstrap)
             .await
-            .context("failed to subscribe gossip topic")?;
+        {
+            Ok(topic_handle) => topic_handle,
+            Err(error) => {
+                let message = format!("failed to subscribe gossip topic: {error}");
+                *self.last_error.lock().await = Some(message.clone());
+                return Err(anyhow!(message));
+            }
+        };
         let (sender, mut receiver) = topic_handle.split();
         let (broadcaster, _) = broadcast::channel(256);
         let outbound = broadcaster.clone();
@@ -355,21 +385,32 @@ impl IrohGossipTransport {
         let neighbors_task = Arc::clone(&neighbors);
         let last_received_at = Arc::new(Mutex::new(None));
         let last_received_at_task = Arc::clone(&last_received_at);
+        let last_error = Arc::new(Mutex::new(None));
+        let last_error_task = Arc::clone(&last_error);
+        let transport_last_error = Arc::clone(&self.last_error);
         let imported_count = imported.len();
 
         let task = tokio::spawn(async move {
-            if imported_count > 0
-                && timeout(Duration::from_secs(15), receiver.joined())
+            if imported_count > 0 {
+                if timeout(Duration::from_secs(15), receiver.joined())
                     .await
                     .is_ok_and(|result| result.is_ok())
-            {
-                joined_task_state.store(true, Ordering::SeqCst);
-                joined_task_notify.notify_waiters();
-                let current_neighbors = receiver
-                    .neighbors()
-                    .map(|peer| peer.to_string())
-                    .collect::<BTreeSet<_>>();
-                *neighbors_task.write().await = current_neighbors;
+                {
+                    joined_task_state.store(true, Ordering::SeqCst);
+                    joined_task_notify.notify_waiters();
+                    *last_error_task.lock().await = None;
+                    *transport_last_error.lock().await = None;
+                    let current_neighbors = receiver
+                        .neighbors()
+                        .map(|peer| peer.to_string())
+                        .collect::<BTreeSet<_>>();
+                    *neighbors_task.write().await = current_neighbors;
+                } else {
+                    let message = "timed out waiting for initial topic join".to_string();
+                    *last_error_task.lock().await = Some(message.clone());
+                    *transport_last_error.lock().await =
+                        Some(format!("topic join pending: {message}"));
+                }
             }
             while let Some(event) = receiver.next().await {
                 match event {
@@ -381,23 +422,35 @@ impl IrohGossipTransport {
                         *neighbors_task.write().await = current_neighbors;
                         *last_received_at_task.lock().await = Some(Utc::now().timestamp_millis());
                         if let Ok(parsed) = serde_json::from_slice::<Event>(&message.content) {
+                            *last_error_task.lock().await = None;
+                            *transport_last_error.lock().await = None;
                             let _ = outbound.send(EventEnvelope {
                                 event: parsed,
                                 received_at: Utc::now().timestamp_millis(),
                                 source_peer: String::new(),
                             });
+                        } else {
+                            *last_error_task.lock().await =
+                                Some("failed to decode gossip payload".to_string());
                         }
                     }
                     Ok(GossipEvent::NeighborUp(peer_id)) => {
                         let mut guard = neighbors_task.write().await;
                         guard.insert(peer_id.to_string());
+                        *last_error_task.lock().await = None;
+                        *transport_last_error.lock().await = None;
                     }
                     Ok(GossipEvent::NeighborDown(peer_id)) => {
                         let mut guard = neighbors_task.write().await;
                         guard.remove(peer_id.to_string().as_str());
                     }
                     Ok(GossipEvent::Lagged) => {}
-                    Err(_) => break,
+                    Err(error) => {
+                        let message = format!("gossip receiver closed: {error}");
+                        *last_error_task.lock().await = Some(message.clone());
+                        *transport_last_error.lock().await = Some(message);
+                        break;
+                    }
                 }
             }
         });
@@ -413,6 +466,7 @@ impl IrohGossipTransport {
                 bootstrap_peer_ids,
                 neighbors,
                 last_received_at,
+                last_error,
                 _receiver_task: task,
             },
         );
@@ -452,17 +506,27 @@ impl Transport for IrohGossipTransport {
         let state = states
             .get(topic.as_str())
             .ok_or_else(|| anyhow!("missing topic sender"))?;
-        if !peer_ids.is_empty() && !state.joined.load(Ordering::SeqCst) {
-            timeout(Duration::from_secs(10), state.joined_notify.notified())
+        if !peer_ids.is_empty()
+            && !state.joined.load(Ordering::SeqCst)
+            && timeout(Duration::from_secs(10), state.joined_notify.notified())
                 .await
-                .context("timed out waiting for gossip topic join")?;
+                .is_err()
+        {
+            let message = "timed out waiting for gossip topic join".to_string();
+            *state.last_error.lock().await = Some(message.clone());
+            *self.last_error.lock().await = Some(format!("topic {}: {message}", topic.as_str()));
+            return Err(anyhow!(message));
         }
         let payload = serde_json::to_vec(&event)?;
         let sender = state.sender.lock().await;
-        sender
-            .broadcast(payload.into())
-            .await
-            .context("failed to broadcast gossip event")?;
+        if let Err(error) = sender.broadcast(payload.into()).await {
+            let message = format!("failed to broadcast gossip event: {error}");
+            *state.last_error.lock().await = Some(message.clone());
+            *self.last_error.lock().await = Some(message.clone());
+            return Err(anyhow!(message));
+        }
+        *state.last_error.lock().await = None;
+        *self.last_error.lock().await = None;
         Ok(())
     }
 
@@ -478,6 +542,7 @@ impl Transport for IrohGossipTransport {
                     state.bootstrap_peer_ids.iter().cloned().collect::<Vec<_>>(),
                     Arc::clone(&state.neighbors),
                     Arc::clone(&state.last_received_at),
+                    Arc::clone(&state.last_error),
                 )
             })
             .collect::<Vec<_>>();
@@ -490,12 +555,15 @@ impl Transport for IrohGossipTransport {
             .cloned()
             .collect::<Vec<_>>();
         let mut topic_diagnostics = Vec::with_capacity(topic_states.len());
-        for (topic, configured_peer_ids, neighbors, last_received_at) in topic_states {
+        for (topic, configured_peer_ids, neighbors, last_received_at, last_error) in topic_states {
             let peers = neighbors.read().await.iter().cloned().collect::<Vec<_>>();
             let last_received_at = *last_received_at.lock().await;
+            let last_error = last_error.lock().await.clone();
             for peer in &peers {
                 connected.insert(peer.clone());
             }
+            let configured_peer_count = configured_peer_ids.len();
+            let connected_peer_count = peers.len();
             let missing_peer_ids = configured_peer_ids
                 .iter()
                 .filter(|peer| !peers.iter().any(|connected_peer| connected_peer == *peer))
@@ -504,11 +572,13 @@ impl Transport for IrohGossipTransport {
             topic_diagnostics.push(TopicPeerSnapshot {
                 topic,
                 joined: !peers.is_empty(),
-                peer_count: peers.len(),
+                peer_count: connected_peer_count,
                 connected_peers: peers,
                 configured_peer_ids,
                 missing_peer_ids,
                 last_received_at,
+                status_detail: topic_status_detail(configured_peer_count, connected_peer_count),
+                last_error,
             });
         }
         topic_diagnostics.sort_by(|left, right| left.topic.cmp(&right.topic));
@@ -520,14 +590,23 @@ impl Transport for IrohGossipTransport {
             .cloned()
             .collect::<Vec<_>>();
         let connected_peers = connected.into_iter().collect::<Vec<_>>();
+        let configured_peer_count = configured_peers.len();
+        let connected_peer_count = connected_peers.len();
+        let subscribed_topic_count = topic_diagnostics.len();
 
         Ok(PeerSnapshot {
             connected: !connected_peers.is_empty(),
-            peer_count: connected_peers.len(),
+            peer_count: connected_peer_count,
             connected_peers,
             configured_peers,
             subscribed_topics,
             pending_events: 0,
+            status_detail: peer_status_detail(
+                configured_peer_count,
+                connected_peer_count,
+                subscribed_topic_count,
+            ),
+            last_error: self.last_error.lock().await.clone(),
             topic_diagnostics,
         })
     }
@@ -540,12 +619,20 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn import_ticket(&self, ticket: &str) -> Result<()> {
-        let endpoint_addr = parse_ticket(ticket)?;
+        let endpoint_addr = match parse_ticket(ticket) {
+            Ok(endpoint_addr) => endpoint_addr,
+            Err(error) => {
+                let message = format!("failed to import peer ticket: {error}");
+                *self.last_error.lock().await = Some(message.clone());
+                return Err(anyhow!(message));
+            }
+        };
         self.discovery.add_endpoint_info(endpoint_addr.clone());
         self.imported_peers
             .lock()
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        *self.last_error.lock().await = None;
         Ok(())
     }
 }
@@ -687,6 +774,36 @@ fn is_reachable_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => !ip.is_unspecified() && !ip.is_loopback(),
         IpAddr::V6(ip) => !ip.is_unspecified() && !ip.is_loopback(),
+    }
+}
+
+fn peer_status_detail(
+    configured_peer_count: usize,
+    connected_peer_count: usize,
+    subscribed_topic_count: usize,
+) -> String {
+    if configured_peer_count == 0 {
+        "No peer tickets imported".to_string()
+    } else if subscribed_topic_count == 0 {
+        "No topics subscribed locally".to_string()
+    } else if connected_peer_count == 0 {
+        "Waiting for configured peers to connect".to_string()
+    } else if connected_peer_count < configured_peer_count {
+        "Connected to a subset of configured peers".to_string()
+    } else {
+        "Connected to all configured peers".to_string()
+    }
+}
+
+fn topic_status_detail(configured_peer_count: usize, connected_peer_count: usize) -> String {
+    if configured_peer_count == 0 {
+        "No peers configured for this topic".to_string()
+    } else if connected_peer_count == 0 {
+        "Waiting for configured peers to join this topic".to_string()
+    } else if connected_peer_count < configured_peer_count {
+        "Connected to a subset of configured peers for this topic".to_string()
+    } else {
+        "Connected to all configured peers for this topic".to_string()
     }
 }
 

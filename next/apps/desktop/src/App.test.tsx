@@ -5,7 +5,10 @@ import { expect, test } from 'vitest';
 import { App } from './App';
 import { DesktopApi, SyncStatus, TimelineView } from './lib/api';
 
-function createMockApi() {
+function createMockApi(options?: {
+  globalLastError?: string | null;
+  topicLastError?: string | null;
+}) {
   const postsByTopic: Record<string, TimelineView['items']> = {};
   let sequence = 0;
   const syncStatus: SyncStatus = {
@@ -13,6 +16,8 @@ function createMockApi() {
     last_sync_ts: 1,
     peer_count: 1,
     pending_events: 0,
+    status_detail: 'Connected to all configured peers',
+    last_error: options?.globalLastError ?? null,
     configured_peers: ['peer-a'],
     subscribed_topics: ['kukuri:topic:demo'],
     topic_diagnostics: [
@@ -24,6 +29,8 @@ function createMockApi() {
         configured_peer_ids: ['peer-a'],
         missing_peer_ids: [],
         last_received_at: 1,
+        status_detail: 'Connected to all configured peers for this topic',
+        last_error: options?.topicLastError ?? null,
       },
     ],
   };
@@ -59,6 +66,8 @@ function createMockApi() {
           configured_peer_ids: ['peer-a'],
           missing_peer_ids: [],
           last_received_at: sequence,
+          status_detail: 'Connected to all configured peers for this topic',
+          last_error: null,
         });
       }
       return id;
@@ -74,6 +83,8 @@ function createMockApi() {
           configured_peer_ids: [],
           missing_peer_ids: [],
           last_received_at: null,
+          status_detail: 'No peers configured for this topic',
+          last_error: null,
         });
       }
       return { items: postsByTopic[topic] ?? [], next_cursor: null };
@@ -115,6 +126,7 @@ test('desktop shell can publish and render a post', async () => {
   expect(screen.getByText('Live over static peers')).toBeInTheDocument();
   expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
   expect(screen.getByText('Configured Peers')).toBeInTheDocument();
+  expect(screen.getByText('Connected to all configured peers')).toBeInTheDocument();
   expect(screen.getAllByText('peer-a').length).toBeGreaterThan(0);
   expect(screen.getByText('joined / peers: 1')).toBeInTheDocument();
 });
@@ -177,4 +189,28 @@ test('desktop shell can track multiple topics at once', async () => {
   expect(screen.getByText('demo post')).toBeInTheDocument();
   expect(screen.getByText('idle / peers: 0')).toBeInTheDocument();
   expect(screen.getByText('expected: 0')).toBeInTheDocument();
+  expect(
+    screen.getByText('Connected to all configured peers for this topic')
+  ).toBeInTheDocument();
+});
+
+test('desktop shell renders diagnostics error reasons', async () => {
+  render(
+    <App
+      api={createMockApi({
+        globalLastError: 'failed to import peer ticket: invalid endpoint id',
+        topicLastError: 'timed out waiting for gossip topic join',
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('Last Error')).toBeInTheDocument();
+    expect(
+      screen.getByText('failed to import peer ticket: invalid endpoint id')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('error: timed out waiting for gossip topic join')
+    ).toBeInTheDocument();
+  });
 });

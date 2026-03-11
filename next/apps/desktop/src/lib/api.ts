@@ -26,6 +26,8 @@ export type SyncStatus = {
   last_sync_ts?: number | null;
   peer_count: number;
   pending_events: number;
+  status_detail: string;
+  last_error?: string | null;
   configured_peers: string[];
   subscribed_topics: string[];
   topic_diagnostics: TopicSyncStatus[];
@@ -39,6 +41,8 @@ export type TopicSyncStatus = {
   configured_peer_ids: string[];
   missing_peer_ids: string[];
   last_received_at?: number | null;
+  status_detail: string;
+  last_error?: string | null;
 };
 
 export interface DesktopApi {
