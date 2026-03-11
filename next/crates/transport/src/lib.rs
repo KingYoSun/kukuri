@@ -209,6 +209,7 @@ struct TopicState {
     joined: Arc<AtomicBool>,
     joined_notify: Arc<Notify>,
     bootstrap_peer_ids: BTreeSet<String>,
+    neighbors: Arc<RwLock<BTreeSet<String>>>,
     _receiver_task: JoinHandle<()>,
 }
 
@@ -220,7 +221,6 @@ pub struct IrohGossipTransport {
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
-    connected_peers: Arc<RwLock<BTreeSet<String>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
 }
@@ -249,7 +249,6 @@ impl IrohGossipTransport {
             discovery,
             network_config,
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
-            connected_peers: Arc::new(RwLock::new(BTreeSet::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -312,11 +311,12 @@ impl IrohGossipTransport {
         let (sender, mut receiver) = topic_handle.split();
         let (broadcaster, _) = broadcast::channel(256);
         let outbound = broadcaster.clone();
-        let peers = Arc::clone(&self.connected_peers);
         let joined = Arc::new(AtomicBool::new(imported.is_empty()));
         let joined_notify = Arc::new(Notify::new());
         let joined_task_state = Arc::clone(&joined);
         let joined_task_notify = Arc::clone(&joined_notify);
+        let neighbors = Arc::new(RwLock::new(BTreeSet::new()));
+        let neighbors_task = Arc::clone(&neighbors);
         let imported_count = imported.len();
 
         let task = tokio::spawn(async move {
@@ -327,10 +327,20 @@ impl IrohGossipTransport {
             {
                 joined_task_state.store(true, Ordering::SeqCst);
                 joined_task_notify.notify_waiters();
+                let current_neighbors = receiver
+                    .neighbors()
+                    .map(|peer| peer.to_string())
+                    .collect::<BTreeSet<_>>();
+                *neighbors_task.write().await = current_neighbors;
             }
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipEvent::Received(message)) => {
+                        let current_neighbors = receiver
+                            .neighbors()
+                            .map(|peer| peer.to_string())
+                            .collect::<BTreeSet<_>>();
+                        *neighbors_task.write().await = current_neighbors;
                         if let Ok(parsed) = serde_json::from_slice::<Event>(&message.content) {
                             let _ = outbound.send(EventEnvelope {
                                 event: parsed,
@@ -340,10 +350,12 @@ impl IrohGossipTransport {
                         }
                     }
                     Ok(GossipEvent::NeighborUp(peer_id)) => {
-                        peers.write().await.insert(peer_id.to_string());
+                        let mut guard = neighbors_task.write().await;
+                        guard.insert(peer_id.to_string());
                     }
                     Ok(GossipEvent::NeighborDown(peer_id)) => {
-                        peers.write().await.remove(peer_id.to_string().as_str());
+                        let mut guard = neighbors_task.write().await;
+                        guard.remove(peer_id.to_string().as_str());
                     }
                     Ok(GossipEvent::Lagged) => {}
                     Err(_) => break,
@@ -360,6 +372,7 @@ impl IrohGossipTransport {
                 joined,
                 joined_notify,
                 bootstrap_peer_ids,
+                neighbors,
                 _receiver_task: task,
             },
         );
@@ -409,13 +422,19 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn peers(&self) -> Result<PeerSnapshot> {
-        let connected = self
-            .connected_peers
-            .read()
+        let neighbor_sets = self
+            .topic_states
+            .lock()
             .await
-            .iter()
-            .cloned()
+            .values()
+            .map(|state| Arc::clone(&state.neighbors))
             .collect::<Vec<_>>();
+        let mut connected = BTreeSet::new();
+        for neighbors in neighbor_sets {
+            for peer in neighbors.read().await.iter().cloned() {
+                connected.insert(peer);
+            }
+        }
         let subscribed_topics = self
             .subscribed_topics
             .lock()
@@ -423,11 +442,12 @@ impl Transport for IrohGossipTransport {
             .iter()
             .cloned()
             .collect::<Vec<_>>();
+        let connected_peers = connected.into_iter().collect::<Vec<_>>();
 
         Ok(PeerSnapshot {
-            connected: !connected.is_empty(),
-            peer_count: connected.len(),
-            connected_peers: connected,
+            connected: !connected_peers.is_empty(),
+            peer_count: connected_peers.len(),
+            connected_peers,
             subscribed_topics,
             pending_events: 0,
         })
@@ -627,6 +647,18 @@ mod tests {
         let (_stream_a, mut stream_b) =
             tokio::try_join!(transport_a.subscribe(&topic), transport_b.subscribe(&topic))
                 .expect("subscribe both");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let peers_b = transport_b.peers().await.expect("peers b");
+                if peers_a.peer_count >= 1 && peers_b.peer_count >= 1 {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("peer snapshot timeout");
         let event =
             build_text_note(&generate_keys(), &topic, "hello transport", None).expect("event");
 
