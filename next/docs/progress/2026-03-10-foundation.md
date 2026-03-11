@@ -17,8 +17,10 @@
 - `cargo xtask test`
 - `cargo xtask e2e-smoke`
 - Linux 実機で `pnpm tauri dev` を使った `post -> restart -> persist`
+- Linux 実機 2 台で固定 port / 相互 ticket import により `connected: yes, peers: 1` の双方向収束を確認
+- Linux 実機 2 台で投稿伝播と、peer 終了後に polling で `connected: no, peers: 0` へ戻ることを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `2 instance + static-peer import + timeline 相互反映`。
+- Tauri backend binding は導入済み。次の実機確認は `reply/thread 伝播` と `複数 topic 同時購読`。
