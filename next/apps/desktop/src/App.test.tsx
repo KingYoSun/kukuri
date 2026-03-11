@@ -14,6 +14,15 @@ function createMockApi() {
     peer_count: 1,
     pending_events: 0,
     subscribed_topics: ['kukuri:topic:demo'],
+    topic_diagnostics: [
+      {
+        topic: 'kukuri:topic:demo',
+        joined: true,
+        peer_count: 1,
+        connected_peers: ['peer-a'],
+        last_received_at: 1,
+      },
+    ],
   };
 
   const api: DesktopApi = {
@@ -38,10 +47,28 @@ function createMockApi() {
         ...posts,
       ];
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
+      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
+        syncStatus.topic_diagnostics.push({
+          topic,
+          joined: true,
+          peer_count: 1,
+          connected_peers: ['peer-a'],
+          last_received_at: sequence,
+        });
+      }
       return id;
     },
     async listTimeline(topic) {
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
+      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
+        syncStatus.topic_diagnostics.push({
+          topic,
+          joined: false,
+          peer_count: 0,
+          connected_peers: [],
+          last_received_at: null,
+        });
+      }
       return { items: postsByTopic[topic] ?? [], next_cursor: null };
     },
     async listThread(topic, threadId) {
@@ -75,6 +102,7 @@ test('desktop shell can publish and render a post', async () => {
   });
   expect(screen.getByText('Live over static peers')).toBeInTheDocument();
   expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
+  expect(screen.getByText('joined / peers: 1')).toBeInTheDocument();
 });
 
 test('desktop shell can enter reply mode and render reply state', async () => {
@@ -133,4 +161,5 @@ test('desktop shell can track multiple topics at once', async () => {
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
   expect(screen.getByText('demo post')).toBeInTheDocument();
+  expect(screen.getByText('idle / peers: 0')).toBeInTheDocument();
 });

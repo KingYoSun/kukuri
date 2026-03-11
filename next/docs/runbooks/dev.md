@@ -44,6 +44,7 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 8. timeline または thread pane の `Reply` ボタンから返信し、相手側の thread に反映されることを確認する。
 9. `Add Topic` で 2 つ以上の topic を登録し、切り替えながら各 timeline が維持されることを確認する。
 10. peer 接続中に複数 topic へ post し、相手側で各 topic の timeline に反映されることを確認する。
+11. tracked topic 一覧の各 topic について `joined / peers / last_received_at` が妥当な値になることを確認する。
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。

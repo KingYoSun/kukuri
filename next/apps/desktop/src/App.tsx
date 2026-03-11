@@ -1,6 +1,6 @@
 import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { DesktopApi, PostView, SyncStatus, runtimeApi } from './lib/api';
+import { DesktopApi, PostView, SyncStatus, TopicSyncStatus, runtimeApi } from './lib/api';
 
 type AppProps = {
   api?: DesktopApi;
@@ -27,6 +27,7 @@ export function App({ api = runtimeApi }: AppProps) {
     peer_count: 0,
     pending_events: 0,
     subscribed_topics: [],
+    topic_diagnostics: [],
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +39,13 @@ export function App({ api = runtimeApi }: AppProps) {
   const activeTimeline = useMemo(
     () => timelinesByTopic[activeTopic] ?? [],
     [activeTopic, timelinesByTopic]
+  );
+  const topicDiagnostics = useMemo(
+    () =>
+      Object.fromEntries(
+        syncStatus.topic_diagnostics.map((diagnostic) => [diagnostic.topic, diagnostic])
+      ) as Record<string, TopicSyncStatus>,
+    [syncStatus.topic_diagnostics]
   );
 
   const loadTopics = useCallback(async (
@@ -289,6 +297,17 @@ export function App({ api = runtimeApi }: AppProps) {
                       x
                     </button>
                   ) : null}
+                  <div className='topic-diagnostic'>
+                    <span>
+                      {topicDiagnostics[topic]?.joined ? 'joined' : 'idle'} / peers:{' '}
+                      {topicDiagnostics[topic]?.peer_count ?? 0}
+                    </span>
+                    <small>
+                      {topicDiagnostics[topic]?.last_received_at
+                        ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
+                        : 'no events'}
+                    </small>
+                  </div>
                 </li>
               ))}
             </ul>

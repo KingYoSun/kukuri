@@ -27,6 +27,15 @@ export type SyncStatus = {
   peer_count: number;
   pending_events: number;
   subscribed_topics: string[];
+  topic_diagnostics: TopicSyncStatus[];
+};
+
+export type TopicSyncStatus = {
+  topic: string;
+  joined: boolean;
+  peer_count: number;
+  connected_peers: string[];
+  last_received_at?: number | null;
 };
 
 export interface DesktopApi {

@@ -39,6 +39,16 @@ pub struct PeerSnapshot {
     pub connected_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub pending_events: usize,
+    pub topic_diagnostics: Vec<TopicPeerSnapshot>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicPeerSnapshot {
+    pub topic: String,
+    pub joined: bool,
+    pub peer_count: usize,
+    pub connected_peers: Vec<String>,
+    pub last_received_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,12 +184,24 @@ impl Transport for FakeTransport {
             .iter()
             .cloned()
             .collect::<Vec<_>>();
+        let topic_diagnostics = topics
+            .iter()
+            .cloned()
+            .map(|topic| TopicPeerSnapshot {
+                topic,
+                joined: !imported.is_empty(),
+                peer_count: imported.len(),
+                connected_peers: imported.clone(),
+                last_received_at: None,
+            })
+            .collect::<Vec<_>>();
         Ok(PeerSnapshot {
             connected: !imported.is_empty(),
             peer_count: imported.len(),
             connected_peers: imported,
             subscribed_topics: topics,
             pending_events: 0,
+            topic_diagnostics,
         })
     }
 
@@ -210,6 +232,7 @@ struct TopicState {
     joined_notify: Arc<Notify>,
     bootstrap_peer_ids: BTreeSet<String>,
     neighbors: Arc<RwLock<BTreeSet<String>>>,
+    last_received_at: Arc<Mutex<Option<i64>>>,
     _receiver_task: JoinHandle<()>,
 }
 
@@ -317,6 +340,8 @@ impl IrohGossipTransport {
         let joined_task_notify = Arc::clone(&joined_notify);
         let neighbors = Arc::new(RwLock::new(BTreeSet::new()));
         let neighbors_task = Arc::clone(&neighbors);
+        let last_received_at = Arc::new(Mutex::new(None));
+        let last_received_at_task = Arc::clone(&last_received_at);
         let imported_count = imported.len();
 
         let task = tokio::spawn(async move {
@@ -341,6 +366,7 @@ impl IrohGossipTransport {
                             .map(|peer| peer.to_string())
                             .collect::<BTreeSet<_>>();
                         *neighbors_task.write().await = current_neighbors;
+                        *last_received_at_task.lock().await = Some(Utc::now().timestamp_millis());
                         if let Ok(parsed) = serde_json::from_slice::<Event>(&message.content) {
                             let _ = outbound.send(EventEnvelope {
                                 event: parsed,
@@ -373,6 +399,7 @@ impl IrohGossipTransport {
                 joined_notify,
                 bootstrap_peer_ids,
                 neighbors,
+                last_received_at,
                 _receiver_task: task,
             },
         );
@@ -422,19 +449,36 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn peers(&self) -> Result<PeerSnapshot> {
-        let neighbor_sets = self
+        let topic_states = self
             .topic_states
             .lock()
             .await
-            .values()
-            .map(|state| Arc::clone(&state.neighbors))
+            .iter()
+            .map(|(topic, state)| {
+                (
+                    topic.clone(),
+                    Arc::clone(&state.neighbors),
+                    Arc::clone(&state.last_received_at),
+                )
+            })
             .collect::<Vec<_>>();
         let mut connected = BTreeSet::new();
-        for neighbors in neighbor_sets {
-            for peer in neighbors.read().await.iter().cloned() {
-                connected.insert(peer);
+        let mut topic_diagnostics = Vec::with_capacity(topic_states.len());
+        for (topic, neighbors, last_received_at) in topic_states {
+            let peers = neighbors.read().await.iter().cloned().collect::<Vec<_>>();
+            let last_received_at = *last_received_at.lock().await;
+            for peer in &peers {
+                connected.insert(peer.clone());
             }
+            topic_diagnostics.push(TopicPeerSnapshot {
+                topic,
+                joined: !peers.is_empty(),
+                peer_count: peers.len(),
+                connected_peers: peers,
+                last_received_at,
+            });
         }
+        topic_diagnostics.sort_by(|left, right| left.topic.cmp(&right.topic));
         let subscribed_topics = self
             .subscribed_topics
             .lock()
@@ -450,6 +494,7 @@ impl Transport for IrohGossipTransport {
             connected_peers,
             subscribed_topics,
             pending_events: 0,
+            topic_diagnostics,
         })
     }
 

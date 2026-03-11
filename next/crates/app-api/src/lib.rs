@@ -5,7 +5,7 @@ use anyhow::Result;
 use futures_util::StreamExt;
 use next_core::{EventId, TopicId, build_text_note, generate_keys};
 use next_store::{Page, Store, TimelineCursor};
-use next_transport::{PeerSnapshot, Transport};
+use next_transport::{PeerSnapshot, TopicPeerSnapshot, Transport};
 use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -36,6 +36,16 @@ pub struct SyncStatus {
     pub peer_count: usize,
     pub pending_events: usize,
     pub subscribed_topics: Vec<String>,
+    pub topic_diagnostics: Vec<TopicSyncStatus>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TopicSyncStatus {
+    pub topic: String,
+    pub joined: bool,
+    pub peer_count: usize,
+    pub connected_peers: Vec<String>,
+    pub last_received_at: Option<i64>,
 }
 
 pub struct AppService {
@@ -112,6 +122,7 @@ impl AppService {
             connected_peers: _,
             subscribed_topics,
             pending_events,
+            topic_diagnostics,
         } = self.transport.peers().await?;
 
         Ok(SyncStatus {
@@ -120,6 +131,24 @@ impl AppService {
             peer_count,
             pending_events,
             subscribed_topics,
+            topic_diagnostics: topic_diagnostics
+                .into_iter()
+                .map(
+                    |TopicPeerSnapshot {
+                         topic,
+                         joined,
+                         peer_count,
+                         connected_peers,
+                         last_received_at,
+                     }| TopicSyncStatus {
+                        topic,
+                        joined,
+                        peer_count,
+                        connected_peers,
+                        last_received_at,
+                    },
+                )
+                .collect(),
         })
     }
 
@@ -257,6 +286,18 @@ mod tests {
                 .subscribed_topics
                 .iter()
                 .any(|topic| topic == "kukuri:topic:two")
+        );
+        assert!(
+            status
+                .topic_diagnostics
+                .iter()
+                .any(|topic| topic.topic == "kukuri:topic:one")
+        );
+        assert!(
+            status
+                .topic_diagnostics
+                .iter()
+                .any(|topic| topic.topic == "kukuri:topic:two")
         );
     }
 
