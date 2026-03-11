@@ -37,6 +37,7 @@ pub struct PeerSnapshot {
     pub connected: bool,
     pub peer_count: usize,
     pub connected_peers: Vec<String>,
+    pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub pending_events: usize,
     pub topic_diagnostics: Vec<TopicPeerSnapshot>,
@@ -48,6 +49,8 @@ pub struct TopicPeerSnapshot {
     pub joined: bool,
     pub peer_count: usize,
     pub connected_peers: Vec<String>,
+    pub configured_peer_ids: Vec<String>,
+    pub missing_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
 }
 
@@ -198,6 +201,8 @@ impl Transport for FakeTransport {
                 joined: !imported.is_empty(),
                 peer_count: imported.len(),
                 connected_peers: imported.clone(),
+                configured_peer_ids: imported.clone(),
+                missing_peer_ids: Vec::new(),
                 last_received_at: None,
             })
             .collect::<Vec<_>>();
@@ -205,6 +210,7 @@ impl Transport for FakeTransport {
             connected: !imported.is_empty(),
             peer_count: imported.len(),
             connected_peers: imported,
+            configured_peers: Vec::new(),
             subscribed_topics: topics,
             pending_events: 0,
             topic_diagnostics,
@@ -469,24 +475,39 @@ impl Transport for IrohGossipTransport {
             .map(|(topic, state)| {
                 (
                     topic.clone(),
+                    state.bootstrap_peer_ids.iter().cloned().collect::<Vec<_>>(),
                     Arc::clone(&state.neighbors),
                     Arc::clone(&state.last_received_at),
                 )
             })
             .collect::<Vec<_>>();
         let mut connected = BTreeSet::new();
+        let configured_peers = self
+            .imported_peers
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
         let mut topic_diagnostics = Vec::with_capacity(topic_states.len());
-        for (topic, neighbors, last_received_at) in topic_states {
+        for (topic, configured_peer_ids, neighbors, last_received_at) in topic_states {
             let peers = neighbors.read().await.iter().cloned().collect::<Vec<_>>();
             let last_received_at = *last_received_at.lock().await;
             for peer in &peers {
                 connected.insert(peer.clone());
             }
+            let missing_peer_ids = configured_peer_ids
+                .iter()
+                .filter(|peer| !peers.iter().any(|connected_peer| connected_peer == *peer))
+                .cloned()
+                .collect::<Vec<_>>();
             topic_diagnostics.push(TopicPeerSnapshot {
                 topic,
                 joined: !peers.is_empty(),
                 peer_count: peers.len(),
                 connected_peers: peers,
+                configured_peer_ids,
+                missing_peer_ids,
                 last_received_at,
             });
         }
@@ -504,6 +525,7 @@ impl Transport for IrohGossipTransport {
             connected: !connected_peers.is_empty(),
             peer_count: connected_peers.len(),
             connected_peers,
+            configured_peers,
             subscribed_topics,
             pending_events: 0,
             topic_diagnostics,

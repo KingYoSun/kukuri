@@ -26,6 +26,7 @@ export type SyncStatus = {
   last_sync_ts?: number | null;
   peer_count: number;
   pending_events: number;
+  configured_peers: string[];
   subscribed_topics: string[];
   topic_diagnostics: TopicSyncStatus[];
 };
@@ -35,6 +36,8 @@ export type TopicSyncStatus = {
   joined: boolean;
   peer_count: number;
   connected_peers: string[];
+  configured_peer_ids: string[];
+  missing_peer_ids: string[];
   last_received_at?: number | null;
 };
 

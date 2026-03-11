@@ -26,6 +26,7 @@ export function App({ api = runtimeApi }: AppProps) {
     connected: false,
     peer_count: 0,
     pending_events: 0,
+    configured_peers: [],
     subscribed_topics: [],
     topic_diagnostics: [],
   });
@@ -254,6 +255,19 @@ export function App({ api = runtimeApi }: AppProps) {
               <dd>{syncStatus.pending_events}</dd>
             </div>
           </dl>
+          <div className='diagnostic-block'>
+            <strong>Configured Peers</strong>
+            <p>{syncStatus.configured_peers.length > 0 ? syncStatus.configured_peers.join(', ') : 'none'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Connected Peers</strong>
+            <p>
+              {syncStatus.topic_diagnostics
+                .flatMap((diagnostic) => diagnostic.connected_peers)
+                .filter((peer, index, peers) => peers.indexOf(peer) === index)
+                .join(', ') || 'none'}
+            </p>
+          </div>
           <label className='field'>
             <span>Your Ticket</span>
             <textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
@@ -308,6 +322,16 @@ export function App({ api = runtimeApi }: AppProps) {
                         ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
                         : 'no events'}
                     </small>
+                  </div>
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>
+                      expected:{' '}
+                      {(topicDiagnostics[topic]?.configured_peer_ids.length ?? 0)}
+                    </span>
+                    <span>
+                      missing:{' '}
+                      {(topicDiagnostics[topic]?.missing_peer_ids.length ?? 0)}
+                    </span>
                   </div>
                 </li>
               ))}

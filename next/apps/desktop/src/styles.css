@@ -233,6 +233,21 @@ textarea {
   font-size: 0.78rem;
 }
 
+.topic-diagnostic-secondary {
+  color: rgba(246, 241, 232, 0.52);
+}
+
+.diagnostic-block {
+  margin: 0.75rem 0;
+  color: rgba(246, 241, 232, 0.72);
+}
+
+.diagnostic-block p {
+  margin: 0.35rem 0 0;
+  word-break: break-all;
+  color: rgba(246, 241, 232, 0.58);
+}
+
 .post-list,
 .thread-list {
   display: grid;
