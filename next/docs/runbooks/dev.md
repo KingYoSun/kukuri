@@ -18,9 +18,11 @@ cargo xtask e2e-smoke
 cd next/apps/desktop
 npx pnpm@10.16.1 dev
 npx pnpm@10.16.1 test
+npx pnpm@10.16.1 tauri:dev
 ```
 
 ## 現在の注意点
 - `next-transport` の `transport_static_peer_can_connect_endpoint` は required。
 - `next-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。
 - deterministic な required lane は `FakeTransport` と `next-harness` が担う。
+- Tauri wrapper の単体 compile は `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml` で確認する。

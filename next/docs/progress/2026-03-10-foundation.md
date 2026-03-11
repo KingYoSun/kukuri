@@ -3,7 +3,9 @@
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
 - `next-core`, `next-store`, `next-transport`, `next-app-api`, `next-harness`
+- `next-desktop-runtime` を追加し、desktop 用 command surface を pure Rust で検証できるようにした
 - `next/apps/desktop` の Linux-first shell
+- `next/apps/desktop/src-tauri` の thin wrapper を追加し、`invoke` 経由で `create_post/list_timeline/list_thread/get_sync_status/import_peer_ticket` を呼べる形にした
 - `next-fast.yml`, `next-nightly.yml`
 - `next-transport` は公式 `iroh-gossip` example / docs に寄せて `receiver.joined()` ベースの join gating を導入
 - `next-transport` に low-level baseline test を追加し、wrapper 依存の問題と `iroh-gossip` 本体の問題を分離できるようにした

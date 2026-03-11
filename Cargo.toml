@@ -6,10 +6,12 @@ members = [
     "next/crates/transport",
     "next/crates/harness",
     "next/crates/app-api",
+    "next/crates/desktop-runtime",
 ]
 exclude = [
     "kukuri-community-node",
     "kukuri-tauri/src-tauri",
+    "next/apps/desktop/src-tauri",
 ]
 resolver = "2"
 
@@ -37,3 +39,4 @@ tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync", "
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tempfile = "3.25.0"

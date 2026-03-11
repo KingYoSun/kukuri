@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 export type TimelineCursor = {
   created_at: number;
   event_id: string;
@@ -51,13 +53,57 @@ const unavailable = async (): Promise<never> => {
 };
 
 export const runtimeApi: DesktopApi = {
-  createPost: async (topic, content, replyTo) =>
-    (window.__KUKURI_NEXT_DESKTOP__?.createPost(topic, content, replyTo) ?? unavailable()),
-  listTimeline: async (topic, cursor, limit) =>
-    (window.__KUKURI_NEXT_DESKTOP__?.listTimeline(topic, cursor, limit) ?? unavailable()),
-  listThread: async (topic, threadId, cursor, limit) =>
-    (window.__KUKURI_NEXT_DESKTOP__?.listThread(topic, threadId, cursor, limit) ?? unavailable()),
-  getSyncStatus: async () => window.__KUKURI_NEXT_DESKTOP__?.getSyncStatus() ?? unavailable(),
-  importPeerTicket: async (ticket) =>
-    (window.__KUKURI_NEXT_DESKTOP__?.importPeerTicket(ticket) ?? unavailable()),
+  createPost: async (topic, content, replyTo) => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.createPost(topic, content, replyTo);
+    }
+    return invoke<string>('create_post', {
+      request: {
+        topic,
+        content,
+        reply_to: replyTo,
+      },
+    }).catch(() => unavailable());
+  },
+  listTimeline: async (topic, cursor, limit) => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.listTimeline(topic, cursor, limit);
+    }
+    return invoke<TimelineView>('list_timeline', {
+      request: {
+        topic,
+        cursor,
+        limit,
+      },
+    }).catch(() => unavailable());
+  },
+  listThread: async (topic, threadId, cursor, limit) => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.listThread(topic, threadId, cursor, limit);
+    }
+    return invoke<TimelineView>('list_thread', {
+      request: {
+        topic,
+        thread_id: threadId,
+        cursor,
+        limit,
+      },
+    }).catch(() => unavailable());
+  },
+  getSyncStatus: async () => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.getSyncStatus();
+    }
+    return invoke<SyncStatus>('get_sync_status').catch(() => unavailable());
+  },
+  importPeerTicket: async (ticket) => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.importPeerTicket(ticket);
+    }
+    return invoke<void>('import_peer_ticket', {
+      request: {
+        ticket,
+      },
+    }).catch(() => unavailable());
+  },
 };

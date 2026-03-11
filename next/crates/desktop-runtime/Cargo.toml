@@ -1,0 +1,16 @@
+[package]
+name = "next-desktop-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+tokio.workspace = true
+next-app-api = { path = "../app-api" }
+next-store = { path = "../store" }
+next-transport = { path = "../transport" }
+
+[dev-dependencies]
+tempfile.workspace = true
