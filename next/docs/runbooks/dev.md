@@ -21,11 +21,25 @@ npx pnpm@10.16.1 test
 npx pnpm@10.16.1 tauri:dev
 ```
 
+## remote-sync 用の環境変数
+```bash
+export KUKURI_NEXT_BIND_ADDR=0.0.0.0:0
+export KUKURI_NEXT_ADVERTISE_HOST=<LANで到達可能なIPまたはホスト名>
+export KUKURI_NEXT_ADVERTISE_PORT=<必要なら固定port>
+export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別子>
+```
+
+- `KUKURI_NEXT_ADVERTISE_HOST` を設定すると `Your Ticket` はその host を使う。
+- `KUKURI_NEXT_INSTANCE` を設定すると app data dir が分離される。
+- `KUKURI_NEXT_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
+
 ## 次の手動確認
-1. `npx pnpm@10.16.1 tauri:dev` を 2 instance 起動する。
-2. 両方の `Your Ticket` を相互に `Peer Ticket` へ貼って import する。
-3. 片方で post し、もう片方の timeline に反映されることを確認する。
-4. 片方を再起動しても timeline が維持されることを確認する。
+1. 各端末で `KUKURI_NEXT_BIND_ADDR=0.0.0.0:0` と `KUKURI_NEXT_ADVERTISE_HOST` を設定する。
+2. 同一マシンで複数起動する場合は `KUKURI_NEXT_INSTANCE` も別値にする。
+3. `npx pnpm@10.16.1 tauri:dev` を起動する。
+4. 両方の `Your Ticket` を相互に `Peer Ticket` へ貼って import する。
+5. 片方で post し、もう片方の timeline に反映されることを確認する。
+6. 片方を再起動しても timeline が維持されることを確認する。
 
 ## 現在の注意点
 - `next-transport` の `transport_static_peer_can_connect_endpoint` は required。

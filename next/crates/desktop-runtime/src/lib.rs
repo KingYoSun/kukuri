@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use next_app_api::{AppService, SyncStatus, TimelineView};
 use next_store::{SqliteStore, TimelineCursor};
-use next_transport::IrohGossipTransport;
+use next_transport::{IrohGossipTransport, TransportNetworkConfig};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,15 +41,26 @@ pub struct DesktopRuntime {
 
 impl DesktopRuntime {
     pub async fn new(db_path: impl AsRef<Path>) -> Result<Self> {
+        Self::new_with_config(db_path, TransportNetworkConfig::loopback()).await
+    }
+
+    pub async fn new_with_config(
+        db_path: impl AsRef<Path>,
+        network_config: TransportNetworkConfig,
+    ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
-        let transport = Arc::new(IrohGossipTransport::bind_local().await?);
+        let transport = Arc::new(IrohGossipTransport::bind(network_config).await?);
         let app_service = AppService::new(store, transport);
 
         Ok(Self {
             app_service,
             db_path,
         })
+    }
+
+    pub async fn from_env(db_path: impl AsRef<Path>) -> Result<Self> {
+        Self::new_with_config(db_path, TransportNetworkConfig::from_env()?).await
     }
 
     pub fn db_path(&self) -> &Path {

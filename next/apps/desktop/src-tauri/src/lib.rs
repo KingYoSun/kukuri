@@ -16,10 +16,26 @@ fn map_error(error: impl std::fmt::Display) -> String {
 }
 
 fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app_handle
+    if let Some(explicit_dir) = std::env::var("KUKURI_NEXT_APP_DATA_DIR")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let path = PathBuf::from(explicit_dir);
+        std::fs::create_dir_all(&path)
+            .map_err(|error| format!("failed to create explicit app data dir: {error}"))?;
+        return Ok(path.join("kukuri-next.db"));
+    }
+
+    let mut app_data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
+    if let Some(instance) = std::env::var("KUKURI_NEXT_INSTANCE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        app_data_dir = app_data_dir.join(instance.trim());
+    }
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|error| format!("failed to create app data dir: {error}"))?;
     Ok(app_data_dir.join("kukuri-next.db"))
@@ -76,7 +92,7 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let db_path = resolve_db_path(app.handle())?;
-            let runtime = tauri::async_runtime::block_on(DesktopRuntime::new(db_path))
+            let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
                 .map_err(map_error)?;
             app.manage(DesktopState {
                 runtime: Arc::new(runtime),

@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
+use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
@@ -38,6 +39,58 @@ pub struct PeerSnapshot {
     pub connected_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub pending_events: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportNetworkConfig {
+    pub bind_addr: SocketAddr,
+    pub advertised_host: Option<String>,
+    pub advertised_port: Option<u16>,
+}
+
+impl Default for TransportNetworkConfig {
+    fn default() -> Self {
+        Self {
+            bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)),
+            advertised_host: None,
+            advertised_port: None,
+        }
+    }
+}
+
+impl TransportNetworkConfig {
+    pub fn loopback() -> Self {
+        Self {
+            bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
+            advertised_host: None,
+            advertised_port: None,
+        }
+    }
+
+    pub fn from_env() -> Result<Self> {
+        let bind_addr = std::env::var("KUKURI_NEXT_BIND_ADDR")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| SocketAddr::from_str(value.trim()))
+            .transpose()
+            .context("failed to parse KUKURI_NEXT_BIND_ADDR")?
+            .unwrap_or_else(|| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)));
+        let advertised_host = std::env::var("KUKURI_NEXT_ADVERTISE_HOST")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let advertised_port = std::env::var("KUKURI_NEXT_ADVERTISE_PORT")
+            .ok()
+            .map(|value| value.trim().parse::<u16>())
+            .transpose()
+            .context("failed to parse KUKURI_NEXT_ADVERTISE_PORT")?;
+
+        Ok(Self {
+            bind_addr,
+            advertised_host,
+            advertised_port,
+        })
+    }
 }
 
 #[async_trait]
@@ -164,6 +217,7 @@ pub struct IrohGossipTransport {
     gossip: Gossip,
     _router: Router,
     discovery: Arc<MemoryLookup>,
+    network_config: TransportNetworkConfig,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     connected_peers: Arc<RwLock<BTreeSet<String>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
@@ -171,12 +225,12 @@ pub struct IrohGossipTransport {
 }
 
 impl IrohGossipTransport {
-    pub async fn bind_local() -> Result<Self> {
+    pub async fn bind(network_config: TransportNetworkConfig) -> Result<Self> {
         let discovery = Arc::new(MemoryLookup::new());
-        let endpoint = Endpoint::empty_builder(RelayMode::Disabled)
-            .address_lookup(discovery.clone())
-            .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
-            .context("failed to bind local endpoint address")?
+        let mut builder =
+            Endpoint::empty_builder(RelayMode::Disabled).address_lookup(discovery.clone());
+        builder = apply_bind(builder, network_config.bind_addr)?;
+        let endpoint = builder
             .bind()
             .await
             .context("failed to bind iroh endpoint")?;
@@ -192,11 +246,20 @@ impl IrohGossipTransport {
             gossip,
             _router: router,
             discovery,
+            network_config,
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             connected_peers: Arc::new(RwLock::new(BTreeSet::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
         })
+    }
+
+    pub async fn bind_local() -> Result<Self> {
+        Self::bind(TransportNetworkConfig::loopback()).await
+    }
+
+    pub async fn bind_from_env() -> Result<Self> {
+        Self::bind(TransportNetworkConfig::from_env()?).await
     }
 
     async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
@@ -347,7 +410,10 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn export_ticket(&self) -> Result<Option<String>> {
-        Ok(Some(encode_ticket(&self.endpoint.addr())?))
+        Ok(Some(encode_ticket(
+            &self.endpoint.addr(),
+            &self.network_config,
+        )?))
     }
 
     async fn import_ticket(&self, ticket: &str) -> Result<()> {
@@ -366,13 +432,50 @@ fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     GossipTopicId::from_bytes(*hash.as_bytes())
 }
 
-fn encode_ticket(endpoint_addr: &EndpointAddr) -> Result<String> {
-    let socket_addr = endpoint_addr
-        .ip_addrs()
-        .next()
-        .copied()
-        .ok_or_else(|| anyhow!("endpoint does not expose a direct socket address"))?;
-    Ok(format!("{}@{socket_addr}", endpoint_addr.id))
+fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
+    match bind_addr {
+        SocketAddr::V4(addr) => builder
+            .bind_addr(addr)
+            .map_err(|error| anyhow!("failed to bind IPv4 address: {error}")),
+        SocketAddr::V6(addr) => builder
+            .bind_addr(addr)
+            .map_err(|error| anyhow!("failed to bind IPv6 address: {error}")),
+    }
+}
+
+fn encode_ticket(endpoint_addr: &EndpointAddr, config: &TransportNetworkConfig) -> Result<String> {
+    let advertised_port = config
+        .advertised_port
+        .or_else(|| endpoint_addr.ip_addrs().next().map(|addr| addr.port()))
+        .or_else(|| match config.bind_addr {
+            SocketAddr::V4(addr) if addr.port() != 0 => Some(addr.port()),
+            SocketAddr::V6(addr) if addr.port() != 0 => Some(addr.port()),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("could not determine advertised port"))?;
+    let advertised_host = config
+        .advertised_host
+        .clone()
+        .or_else(|| {
+            endpoint_addr
+                .ip_addrs()
+                .filter(|addr| is_reachable_ip(addr.ip()))
+                .map(|addr| addr.ip().to_string())
+                .next()
+        })
+        .or_else(|| match config.bind_addr.ip() {
+            ip if is_reachable_ip(ip) => Some(ip.to_string()),
+            IpAddr::V4(ip) if ip.is_loopback() => Some(ip.to_string()),
+            IpAddr::V6(ip) if ip.is_loopback() => Some(ip.to_string()),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("could not determine advertised host"))?;
+
+    Ok(format!(
+        "{}@{}",
+        endpoint_addr.id,
+        format_host_port(&advertised_host, advertised_port)
+    ))
 }
 
 fn parse_ticket(ticket: &str) -> Result<EndpointAddr> {
@@ -380,8 +483,88 @@ fn parse_ticket(ticket: &str) -> Result<EndpointAddr> {
         .split_once('@')
         .ok_or_else(|| anyhow!("ticket must be formatted as <node_id>@<host:port>"))?;
     let endpoint_id = EndpointId::from_str(node_id).context("invalid endpoint id")?;
-    let socket_addr = SocketAddr::from_str(socket_addr).context("invalid socket address")?;
-    Ok(EndpointAddr::new(endpoint_id).with_ip_addr(socket_addr))
+    let socket_addrs = resolve_socket_addrs(socket_addr)?;
+    build_endpoint_addr(endpoint_id, socket_addrs)
+        .ok_or_else(|| anyhow!("ticket must resolve to at least one socket address"))
+}
+
+fn build_endpoint_addr(
+    endpoint_id: EndpointId,
+    socket_addrs: Vec<SocketAddr>,
+) -> Option<EndpointAddr> {
+    if socket_addrs.is_empty() {
+        return None;
+    }
+
+    let mut endpoint_addr = EndpointAddr::new(endpoint_id);
+    for socket_addr in socket_addrs {
+        endpoint_addr = endpoint_addr.with_ip_addr(socket_addr);
+    }
+    Some(endpoint_addr)
+}
+
+fn resolve_socket_addrs(value: &str) -> Result<Vec<SocketAddr>> {
+    let trimmed = value.trim();
+    if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {
+        return Ok(vec![socket_addr]);
+    }
+
+    let (host, port_raw) = trimmed
+        .rsplit_once(':')
+        .ok_or_else(|| anyhow!("invalid socket address: {value}"))?;
+    let host = host.trim().trim_start_matches('[').trim_end_matches(']');
+    let port = port_raw
+        .trim()
+        .parse::<u16>()
+        .with_context(|| format!("invalid port in `{value}`"))?;
+
+    let addrs = if host.eq_ignore_ascii_case("localhost") {
+        vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)]
+    } else {
+        (host, port)
+            .to_socket_addrs()
+            .with_context(|| format!("failed to resolve host `{host}`"))?
+            .collect::<Vec<_>>()
+    };
+
+    Ok(prioritize_socket_addrs(addrs))
+}
+
+fn prioritize_socket_addrs(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    let mut unique = Vec::new();
+    for addr in addrs {
+        if !unique.contains(&addr) {
+            unique.push(addr);
+        }
+    }
+
+    let mut ipv4 = Vec::new();
+    let mut other = Vec::new();
+    for addr in unique {
+        if addr.is_ipv4() {
+            ipv4.push(addr);
+        } else {
+            other.push(addr);
+        }
+    }
+    ipv4.extend(other);
+    ipv4
+}
+
+fn format_host_port(host: &str, port: u16) -> String {
+    let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if trimmed.contains(':') {
+        format!("[{trimmed}]:{port}")
+    } else {
+        format!("{trimmed}:{port}")
+    }
+}
+
+fn is_reachable_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => !ip.is_unspecified() && !ip.is_loopback(),
+        IpAddr::V6(ip) => !ip.is_unspecified() && !ip.is_loopback(),
+    }
 }
 
 #[cfg(test)]
@@ -582,6 +765,39 @@ mod tests {
         assert_eq!(
             parsed.ip_addrs().next().copied(),
             Some("127.0.0.1:4444".parse().expect("socket addr"))
+        );
+    }
+
+    #[test]
+    fn encode_ticket_prefers_explicit_advertised_host() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr = EndpointAddr::new(endpoint_id)
+            .with_ip_addr("0.0.0.0:40123".parse().expect("socket addr"));
+        let config = TransportNetworkConfig {
+            bind_addr: "0.0.0.0:40123".parse().expect("bind addr"),
+            advertised_host: Some("192.168.10.5".into()),
+            advertised_port: Some(40123),
+        };
+
+        let ticket = encode_ticket(&endpoint_addr, &config).expect("ticket");
+        assert_eq!(
+            ticket,
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@192.168.10.5:40123"
+        );
+    }
+
+    #[test]
+    fn parse_ticket_resolves_localhost_hostname() {
+        let parsed = parse_ticket(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@localhost:40123",
+        )
+        .expect("ticket");
+        assert_eq!(
+            parsed.ip_addrs().next().copied(),
+            Some("127.0.0.1:40123".parse().expect("socket addr"))
         );
     }
 }
