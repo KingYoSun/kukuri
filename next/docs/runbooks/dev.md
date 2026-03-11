@@ -41,6 +41,10 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 5. 片方で post し、もう片方の timeline に反映されることを確認する。
 6. 片方を再起動しても timeline が維持されることを確認する。
 
+補足:
+- desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。
+- `Refresh` は強制再取得用で、通常の確認では押さなくても反映される想定。
+
 ## 現在の注意点
 - `next-transport` の `transport_static_peer_can_connect_endpoint` は required。
 - `next-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。

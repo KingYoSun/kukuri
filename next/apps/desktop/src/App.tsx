@@ -7,6 +7,7 @@ type AppProps = {
 };
 
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
+const REFRESH_INTERVAL_MS = 2000;
 
 export function App({ api = runtimeApi }: AppProps) {
   const [topic, setTopic] = useState(DEFAULT_TOPIC);
@@ -48,7 +49,24 @@ export function App({ api = runtimeApi }: AppProps) {
   }, [api]);
 
   useEffect(() => {
-    void loadTopic(topic);
+    let disposed = false;
+
+    const refresh = async () => {
+      if (disposed) {
+        return;
+      }
+      await loadTopic(topic);
+    };
+
+    void refresh();
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
   }, [loadTopic, topic]);
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
