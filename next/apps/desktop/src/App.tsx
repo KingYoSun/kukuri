@@ -15,6 +15,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [thread, setThread] = useState<PostView[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [peerTicket, setPeerTicket] = useState('');
+  const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     connected: false,
     peer_count: 0,
@@ -30,13 +31,15 @@ export function App({ api = runtimeApi }: AppProps) {
 
   const loadTopic = useCallback(async (currentTopic: string) => {
     try {
-      const [timelineView, status] = await Promise.all([
+      const [timelineView, status, ticket] = await Promise.all([
         api.listTimeline(currentTopic, null, 50),
         api.getSyncStatus(),
+        api.getLocalPeerTicket(),
       ]);
       startTransition(() => {
         setTimeline(timelineView.items);
         setSyncStatus(status);
+        setLocalPeerTicket(ticket);
         setError(null);
       });
     } catch (loadError) {
@@ -125,6 +128,10 @@ export function App({ api = runtimeApi }: AppProps) {
               <dd>{syncStatus.pending_events}</dd>
             </div>
           </dl>
+          <label className='field'>
+            <span>Your Ticket</span>
+            <textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
+          </label>
           <label className='field'>
             <span>Peer Ticket</span>
             <input

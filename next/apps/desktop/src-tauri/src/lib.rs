@@ -64,6 +64,13 @@ async fn import_peer_ticket(
     state.runtime.import_peer_ticket(request).await.map_err(map_error)
 }
 
+#[tauri::command]
+async fn get_local_peer_ticket(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Option<String>, String> {
+    state.runtime.local_peer_ticket().await.map_err(map_error)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -81,7 +88,8 @@ pub fn run() {
             list_timeline,
             list_thread,
             get_sync_status,
-            import_peer_ticket
+            import_peer_ticket,
+            get_local_peer_ticket
         ])
         .run(tauri::generate_context!())
         .expect("failed to run next desktop tauri app");

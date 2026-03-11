@@ -43,6 +43,9 @@ function createMockApi() {
       return syncStatus;
     },
     async importPeerTicket() {},
+    async getLocalPeerTicket() {
+      return 'peer1@127.0.0.1:7777';
+    },
   };
 
   return api;
@@ -61,4 +64,5 @@ test('desktop shell can publish and render a post', async () => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
   expect(screen.getByText('Live over static peers')).toBeInTheDocument();
+  expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
 });

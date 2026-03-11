@@ -40,6 +40,7 @@ export interface DesktopApi {
   ): Promise<TimelineView>;
   getSyncStatus(): Promise<SyncStatus>;
   importPeerTicket(ticket: string): Promise<void>;
+  getLocalPeerTicket(): Promise<string | null>;
 }
 
 declare global {
@@ -105,5 +106,11 @@ export const runtimeApi: DesktopApi = {
         ticket,
       },
     }).catch(() => unavailable());
+  },
+  getLocalPeerTicket: async () => {
+    if (window.__KUKURI_NEXT_DESKTOP__) {
+      return window.__KUKURI_NEXT_DESKTOP__.getLocalPeerTicket();
+    }
+    return invoke<string | null>('get_local_peer_ticket').catch(() => unavailable());
   },
 };

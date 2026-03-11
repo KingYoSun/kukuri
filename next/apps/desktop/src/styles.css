@@ -94,7 +94,8 @@ textarea {
 }
 
 .field input,
-.composer textarea {
+.composer textarea,
+.ticket-output {
   width: 100%;
   border: 1px solid rgba(246, 241, 232, 0.12);
   border-radius: 14px;
@@ -110,6 +111,11 @@ textarea {
 
 .composer textarea {
   min-height: 120px;
+  resize: vertical;
+}
+
+.ticket-output {
+  min-height: 88px;
   resize: vertical;
 }
 
