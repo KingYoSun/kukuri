@@ -34,6 +34,11 @@ pub struct ImportPeerTicketRequest {
     pub ticket: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnsubscribeTopicRequest {
+    pub topic: String,
+}
+
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
@@ -105,6 +110,12 @@ impl DesktopRuntime {
     pub async fn import_peer_ticket(&self, request: ImportPeerTicketRequest) -> Result<()> {
         self.app_service
             .import_peer_ticket(request.ticket.as_str())
+            .await
+    }
+
+    pub async fn unsubscribe_topic(&self, request: UnsubscribeTopicRequest) -> Result<()> {
+        self.app_service
+            .unsubscribe_topic(request.topic.as_str())
             .await
     }
 

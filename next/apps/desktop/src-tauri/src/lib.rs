@@ -4,6 +4,7 @@ use std::sync::Arc;
 use next_desktop_runtime::{
     CreatePostRequest, DesktopRuntime, ImportPeerTicketRequest, ListThreadRequest,
     ListTimelineRequest,
+    UnsubscribeTopicRequest,
 };
 use tauri::Manager;
 
@@ -81,6 +82,14 @@ async fn import_peer_ticket(
 }
 
 #[tauri::command]
+async fn unsubscribe_topic(
+    state: tauri::State<'_, DesktopState>,
+    request: UnsubscribeTopicRequest,
+) -> Result<(), String> {
+    state.runtime.unsubscribe_topic(request).await.map_err(map_error)
+}
+
+#[tauri::command]
 async fn get_local_peer_ticket(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Option<String>, String> {
@@ -105,6 +114,7 @@ pub fn run() {
             list_thread,
             get_sync_status,
             import_peer_ticket,
+            unsubscribe_topic,
             get_local_peer_ticket
         ])
         .run(tauri::generate_context!())
