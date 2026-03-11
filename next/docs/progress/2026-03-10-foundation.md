@@ -10,6 +10,7 @@
 - `next-fast.yml`, `next-nightly.yml`
 - `next-transport` は公式 `iroh-gossip` example / docs に寄せて `receiver.joined()` ベースの join gating を導入
 - `next-transport` に low-level baseline test を追加し、wrapper 依存の問題と `iroh-gossip` 本体の問題を分離できるようにした
+- desktop UI に reply モードと thread pane からの reply 導線を追加した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -20,7 +21,8 @@
 - Linux 実機 2 台で固定 port / 相互 ticket import により `connected: yes, peers: 1` の双方向収束を確認
 - Linux 実機 2 台で投稿伝播と、peer 終了後に polling で `connected: no, peers: 0` へ戻ることを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
+- app-api test で `reply/thread` の peer 間伝播を確認
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `reply/thread 伝播` と `複数 topic 同時購読`。
+- Tauri backend binding は導入済み。次の実機確認は `reply/thread 実機導線` と `複数 topic 同時購読`。

@@ -385,8 +385,8 @@ impl Store for MemoryStore {
         let mut items = roots
             .get(topic_id)
             .into_iter()
-            .flat_map(|entries| entries.values())
-            .filter_map(|root_id| events.get(root_id).cloned())
+            .flat_map(|entries| entries.keys())
+            .filter_map(|event_id| events.get(&EventId::from(event_id.as_str())).cloned())
             .filter(|event| {
                 event.id == *thread_id
                     || event

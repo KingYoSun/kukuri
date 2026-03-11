@@ -370,4 +370,94 @@ mod tests {
 
         assert_eq!(received.content, "hello after import");
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iroh_transport_syncs_reply_into_thread() {
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let transport_a = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport a should bind"),
+        );
+        let transport_b = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport b should bind"),
+        );
+        let app_a = AppService::new(store_a, transport_a);
+        let app_b = AppService::new(store_b, transport_b);
+        let topic = "kukuri:topic:reply-thread";
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+        let root_id = app_a
+            .create_post(topic, "root over iroh", None)
+            .await
+            .expect("create root");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if timeline.items.iter().any(|post| post.id == root_id) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("root propagation timeout");
+
+        let reply_id = app_b
+            .create_post(topic, "reply over iroh", Some(root_id.as_str()))
+            .await
+            .expect("create reply");
+        let thread = timeout(Duration::from_secs(10), async {
+            loop {
+                let thread = app_a
+                    .list_thread(topic, root_id.as_str(), None, 20)
+                    .await
+                    .expect("thread a");
+                if thread.items.iter().any(|post| post.id == reply_id) {
+                    return thread;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("reply propagation timeout");
+
+        assert_eq!(thread.items.len(), 2);
+        let reply = thread
+            .items
+            .iter()
+            .find(|post| post.id == reply_id)
+            .expect("reply in thread");
+        assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
+        assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
+    }
 }

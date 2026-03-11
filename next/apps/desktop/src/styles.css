@@ -109,6 +109,21 @@ textarea {
   gap: 0.8rem;
 }
 
+.reply-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  padding: 0.9rem;
+  border-radius: 16px;
+  background: rgba(0, 179, 164, 0.12);
+}
+
+.reply-banner p {
+  margin: 0.35rem 0 0;
+  color: rgba(246, 241, 232, 0.76);
+}
+
 .composer textarea {
   min-height: 120px;
   resize: vertical;
@@ -166,14 +181,32 @@ textarea {
 }
 
 .post-card {
-  width: 100%;
-  text-align: left;
   border: 1px solid rgba(246, 241, 232, 0.08);
   border-radius: 18px;
   padding: 0.95rem;
-  color: inherit;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.post-link {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
   cursor: pointer;
+}
+
+.post-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.reply-chip {
+  display: inline-block;
+  margin-top: 0.55rem;
+  font-style: normal;
+  color: #8ce0d6;
 }
 
 .post-meta {

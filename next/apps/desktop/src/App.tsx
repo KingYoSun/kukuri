@@ -15,6 +15,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [timeline, setTimeline] = useState<PostView[]>([]);
   const [thread, setThread] = useState<PostView[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
   const [peerTicket, setPeerTicket] = useState('');
   const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
@@ -30,17 +31,21 @@ export function App({ api = runtimeApi }: AppProps) {
     [syncStatus.connected]
   );
 
-  const loadTopic = useCallback(async (currentTopic: string) => {
+  const loadTopic = useCallback(async (currentTopic: string, currentThread: string | null) => {
     try {
-      const [timelineView, status, ticket] = await Promise.all([
+      const [timelineView, status, ticket, threadView] = await Promise.all([
         api.listTimeline(currentTopic, null, 50),
         api.getSyncStatus(),
         api.getLocalPeerTicket(),
+        currentThread ? api.listThread(currentTopic, currentThread, null, 50) : Promise.resolve(null),
       ]);
       startTransition(() => {
         setTimeline(timelineView.items);
         setSyncStatus(status);
         setLocalPeerTicket(ticket);
+        if (threadView) {
+          setThread(threadView.items);
+        }
         setError(null);
       });
     } catch (loadError) {
@@ -55,7 +60,7 @@ export function App({ api = runtimeApi }: AppProps) {
       if (disposed) {
         return;
       }
-      await loadTopic(topic);
+      await loadTopic(topic, selectedThread);
     };
 
     void refresh();
@@ -67,7 +72,7 @@ export function App({ api = runtimeApi }: AppProps) {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [loadTopic, topic]);
+  }, [loadTopic, selectedThread, topic]);
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,12 +81,13 @@ export function App({ api = runtimeApi }: AppProps) {
     }
 
     try {
-      await api.createPost(topic, composer.trim(), selectedThread);
+      await api.createPost(topic, composer.trim(), replyTarget?.id ?? null);
       setComposer('');
-      await loadTopic(topic);
+      await loadTopic(topic, selectedThread);
       if (selectedThread) {
         await openThread(selectedThread);
       }
+      setReplyTarget(null);
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'failed to publish');
     }
@@ -99,6 +105,21 @@ export function App({ api = runtimeApi }: AppProps) {
     }
   }
 
+  function beginReply(post: PostView) {
+    setReplyTarget(post);
+    if (post.root_id) {
+      setSelectedThread(post.root_id);
+      void openThread(post.root_id);
+      return;
+    }
+    setSelectedThread(post.id);
+    void openThread(post.id);
+  }
+
+  function clearReply() {
+    setReplyTarget(null);
+  }
+
   async function handleImportPeer() {
     if (!peerTicket.trim()) {
       return;
@@ -106,7 +127,7 @@ export function App({ api = runtimeApi }: AppProps) {
     try {
       await api.importPeerTicket(peerTicket.trim());
       setPeerTicket('');
-      await loadTopic(topic);
+      await loadTopic(topic, selectedThread);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'failed to import peer');
     }
@@ -166,44 +187,98 @@ export function App({ api = runtimeApi }: AppProps) {
         <section className='panel'>
           <div className='panel-header'>
             <h2>Timeline</h2>
-            <button className='button button-secondary' onClick={() => void loadTopic(topic)}>
+            <button
+              className='button button-secondary'
+              onClick={() => void loadTopic(topic, selectedThread)}
+            >
               Refresh
             </button>
           </div>
           <form className='composer' onSubmit={handlePublish}>
+            {replyTarget ? (
+              <div className='reply-banner'>
+                <div>
+                  <strong>Replying</strong>
+                  <p>{replyTarget.content}</p>
+                </div>
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  onClick={clearReply}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
             <textarea
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
-              placeholder='Write a post'
+              placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
             />
             <button className='button' type='submit'>
-              Publish
+              {replyTarget ? 'Reply' : 'Publish'}
             </button>
           </form>
           <ul className='post-list'>
             {timeline.map((post) => (
               <li key={post.id}>
-                <button className='post-card' onClick={() => void openThread(post.root_id ?? post.id)}>
-                  <div className='post-meta'>
-                    <span>{post.author_npub}</span>
-                    <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
+                <article className='post-card'>
+                  <button className='post-link' onClick={() => void openThread(post.root_id ?? post.id)}>
+                    <div className='post-meta'>
+                      <span>{post.author_npub}</span>
+                      <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
+                    </div>
+                    <strong>{post.content}</strong>
+                    <small>{post.note_id}</small>
+                    {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
+                  </button>
+                  <div className='post-actions'>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => beginReply(post)}
+                    >
+                      Reply
+                    </button>
                   </div>
-                  <strong>{post.content}</strong>
-                  <small>{post.note_id}</small>
-                </button>
+                </article>
               </li>
             ))}
           </ul>
         </section>
 
         <section className='panel'>
-          <h2>Thread</h2>
+          <div className='panel-header'>
+            <h2>Thread</h2>
+            {selectedThread ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                onClick={() => {
+                  setSelectedThread(null);
+                  setThread([]);
+                  clearReply();
+                }}
+              >
+                Close
+              </button>
+            ) : null}
+          </div>
           {selectedThread ? (
             <ul className='thread-list'>
               {thread.map((post) => (
                 <li key={post.id} className='thread-item'>
                   <strong>{post.content}</strong>
                   <small>{post.author_npub}</small>
+                  <div className='post-actions'>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => beginReply(post)}
+                    >
+                      Reply
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
