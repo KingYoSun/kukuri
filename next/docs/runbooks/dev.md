@@ -42,7 +42,8 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 6. 片方を再起動しても timeline が維持されることを確認する。
 7. どちらかの client を終了し、相手側が polling で `connected: no, peers: 0` に戻ることを確認する。
 8. timeline または thread pane の `Reply` ボタンから返信し、相手側の thread に反映されることを確認する。
-9. 次フェーズでは複数 topic を同時に開いた状態で status と timeline の整合を確認する。
+9. `Add Topic` で 2 つ以上の topic を登録し、切り替えながら各 timeline が維持されることを確認する。
+10. peer 接続中に複数 topic へ post し、相手側で各 topic の timeline に反映されることを確認する。
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。

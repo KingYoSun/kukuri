@@ -11,6 +11,7 @@
 - `next-transport` は公式 `iroh-gossip` example / docs に寄せて `receiver.joined()` ベースの join gating を導入
 - `next-transport` に low-level baseline test を追加し、wrapper 依存の問題と `iroh-gossip` 本体の問題を分離できるようにした
 - desktop UI に reply モードと thread pane からの reply 導線を追加した
+- desktop UI を `trackedTopics + activeTopic + timelinesByTopic` 構成へ拡張し、複数 topic を同時購読できるようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -23,7 +24,8 @@
 - Linux 実機 2 台で `root -> reply -> thread` 反映が peer 間で同期することを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - app-api test で `reply/thread` の peer 間伝播を確認
+- app-api test で複数 topic 同時購読時の subscription 追跡を確認
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `複数 topic 同時購読` と `peer 診断表示の拡充`。
+- Tauri backend binding は導入済み。次の実機確認は `複数 topic 同時購読の実機 UX` と `peer 診断表示の拡充`。

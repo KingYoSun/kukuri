@@ -93,6 +93,15 @@ textarea {
   color: rgba(246, 241, 232, 0.72);
 }
 
+.topic-input-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.topic-input-row input {
+  flex: 1;
+}
+
 .field input,
 .composer textarea,
 .ticket-output {
@@ -172,6 +181,48 @@ textarea {
   font-size: 1.15rem;
 }
 
+.topic-list {
+  margin-top: 1.25rem;
+}
+
+.topic-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.topic-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.topic-item-active {
+  background: rgba(0, 179, 164, 0.16);
+}
+
+.topic-link,
+.topic-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.topic-link {
+  flex: 1;
+  text-align: left;
+}
+
+.topic-remove {
+  width: 2rem;
+}
+
 .post-list,
 .thread-list {
   display: grid;
@@ -207,6 +258,11 @@ textarea {
   margin-top: 0.55rem;
   font-style: normal;
   color: #8ce0d6;
+}
+
+.active-topic-label {
+  color: rgba(246, 241, 232, 0.72);
+  font-size: 0.8rem;
 }
 
 .post-meta {

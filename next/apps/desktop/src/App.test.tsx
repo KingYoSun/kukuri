@@ -6,7 +6,7 @@ import { App } from './App';
 import { DesktopApi, SyncStatus, TimelineView } from './lib/api';
 
 function createMockApi() {
-  let posts: TimelineView['items'] = [];
+  const postsByTopic: Record<string, TimelineView['items']> = {};
   let sequence = 0;
   const syncStatus: SyncStatus = {
     connected: true,
@@ -20,10 +20,11 @@ function createMockApi() {
     async createPost(topic, content, replyTo) {
       sequence += 1;
       const id = `${topic}-${sequence}`;
+      const posts = postsByTopic[topic] ?? [];
       const rootId = replyTo
         ? posts.find((post) => post.id === replyTo)?.root_id ?? replyTo
         : id;
-      posts = [
+      postsByTopic[topic] = [
         {
           id,
           author_pubkey: 'f'.repeat(64),
@@ -36,13 +37,19 @@ function createMockApi() {
         },
         ...posts,
       ];
+      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
       return id;
     },
-    async listTimeline() {
-      return { items: posts, next_cursor: null };
+    async listTimeline(topic) {
+      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
+      return { items: postsByTopic[topic] ?? [], next_cursor: null };
     },
-    async listThread(_topic, threadId) {
-      return { items: posts.filter((post) => post.root_id === threadId || post.id === threadId), next_cursor: null };
+    async listThread(topic, threadId) {
+      const posts = postsByTopic[topic] ?? [];
+      return {
+        items: posts.filter((post) => post.root_id === threadId || post.id === threadId),
+        next_cursor: null,
+      };
     },
     async getSyncStatus() {
       return syncStatus;
@@ -60,8 +67,6 @@ test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createMockApi()} />);
 
-  await user.clear(screen.getByLabelText('Topic'));
-  await user.type(screen.getByLabelText('Topic'), 'kukuri:topic:demo');
   await user.type(screen.getByPlaceholderText('Write a post'), 'hello desktop');
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
@@ -102,4 +107,30 @@ test('desktop shell can enter reply mode and render reply state', async () => {
     expect(screen.getAllByText('reply post').length).toBeGreaterThan(0);
   });
   expect(screen.getAllByText('Reply').length).toBeGreaterThan(0);
+});
+
+test('desktop shell can track multiple topics at once', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  expect(screen.getByRole('button', { name: 'kukuri:topic:second' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  await user.type(screen.getByPlaceholderText('Write a post'), 'demo post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('demo post')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+  await user.type(screen.getByPlaceholderText('Write a post'), 'second post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('second post')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  expect(screen.getByText('demo post')).toBeInTheDocument();
 });

@@ -10,9 +10,13 @@ const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
 
 export function App({ api = runtimeApi }: AppProps) {
-  const [topic, setTopic] = useState(DEFAULT_TOPIC);
+  const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
+  const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
+  const [topicInput, setTopicInput] = useState('');
   const [composer, setComposer] = useState('');
-  const [timeline, setTimeline] = useState<PostView[]>([]);
+  const [timelinesByTopic, setTimelinesByTopic] = useState<Record<string, PostView[]>>({
+    [DEFAULT_TOPIC]: [],
+  });
   const [thread, setThread] = useState<PostView[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
@@ -31,20 +35,42 @@ export function App({ api = runtimeApi }: AppProps) {
     [syncStatus.connected]
   );
 
-  const loadTopic = useCallback(async (currentTopic: string, currentThread: string | null) => {
+  const activeTimeline = useMemo(
+    () => timelinesByTopic[activeTopic] ?? [],
+    [activeTopic, timelinesByTopic]
+  );
+
+  const loadTopics = useCallback(async (
+    currentTopics: string[],
+    currentActiveTopic: string,
+    currentThread: string | null
+  ) => {
     try {
-      const [timelineView, status, ticket, threadView] = await Promise.all([
-        api.listTimeline(currentTopic, null, 50),
+      const [timelineViews, status, ticket, threadView] = await Promise.all([
+        Promise.all(
+          currentTopics.map(async (topic) => ({
+            topic,
+            timeline: await api.listTimeline(topic, null, 50),
+          }))
+        ),
         api.getSyncStatus(),
         api.getLocalPeerTicket(),
-        currentThread ? api.listThread(currentTopic, currentThread, null, 50) : Promise.resolve(null),
+        currentThread
+          ? api.listThread(currentActiveTopic, currentThread, null, 50)
+          : Promise.resolve(null),
       ]);
       startTransition(() => {
-        setTimeline(timelineView.items);
+        setTimelinesByTopic(
+          Object.fromEntries(
+            timelineViews.map(({ topic, timeline }) => [topic, timeline.items])
+          )
+        );
         setSyncStatus(status);
         setLocalPeerTicket(ticket);
         if (threadView) {
           setThread(threadView.items);
+        } else if (!currentThread) {
+          setThread([]);
         }
         setError(null);
       });
@@ -60,7 +86,7 @@ export function App({ api = runtimeApi }: AppProps) {
       if (disposed) {
         return;
       }
-      await loadTopic(topic, selectedThread);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
     };
 
     void refresh();
@@ -72,7 +98,46 @@ export function App({ api = runtimeApi }: AppProps) {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [loadTopic, selectedThread, topic]);
+  }, [activeTopic, loadTopics, selectedThread, trackedTopics]);
+
+  function clearThreadContext() {
+    setSelectedThread(null);
+    setThread([]);
+    setReplyTarget(null);
+  }
+
+  async function handleAddTopic() {
+    const nextTopic = topicInput.trim();
+    if (!nextTopic) {
+      return;
+    }
+    const nextTopics = trackedTopics.includes(nextTopic)
+      ? trackedTopics
+      : [...trackedTopics, nextTopic];
+    setTrackedTopics(nextTopics);
+    setActiveTopic(nextTopic);
+    setTopicInput('');
+    clearThreadContext();
+    await loadTopics(nextTopics, nextTopic, null);
+  }
+
+  async function handleSelectTopic(topic: string) {
+    setActiveTopic(topic);
+    clearThreadContext();
+    await loadTopics(trackedTopics, topic, null);
+  }
+
+  async function handleRemoveTopic(topic: string) {
+    if (trackedTopics.length === 1) {
+      return;
+    }
+    const nextTopics = trackedTopics.filter((value) => value !== topic);
+    const nextActiveTopic = activeTopic === topic ? nextTopics[0] : activeTopic;
+    setTrackedTopics(nextTopics);
+    setActiveTopic(nextActiveTopic);
+    clearThreadContext();
+    await loadTopics(nextTopics, nextActiveTopic, null);
+  }
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,9 +146,9 @@ export function App({ api = runtimeApi }: AppProps) {
     }
 
     try {
-      await api.createPost(topic, composer.trim(), replyTarget?.id ?? null);
+      await api.createPost(activeTopic, composer.trim(), replyTarget?.id ?? null);
       setComposer('');
-      await loadTopic(topic, selectedThread);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
       if (selectedThread) {
         await openThread(selectedThread);
       }
@@ -95,7 +160,7 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function openThread(threadId: string) {
     try {
-      const threadView = await api.listThread(topic, threadId, null, 50);
+      const threadView = await api.listThread(activeTopic, threadId, null, 50);
       startTransition(() => {
         setSelectedThread(threadId);
         setThread(threadView.items);
@@ -127,7 +192,7 @@ export function App({ api = runtimeApi }: AppProps) {
     try {
       await api.importPeerTicket(peerTicket.trim());
       setPeerTicket('');
-      await loadTopic(topic, selectedThread);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'failed to import peer');
     }
@@ -145,8 +210,21 @@ export function App({ api = runtimeApi }: AppProps) {
           </p>
         </div>
         <label className='field'>
-          <span>Topic</span>
-          <input value={topic} onChange={(e) => setTopic(e.target.value)} />
+          <span>Add Topic</span>
+          <div className='topic-input-row'>
+            <input
+              value={topicInput}
+              onChange={(e) => setTopicInput(e.target.value)}
+              placeholder='kukuri:topic:demo'
+            />
+            <button
+              className='button button-secondary'
+              type='button'
+              onClick={() => void handleAddTopic()}
+            >
+              Add
+            </button>
+          </div>
         </label>
       </section>
 
@@ -182,14 +260,48 @@ export function App({ api = runtimeApi }: AppProps) {
           <button className='button button-secondary' onClick={() => void handleImportPeer()}>
             Import Peer
           </button>
+          <section className='topic-list'>
+            <div className='panel-header'>
+              <h3>Tracked Topics</h3>
+              <small>{syncStatus.subscribed_topics.length} active</small>
+            </div>
+            <ul>
+              {trackedTopics.map((topic) => (
+                <li
+                  key={topic}
+                  className={
+                    topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'
+                  }
+                >
+                  <button
+                    className='topic-link'
+                    type='button'
+                    onClick={() => void handleSelectTopic(topic)}
+                  >
+                    {topic}
+                  </button>
+                  {trackedTopics.length > 1 ? (
+                    <button
+                      className='topic-remove'
+                      type='button'
+                      onClick={() => void handleRemoveTopic(topic)}
+                    >
+                      x
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
         </aside>
 
         <section className='panel'>
           <div className='panel-header'>
             <h2>Timeline</h2>
+            <span className='active-topic-label'>{activeTopic}</span>
             <button
               className='button button-secondary'
-              onClick={() => void loadTopic(topic, selectedThread)}
+              onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
             >
               Refresh
             </button>
@@ -220,7 +332,7 @@ export function App({ api = runtimeApi }: AppProps) {
             </button>
           </form>
           <ul className='post-list'>
-            {timeline.map((post) => (
+            {activeTimeline.map((post) => (
               <li key={post.id}>
                 <article className='post-card'>
                   <button className='post-link' onClick={() => void openThread(post.root_id ?? post.id)}>

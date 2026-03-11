@@ -230,6 +230,36 @@ mod tests {
         assert_eq!(timeline.items[0].content, "hello app");
     }
 
+    #[tokio::test]
+    async fn tracking_multiple_topics_updates_sync_status() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+
+        let _ = app
+            .list_timeline("kukuri:topic:one", None, 10)
+            .await
+            .expect("timeline one");
+        let _ = app
+            .list_timeline("kukuri:topic:two", None, 10)
+            .await
+            .expect("timeline two");
+        let status = app.get_sync_status().await.expect("sync status");
+
+        assert!(
+            status
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == "kukuri:topic:one")
+        );
+        assert!(
+            status
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == "kukuri:topic:two")
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_post_between_apps() {
         let store_a = Arc::new(MemoryStore::default());
