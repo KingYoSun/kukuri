@@ -208,6 +208,7 @@ struct TopicState {
     broadcaster: broadcast::Sender<EventEnvelope>,
     joined: Arc<AtomicBool>,
     joined_notify: Arc<Notify>,
+    bootstrap_peer_ids: BTreeSet<String>,
     _receiver_task: JoinHandle<()>,
 }
 
@@ -262,12 +263,14 @@ impl IrohGossipTransport {
         Self::bind(TransportNetworkConfig::from_env()?).await
     }
 
-    async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
-        if let Some(existing) = self.topic_states.lock().await.get(topic.as_str()) {
-            self.subscribed_topics.lock().await.insert(topic.0.clone());
-            return Ok(existing.broadcaster.clone());
+    async fn remove_topic_state(&self, topic: &str) {
+        if let Some(state) = self.topic_states.lock().await.remove(topic) {
+            state._receiver_task.abort();
+            drop(state.sender);
         }
+    }
 
+    async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
         let imported = self
             .imported_peers
             .lock()
@@ -275,6 +278,26 @@ impl IrohGossipTransport {
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        let bootstrap_peer_ids = imported
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+
+        let existing = {
+            let topics = self.topic_states.lock().await;
+            topics
+                .get(topic.as_str())
+                .map(|state| (state.broadcaster.clone(), state.bootstrap_peer_ids.clone()))
+        };
+
+        if let Some((broadcaster, existing_bootstrap_peer_ids)) = existing {
+            if existing_bootstrap_peer_ids == bootstrap_peer_ids {
+                self.subscribed_topics.lock().await.insert(topic.0.clone());
+                return Ok(broadcaster);
+            }
+            self.remove_topic_state(topic.as_str()).await;
+        }
+
         let bootstrap = imported.iter().map(|peer| peer.id).collect::<Vec<_>>();
 
         for peer in &imported {
@@ -336,6 +359,7 @@ impl IrohGossipTransport {
                 broadcaster: broadcaster.clone(),
                 joined,
                 joined_notify,
+                bootstrap_peer_ids,
                 _receiver_task: task,
             },
         );

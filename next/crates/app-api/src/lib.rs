@@ -124,7 +124,18 @@ impl AppService {
     }
 
     pub async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
-        self.transport.import_ticket(ticket).await
+        self.transport.import_ticket(ticket).await?;
+        let existing_topics = self
+            .subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for topic in existing_topics {
+            self.restart_topic_subscription(topic.as_str()).await?;
+        }
+        Ok(())
     }
 
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
@@ -136,6 +147,17 @@ impl AppService {
             return Ok(());
         }
 
+        self.spawn_topic_subscription(topic_id).await
+    }
+
+    async fn restart_topic_subscription(&self, topic_id: &str) -> Result<()> {
+        if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
+            handle.abort();
+        }
+        self.spawn_topic_subscription(topic_id).await
+    }
+
+    async fn spawn_topic_subscription(&self, topic_id: &str) -> Result<()> {
         let store = Arc::clone(&self.store);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let mut stream = self.transport.subscribe(&TopicId::new(topic_id)).await?;
@@ -279,5 +301,73 @@ mod tests {
                 .iter()
                 .any(|value| value == topic)
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let transport_a = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport a should bind"),
+        );
+        let transport_b = Arc::new(
+            IrohGossipTransport::bind_local()
+                .await
+                .expect("transport b should bind"),
+        );
+        let app_a = AppService::new(store_a, transport_a);
+        let app_b = AppService::new(store_b, transport_b);
+        let topic = "kukuri:topic:rebind-after-import";
+
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a before import");
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b before import");
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let event_id = app_a
+            .create_post(topic, "hello after import", None)
+            .await
+            .expect("create post");
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline should load");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("timeline sync timeout");
+
+        assert_eq!(received.content, "hello after import");
     }
 }
