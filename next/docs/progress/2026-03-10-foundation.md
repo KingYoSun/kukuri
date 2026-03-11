@@ -26,6 +26,7 @@
 - Linux 実機 2 台で複数 topic を同時購読し、各 topic で timeline が維持されることを確認
 - Linux 実機 2 台で片側だけ購読している topic はその topic 行だけ `joined: false / peers: 0` になることを確認
 - Linux 実機 2 台で共通購読 topic を片側で解除した後、その topic 行だけ `joined: false / peers: 0` になることを確認
+- Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
@@ -33,4 +34,4 @@
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `診断表示の追加項目` と `エラー理由の可視化`。
+- Tauri backend binding は導入済み。次の実機確認は `エラー理由の可視化` と `diagnostics の詳細化`。
