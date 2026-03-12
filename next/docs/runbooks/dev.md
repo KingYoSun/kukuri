@@ -60,6 +60,15 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 
+## Phase5 入口チェック
+1. `cargo test -p next-app-api --lib` を通す。
+2. `cargo test -p next-desktop-runtime --lib` を通す。
+3. `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml` を通す。
+4. `sqlite_deletion_does_not_lose_shared_state` と `restart_restores_from_docs_blobs_without_sqlite_seed` が green であることを確認する。
+5. `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green であることを確認する。
+6. `compat_event_gossip` がコードから除去されていることを確認する。
+7. `legacy/` を参照せず `next/` だけで Linux の開発・テスト・起動が完結することを確認する。
+
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。
 - `Refresh` は強制再取得用で、通常の確認では押さなくても反映される想定。

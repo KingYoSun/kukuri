@@ -845,6 +845,56 @@ mod tests {
         }
     }
 
+    async fn assert_docs_sync_recovers_post_without_hints(topic: &str, content: &str) {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a,
+            stack_a.transport.clone(),
+            Arc::new(NoopHintTransport),
+            stack_a.docs_sync.clone(),
+            stack_a.blob_service.clone(),
+            generate_keys(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b,
+            stack_b.transport.clone(),
+            Arc::new(NoopHintTransport),
+            stack_b.docs_sync.clone(),
+            stack_b.blob_service.clone(),
+            generate_keys(),
+        );
+
+        let ticket_a = app_a.peer_ticket().await.expect("ticket a").expect("ticket a value");
+        let ticket_b = app_b.peer_ticket().await.expect("ticket b").expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let event_id = app_a
+            .create_post(topic, content, None)
+            .await
+            .expect("create post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b.list_timeline(topic, None, 20).await.expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("missing gossip timeout");
+
+        assert_eq!(received.content, content);
+    }
+
     #[tokio::test]
     async fn create_post_and_list_timeline() {
         let store = Arc::new(MemoryStore::default());
@@ -1027,54 +1077,20 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn missing_gossip_but_docs_sync_recovers_post() {
-        let dir = tempdir().expect("tempdir");
-        let stack_a = TestIrohStack::new(&dir.path().join("a")).await;
-        let stack_b = TestIrohStack::new(&dir.path().join("b")).await;
-        let store_a = Arc::new(MemoryStore::default());
-        let store_b = Arc::new(MemoryStore::default());
-        let app_a = AppService::new_with_services(
-            store_a.clone(),
-            store_a,
-            stack_a.transport.clone(),
-            Arc::new(NoopHintTransport),
-            stack_a.docs_sync.clone(),
-            stack_a.blob_service.clone(),
-            generate_keys(),
-        );
-        let app_b = AppService::new_with_services(
-            store_b.clone(),
-            store_b,
-            stack_b.transport.clone(),
-            Arc::new(NoopHintTransport),
-            stack_b.docs_sync.clone(),
-            stack_b.blob_service.clone(),
-            generate_keys(),
-        );
+        assert_docs_sync_recovers_post_without_hints(
+            "kukuri:topic:missing-gossip",
+            "docs recover",
+        )
+        .await;
+    }
 
-        let ticket_a = app_a.peer_ticket().await.expect("ticket a").expect("ticket a value");
-        let ticket_b = app_b.peer_ticket().await.expect("ticket b").expect("ticket b value");
-        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
-        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
-
-        let topic = "kukuri:topic:missing-gossip";
-        let event_id = app_a
-            .create_post(topic, "docs recover", None)
-            .await
-            .expect("create post");
-
-        let received = timeout(Duration::from_secs(10), async {
-            loop {
-                let timeline = app_b.list_timeline(topic, None, 20).await.expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
-                    return post.clone();
-                }
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .expect("missing gossip timeout");
-
-        assert_eq!(received.content, "docs recover");
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn gossip_loss_does_not_lose_durable_post() {
+        assert_docs_sync_recovers_post_without_hints(
+            "kukuri:topic:gossip-loss",
+            "durable docs payload",
+        )
+        .await;
     }
 
     #[tokio::test]

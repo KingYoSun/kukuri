@@ -40,11 +40,22 @@
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - desktop-runtime test で restart 後も author pubkey が維持されることを確認
 - desktop-runtime test で `late_joiner_backfills_timeline_from_docs` が green
+- desktop-runtime test で `sqlite_deletion_does_not_lose_shared_state` が green
+- desktop-runtime test で `restart_restores_from_docs_blobs_without_sqlite_seed` が green
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
 - app-api と frontend test で topic ごとの diagnostics 表示を確認
 - app-api test で invalid ticket import 時に `last_error` が diagnostics へ反映されることを確認
+- app-api test で `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green
+- app-api test で `thread_open_triggers_lazy_blob_fetch` / `image_post_visible_before_full_blob_download` / `new_writes_use_blob_text_payload_refs` が green
+- docs-sync test で `private_cursor_not_in_public_replica` が green
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
+
+## Phase5 入口条件
+- `SQLite` を削除しても docs/blobs から shared durable state が復元できること
+- `gossip` を取り逃しても late join/backfill が docs/blobs だけで成立すること
+- `compat_event_gossip` がコードから消えていること
+- `legacy/` 非依存で Linux の開発・テスト・起動が完結すること
