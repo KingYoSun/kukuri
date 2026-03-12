@@ -15,3 +15,4 @@
 - `desktop + core + store + static-peer transport + harness`
 - required target は Linux のみ
 - root 実行入口は `cargo xtask ...`
+- 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。

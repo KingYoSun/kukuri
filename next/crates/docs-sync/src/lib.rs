@@ -553,4 +553,45 @@ mod tests {
             .expect("utf8")
             .contains("event-1"));
     }
+
+    #[tokio::test]
+    async fn private_cursor_not_in_public_replica() {
+        let node = IrohDocsNode::memory().await.expect("memory docs node");
+        let docs = IrohDocsSync::new(node);
+        let topic_replica = topic_replica_id("kukuri:topic:docs");
+        let author_replica = author_replica_id("f".repeat(64).as_str());
+        let device_replica = device_replica_id("f".repeat(64).as_str(), "device-a");
+
+        docs.open_replica(&topic_replica).await.expect("open topic replica");
+        docs.open_replica(&author_replica).await.expect("open author replica");
+        docs.open_replica(&device_replica).await.expect("open device replica");
+
+        docs.apply_doc_op(
+            &device_replica,
+            DocOp::SetJson {
+                key: "cursor/topic/kukuri:topic:docs".into(),
+                value: serde_json::json!({ "created_at": 1 }),
+            },
+        )
+        .await
+        .expect("write device cursor");
+
+        let topic_rows = docs
+            .query_replica(&topic_replica, DocQuery::Prefix("cursor/".into()))
+            .await
+            .expect("query topic cursor");
+        let author_rows = docs
+            .query_replica(&author_replica, DocQuery::Prefix("cursor/".into()))
+            .await
+            .expect("query author cursor");
+        let device_rows = docs
+            .query_replica(&device_replica, DocQuery::Prefix("cursor/".into()))
+            .await
+            .expect("query device cursor");
+
+        assert!(topic_rows.is_empty());
+        assert!(author_rows.is_empty());
+        assert_eq!(device_rows.len(), 1);
+        assert_eq!(device_rows[0].key, "cursor/topic/kukuri:topic:docs");
+    }
 }
