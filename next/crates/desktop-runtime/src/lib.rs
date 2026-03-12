@@ -93,6 +93,7 @@ impl DesktopRuntime {
             iroh_stack.transport.clone(),
             iroh_stack.docs_sync.clone(),
             iroh_stack.blob_service.clone(),
+            false,
             keys,
         );
 

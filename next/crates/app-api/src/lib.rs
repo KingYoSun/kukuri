@@ -68,6 +68,7 @@ pub struct AppService {
     hint_transport: Arc<dyn HintTransport>,
     docs_sync: Arc<dyn DocsSync>,
     blob_service: Arc<dyn BlobService>,
+    compat_event_gossip: bool,
     keys: Arc<Keys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
@@ -88,6 +89,7 @@ impl AppService {
             transport as Arc<dyn HintTransport>,
             docs_sync,
             blob_service,
+            true,
             generate_keys(),
         )
     }
@@ -99,6 +101,7 @@ impl AppService {
         hint_transport: Arc<dyn HintTransport>,
         docs_sync: Arc<dyn DocsSync>,
         blob_service: Arc<dyn BlobService>,
+        compat_event_gossip: bool,
         keys: Keys,
     ) -> Self {
         Self {
@@ -108,6 +111,7 @@ impl AppService {
             hint_transport,
             docs_sync,
             blob_service,
+            compat_event_gossip,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
@@ -142,7 +146,9 @@ impl AppService {
                 },
             )
             .await?;
-        self.transport.publish(&topic, event.clone()).await?;
+        if self.compat_event_gossip {
+            self.transport.publish(&topic, event.clone()).await?;
+        }
         Ok(event.id.0)
     }
 
@@ -302,26 +308,71 @@ impl AppService {
         let projection_store = Arc::clone(&self.projection_store);
         let docs_sync = Arc::clone(&self.docs_sync);
         let blob_service = Arc::clone(&self.blob_service);
+        let hint_transport = Arc::clone(&self.hint_transport);
         let last_sync = Arc::clone(&self.last_sync_ts);
-        let mut stream = self.transport.subscribe(&TopicId::new(topic_id)).await?;
         let topic_key = topic_id.to_string();
-
-        let handle = tokio::spawn(async move {
-            while let Some(envelope) = stream.next().await {
-                if store.put_event(envelope.event.clone()).await.is_ok()
-                    && ingest_remote_event(
-                        docs_sync.as_ref(),
-                        blob_service.as_ref(),
-                        projection_store.as_ref(),
-                        envelope.event.clone(),
-                    )
-                    .await
-                    .is_ok()
-                {
-                    *last_sync.lock().await = Some(envelope.received_at);
+        let compat_event_gossip = self.compat_event_gossip;
+        let handle = if compat_event_gossip {
+            let mut stream = self.transport.subscribe(&TopicId::new(topic_id)).await?;
+            tokio::spawn(async move {
+                while let Some(envelope) = stream.next().await {
+                    if store.put_event(envelope.event.clone()).await.is_ok()
+                        && ingest_remote_event(
+                            docs_sync.as_ref(),
+                            blob_service.as_ref(),
+                            projection_store.as_ref(),
+                            envelope.event.clone(),
+                        )
+                        .await
+                        .is_ok()
+                    {
+                        *last_sync.lock().await = Some(envelope.received_at);
+                    }
                 }
-            }
-        });
+            })
+        } else {
+            let topic_replica = topic_replica_id(topic_id);
+            docs_sync.open_replica(&topic_replica).await?;
+            let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
+            let mut hint_stream = hint_transport.subscribe_hints(&TopicId::new(topic_id)).await?;
+            let topic = topic_id.to_string();
+            tokio::spawn(async move {
+                let _ = hydrate_topic_projection_with_services(
+                    docs_sync.as_ref(),
+                    blob_service.as_ref(),
+                    projection_store.as_ref(),
+                    topic.as_str(),
+                )
+                .await;
+                loop {
+                    tokio::select! {
+                        Some(event) = doc_stream.next() => {
+                            if event.is_ok()
+                                && hydrate_topic_projection_with_services(
+                                    docs_sync.as_ref(),
+                                    blob_service.as_ref(),
+                                    projection_store.as_ref(),
+                                    topic.as_str(),
+                                ).await.is_ok() {
+                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            }
+                        }
+                        Some(event) = hint_stream.next() => {
+                            if hint_targets_topic(&event.hint, topic.as_str())
+                                && hydrate_topic_projection_with_services(
+                                    docs_sync.as_ref(),
+                                    blob_service.as_ref(),
+                                    projection_store.as_ref(),
+                                    topic.as_str(),
+                                ).await.is_ok() {
+                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            }
+                        }
+                        else => break,
+                    }
+                }
+            })
+        };
 
         self.subscriptions.lock().await.insert(topic_key, handle);
         Ok(())
@@ -363,28 +414,13 @@ impl AppService {
     }
 
     async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<()> {
-        let replica = topic_replica_id(topic_id);
-        let records = self
-            .docs_sync
-            .query_replica(&replica, DocQuery::Prefix("post/".into()))
-            .await?;
-        for record in records {
-            let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
-            let content = match &header.payload_ref {
-                PayloadRef::InlineText { text } => Some(text.clone()),
-                PayloadRef::BlobText { hash, .. } => self
-                    .blob_service
-                    .fetch_blob(hash)
-                    .await?
-                    .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
-            };
-            ProjectionStore::put_projection_row(
-                self.projection_store.as_ref(),
-                projection_row_from_header(&header, content),
-            )
-            .await?;
-        }
-        Ok(())
+        hydrate_topic_projection_with_services(
+            self.docs_sync.as_ref(),
+            self.blob_service.as_ref(),
+            self.projection_store.as_ref(),
+            topic_id,
+        )
+        .await
     }
 
     fn page_to_view(&self, page: Page<EventProjectionRow>) -> TimelineView {
@@ -519,6 +555,42 @@ async fn ingest_remote_event(
         .mark_blob_status(&blob.hash, BlobCacheStatus::Available)
         .await?;
     Ok(())
+}
+
+async fn hydrate_topic_projection_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+) -> Result<()> {
+    let replica = topic_replica_id(topic_id);
+    let records = docs_sync
+        .query_replica(&replica, DocQuery::Prefix("post/".into()))
+        .await?;
+    for record in records {
+        let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+        let content = match &header.payload_ref {
+            PayloadRef::InlineText { text } => Some(text.clone()),
+            PayloadRef::BlobText { hash, .. } => blob_service
+                .fetch_blob(hash)
+                .await?
+                .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
+        };
+        projection_store
+            .put_projection_row(projection_row_from_header(&header, content))
+            .await?;
+    }
+    Ok(())
+}
+
+fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
+    match hint {
+        GossipHint::TopicIndexUpdated { topic_id, .. }
+        | GossipHint::Presence { topic_id, .. }
+        | GossipHint::Typing { topic_id, .. }
+        | GossipHint::LiveSignal { topic_id, .. } => topic_id.as_str() == topic,
+        GossipHint::ThreadUpdated { .. } | GossipHint::ProfileUpdated { .. } => true,
+    }
 }
 
 #[cfg(test)]
