@@ -55,6 +55,7 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立
 - Linux 実機 2 台で `post -> reply -> thread` と複数 topic の双方向伝播が成立
 - Linux 実機 2 台で topic 単位の unsubscribe と peer diagnostics 表示が期待どおりに機能
+- Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
 - Linux-first MVP の Phase4 desktop 縦スライスは完了

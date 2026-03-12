@@ -33,6 +33,7 @@
 - Linux 実機 2 台で複数 topic を同時購読し、各 topic で timeline が維持されることを確認
 - Linux 実機 2 台で片側だけ購読している topic はその topic 行だけ `joined: false / peers: 0` になることを確認
 - Linux 実機 2 台で共通購読 topic を片側で解除した後、その topic 行だけ `joined: false / peers: 0` になることを確認
+- Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
