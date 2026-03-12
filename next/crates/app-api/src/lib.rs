@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -166,7 +166,7 @@ impl AppService {
             limit,
         )
         .await?;
-        if page.items.is_empty() {
+        if page.items.is_empty() || projection_page_needs_hydration(&page) {
             self.hydrate_topic_projection(topic_id).await?;
             page = ProjectionStore::list_topic_timeline(
                 self.projection_store.as_ref(),
@@ -195,7 +195,7 @@ impl AppService {
             limit,
         )
         .await?;
-        if page.items.is_empty() {
+        if page.items.is_empty() || projection_page_needs_hydration(&page) {
             self.hydrate_topic_projection(topic_id).await?;
             page = ProjectionStore::list_thread(
                 self.projection_store.as_ref(),
@@ -221,6 +221,8 @@ impl AppService {
             last_error,
             topic_diagnostics,
         } = self.transport.peers().await?;
+        let subscribed_topics = normalize_topics(subscribed_topics);
+        let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
 
         Ok(SyncStatus {
             connected,
@@ -233,29 +235,17 @@ impl AppService {
             subscribed_topics,
             topic_diagnostics: topic_diagnostics
                 .into_iter()
-                .map(
-                    |TopicPeerSnapshot {
-                         topic,
-                         joined,
-                         peer_count,
-                         connected_peers,
-                         configured_peer_ids,
-                         missing_peer_ids,
-                         last_received_at,
-                         status_detail,
-                         last_error,
-                     }| TopicSyncStatus {
-                        topic,
-                        joined,
-                        peer_count,
-                        connected_peers,
-                        configured_peer_ids,
-                        missing_peer_ids,
-                        last_received_at,
-                        status_detail,
-                        last_error,
-                    },
-                )
+                .map(|diagnostic| TopicSyncStatus {
+                    topic: diagnostic.topic,
+                    joined: diagnostic.joined,
+                    peer_count: diagnostic.peer_count,
+                    connected_peers: diagnostic.connected_peers,
+                    configured_peer_ids: diagnostic.configured_peer_ids,
+                    missing_peer_ids: diagnostic.missing_peer_ids,
+                    last_received_at: diagnostic.last_received_at,
+                    status_detail: diagnostic.status_detail,
+                    last_error: diagnostic.last_error,
+                })
                 .collect(),
         })
     }
@@ -593,12 +583,180 @@ fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
     }
 }
 
+fn projection_page_needs_hydration(page: &Page<EventProjectionRow>) -> bool {
+    page.items.iter().any(|item| item.content.is_none())
+}
+
+fn normalize_topic_name(topic: String) -> String {
+    topic
+        .strip_prefix("hint/")
+        .map_or(topic.clone(), ToOwned::to_owned)
+}
+
+fn normalize_topics(topics: Vec<String>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut normalized = Vec::new();
+    for topic in topics {
+        let topic = normalize_topic_name(topic);
+        if seen.insert(topic.clone()) {
+            normalized.push(topic);
+        }
+    }
+    normalized
+}
+
+fn normalize_topic_diagnostics(
+    diagnostics: Vec<TopicPeerSnapshot>,
+) -> Vec<TopicPeerSnapshot> {
+    let mut merged = BTreeMap::<String, TopicPeerSnapshot>::new();
+    for diagnostic in diagnostics {
+        let topic = normalize_topic_name(diagnostic.topic);
+        let entry = merged.entry(topic.clone()).or_insert_with(|| TopicPeerSnapshot {
+            topic: topic.clone(),
+            joined: false,
+            peer_count: 0,
+            connected_peers: Vec::new(),
+            configured_peer_ids: Vec::new(),
+            missing_peer_ids: Vec::new(),
+            last_received_at: None,
+            status_detail: diagnostic.status_detail.clone(),
+            last_error: diagnostic.last_error.clone(),
+        });
+        entry.joined |= diagnostic.joined;
+        entry.peer_count = entry.peer_count.max(diagnostic.peer_count);
+        for peer in diagnostic.connected_peers {
+            if !entry.connected_peers.contains(&peer) {
+                entry.connected_peers.push(peer);
+            }
+        }
+        for peer in diagnostic.configured_peer_ids {
+            if !entry.configured_peer_ids.contains(&peer) {
+                entry.configured_peer_ids.push(peer);
+            }
+        }
+        for peer in diagnostic.missing_peer_ids {
+            if !entry.missing_peer_ids.contains(&peer) {
+                entry.missing_peer_ids.push(peer);
+            }
+        }
+        entry.last_received_at = match (entry.last_received_at, diagnostic.last_received_at) {
+            (Some(left), Some(right)) => Some(left.max(right)),
+            (None, value) | (value, None) => value,
+        };
+        if entry.status_detail.starts_with("No peers configured")
+            || entry.status_detail.starts_with("Waiting")
+        {
+            entry.status_detail = diagnostic.status_detail;
+        }
+        if entry.last_error.is_none() {
+            entry.last_error = diagnostic.last_error;
+        }
+    }
+    merged.into_values().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use next_store::MemoryStore;
-    use next_transport::{FakeNetwork, FakeTransport, IrohGossipTransport};
+    use next_transport::{EventEnvelope, EventStream, FakeNetwork, FakeTransport, HintEnvelope, HintStream, IrohGossipTransport};
+    use tokio::sync::{broadcast, Mutex as TokioMutex};
     use tokio::time::{Duration, sleep, timeout};
+    use tokio_stream::wrappers::BroadcastStream;
+
+    #[derive(Clone)]
+    struct StaticTransport {
+        peers: Arc<TokioMutex<PeerSnapshot>>,
+        events: Arc<TokioMutex<HashMap<String, broadcast::Sender<EventEnvelope>>>>,
+        hints: Arc<TokioMutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
+        local_ticket: String,
+    }
+
+    impl StaticTransport {
+        fn new(peers: PeerSnapshot) -> Self {
+            Self {
+                peers: Arc::new(TokioMutex::new(peers)),
+                events: Arc::new(TokioMutex::new(HashMap::new())),
+                hints: Arc::new(TokioMutex::new(HashMap::new())),
+                local_ticket: "static-peer".into(),
+            }
+        }
+
+        async fn event_sender(&self, topic: &TopicId) -> broadcast::Sender<EventEnvelope> {
+            let mut guard = self.events.lock().await;
+            guard
+                .entry(topic.as_str().to_string())
+                .or_insert_with(|| broadcast::channel(64).0)
+                .clone()
+        }
+
+        async fn hint_sender(&self, topic: &TopicId) -> broadcast::Sender<HintEnvelope> {
+            let mut guard = self.hints.lock().await;
+            guard
+                .entry(topic.as_str().to_string())
+                .or_insert_with(|| broadcast::channel(64).0)
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl Transport for StaticTransport {
+        async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
+            let sender = self.event_sender(topic).await;
+            let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
+                item.ok()
+            });
+            Ok(Box::pin(stream))
+        }
+
+        async fn unsubscribe(&self, _topic: &TopicId) -> Result<()> {
+            Ok(())
+        }
+
+        async fn publish(&self, topic: &TopicId, event: next_core::Event) -> Result<()> {
+            let sender = self.event_sender(topic).await;
+            let _ = sender.send(EventEnvelope {
+                event,
+                received_at: Utc::now().timestamp_millis(),
+                source_peer: "static".into(),
+            });
+            Ok(())
+        }
+
+        async fn peers(&self) -> Result<PeerSnapshot> {
+            Ok(self.peers.lock().await.clone())
+        }
+
+        async fn export_ticket(&self) -> Result<Option<String>> {
+            Ok(Some(self.local_ticket.clone()))
+        }
+
+        async fn import_ticket(&self, _ticket: &str) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl HintTransport for StaticTransport {
+        async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+            let sender = self.hint_sender(topic).await;
+            let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
+                item.ok()
+            });
+            Ok(Box::pin(stream))
+        }
+
+        async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
+            let sender = self.hint_sender(topic).await;
+            let _ = sender.send(HintEnvelope {
+                hint,
+                received_at: Utc::now().timestamp_millis(),
+                source_peer: "static".into(),
+            });
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn create_post_and_list_timeline() {
@@ -673,6 +831,87 @@ mod tests {
                 .iter()
                 .all(|topic| topic.last_error.is_none())
         );
+    }
+
+    #[tokio::test]
+    async fn list_timeline_rehydrates_placeholder_from_blob_store() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let topic = TopicId::new("kukuri:topic:hydrate");
+        let event = build_text_note(&keys, &topic, "hello after blob fetch", None).expect("event");
+        let stored_blob = blob_service
+            .put_blob(b"hello after blob fetch".to_vec(), "text/plain")
+            .await
+            .expect("put blob");
+        let header = event.to_canonical_header(PayloadRef::BlobText {
+            hash: stored_blob.hash.clone(),
+            mime: stored_blob.mime.clone(),
+            bytes: stored_blob.bytes,
+        });
+        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
+            .await
+            .expect("persist header");
+        ProjectionStore::put_projection_row(
+            store.as_ref(),
+            projection_row_from_header(&header, None),
+        )
+        .await
+        .expect("put placeholder projection");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service,
+            false,
+            keys,
+        );
+
+        let timeline = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline");
+
+        assert_eq!(timeline.items.len(), 1);
+        assert_eq!(timeline.items[0].content, "hello after blob fetch");
+    }
+
+    #[tokio::test]
+    async fn sync_status_normalizes_hint_topic_names() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot {
+            connected: true,
+            peer_count: 1,
+            connected_peers: vec!["peer-a".into()],
+            configured_peers: vec!["peer-a".into()],
+            subscribed_topics: vec!["hint/kukuri:topic:demo".into()],
+            pending_events: 0,
+            status_detail: "Connected".into(),
+            last_error: None,
+            topic_diagnostics: vec![TopicPeerSnapshot {
+                topic: "hint/kukuri:topic:demo".into(),
+                joined: true,
+                peer_count: 1,
+                connected_peers: vec!["peer-a".into()],
+                configured_peer_ids: vec!["peer-a".into()],
+                missing_peer_ids: Vec::new(),
+                last_received_at: Some(1),
+                status_detail: "Connected".into(),
+                last_error: None,
+            }],
+        }));
+        let app = AppService::new(store, transport);
+
+        let status = app.get_sync_status().await.expect("sync status");
+
+        assert_eq!(status.subscribed_topics, vec!["kukuri:topic:demo"]);
+        assert_eq!(status.topic_diagnostics.len(), 1);
+        assert_eq!(status.topic_diagnostics[0].topic, "kukuri:topic:demo");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
