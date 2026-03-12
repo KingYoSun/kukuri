@@ -271,6 +271,9 @@ impl AppService {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
         }
+        self.hint_transport
+            .unsubscribe_hints(&TopicId::new(topic_id))
+            .await?;
         self.transport.unsubscribe(&TopicId::new(topic_id)).await
     }
 
@@ -745,6 +748,10 @@ mod tests {
                 item.ok()
             });
             Ok(Box::pin(stream))
+        }
+
+        async fn unsubscribe_hints(&self, _topic: &TopicId) -> Result<()> {
+            Ok(())
         }
 
         async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {

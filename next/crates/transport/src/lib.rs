@@ -131,6 +131,7 @@ pub trait Transport: Send + Sync {
 #[async_trait]
 pub trait HintTransport: Send + Sync {
     async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream>;
+    async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()>;
     async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()>;
 }
 
@@ -283,11 +284,25 @@ impl Transport for FakeTransport {
 #[async_trait]
 impl HintTransport for FakeTransport {
     async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        self.subscribed_topics
+            .lock()
+            .await
+            .insert(hint_topic.as_str().to_string());
         let sender = self.hint_sender(topic).await;
         let stream = BroadcastStream::new(sender.subscribe()).filter_map(|event| async move {
             event.ok()
         });
         Ok(Box::pin(stream))
+    }
+
+    async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
+        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        self.subscribed_topics
+            .lock()
+            .await
+            .remove(hint_topic.as_str());
+        Ok(())
     }
 
     async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
@@ -718,6 +733,11 @@ impl HintTransport for IrohGossipTransport {
         Ok(Box::pin(mapped))
     }
 
+    async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
+        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        self.unsubscribe(&hint_topic).await
+    }
+
     async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
         let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
         let payload = serde_json::to_string(&hint)?;
@@ -977,6 +997,107 @@ mod tests {
 
         assert_eq!(envelope.event.id, event.id);
         assert_eq!(envelope.event.content, "hello transport");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn topic_hint_peer_count_tracks_real_subscribers() {
+        let transport_a = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport b");
+        let ticket_a = transport_a
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = transport_b
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        transport_a.import_ticket(&ticket_b).await.expect("import b");
+        transport_b.import_ticket(&ticket_a).await.expect("import a");
+
+        let demo = TopicId::new("kukuri:topic:demo");
+        let test7 = TopicId::new("kukuri:topic:test7");
+        let _ = transport_a
+            .subscribe_hints(&demo)
+            .await
+            .expect("subscribe demo a");
+        let _ = transport_b
+            .subscribe_hints(&demo)
+            .await
+            .expect("subscribe demo b");
+        let _ = transport_a
+            .subscribe_hints(&test7)
+            .await
+            .expect("subscribe test7 a");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let demo_diag = peers_a
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:demo")
+                    .expect("demo diag");
+                let test7_diag = peers_a
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:test7")
+                    .expect("test7 diag");
+                if demo_diag.peer_count == 1 && test7_diag.peer_count == 0 {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("initial peer counts timeout");
+
+        let _ = transport_b
+            .subscribe_hints(&test7)
+            .await
+            .expect("subscribe test7 b");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let test7_diag = peers_a
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:test7")
+                    .expect("test7 diag");
+                if test7_diag.peer_count == 1 {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("join peer count timeout");
+
+        transport_b
+            .unsubscribe_hints(&test7)
+            .await
+            .expect("unsubscribe test7 b");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let test7_diag = peers_a
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:test7")
+                    .expect("test7 diag");
+                if test7_diag.peer_count == 0 {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("leave peer count timeout");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
