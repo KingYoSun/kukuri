@@ -1,5 +1,8 @@
 # 2026年03月10日 foundation
 
+## Status
+- Linux-first MVP の Phase4 desktop 縦スライスは完了
+
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
 - `next-core`, `next-store`, `next-transport`, `next-app-api`, `next-harness`
@@ -40,4 +43,4 @@
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding と鍵永続化は導入済み。次の実機確認は `status_detail / last_error` が接続失敗時や再接続時にも期待どおり更新されるかの確認。
+- Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。

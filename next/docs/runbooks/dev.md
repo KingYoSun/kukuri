@@ -35,7 +35,7 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - `KUKURI_NEXT_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
 - `KUKURI_NEXT_DISABLE_KEYRING=1` を設定すると Linux keyring を使わず、app data dir 内の 0600 fallback file を使う。
 
-## 次の手動確認
+## 回帰用の手動確認
 1. 各端末で `KUKURI_NEXT_BIND_ADDR=0.0.0.0:0` と `KUKURI_NEXT_ADVERTISE_HOST` を設定する。
 2. 同一マシンで複数起動する場合は `KUKURI_NEXT_INSTANCE` も別値にする。
 3. `npx pnpm@10.16.1 tauri:dev` を起動する。
@@ -57,6 +57,7 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - Linux 実機 2 台で topic 単位の unsubscribe と peer diagnostics 表示が期待どおりに機能
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
+- Linux-first MVP の Phase4 desktop 縦スライスは完了
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。
