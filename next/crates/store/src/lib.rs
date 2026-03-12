@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use next_core::{BlobHash, Event, EventId, PayloadRef, Profile, ReplicaId, ThreadRef, parse_profile};
+use next_core::{
+    BlobHash, Event, EventId, PayloadRef, Profile, ReplicaId, ThreadRef, parse_profile,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, Row, Sqlite};
@@ -673,8 +675,12 @@ impl ProjectionStore for SqliteStore {
     }
 
     async fn rebuild_from_docs_blobs(&self, rows: Vec<EventProjectionRow>) -> Result<()> {
-        sqlx::query("DELETE FROM thread_cache").execute(&self.pool).await?;
-        sqlx::query("DELETE FROM topic_index_cache").execute(&self.pool).await?;
+        sqlx::query("DELETE FROM thread_cache")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM topic_index_cache")
+            .execute(&self.pool)
+            .await?;
         for row in rows {
             self.put_projection_row(row).await?;
         }
@@ -824,7 +830,9 @@ fn page_from_rows(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Page<Event>> {
     Ok(Page { items, next_cursor })
 }
 
-fn projection_page_from_rows(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Page<EventProjectionRow>> {
+fn projection_page_from_rows(
+    rows: Vec<sqlx::sqlite::SqliteRow>,
+) -> Result<Page<EventProjectionRow>> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         items.push(row_to_projection(row)?);

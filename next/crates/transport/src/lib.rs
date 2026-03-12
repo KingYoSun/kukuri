@@ -290,9 +290,8 @@ impl HintTransport for FakeTransport {
             .await
             .insert(hint_topic.as_str().to_string());
         let sender = self.hint_sender(topic).await;
-        let stream = BroadcastStream::new(sender.subscribe()).filter_map(|event| async move {
-            event.ok()
-        });
+        let stream =
+            BroadcastStream::new(sender.subscribe()).filter_map(|event| async move { event.ok() });
         Ok(Box::pin(stream))
     }
 
@@ -742,7 +741,10 @@ impl HintTransport for IrohGossipTransport {
         let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
         let payload = serde_json::to_string(&hint)?;
         let event = Event {
-            id: next_core::EventId::from(format!("hint-{}", blake3::hash(payload.as_bytes()).to_hex())),
+            id: next_core::EventId::from(format!(
+                "hint-{}",
+                blake3::hash(payload.as_bytes()).to_hex()
+            )),
             pubkey: next_core::Pubkey::from("hint"),
             created_at: Utc::now().timestamp(),
             kind: 1,
@@ -1017,8 +1019,14 @@ mod tests {
             .await
             .expect("ticket b")
             .expect("ticket b value");
-        transport_a.import_ticket(&ticket_b).await.expect("import b");
-        transport_b.import_ticket(&ticket_a).await.expect("import a");
+        transport_a
+            .import_ticket(&ticket_b)
+            .await
+            .expect("import b");
+        transport_b
+            .import_ticket(&ticket_a)
+            .await
+            .expect("import a");
 
         let demo = TopicId::new("kukuri:topic:demo");
         let test7 = TopicId::new("kukuri:topic:test7");

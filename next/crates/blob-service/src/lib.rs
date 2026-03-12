@@ -149,7 +149,9 @@ impl BlobService for IrohBlobService {
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         let endpoint_addr = parse_endpoint_ticket(ticket)?;
-        self.node.discovery().add_endpoint_info(endpoint_addr.clone());
+        self.node
+            .discovery()
+            .add_endpoint_info(endpoint_addr.clone());
         self.imported_peers
             .lock()
             .await

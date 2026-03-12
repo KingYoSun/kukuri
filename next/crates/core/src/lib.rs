@@ -93,8 +93,14 @@ impl BlobHash {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayloadRef {
-    InlineText { text: String },
-    BlobText { hash: BlobHash, mime: String, bytes: u64 },
+    InlineText {
+        text: String,
+    },
+    BlobText {
+        hash: BlobHash,
+        mime: String,
+        bytes: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

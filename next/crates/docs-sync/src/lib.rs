@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
-use iroh::{Endpoint, EndpointAddr, RelayMode};
 use iroh::protocol::Router;
+use iroh::{Endpoint, EndpointAddr, RelayMode};
 use iroh_blobs::api::Store as BlobStore;
 use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore};
 use iroh_docs::api::{Doc, DocsApi};
@@ -23,12 +23,22 @@ use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
+type ReplicaRecords = HashMap<String, Vec<u8>>;
+type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DocOp {
-    SetJson { key: String, value: serde_json::Value },
-    SetBytes { key: String, value: Vec<u8> },
-    DeletePrefix { prefix: String },
+    SetJson {
+        key: String,
+        value: serde_json::Value,
+    },
+    SetBytes {
+        key: String,
+        value: Vec<u8>,
+    },
+    DeletePrefix {
+        prefix: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,7 +67,11 @@ pub struct DocEvent {
 pub trait DocsSync: Send + Sync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()>;
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()>;
-    async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>>;
+    async fn query_replica(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+    ) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
 }
@@ -103,8 +117,8 @@ impl IrohDocsNode {
     ) -> Result<Arc<Self>> {
         let blobs = store.into();
         let discovery = Arc::new(MemoryLookup::new());
-        let mut endpoint_builder = Endpoint::empty_builder(RelayMode::Disabled)
-            .address_lookup(discovery.clone());
+        let mut endpoint_builder =
+            Endpoint::empty_builder(RelayMode::Disabled).address_lookup(discovery.clone());
         endpoint_builder = match network_config.bind_addr {
             std::net::SocketAddr::V4(addr) => endpoint_builder.bind_addr(addr)?,
             std::net::SocketAddr::V6(addr) => endpoint_builder.bind_addr(addr)?,
@@ -124,7 +138,10 @@ impl IrohDocsNode {
             .await
             .context("failed to spawn iroh docs")?;
         let router = Router::builder(endpoint.clone())
-            .accept(iroh_blobs::ALPN, iroh_blobs::BlobsProtocol::new(&blobs, None))
+            .accept(
+                iroh_blobs::ALPN,
+                iroh_blobs::BlobsProtocol::new(&blobs, None),
+            )
             .accept(iroh_docs::ALPN, docs.clone())
             .accept(iroh_gossip::ALPN, gossip.clone())
             .spawn();
@@ -195,7 +212,7 @@ pub struct IrohDocsSync {
 
 #[derive(Clone, Default)]
 pub struct MemoryDocsSync {
-    records: Arc<Mutex<HashMap<String, HashMap<String, Vec<u8>>>>>,
+    records: Arc<Mutex<MemoryReplicaMap>>,
     events: Arc<Mutex<HashMap<String, broadcast::Sender<DocEvent>>>>,
 }
 
@@ -251,18 +268,16 @@ impl IrohDocsSync {
         let live_events = tx.clone();
         let task = tokio::spawn(async move {
             while let Some(item) = live.next().await {
-                if let Ok(event) = item {
-                    match event {
-                        iroh_docs::engine::LiveEvent::InsertLocal { entry }
-                        | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. } => {
-                            let _ = live_events.send(DocEvent {
-                                replica_id: live_replica.clone(),
-                                key: String::from_utf8_lossy(entry.key()).to_string(),
-                                content_hash: entry.content_hash().to_string(),
-                            });
-                        }
-                        _ => {}
-                    }
+                if let Ok(
+                    iroh_docs::engine::LiveEvent::InsertLocal { entry }
+                    | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. },
+                ) = item
+                {
+                    let _ = live_events.send(DocEvent {
+                        replica_id: live_replica.clone(),
+                        key: String::from_utf8_lossy(entry.key()).to_string(),
+                        content_hash: entry.content_hash().to_string(),
+                    });
                 }
             }
         });
@@ -308,9 +323,7 @@ impl DocsSync for MemoryDocsSync {
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
         self.open_replica(replica_id).await?;
         let mut records = self.records.lock().await;
-        let replica = records
-            .entry(replica_id.as_str().to_string())
-            .or_default();
+        let replica = records.entry(replica_id.as_str().to_string()).or_default();
         match op {
             DocOp::SetJson { key, value } => {
                 let bytes = serde_json::to_vec(&value)?;
@@ -351,10 +364,17 @@ impl DocsSync for MemoryDocsSync {
         Ok(())
     }
 
-    async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>> {
+    async fn query_replica(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+    ) -> Result<Vec<DocRecord>> {
         self.open_replica(replica_id).await?;
         let records = self.records.lock().await;
-        let items = records.get(replica_id.as_str()).cloned().unwrap_or_default();
+        let items = records
+            .get(replica_id.as_str())
+            .cloned()
+            .unwrap_or_default();
         let mut rows = items
             .into_iter()
             .filter(|(key, _)| match &query {
@@ -382,9 +402,8 @@ impl DocsSync for MemoryDocsSync {
             .get(replica_id.as_str())
             .cloned()
             .context("missing replica events")?;
-        let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
-            item.ok().map(Ok)
-        });
+        let stream = BroadcastStream::new(sender.subscribe())
+            .filter_map(|item| async move { item.ok().map(Ok) });
         Ok(Box::pin(stream))
     }
 
@@ -408,7 +427,9 @@ impl DocsSync for IrohDocsSync {
         match op {
             DocOp::SetJson { key, value } => {
                 let payload = serde_json::to_vec(&value)?;
-                let content_hash = doc.set_bytes(author, key.as_bytes().to_vec(), payload.clone()).await?;
+                let content_hash = doc
+                    .set_bytes(author, key.as_bytes().to_vec(), payload.clone())
+                    .await?;
                 let _ = sender.send(DocEvent {
                     replica_id: replica_id.clone(),
                     key,
@@ -416,7 +437,9 @@ impl DocsSync for IrohDocsSync {
                 });
             }
             DocOp::SetBytes { key, value } => {
-                let content_hash = doc.set_bytes(author, key.as_bytes().to_vec(), value).await?;
+                let content_hash = doc
+                    .set_bytes(author, key.as_bytes().to_vec(), value)
+                    .await?;
                 let _ = sender.send(DocEvent {
                     replica_id: replica_id.clone(),
                     key,
@@ -430,7 +453,11 @@ impl DocsSync for IrohDocsSync {
         Ok(())
     }
 
-    async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>> {
+    async fn query_replica(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+    ) -> Result<Vec<DocRecord>> {
         let doc = self.ensure_replica(replica_id).await?;
         let query = match query {
             DocQuery::Exact(key) => Query::key_exact(key).build(),
@@ -443,7 +470,12 @@ impl DocsSync for IrohDocsSync {
         while let Some(entry) = stream.next().await {
             let entry = entry?;
             let key = String::from_utf8(entry.key().to_vec()).context("docs key is not utf8")?;
-            let value = self.node.blobs().blobs().get_bytes(entry.content_hash()).await?;
+            let value = self
+                .node
+                .blobs()
+                .blobs()
+                .get_bytes(entry.content_hash())
+                .await?;
             records.push(DocRecord {
                 key,
                 value: value.to_vec(),
@@ -456,15 +488,16 @@ impl DocsSync for IrohDocsSync {
 
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream> {
         let sender = self.sender(replica_id).await?;
-        let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
-            item.ok().map(Ok)
-        });
+        let stream = BroadcastStream::new(sender.subscribe())
+            .filter_map(|item| async move { item.ok().map(Ok) });
         Ok(Box::pin(stream))
     }
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         let endpoint_addr = parse_endpoint_ticket(ticket)?;
-        self.node.discovery().add_endpoint_info(endpoint_addr.clone());
+        self.node
+            .discovery()
+            .add_endpoint_info(endpoint_addr.clone());
         self.imported_peers
             .lock()
             .await
@@ -549,9 +582,11 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].key, "timeline/0001-event");
-        assert!(String::from_utf8(rows[0].value.clone())
-            .expect("utf8")
-            .contains("event-1"));
+        assert!(
+            String::from_utf8(rows[0].value.clone())
+                .expect("utf8")
+                .contains("event-1")
+        );
     }
 
     #[tokio::test]
@@ -562,9 +597,15 @@ mod tests {
         let author_replica = author_replica_id("f".repeat(64).as_str());
         let device_replica = device_replica_id("f".repeat(64).as_str(), "device-a");
 
-        docs.open_replica(&topic_replica).await.expect("open topic replica");
-        docs.open_replica(&author_replica).await.expect("open author replica");
-        docs.open_replica(&device_replica).await.expect("open device replica");
+        docs.open_replica(&topic_replica)
+            .await
+            .expect("open topic replica");
+        docs.open_replica(&author_replica)
+            .await
+            .expect("open author replica");
+        docs.open_replica(&device_replica)
+            .await
+            .expect("open device replica");
 
         docs.apply_doc_op(
             &device_replica,

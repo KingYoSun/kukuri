@@ -6,11 +6,15 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use next_blob_service::{BlobService, MemoryBlobService, StoredBlob};
 use next_core::{
-    CanonicalPostHeader, EventId, GossipHint, PayloadRef, TopicId, build_text_note,
-    generate_keys, timeline_sort_key,
+    CanonicalPostHeader, EventId, GossipHint, PayloadRef, TopicId, build_text_note, generate_keys,
+    timeline_sort_key,
 };
-use next_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id};
-use next_store::{BlobCacheStatus, EventProjectionRow, Page, ProjectionStore, Store, TimelineCursor};
+use next_docs_sync::{
+    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
+};
+use next_store::{
+    BlobCacheStatus, EventProjectionRow, Page, ProjectionStore, Store, TimelineCursor,
+};
 use next_transport::{HintTransport, PeerSnapshot, TopicPeerSnapshot, Transport};
 use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
@@ -132,7 +136,8 @@ impl AppService {
             .blob_service
             .put_blob(content.as_bytes().to_vec(), "text/plain")
             .await?;
-        self.ingest_event(event.clone(), Some(stored_blob.clone())).await?;
+        self.ingest_event(event.clone(), Some(stored_blob.clone()))
+            .await?;
         self.hint_transport
             .publish_hint(
                 &topic,
@@ -160,7 +165,9 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
-            self.hydrate_topic_projection(topic_id).await?;
+            if self.hydrate_topic_projection(topic_id).await? > 0 {
+                *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+            }
             page = ProjectionStore::list_topic_timeline(
                 self.projection_store.as_ref(),
                 topic_id,
@@ -189,7 +196,9 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
-            self.hydrate_topic_projection(topic_id).await?;
+            if self.hydrate_topic_projection(topic_id).await? > 0 {
+                *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+            }
             page = ProjectionStore::list_thread(
                 self.projection_store.as_ref(),
                 topic_id,
@@ -277,7 +286,10 @@ impl AppService {
     pub async fn shutdown(&self) {
         let handles = {
             let mut subscriptions = self.subscriptions.lock().await;
-            subscriptions.drain().map(|(_, handle)| handle).collect::<Vec<_>>()
+            subscriptions
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
         };
         for handle in handles {
             handle.abort();
@@ -310,7 +322,9 @@ impl AppService {
         let topic_replica = topic_replica_id(topic_id);
         docs_sync.open_replica(&topic_replica).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
-        let mut hint_stream = hint_transport.subscribe_hints(&TopicId::new(topic_id)).await?;
+        let mut hint_stream = hint_transport
+            .subscribe_hints(&TopicId::new(topic_id))
+            .await?;
         let topic = topic_id.to_string();
         let handle = tokio::spawn(async move {
             let _ = hydrate_topic_projection_with_services(
@@ -323,25 +337,31 @@ impl AppService {
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
-                        if event.is_ok()
-                            && hydrate_topic_projection_with_services(
+                        if event.is_ok() {
+                            if let Ok(count) = hydrate_topic_projection_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
-                            ).await.is_ok() {
-                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            ).await {
+                                if count > 0 {
+                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                }
+                            }
                         }
                     }
                     Some(event) = hint_stream.next() => {
-                        if hint_targets_topic(&event.hint, topic.as_str())
-                            && hydrate_topic_projection_with_services(
+                        if hint_targets_topic(&event.hint, topic.as_str()) {
+                            if let Ok(count) = hydrate_topic_projection_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
-                            ).await.is_ok() {
-                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            ).await {
+                                if count > 0 {
+                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                }
+                            }
                         }
                     }
                     else => break,
@@ -353,14 +373,19 @@ impl AppService {
         Ok(())
     }
 
-    async fn ingest_event(&self, event: next_core::Event, stored_blob: Option<StoredBlob>) -> Result<()> {
+    async fn ingest_event(
+        &self,
+        event: next_core::Event,
+        stored_blob: Option<StoredBlob>,
+    ) -> Result<()> {
         self.store.put_event(event.clone()).await?;
         let blob = match stored_blob {
             Some(blob) => blob,
-            None => self
-                .blob_service
-                .put_blob(event.content.as_bytes().to_vec(), "text/plain")
-                .await?,
+            None => {
+                self.blob_service
+                    .put_blob(event.content.as_bytes().to_vec(), "text/plain")
+                    .await?
+            }
         };
         let header = event.to_canonical_header(PayloadRef::BlobText {
             hash: blob.hash.clone(),
@@ -393,11 +418,8 @@ impl AppService {
             return Ok(Some(event));
         }
 
-        let Some(projection) = ProjectionStore::get_event_projection(
-            self.projection_store.as_ref(),
-            event_id,
-        )
-        .await?
+        let Some(projection) =
+            ProjectionStore::get_event_projection(self.projection_store.as_ref(), event_id).await?
         else {
             return Ok(None);
         };
@@ -434,7 +456,7 @@ impl AppService {
         }))
     }
 
-    async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<()> {
+    async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<usize> {
         hydrate_topic_projection_with_services(
             self.docs_sync.as_ref(),
             self.blob_service.as_ref(),
@@ -449,17 +471,17 @@ impl AppService {
             items: page
                 .items
                 .into_iter()
-                .map(|event| {
-                    PostView {
-                        id: event.event_id.0.clone(),
-                        author_pubkey: event.author_pubkey.clone(),
-                        author_npub: event.author_pubkey.clone(),
-                        note_id: event.event_id.0.clone(),
-                        content: event.content.unwrap_or_else(|| "[blob pending]".to_string()),
-                        created_at: event.created_at,
-                        reply_to: event.reply_to.map(|id| id.0),
-                        root_id: event.root_id.map(|id| id.0),
-                    }
+                .map(|event| PostView {
+                    id: event.event_id.0.clone(),
+                    author_pubkey: event.author_pubkey.clone(),
+                    author_npub: event.author_pubkey.clone(),
+                    note_id: event.event_id.0.clone(),
+                    content: event
+                        .content
+                        .unwrap_or_else(|| "[blob pending]".to_string()),
+                    created_at: event.created_at,
+                    reply_to: event.reply_to.map(|id| id.0),
+                    root_id: event.root_id.map(|id| id.0),
                 })
                 .collect(),
             next_cursor: page.next_cursor,
@@ -491,7 +513,10 @@ async fn persist_header(
         .apply_doc_op(
             &topic_replica,
             DocOp::SetJson {
-                key: stable_key("timeline", &format!("{sort_key}/{}", header.event_id.as_str())),
+                key: stable_key(
+                    "timeline",
+                    &format!("{sort_key}/{}", header.event_id.as_str()),
+                ),
                 value: serde_json::json!({
                     "event_id": header.event_id,
                     "created_at": header.created_at,
@@ -499,14 +524,21 @@ async fn persist_header(
             },
         )
         .await?;
-    let root_id = header.root.clone().unwrap_or_else(|| header.event_id.clone());
+    let root_id = header
+        .root
+        .clone()
+        .unwrap_or_else(|| header.event_id.clone());
     docs_sync
         .apply_doc_op(
             &topic_replica,
             DocOp::SetJson {
                 key: stable_key(
                     "thread",
-                    &format!("{}/{sort_key}/{}", root_id.as_str(), header.event_id.as_str()),
+                    &format!(
+                        "{}/{sort_key}/{}",
+                        root_id.as_str(),
+                        header.event_id.as_str()
+                    ),
                 ),
                 value: serde_json::json!({
                     "event_id": header.event_id,
@@ -531,7 +563,10 @@ async fn persist_header(
     Ok(())
 }
 
-fn projection_row_from_header(header: &CanonicalPostHeader, content: Option<String>) -> EventProjectionRow {
+fn projection_row_from_header(
+    header: &CanonicalPostHeader,
+    content: Option<String>,
+) -> EventProjectionRow {
     let source_blob_hash = match &header.payload_ref {
         PayloadRef::BlobText { hash, .. } => Some(hash.clone()),
         PayloadRef::InlineText { .. } => None,
@@ -559,11 +594,12 @@ async fn hydrate_topic_projection_with_services(
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
-) -> Result<()> {
+) -> Result<usize> {
     let replica = topic_replica_id(topic_id);
     let records = docs_sync
         .query_replica(&replica, DocQuery::Prefix("post/".into()))
         .await?;
+    let mut hydrated = 0usize;
     for record in records {
         let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
         let content = match &header.payload_ref {
@@ -576,8 +612,9 @@ async fn hydrate_topic_projection_with_services(
         projection_store
             .put_projection_row(projection_row_from_header(&header, content))
             .await?;
+        hydrated += 1;
     }
-    Ok(())
+    Ok(hydrated)
 }
 
 fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
@@ -612,23 +649,23 @@ fn normalize_topics(topics: Vec<String>) -> Vec<String> {
     normalized
 }
 
-fn normalize_topic_diagnostics(
-    diagnostics: Vec<TopicPeerSnapshot>,
-) -> Vec<TopicPeerSnapshot> {
+fn normalize_topic_diagnostics(diagnostics: Vec<TopicPeerSnapshot>) -> Vec<TopicPeerSnapshot> {
     let mut merged = BTreeMap::<String, TopicPeerSnapshot>::new();
     for diagnostic in diagnostics {
         let topic = normalize_topic_name(diagnostic.topic);
-        let entry = merged.entry(topic.clone()).or_insert_with(|| TopicPeerSnapshot {
-            topic: topic.clone(),
-            joined: false,
-            peer_count: 0,
-            connected_peers: Vec::new(),
-            configured_peer_ids: Vec::new(),
-            missing_peer_ids: Vec::new(),
-            last_received_at: None,
-            status_detail: diagnostic.status_detail.clone(),
-            last_error: diagnostic.last_error.clone(),
-        });
+        let entry = merged
+            .entry(topic.clone())
+            .or_insert_with(|| TopicPeerSnapshot {
+                topic: topic.clone(),
+                joined: false,
+                peer_count: 0,
+                connected_peers: Vec::new(),
+                configured_peer_ids: Vec::new(),
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: diagnostic.status_detail.clone(),
+                last_error: diagnostic.last_error.clone(),
+            });
         entry.joined |= diagnostic.joined;
         entry.peer_count = entry.peer_count.max(diagnostic.peer_count);
         for peer in diagnostic.connected_peers {
@@ -680,9 +717,12 @@ mod tests {
     use next_docs_sync::IrohDocsNode;
     use next_docs_sync::IrohDocsSync;
     use next_store::MemoryStore;
-    use next_transport::{EventEnvelope, EventStream, FakeNetwork, FakeTransport, HintEnvelope, HintStream, IrohGossipTransport};
+    use next_transport::{
+        EventEnvelope, EventStream, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
+        IrohGossipTransport,
+    };
     use tempfile::tempdir;
-    use tokio::sync::{broadcast, Mutex as TokioMutex};
+    use tokio::sync::{Mutex as TokioMutex, broadcast};
     use tokio::time::{Duration, sleep, timeout};
     use tokio_stream::wrappers::BroadcastStream;
 
@@ -725,9 +765,8 @@ mod tests {
     impl Transport for StaticTransport {
         async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
             let sender = self.event_sender(topic).await;
-            let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
-                item.ok()
-            });
+            let stream = BroadcastStream::new(sender.subscribe())
+                .filter_map(|item| async move { item.ok() });
             Ok(Box::pin(stream))
         }
 
@@ -762,9 +801,8 @@ mod tests {
     impl HintTransport for StaticTransport {
         async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
             let sender = self.hint_sender(topic).await;
-            let stream = BroadcastStream::new(sender.subscribe()).filter_map(|item| async move {
-                item.ok()
-            });
+            let stream = BroadcastStream::new(sender.subscribe())
+                .filter_map(|item| async move { item.ok() });
             Ok(Box::pin(stream))
         }
 
@@ -870,8 +908,16 @@ mod tests {
             generate_keys(),
         );
 
-        let ticket_a = app_a.peer_ticket().await.expect("ticket a").expect("ticket a value");
-        let ticket_b = app_b.peer_ticket().await.expect("ticket b").expect("ticket b value");
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
         app_a.import_peer_ticket(&ticket_b).await.expect("import b");
         app_b.import_peer_ticket(&ticket_a).await.expect("import a");
 
@@ -882,7 +928,10 @@ mod tests {
 
         let received = timeout(Duration::from_secs(10), async {
             loop {
-                let timeline = app_b.list_timeline(topic, None, 20).await.expect("timeline");
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline");
                 if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
                     return post.clone();
                 }
@@ -1018,6 +1067,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn on_demand_hydration_updates_last_sync_ts() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let topic = TopicId::new("kukuri:topic:on-demand-sync-ts");
+        let event = build_text_note(&keys, &topic, "hydrate updates sync ts", None).expect("event");
+        let stored_blob = blob_service
+            .put_blob(b"hydrate updates sync ts".to_vec(), "text/plain")
+            .await
+            .expect("put blob");
+        let header = event.to_canonical_header(PayloadRef::BlobText {
+            hash: stored_blob.hash,
+            mime: stored_blob.mime,
+            bytes: stored_blob.bytes,
+        });
+        persist_header(docs_sync.as_ref(), header, event.pubkey.as_str())
+            .await
+            .expect("persist header");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service,
+            keys,
+        );
+
+        assert!(
+            app.get_sync_status()
+                .await
+                .expect("status")
+                .last_sync_ts
+                .is_none()
+        );
+
+        let timeline = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline");
+        assert_eq!(timeline.items.len(), 1);
+
+        assert!(
+            app.get_sync_status()
+                .await
+                .expect("status")
+                .last_sync_ts
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
     async fn sync_status_normalizes_hint_topic_names() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(StaticTransport::new(PeerSnapshot {
@@ -1077,11 +1181,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn missing_gossip_but_docs_sync_recovers_post() {
-        assert_docs_sync_recovers_post_without_hints(
-            "kukuri:topic:missing-gossip",
-            "docs recover",
-        )
-        .await;
+        assert_docs_sync_recovers_post_without_hints("kukuri:topic:missing-gossip", "docs recover")
+            .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1203,13 +1304,20 @@ mod tests {
             .create_post(topic, "blob text only", None)
             .await
             .expect("create post");
-        let projection = ProjectionStore::get_event_projection(store.as_ref(), &EventId::from(event_id))
-            .await
-            .expect("projection")
-            .expect("projection row");
+        let projection =
+            ProjectionStore::get_event_projection(store.as_ref(), &EventId::from(event_id))
+                .await
+                .expect("projection")
+                .expect("projection row");
 
-        assert!(matches!(projection.payload_ref, PayloadRef::BlobText { .. }));
-        assert!(!matches!(projection.payload_ref, PayloadRef::InlineText { .. }));
+        assert!(matches!(
+            projection.payload_ref,
+            PayloadRef::BlobText { .. }
+        ));
+        assert!(!matches!(
+            projection.payload_ref,
+            PayloadRef::InlineText { .. }
+        ));
     }
 
     #[tokio::test]
