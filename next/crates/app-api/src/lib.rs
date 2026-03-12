@@ -68,7 +68,6 @@ pub struct AppService {
     hint_transport: Arc<dyn HintTransport>,
     docs_sync: Arc<dyn DocsSync>,
     blob_service: Arc<dyn BlobService>,
-    compat_event_gossip: bool,
     keys: Arc<Keys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
@@ -89,7 +88,6 @@ impl AppService {
             transport as Arc<dyn HintTransport>,
             docs_sync,
             blob_service,
-            true,
             generate_keys(),
         )
     }
@@ -101,7 +99,6 @@ impl AppService {
         hint_transport: Arc<dyn HintTransport>,
         docs_sync: Arc<dyn DocsSync>,
         blob_service: Arc<dyn BlobService>,
-        compat_event_gossip: bool,
         keys: Keys,
     ) -> Self {
         Self {
@@ -111,7 +108,6 @@ impl AppService {
             hint_transport,
             docs_sync,
             blob_service,
-            compat_event_gossip,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
@@ -127,7 +123,7 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
-            self.store.get_event(&EventId::from(reply_to)).await?
+            self.resolve_parent_event(&EventId::from(reply_to)).await?
         } else {
             None
         };
@@ -146,9 +142,6 @@ impl AppService {
                 },
             )
             .await?;
-        if self.compat_event_gossip {
-            self.transport.publish(&topic, event.clone()).await?;
-        }
         Ok(event.id.0)
     }
 
@@ -281,6 +274,17 @@ impl AppService {
         self.transport.export_ticket().await
     }
 
+    pub async fn shutdown(&self) {
+        let handles = {
+            let mut subscriptions = self.subscriptions.lock().await;
+            subscriptions.drain().map(|(_, handle)| handle).collect::<Vec<_>>()
+        };
+        for handle in handles {
+            handle.abort();
+            let _ = handle.await;
+        }
+    }
+
     async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
         if self.subscriptions.lock().await.contains_key(topic_id) {
             return Ok(());
@@ -297,75 +301,53 @@ impl AppService {
     }
 
     async fn spawn_topic_subscription(&self, topic_id: &str) -> Result<()> {
-        let store = Arc::clone(&self.store);
         let projection_store = Arc::clone(&self.projection_store);
         let docs_sync = Arc::clone(&self.docs_sync);
         let blob_service = Arc::clone(&self.blob_service);
         let hint_transport = Arc::clone(&self.hint_transport);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let topic_key = topic_id.to_string();
-        let compat_event_gossip = self.compat_event_gossip;
-        let handle = if compat_event_gossip {
-            let mut stream = self.transport.subscribe(&TopicId::new(topic_id)).await?;
-            tokio::spawn(async move {
-                while let Some(envelope) = stream.next().await {
-                    if store.put_event(envelope.event.clone()).await.is_ok()
-                        && ingest_remote_event(
-                            docs_sync.as_ref(),
-                            blob_service.as_ref(),
-                            projection_store.as_ref(),
-                            envelope.event.clone(),
-                        )
-                        .await
-                        .is_ok()
-                    {
-                        *last_sync.lock().await = Some(envelope.received_at);
-                    }
-                }
-            })
-        } else {
-            let topic_replica = topic_replica_id(topic_id);
-            docs_sync.open_replica(&topic_replica).await?;
-            let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
-            let mut hint_stream = hint_transport.subscribe_hints(&TopicId::new(topic_id)).await?;
-            let topic = topic_id.to_string();
-            tokio::spawn(async move {
-                let _ = hydrate_topic_projection_with_services(
-                    docs_sync.as_ref(),
-                    blob_service.as_ref(),
-                    projection_store.as_ref(),
-                    topic.as_str(),
-                )
-                .await;
-                loop {
-                    tokio::select! {
-                        Some(event) = doc_stream.next() => {
-                            if event.is_ok()
-                                && hydrate_topic_projection_with_services(
-                                    docs_sync.as_ref(),
-                                    blob_service.as_ref(),
-                                    projection_store.as_ref(),
-                                    topic.as_str(),
-                                ).await.is_ok() {
-                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                            }
+        let topic_replica = topic_replica_id(topic_id);
+        docs_sync.open_replica(&topic_replica).await?;
+        let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
+        let mut hint_stream = hint_transport.subscribe_hints(&TopicId::new(topic_id)).await?;
+        let topic = topic_id.to_string();
+        let handle = tokio::spawn(async move {
+            let _ = hydrate_topic_projection_with_services(
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                projection_store.as_ref(),
+                topic.as_str(),
+            )
+            .await;
+            loop {
+                tokio::select! {
+                    Some(event) = doc_stream.next() => {
+                        if event.is_ok()
+                            && hydrate_topic_projection_with_services(
+                                docs_sync.as_ref(),
+                                blob_service.as_ref(),
+                                projection_store.as_ref(),
+                                topic.as_str(),
+                            ).await.is_ok() {
+                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
                         }
-                        Some(event) = hint_stream.next() => {
-                            if hint_targets_topic(&event.hint, topic.as_str())
-                                && hydrate_topic_projection_with_services(
-                                    docs_sync.as_ref(),
-                                    blob_service.as_ref(),
-                                    projection_store.as_ref(),
-                                    topic.as_str(),
-                                ).await.is_ok() {
-                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                            }
-                        }
-                        else => break,
                     }
+                    Some(event) = hint_stream.next() => {
+                        if hint_targets_topic(&event.hint, topic.as_str())
+                            && hydrate_topic_projection_with_services(
+                                docs_sync.as_ref(),
+                                blob_service.as_ref(),
+                                projection_store.as_ref(),
+                                topic.as_str(),
+                            ).await.is_ok() {
+                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                        }
+                    }
+                    else => break,
                 }
-            })
-        };
+            }
+        });
 
         self.subscriptions.lock().await.insert(topic_key, handle);
         Ok(())
@@ -404,6 +386,52 @@ impl AppService {
         .await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         Ok(())
+    }
+
+    async fn resolve_parent_event(&self, event_id: &EventId) -> Result<Option<next_core::Event>> {
+        if let Some(event) = self.store.get_event(event_id).await? {
+            return Ok(Some(event));
+        }
+
+        let Some(projection) = ProjectionStore::get_event_projection(
+            self.projection_store.as_ref(),
+            event_id,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+
+        let mut tags = vec![
+            vec!["t".into(), projection.topic_id.clone()],
+            vec!["topic".into(), projection.topic_id.clone()],
+        ];
+        if let Some(root_id) = projection.root_id.clone() {
+            tags.push(vec![
+                "e".into(),
+                root_id.0.clone(),
+                String::new(),
+                "root".into(),
+            ]);
+        }
+        if let Some(reply_to) = projection.reply_to.clone() {
+            tags.push(vec![
+                "e".into(),
+                reply_to.0.clone(),
+                String::new(),
+                "reply".into(),
+            ]);
+        }
+
+        Ok(Some(next_core::Event {
+            id: projection.event_id,
+            pubkey: projection.author_pubkey.into(),
+            created_at: projection.created_at,
+            kind: 1,
+            tags,
+            content: projection.content.unwrap_or_default(),
+            sig: String::new(),
+        }))
     }
 
     async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<()> {
@@ -526,30 +554,6 @@ fn projection_row_from_header(header: &CanonicalPostHeader, content: Option<Stri
     }
 }
 
-async fn ingest_remote_event(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    event: next_core::Event,
-) -> Result<()> {
-    let blob = blob_service
-        .put_blob(event.content.as_bytes().to_vec(), "text/plain")
-        .await?;
-    let header = event.to_canonical_header(PayloadRef::BlobText {
-        hash: blob.hash.clone(),
-        mime: blob.mime.clone(),
-        bytes: blob.bytes,
-    });
-    persist_header(docs_sync, header.clone(), event.pubkey.as_str()).await?;
-    projection_store
-        .put_projection_row(projection_row_from_header(&header, Some(event.content.clone())))
-        .await?;
-    projection_store
-        .mark_blob_status(&blob.hash, BlobCacheStatus::Available)
-        .await?;
-    Ok(())
-}
-
 async fn hydrate_topic_projection_with_services(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -658,12 +662,26 @@ fn normalize_topic_diagnostics(
     merged.into_values().collect()
 }
 
+impl Drop for AppService {
+    fn drop(&mut self) {
+        if let Ok(mut subscriptions) = self.subscriptions.try_lock() {
+            for (_, handle) in subscriptions.drain() {
+                handle.abort();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use next_blob_service::IrohBlobService;
+    use next_docs_sync::IrohDocsNode;
+    use next_docs_sync::IrohDocsSync;
     use next_store::MemoryStore;
     use next_transport::{EventEnvelope, EventStream, FakeNetwork, FakeTransport, HintEnvelope, HintStream, IrohGossipTransport};
+    use tempfile::tempdir;
     use tokio::sync::{broadcast, Mutex as TokioMutex};
     use tokio::time::{Duration, sleep, timeout};
     use tokio_stream::wrappers::BroadcastStream;
@@ -761,6 +779,68 @@ mod tests {
                 received_at: Utc::now().timestamp_millis(),
                 source_peer: "static".into(),
             });
+            Ok(())
+        }
+    }
+
+    struct TestIrohStack {
+        _node: Arc<IrohDocsNode>,
+        transport: Arc<IrohGossipTransport>,
+        docs_sync: Arc<IrohDocsSync>,
+        blob_service: Arc<IrohBlobService>,
+    }
+
+    impl TestIrohStack {
+        async fn new(root: &std::path::Path) -> Self {
+            let node = IrohDocsNode::persistent_with_config(
+                root,
+                next_transport::TransportNetworkConfig::loopback(),
+            )
+            .await
+            .expect("iroh docs node");
+            let transport = Arc::new(IrohGossipTransport::from_shared_parts(
+                node.endpoint().clone(),
+                node.gossip().clone(),
+                node.discovery(),
+                next_transport::TransportNetworkConfig::loopback(),
+            ));
+            let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
+            let blob_service = Arc::new(IrohBlobService::new(node.clone()));
+            Self {
+                _node: node,
+                transport,
+                docs_sync,
+                blob_service,
+            }
+        }
+    }
+
+    fn app_with_iroh_services(store: Arc<MemoryStore>, stack: &TestIrohStack) -> AppService {
+        AppService::new_with_services(
+            store.clone(),
+            store,
+            stack.transport.clone(),
+            stack.transport.clone(),
+            stack.docs_sync.clone(),
+            stack.blob_service.clone(),
+            generate_keys(),
+        )
+    }
+
+    #[derive(Clone)]
+    struct NoopHintTransport;
+
+    #[async_trait]
+    impl HintTransport for NoopHintTransport {
+        async fn subscribe_hints(&self, _topic: &TopicId) -> Result<HintStream> {
+            Ok(Box::pin(futures_util::stream::empty()))
+        }
+
+        async fn unsubscribe_hints(&self, _topic: &TopicId) -> Result<()> {
+            Ok(())
+        }
+
+        async fn publish_hint(&self, _topic: &TopicId, _hint: GossipHint) -> Result<()> {
             Ok(())
         }
     }
@@ -875,7 +955,6 @@ mod tests {
             transport,
             docs_sync,
             blob_service,
-            false,
             keys,
         );
 
@@ -946,6 +1025,177 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn missing_gossip_but_docs_sync_recovers_post() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a,
+            stack_a.transport.clone(),
+            Arc::new(NoopHintTransport),
+            stack_a.docs_sync.clone(),
+            stack_a.blob_service.clone(),
+            generate_keys(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b,
+            stack_b.transport.clone(),
+            Arc::new(NoopHintTransport),
+            stack_b.docs_sync.clone(),
+            stack_b.blob_service.clone(),
+            generate_keys(),
+        );
+
+        let ticket_a = app_a.peer_ticket().await.expect("ticket a").expect("ticket a value");
+        let ticket_b = app_b.peer_ticket().await.expect("ticket b").expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let topic = "kukuri:topic:missing-gossip";
+        let event_id = app_a
+            .create_post(topic, "docs recover", None)
+            .await
+            .expect("create post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b.list_timeline(topic, None, 20).await.expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("missing gossip timeout");
+
+        assert_eq!(received.content, "docs recover");
+    }
+
+    #[tokio::test]
+    async fn thread_open_triggers_lazy_blob_fetch() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let topic = TopicId::new("kukuri:topic:thread-lazy");
+        let root = build_text_note(&keys, &topic, "root body", None).expect("root");
+        let reply = build_text_note(&keys, &topic, "reply body", Some(&root)).expect("reply");
+
+        for event in [root.clone(), reply.clone()] {
+            let blob = blob_service
+                .put_blob(event.content.as_bytes().to_vec(), "text/plain")
+                .await
+                .expect("put blob");
+            let header = event.to_canonical_header(PayloadRef::BlobText {
+                hash: blob.hash,
+                mime: blob.mime,
+                bytes: blob.bytes,
+            });
+            persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
+                .await
+                .expect("persist header");
+            ProjectionStore::put_projection_row(
+                store.as_ref(),
+                projection_row_from_header(&header, None),
+            )
+            .await
+            .expect("placeholder row");
+        }
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+
+        let thread = app
+            .list_thread(topic.as_str(), root.id.as_str(), None, 20)
+            .await
+            .expect("thread");
+
+        assert_eq!(thread.items.len(), 2);
+        assert!(thread.items.iter().any(|post| post.content == "root body"));
+        assert!(thread.items.iter().any(|post| post.content == "reply body"));
+    }
+
+    #[tokio::test]
+    async fn image_post_visible_before_full_blob_download() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let topic = TopicId::new("kukuri:topic:image");
+        let event = build_text_note(&keys, &topic, "", None).expect("event");
+        let mut header = event.to_canonical_header(PayloadRef::BlobText {
+            hash: next_core::BlobHash::new("f".repeat(64)),
+            mime: "text/plain".into(),
+            bytes: 0,
+        });
+        header.attachments = vec![next_core::AssetRef {
+            hash: next_core::BlobHash::new("a".repeat(64)),
+            mime: "image/png".into(),
+            bytes: 1024,
+            role: next_core::AssetRole::ImageOriginal,
+        }];
+        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
+            .await
+            .expect("persist header");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service.clone(),
+            generate_keys(),
+        );
+
+        let timeline = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline");
+        assert_eq!(timeline.items.len(), 1);
+        assert_eq!(timeline.items[0].content, "[blob pending]");
+
+        blob_service
+            .put_blob(b"caption".to_vec(), "text/plain")
+            .await
+            .expect("put body blob");
+    }
+
+    #[tokio::test]
+    async fn new_writes_use_blob_text_payload_refs() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store.clone(), transport);
+        let topic = "kukuri:topic:blobtext";
+
+        let event_id = app
+            .create_post(topic, "blob text only", None)
+            .await
+            .expect("create post");
+        let projection = ProjectionStore::get_event_projection(store.as_ref(), &EventId::from(event_id))
+            .await
+            .expect("projection")
+            .expect("projection row");
+
+        assert!(matches!(projection.payload_ref, PayloadRef::BlobText { .. }));
+        assert!(!matches!(projection.payload_ref, PayloadRef::InlineText { .. }));
+    }
+
     #[tokio::test]
     async fn unsubscribe_topic_removes_subscription_from_sync_status() {
         let store = Arc::new(MemoryStore::default());
@@ -981,20 +1231,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_post_between_apps() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("post-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("post-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let transport_a = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport a should bind"),
-        );
-        let transport_b = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport b should bind"),
-        );
-        let app_a = AppService::new(store_a, transport_a.clone());
-        let app_b = AppService::new(store_b, transport_b.clone());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
 
         let ticket_a = app_a
             .peer_ticket()
@@ -1054,20 +1297,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("rebind-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let transport_a = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport a should bind"),
-        );
-        let transport_b = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport b should bind"),
-        );
-        let app_a = AppService::new(store_a, transport_a);
-        let app_b = AppService::new(store_b, transport_b);
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
         let topic = "kukuri:topic:rebind-after-import";
 
         let _ = app_a
@@ -1122,20 +1358,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_reply_into_thread() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("reply-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("reply-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let transport_a = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport a should bind"),
-        );
-        let transport_b = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport b should bind"),
-        );
-        let app_a = AppService::new(store_a, transport_a);
-        let app_b = AppService::new(store_b, transport_b);
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
         let topic = "kukuri:topic:reply-thread";
 
         let ticket_a = app_a
@@ -1212,20 +1441,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_multiple_topics_bidirectionally() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("multi-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("multi-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let transport_a = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport a should bind"),
-        );
-        let transport_b = Arc::new(
-            IrohGossipTransport::bind_local()
-                .await
-                .expect("transport b should bind"),
-        );
-        let app_a = AppService::new(store_a, transport_a);
-        let app_b = AppService::new(store_b, transport_b);
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
         let topic_one = "kukuri:topic:one";
         let topic_two = "kukuri:topic:two";
 

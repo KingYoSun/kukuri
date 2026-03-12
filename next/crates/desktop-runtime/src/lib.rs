@@ -93,7 +93,6 @@ impl DesktopRuntime {
             iroh_stack.transport.clone(),
             iroh_stack.docs_sync.clone(),
             iroh_stack.blob_service.clone(),
-            false,
             keys,
         );
 
@@ -161,6 +160,10 @@ impl DesktopRuntime {
 
     pub async fn local_peer_ticket(&self) -> Result<Option<String>> {
         self.app_service.peer_ticket().await
+    }
+
+    pub async fn shutdown(&self) {
+        self.app_service.shutdown().await;
     }
 }
 
@@ -396,5 +399,116 @@ mod tests {
         .expect("late join timeout");
 
         assert_eq!(received.content, "hello from before join");
+    }
+
+    #[tokio::test]
+    async fn sqlite_deletion_does_not_lose_shared_state() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("delete-sqlite.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:sqlite-delete";
+        let root_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "root".into(),
+                reply_to: None,
+            })
+            .await
+            .expect("root post");
+        let reply_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "reply".into(),
+                reply_to: Some(root_id.clone()),
+            })
+            .await
+            .expect("reply post");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let timeline = restarted
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("timeline");
+        let thread = restarted
+            .list_thread(ListThreadRequest {
+                topic: topic.into(),
+                thread_id: root_id.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("thread");
+
+        assert!(timeline.items.iter().any(|post| post.id == root_id));
+        assert!(timeline.items.iter().any(|post| post.id == reply_id));
+        assert!(thread.items.iter().any(|post| post.id == root_id));
+        assert!(thread.items.iter().any(|post| post.id == reply_id));
+    }
+
+    #[tokio::test]
+    async fn restart_restores_from_docs_blobs_without_sqlite_seed() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("restart-no-seed.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:restart-no-seed";
+        let event_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "restored from docs".into(),
+                reply_to: None,
+            })
+            .await
+            .expect("create post");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let timeline = restarted
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("timeline");
+
+        let restored = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("restored post");
+        assert_eq!(restored.content, "restored from docs");
     }
 }

@@ -19,3 +19,6 @@ next-blob-service = { path = "../blob-service" }
 next-docs-sync = { path = "../docs-sync" }
 next-store = { path = "../store" }
 next-transport = { path = "../transport" }
+
+[dev-dependencies]
+tempfile.workspace = true

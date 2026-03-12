@@ -2811,6 +2811,7 @@ dependencies = [
  "nostr-sdk",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-stream",
 ]
