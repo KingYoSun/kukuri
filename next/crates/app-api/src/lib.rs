@@ -256,6 +256,8 @@ impl AppService {
 
     pub async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         self.transport.import_ticket(ticket).await?;
+        self.docs_sync.import_peer_ticket(ticket).await?;
+        self.blob_service.import_peer_ticket(ticket).await?;
         let existing_topics = self
             .subscriptions
             .lock()

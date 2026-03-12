@@ -8,11 +8,13 @@ license.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 blake3.workspace = true
+iroh.workspace = true
 iroh-blobs.workspace = true
 serde.workspace = true
 tokio.workspace = true
 next-core = { path = "../core" }
 next-docs-sync = { path = "../docs-sync" }
+next-transport = { path = "../transport" }
 
 [dev-dependencies]
 tempfile.workspace = true

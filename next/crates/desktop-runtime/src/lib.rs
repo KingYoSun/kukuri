@@ -48,6 +48,14 @@ pub struct UnsubscribeTopicRequest {
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
+    _iroh_stack: SharedIrohStack,
+}
+
+struct SharedIrohStack {
+    _node: Arc<IrohDocsNode>,
+    transport: Arc<IrohGossipTransport>,
+    docs_sync: Arc<IrohDocsSync>,
+    blob_service: Arc<IrohBlobService>,
 }
 
 impl DesktopRuntime {
@@ -76,24 +84,22 @@ impl DesktopRuntime {
         let db_path = db_path.as_ref().to_path_buf();
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
-        let transport = Arc::new(IrohGossipTransport::bind(network_config).await?);
-        let docs_node = IrohDocsNode::persistent(&docs_root).await?;
-        let docs_sync = Arc::new(IrohDocsSync::new(docs_node.clone()));
-        let blob_service = Arc::new(IrohBlobService::new(docs_node));
+        let iroh_stack = SharedIrohStack::new(&docs_root, network_config.clone()).await?;
         let keys = load_or_create_keys(&db_path, identity_mode)?;
         let app_service = AppService::new_with_services(
             store.clone(),
             store,
-            transport.clone(),
-            transport,
-            docs_sync,
-            blob_service,
+            iroh_stack.transport.clone(),
+            iroh_stack.transport.clone(),
+            iroh_stack.docs_sync.clone(),
+            iroh_stack.blob_service.clone(),
             keys,
         );
 
         Ok(Self {
             app_service,
             db_path,
+            _iroh_stack: iroh_stack,
         })
     }
 
@@ -154,6 +160,26 @@ impl DesktopRuntime {
 
     pub async fn local_peer_ticket(&self) -> Result<Option<String>> {
         self.app_service.peer_ticket().await
+    }
+}
+
+impl SharedIrohStack {
+    async fn new(root: &Path, network_config: TransportNetworkConfig) -> Result<Self> {
+        let node = IrohDocsNode::persistent_with_config(root, network_config.clone()).await?;
+        let transport = Arc::new(IrohGossipTransport::from_shared_parts(
+            node.endpoint().clone(),
+            node.gossip().clone(),
+            node.discovery(),
+            network_config,
+        ));
+        let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
+        let blob_service = Arc::new(IrohBlobService::new(node.clone()));
+        Ok(Self {
+            _node: node,
+            transport,
+            docs_sync,
+            blob_service,
+        })
     }
 }
 
@@ -308,5 +334,66 @@ mod tests {
         assert_eq!(received.content, "hello desktop runtime");
         let status = runtime_b.get_sync_status().await.expect("sync status");
         assert!(status.last_sync_ts.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_timeline_from_docs() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("late-a.db");
+        let db_b = dir.path().join("late-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let topic = "kukuri:topic:late-join";
+        let event_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "hello from before join".into(),
+                reply_to: None,
+            })
+            .await
+            .expect("create post before join");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a into b");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late join timeout");
+
+        assert_eq!(received.content, "hello from before join");
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -6,17 +6,20 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
-use iroh::RelayMode;
+use iroh::address_lookup::MemoryLookup;
+use iroh::{Endpoint, EndpointAddr, RelayMode};
 use iroh::protocol::Router;
 use iroh_blobs::api::Store as BlobStore;
 use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore};
 use iroh_docs::api::{Doc, DocsApi};
 use iroh_docs::store::Query;
-use iroh_docs::{Capability, NamespaceSecret};
+use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use iroh_gossip::net::Gossip;
 use next_core::{ReplicaId, blob_hash};
+use next_transport::{TransportNetworkConfig, parse_endpoint_ticket};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
+use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
@@ -56,10 +59,14 @@ pub trait DocsSync: Send + Sync {
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()>;
     async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
 }
 
 #[derive(Clone)]
 pub struct IrohDocsNode {
+    endpoint: Endpoint,
+    gossip: Gossip,
+    discovery: Arc<MemoryLookup>,
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
@@ -68,10 +75,17 @@ pub struct IrohDocsNode {
 impl IrohDocsNode {
     pub async fn memory() -> Result<Arc<Self>> {
         let store = MemStore::new();
-        Self::spawn((*store).clone(), None).await
+        Self::spawn((*store).clone(), None, TransportNetworkConfig::loopback()).await
     }
 
     pub async fn persistent(root: impl AsRef<Path>) -> Result<Arc<Self>> {
+        Self::persistent_with_config(root, TransportNetworkConfig::loopback()).await
+    }
+
+    pub async fn persistent_with_config(
+        root: impl AsRef<Path>,
+        network_config: TransportNetworkConfig,
+    ) -> Result<Arc<Self>> {
         let root = root.as_ref();
         std::fs::create_dir_all(root)
             .with_context(|| format!("failed to create docs root {}", root.display()))?;
@@ -79,15 +93,27 @@ impl IrohDocsNode {
         let store = iroh_blobs::store::fs::FsStore::load_with_opts(root.join("blobs.db"), options)
             .await
             .with_context(|| format!("failed to load blob store at {}", root.display()))?;
-        Self::spawn((*store).clone(), Some(root.to_path_buf())).await
+        Self::spawn((*store).clone(), Some(root.to_path_buf()), network_config).await
     }
 
-    async fn spawn(store: impl Into<BlobStore>, root: Option<PathBuf>) -> Result<Arc<Self>> {
+    async fn spawn(
+        store: impl Into<BlobStore>,
+        root: Option<PathBuf>,
+        network_config: TransportNetworkConfig,
+    ) -> Result<Arc<Self>> {
         let blobs = store.into();
-        let endpoint = iroh::Endpoint::empty_builder(RelayMode::Disabled)
+        let discovery = Arc::new(MemoryLookup::new());
+        let mut endpoint_builder = Endpoint::empty_builder(RelayMode::Disabled)
+            .address_lookup(discovery.clone());
+        endpoint_builder = match network_config.bind_addr {
+            std::net::SocketAddr::V4(addr) => endpoint_builder.bind_addr(addr)?,
+            std::net::SocketAddr::V6(addr) => endpoint_builder.bind_addr(addr)?,
+        };
+        let endpoint = endpoint_builder
             .bind()
             .await
             .context("failed to bind iroh endpoint for docs node")?;
+        discovery.add_endpoint_info(endpoint.addr());
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let docs_builder = match root {
             Some(path) => iroh_docs::protocol::Docs::persistent(path),
@@ -97,17 +123,32 @@ impl IrohDocsNode {
             .spawn(endpoint.clone(), blobs.clone(), gossip.clone())
             .await
             .context("failed to spawn iroh docs")?;
-        let router = Router::builder(endpoint)
+        let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::ALPN, iroh_blobs::BlobsProtocol::new(&blobs, None))
             .accept(iroh_docs::ALPN, docs.clone())
-            .accept(iroh_gossip::ALPN, gossip)
+            .accept(iroh_gossip::ALPN, gossip.clone())
             .spawn();
 
         Ok(Arc::new(Self {
+            endpoint,
+            gossip,
+            discovery,
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
         }))
+    }
+
+    pub fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
+    }
+
+    pub fn gossip(&self) -> &Gossip {
+        &self.gossip
+    }
+
+    pub fn discovery(&self) -> Arc<MemoryLookup> {
+        self.discovery.clone()
     }
 
     pub fn docs(&self) -> &DocsApi {
@@ -141,12 +182,15 @@ impl Drop for IrohDocsNode {
 struct ReplicaHandle {
     doc: Doc,
     events: broadcast::Sender<DocEvent>,
+    sync_peer_ids: BTreeSet<String>,
+    _live_task: JoinHandle<()>,
 }
 
 #[derive(Clone)]
 pub struct IrohDocsSync {
     node: Arc<IrohDocsNode>,
     replicas: Arc<Mutex<HashMap<String, ReplicaHandle>>>,
+    imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
 }
 
 #[derive(Clone, Default)]
@@ -160,26 +204,75 @@ impl IrohDocsSync {
         Self {
             node,
             replicas: Arc::new(Mutex::new(HashMap::new())),
+            imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
     async fn ensure_replica(&self, replica_id: &ReplicaId) -> Result<Doc> {
-        if let Some(handle) = self.replicas.lock().await.get(replica_id.as_str()) {
+        let imported = self
+            .imported_peers
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let imported_ids = imported
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+
+        if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
+            if handle.sync_peer_ids != imported_ids && !imported.is_empty() {
+                doc_start_sync(&handle.doc, imported.clone()).await?;
+                handle.sync_peer_ids = imported_ids;
+            }
             return Ok(handle.doc.clone());
         }
 
         let secret = replica_secret(replica_id);
-        let doc = self
-            .node
-            .docs()
-            .import_namespace(Capability::Write(secret))
-            .await?;
+        let doc = if imported.is_empty() {
+            self.node
+                .docs()
+                .import_namespace(Capability::Write(secret))
+                .await?
+        } else {
+            self.node
+                .docs()
+                .import(DocTicket {
+                    capability: Capability::Write(secret),
+                    nodes: imported.clone(),
+                })
+                .await?
+        };
+        doc_start_sync(&doc, imported.clone()).await?;
         let (tx, _) = broadcast::channel(256);
+        let mut live = doc.subscribe().await?;
+        let live_replica = replica_id.clone();
+        let live_events = tx.clone();
+        let task = tokio::spawn(async move {
+            while let Some(item) = live.next().await {
+                if let Ok(event) = item {
+                    match event {
+                        iroh_docs::engine::LiveEvent::InsertLocal { entry }
+                        | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. } => {
+                            let _ = live_events.send(DocEvent {
+                                replica_id: live_replica.clone(),
+                                key: String::from_utf8_lossy(entry.key()).to_string(),
+                                content_hash: entry.content_hash().to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
         self.replicas.lock().await.insert(
             replica_id.as_str().to_string(),
             ReplicaHandle {
                 doc: doc.clone(),
                 events: tx,
+                sync_peer_ids: imported_ids,
+                _live_task: task,
             },
         );
         Ok(doc)
@@ -294,6 +387,10 @@ impl DocsSync for MemoryDocsSync {
         });
         Ok(Box::pin(stream))
     }
+
+    async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -364,6 +461,32 @@ impl DocsSync for IrohDocsSync {
         });
         Ok(Box::pin(stream))
     }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        let endpoint_addr = parse_endpoint_ticket(ticket)?;
+        self.node.discovery().add_endpoint_info(endpoint_addr.clone());
+        self.imported_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr.clone());
+        let peers = self
+            .imported_peers
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let peer_ids = peers
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+        let mut replicas = self.replicas.lock().await;
+        for handle in replicas.values_mut() {
+            doc_start_sync(&handle.doc, peers.clone()).await?;
+            handle.sync_peer_ids = peer_ids.clone();
+        }
+        Ok(())
+    }
 }
 
 fn replica_secret(replica_id: &ReplicaId) -> NamespaceSecret {
@@ -389,6 +512,10 @@ pub fn stable_key(prefix: &str, key: &str) -> String {
 
 pub fn value_hash(value: impl AsRef<[u8]>) -> String {
     blob_hash(value).0
+}
+
+async fn doc_start_sync(doc: &Doc, peers: Vec<EndpointAddr>) -> Result<()> {
+    doc.start_sync(peers).await
 }
 
 #[cfg(test)]

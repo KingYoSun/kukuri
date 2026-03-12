@@ -317,7 +317,7 @@ struct TopicState {
 pub struct IrohGossipTransport {
     endpoint: Endpoint,
     gossip: Gossip,
-    _router: Router,
+    _router: Option<Router>,
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
@@ -346,7 +346,7 @@ impl IrohGossipTransport {
         Ok(Self {
             endpoint,
             gossip,
-            _router: router,
+            _router: Some(router),
             discovery,
             network_config,
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
@@ -354,6 +354,26 @@ impl IrohGossipTransport {
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
         })
+    }
+
+    pub fn from_shared_parts(
+        endpoint: Endpoint,
+        gossip: Gossip,
+        discovery: Arc<MemoryLookup>,
+        network_config: TransportNetworkConfig,
+    ) -> Self {
+        discovery.add_endpoint_info(endpoint.addr());
+        Self {
+            endpoint,
+            gossip,
+            _router: None,
+            discovery,
+            network_config,
+            imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
+            topic_states: Arc::new(Mutex::new(HashMap::new())),
+            last_error: Arc::new(Mutex::new(None)),
+        }
     }
 
     pub async fn bind_local() -> Result<Self> {
@@ -656,14 +676,14 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn export_ticket(&self) -> Result<Option<String>> {
-        Ok(Some(encode_ticket(
+        Ok(Some(encode_endpoint_ticket(
             &self.endpoint.addr(),
             &self.network_config,
         )?))
     }
 
     async fn import_ticket(&self, ticket: &str) -> Result<()> {
-        let endpoint_addr = match parse_ticket(ticket) {
+        let endpoint_addr = match parse_endpoint_ticket(ticket) {
             Ok(endpoint_addr) => endpoint_addr,
             Err(error) => {
                 let message = format!("failed to import peer ticket: {error}");
@@ -738,7 +758,10 @@ fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<Endpoin
     }
 }
 
-fn encode_ticket(endpoint_addr: &EndpointAddr, config: &TransportNetworkConfig) -> Result<String> {
+pub fn encode_endpoint_ticket(
+    endpoint_addr: &EndpointAddr,
+    config: &TransportNetworkConfig,
+) -> Result<String> {
     let advertised_port = config
         .advertised_port
         .or_else(|| endpoint_addr.ip_addrs().next().map(|addr| addr.port()))
@@ -773,7 +796,7 @@ fn encode_ticket(endpoint_addr: &EndpointAddr, config: &TransportNetworkConfig) 
     ))
 }
 
-fn parse_ticket(ticket: &str) -> Result<EndpointAddr> {
+pub fn parse_endpoint_ticket(ticket: &str) -> Result<EndpointAddr> {
     let (node_id, socket_addr) = ticket
         .split_once('@')
         .ok_or_else(|| anyhow!("ticket must be formatted as <node_id>@<host:port>"))?;
@@ -1060,7 +1083,7 @@ mod tests {
             .import_ticket(&ticket_b)
             .await
             .expect("import b");
-        let addr_b = parse_ticket(&ticket_b).expect("parse ticket b");
+        let addr_b = parse_endpoint_ticket(&ticket_b).expect("parse ticket b");
         timeout(
             Duration::from_secs(5),
             transport_a.endpoint.connect(addr_b, GOSSIP_ALPN),
@@ -1094,7 +1117,7 @@ mod tests {
     fn ticket_roundtrip() {
         let ticket =
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@127.0.0.1:4444";
-        let parsed = parse_ticket(ticket).expect("ticket must parse");
+        let parsed = parse_endpoint_ticket(ticket).expect("ticket must parse");
         assert_eq!(
             parsed.id.to_string(),
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0"
@@ -1119,7 +1142,7 @@ mod tests {
             advertised_port: Some(40123),
         };
 
-        let ticket = encode_ticket(&endpoint_addr, &config).expect("ticket");
+        let ticket = encode_endpoint_ticket(&endpoint_addr, &config).expect("ticket");
         assert_eq!(
             ticket,
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@192.168.10.5:40123"
@@ -1128,7 +1151,7 @@ mod tests {
 
     #[test]
     fn parse_ticket_resolves_localhost_hostname() {
-        let parsed = parse_ticket(
+        let parsed = parse_endpoint_ticket(
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@localhost:40123",
         )
         .expect("ticket");

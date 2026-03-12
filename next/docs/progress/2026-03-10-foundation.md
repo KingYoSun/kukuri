@@ -18,6 +18,8 @@
 - `peer診断表示の拡充` として topic ごとの `joined / peers / last_received_at` を UI 表示できるようにした
 - `peer診断表示` に global/topic ごとの `status_detail / last_error` を追加し、接続待ちと直近エラー理由を UI 表示できるようにした
 - desktop runtime で local 鍵を Linux keyring へ保存し、利用できない環境では 0600 の fallback file へ保存するようにした
+- v3 foundation として `next-docs-sync` / `next-blob-service` を追加し、shared durable state の正本を docs/blobs に寄せる最小 data plane を導入した
+- desktop-runtime で gossip/docs/blobs を shared iroh stack 上に統合し、`import_peer_ticket` が docs/blobs にも伝播するようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -36,6 +38,7 @@
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - desktop-runtime test で restart 後も author pubkey が維持されることを確認
+- desktop-runtime test で `late_joiner_backfills_timeline_from_docs` が green
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
 - app-api と frontend test で topic ごとの diagnostics 表示を確認
