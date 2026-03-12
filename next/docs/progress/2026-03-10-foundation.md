@@ -30,6 +30,7 @@
 - Linux 実機 2 台で共通購読 topic を片側で解除した後、その topic 行だけ `joined: false / peers: 0` になることを確認
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
+- Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - desktop-runtime test で restart 後も author pubkey が維持されることを確認
 - app-api test で `reply/thread` の peer 間伝播を確認
