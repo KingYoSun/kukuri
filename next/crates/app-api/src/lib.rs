@@ -337,31 +337,29 @@ impl AppService {
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
-                        if event.is_ok() {
-                            if let Ok(count) = hydrate_topic_projection_with_services(
+                        if event.is_ok()
+                            && let Ok(count) = hydrate_topic_projection_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
-                            ).await {
-                                if count > 0 {
-                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                                }
-                            }
+                            ).await
+                            && count > 0
+                        {
+                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
                         }
                     }
                     Some(event) = hint_stream.next() => {
-                        if hint_targets_topic(&event.hint, topic.as_str()) {
-                            if let Ok(count) = hydrate_topic_projection_with_services(
+                        if hint_targets_topic(&event.hint, topic.as_str())
+                            && let Ok(count) = hydrate_topic_projection_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
-                            ).await {
-                                if count > 0 {
-                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                                }
-                            }
+                            ).await
+                            && count > 0
+                        {
+                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
                         }
                     }
                     else => break,
