@@ -14,6 +14,7 @@
 - desktop UI を `trackedTopics + activeTopic + timelinesByTopic` 構成へ拡張し、複数 topic を同時購読できるようにした
 - `peer診断表示の拡充` として topic ごとの `joined / peers / last_received_at` を UI 表示できるようにした
 - `peer診断表示` に global/topic ごとの `status_detail / last_error` を追加し、接続待ちと直近エラー理由を UI 表示できるようにした
+- desktop runtime で local 鍵を Linux keyring へ保存し、利用できない環境では 0600 の fallback file へ保存するようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -30,6 +31,7 @@
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
 - `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
+- desktop-runtime test で restart 後も author pubkey が維持されることを確認
 - app-api test で `reply/thread` の peer 間伝播を確認
 - app-api test で複数 topic 同時購読時の subscription 追跡を確認
 - app-api と frontend test で topic ごとの diagnostics 表示を確認
@@ -37,4 +39,4 @@
 
 ## 既知の制約
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
-- Tauri backend binding は導入済み。次の実機確認は `status_detail / last_error` が接続失敗時や再接続時にも期待どおり更新されるかの確認。
+- Tauri backend binding と鍵永続化は導入済み。次の実機確認は `status_detail / last_error` が接続失敗時や再接続時にも期待どおり更新されるかの確認。

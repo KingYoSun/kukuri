@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+keyring.workspace = true
+nostr-sdk.workspace = true
 serde.workspace = true
 tokio.workspace = true
 next-app-api = { path = "../app-api" }

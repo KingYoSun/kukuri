@@ -1,3 +1,5 @@
+mod identity;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -6,6 +8,8 @@ use next_app_api::{AppService, SyncStatus, TimelineView};
 use next_store::{SqliteStore, TimelineCursor};
 use next_transport::{IrohGossipTransport, TransportNetworkConfig};
 use serde::{Deserialize, Serialize};
+
+use crate::identity::{IdentityStorageMode, load_or_create_keys};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -46,17 +50,32 @@ pub struct DesktopRuntime {
 
 impl DesktopRuntime {
     pub async fn new(db_path: impl AsRef<Path>) -> Result<Self> {
-        Self::new_with_config(db_path, TransportNetworkConfig::loopback()).await
+        Self::new_with_config_and_identity(
+            db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::from_env(),
+        )
+        .await
     }
 
     pub async fn new_with_config(
         db_path: impl AsRef<Path>,
         network_config: TransportNetworkConfig,
     ) -> Result<Self> {
+        Self::new_with_config_and_identity(db_path, network_config, IdentityStorageMode::from_env())
+            .await
+    }
+
+    async fn new_with_config_and_identity(
+        db_path: impl AsRef<Path>,
+        network_config: TransportNetworkConfig,
+        identity_mode: IdentityStorageMode,
+    ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let transport = Arc::new(IrohGossipTransport::bind(network_config).await?);
-        let app_service = AppService::new(store, transport);
+        let keys = load_or_create_keys(&db_path, identity_mode)?;
+        let app_service = AppService::new_with_keys(store, transport, keys);
 
         Ok(Self {
             app_service,
@@ -131,10 +150,16 @@ mod tests {
     use tokio::time::{Duration, sleep, timeout};
 
     #[tokio::test]
-    async fn desktop_runtime_persists_posts_after_restart() {
+    async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("kukuri-next.db");
-        let runtime = DesktopRuntime::new(&db_path).await.expect("runtime");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
         let event_id = runtime
             .create_post(CreatePostRequest {
                 topic: "kukuri:topic:runtime".into(),
@@ -145,9 +170,21 @@ mod tests {
             .expect("create post");
         drop(runtime);
 
-        let restarted = DesktopRuntime::new(&db_path)
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime restart");
+        let restarted_event_id = restarted
+            .create_post(CreatePostRequest {
+                topic: "kukuri:topic:runtime".into(),
+                content: "persist me again".into(),
+                reply_to: None,
+            })
             .await
-            .expect("runtime restart");
+            .expect("create post after restart");
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: "kukuri:topic:runtime".into(),
@@ -158,6 +195,23 @@ mod tests {
             .expect("timeline");
 
         assert!(timeline.items.iter().any(|post| post.id == event_id));
+        assert!(
+            timeline
+                .items
+                .iter()
+                .any(|post| post.id == restarted_event_id)
+        );
+        let original_post = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("original post");
+        let restarted_post = timeline
+            .items
+            .iter()
+            .find(|post| post.id == restarted_event_id)
+            .expect("restarted post");
+        assert_eq!(original_post.author_pubkey, restarted_post.author_pubkey);
         assert_eq!(restarted.db_path(), db_path.as_path());
     }
 
@@ -166,8 +220,20 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("a.db");
         let db_b = dir.path().join("b.db");
-        let runtime_a = DesktopRuntime::new(&db_a).await.expect("runtime a");
-        let runtime_b = DesktopRuntime::new(&db_b).await.expect("runtime b");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
         let ticket_a = runtime_a
             .local_peer_ticket()
             .await

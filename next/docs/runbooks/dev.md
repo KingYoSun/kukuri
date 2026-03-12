@@ -27,11 +27,13 @@ export KUKURI_NEXT_BIND_ADDR=0.0.0.0:0
 export KUKURI_NEXT_ADVERTISE_HOST=<LANで到達可能なIPまたはホスト名>
 export KUKURI_NEXT_ADVERTISE_PORT=<必要なら固定port>
 export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別子>
+export KUKURI_NEXT_DISABLE_KEYRING=1
 ```
 
 - `KUKURI_NEXT_ADVERTISE_HOST` を設定すると `Your Ticket` はその host を使う。
 - `KUKURI_NEXT_INSTANCE` を設定すると app data dir が分離される。
 - `KUKURI_NEXT_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
+- `KUKURI_NEXT_DISABLE_KEYRING=1` を設定すると Linux keyring を使わず、app data dir 内の 0600 fallback file を使う。
 
 ## 次の手動確認
 1. 各端末で `KUKURI_NEXT_BIND_ADDR=0.0.0.0:0` と `KUKURI_NEXT_ADVERTISE_HOST` を設定する。
@@ -47,6 +49,7 @@ export KUKURI_NEXT_INSTANCE=<同一マシンで複数起動する場合の識別
 11. tracked topic 一覧の各 topic について `joined / peers / expected / missing / last_received_at / status_detail` が妥当な値になることを確認する。
 12. 共通購読 topic を片側で解除し、その topic 行だけ `joined: false / peers: 0` になることを確認する。
 13. invalid な `Peer Ticket` を import したときに global `Last Error` が更新されることを確認する。
+14. client 再起動後に新規 post を作成し、restart 前後で author identity が変わらないことを確認する。
 
 実機確認済み:
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立

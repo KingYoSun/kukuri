@@ -29,6 +29,7 @@ futures-util = "0.3.32"
 hex = "0.4.3"
 iroh = { version = "0.96.1", features = ["address-lookup-mdns"] }
 iroh-gossip = "0.96.0"
+keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service"] }
 nostr-sdk = { version = "0.44.1", features = ["nip04", "nip44"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

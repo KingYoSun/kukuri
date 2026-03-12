@@ -65,10 +65,14 @@ pub struct AppService {
 
 impl AppService {
     pub fn new(store: Arc<dyn Store>, transport: Arc<dyn Transport>) -> Self {
+        Self::new_with_keys(store, transport, generate_keys())
+    }
+
+    pub fn new_with_keys(store: Arc<dyn Store>, transport: Arc<dyn Transport>, keys: Keys) -> Self {
         Self {
             store,
             transport,
-            keys: Arc::new(generate_keys()),
+            keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
         }
