@@ -1,20 +1,18 @@
 [package]
-name = "next-desktop-runtime"
+name = "next-blob-service"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-keyring.workspace = true
-nostr-sdk.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+iroh-blobs.workspace = true
 serde.workspace = true
 tokio.workspace = true
-next-app-api = { path = "../app-api" }
-next-blob-service = { path = "../blob-service" }
+next-core = { path = "../core" }
 next-docs-sync = { path = "../docs-sync" }
-next-store = { path = "../store" }
-next-transport = { path = "../transport" }
 
 [dev-dependencies]
 tempfile.workspace = true

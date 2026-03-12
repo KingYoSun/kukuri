@@ -2,10 +2,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::Utc;
 use futures_util::StreamExt;
-use next_core::{EventId, TopicId, build_text_note, generate_keys};
-use next_store::{Page, Store, TimelineCursor};
-use next_transport::{PeerSnapshot, TopicPeerSnapshot, Transport};
+use next_blob_service::{BlobService, MemoryBlobService, StoredBlob};
+use next_core::{
+    CanonicalPostHeader, EventId, GossipHint, PayloadRef, TopicId, build_text_note,
+    generate_keys, timeline_sort_key,
+};
+use next_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id};
+use next_store::{BlobCacheStatus, EventProjectionRow, Page, ProjectionStore, Store, TimelineCursor};
+use next_transport::{HintTransport, PeerSnapshot, TopicPeerSnapshot, Transport};
 use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -57,21 +63,51 @@ pub struct TopicSyncStatus {
 
 pub struct AppService {
     store: Arc<dyn Store>,
+    projection_store: Arc<dyn ProjectionStore>,
     transport: Arc<dyn Transport>,
+    hint_transport: Arc<dyn HintTransport>,
+    docs_sync: Arc<dyn DocsSync>,
+    blob_service: Arc<dyn BlobService>,
     keys: Arc<Keys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
 }
 
 impl AppService {
-    pub fn new(store: Arc<dyn Store>, transport: Arc<dyn Transport>) -> Self {
-        Self::new_with_keys(store, transport, generate_keys())
+    pub fn new<S, T>(store: Arc<S>, transport: Arc<T>) -> Self
+    where
+        S: Store + ProjectionStore + 'static,
+        T: Transport + HintTransport + 'static,
+    {
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        Self::new_with_services(
+            store.clone() as Arc<dyn Store>,
+            store as Arc<dyn ProjectionStore>,
+            transport.clone(),
+            transport as Arc<dyn HintTransport>,
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        )
     }
 
-    pub fn new_with_keys(store: Arc<dyn Store>, transport: Arc<dyn Transport>, keys: Keys) -> Self {
+    pub fn new_with_services(
+        store: Arc<dyn Store>,
+        projection_store: Arc<dyn ProjectionStore>,
+        transport: Arc<dyn Transport>,
+        hint_transport: Arc<dyn HintTransport>,
+        docs_sync: Arc<dyn DocsSync>,
+        blob_service: Arc<dyn BlobService>,
+        keys: Keys,
+    ) -> Self {
         Self {
             store,
             transport,
+            projection_store,
+            hint_transport,
+            docs_sync,
+            blob_service,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
@@ -92,7 +128,20 @@ impl AppService {
             None
         };
         let event = build_text_note(self.keys.as_ref(), &topic, content, parent.as_ref())?;
-        self.store.put_event(event.clone()).await?;
+        let stored_blob = self
+            .blob_service
+            .put_blob(content.as_bytes().to_vec(), "text/plain")
+            .await?;
+        self.ingest_event(event.clone(), Some(stored_blob.clone())).await?;
+        self.hint_transport
+            .publish_hint(
+                &topic,
+                GossipHint::TopicIndexUpdated {
+                    topic_id: topic.clone(),
+                    event_ids: vec![event.id.clone()],
+                },
+            )
+            .await?;
         self.transport.publish(&topic, event.clone()).await?;
         Ok(event.id.0)
     }
@@ -104,10 +153,23 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         self.ensure_topic_subscription(topic_id).await?;
-        let page = self
-            .store
-            .list_topic_timeline(topic_id, cursor, limit)
+        let mut page = ProjectionStore::list_topic_timeline(
+            self.projection_store.as_ref(),
+            topic_id,
+            cursor.clone(),
+            limit,
+        )
+        .await?;
+        if page.items.is_empty() {
+            self.hydrate_topic_projection(topic_id).await?;
+            page = ProjectionStore::list_topic_timeline(
+                self.projection_store.as_ref(),
+                topic_id,
+                cursor,
+                limit,
+            )
             .await?;
+        }
         Ok(self.page_to_view(page))
     }
 
@@ -119,10 +181,25 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         self.ensure_topic_subscription(topic_id).await?;
-        let page = self
-            .store
-            .list_thread(topic_id, &EventId::from(thread_id), cursor, limit)
+        let mut page = ProjectionStore::list_thread(
+            self.projection_store.as_ref(),
+            topic_id,
+            &EventId::from(thread_id),
+            cursor.clone(),
+            limit,
+        )
+        .await?;
+        if page.items.is_empty() {
+            self.hydrate_topic_projection(topic_id).await?;
+            page = ProjectionStore::list_thread(
+                self.projection_store.as_ref(),
+                topic_id,
+                &EventId::from(thread_id),
+                cursor,
+                limit,
+            )
             .await?;
+        }
         Ok(self.page_to_view(page))
     }
 
@@ -220,13 +297,25 @@ impl AppService {
 
     async fn spawn_topic_subscription(&self, topic_id: &str) -> Result<()> {
         let store = Arc::clone(&self.store);
+        let projection_store = Arc::clone(&self.projection_store);
+        let docs_sync = Arc::clone(&self.docs_sync);
+        let blob_service = Arc::clone(&self.blob_service);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let mut stream = self.transport.subscribe(&TopicId::new(topic_id)).await?;
         let topic_key = topic_id.to_string();
 
         let handle = tokio::spawn(async move {
             while let Some(envelope) = stream.next().await {
-                if store.put_event(envelope.event).await.is_ok() {
+                if store.put_event(envelope.event.clone()).await.is_ok()
+                    && ingest_remote_event(
+                        docs_sync.as_ref(),
+                        blob_service.as_ref(),
+                        projection_store.as_ref(),
+                        envelope.event.clone(),
+                    )
+                    .await
+                    .is_ok()
+                {
                     *last_sync.lock().await = Some(envelope.received_at);
                 }
             }
@@ -236,32 +325,198 @@ impl AppService {
         Ok(())
     }
 
-    fn page_to_view(&self, page: Page<next_core::Event>) -> TimelineView {
+    async fn ingest_event(&self, event: next_core::Event, stored_blob: Option<StoredBlob>) -> Result<()> {
+        self.store.put_event(event.clone()).await?;
+        let blob = match stored_blob {
+            Some(blob) => blob,
+            None => self
+                .blob_service
+                .put_blob(event.content.as_bytes().to_vec(), "text/plain")
+                .await?,
+        };
+        let header = event.to_canonical_header(PayloadRef::BlobText {
+            hash: blob.hash.clone(),
+            mime: blob.mime.clone(),
+            bytes: blob.bytes,
+        });
+        persist_header(
+            self.docs_sync.as_ref(),
+            header.clone(),
+            event.pubkey.as_str(),
+        )
+        .await?;
+        ProjectionStore::put_projection_row(
+            self.projection_store.as_ref(),
+            projection_row_from_header(&header, Some(event.content.clone())),
+        )
+        .await?;
+        ProjectionStore::mark_blob_status(
+            self.projection_store.as_ref(),
+            &blob.hash,
+            BlobCacheStatus::Available,
+        )
+        .await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        Ok(())
+    }
+
+    async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<()> {
+        let replica = topic_replica_id(topic_id);
+        let records = self
+            .docs_sync
+            .query_replica(&replica, DocQuery::Prefix("post/".into()))
+            .await?;
+        for record in records {
+            let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+            let content = match &header.payload_ref {
+                PayloadRef::InlineText { text } => Some(text.clone()),
+                PayloadRef::BlobText { hash, .. } => self
+                    .blob_service
+                    .fetch_blob(hash)
+                    .await?
+                    .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
+            };
+            ProjectionStore::put_projection_row(
+                self.projection_store.as_ref(),
+                projection_row_from_header(&header, content),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    fn page_to_view(&self, page: Page<EventProjectionRow>) -> TimelineView {
         TimelineView {
             items: page
                 .items
                 .into_iter()
                 .map(|event| {
-                    let thread = event.thread_ref();
                     PostView {
-                        id: event.id.0.clone(),
-                        author_pubkey: event.pubkey.0.clone(),
-                        author_npub: event
-                            .author_npub()
-                            .unwrap_or_else(|_| event.pubkey.0.clone()),
-                        note_id: event.note_id().unwrap_or_else(|_| event.id.0.clone()),
-                        content: event.content,
+                        id: event.event_id.0.clone(),
+                        author_pubkey: event.author_pubkey.clone(),
+                        author_npub: event.author_pubkey.clone(),
+                        note_id: event.event_id.0.clone(),
+                        content: event.content.unwrap_or_else(|| "[blob pending]".to_string()),
                         created_at: event.created_at,
-                        reply_to: thread
-                            .as_ref()
-                            .and_then(|thread| thread.reply_to.as_ref().map(|id| id.0.clone())),
-                        root_id: thread.map(|thread| thread.root.0),
+                        reply_to: event.reply_to.map(|id| id.0),
+                        root_id: event.root_id.map(|id| id.0),
                     }
                 })
                 .collect(),
             next_cursor: page.next_cursor,
         }
     }
+}
+
+async fn persist_header(
+    docs_sync: &dyn DocsSync,
+    header: CanonicalPostHeader,
+    author_pubkey: &str,
+) -> Result<()> {
+    let topic_replica = topic_replica_id(header.topic_id.as_str());
+    let author_replica = author_replica_id(author_pubkey);
+    let sort_key = timeline_sort_key(header.created_at, &header.event_id);
+    let header_json = serde_json::to_value(&header)?;
+    docs_sync.open_replica(&topic_replica).await?;
+    docs_sync.open_replica(&author_replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &topic_replica,
+            DocOp::SetJson {
+                key: stable_key("post", &format!("{}/header", header.event_id.as_str())),
+                value: header_json.clone(),
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &topic_replica,
+            DocOp::SetJson {
+                key: stable_key("timeline", &format!("{sort_key}/{}", header.event_id.as_str())),
+                value: serde_json::json!({
+                    "event_id": header.event_id,
+                    "created_at": header.created_at,
+                }),
+            },
+        )
+        .await?;
+    let root_id = header.root.clone().unwrap_or_else(|| header.event_id.clone());
+    docs_sync
+        .apply_doc_op(
+            &topic_replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "thread",
+                    &format!("{}/{sort_key}/{}", root_id.as_str(), header.event_id.as_str()),
+                ),
+                value: serde_json::json!({
+                    "event_id": header.event_id,
+                    "root_id": root_id,
+                    "reply_to": header.reply_to,
+                }),
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &author_replica,
+            DocOp::SetJson {
+                key: stable_key("posts", &format!("{sort_key}/{}", header.event_id.as_str())),
+                value: serde_json::json!({
+                    "event_id": header.event_id,
+                    "topic_id": header.topic_id,
+                }),
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+fn projection_row_from_header(header: &CanonicalPostHeader, content: Option<String>) -> EventProjectionRow {
+    let source_blob_hash = match &header.payload_ref {
+        PayloadRef::BlobText { hash, .. } => Some(hash.clone()),
+        PayloadRef::InlineText { .. } => None,
+    };
+    EventProjectionRow {
+        event_id: header.event_id.clone(),
+        topic_id: header.topic_id.as_str().to_string(),
+        author_pubkey: header.author.as_str().to_string(),
+        created_at: header.created_at,
+        root_id: header.root.clone(),
+        reply_to: header.reply_to.clone(),
+        payload_ref: header.payload_ref.clone(),
+        content,
+        source_replica_id: topic_replica_id(header.topic_id.as_str()),
+        source_key: stable_key("post", &format!("{}/header", header.event_id.as_str())),
+        source_event_id: header.event_id.clone(),
+        source_blob_hash,
+        derived_at: Utc::now().timestamp_millis(),
+        projection_version: 1,
+    }
+}
+
+async fn ingest_remote_event(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    event: next_core::Event,
+) -> Result<()> {
+    let blob = blob_service
+        .put_blob(event.content.as_bytes().to_vec(), "text/plain")
+        .await?;
+    let header = event.to_canonical_header(PayloadRef::BlobText {
+        hash: blob.hash.clone(),
+        mime: blob.mime.clone(),
+        bytes: blob.bytes,
+    });
+    persist_header(docs_sync, header.clone(), event.pubkey.as_str()).await?;
+    projection_store
+        .put_projection_row(projection_row_from_header(&header, Some(event.content.clone())))
+        .await?;
+    projection_store
+        .mark_blob_status(&blob.hash, BlobCacheStatus::Available)
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]

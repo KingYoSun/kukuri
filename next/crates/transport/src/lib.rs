@@ -16,7 +16,7 @@ use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
-use next_core::{Event, TopicId};
+use next_core::{Event, GossipHint, TopicId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 use tokio::task::JoinHandle;
@@ -24,10 +24,18 @@ use tokio::time::timeout;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub type EventStream = Pin<Box<dyn Stream<Item = EventEnvelope> + Send>>;
+pub type HintStream = Pin<Box<dyn Stream<Item = HintEnvelope> + Send>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventEnvelope {
     pub event: Event,
+    pub received_at: i64,
+    pub source_peer: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HintEnvelope {
+    pub hint: GossipHint,
     pub received_at: i64,
     pub source_peer: String,
 }
@@ -120,9 +128,16 @@ pub trait Transport: Send + Sync {
     async fn import_ticket(&self, ticket: &str) -> Result<()>;
 }
 
+#[async_trait]
+pub trait HintTransport: Send + Sync {
+    async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream>;
+    async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()>;
+}
+
 #[derive(Clone, Default)]
 pub struct FakeNetwork {
     topics: Arc<Mutex<HashMap<String, broadcast::Sender<EventEnvelope>>>>,
+    hints: Arc<Mutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
     known_peers: Arc<Mutex<BTreeSet<String>>>,
 }
 
@@ -152,6 +167,14 @@ impl FakeTransport {
 
     async fn topic_sender(&self, topic: &TopicId) -> broadcast::Sender<EventEnvelope> {
         let mut topics = self.network.topics.lock().await;
+        topics
+            .entry(topic.0.clone())
+            .or_insert_with(|| broadcast::channel(128).0)
+            .clone()
+    }
+
+    async fn hint_sender(&self, topic: &TopicId) -> broadcast::Sender<HintEnvelope> {
+        let mut topics = self.network.hints.lock().await;
         topics
             .entry(topic.0.clone())
             .or_insert_with(|| broadcast::channel(128).0)
@@ -253,6 +276,27 @@ impl Transport for FakeTransport {
             .lock()
             .await
             .insert(ticket.to_string());
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl HintTransport for FakeTransport {
+    async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+        let sender = self.hint_sender(topic).await;
+        let stream = BroadcastStream::new(sender.subscribe()).filter_map(|event| async move {
+            event.ok()
+        });
+        Ok(Box::pin(stream))
+    }
+
+    async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
+        let sender = self.hint_sender(topic).await;
+        let _ = sender.send(HintEnvelope {
+            hint,
+            received_at: Utc::now().timestamp_millis(),
+            source_peer: self.local_id.clone(),
+        });
         Ok(())
     }
 }
@@ -633,6 +677,47 @@ impl Transport for IrohGossipTransport {
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr);
         *self.last_error.lock().await = None;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl HintTransport for IrohGossipTransport {
+    async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let stream = self.subscribe(&hint_topic).await?;
+        let mapped = stream.filter_map(|envelope| async move {
+            serde_json::from_str::<GossipHint>(envelope.event.content.as_str())
+                .ok()
+                .map(|hint| HintEnvelope {
+                    hint,
+                    received_at: envelope.received_at,
+                    source_peer: envelope.source_peer,
+                })
+        });
+        Ok(Box::pin(mapped))
+    }
+
+    async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
+        let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
+        let payload = serde_json::to_string(&hint)?;
+        let event = Event {
+            id: next_core::EventId::from(format!("hint-{}", blake3::hash(payload.as_bytes()).to_hex())),
+            pubkey: next_core::Pubkey::from("hint"),
+            created_at: Utc::now().timestamp(),
+            kind: 1,
+            tags: vec![vec!["topic".into(), hint_topic.as_str().into()]],
+            content: payload,
+            sig: String::new(),
+        };
+        let _ = self.ensure_topic(&hint_topic).await?;
+        let states = self.topic_states.lock().await;
+        let state = states
+            .get(hint_topic.as_str())
+            .ok_or_else(|| anyhow!("missing hint topic sender"))?;
+        let sender = state.sender.lock().await;
+        let payload = serde_json::to_vec(&event)?;
+        let _ = sender.broadcast(payload.into()).await;
         Ok(())
     }
 }

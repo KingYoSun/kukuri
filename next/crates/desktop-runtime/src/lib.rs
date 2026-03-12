@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use next_app_api::{AppService, SyncStatus, TimelineView};
+use next_blob_service::IrohBlobService;
+use next_docs_sync::{IrohDocsNode, IrohDocsSync};
 use next_store::{SqliteStore, TimelineCursor};
 use next_transport::{IrohGossipTransport, TransportNetworkConfig};
 use serde::{Deserialize, Serialize};
@@ -72,10 +74,22 @@ impl DesktopRuntime {
         identity_mode: IdentityStorageMode,
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
+        let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let transport = Arc::new(IrohGossipTransport::bind(network_config).await?);
+        let docs_node = IrohDocsNode::persistent(&docs_root).await?;
+        let docs_sync = Arc::new(IrohDocsSync::new(docs_node.clone()));
+        let blob_service = Arc::new(IrohBlobService::new(docs_node));
         let keys = load_or_create_keys(&db_path, identity_mode)?;
-        let app_service = AppService::new_with_keys(store, transport, keys);
+        let app_service = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service,
+            keys,
+        );
 
         Ok(Self {
             app_service,

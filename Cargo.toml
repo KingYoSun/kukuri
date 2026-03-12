@@ -4,6 +4,8 @@ members = [
     "next/crates/core",
     "next/crates/store",
     "next/crates/transport",
+    "next/crates/docs-sync",
+    "next/crates/blob-service",
     "next/crates/harness",
     "next/crates/app-api",
     "next/crates/desktop-runtime",
@@ -28,6 +30,8 @@ chrono = { version = "0.4.43", features = ["serde"] }
 futures-util = "0.3.32"
 hex = "0.4.3"
 iroh = { version = "0.96.1", features = ["address-lookup-mdns"] }
+iroh-docs = "0.96.0"
+iroh-blobs = "0.98.0"
 iroh-gossip = "0.96.0"
 keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service"] }
 nostr-sdk = { version = "0.44.1", features = ["nip04", "nip44"] }

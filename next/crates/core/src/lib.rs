@@ -63,6 +63,108 @@ impl TopicId {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReplicaId(pub String);
+
+impl ReplicaId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlobHash(pub String);
+
+impl BlobHash {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PayloadRef {
+    InlineText { text: String },
+    BlobText { hash: BlobHash, mime: String, bytes: u64 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetRef {
+    pub hash: BlobHash,
+    pub mime: String,
+    pub bytes: u64,
+    pub role: AssetRole,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssetRole {
+    ImageOriginal,
+    ImagePreview,
+    VideoPoster,
+    VideoManifest,
+    Attachment,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LiveSignalKind {
+    SessionStarted,
+    SessionEnded,
+    RoomActivity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GossipHint {
+    TopicIndexUpdated {
+        topic_id: TopicId,
+        event_ids: Vec<EventId>,
+    },
+    ThreadUpdated {
+        root_id: EventId,
+        event_ids: Vec<EventId>,
+    },
+    ProfileUpdated {
+        author: Pubkey,
+    },
+    Presence {
+        topic_id: TopicId,
+        author: Pubkey,
+        ttl_ms: u32,
+    },
+    Typing {
+        topic_id: TopicId,
+        root_id: Option<EventId>,
+        author: Pubkey,
+        ttl_ms: u32,
+    },
+    LiveSignal {
+        topic_id: TopicId,
+        session_id: String,
+        kind: LiveSignalKind,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonicalPostHeader {
+    pub event_id: EventId,
+    pub topic_id: TopicId,
+    pub author: Pubkey,
+    pub root: Option<EventId>,
+    pub reply_to: Option<EventId>,
+    pub created_at: i64,
+    pub payload_ref: PayloadRef,
+    pub attachments: Vec<AssetRef>,
+    pub signature: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadRef {
     pub root: EventId,
@@ -187,6 +289,31 @@ impl Event {
         let pubkey = PublicKey::from_hex(self.pubkey.as_str())?;
         pubkey.to_bech32().map_err(Into::into)
     }
+
+    pub fn to_canonical_header(&self, payload_ref: PayloadRef) -> CanonicalPostHeader {
+        let thread = self.thread_ref();
+        CanonicalPostHeader {
+            event_id: self.id.clone(),
+            topic_id: self
+                .topic_id()
+                .unwrap_or_else(|| TopicId::new("kukuri:topic:unknown")),
+            author: self.pubkey.clone(),
+            root: thread.as_ref().map(|thread| thread.root.clone()),
+            reply_to: thread.and_then(|thread| thread.reply_to),
+            created_at: self.created_at,
+            payload_ref,
+            attachments: Vec::new(),
+            signature: self.sig.clone(),
+        }
+    }
+}
+
+pub fn blob_hash(data: impl AsRef<[u8]>) -> BlobHash {
+    BlobHash::new(blake3::hash(data.as_ref()).to_hex().to_string())
+}
+
+pub fn timeline_sort_key(created_at: i64, event_id: &EventId) -> String {
+    format!("{created_at:020}-{}", event_id.as_str())
 }
 
 pub fn generate_keys() -> Keys {
@@ -320,5 +447,29 @@ mod tests {
         assert!(npub.starts_with("npub1"));
         assert!(!json.contains("note1"));
         assert!(!json.contains("npub1"));
+    }
+
+    #[test]
+    fn gossip_hint_contains_no_payload_body() {
+        let hint = GossipHint::TopicIndexUpdated {
+            topic_id: TopicId::new("kukuri:topic:docs"),
+            event_ids: vec![EventId::from("event-1"), EventId::from("event-2")],
+        };
+
+        let json = serde_json::to_string(&hint).expect("serialize hint");
+        assert!(json.contains("TopicIndexUpdated"));
+        assert!(!json.contains("hello"));
+        assert!(!json.contains("content"));
+        assert!(!json.contains("payload_ref"));
+    }
+
+    #[test]
+    fn blob_hash_roundtrip() {
+        let payload = "hello blobs";
+        let hash = blob_hash(payload);
+        let restored = BlobHash::new(hash.as_str());
+
+        assert_eq!(restored, hash);
+        assert_eq!(hash.as_str().len(), 64);
     }
 }
