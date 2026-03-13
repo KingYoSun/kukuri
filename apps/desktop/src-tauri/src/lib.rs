@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
-    CreatePostRequest, DesktopRuntime, ImportPeerTicketRequest, ListThreadRequest,
-    ListTimelineRequest, UnsubscribeTopicRequest, resolve_db_path_from_env,
+    CreatePostRequest, DesktopRuntime, GetBlobPreviewRequest, ImportPeerTicketRequest,
+    ListThreadRequest, ListTimelineRequest, UnsubscribeTopicRequest, resolve_db_path_from_env,
 };
 use tauri::Manager;
 
@@ -88,6 +88,18 @@ async fn get_local_peer_ticket(
     state.runtime.local_peer_ticket().await.map_err(map_error)
 }
 
+#[tauri::command]
+async fn get_blob_preview_url(
+    state: tauri::State<'_, DesktopState>,
+    request: GetBlobPreviewRequest,
+) -> Result<Option<String>, String> {
+    state
+        .runtime
+        .get_blob_preview_url(request)
+        .await
+        .map_err(map_error)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -107,7 +119,8 @@ pub fn run() {
             get_sync_status,
             import_peer_ticket,
             unsubscribe_topic,
-            get_local_peer_ticket
+            get_local_peer_ticket,
+            get_blob_preview_url
         ])
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");

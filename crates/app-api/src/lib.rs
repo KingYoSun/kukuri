@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use anyhow::Result;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
@@ -309,6 +311,20 @@ impl AppService {
 
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
         self.transport.export_ticket().await
+    }
+
+    pub async fn blob_preview_data_url(&self, hash: &str, mime: &str) -> Result<Option<String>> {
+        let Some(bytes) = self
+            .blob_service
+            .fetch_blob(&kukuri_core::BlobHash::new(hash.to_string()))
+            .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(format!(
+            "data:{mime};base64,{}",
+            BASE64_STANDARD.encode(bytes)
+        )))
     }
 
     pub async fn shutdown(&self) {
@@ -1470,6 +1486,40 @@ mod tests {
             projection.payload_ref,
             PayloadRef::InlineText { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn blob_preview_data_url_roundtrip() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            Arc::new(MemoryDocsSync::default()),
+            blob_service.clone(),
+            generate_keys(),
+        );
+
+        let stored = blob_service
+            .put_blob(b"fake-image".to_vec(), "image/png")
+            .await
+            .expect("put image");
+        let preview = app
+            .blob_preview_data_url(stored.hash.as_str(), "image/png")
+            .await
+            .expect("preview data url")
+            .expect("preview present");
+
+        assert_eq!(preview, "data:image/png;base64,ZmFrZS1pbWFnZQ==");
+        assert!(
+            app.blob_preview_data_url(&"f".repeat(64), "image/png")
+                .await
+                .expect("missing preview")
+                .is_none()
+        );
     }
 
     #[tokio::test]

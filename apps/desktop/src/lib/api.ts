@@ -70,6 +70,7 @@ export interface DesktopApi {
   importPeerTicket(ticket: string): Promise<void>;
   unsubscribeTopic(topic: string): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
+  getBlobPreviewUrl(hash: string, mime: string): Promise<string | null>;
 }
 
 declare global {
@@ -151,5 +152,16 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.getLocalPeerTicket();
     }
     return invoke<string | null>('get_local_peer_ticket').catch(() => unavailable());
+  },
+  getBlobPreviewUrl: async (hash, mime) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getBlobPreviewUrl(hash, mime);
+    }
+    return invoke<string | null>('get_blob_preview_url', {
+      request: {
+        hash,
+        mime,
+      },
+    }).catch(() => unavailable());
   },
 };

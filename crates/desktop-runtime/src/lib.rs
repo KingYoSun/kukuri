@@ -48,6 +48,12 @@ pub struct UnsubscribeTopicRequest {
     pub topic: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetBlobPreviewRequest {
+    pub hash: String,
+    pub mime: String,
+}
+
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
@@ -164,6 +170,15 @@ impl DesktopRuntime {
 
     pub async fn local_peer_ticket(&self) -> Result<Option<String>> {
         self.app_service.peer_ticket().await
+    }
+
+    pub async fn get_blob_preview_url(
+        &self,
+        request: GetBlobPreviewRequest,
+    ) -> Result<Option<String>> {
+        self.app_service
+            .blob_preview_data_url(request.hash.as_str(), request.mime.as_str())
+            .await
     }
 
     pub async fn shutdown(&self) {

@@ -45,6 +45,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
   const [peerTicket, setPeerTicket] = useState('');
   const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
+  const [blobPreviewUrls, setBlobPreviewUrls] = useState<Record<string, string | null>>({});
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     connected: false,
     peer_count: 0,
@@ -133,6 +134,55 @@ export function App({ api = runtimeApi }: AppProps) {
       window.clearInterval(intervalId);
     };
   }, [activeTopic, loadTopics, selectedThread, trackedTopics]);
+
+  useEffect(() => {
+    const posts = [...activeTimeline, ...thread];
+    const imageAttachments = posts
+      .map(selectPrimaryImage)
+      .filter((attachment): attachment is AttachmentView => attachment !== null)
+      .filter((attachment) => attachment.status === 'Available' || attachment.status === 'Pinned');
+
+    let disposed = false;
+    for (const attachment of imageAttachments) {
+      if (blobPreviewUrls[attachment.hash] !== undefined) {
+        continue;
+      }
+      void api
+        .getBlobPreviewUrl(attachment.hash, attachment.mime)
+        .then((url) => {
+          if (disposed) {
+            return;
+          }
+          setBlobPreviewUrls((current) => {
+            if (current[attachment.hash] !== undefined) {
+              return current;
+            }
+            return {
+              ...current,
+              [attachment.hash]: url,
+            };
+          });
+        })
+        .catch(() => {
+          if (disposed) {
+            return;
+          }
+          setBlobPreviewUrls((current) => {
+            if (current[attachment.hash] !== undefined) {
+              return current;
+            }
+            return {
+              ...current,
+              [attachment.hash]: null,
+            };
+          });
+        });
+    }
+
+    return () => {
+      disposed = true;
+    };
+  }, [activeTimeline, api, blobPreviewUrls, thread]);
 
   function clearThreadContext() {
     setSelectedThread(null);
@@ -239,7 +289,7 @@ export function App({ api = runtimeApi }: AppProps) {
       ? Math.max(post.attachments.filter((attachment) => attachment !== primaryImage).length, 0)
       : 0;
     const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
-    const mediaPreviewSrc = primaryImage ? attachmentPreviewSrc() : null;
+    const mediaPreviewSrc = primaryImage ? blobPreviewUrls[primaryImage.hash] ?? attachmentPreviewSrc() : null;
     const mediaIsReady = primaryImage ? primaryImage.status !== 'Missing' : false;
     const threadTargetId = post.root_id ?? post.id;
 
@@ -272,6 +322,7 @@ export function App({ api = runtimeApi }: AppProps) {
                     className='media-preview'
                     src={mediaPreviewSrc}
                     alt={primaryImage.mime}
+                    data-testid={`media-preview-${post.id}`}
                   />
                 ) : mediaIsReady ? (
                   <div className='media-ready-placeholder'>

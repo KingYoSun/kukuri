@@ -119,6 +119,9 @@ function createMockApi(options?: {
     async getLocalPeerTicket() {
       return 'peer1@127.0.0.1:7777';
     },
+    async getBlobPreviewUrl() {
+      return null;
+    },
   };
 
   return api;
@@ -309,6 +312,35 @@ test('timeline image post switches to ready state when attachment becomes availa
     expect(screen.getByText('image ready')).toBeInTheDocument();
   });
   expect(screen.queryByText('syncing image')).not.toBeInTheDocument();
+});
+
+test('timeline image post renders actual preview when preview url is available', async () => {
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildImagePost({
+          content: 'caption ready',
+          content_status: 'Available',
+          attachments: [
+            {
+              hash: 'b'.repeat(64),
+              mime: 'image/png',
+              bytes: 4096,
+              role: 'image_original',
+              status: 'Available',
+            },
+          ],
+        }),
+      ],
+    },
+  });
+  api.getBlobPreviewUrl = async () => 'data:image/png;base64,ZmFrZQ==';
+
+  render(<App api={api} />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('media-preview-image-post')).toBeInTheDocument();
+  });
 });
 
 test('thread pane reuses the same image placeholder renderer', async () => {
