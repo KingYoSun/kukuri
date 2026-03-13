@@ -4,6 +4,7 @@
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 - v3 Phase4.5E data source policy lock は完了
 - v3 Phase5 cutover は完了
+- Phase6-1 image post canonical source 設計に着手
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -23,6 +24,8 @@
 - v3 foundation として `kukuri-docs-sync` / `kukuri-blob-service` を追加し、shared durable state の正本を docs/blobs に寄せる最小 data plane を導入した
 - desktop-runtime で gossip/docs/blobs を shared iroh stack 上に統合し、`import_peer_ticket` が docs/blobs にも伝播するようにした
 - root 直下の pre-cutover app/service tree を `legacy/` へ移し、root 入口を current kukuri 実装中心へ縮退した
+- `ADR 0003` で image post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
+- `image_post_visible_before_full_blob_download` を attachment metadata と blob status 遷移まで広げた
 
 ## 検証済み
 - `cargo xtask doctor`

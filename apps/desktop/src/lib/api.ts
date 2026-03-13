@@ -11,9 +11,21 @@ export type PostView = {
   author_npub: string;
   note_id: string;
   content: string;
+  content_status: BlobViewStatus;
+  attachments: AttachmentView[];
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+};
+
+export type BlobViewStatus = 'Missing' | 'Available' | 'Pinned';
+
+export type AttachmentView = {
+  hash: string;
+  mime: string;
+  bytes: number;
+  role: string;
+  status: BlobViewStatus;
 };
 
 export type TimelineView = {

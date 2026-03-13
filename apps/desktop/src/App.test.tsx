@@ -50,6 +50,8 @@ function createMockApi(options?: {
           author_npub: 'npub1testauthor',
           note_id: `note1${sequence}`,
           content,
+          content_status: 'Available',
+          attachments: [],
           created_at: sequence,
           reply_to: replyTo ?? null,
           root_id: rootId,

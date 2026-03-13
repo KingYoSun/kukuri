@@ -4,10 +4,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::Utc;
 use futures_util::StreamExt;
-use kukuri_blob_service::{BlobService, MemoryBlobService, StoredBlob};
+use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    CanonicalPostHeader, EventId, GossipHint, PayloadRef, TopicId, build_text_note, generate_keys,
-    timeline_sort_key,
+    AssetRole, CanonicalPostHeader, EventId, GossipHint, PayloadRef, ReplicaId, TopicId,
+    build_text_note, generate_keys, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
@@ -28,9 +28,27 @@ pub struct PostView {
     pub author_npub: String,
     pub note_id: String,
     pub content: String,
+    pub content_status: BlobViewStatus,
+    pub attachments: Vec<AttachmentView>,
     pub created_at: i64,
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlobViewStatus {
+    Missing,
+    Available,
+    Pinned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachmentView {
+    pub hash: String,
+    pub mime: String,
+    pub bytes: u64,
+    pub role: String,
+    pub status: BlobViewStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,7 +194,7 @@ impl AppService {
             )
             .await?;
         }
-        Ok(self.page_to_view(page))
+        self.page_to_view(page).await
     }
 
     pub async fn list_thread(
@@ -208,7 +226,7 @@ impl AppService {
             )
             .await?;
         }
-        Ok(self.page_to_view(page))
+        self.page_to_view(page).await
     }
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
@@ -464,26 +482,43 @@ impl AppService {
         .await
     }
 
-    fn page_to_view(&self, page: Page<EventProjectionRow>) -> TimelineView {
-        TimelineView {
-            items: page
-                .items
-                .into_iter()
-                .map(|event| PostView {
-                    id: event.event_id.0.clone(),
-                    author_pubkey: event.author_pubkey.clone(),
-                    author_npub: event.author_pubkey.clone(),
-                    note_id: event.event_id.0.clone(),
-                    content: event
-                        .content
-                        .unwrap_or_else(|| "[blob pending]".to_string()),
-                    created_at: event.created_at,
-                    reply_to: event.reply_to.map(|id| id.0),
-                    root_id: event.root_id.map(|id| id.0),
-                })
-                .collect(),
-            next_cursor: page.next_cursor,
+    async fn page_to_view(&self, page: Page<EventProjectionRow>) -> Result<TimelineView> {
+        let mut items = Vec::with_capacity(page.items.len());
+        for row in page.items {
+            items.push(self.row_to_view(row).await?);
         }
+        Ok(TimelineView {
+            items,
+            next_cursor: page.next_cursor,
+        })
+    }
+
+    async fn row_to_view(&self, row: EventProjectionRow) -> Result<PostView> {
+        let header = fetch_header_for_projection(
+            self.docs_sync.as_ref(),
+            &row.source_replica_id,
+            row.source_key.as_str(),
+        )
+        .await?;
+        let content_status = blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
+        let attachments = if let Some(header) = header {
+            attachment_views(self.blob_service.as_ref(), &header).await?
+        } else {
+            Vec::new()
+        };
+
+        Ok(PostView {
+            id: row.event_id.0.clone(),
+            author_pubkey: row.author_pubkey.clone(),
+            author_npub: row.author_pubkey.clone(),
+            note_id: row.event_id.0.clone(),
+            content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+            content_status,
+            attachments,
+            created_at: row.created_at,
+            reply_to: row.reply_to.map(|id| id.0),
+            root_id: row.root_id.map(|id| id.0),
+        })
     }
 }
 
@@ -602,11 +637,33 @@ async fn hydrate_topic_projection_with_services(
         let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
         let content = match &header.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
-            PayloadRef::BlobText { hash, .. } => blob_service
-                .fetch_blob(hash)
-                .await?
-                .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
+            PayloadRef::BlobText { hash, .. } => {
+                let payload = blob_service
+                    .fetch_blob(hash)
+                    .await?
+                    .map(|bytes| String::from_utf8_lossy(&bytes).to_string());
+                projection_store
+                    .mark_blob_status(
+                        hash,
+                        match payload {
+                            Some(_) => BlobCacheStatus::Available,
+                            None => BlobCacheStatus::Missing,
+                        },
+                    )
+                    .await?;
+                payload
+            }
         };
+        for attachment in &header.attachments {
+            let status = match blob_service.blob_status(&attachment.hash).await? {
+                BlobStatus::Missing => BlobCacheStatus::Missing,
+                BlobStatus::Available => BlobCacheStatus::Available,
+                BlobStatus::Pinned => BlobCacheStatus::Pinned,
+            };
+            projection_store
+                .mark_blob_status(&attachment.hash, status)
+                .await?;
+        }
         projection_store
             .put_projection_row(projection_row_from_header(&header, content))
             .await?;
@@ -627,6 +684,69 @@ fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
 
 fn projection_page_needs_hydration(page: &Page<EventProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
+}
+
+async fn fetch_header_for_projection(
+    docs_sync: &dyn DocsSync,
+    replica_id: &ReplicaId,
+    source_key: &str,
+) -> Result<Option<CanonicalPostHeader>> {
+    let records = docs_sync
+        .query_replica(replica_id, DocQuery::Exact(source_key.to_string()))
+        .await?;
+    let Some(record) = records.into_iter().next() else {
+        return Ok(None);
+    };
+    let header = serde_json::from_slice(&record.value)?;
+    Ok(Some(header))
+}
+
+async fn blob_view_status_for_payload(
+    blob_service: &dyn BlobService,
+    payload_ref: &PayloadRef,
+) -> Result<BlobViewStatus> {
+    match payload_ref {
+        PayloadRef::InlineText { .. } => Ok(BlobViewStatus::Available),
+        PayloadRef::BlobText { hash, .. } => {
+            let status = blob_service.blob_status(hash).await?;
+            Ok(blob_view_status(status))
+        }
+    }
+}
+
+async fn attachment_views(
+    blob_service: &dyn BlobService,
+    header: &CanonicalPostHeader,
+) -> Result<Vec<AttachmentView>> {
+    let mut attachments = Vec::with_capacity(header.attachments.len());
+    for attachment in &header.attachments {
+        attachments.push(AttachmentView {
+            hash: attachment.hash.as_str().to_string(),
+            mime: attachment.mime.clone(),
+            bytes: attachment.bytes,
+            role: attachment_role_name(&attachment.role).to_string(),
+            status: blob_view_status(blob_service.blob_status(&attachment.hash).await?),
+        });
+    }
+    Ok(attachments)
+}
+
+fn blob_view_status(status: BlobStatus) -> BlobViewStatus {
+    match status {
+        BlobStatus::Missing => BlobViewStatus::Missing,
+        BlobStatus::Available => BlobViewStatus::Available,
+        BlobStatus::Pinned => BlobViewStatus::Pinned,
+    }
+}
+
+fn attachment_role_name(role: &AssetRole) -> &'static str {
+    match role {
+        AssetRole::ImageOriginal => "image_original",
+        AssetRole::ImagePreview => "image_preview",
+        AssetRole::VideoPoster => "video_poster",
+        AssetRole::VideoManifest => "video_manifest",
+        AssetRole::Attachment => "attachment",
+    }
 }
 
 fn normalize_topic_name(topic: String) -> String {
@@ -1253,15 +1373,17 @@ mod tests {
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:image");
         let event = build_text_note(&keys, &topic, "", None).expect("event");
+        let image_bytes = b"fake image bytes".to_vec();
+        let image_hash = kukuri_core::blob_hash(&image_bytes);
         let mut header = event.to_canonical_header(PayloadRef::BlobText {
             hash: kukuri_core::BlobHash::new("f".repeat(64)),
             mime: "text/plain".into(),
             bytes: 0,
         });
         header.attachments = vec![kukuri_core::AssetRef {
-            hash: kukuri_core::BlobHash::new("a".repeat(64)),
+            hash: image_hash.clone(),
             mime: "image/png".into(),
-            bytes: 1024,
+            bytes: image_bytes.len() as u64,
             role: kukuri_core::AssetRole::ImageOriginal,
         }];
         persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
@@ -1284,11 +1406,32 @@ mod tests {
             .expect("timeline");
         assert_eq!(timeline.items.len(), 1);
         assert_eq!(timeline.items[0].content, "[blob pending]");
+        assert_eq!(timeline.items[0].content_status, BlobViewStatus::Missing);
+        assert_eq!(timeline.items[0].attachments.len(), 1);
+        assert_eq!(
+            timeline.items[0].attachments[0].status,
+            BlobViewStatus::Missing
+        );
+        assert_eq!(
+            timeline.items[0].attachments[0].role,
+            "image_original"
+        );
 
         blob_service
-            .put_blob(b"caption".to_vec(), "text/plain")
+            .put_blob(image_bytes, "image/png")
             .await
-            .expect("put body blob");
+            .expect("put image blob");
+
+        let refreshed = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline after image fetch");
+        assert_eq!(refreshed.items.len(), 1);
+        assert_eq!(
+            refreshed.items[0].attachments[0].status,
+            BlobViewStatus::Available
+        );
+        assert_eq!(refreshed.items[0].attachments[0].mime, "image/png");
     }
 
     #[tokio::test]
