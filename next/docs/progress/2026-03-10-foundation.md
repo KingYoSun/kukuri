@@ -2,6 +2,8 @@
 
 ## Status
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
+- v3 Phase4.5E data source policy lock は完了
+- v3 Phase5 cutover は ready
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -26,6 +28,7 @@
 - `cargo xtask check`
 - `cargo xtask test`
 - `cargo xtask e2e-smoke`
+- `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - Linux 実機で `pnpm tauri dev` を使った `post -> restart -> persist`
 - Linux 実機 2 台で固定 port / 相互 ticket import により `connected: yes, peers: 1` の双方向収束を確認
 - Linux 実機 2 台で投稿伝播と、peer 終了後に polling で `connected: no, peers: 0` へ戻ることを確認
@@ -37,7 +40,6 @@
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
-- `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml`
 - desktop-runtime test で restart 後も author pubkey が維持されることを確認
 - desktop-runtime test で `late_joiner_backfills_timeline_from_docs` が green
 - desktop-runtime test で `sqlite_deletion_does_not_lose_shared_state` が green
@@ -55,7 +57,7 @@
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 
 ## Phase5 入口条件
-- `SQLite` を削除しても docs/blobs から shared durable state が復元できること
-- `gossip` を取り逃しても late join/backfill が docs/blobs だけで成立すること
-- `compat_event_gossip` がコードから消えていること
-- `legacy/` 非依存で Linux の開発・テスト・起動が完結すること
+- `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み
+- `gossip` を取り逃しても late join/backfill が docs/blobs だけで成立することを確認済み
+- `compat_event_gossip` は `next/` のコードから除去済み
+- `legacy/` を参照せず Linux の開発・テスト・起動が完結することを local required lane で確認済み

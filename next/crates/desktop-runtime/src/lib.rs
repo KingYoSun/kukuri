@@ -48,7 +48,7 @@ pub struct UnsubscribeTopicRequest {
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
-    _iroh_stack: SharedIrohStack,
+    iroh_stack: SharedIrohStack,
 }
 
 struct SharedIrohStack {
@@ -99,7 +99,7 @@ impl DesktopRuntime {
         Ok(Self {
             app_service,
             db_path,
-            _iroh_stack: iroh_stack,
+            iroh_stack,
         })
     }
 
@@ -164,6 +164,7 @@ impl DesktopRuntime {
 
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
+        self.iroh_stack.shutdown().await;
     }
 }
 
@@ -185,6 +186,10 @@ impl SharedIrohStack {
             blob_service,
         })
     }
+
+    async fn shutdown(&self) {
+        let _ = self._node.clone().shutdown().await;
+    }
 }
 
 #[cfg(test)]
@@ -197,12 +202,16 @@ mod tests {
     async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("kukuri-next.db");
-        let runtime = DesktopRuntime::new_with_config_and_identity(
-            &db_path,
-            TransportNetworkConfig::loopback(),
-            IdentityStorageMode::FileOnly,
+        let runtime = timeout(
+            Duration::from_secs(15),
+            DesktopRuntime::new_with_config_and_identity(
+                &db_path,
+                TransportNetworkConfig::loopback(),
+                IdentityStorageMode::FileOnly,
+            ),
         )
         .await
+        .expect("runtime creation timeout")
         .expect("runtime");
         let event_id = runtime
             .create_post(CreatePostRequest {
@@ -212,14 +221,21 @@ mod tests {
             })
             .await
             .expect("create post");
+        timeout(Duration::from_secs(15), runtime.shutdown())
+            .await
+            .expect("runtime shutdown timeout");
         drop(runtime);
 
-        let restarted = DesktopRuntime::new_with_config_and_identity(
-            &db_path,
-            TransportNetworkConfig::loopback(),
-            IdentityStorageMode::FileOnly,
+        let restarted = timeout(
+            Duration::from_secs(15),
+            DesktopRuntime::new_with_config_and_identity(
+                &db_path,
+                TransportNetworkConfig::loopback(),
+                IdentityStorageMode::FileOnly,
+            ),
         )
         .await
+        .expect("runtime restart timeout")
         .expect("runtime restart");
         let restarted_event_id = restarted
             .create_post(CreatePostRequest {
@@ -257,6 +273,9 @@ mod tests {
             .expect("restarted post");
         assert_eq!(original_post.author_pubkey, restarted_post.author_pubkey);
         assert_eq!(restarted.db_path(), db_path.as_path());
+        timeout(Duration::from_secs(15), restarted.shutdown())
+            .await
+            .expect("restarted shutdown timeout");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

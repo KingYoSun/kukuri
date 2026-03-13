@@ -61,13 +61,17 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 
 ## Phase5 入口チェック
-1. `cargo test -p next-app-api --lib` を通す。
-2. `cargo test -p next-desktop-runtime --lib` を通す。
-3. `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml` を通す。
-4. `sqlite_deletion_does_not_lose_shared_state` と `restart_restores_from_docs_blobs_without_sqlite_seed` が green であることを確認する。
-5. `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green であることを確認する。
-6. `compat_event_gossip` がコードから除去されていることを確認する。
-7. `legacy/` を参照せず `next/` だけで Linux の開発・テスト・起動が完結することを確認する。
+1. `cargo xtask doctor` を通す。
+2. `cargo xtask check` を通す。
+3. `cargo xtask test` を通す。
+4. `cargo xtask e2e-smoke` を通す。
+5. `cargo check --manifest-path next/apps/desktop/src-tauri/Cargo.toml` を通す。
+6. `sqlite_deletion_does_not_lose_shared_state` と `restart_restores_from_docs_blobs_without_sqlite_seed` が green であることを確認する。
+7. `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green であることを確認する。
+8. `compat_event_gossip` が `next/` のコードから除去されていることを確認する。
+9. `legacy/` を参照せず `next/` だけで Linux の開発・テスト・起動が完結することを確認する。
+
+現在の HEAD では上記 1-9 を local で確認済み。
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。

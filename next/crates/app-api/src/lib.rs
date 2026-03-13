@@ -293,7 +293,7 @@ impl AppService {
         };
         for handle in handles {
             handle.abort();
-            let _ = handle.await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
     }
 
@@ -1455,6 +1455,29 @@ mod tests {
             .import_peer_ticket(&ticket_a)
             .await
             .expect("import a into b");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let status_a = app_a.get_sync_status().await.expect("status a");
+                let status_b = app_b.get_sync_status().await.expect("status b");
+                let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
+                    topic_status.topic == topic
+                        && topic_status.joined
+                        && topic_status.peer_count > 0
+                });
+                let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
+                    topic_status.topic == topic
+                        && topic_status.joined
+                        && topic_status.peer_count > 0
+                });
+                if ready_a && ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("subscription rebuild timeout");
 
         let event_id = app_a
             .create_post(topic, "hello after import", None)
