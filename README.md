@@ -23,12 +23,10 @@ npx pnpm@10.16.1 dev
 
 ```text
 .
-├── next/                  # new Linux-first MVP
-├── next/docs/             # current docs
-├── legacy/                # old docs / scripts / docker / workflows / AGENTS
-├── kukuri-tauri/          # pre-cutover legacy app tree
-├── kukuri-community-node/ # pre-cutover legacy service tree
-└── .github/workflows/     # next-fast.yml / next-nightly.yml
+├── next/              # active Linux-first implementation
+├── next/docs/         # current truth: adr / runbook / progress
+├── legacy/            # archived pre-cutover assets and docs history
+└── .github/workflows/ # next-fast.yml / next-nightly.yml
 ```
 
 ## Rules
@@ -37,6 +35,7 @@ npx pnpm@10.16.1 dev
 - `legacy/` is reference-only.
 - Linux is the only required target during MVP.
 - Windows, DHT discovery, and community-node integration are deferred.
+- `AGENTS.md -> next/docs/*` is sufficient for new contributors.
 
 ## Docs
 

@@ -3,7 +3,7 @@
 ## Status
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 - v3 Phase4.5E data source policy lock は完了
-- v3 Phase5 cutover は ready
+- v3 Phase5 cutover は完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -22,6 +22,7 @@
 - desktop runtime で local 鍵を Linux keyring へ保存し、利用できない環境では 0600 の fallback file へ保存するようにした
 - v3 foundation として `next-docs-sync` / `next-blob-service` を追加し、shared durable state の正本を docs/blobs に寄せる最小 data plane を導入した
 - desktop-runtime で gossip/docs/blobs を shared iroh stack 上に統合し、`import_peer_ticket` が docs/blobs にも伝播するようにした
+- root 直下の pre-cutover app/service tree を `legacy/` へ移し、root 入口を `next` 中心へ縮退した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -56,8 +57,10 @@
 - `next-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 
-## Phase5 入口条件
+## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み
 - `gossip` を取り逃しても late join/backfill が docs/blobs だけで成立することを確認済み
 - `compat_event_gossip` は `next/` のコードから除去済み
+- root workspace と root README は `next` 中心へ縮退済み
+- pre-cutover の app/service tree は `legacy/` へ移動済み
 - `legacy/` を参照せず Linux の開発・テスト・起動が完結することを local required lane で確認済み

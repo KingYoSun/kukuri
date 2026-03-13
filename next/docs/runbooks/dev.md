@@ -60,7 +60,7 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 
-## Phase5 入口チェック
+## Phase5 Cutover Check
 1. `cargo xtask doctor` を通す。
 2. `cargo xtask check` を通す。
 3. `cargo xtask test` を通す。
@@ -71,7 +71,7 @@ export KUKURI_NEXT_DISABLE_KEYRING=1
 8. `compat_event_gossip` が `next/` のコードから除去されていることを確認する。
 9. `legacy/` を参照せず `next/` だけで Linux の開発・テスト・起動が完結することを確認する。
 
-現在の HEAD では上記 1-9 を local で確認済み。
+現在の HEAD では上記 1-9 を local で確認済みで、Phase5 cutover は完了。
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。

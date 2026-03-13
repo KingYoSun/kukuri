@@ -23,12 +23,10 @@ npx pnpm@10.16.1 dev
 
 ```text
 .
-├── next/                 # 新しい Linux-first MVP
-├── next/docs/            # 現行ドキュメント
-├── legacy/               # 旧 docs / scripts / docker / workflow / AGENTS
-├── kukuri-tauri/         # pre-cutover の旧 app tree（参照用）
-├── kukuri-community-node/# pre-cutover の旧 service tree（参照用）
-└── .github/workflows/    # next-fast.yml / next-nightly.yml
+├── next/              # 現行の Linux-first 実装
+├── next/docs/         # 現在の真実: adr / runbook / progress
+├── legacy/            # cutover 前の資産と履歴アーカイブ
+└── .github/workflows/ # next-fast.yml / next-nightly.yml
 ```
 
 ## ルール
@@ -37,6 +35,7 @@ npx pnpm@10.16.1 dev
 - `legacy/` は参照専用です。
 - MVP 中は Linux だけを required target にします。
 - Windows、DHT、community-node 連携は後続フェーズです。
+- 新規参加者は `AGENTS.md -> next/docs/*` だけで着手できます。
 
 ## ドキュメント
 

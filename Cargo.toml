@@ -11,8 +11,6 @@ members = [
     "next/crates/desktop-runtime",
 ]
 exclude = [
-    "kukuri-community-node",
-    "kukuri-tauri/src-tauri",
     "next/apps/desktop/src-tauri",
 ]
 resolver = "2"
