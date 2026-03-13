@@ -1,6 +1,6 @@
 import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { DesktopApi, PostView, SyncStatus, TopicSyncStatus, runtimeApi } from './lib/api';
+import { AttachmentView, DesktopApi, PostView, SyncStatus, TopicSyncStatus, runtimeApi } from './lib/api';
 
 type AppProps = {
   api?: DesktopApi;
@@ -8,6 +8,29 @@ type AppProps = {
 
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
+
+function selectPrimaryImage(post: PostView): AttachmentView | null {
+  return (
+    post.attachments.find(
+      (attachment) =>
+        attachment.role === 'image_original' || attachment.mime.startsWith('image/')
+    ) ?? null
+  );
+}
+
+function attachmentPreviewSrc(): string | null {
+  return null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
+}
 
 export function App({ api = runtimeApi }: AppProps) {
   const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
@@ -210,6 +233,94 @@ export function App({ api = runtimeApi }: AppProps) {
     }
   }
 
+  function renderPostCard(post: PostView, context: 'timeline' | 'thread') {
+    const primaryImage = selectPrimaryImage(post);
+    const extraAttachmentCount = primaryImage
+      ? Math.max(post.attachments.filter((attachment) => attachment !== primaryImage).length, 0)
+      : 0;
+    const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
+    const mediaPreviewSrc = primaryImage ? attachmentPreviewSrc() : null;
+    const mediaIsReady = primaryImage ? primaryImage.status !== 'Missing' : false;
+    const threadTargetId = post.root_id ?? post.id;
+
+    return (
+      <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
+        <button
+          className='post-link'
+          type='button'
+          onClick={() => void openThread(threadTargetId)}
+        >
+          <div className='post-meta'>
+            <span>{post.author_npub}</span>
+            <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
+          </div>
+          {primaryImage ? (
+            <>
+              <div
+                className={mediaIsReady ? 'media-frame media-frame-ready' : 'media-frame media-frame-loading'}
+              >
+                <div className='media-badges'>
+                  <span className='media-status-badge'>
+                    {mediaIsReady ? 'image ready' : 'syncing image'}
+                  </span>
+                  {extraAttachmentCount > 0 ? (
+                    <span className='media-count-badge'>+{extraAttachmentCount}</span>
+                  ) : null}
+                </div>
+                {mediaIsReady && mediaPreviewSrc ? (
+                  <img
+                    className='media-preview'
+                    src={mediaPreviewSrc}
+                    alt={primaryImage.mime}
+                  />
+                ) : mediaIsReady ? (
+                  <div className='media-ready-placeholder'>
+                    <span>preview pending</span>
+                  </div>
+                ) : (
+                  <div
+                    className='media-skeleton'
+                    data-testid={`media-skeleton-${post.id}`}
+                    aria-hidden='true'
+                  />
+                )}
+              </div>
+              <div className='media-meta'>
+                <span>{primaryImage.mime}</span>
+                <span>{formatBytes(primaryImage.bytes)}</span>
+              </div>
+            </>
+          ) : null}
+          <div className='post-body'>
+            {isPendingText ? (
+              <div
+                className='text-skeleton-group'
+                data-testid={`text-skeleton-${post.id}`}
+                aria-hidden='true'
+              >
+                <span className='text-skeleton text-skeleton-line' />
+                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
+              </div>
+            ) : (
+              <strong className='post-title'>{post.content}</strong>
+            )}
+          </div>
+          <small>{post.note_id}</small>
+          {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
+        </button>
+        <div className='post-actions'>
+          <button
+            className='button button-secondary'
+            type='button'
+            onClick={() => beginReply(post)}
+          >
+            Reply
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <main className='shell'>
       <section className='hero'>
@@ -399,28 +510,7 @@ export function App({ api = runtimeApi }: AppProps) {
           </form>
           <ul className='post-list'>
             {activeTimeline.map((post) => (
-              <li key={post.id}>
-                <article className='post-card'>
-                  <button className='post-link' onClick={() => void openThread(post.root_id ?? post.id)}>
-                    <div className='post-meta'>
-                      <span>{post.author_npub}</span>
-                      <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
-                    </div>
-                    <strong>{post.content}</strong>
-                    <small>{post.note_id}</small>
-                    {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
-                  </button>
-                  <div className='post-actions'>
-                    <button
-                      className='button button-secondary'
-                      type='button'
-                      onClick={() => beginReply(post)}
-                    >
-                      Reply
-                    </button>
-                  </div>
-                </article>
-              </li>
+              <li key={post.id}>{renderPostCard(post, 'timeline')}</li>
             ))}
           </ul>
         </section>
@@ -446,17 +536,7 @@ export function App({ api = runtimeApi }: AppProps) {
             <ul className='thread-list'>
               {thread.map((post) => (
                 <li key={post.id} className='thread-item'>
-                  <strong>{post.content}</strong>
-                  <small>{post.author_npub}</small>
-                  <div className='post-actions'>
-                    <button
-                      className='button button-secondary'
-                      type='button'
-                      onClick={() => beginReply(post)}
-                    >
-                      Reply
-                    </button>
-                  </div>
+                  {renderPostCard(post, 'thread')}
                 </li>
               ))}
             </ul>

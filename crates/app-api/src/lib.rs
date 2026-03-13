@@ -194,7 +194,12 @@ impl AppService {
             )
             .await?;
         }
-        self.page_to_view(page).await
+        let view = self.page_to_view(page).await?;
+        let mut last_sync = self.last_sync_ts.lock().await;
+        if !view.items.is_empty() && last_sync.is_none() {
+            *last_sync = Some(Utc::now().timestamp_millis());
+        }
+        Ok(view)
     }
 
     pub async fn list_thread(
@@ -226,7 +231,12 @@ impl AppService {
             )
             .await?;
         }
-        self.page_to_view(page).await
+        let view = self.page_to_view(page).await?;
+        let mut last_sync = self.last_sync_ts.lock().await;
+        if !view.items.is_empty() && last_sync.is_none() {
+            *last_sync = Some(Utc::now().timestamp_millis());
+        }
+        Ok(view)
     }
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
@@ -500,7 +510,8 @@ impl AppService {
             row.source_key.as_str(),
         )
         .await?;
-        let content_status = blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
+        let content_status =
+            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
         let attachments = if let Some(header) = header {
             attachment_views(self.blob_service.as_ref(), &header).await?
         } else {
@@ -691,9 +702,12 @@ async fn fetch_header_for_projection(
     replica_id: &ReplicaId,
     source_key: &str,
 ) -> Result<Option<CanonicalPostHeader>> {
-    let records = docs_sync
+    let Ok(records) = docs_sync
         .query_replica(replica_id, DocQuery::Exact(source_key.to_string()))
-        .await?;
+        .await
+    else {
+        return Ok(None);
+    };
     let Some(record) = records.into_iter().next() else {
         return Ok(None);
     };
@@ -1412,10 +1426,7 @@ mod tests {
             timeline.items[0].attachments[0].status,
             BlobViewStatus::Missing
         );
-        assert_eq!(
-            timeline.items[0].attachments[0].role,
-            "image_original"
-        );
+        assert_eq!(timeline.items[0].attachments[0].role, "image_original");
 
         blob_service
             .put_blob(image_bytes, "image/png")

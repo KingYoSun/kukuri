@@ -1,15 +1,24 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test } from 'vitest';
 
 import { App } from './App';
-import { DesktopApi, SyncStatus, TimelineView } from './lib/api';
+import { AttachmentView, BlobViewStatus, DesktopApi, PostView, SyncStatus, TimelineView } from './lib/api';
 
 function createMockApi(options?: {
   globalLastError?: string | null;
   topicLastError?: string | null;
+  seedPosts?: Record<string, TimelineView['items']>;
 }) {
-  const postsByTopic: Record<string, TimelineView['items']> = {};
+  const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
+    Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
+      topic,
+      posts.map((post) => ({
+        ...post,
+        attachments: [...post.attachments],
+      })),
+    ])
+  );
   let sequence = 0;
   const syncStatus: SyncStatus = {
     connected: true,
@@ -115,6 +124,30 @@ function createMockApi(options?: {
   return api;
 }
 
+function buildImagePost(overrides?: Partial<PostView>): PostView {
+  const attachment: AttachmentView = {
+    hash: 'a'.repeat(64),
+    mime: 'image/png',
+    bytes: 2048,
+    role: 'image_original',
+    status: 'Missing',
+  };
+
+  return {
+    id: 'image-post',
+    author_pubkey: 'f'.repeat(64),
+    author_npub: 'npub1imageauthor',
+    note_id: 'note1imagepost',
+    content: '[blob pending]',
+    content_status: 'Missing',
+    attachments: [attachment],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'image-post',
+    ...overrides,
+  };
+}
+
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createMockApi()} />);
@@ -215,4 +248,123 @@ test('desktop shell renders diagnostics error reasons', async () => {
       screen.getByText('error: timed out waiting for gossip topic join')
     ).toBeInTheDocument();
   });
+});
+
+test('timeline image post shows media skeleton when attachment is missing', async () => {
+  render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [buildImagePost()],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('syncing image')).toBeInTheDocument();
+  });
+  expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+  expect(screen.getByText('image/png')).toBeInTheDocument();
+});
+
+test('timeline image post switches to ready state when attachment becomes available', async () => {
+  const missingPost = buildImagePost();
+  const { rerender } = render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [missingPost],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('syncing image')).toBeInTheDocument();
+  });
+
+  rerender(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            buildImagePost({
+              content: 'caption ready',
+              content_status: 'Available' satisfies BlobViewStatus,
+              attachments: [
+                {
+                  ...missingPost.attachments[0],
+                  status: 'Available',
+                },
+              ],
+            }),
+          ],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('image ready')).toBeInTheDocument();
+  });
+  expect(screen.queryByText('syncing image')).not.toBeInTheDocument();
+});
+
+test('thread pane reuses the same image placeholder renderer', async () => {
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            buildImagePost(),
+            {
+              ...buildImagePost({
+                id: 'reply-post',
+                note_id: 'note1replypost',
+                content: 'reply body',
+                content_status: 'Available',
+                attachments: [],
+                reply_to: 'image-post',
+                root_id: 'image-post',
+              }),
+            },
+          ],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('note1imagepost')).toBeInTheDocument();
+  });
+  await user.click(screen.getByText('note1imagepost'));
+  const threadPanel = screen.getByRole('heading', { name: 'Thread' }).closest('section');
+  if (!threadPanel) {
+    throw new Error('thread panel not found');
+  }
+
+  await waitFor(() => {
+    expect(within(threadPanel).getByText('syncing image')).toBeInTheDocument();
+  });
+  expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
+});
+
+test('text body pending uses text skeleton without hiding image metadata', async () => {
+  render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [buildImagePost()],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId('text-skeleton-image-post')).toBeInTheDocument();
+  });
+  expect(screen.getByText('image/png')).toBeInTheDocument();
+  expect(screen.getByText('2.0 KB')).toBeInTheDocument();
 });
