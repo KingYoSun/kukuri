@@ -1,0 +1,20 @@
+[package]
+name = "kukuri-desktop-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+keyring.workspace = true
+nostr-sdk.workspace = true
+serde.workspace = true
+tokio.workspace = true
+kukuri-app-api = { path = "../app-api" }
+kukuri-blob-service = { path = "../blob-service" }
+kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-store = { path = "../store" }
+kukuri-transport = { path = "../transport" }
+
+[dev-dependencies]
+tempfile.workspace = true

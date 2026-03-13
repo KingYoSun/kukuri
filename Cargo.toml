@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "next/xtask",
-    "next/crates/core",
-    "next/crates/store",
-    "next/crates/transport",
-    "next/crates/docs-sync",
-    "next/crates/blob-service",
-    "next/crates/harness",
-    "next/crates/app-api",
-    "next/crates/desktop-runtime",
+    "xtask",
+    "crates/core",
+    "crates/store",
+    "crates/transport",
+    "crates/docs-sync",
+    "crates/blob-service",
+    "crates/harness",
+    "crates/app-api",
+    "crates/desktop-runtime",
 ]
 exclude = [
-    "next/apps/desktop/src-tauri",
+    "apps/desktop/src-tauri",
 ]
 resolver = "2"
 

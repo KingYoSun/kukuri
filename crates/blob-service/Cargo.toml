@@ -1,0 +1,20 @@
+[package]
+name = "kukuri-blob-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+iroh.workspace = true
+iroh-blobs.workspace = true
+serde.workspace = true
+tokio.workspace = true
+kukuri-core = { path = "../core" }
+kukuri-docs-sync = { path = "../docs-sync" }
+kukuri-transport = { path = "../transport" }
+
+[dev-dependencies]
+tempfile.workspace = true

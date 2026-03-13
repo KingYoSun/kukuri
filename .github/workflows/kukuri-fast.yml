@@ -1,0 +1,70 @@
+name: Kukuri Fast
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'xtask/**'
+      - 'crates/**'
+      - 'apps/**'
+      - 'docs/**'
+      - 'harness/**'
+      - '.github/workflows/kukuri-fast.yml'
+      - '.github/workflows/kukuri-nightly.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'xtask/**'
+      - 'crates/**'
+      - 'apps/**'
+      - 'docs/**'
+      - 'harness/**'
+      - '.github/workflows/kukuri-fast.yml'
+      - '.github/workflows/kukuri-nightly.yml'
+  workflow_dispatch:
+
+jobs:
+  linux-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+          components: clippy,rustfmt
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npx pnpm@10.16.1 install --frozen-lockfile
+
+      - name: Doctor
+        run: cargo xtask doctor
+
+      - name: Fast checks
+        run: cargo xtask check
+
+      - name: E2E smoke
+        run: cargo xtask e2e-smoke
+
+      - name: Upload kukuri artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kukuri-fast-artifacts
+          path: test-results/kukuri/
+          if-no-files-found: warn
