@@ -326,6 +326,8 @@ impl SharedIrohStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
@@ -352,6 +354,16 @@ mod tests {
 
     fn legacy_env(name: &str) -> String {
         format!("KUKURI_{}_{}", "NEXT", name)
+    }
+
+    fn image_attachment_request(name: &str, mime: &str, bytes: &[u8]) -> CreateAttachmentRequest {
+        CreateAttachmentRequest {
+            file_name: Some(name.to_string()),
+            mime: mime.to_string(),
+            byte_size: bytes.len() as u64,
+            data_base64: BASE64_STANDARD.encode(bytes),
+            role: Some("image_original".to_string()),
+        }
     }
 
     #[test]
@@ -611,6 +623,80 @@ mod tests {
         assert_eq!(received.content, "hello from before join");
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_image_post_from_docs() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("late-image-a.db");
+        let db_b = dir.path().join("late-image-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let topic = "kukuri:topic:late-image-runtime";
+        let event_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "late image".into(),
+                reply_to: None,
+                attachments: vec![image_attachment_request(
+                    "late.png",
+                    "image/png",
+                    b"late-image-runtime",
+                )],
+            })
+            .await
+            .expect("create image post before join");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a into b");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late image timeout");
+
+        assert_eq!(received.attachments.len(), 1);
+        let preview = runtime_b
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: received.attachments[0].hash.clone(),
+                mime: received.attachments[0].mime.clone(),
+            })
+            .await
+            .expect("blob preview");
+        assert!(preview.is_some());
+    }
+
     #[tokio::test]
     async fn sqlite_deletion_does_not_lose_shared_state() {
         let dir = tempdir().expect("tempdir");
@@ -723,5 +809,66 @@ mod tests {
             .find(|post| post.id == event_id)
             .expect("restored post");
         assert_eq!(restored.content, "restored from docs");
+    }
+
+    #[tokio::test]
+    async fn restart_restores_image_post_preview() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("restart-image.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:restart-image";
+        let event_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "restored image".into(),
+                reply_to: None,
+                attachments: vec![image_attachment_request(
+                    "restored.png",
+                    "image/png",
+                    b"restart-image-preview",
+                )],
+            })
+            .await
+            .expect("create image post");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let timeline = restarted
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("timeline");
+        let restored = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("restored image post");
+
+        assert_eq!(restored.attachments.len(), 1);
+        let preview = restarted
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: restored.attachments[0].hash.clone(),
+                mime: restored.attachments[0].mime.clone(),
+            })
+            .await
+            .expect("preview after restart");
+        assert!(preview.is_some());
     }
 }

@@ -1059,6 +1059,14 @@ mod tests {
         )
     }
 
+    fn pending_image_attachment(mime: &str, bytes: &[u8]) -> PendingAttachment {
+        PendingAttachment {
+            mime: mime.to_string(),
+            bytes: bytes.to_vec(),
+            role: AssetRole::ImageOriginal,
+        }
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -1737,6 +1745,79 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iroh_transport_syncs_image_post_between_apps() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("image-post-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("image-post-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let topic = "kukuri:topic:image-sync";
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("app b should subscribe to topic");
+
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "caption over iroh",
+                None,
+                vec![pending_image_attachment("image/png", b"fake-image-sync")],
+            )
+            .await
+            .expect("create image post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline should load");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("image sync timeout");
+
+        assert_eq!(received.content, "caption over iroh");
+        assert_eq!(received.attachments.len(), 1);
+        assert_eq!(received.attachments[0].mime, "image/png");
+        assert_eq!(received.attachments[0].status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
+                .await
+                .expect("preview data url")
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
@@ -1821,6 +1902,63 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_image_post_from_docs() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("late-image-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("late-image-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+
+        let topic = "kukuri:topic:late-image";
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "late image caption",
+                None,
+                vec![pending_image_attachment("image/png", b"late-image-bytes")],
+            )
+            .await
+            .expect("create image post before join");
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late image join timeout");
+
+        assert_eq!(received.attachments.len(), 1);
+        assert_eq!(received.attachments[0].status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
+                .await
+                .expect("preview data url")
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_reply_into_thread() {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("reply-a")).await;
@@ -1901,6 +2039,104 @@ mod tests {
             .expect("reply in thread");
         assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
         assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn image_reply_thread_syncs() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("image-thread-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("image-thread-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let topic = "kukuri:topic:image-thread";
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+        let root_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "root image",
+                None,
+                vec![pending_image_attachment("image/png", b"root-image")],
+            )
+            .await
+            .expect("create root image");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if timeline.items.iter().any(|post| post.id == root_id) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("root image propagation timeout");
+
+        let reply_id = app_b
+            .create_post_with_attachments(
+                topic,
+                "reply image",
+                Some(root_id.as_str()),
+                vec![pending_image_attachment("image/jpeg", b"reply-image")],
+            )
+            .await
+            .expect("create reply image");
+        let thread = timeout(Duration::from_secs(10), async {
+            loop {
+                let thread = app_a
+                    .list_thread(topic, root_id.as_str(), None, 20)
+                    .await
+                    .expect("thread a");
+                if thread.items.iter().any(|post| post.id == reply_id) {
+                    return thread;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("image reply propagation timeout");
+
+        let root = thread
+            .items
+            .iter()
+            .find(|post| post.id == root_id)
+            .expect("root in thread");
+        let reply = thread
+            .items
+            .iter()
+            .find(|post| post.id == reply_id)
+            .expect("reply in thread");
+        assert_eq!(root.attachments[0].mime, "image/png");
+        assert_eq!(reply.attachments[0].mime, "image/jpeg");
+        assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
