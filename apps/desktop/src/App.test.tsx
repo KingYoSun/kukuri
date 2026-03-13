@@ -3,7 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { expect, test } from 'vitest';
 
 import { App } from './App';
-import { AttachmentView, BlobViewStatus, DesktopApi, PostView, SyncStatus, TimelineView } from './lib/api';
+import {
+  AttachmentView,
+  BlobViewStatus,
+  CreateAttachmentInput,
+  DesktopApi,
+  PostView,
+  SyncStatus,
+  TimelineView,
+} from './lib/api';
 
 function createMockApi(options?: {
   globalLastError?: string | null;
@@ -45,13 +53,20 @@ function createMockApi(options?: {
   };
 
   const api: DesktopApi = {
-    async createPost(topic, content, replyTo) {
+    async createPost(topic, content, replyTo, attachments) {
       sequence += 1;
       const id = `${topic}-${sequence}`;
       const posts = postsByTopic[topic] ?? [];
       const rootId = replyTo
         ? posts.find((post) => post.id === replyTo)?.root_id ?? replyTo
         : id;
+      const postAttachments: AttachmentView[] = (attachments ?? []).map((attachment, index) => ({
+        hash: `${id}-attachment-${index}`,
+        mime: attachment.mime,
+        bytes: attachment.byte_size,
+        role: attachment.role ?? 'image_original',
+        status: 'Available',
+      }));
       postsByTopic[topic] = [
         {
           id,
@@ -60,7 +75,7 @@ function createMockApi(options?: {
           note_id: `note1${sequence}`,
           content,
           content_status: 'Available',
-          attachments: [],
+          attachments: postAttachments,
           created_at: sequence,
           reply_to: replyTo ?? null,
           root_id: rootId,
@@ -251,6 +266,48 @@ test('desktop shell renders diagnostics error reasons', async () => {
       screen.getByText('error: timed out waiting for gossip topic join')
     ).toBeInTheDocument();
   });
+});
+
+test('desktop shell can publish an image-only post from composer', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  const input = screen.getByLabelText('Attach Images');
+  await user.upload(
+    input,
+    new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('image ready')).toBeInTheDocument();
+  });
+  expect(screen.getByText('image/png')).toBeInTheDocument();
+});
+
+test('desktop shell sends image attachments through createPost', async () => {
+  let attachmentsSeen: CreateAttachmentInput[] = [];
+  const api = createMockApi();
+  const originalCreatePost = api.createPost;
+  api.createPost = async (topic, content, replyTo, attachments) => {
+    attachmentsSeen = attachments ?? [];
+    return originalCreatePost(topic, content, replyTo, attachments);
+  };
+
+  const user = userEvent.setup();
+  render(<App api={api} />);
+  const input = screen.getByLabelText('Attach Images');
+  await user.upload(
+    input,
+    new File([Uint8Array.from([7, 8, 9])], 'city.jpg', { type: 'image/jpeg' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(attachmentsSeen).toHaveLength(1);
+  });
+  expect(attachmentsSeen[0].mime).toBe('image/jpeg');
+  expect(attachmentsSeen[0].file_name).toBe('city.jpg');
 });
 
 test('timeline image post shows media skeleton when attachment is missing', async () => {

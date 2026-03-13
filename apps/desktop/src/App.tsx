@@ -1,6 +1,14 @@
-import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { AttachmentView, DesktopApi, PostView, SyncStatus, TopicSyncStatus, runtimeApi } from './lib/api';
+import {
+  AttachmentView,
+  CreateAttachmentInput,
+  DesktopApi,
+  PostView,
+  SyncStatus,
+  TopicSyncStatus,
+  runtimeApi,
+} from './lib/api';
 
 type AppProps = {
   api?: DesktopApi;
@@ -32,11 +40,30 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+async function fileToCreateAttachment(file: File): Promise<CreateAttachmentInput> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return {
+    file_name: file.name,
+    mime: file.type || 'application/octet-stream',
+    byte_size: file.size,
+    data_base64: window.btoa(binary),
+    role: 'image_original',
+  };
+}
+
 export function App({ api = runtimeApi }: AppProps) {
   const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
   const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
   const [topicInput, setTopicInput] = useState('');
   const [composer, setComposer] = useState('');
+  const [draftAttachments, setDraftAttachments] = useState<CreateAttachmentInput[]>([]);
+  const [attachmentInputKey, setAttachmentInputKey] = useState(0);
   const [timelinesByTopic, setTimelinesByTopic] = useState<Record<string, PostView[]>>({
     [DEFAULT_TOPIC]: [],
   });
@@ -226,13 +253,20 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!composer.trim()) {
+    if (!composer.trim() && draftAttachments.length === 0) {
       return;
     }
 
     try {
-      await api.createPost(activeTopic, composer.trim(), replyTarget?.id ?? null);
+      await api.createPost(
+        activeTopic,
+        composer.trim(),
+        replyTarget?.id ?? null,
+        draftAttachments
+      );
       setComposer('');
+      setDraftAttachments([]);
+      setAttachmentInputKey((value) => value + 1);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       if (selectedThread) {
         await openThread(selectedThread);
@@ -241,6 +275,32 @@ export function App({ api = runtimeApi }: AppProps) {
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'failed to publish');
     }
+  }
+
+  async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith('image/')
+    );
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(files.map(fileToCreateAttachment));
+      setDraftAttachments((current) => [...current, ...nextAttachments]);
+      setError(null);
+      setAttachmentInputKey((value) => value + 1);
+    } catch (attachmentError) {
+      setError(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : 'failed to read image attachment'
+      );
+    }
+  }
+
+  function handleRemoveDraftAttachment(index: number) {
+    setDraftAttachments((current) => current.filter((_, attachmentIndex) => attachmentIndex !== index));
   }
 
   async function openThread(threadId: string) {
@@ -555,6 +615,38 @@ export function App({ api = runtimeApi }: AppProps) {
               onChange={(e) => setComposer(e.target.value)}
               placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
             />
+            <label className='field file-field'>
+              <span>Attach Images</span>
+              <input
+                key={attachmentInputKey}
+                aria-label='Attach Images'
+                type='file'
+                accept='image/*'
+                multiple
+                onChange={(event) => {
+                  void handleAttachmentSelection(event);
+                }}
+              />
+            </label>
+            {draftAttachments.length > 0 ? (
+              <ul className='draft-attachment-list'>
+                {draftAttachments.map((attachment, index) => (
+                  <li key={`${attachment.file_name ?? attachment.mime}-${index}`} className='draft-attachment-item'>
+                    <div>
+                      <strong>{attachment.file_name ?? attachment.mime}</strong>
+                      <small>{formatBytes(attachment.byte_size)}</small>
+                    </div>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => handleRemoveDraftAttachment(index)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <button className='button' type='submit'>
               {replyTarget ? 'Reply' : 'Publish'}
             </button>

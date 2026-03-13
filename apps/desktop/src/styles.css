@@ -113,6 +113,36 @@ textarea {
   background: rgba(10, 16, 24, 0.8);
 }
 
+.file-field input[type='file'] {
+  padding: 0.65rem 0;
+  border: 0;
+  background: transparent;
+}
+
+.draft-attachment-list {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.draft-attachment-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.draft-attachment-item small {
+  display: block;
+  margin-top: 0.35rem;
+  color: rgba(246, 241, 232, 0.58);
+}
+
 .composer {
   display: grid;
   gap: 0.8rem;

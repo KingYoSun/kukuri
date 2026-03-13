@@ -28,6 +28,14 @@ export type AttachmentView = {
   status: BlobViewStatus;
 };
 
+export type CreateAttachmentInput = {
+  file_name?: string | null;
+  mime: string;
+  byte_size: number;
+  data_base64: string;
+  role?: string | null;
+};
+
 export type TimelineView = {
   items: PostView[];
   next_cursor?: TimelineCursor | null;
@@ -58,7 +66,12 @@ export type TopicSyncStatus = {
 };
 
 export interface DesktopApi {
-  createPost(topic: string, content: string, replyTo?: string | null): Promise<string>;
+  createPost(
+    topic: string,
+    content: string,
+    replyTo?: string | null,
+    attachments?: CreateAttachmentInput[]
+  ): Promise<string>;
   listTimeline(topic: string, cursor?: TimelineCursor | null, limit?: number): Promise<TimelineView>;
   listThread(
     topic: string,
@@ -84,15 +97,16 @@ const unavailable = async (): Promise<never> => {
 };
 
 export const runtimeApi: DesktopApi = {
-  createPost: async (topic, content, replyTo) => {
+  createPost: async (topic, content, replyTo, attachments = []) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo);
+      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments);
     }
     return invoke<string>('create_post', {
       request: {
         topic,
         content,
         reply_to: replyTo,
+        attachments,
       },
     }).catch(() => unavailable());
   },

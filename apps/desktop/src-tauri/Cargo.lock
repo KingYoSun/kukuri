@@ -3387,9 +3387,11 @@ name = "kukuri-desktop-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "keyring",
  "kukuri-app-api",
  "kukuri-blob-service",
+ "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-store",
  "kukuri-transport",

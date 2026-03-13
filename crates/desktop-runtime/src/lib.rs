@@ -5,8 +5,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use kukuri_app_api::{AppService, SyncStatus, TimelineView};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use kukuri_app_api::{AppService, PendingAttachment, SyncStatus, TimelineView};
 use kukuri_blob_service::IrohBlobService;
+use kukuri_core::AssetRole;
 use kukuri_docs_sync::{IrohDocsNode, IrohDocsSync};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{IrohGossipTransport, TransportNetworkConfig};
@@ -21,6 +24,17 @@ pub struct CreatePostRequest {
     pub topic: String,
     pub content: String,
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<CreateAttachmentRequest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateAttachmentRequest {
+    pub file_name: Option<String>,
+    pub mime: String,
+    pub byte_size: u64,
+    pub data_base64: String,
+    pub role: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,11 +136,17 @@ impl DesktopRuntime {
     }
 
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<String> {
+        let attachments = request
+            .attachments
+            .into_iter()
+            .map(pending_attachment_from_request)
+            .collect::<Result<Vec<_>>>()?;
         self.app_service
-            .create_post(
+            .create_post_with_attachments(
                 request.topic.as_str(),
                 request.content.as_str(),
                 request.reply_to.as_deref(),
+                attachments,
             )
             .await
     }
@@ -256,6 +276,24 @@ fn legacy_db_file_name() -> String {
     format!("kukuri-{}.db", "next")
 }
 
+fn pending_attachment_from_request(request: CreateAttachmentRequest) -> Result<PendingAttachment> {
+    let bytes = BASE64_STANDARD
+        .decode(request.data_base64.as_bytes())
+        .context("failed to decode attachment data")?;
+    let role = match request.role.as_deref() {
+        Some("image_preview") => AssetRole::ImagePreview,
+        Some("video_poster") => AssetRole::VideoPoster,
+        Some("video_manifest") => AssetRole::VideoManifest,
+        Some("attachment") => AssetRole::Attachment,
+        _ => AssetRole::ImageOriginal,
+    };
+    Ok(PendingAttachment {
+        mime: request.mime,
+        bytes,
+        role,
+    })
+}
+
 #[cfg(test)]
 fn legacy_iroh_data_dir_name() -> String {
     format!("kukuri-{}.iroh-data", "next")
@@ -367,6 +405,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("create post");
@@ -391,6 +430,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me again".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("create post after restart");
@@ -480,6 +520,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello desktop runtime".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("create post");
@@ -526,6 +567,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello from before join".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("create post before join");
@@ -586,6 +628,7 @@ mod tests {
                 topic: topic.into(),
                 content: "root".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("root post");
@@ -594,6 +637,7 @@ mod tests {
                 topic: topic.into(),
                 content: "reply".into(),
                 reply_to: Some(root_id.clone()),
+                attachments: vec![],
             })
             .await
             .expect("reply post");
@@ -649,6 +693,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored from docs".into(),
                 reply_to: None,
+                attachments: vec![],
             })
             .await
             .expect("create post");

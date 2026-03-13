@@ -53,6 +53,13 @@ pub struct AttachmentView {
     pub status: BlobViewStatus,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingAttachment {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+    pub role: AssetRole,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelineView {
     pub items: Vec<PostView>,
@@ -144,6 +151,17 @@ impl AppService {
         content: &str,
         reply_to: Option<&str>,
     ) -> Result<String> {
+        self.create_post_with_attachments(topic_id, content, reply_to, Vec::new())
+            .await
+    }
+
+    pub async fn create_post_with_attachments(
+        &self,
+        topic_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
+        attachments: Vec<PendingAttachment>,
+    ) -> Result<String> {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
@@ -156,7 +174,17 @@ impl AppService {
             .blob_service
             .put_blob(content.as_bytes().to_vec(), "text/plain")
             .await?;
-        self.ingest_event(event.clone(), Some(stored_blob.clone()))
+        let stored_attachments = futures_util::future::try_join_all(attachments.into_iter().map(
+            |attachment| async move {
+                let stored = self
+                    .blob_service
+                    .put_blob(attachment.bytes, attachment.mime.as_str())
+                    .await?;
+                Ok::<_, anyhow::Error>((attachment.role, stored))
+            },
+        ))
+        .await?;
+        self.ingest_event(event.clone(), Some(stored_blob.clone()), stored_attachments)
             .await?;
         self.hint_transport
             .publish_hint(
@@ -419,6 +447,7 @@ impl AppService {
         &self,
         event: kukuri_core::Event,
         stored_blob: Option<StoredBlob>,
+        attachments: Vec<(AssetRole, StoredBlob)>,
     ) -> Result<()> {
         self.store.put_event(event.clone()).await?;
         let blob = match stored_blob {
@@ -429,11 +458,20 @@ impl AppService {
                     .await?
             }
         };
-        let header = event.to_canonical_header(PayloadRef::BlobText {
+        let mut header = event.to_canonical_header(PayloadRef::BlobText {
             hash: blob.hash.clone(),
             mime: blob.mime.clone(),
             bytes: blob.bytes,
         });
+        header.attachments = attachments
+            .iter()
+            .map(|(role, stored)| kukuri_core::AssetRef {
+                hash: stored.hash.clone(),
+                mime: stored.mime.clone(),
+                bytes: stored.bytes,
+                role: role.clone(),
+            })
+            .collect();
         persist_header(
             self.docs_sync.as_ref(),
             header.clone(),
@@ -451,6 +489,14 @@ impl AppService {
             BlobCacheStatus::Available,
         )
         .await?;
+        for (_, attachment) in attachments {
+            ProjectionStore::mark_blob_status(
+                self.projection_store.as_ref(),
+                &attachment.hash,
+                BlobCacheStatus::Available,
+            )
+            .await?;
+        }
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         Ok(())
     }
@@ -1110,6 +1156,75 @@ mod tests {
         assert_eq!(timeline.items.len(), 1);
         assert_eq!(timeline.items[0].id, event_id);
         assert_eq!(timeline.items[0].content, "hello app");
+    }
+
+    #[tokio::test]
+    async fn create_post_with_image_attachment_surfaces_attachment_metadata() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+
+        let event_id = app
+            .create_post_with_attachments(
+                "kukuri:topic:image-write",
+                "caption",
+                None,
+                vec![PendingAttachment {
+                    mime: "image/png".into(),
+                    bytes: b"fake-image".to_vec(),
+                    role: AssetRole::ImageOriginal,
+                }],
+            )
+            .await
+            .expect("create image post");
+        let timeline = app
+            .list_timeline("kukuri:topic:image-write", None, 10)
+            .await
+            .expect("timeline");
+
+        let post = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("image post");
+        assert_eq!(post.content, "caption");
+        assert_eq!(post.attachments.len(), 1);
+        assert_eq!(post.attachments[0].mime, "image/png");
+        assert_eq!(post.attachments[0].role, "image_original");
+        assert_eq!(post.attachments[0].status, BlobViewStatus::Available);
+    }
+
+    #[tokio::test]
+    async fn create_post_with_image_only_succeeds() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+
+        let event_id = app
+            .create_post_with_attachments(
+                "kukuri:topic:image-only",
+                "",
+                None,
+                vec![PendingAttachment {
+                    mime: "image/jpeg".into(),
+                    bytes: b"fake-jpeg".to_vec(),
+                    role: AssetRole::ImageOriginal,
+                }],
+            )
+            .await
+            .expect("create image-only post");
+        let timeline = app
+            .list_timeline("kukuri:topic:image-only", None, 10)
+            .await
+            .expect("timeline");
+
+        let post = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("image-only post");
+        assert_eq!(post.attachments.len(), 1);
+        assert_eq!(post.attachments[0].mime, "image/jpeg");
     }
 
     #[tokio::test]
