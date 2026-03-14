@@ -115,6 +115,98 @@ function posterFileName(fileName: string): string {
   return `${baseName}.poster.jpg`;
 }
 
+function attachHiddenVideo(video: HTMLVideoElement) {
+  video.setAttribute('aria-hidden', 'true');
+  video.style.position = 'fixed';
+  video.style.left = '-9999px';
+  video.style.top = '0';
+  video.style.width = '1px';
+  video.style.height = '1px';
+  video.style.opacity = '0';
+  video.style.pointerEvents = 'none';
+  document.body.appendChild(video);
+}
+
+async function waitForPosterFrame(video: HTMLVideoElement): Promise<void> {
+  return await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      video.removeEventListener('loadeddata', resolveIfReady);
+      video.removeEventListener('canplay', resolveIfReady);
+      video.removeEventListener('seeked', resolveIfReady);
+      video.removeEventListener('timeupdate', resolveIfReady);
+      video.removeEventListener('loadedmetadata', handleMetadata);
+      video.removeEventListener('error', fail);
+    };
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const fail = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new Error('failed to generate video poster'));
+    };
+
+    const resolveIfReady = () => {
+      if (
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
+        finish();
+      }
+    };
+
+    const handleMetadata = () => {
+      resolveIfReady();
+      if (settled) {
+        return;
+      }
+
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const seekTarget = duration > 0 ? Math.min(duration / 2, 0.1) : 0.1;
+      if (seekTarget > 0) {
+        try {
+          video.currentTime = seekTarget;
+        } catch {
+          // Some platforms reject seek before decode warms up.
+        }
+      }
+
+      try {
+        const playAttempt = video.play();
+        if (playAttempt && typeof playAttempt.then === 'function') {
+          void playAttempt.then(() => {
+            video.pause();
+            resolveIfReady();
+          });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    video.addEventListener('loadeddata', resolveIfReady);
+    video.addEventListener('canplay', resolveIfReady);
+    video.addEventListener('seeked', resolveIfReady);
+    video.addEventListener('timeupdate', resolveIfReady);
+    video.addEventListener('loadedmetadata', handleMetadata);
+    video.addEventListener('error', fail, { once: true });
+    resolveIfReady();
+  });
+}
+
 async function generateVideoPoster(file: File): Promise<File> {
   const videoObjectUrl = URL.createObjectURL(file);
 
@@ -136,16 +228,30 @@ async function generateVideoPoster(file: File): Promise<File> {
 
       const cleanup = () => {
         window.clearTimeout(timeoutId);
+        try {
+          video.pause();
+        } catch {
+          // ignore
+        }
         video.removeAttribute('src');
+        try {
+          video.load();
+        } catch {
+          // ignore
+        }
+        video.remove();
       };
 
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
+      attachHiddenVideo(video);
 
-      video.addEventListener(
-        'loadeddata',
-        () => {
+      video.src = videoObjectUrl;
+      video.load();
+
+      void waitForPosterFrame(video)
+        .then(() => {
           if (finished) {
             return;
           }
@@ -188,21 +294,11 @@ async function generateVideoPoster(file: File): Promise<File> {
             'image/jpeg',
             0.85
           );
-        },
-        { once: true }
-      );
-
-      video.addEventListener(
-        'error',
-        () => {
+        })
+        .catch(() => {
           cleanup();
           fail();
-        },
-        { once: true }
-      );
-
-      video.src = videoObjectUrl;
-      video.load();
+        });
     });
   } finally {
     URL.revokeObjectURL(videoObjectUrl);
@@ -240,7 +336,6 @@ export function App({ api = runtimeApi }: AppProps) {
   const draftSequenceRef = useRef(0);
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
-  const inFlightMediaFetchesRef = useRef(new Set<string>());
 
   const headline = useMemo(
     () => (syncStatus.connected ? 'Live over static peers' : 'Local-first shell'),
@@ -334,14 +429,12 @@ export function App({ api = runtimeApi }: AppProps) {
   useEffect(() => {
     const remoteObjectUrls = remoteObjectUrlRef.current;
     const draftPreviewUrls = draftPreviewUrlRef.current;
-    const inFlightMediaFetches = inFlightMediaFetchesRef.current;
 
     return () => {
       for (const url of remoteObjectUrls.values()) {
         URL.revokeObjectURL(url);
       }
       remoteObjectUrls.clear();
-      inFlightMediaFetches.clear();
       for (const url of draftPreviewUrls.values()) {
         URL.revokeObjectURL(url);
       }
@@ -353,18 +446,13 @@ export function App({ api = runtimeApi }: AppProps) {
     let disposed = false;
 
     for (const attachment of previewableMediaAttachments) {
-      if (
-        typeof mediaObjectUrls[attachment.hash] === 'string' ||
-        inFlightMediaFetchesRef.current.has(attachment.hash)
-      ) {
+      if (typeof mediaObjectUrls[attachment.hash] === 'string') {
         continue;
       }
-      inFlightMediaFetchesRef.current.add(attachment.hash);
 
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
-          inFlightMediaFetchesRef.current.delete(attachment.hash);
           const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (disposed) {
             if (nextUrl) {
@@ -393,7 +481,6 @@ export function App({ api = runtimeApi }: AppProps) {
           });
         })
         .catch(() => {
-          inFlightMediaFetchesRef.current.delete(attachment.hash);
           if (disposed) {
             return;
           }

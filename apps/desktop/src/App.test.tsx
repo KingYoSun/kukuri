@@ -222,6 +222,10 @@ function installSuccessfulPosterGenerationMocks() {
     configurable: true,
     get: () => 360,
   });
+  Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+    configurable: true,
+    get: () => 2,
+  });
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function load(
     this: HTMLMediaElement
   ) {
@@ -229,6 +233,52 @@ function installSuccessfulPosterGenerationMocks() {
       this.dispatchEvent(new Event('loadeddata'));
     });
   });
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback(new Blob([Uint8Array.from([9, 8, 7, 6])], { type: 'image/jpeg' }));
+  });
+}
+
+function installMetadataSeekPosterGenerationMocks() {
+  Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+    configurable: true,
+    get: () => 640,
+  });
+  Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+    configurable: true,
+    get: () => 360,
+  });
+  Object.defineProperty(HTMLMediaElement.prototype, 'duration', {
+    configurable: true,
+    get: () => 12,
+  });
+  Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+    configurable: true,
+    get: () => 2,
+  });
+  let currentTime = 0;
+  Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set(this: HTMLMediaElement, value: number) {
+      currentTime = value;
+      queueMicrotask(() => {
+        this.dispatchEvent(new Event('seeked'));
+      });
+    },
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function load(
+    this: HTMLMediaElement
+  ) {
+    queueMicrotask(() => {
+      this.dispatchEvent(new Event('loadedmetadata'));
+    });
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async () => undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     drawImage: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
@@ -412,6 +462,32 @@ test('video upload generates poster attachment before publish', async () => {
   expect(attachmentsSeen.some((attachment) => attachment.role === 'video_poster')).toBe(true);
 });
 
+test('video upload generates poster attachment with metadata seek fallback', async () => {
+  installObjectUrlMocks();
+  installMetadataSeekPosterGenerationMocks();
+  let attachmentsSeen: CreateAttachmentInput[] = [];
+  const api = createMockApi();
+  const originalCreatePost = api.createPost;
+  api.createPost = async (topic, content, replyTo, attachments) => {
+    attachmentsSeen = attachments ?? [];
+    return originalCreatePost(topic, content, replyTo, attachments);
+  };
+
+  const user = userEvent.setup();
+  render(<App api={api} />);
+
+  await user.upload(
+    screen.getByLabelText('Attach'),
+    new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(attachmentsSeen).toHaveLength(2);
+  });
+  expect(attachmentsSeen.some((attachment) => attachment.role === 'video_poster')).toBe(true);
+});
+
 test('video poster generation failure blocks publish', async () => {
   installObjectUrlMocks();
   installFailedPosterGenerationMocks();
@@ -470,15 +546,14 @@ test('composer shows video poster draft preview before publish', async () => {
 });
 
 test('timeline image post shows media skeleton when attachment is missing', async () => {
-  render(
-    <App
-      api={createMockApi({
-        seedPosts: {
-          'kukuri:topic:demo': [buildImagePost()],
-        },
-      })}
-    />
-  );
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [buildImagePost()],
+    },
+  });
+  api.getBlobMediaPayload = async () => null;
+
+  render(<App api={api} />);
 
   await waitFor(() => {
     expect(screen.getByText('syncing image')).toBeInTheDocument();
@@ -724,6 +799,81 @@ test('video card fetches manifest payload even when attachment status is missing
   };
 
   render(<App api={api} />);
+
+  const video = await screen.findByTestId('media-video-video-post');
+  expect(video).toBeInTheDocument();
+  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
+});
+
+test('video card retries after stalled manifest fetch after rerender', async () => {
+  installObjectUrlMocks();
+  const manifestHash = 'retry-manifest'.repeat(4);
+  const posterHash = 'retry-poster'.repeat(4);
+  const seedPosts = {
+    'kukuri:topic:demo': [
+      buildVideoPost({
+        attachments: [
+          {
+            hash: manifestHash,
+            mime: 'video/mp4',
+            bytes: 9999,
+            role: 'video_manifest',
+            status: 'Missing',
+          },
+          {
+            hash: posterHash,
+            mime: 'image/jpeg',
+            bytes: 1024,
+            role: 'video_poster',
+            status: 'Missing',
+          },
+        ],
+      }),
+    ],
+  };
+  const stalledApi = createMockApi({
+    seedPosts,
+  });
+  stalledApi.getBlobMediaPayload = async (hash, mime) => {
+    if (hash === manifestHash) {
+      return new Promise<null>(() => {});
+    }
+    if (hash === posterHash) {
+      return {
+        bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+        mime,
+      };
+    }
+    return null;
+  };
+  const recoveredApi = createMockApi({
+    seedPosts: {
+      ...seedPosts,
+    },
+  });
+  recoveredApi.getBlobMediaPayload = async (hash, mime) => {
+    if (hash === manifestHash) {
+      return {
+        bytes_base64: 'ZmFrZS12aWRlbw==',
+        mime,
+      };
+    }
+    if (hash === posterHash) {
+      return {
+        bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+        mime,
+      };
+    }
+    return null;
+  };
+
+  const { rerender } = render(<App api={stalledApi} />);
+
+  await waitFor(() => {
+    expect(screen.getAllByText('poster ready').length).toBeGreaterThan(0);
+  });
+
+  rerender(<App api={recoveredApi} />);
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
