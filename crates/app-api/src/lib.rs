@@ -8,18 +8,22 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, CanonicalPostHeader, EventId, GossipHint, PayloadRef, ReplicaId, TopicId,
-    build_text_note, generate_keys, timeline_sort_key,
+    AssetRole, CanonicalPostHeader, EventId, GAME_MANIFEST_MIME, GameParticipant,
+    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
+    LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus,
+    LiveSignalKind, ManifestBlobRef, PayloadRef, Pubkey, ReplicaId, TopicId, build_text_note,
+    generate_keys, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
 };
 use kukuri_store::{
-    BlobCacheStatus, EventProjectionRow, Page, ProjectionStore, Store, TimelineCursor,
+    BlobCacheStatus, EventProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, Page,
+    ProjectionStore, Store, TimelineCursor,
 };
 use kukuri_transport::{HintTransport, PeerSnapshot, TopicPeerSnapshot, Transport};
 use nostr_sdk::prelude::Keys;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -68,6 +72,58 @@ pub struct PendingAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveSessionView {
+    pub session_id: String,
+    pub host_pubkey: String,
+    pub title: String,
+    pub description: String,
+    pub status: LiveSessionStatus,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub viewer_count: usize,
+    pub joined_by_me: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameRoomView {
+    pub room_id: String,
+    pub host_pubkey: String,
+    pub title: String,
+    pub description: String,
+    pub status: GameRoomStatus,
+    pub phase_label: Option<String>,
+    pub scores: Vec<GameScoreView>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameScoreView {
+    pub participant_id: String,
+    pub label: String,
+    pub score: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateLiveSessionInput {
+    pub title: String,
+    pub description: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateGameRoomInput {
+    pub title: String,
+    pub description: String,
+    pub participants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateGameRoomInput {
+    pub status: GameRoomStatus,
+    pub phase_label: Option<String>,
+    pub scores: Vec<GameScoreView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelineView {
     pub items: Vec<PostView>,
     pub next_cursor: Option<TimelineCursor>,
@@ -84,6 +140,7 @@ pub struct SyncStatus {
     pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
     pub topic_diagnostics: Vec<TopicSyncStatus>,
+    pub local_author_pubkey: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,6 +165,7 @@ pub struct AppService {
     blob_service: Arc<dyn BlobService>,
     keys: Arc<Keys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
 }
 
@@ -148,6 +206,7 @@ impl AppService {
             blob_service,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
         }
     }
@@ -276,6 +335,345 @@ impl AppService {
         Ok(view)
     }
 
+    pub async fn list_live_sessions(&self, topic_id: &str) -> Result<Vec<LiveSessionView>> {
+        self.ensure_topic_subscription(topic_id).await?;
+        self.projection_store
+            .clear_expired_live_presence(Utc::now().timestamp_millis())
+            .await?;
+        let mut rows = self
+            .projection_store
+            .list_topic_live_sessions(topic_id)
+            .await?;
+        if rows.is_empty() {
+            hydrate_live_sessions_with_services(
+                self.docs_sync.as_ref(),
+                self.blob_service.as_ref(),
+                self.projection_store.as_ref(),
+                topic_id,
+            )
+            .await?;
+            self.projection_store
+                .clear_expired_live_presence(Utc::now().timestamp_millis())
+                .await?;
+            rows = self
+                .projection_store
+                .list_topic_live_sessions(topic_id)
+                .await?;
+        }
+        self.cleanup_ended_live_presence_tasks(&rows).await;
+        let joined_sessions = self.live_presence_tasks.lock().await;
+        Ok(rows
+            .into_iter()
+            .map(|row| LiveSessionView {
+                session_id: row.session_id.clone(),
+                host_pubkey: row.host_pubkey,
+                title: row.title,
+                description: row.description,
+                status: row.status,
+                started_at: row.started_at,
+                ended_at: row.ended_at,
+                viewer_count: row.viewer_count,
+                joined_by_me: joined_sessions.contains_key(
+                    live_presence_task_key(topic_id, row.session_id.as_str()).as_str(),
+                ),
+            })
+            .collect())
+    }
+
+    pub async fn create_live_session(
+        &self,
+        topic_id: &str,
+        input: CreateLiveSessionInput,
+    ) -> Result<String> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let now = Utc::now().timestamp_millis();
+        let title = input.title.trim();
+        if title.is_empty() {
+            anyhow::bail!("live session title is required");
+        }
+        let session_id = format!(
+            "live-{}-{}",
+            now,
+            short_id_suffix(self.current_author_pubkey().as_str())
+        );
+        let topic = TopicId::new(topic_id);
+        let manifest = LiveSessionManifestBlobV1 {
+            session_id: session_id.clone(),
+            topic_id: topic.clone(),
+            owner_pubkey: Pubkey::from(self.current_author_pubkey()),
+            title: title.to_string(),
+            description: input.description.trim().to_string(),
+            status: LiveSessionStatus::Live,
+            started_at: now,
+            ended_at: None,
+        };
+        let state = self
+            .persist_live_session_manifest(topic_id, manifest.clone(), now)
+            .await?;
+        self.projection_store
+            .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        self.hint_transport
+            .publish_hint(
+                &topic,
+                GossipHint::LiveSignal {
+                    topic_id: topic.clone(),
+                    session_id: session_id.clone(),
+                    kind: LiveSignalKind::SessionStarted,
+                },
+            )
+            .await?;
+        *self.last_sync_ts.lock().await = Some(now);
+        Ok(session_id)
+    }
+
+    pub async fn end_live_session(&self, topic_id: &str, session_id: &str) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let (state, mut manifest) = self
+            .fetch_live_session_state_and_manifest(topic_id, session_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("live session not found"))?;
+        let owner = self.current_author_pubkey();
+        if state.owner_pubkey.as_str() != owner {
+            anyhow::bail!("only the live session owner can end the session");
+        }
+        if manifest.status == LiveSessionStatus::Ended {
+            self.stop_live_presence_task(topic_id, session_id).await;
+            return Ok(());
+        }
+        let now = Utc::now().timestamp_millis();
+        manifest.status = LiveSessionStatus::Ended;
+        manifest.ended_at = Some(now);
+        let state = self
+            .persist_live_session_manifest(topic_id, manifest.clone(), state.created_at)
+            .await?;
+        self.projection_store
+            .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        self.stop_live_presence_task(topic_id, session_id).await;
+        self.hint_transport
+            .publish_hint(
+                &TopicId::new(topic_id),
+                GossipHint::LiveSignal {
+                    topic_id: TopicId::new(topic_id),
+                    session_id: session_id.to_string(),
+                    kind: LiveSignalKind::SessionEnded,
+                },
+            )
+            .await?;
+        *self.last_sync_ts.lock().await = Some(now);
+        Ok(())
+    }
+
+    pub async fn join_live_session(&self, topic_id: &str, session_id: &str) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let Some((_, manifest)) = self
+            .fetch_live_session_state_and_manifest(topic_id, session_id)
+            .await?
+        else {
+            anyhow::bail!("live session not found");
+        };
+        if manifest.status == LiveSessionStatus::Ended {
+            anyhow::bail!("cannot join an ended live session");
+        }
+        let task_key = live_presence_task_key(topic_id, session_id);
+        if self
+            .live_presence_tasks
+            .lock()
+            .await
+            .contains_key(task_key.as_str())
+        {
+            return Ok(());
+        }
+        self.apply_live_presence(topic_id, session_id, 30_000)
+            .await?;
+        let hint_transport = Arc::clone(&self.hint_transport);
+        let projection_store = Arc::clone(&self.projection_store);
+        let topic = TopicId::new(topic_id);
+        let topic_key = topic_id.to_string();
+        let session_key = session_id.to_string();
+        let author = Pubkey::from(self.current_author_pubkey());
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                let now = Utc::now().timestamp_millis();
+                let _ = projection_store
+                    .upsert_live_presence(
+                        topic_key.as_str(),
+                        session_key.as_str(),
+                        author.as_str(),
+                        now + 30_000,
+                        now,
+                    )
+                    .await;
+                let _ = hint_transport
+                    .publish_hint(
+                        &topic,
+                        GossipHint::LivePresence {
+                            topic_id: topic.clone(),
+                            session_id: session_key.clone(),
+                            author: author.clone(),
+                            ttl_ms: 30_000,
+                        },
+                    )
+                    .await;
+            }
+        });
+        self.live_presence_tasks
+            .lock()
+            .await
+            .insert(task_key, handle);
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        Ok(())
+    }
+
+    pub async fn leave_live_session(&self, topic_id: &str, session_id: &str) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        self.stop_live_presence_task(topic_id, session_id).await;
+        self.apply_live_presence(topic_id, session_id, 0).await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        Ok(())
+    }
+
+    pub async fn list_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomView>> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let mut rows = self
+            .projection_store
+            .list_topic_game_rooms(topic_id)
+            .await?;
+        if rows.is_empty() {
+            hydrate_game_rooms_with_services(
+                self.docs_sync.as_ref(),
+                self.blob_service.as_ref(),
+                self.projection_store.as_ref(),
+                topic_id,
+            )
+            .await?;
+            rows = self
+                .projection_store
+                .list_topic_game_rooms(topic_id)
+                .await?;
+        }
+        Ok(rows
+            .into_iter()
+            .map(|row| GameRoomView {
+                room_id: row.room_id,
+                host_pubkey: row.host_pubkey,
+                title: row.title,
+                description: row.description,
+                status: row.status,
+                phase_label: row.phase_label,
+                scores: row
+                    .scores
+                    .into_iter()
+                    .map(|score| GameScoreView {
+                        participant_id: score.participant_id,
+                        label: score.label,
+                        score: score.score,
+                    })
+                    .collect(),
+                updated_at: row.updated_at,
+            })
+            .collect())
+    }
+
+    pub async fn create_game_room(
+        &self,
+        topic_id: &str,
+        input: CreateGameRoomInput,
+    ) -> Result<String> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let participants = sanitize_game_participants(input.participants)?;
+        let now = Utc::now().timestamp_millis();
+        let title = input.title.trim();
+        if title.is_empty() {
+            anyhow::bail!("game room title is required");
+        }
+        let room_id = format!(
+            "game-{}-{}",
+            now,
+            short_id_suffix(self.current_author_pubkey().as_str())
+        );
+        let manifest = GameRoomManifestBlobV1 {
+            room_id: room_id.clone(),
+            topic_id: TopicId::new(topic_id),
+            owner_pubkey: Pubkey::from(self.current_author_pubkey()),
+            title: title.to_string(),
+            description: input.description.trim().to_string(),
+            status: GameRoomStatus::Open,
+            phase_label: None,
+            participants: participants
+                .iter()
+                .enumerate()
+                .map(|(index, label)| GameParticipant {
+                    participant_id: format!("participant-{}", index + 1),
+                    label: label.clone(),
+                })
+                .collect(),
+            scores: participants
+                .iter()
+                .enumerate()
+                .map(|(index, label)| GameScoreEntry {
+                    participant_id: format!("participant-{}", index + 1),
+                    label: label.clone(),
+                    score: 0,
+                })
+                .collect(),
+            updated_at: now,
+        };
+        let state = self
+            .persist_game_room_manifest(topic_id, manifest.clone(), now)
+            .await?;
+        self.projection_store
+            .upsert_game_room_cache(game_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        *self.last_sync_ts.lock().await = Some(now);
+        Ok(room_id)
+    }
+
+    pub async fn update_game_room(
+        &self,
+        topic_id: &str,
+        room_id: &str,
+        input: UpdateGameRoomInput,
+    ) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let (state, mut manifest) = self
+            .fetch_game_room_state_and_manifest(topic_id, room_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("game room not found"))?;
+        let owner = self.current_author_pubkey();
+        if state.owner_pubkey.as_str() != owner {
+            anyhow::bail!("only the game room owner can update the room");
+        }
+        validate_game_room_transition(&manifest.status, &input.status)?;
+        validate_game_room_scores(&manifest, &input.scores)?;
+        manifest.status = input.status;
+        manifest.phase_label = input
+            .phase_label
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        manifest.scores = input
+            .scores
+            .into_iter()
+            .map(|score| GameScoreEntry {
+                participant_id: score.participant_id,
+                label: score.label,
+                score: score.score,
+            })
+            .collect();
+        manifest.updated_at = Utc::now().timestamp_millis();
+        let state = self
+            .persist_game_room_manifest(topic_id, manifest.clone(), state.created_at)
+            .await?;
+        self.projection_store
+            .upsert_game_room_cache(game_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        *self.last_sync_ts.lock().await = Some(manifest.updated_at);
+        Ok(())
+    }
+
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
         let PeerSnapshot {
             connected,
@@ -314,6 +712,7 @@ impl AppService {
                     last_error: diagnostic.last_error,
                 })
                 .collect(),
+            local_author_pubkey: self.current_author_pubkey(),
         })
     }
 
@@ -337,6 +736,22 @@ impl AppService {
     pub async fn unsubscribe_topic(&self, topic_id: &str) -> Result<()> {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
+        }
+        let keys_to_remove = self
+            .live_presence_tasks
+            .lock()
+            .await
+            .keys()
+            .filter(|key| key.starts_with(&format!("{topic_id}::")))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in keys_to_remove {
+            let session_id = key
+                .split_once("::")
+                .map(|(_, session_id)| session_id.to_string())
+                .unwrap_or_default();
+            self.stop_live_presence_task(topic_id, session_id.as_str())
+                .await;
         }
         self.hint_transport
             .unsubscribe_hints(&TopicId::new(topic_id))
@@ -410,6 +825,169 @@ impl AppService {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
+        let presence_handles = {
+            let mut tasks = self.live_presence_tasks.lock().await;
+            tasks.drain().map(|(_, handle)| handle).collect::<Vec<_>>()
+        };
+        for handle in presence_handles {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
+    }
+
+    fn current_author_pubkey(&self) -> String {
+        self.keys.public_key().to_hex()
+    }
+
+    async fn stop_live_presence_task(&self, topic_id: &str, session_id: &str) {
+        let key = live_presence_task_key(topic_id, session_id);
+        let handle = self.live_presence_tasks.lock().await.remove(key.as_str());
+        if let Some(handle) = handle {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
+    }
+
+    async fn cleanup_ended_live_presence_tasks(&self, rows: &[LiveSessionProjectionRow]) {
+        for row in rows {
+            if row.status == LiveSessionStatus::Ended {
+                self.stop_live_presence_task(row.topic_id.as_str(), row.session_id.as_str())
+                    .await;
+            }
+        }
+    }
+
+    async fn apply_live_presence(
+        &self,
+        topic_id: &str,
+        session_id: &str,
+        ttl_ms: u32,
+    ) -> Result<()> {
+        let now = Utc::now().timestamp_millis();
+        let author = self.current_author_pubkey();
+        self.projection_store
+            .upsert_live_presence(
+                topic_id,
+                session_id,
+                author.as_str(),
+                now + i64::from(ttl_ms),
+                now,
+            )
+            .await?;
+        self.projection_store
+            .clear_expired_live_presence(now)
+            .await?;
+        self.hint_transport
+            .publish_hint(
+                &TopicId::new(topic_id),
+                GossipHint::LivePresence {
+                    topic_id: TopicId::new(topic_id),
+                    session_id: session_id.to_string(),
+                    author: Pubkey::from(author),
+                    ttl_ms,
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn persist_live_session_manifest(
+        &self,
+        topic_id: &str,
+        manifest: LiveSessionManifestBlobV1,
+        created_at: i64,
+    ) -> Result<LiveSessionStateDocV1> {
+        let now = Utc::now().timestamp_millis();
+        let stored =
+            store_manifest_blob(self.blob_service.as_ref(), &manifest, LIVE_MANIFEST_MIME).await?;
+        let state = LiveSessionStateDocV1 {
+            session_id: manifest.session_id.clone(),
+            topic_id: TopicId::new(topic_id),
+            owner_pubkey: manifest.owner_pubkey.clone(),
+            created_at,
+            updated_at: now,
+            status: manifest.status.clone(),
+            current_manifest: ManifestBlobRef {
+                hash: stored.hash.clone(),
+                mime: stored.mime.clone(),
+                bytes: stored.bytes,
+            },
+        };
+        persist_live_session_state(self.docs_sync.as_ref(), &state).await?;
+        self.projection_store
+            .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
+            .await?;
+        Ok(state)
+    }
+
+    async fn persist_game_room_manifest(
+        &self,
+        topic_id: &str,
+        manifest: GameRoomManifestBlobV1,
+        created_at: i64,
+    ) -> Result<GameRoomStateDocV1> {
+        let now = Utc::now().timestamp_millis();
+        let stored =
+            store_manifest_blob(self.blob_service.as_ref(), &manifest, GAME_MANIFEST_MIME).await?;
+        let state = GameRoomStateDocV1 {
+            room_id: manifest.room_id.clone(),
+            topic_id: TopicId::new(topic_id),
+            owner_pubkey: manifest.owner_pubkey.clone(),
+            created_at,
+            updated_at: now,
+            status: manifest.status.clone(),
+            current_manifest: ManifestBlobRef {
+                hash: stored.hash.clone(),
+                mime: stored.mime.clone(),
+                bytes: stored.bytes,
+            },
+        };
+        persist_game_room_state(self.docs_sync.as_ref(), &state).await?;
+        self.projection_store
+            .mark_blob_status(&stored.hash, BlobCacheStatus::Available)
+            .await?;
+        Ok(state)
+    }
+
+    async fn fetch_live_session_state_and_manifest(
+        &self,
+        topic_id: &str,
+        session_id: &str,
+    ) -> Result<Option<(LiveSessionStateDocV1, LiveSessionManifestBlobV1)>> {
+        let Some(state) =
+            fetch_live_session_state(self.docs_sync.as_ref(), topic_id, session_id).await?
+        else {
+            return Ok(None);
+        };
+        let Some(manifest) = fetch_manifest_blob::<LiveSessionManifestBlobV1>(
+            self.blob_service.as_ref(),
+            &state.current_manifest,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some((state, manifest)))
+    }
+
+    async fn fetch_game_room_state_and_manifest(
+        &self,
+        topic_id: &str,
+        room_id: &str,
+    ) -> Result<Option<(GameRoomStateDocV1, GameRoomManifestBlobV1)>> {
+        let Some(state) = fetch_game_room_state(self.docs_sync.as_ref(), topic_id, room_id).await?
+        else {
+            return Ok(None);
+        };
+        let Some(manifest) = fetch_manifest_blob::<GameRoomManifestBlobV1>(
+            self.blob_service.as_ref(),
+            &state.current_manifest,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some((state, manifest)))
     }
 
     async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
@@ -436,13 +1014,14 @@ impl AppService {
         let topic_key = topic_id.to_string();
         let topic_replica = topic_replica_id(topic_id);
         docs_sync.open_replica(&topic_replica).await?;
+        projection_store.clear_topic_live_presence(topic_id).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
         let mut hint_stream = hint_transport
             .subscribe_hints(&TopicId::new(topic_id))
             .await?;
         let topic = topic_id.to_string();
         let handle = tokio::spawn(async move {
-            let _ = hydrate_topic_projection_with_services(
+            let _ = hydrate_topic_state_with_services(
                 docs_sync.as_ref(),
                 blob_service.as_ref(),
                 projection_store.as_ref(),
@@ -453,7 +1032,7 @@ impl AppService {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
                         if event.is_ok()
-                            && let Ok(count) = hydrate_topic_projection_with_services(
+                            && let Ok(count) = hydrate_topic_state_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
@@ -465,16 +1044,35 @@ impl AppService {
                         }
                     }
                     Some(event) = hint_stream.next() => {
-                        if hint_targets_topic(&event.hint, topic.as_str())
-                            && let Ok(count) = hydrate_topic_projection_with_services(
-                                docs_sync.as_ref(),
-                                blob_service.as_ref(),
-                                projection_store.as_ref(),
-                                topic.as_str(),
-                            ).await
-                            && count > 0
-                        {
-                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                        if hint_targets_topic(&event.hint, topic.as_str()) {
+                            match &event.hint {
+                                GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {
+                                    let now = Utc::now().timestamp_millis();
+                                    let _ = projection_store
+                                        .upsert_live_presence(
+                                            topic.as_str(),
+                                            session_id.as_str(),
+                                            author.as_str(),
+                                            now + i64::from(*ttl_ms),
+                                            now,
+                                        )
+                                        .await;
+                                    let _ = projection_store.clear_expired_live_presence(now).await;
+                                    *last_sync.lock().await = Some(now);
+                                }
+                                _ => {
+                                    if let Ok(count) = hydrate_topic_state_with_services(
+                                        docs_sync.as_ref(),
+                                        blob_service.as_ref(),
+                                        projection_store.as_ref(),
+                                        topic.as_str(),
+                                    ).await
+                                    && count > 0
+                                    {
+                                        *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                    }
+                                }
+                            }
                         }
                     }
                     else => break,
@@ -712,6 +1310,144 @@ async fn persist_header(
     Ok(())
 }
 
+async fn persist_live_session_state(
+    docs_sync: &dyn DocsSync,
+    state: &LiveSessionStateDocV1,
+) -> Result<()> {
+    let replica = topic_replica_id(state.topic_id.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("live", &format!("{}/state", state.session_id)),
+                value: serde_json::to_value(state)?,
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+async fn persist_game_room_state(
+    docs_sync: &dyn DocsSync,
+    state: &GameRoomStateDocV1,
+) -> Result<()> {
+    let replica = topic_replica_id(state.topic_id.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("game", &format!("{}/state", state.room_id)),
+                value: serde_json::to_value(state)?,
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+async fn store_manifest_blob<T: Serialize>(
+    blob_service: &dyn BlobService,
+    manifest: &T,
+    mime: &str,
+) -> Result<StoredBlob> {
+    let payload = serde_json::to_vec(manifest)?;
+    blob_service.put_blob(payload, mime).await
+}
+
+async fn fetch_manifest_blob<T: DeserializeOwned>(
+    blob_service: &dyn BlobService,
+    blob_ref: &ManifestBlobRef,
+) -> Result<Option<T>> {
+    let Some(bytes) = blob_service.fetch_blob(&blob_ref.hash).await? else {
+        return Ok(None);
+    };
+    Ok(Some(serde_json::from_slice(&bytes)?))
+}
+
+async fn fetch_live_session_state(
+    docs_sync: &dyn DocsSync,
+    topic_id: &str,
+    session_id: &str,
+) -> Result<Option<LiveSessionStateDocV1>> {
+    let replica = topic_replica_id(topic_id);
+    let records = docs_sync
+        .query_replica(
+            &replica,
+            DocQuery::Exact(stable_key("live", &format!("{session_id}/state"))),
+        )
+        .await?;
+    let Some(record) = records.into_iter().next() else {
+        return Ok(None);
+    };
+    Ok(Some(serde_json::from_slice(&record.value)?))
+}
+
+async fn fetch_game_room_state(
+    docs_sync: &dyn DocsSync,
+    topic_id: &str,
+    room_id: &str,
+) -> Result<Option<GameRoomStateDocV1>> {
+    let replica = topic_replica_id(topic_id);
+    let records = docs_sync
+        .query_replica(
+            &replica,
+            DocQuery::Exact(stable_key("game", &format!("{room_id}/state"))),
+        )
+        .await?;
+    let Some(record) = records.into_iter().next() else {
+        return Ok(None);
+    };
+    Ok(Some(serde_json::from_slice(&record.value)?))
+}
+
+fn live_projection_row_from_state(
+    state: &LiveSessionStateDocV1,
+    manifest: &LiveSessionManifestBlobV1,
+    topic_id: &str,
+) -> LiveSessionProjectionRow {
+    LiveSessionProjectionRow {
+        session_id: state.session_id.clone(),
+        topic_id: topic_id.to_string(),
+        host_pubkey: state.owner_pubkey.as_str().to_string(),
+        title: manifest.title.clone(),
+        description: manifest.description.clone(),
+        status: state.status.clone(),
+        started_at: manifest.started_at,
+        ended_at: manifest.ended_at,
+        updated_at: state.updated_at,
+        source_replica_id: topic_replica_id(topic_id),
+        source_key: stable_key("live", &format!("{}/state", state.session_id)),
+        manifest_blob_hash: state.current_manifest.hash.clone(),
+        derived_at: Utc::now().timestamp_millis(),
+        projection_version: 1,
+        viewer_count: 0,
+    }
+}
+
+fn game_projection_row_from_state(
+    state: &GameRoomStateDocV1,
+    manifest: &GameRoomManifestBlobV1,
+    topic_id: &str,
+) -> GameRoomProjectionRow {
+    GameRoomProjectionRow {
+        room_id: state.room_id.clone(),
+        topic_id: topic_id.to_string(),
+        host_pubkey: state.owner_pubkey.as_str().to_string(),
+        title: manifest.title.clone(),
+        description: manifest.description.clone(),
+        status: state.status.clone(),
+        phase_label: manifest.phase_label.clone(),
+        scores: manifest.scores.clone(),
+        updated_at: state.updated_at,
+        source_replica_id: topic_replica_id(topic_id),
+        source_key: stable_key("game", &format!("{}/state", state.room_id)),
+        manifest_blob_hash: state.current_manifest.hash.clone(),
+        derived_at: Utc::now().timestamp_millis(),
+        projection_version: 1,
+    }
+}
+
 fn projection_row_from_header(
     header: &CanonicalPostHeader,
     content: Option<String>,
@@ -788,12 +1524,105 @@ async fn hydrate_topic_projection_with_services(
     Ok(hydrated)
 }
 
+async fn hydrate_topic_state_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+) -> Result<usize> {
+    let post_count =
+        hydrate_topic_projection_with_services(docs_sync, blob_service, projection_store, topic_id)
+            .await?;
+    let live_count =
+        hydrate_live_sessions_with_services(docs_sync, blob_service, projection_store, topic_id)
+            .await?;
+    let game_count =
+        hydrate_game_rooms_with_services(docs_sync, blob_service, projection_store, topic_id)
+            .await?;
+    Ok(post_count + live_count + game_count)
+}
+
+async fn hydrate_live_sessions_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+) -> Result<usize> {
+    let replica = topic_replica_id(topic_id);
+    let records = docs_sync
+        .query_replica(&replica, DocQuery::Prefix("live/".into()))
+        .await?;
+    let mut hydrated = 0usize;
+    for record in records {
+        let state: LiveSessionStateDocV1 = serde_json::from_slice(&record.value)?;
+        projection_store
+            .mark_blob_status(
+                &state.current_manifest.hash,
+                blob_status(
+                    blob_service
+                        .blob_status(&state.current_manifest.hash)
+                        .await?,
+                ),
+            )
+            .await?;
+        let Some(manifest) =
+            fetch_manifest_blob::<LiveSessionManifestBlobV1>(blob_service, &state.current_manifest)
+                .await?
+        else {
+            continue;
+        };
+        projection_store
+            .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        hydrated += 1;
+    }
+    Ok(hydrated)
+}
+
+async fn hydrate_game_rooms_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+) -> Result<usize> {
+    let replica = topic_replica_id(topic_id);
+    let records = docs_sync
+        .query_replica(&replica, DocQuery::Prefix("game/".into()))
+        .await?;
+    let mut hydrated = 0usize;
+    for record in records {
+        let state: GameRoomStateDocV1 = serde_json::from_slice(&record.value)?;
+        projection_store
+            .mark_blob_status(
+                &state.current_manifest.hash,
+                blob_status(
+                    blob_service
+                        .blob_status(&state.current_manifest.hash)
+                        .await?,
+                ),
+            )
+            .await?;
+        let Some(manifest) =
+            fetch_manifest_blob::<GameRoomManifestBlobV1>(blob_service, &state.current_manifest)
+                .await?
+        else {
+            continue;
+        };
+        projection_store
+            .upsert_game_room_cache(game_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        hydrated += 1;
+    }
+    Ok(hydrated)
+}
+
 fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
     match hint {
         GossipHint::TopicIndexUpdated { topic_id, .. }
         | GossipHint::Presence { topic_id, .. }
         | GossipHint::Typing { topic_id, .. }
-        | GossipHint::LiveSignal { topic_id, .. } => topic_id.as_str() == topic,
+        | GossipHint::LiveSignal { topic_id, .. }
+        | GossipHint::LivePresence { topic_id, .. } => topic_id.as_str() == topic,
         GossipHint::ThreadUpdated { .. } | GossipHint::ProfileUpdated { .. } => true,
     }
 }
@@ -858,6 +1687,14 @@ fn blob_view_status(status: BlobStatus) -> BlobViewStatus {
     }
 }
 
+fn blob_status(status: BlobStatus) -> BlobCacheStatus {
+    match status {
+        BlobStatus::Missing => BlobCacheStatus::Missing,
+        BlobStatus::Available => BlobCacheStatus::Available,
+        BlobStatus::Pinned => BlobCacheStatus::Pinned,
+    }
+}
+
 fn attachment_role_name(role: &AssetRole) -> &'static str {
     match role {
         AssetRole::ImageOriginal => "image_original",
@@ -866,6 +1703,77 @@ fn attachment_role_name(role: &AssetRole) -> &'static str {
         AssetRole::VideoManifest => "video_manifest",
         AssetRole::Attachment => "attachment",
     }
+}
+
+fn sanitize_game_participants(participants: Vec<String>) -> Result<Vec<String>> {
+    let mut seen = BTreeSet::new();
+    let normalized = participants
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .filter(|value| seen.insert(value.clone()))
+        .collect::<Vec<_>>();
+    if normalized.len() < 2 {
+        anyhow::bail!("game room requires at least two unique participants");
+    }
+    Ok(normalized)
+}
+
+fn validate_game_room_transition(current: &GameRoomStatus, next: &GameRoomStatus) -> Result<()> {
+    match (current, next) {
+        (GameRoomStatus::Finished, GameRoomStatus::Finished) => {
+            anyhow::bail!("finished game room cannot be updated")
+        }
+        (GameRoomStatus::Finished, _) => anyhow::bail!("finished game room cannot be updated"),
+        (GameRoomStatus::Open, GameRoomStatus::Open)
+        | (GameRoomStatus::Open, GameRoomStatus::InProgress)
+        | (GameRoomStatus::Open, GameRoomStatus::Finished)
+        | (GameRoomStatus::InProgress, GameRoomStatus::InProgress)
+        | (GameRoomStatus::InProgress, GameRoomStatus::Finished) => Ok(()),
+        (GameRoomStatus::InProgress, GameRoomStatus::Open) => {
+            anyhow::bail!("game room cannot move back to open")
+        }
+    }
+}
+
+fn validate_game_room_scores(
+    manifest: &GameRoomManifestBlobV1,
+    scores: &[GameScoreView],
+) -> Result<()> {
+    if manifest.scores.len() != scores.len() {
+        anyhow::bail!("score update must include all participants");
+    }
+    let expected = manifest
+        .scores
+        .iter()
+        .map(|score| score.participant_id.clone())
+        .collect::<BTreeSet<_>>();
+    let provided = scores
+        .iter()
+        .map(|score| score.participant_id.clone())
+        .collect::<BTreeSet<_>>();
+    if expected != provided {
+        anyhow::bail!("score update participants do not match the room roster");
+    }
+    let expected_labels = manifest
+        .scores
+        .iter()
+        .map(|score| (score.participant_id.as_str(), score.label.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    for score in scores {
+        if expected_labels.get(score.participant_id.as_str()) != Some(&score.label.as_str()) {
+            anyhow::bail!("score update labels do not match the room roster");
+        }
+    }
+    Ok(())
+}
+
+fn live_presence_task_key(topic_id: &str, session_id: &str) -> String {
+    format!("{topic_id}::{session_id}")
+}
+
+fn short_id_suffix(author_pubkey: &str) -> &str {
+    author_pubkey.get(..8).unwrap_or(author_pubkey)
 }
 
 fn normalize_topic_name(topic: String) -> String {
@@ -940,6 +1848,11 @@ impl Drop for AppService {
     fn drop(&mut self) {
         if let Ok(mut subscriptions) = self.subscriptions.try_lock() {
             for (_, handle) in subscriptions.drain() {
+                handle.abort();
+            }
+        }
+        if let Ok(mut tasks) = self.live_presence_tasks.try_lock() {
+            for (_, handle) in tasks.drain() {
                 handle.abort();
             }
         }
@@ -2562,5 +3475,299 @@ mod tests {
         })
         .await
         .expect("multi topic propagation timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_live_session_manifest() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("live-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("live-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let topic = "kukuri:topic:live-late";
+
+        let session_id = app_a
+            .create_live_session(
+                topic,
+                CreateLiveSessionInput {
+                    title: "late live".into(),
+                    description: "watch along".into(),
+                },
+            )
+            .await
+            .expect("create live session");
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = app_b
+                    .list_live_sessions(topic)
+                    .await
+                    .expect("list live sessions");
+                if let Some(session) = sessions
+                    .into_iter()
+                    .find(|session| session.session_id == session_id)
+                {
+                    return session;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("live session backfill timeout");
+
+        assert_eq!(received.title, "late live");
+        assert_eq!(received.status, LiveSessionStatus::Live);
+    }
+
+    #[tokio::test]
+    async fn live_presence_expires_without_heartbeat() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+        let app = AppService::new(store, transport.clone());
+        let topic = "kukuri:topic:presence-expiry";
+        let session_id = app
+            .create_live_session(
+                topic,
+                CreateLiveSessionInput {
+                    title: "presence".into(),
+                    description: "ttl".into(),
+                },
+            )
+            .await
+            .expect("create live session");
+
+        transport
+            .publish_hint(
+                &TopicId::new(topic),
+                GossipHint::LivePresence {
+                    topic_id: TopicId::new(topic),
+                    session_id: session_id.clone(),
+                    author: Pubkey::from("a".repeat(64)),
+                    ttl_ms: 100,
+                },
+            )
+            .await
+            .expect("publish live presence");
+
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let sessions = app
+                    .list_live_sessions(topic)
+                    .await
+                    .expect("list live sessions");
+                if sessions
+                    .iter()
+                    .any(|session| session.session_id == session_id && session.viewer_count == 1)
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("viewer count update timeout");
+
+        sleep(Duration::from_millis(150)).await;
+        let sessions = app
+            .list_live_sessions(topic)
+            .await
+            .expect("list after expiry");
+        let session = sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("session present");
+        assert_eq!(session.viewer_count, 0);
+    }
+
+    #[tokio::test]
+    async fn ended_live_session_rejects_new_viewers() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+        let topic = "kukuri:topic:ended-live";
+        let session_id = app
+            .create_live_session(
+                topic,
+                CreateLiveSessionInput {
+                    title: "ended".into(),
+                    description: "session".into(),
+                },
+            )
+            .await
+            .expect("create live session");
+        app.end_live_session(topic, session_id.as_str())
+            .await
+            .expect("end live session");
+
+        let error = app
+            .join_live_session(topic, session_id.as_str())
+            .await
+            .expect_err("join should fail");
+        assert!(error.to_string().contains("ended live session"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn game_room_score_update_replicates() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("game-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("game-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let topic = "kukuri:topic:game-sync";
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let room_id = app_a
+            .create_game_room(
+                topic,
+                CreateGameRoomInput {
+                    title: "sync room".into(),
+                    description: "set".into(),
+                    participants: vec!["Alice".into(), "Bob".into()],
+                },
+            )
+            .await
+            .expect("create game room");
+        app_a
+            .update_game_room(
+                topic,
+                room_id.as_str(),
+                UpdateGameRoomInput {
+                    status: GameRoomStatus::InProgress,
+                    phase_label: Some("Round 2".into()),
+                    scores: vec![
+                        GameScoreView {
+                            participant_id: "participant-1".into(),
+                            label: "Alice".into(),
+                            score: 2,
+                        },
+                        GameScoreView {
+                            participant_id: "participant-2".into(),
+                            label: "Bob".into(),
+                            score: 1,
+                        },
+                    ],
+                },
+            )
+            .await
+            .expect("update game room");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let rooms = app_b.list_game_rooms(topic).await.expect("list game rooms");
+                if let Some(room) = rooms.into_iter().find(|room| room.room_id == room_id) {
+                    return room;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("game room replication timeout");
+
+        assert_eq!(received.status, GameRoomStatus::InProgress);
+        assert_eq!(received.phase_label.as_deref(), Some("Round 2"));
+        assert_eq!(
+            received
+                .scores
+                .iter()
+                .find(|score| score.label == "Alice")
+                .map(|score| score.score),
+            Some(2)
+        );
+    }
+
+    #[tokio::test]
+    async fn finished_game_room_rejects_updates() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+        let topic = "kukuri:topic:game-finished";
+        let room_id = app
+            .create_game_room(
+                topic,
+                CreateGameRoomInput {
+                    title: "finished room".into(),
+                    description: "set".into(),
+                    participants: vec!["Alice".into(), "Bob".into()],
+                },
+            )
+            .await
+            .expect("create game room");
+
+        app.update_game_room(
+            topic,
+            room_id.as_str(),
+            UpdateGameRoomInput {
+                status: GameRoomStatus::Finished,
+                phase_label: Some("Final".into()),
+                scores: vec![
+                    GameScoreView {
+                        participant_id: "participant-1".into(),
+                        label: "Alice".into(),
+                        score: 2,
+                    },
+                    GameScoreView {
+                        participant_id: "participant-2".into(),
+                        label: "Bob".into(),
+                        score: 0,
+                    },
+                ],
+            },
+        )
+        .await
+        .expect("finish room");
+
+        let error = app
+            .update_game_room(
+                topic,
+                room_id.as_str(),
+                UpdateGameRoomInput {
+                    status: GameRoomStatus::Finished,
+                    phase_label: Some("After".into()),
+                    scores: vec![
+                        GameScoreView {
+                            participant_id: "participant-1".into(),
+                            label: "Alice".into(),
+                            score: 3,
+                        },
+                        GameScoreView {
+                            participant_id: "participant-2".into(),
+                            label: "Bob".into(),
+                            score: 1,
+                        },
+                    ],
+                },
+            )
+            .await
+            .expect_err("finished room update should fail");
+        assert!(error.to_string().contains("finished game room"));
     }
 }

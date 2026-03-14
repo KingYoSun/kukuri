@@ -15,6 +15,10 @@ import {
   BlobMediaPayload,
   CreateAttachmentInput,
   DesktopApi,
+  GameRoomStatus,
+  GameRoomView,
+  GameScoreView,
+  LiveSessionView,
   PostView,
   SyncStatus,
   TopicSyncStatus,
@@ -30,6 +34,12 @@ type DraftMediaItem = {
   source_name: string;
   preview_url: string;
   attachments: CreateAttachmentInput[];
+};
+
+type GameEditorDraft = {
+  status: GameRoomStatus;
+  phase_label: string;
+  scores: Record<string, string>;
 };
 
 type MediaDebugValue = boolean | number | string | null | undefined;
@@ -427,6 +437,14 @@ async function generateVideoPoster(file: File): Promise<File> {
   }
 }
 
+function createGameEditorDraft(room: GameRoomView): GameEditorDraft {
+  return {
+    status: room.status,
+    phase_label: room.phase_label ?? '',
+    scores: Object.fromEntries(room.scores.map((score) => [score.participant_id, String(score.score)])),
+  };
+}
+
 export function App({ api = runtimeApi }: AppProps) {
   const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
   const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
@@ -435,6 +453,12 @@ export function App({ api = runtimeApi }: AppProps) {
   const [draftMediaItems, setDraftMediaItems] = useState<DraftMediaItem[]>([]);
   const [attachmentInputKey, setAttachmentInputKey] = useState(0);
   const [timelinesByTopic, setTimelinesByTopic] = useState<Record<string, PostView[]>>({
+    [DEFAULT_TOPIC]: [],
+  });
+  const [liveSessionsByTopic, setLiveSessionsByTopic] = useState<Record<string, LiveSessionView[]>>({
+    [DEFAULT_TOPIC]: [],
+  });
+  const [gameRoomsByTopic, setGameRoomsByTopic] = useState<Record<string, GameRoomView[]>>({
     [DEFAULT_TOPIC]: [],
   });
   const [thread, setThread] = useState<PostView[]>([]);
@@ -455,8 +479,17 @@ export function App({ api = runtimeApi }: AppProps) {
     configured_peers: [],
     subscribed_topics: [],
     topic_diagnostics: [],
+    local_author_pubkey: '',
   });
   const [composerError, setComposerError] = useState<string | null>(null);
+  const [liveTitle, setLiveTitle] = useState('');
+  const [liveDescription, setLiveDescription] = useState('');
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [gameTitle, setGameTitle] = useState('');
+  const [gameDescription, setGameDescription] = useState('');
+  const [gameParticipantsInput, setGameParticipantsInput] = useState('');
+  const [gameError, setGameError] = useState<string | null>(null);
+  const [gameDrafts, setGameDrafts] = useState<Record<string, GameEditorDraft>>({});
   const [error, setError] = useState<string | null>(null);
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
@@ -471,6 +504,14 @@ export function App({ api = runtimeApi }: AppProps) {
   const activeTimeline = useMemo(
     () => timelinesByTopic[activeTopic] ?? [],
     [activeTopic, timelinesByTopic]
+  );
+  const activeLiveSessions = useMemo(
+    () => liveSessionsByTopic[activeTopic] ?? [],
+    [activeTopic, liveSessionsByTopic]
+  );
+  const activeGameRooms = useMemo(
+    () => gameRoomsByTopic[activeTopic] ?? [],
+    [activeTopic, gameRoomsByTopic]
   );
   const topicDiagnostics = useMemo(
     () =>
@@ -498,11 +539,23 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, status, ticket, threadView] = await Promise.all([
+        const [timelineViews, liveViews, gameViews, status, ticket, threadView] = await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
               timeline: await api.listTimeline(topic, null, 50),
+            }))
+          ),
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              sessions: await api.listLiveSessions(topic),
+            }))
+          ),
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              rooms: await api.listGameRooms(topic),
             }))
           ),
           api.getSyncStatus(),
@@ -514,6 +567,12 @@ export function App({ api = runtimeApi }: AppProps) {
         startTransition(() => {
           setTimelinesByTopic(
             Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
+          );
+          setLiveSessionsByTopic(
+            Object.fromEntries(liveViews.map(({ topic, sessions }) => [topic, sessions]))
+          );
+          setGameRoomsByTopic(
+            Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
           );
           setSyncStatus(status);
           setLocalPeerTicket(ticket);
@@ -567,6 +626,18 @@ export function App({ api = runtimeApi }: AppProps) {
       draftPreviewUrls.clear();
     };
   }, []);
+
+  useEffect(() => {
+    setGameDrafts((current) => {
+      const next = { ...current };
+      for (const room of activeGameRooms) {
+        if (!next[room.room_id]) {
+          next[room.room_id] = createGameEditorDraft(room);
+        }
+      }
+      return next;
+    });
+  }, [activeGameRooms]);
 
   useEffect(() => {
     let disposed = false;
@@ -847,6 +918,143 @@ export function App({ api = runtimeApi }: AppProps) {
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'failed to import peer');
+    }
+  }
+
+  async function handleCreateLiveSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!liveTitle.trim()) {
+      setLiveError('live session title is required');
+      return;
+    }
+    try {
+      await api.createLiveSession(activeTopic, liveTitle.trim(), liveDescription.trim());
+      setLiveTitle('');
+      setLiveDescription('');
+      setLiveError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (liveCreateError) {
+      setLiveError(
+        liveCreateError instanceof Error ? liveCreateError.message : 'failed to create live session'
+      );
+    }
+  }
+
+  async function handleJoinLiveSession(sessionId: string) {
+    try {
+      await api.joinLiveSession(activeTopic, sessionId);
+      setLiveError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (joinError) {
+      setLiveError(joinError instanceof Error ? joinError.message : 'failed to join live session');
+    }
+  }
+
+  async function handleLeaveLiveSession(sessionId: string) {
+    try {
+      await api.leaveLiveSession(activeTopic, sessionId);
+      setLiveError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (leaveError) {
+      setLiveError(leaveError instanceof Error ? leaveError.message : 'failed to leave live session');
+    }
+  }
+
+  async function handleEndLiveSession(sessionId: string) {
+    try {
+      await api.endLiveSession(activeTopic, sessionId);
+      setLiveError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (endError) {
+      setLiveError(endError instanceof Error ? endError.message : 'failed to end live session');
+    }
+  }
+
+  async function handleCreateGameRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const participants = Array.from(
+      new Set(
+        gameParticipantsInput
+          .split(',')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+    if (!gameTitle.trim()) {
+      setGameError('game room title is required');
+      return;
+    }
+    if (participants.length < 2) {
+      setGameError('game room requires at least two unique participants');
+      return;
+    }
+    try {
+      await api.createGameRoom(
+        activeTopic,
+        gameTitle.trim(),
+        gameDescription.trim(),
+        participants
+      );
+      setGameTitle('');
+      setGameDescription('');
+      setGameParticipantsInput('');
+      setGameError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (createError) {
+      setGameError(createError instanceof Error ? createError.message : 'failed to create game room');
+    }
+  }
+
+  function updateGameDraft(
+    roomId: string,
+    update: (draft: GameEditorDraft) => GameEditorDraft
+  ) {
+    setGameDrafts((current) => {
+      const existingRoom = activeGameRooms.find((room) => room.room_id === roomId);
+      const draft = current[roomId] ?? (existingRoom ? createGameEditorDraft(existingRoom) : null);
+      if (!draft) {
+        return current;
+      }
+      return {
+        ...current,
+        [roomId]: update(draft),
+      };
+    });
+  }
+
+  async function handleUpdateGameRoom(room: GameRoomView) {
+    const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
+    const scores: GameScoreView[] = [];
+    for (const score of room.scores) {
+      const rawScore = draft.scores[score.participant_id] ?? String(score.score);
+      const parsed = Number.parseInt(rawScore, 10);
+      if (Number.isNaN(parsed)) {
+        setGameError(`invalid score for ${score.label}`);
+        return;
+      }
+      scores.push({
+        participant_id: score.participant_id,
+        label: score.label,
+        score: parsed,
+      });
+    }
+    try {
+      await api.updateGameRoom(
+        activeTopic,
+        room.room_id,
+        draft.status,
+        draft.phase_label.trim() || null,
+        scores
+      );
+      setGameError(null);
+      setGameDrafts((current) => {
+        const next = { ...current };
+        delete next[room.room_id];
+        return next;
+      });
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (updateError) {
+      setGameError(updateError instanceof Error ? updateError.message : 'failed to update game room');
     }
   }
 
@@ -1236,6 +1444,226 @@ export function App({ api = runtimeApi }: AppProps) {
               {replyTarget ? 'Reply' : 'Publish'}
             </button>
           </form>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>Live Sessions</h3>
+              <small>{activeLiveSessions.length} active</small>
+            </div>
+            <form className='composer composer-compact' onSubmit={handleCreateLiveSession}>
+              <label className='field'>
+                <span>Live Title</span>
+                <input
+                  value={liveTitle}
+                  onChange={(event) => setLiveTitle(event.target.value)}
+                  placeholder='Friday stream'
+                />
+              </label>
+              <label className='field'>
+                <span>Live Description</span>
+                <textarea
+                  value={liveDescription}
+                  onChange={(event) => setLiveDescription(event.target.value)}
+                  placeholder='short session summary'
+                />
+              </label>
+              {liveError ? <p className='error error-inline'>{liveError}</p> : null}
+              <button className='button' type='submit'>
+                Start Live
+              </button>
+            </form>
+            {activeLiveSessions.length === 0 ? <p className='empty-state'>No live sessions</p> : null}
+            <ul className='post-list'>
+              {activeLiveSessions.map((session) => {
+                const isOwner = session.host_pubkey === syncStatus.local_author_pubkey;
+                return (
+                  <li key={session.session_id}>
+                    <article className='post-card'>
+                      <div className='post-meta'>
+                        <span>{session.title}</span>
+                        <span>{session.status}</span>
+                      </div>
+                      <div className='post-body'>
+                        <strong className='post-title'>{session.description || 'no description'}</strong>
+                      </div>
+                      <small>{session.session_id}</small>
+                      <div className='topic-diagnostic topic-diagnostic-secondary'>
+                        <span>viewers: {session.viewer_count}</span>
+                        <span>
+                          started:{' '}
+                          {new Date(session.started_at).toLocaleTimeString('ja-JP')}
+                        </span>
+                      </div>
+                      {session.ended_at ? (
+                        <div className='topic-diagnostic topic-diagnostic-secondary'>
+                          <span>ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}</span>
+                        </div>
+                      ) : null}
+                      <div className='post-actions'>
+                        {session.joined_by_me ? (
+                          <button
+                            className='button button-secondary'
+                            type='button'
+                            onClick={() => void handleLeaveLiveSession(session.session_id)}
+                          >
+                            Leave
+                          </button>
+                        ) : (
+                          <button
+                            className='button button-secondary'
+                            type='button'
+                            disabled={session.status === 'Ended'}
+                            onClick={() => void handleJoinLiveSession(session.session_id)}
+                          >
+                            Join
+                          </button>
+                        )}
+                        {isOwner ? (
+                          <button
+                            className='button button-secondary'
+                            type='button'
+                            disabled={session.status === 'Ended'}
+                            onClick={() => void handleEndLiveSession(session.session_id)}
+                          >
+                            End
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>Game Rooms</h3>
+              <small>{activeGameRooms.length} tracked</small>
+            </div>
+            <form className='composer composer-compact' onSubmit={handleCreateGameRoom}>
+              <label className='field'>
+                <span>Game Title</span>
+                <input
+                  value={gameTitle}
+                  onChange={(event) => setGameTitle(event.target.value)}
+                  placeholder='Top 8 Finals'
+                />
+              </label>
+              <label className='field'>
+                <span>Game Description</span>
+                <textarea
+                  value={gameDescription}
+                  onChange={(event) => setGameDescription(event.target.value)}
+                  placeholder='match summary'
+                />
+              </label>
+              <label className='field'>
+                <span>Participants</span>
+                <input
+                  value={gameParticipantsInput}
+                  onChange={(event) => setGameParticipantsInput(event.target.value)}
+                  placeholder='Alice, Bob'
+                />
+              </label>
+              {gameError ? <p className='error error-inline'>{gameError}</p> : null}
+              <button className='button' type='submit'>
+                Create Room
+              </button>
+            </form>
+            {activeGameRooms.length === 0 ? <p className='empty-state'>No game rooms</p> : null}
+            <ul className='post-list'>
+              {activeGameRooms.map((room) => {
+                const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
+                const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
+                return (
+                  <li key={room.room_id}>
+                    <article className='post-card'>
+                      <div className='post-meta'>
+                        <span>{room.title}</span>
+                        <span>{room.status}</span>
+                      </div>
+                      <div className='post-body'>
+                        <strong className='post-title'>{room.description || 'no description'}</strong>
+                      </div>
+                      <small>{room.room_id}</small>
+                      <div className='topic-diagnostic topic-diagnostic-secondary'>
+                        <span>phase: {room.phase_label ?? 'none'}</span>
+                        <span>
+                          updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
+                        </span>
+                      </div>
+                      <ul className='draft-attachment-list'>
+                        {room.scores.map((score) => (
+                          <li key={score.participant_id} className='draft-attachment-item score-row'>
+                            <div className='draft-attachment-content'>
+                              <strong>{score.label}</strong>
+                            </div>
+                            {isOwner ? (
+                              <input
+                                aria-label={`${room.room_id}-${score.label}-score`}
+                                value={draft.scores[score.participant_id] ?? String(score.score)}
+                                onChange={(event) =>
+                                  updateGameDraft(room.room_id, (current) => ({
+                                    ...current,
+                                    scores: {
+                                      ...current.scores,
+                                      [score.participant_id]: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            ) : (
+                              <span>{score.score}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {isOwner ? (
+                        <div className='composer composer-compact'>
+                          <label className='field'>
+                            <span>Status</span>
+                            <select
+                              aria-label={`${room.room_id}-status`}
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateGameDraft(room.room_id, (current) => ({
+                                  ...current,
+                                  status: event.target.value as GameRoomStatus,
+                                }))
+                              }
+                            >
+                              <option value='Open'>Open</option>
+                              <option value='InProgress'>InProgress</option>
+                              <option value='Finished'>Finished</option>
+                            </select>
+                          </label>
+                          <label className='field'>
+                            <span>Phase</span>
+                            <input
+                              aria-label={`${room.room_id}-phase`}
+                              value={draft.phase_label}
+                              onChange={(event) =>
+                                updateGameDraft(room.room_id, (current) => ({
+                                  ...current,
+                                  phase_label: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <button
+                            className='button button-secondary'
+                            type='button'
+                            onClick={() => void handleUpdateGameRoom(room)}
+                          >
+                            Save Room
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
           <ul className='post-list'>
             {activeTimeline.map((post) => (
               <li key={post.id}>{renderPostCard(post, 'timeline')}</li>

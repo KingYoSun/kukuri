@@ -2510,6 +2510,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -2518,6 +2519,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "kukuri-app-api",
+ "kukuri-core",
  "kukuri-store",
  "kukuri-transport",
  "serde",

@@ -3370,6 +3370,7 @@ dependencies = [
  "kukuri-transport",
  "serde",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3432,6 +3433,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]

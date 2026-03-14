@@ -8,6 +8,9 @@ import {
   BlobViewStatus,
   CreateAttachmentInput,
   DesktopApi,
+  GameRoomView,
+  GameScoreView,
+  LiveSessionView,
   PostView,
   SyncStatus,
   TimelineView,
@@ -17,6 +20,8 @@ function createMockApi(options?: {
   globalLastError?: string | null;
   topicLastError?: string | null;
   seedPosts?: Record<string, TimelineView['items']>;
+  seedLiveSessions?: Record<string, LiveSessionView[]>;
+  seedGameRooms?: Record<string, GameRoomView[]>;
 }) {
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
     Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
@@ -24,6 +29,18 @@ function createMockApi(options?: {
       posts.map((post) => ({
         ...post,
         attachments: [...post.attachments],
+      })),
+    ])
+  );
+  const liveSessionsByTopic: Record<string, LiveSessionView[]> = Object.fromEntries(
+    Object.entries(options?.seedLiveSessions ?? {}).map(([topic, sessions]) => [topic, [...sessions]])
+  );
+  const gameRoomsByTopic: Record<string, GameRoomView[]> = Object.fromEntries(
+    Object.entries(options?.seedGameRooms ?? {}).map(([topic, rooms]) => [
+      topic,
+      rooms.map((room) => ({
+        ...room,
+        scores: room.scores.map((score) => ({ ...score })),
       })),
     ])
   );
@@ -50,6 +67,7 @@ function createMockApi(options?: {
         last_error: options?.topicLastError ?? null,
       },
     ],
+    local_author_pubkey: 'f'.repeat(64),
   };
 
   const api: DesktopApi = {
@@ -122,12 +140,109 @@ function createMockApi(options?: {
         next_cursor: null,
       };
     },
+    async listLiveSessions(topic) {
+      return liveSessionsByTopic[topic] ?? [];
+    },
+    async createLiveSession(topic, title, description) {
+      sequence += 1;
+      const sessionId = `live-${sequence}`;
+      liveSessionsByTopic[topic] = [
+        {
+          session_id: sessionId,
+          host_pubkey: syncStatus.local_author_pubkey,
+          title,
+          description,
+          status: 'Live',
+          started_at: Date.now(),
+          ended_at: null,
+          viewer_count: 0,
+          joined_by_me: false,
+        },
+        ...(liveSessionsByTopic[topic] ?? []),
+      ];
+      return sessionId;
+    },
+    async endLiveSession(topic, sessionId) {
+      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
+        session.session_id === sessionId
+          ? {
+              ...session,
+              status: 'Ended',
+              ended_at: Date.now(),
+              joined_by_me: false,
+            }
+          : session
+      );
+    },
+    async joinLiveSession(topic, sessionId) {
+      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
+        session.session_id === sessionId
+          ? {
+              ...session,
+              joined_by_me: true,
+              viewer_count: session.viewer_count + 1,
+            }
+          : session
+      );
+    },
+    async leaveLiveSession(topic, sessionId) {
+      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
+        session.session_id === sessionId
+          ? {
+              ...session,
+              joined_by_me: false,
+              viewer_count: Math.max(0, session.viewer_count - 1),
+            }
+          : session
+      );
+    },
+    async listGameRooms(topic) {
+      return gameRoomsByTopic[topic] ?? [];
+    },
+    async createGameRoom(topic, title, description, participants) {
+      sequence += 1;
+      const roomId = `game-${sequence}`;
+      const scores: GameScoreView[] = participants.map((label, index) => ({
+        participant_id: `participant-${index + 1}`,
+        label,
+        score: 0,
+      }));
+      gameRoomsByTopic[topic] = [
+        {
+          room_id: roomId,
+          host_pubkey: syncStatus.local_author_pubkey,
+          title,
+          description,
+          status: 'Open',
+          phase_label: null,
+          scores,
+          updated_at: Date.now(),
+        },
+        ...(gameRoomsByTopic[topic] ?? []),
+      ];
+      return roomId;
+    },
+    async updateGameRoom(topic, roomId, status, phaseLabel, scores) {
+      gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
+        room.room_id === roomId
+          ? {
+              ...room,
+              status,
+              phase_label: phaseLabel,
+              scores: scores.map((score) => ({ ...score })),
+              updated_at: Date.now(),
+            }
+          : room
+      );
+    },
     async getSyncStatus() {
       return syncStatus;
     },
     async importPeerTicket() {},
     async unsubscribeTopic(topic) {
       delete postsByTopic[topic];
+      delete liveSessionsByTopic[topic];
+      delete gameRoomsByTopic[topic];
       syncStatus.subscribed_topics = syncStatus.subscribed_topics.filter((value) => value !== topic);
       syncStatus.topic_diagnostics = syncStatus.topic_diagnostics.filter((value) => value.topic !== topic);
     },
@@ -397,6 +512,65 @@ test('desktop shell renders diagnostics error reasons', async () => {
       screen.getByText('error: timed out waiting for gossip topic join')
     ).toBeInTheDocument();
   });
+});
+
+test('desktop shell can create, join, leave, and end a live session', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('Friday stream'), 'Launch Party');
+  await user.type(screen.getByPlaceholderText('short session summary'), 'watch along');
+  await user.click(screen.getByRole('button', { name: 'Start Live' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Launch Party')).toBeInTheDocument();
+  });
+  expect(screen.getByText('watch along')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Join' }));
+  await waitFor(() => {
+    expect(screen.getByText('viewers: 1')).toBeInTheDocument();
+  });
+  expect(screen.getByRole('button', { name: 'Leave' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Leave' }));
+  await waitFor(() => {
+    expect(screen.getByText('viewers: 0')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'End' }));
+  await waitFor(() => {
+    expect(screen.getByText('Ended')).toBeInTheDocument();
+  });
+});
+
+test('desktop shell can create and update a game room', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('Top 8 Finals'), 'Grand Finals');
+  await user.type(screen.getByPlaceholderText('match summary'), 'set one');
+  await user.type(screen.getByPlaceholderText('Alice, Bob'), 'Alice, Bob');
+  await user.click(screen.getByRole('button', { name: 'Create Room' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Grand Finals')).toBeInTheDocument();
+  });
+  expect(screen.getByText('set one')).toBeInTheDocument();
+  expect(screen.getByLabelText(/game-.*-Alice-score/)).toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText(/game-.*-status/), 'InProgress');
+  await user.clear(screen.getByLabelText(/game-.*-phase/));
+  await user.type(screen.getByLabelText(/game-.*-phase/), 'Round 3');
+  await user.clear(screen.getByLabelText(/game-.*-Alice-score/));
+  await user.type(screen.getByLabelText(/game-.*-Alice-score/), '2');
+  await user.click(screen.getByRole('button', { name: 'Save Room' }));
+
+  await waitFor(() => {
+    expect(screen.getByLabelText(/game-.*-status/)).toHaveValue('InProgress');
+  });
+  expect(screen.getByText('phase: Round 3')).toBeInTheDocument();
+  expect(screen.getByDisplayValue('2')).toBeInTheDocument();
 });
 
 test('single attach button classifies mixed image and video files', async () => {

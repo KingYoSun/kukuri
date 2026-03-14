@@ -11,6 +11,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
 kukuri-app-api = { path = "../app-api" }
+kukuri-core = { path = "../core" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
-

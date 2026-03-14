@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -21,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
+use tracing::{info, warn};
 
 pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
 type ReplicaRecords = HashMap<String, Vec<u8>>;
@@ -302,6 +304,96 @@ impl IrohDocsSync {
             .context("missing replica sender")?;
         Ok(sender)
     }
+
+    async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
+        let mut candidates = Vec::new();
+        if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
+            let learned_peer = EndpointAddr::from_parts(
+                remote_info.id(),
+                remote_info.into_addrs().map(|addr| addr.into_addr()),
+            );
+            if !learned_peer.is_empty() {
+                candidates.push(learned_peer);
+            }
+        }
+        if !candidates
+            .iter()
+            .any(|candidate| candidate == imported_peer)
+        {
+            candidates.push(imported_peer.clone());
+        }
+        candidates
+    }
+
+    async fn fetch_entry_bytes(&self, content_hash: &str) -> Result<Option<Vec<u8>>> {
+        let hash = iroh_blobs::Hash::from_str(content_hash)?;
+        match self.node.blobs().blobs().get_bytes(hash).await {
+            Ok(bytes) => Ok(Some(bytes.to_vec())),
+            Err(error) => {
+                let peers = self
+                    .imported_peers
+                    .lock()
+                    .await
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                info!(
+                    hash = %content_hash,
+                    error = %error,
+                    configured_peer_count = peers.len(),
+                    "docs entry fetch local miss, trying remote peers"
+                );
+                for imported_peer in peers {
+                    let candidates = self.connect_candidates(&imported_peer).await;
+                    for peer in candidates {
+                        match self
+                            .node
+                            .endpoint()
+                            .connect(peer.clone(), iroh_blobs::ALPN)
+                            .await
+                        {
+                            Ok(conn) => match self.node.blobs().remote().fetch(conn, hash).await {
+                                Ok(_) => match self.node.blobs().blobs().get_bytes(hash).await {
+                                    Ok(bytes) => return Ok(Some(bytes.to_vec())),
+                                    Err(error) => {
+                                        warn!(
+                                            hash = %content_hash,
+                                            peer_id = %peer.id,
+                                            error = %error,
+                                            "docs entry transfer completed but content is still missing locally"
+                                        );
+                                    }
+                                },
+                                Err(error) => {
+                                    warn!(
+                                        hash = %content_hash,
+                                        peer_id = %peer.id,
+                                        addrs = ?peer.addrs,
+                                        error = %error,
+                                        "docs entry remote transfer failed"
+                                    );
+                                }
+                            },
+                            Err(error) => {
+                                warn!(
+                                    hash = %content_hash,
+                                    peer_id = %peer.id,
+                                    addrs = ?peer.addrs,
+                                    error = %error,
+                                    "docs entry fetch connect failed"
+                                );
+                            }
+                        }
+                    }
+                }
+                warn!(
+                    hash = %content_hash,
+                    "docs entry fetch exhausted remote peers without success"
+                );
+                Ok(None)
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -470,16 +562,14 @@ impl DocsSync for IrohDocsSync {
         while let Some(entry) = stream.next().await {
             let entry = entry?;
             let key = String::from_utf8(entry.key().to_vec()).context("docs key is not utf8")?;
-            let value = self
-                .node
-                .blobs()
-                .blobs()
-                .get_bytes(entry.content_hash())
-                .await?;
+            let content_hash = entry.content_hash().to_string();
+            let Some(value) = self.fetch_entry_bytes(content_hash.as_str()).await? else {
+                continue;
+            };
             records.push(DocRecord {
                 key,
-                value: value.to_vec(),
-                content_hash: entry.content_hash().to_string(),
+                value,
+                content_hash,
                 content_len: entry.content_len(),
             });
         }

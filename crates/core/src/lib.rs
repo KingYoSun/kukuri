@@ -112,6 +112,13 @@ pub struct AssetRef {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestBlobRef {
+    pub hash: BlobHash,
+    pub mime: String,
+    pub bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssetRole {
     ImageOriginal,
     ImagePreview,
@@ -125,6 +132,80 @@ pub enum LiveSignalKind {
     SessionStarted,
     SessionEnded,
     RoomActivity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LiveSessionStatus {
+    Live,
+    Ended,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GameRoomStatus {
+    Open,
+    InProgress,
+    Finished,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveSessionManifestBlobV1 {
+    pub session_id: String,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub title: String,
+    pub description: String,
+    pub status: LiveSessionStatus,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveSessionStateDocV1 {
+    pub session_id: String,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub status: LiveSessionStatus,
+    pub current_manifest: ManifestBlobRef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameParticipant {
+    pub participant_id: String,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameScoreEntry {
+    pub participant_id: String,
+    pub label: String,
+    pub score: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameRoomManifestBlobV1 {
+    pub room_id: String,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub title: String,
+    pub description: String,
+    pub status: GameRoomStatus,
+    pub phase_label: Option<String>,
+    pub participants: Vec<GameParticipant>,
+    pub scores: Vec<GameScoreEntry>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameRoomStateDocV1 {
+    pub room_id: String,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub status: GameRoomStatus,
+    pub current_manifest: ManifestBlobRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,6 +236,12 @@ pub enum GossipHint {
         topic_id: TopicId,
         session_id: String,
         kind: LiveSignalKind,
+    },
+    LivePresence {
+        topic_id: TopicId,
+        session_id: String,
+        author: Pubkey,
+        ttl_ms: u32,
     },
 }
 
@@ -317,6 +404,9 @@ impl Event {
 pub fn blob_hash(data: impl AsRef<[u8]>) -> BlobHash {
     BlobHash::new(blake3::hash(data.as_ref()).to_hex().to_string())
 }
+
+pub const LIVE_MANIFEST_MIME: &str = "application/vnd.kukuri.live-manifest+json";
+pub const GAME_MANIFEST_MIME: &str = "application/vnd.kukuri.game-manifest+json";
 
 pub fn timeline_sort_key(created_at: i64, event_id: &EventId) -> String {
     format!("{created_at:020}-{}", event_id.as_str())

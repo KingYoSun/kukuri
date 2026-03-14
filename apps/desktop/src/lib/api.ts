@@ -56,6 +56,7 @@ export type SyncStatus = {
   configured_peers: string[];
   subscribed_topics: string[];
   topic_diagnostics: TopicSyncStatus[];
+  local_author_pubkey: string;
 };
 
 export type TopicSyncStatus = {
@@ -68,6 +69,39 @@ export type TopicSyncStatus = {
   last_received_at?: number | null;
   status_detail: string;
   last_error?: string | null;
+};
+
+export type LiveSessionStatus = 'Live' | 'Ended';
+
+export type LiveSessionView = {
+  session_id: string;
+  host_pubkey: string;
+  title: string;
+  description: string;
+  status: LiveSessionStatus;
+  started_at: number;
+  ended_at?: number | null;
+  viewer_count: number;
+  joined_by_me: boolean;
+};
+
+export type GameRoomStatus = 'Open' | 'InProgress' | 'Finished';
+
+export type GameScoreView = {
+  participant_id: string;
+  label: string;
+  score: number;
+};
+
+export type GameRoomView = {
+  room_id: string;
+  host_pubkey: string;
+  title: string;
+  description: string;
+  status: GameRoomStatus;
+  phase_label?: string | null;
+  scores: GameScoreView[];
+  updated_at: number;
 };
 
 export interface DesktopApi {
@@ -84,6 +118,25 @@ export interface DesktopApi {
     cursor?: TimelineCursor | null,
     limit?: number
   ): Promise<TimelineView>;
+  listLiveSessions(topic: string): Promise<LiveSessionView[]>;
+  createLiveSession(topic: string, title: string, description: string): Promise<string>;
+  endLiveSession(topic: string, sessionId: string): Promise<void>;
+  joinLiveSession(topic: string, sessionId: string): Promise<void>;
+  leaveLiveSession(topic: string, sessionId: string): Promise<void>;
+  listGameRooms(topic: string): Promise<GameRoomView[]>;
+  createGameRoom(
+    topic: string,
+    title: string,
+    description: string,
+    participants: string[]
+  ): Promise<string>;
+  updateGameRoom(
+    topic: string,
+    roomId: string,
+    status: GameRoomStatus,
+    phaseLabel: string | null,
+    scores: GameScoreView[]
+  ): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
   importPeerTicket(ticket: string): Promise<void>;
   unsubscribeTopic(topic: string): Promise<void>;
@@ -138,6 +191,98 @@ export const runtimeApi: DesktopApi = {
         thread_id: threadId,
         cursor,
         limit,
+      },
+    }).catch(() => unavailable());
+  },
+  listLiveSessions: async (topic) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listLiveSessions(topic);
+    }
+    return invoke<LiveSessionView[]>('list_live_sessions', {
+      request: {
+        topic,
+      },
+    }).catch(() => unavailable());
+  },
+  createLiveSession: async (topic, title, description) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description);
+    }
+    return invoke<string>('create_live_session', {
+      request: {
+        topic,
+        title,
+        description,
+      },
+    }).catch(() => unavailable());
+  },
+  endLiveSession: async (topic, sessionId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.endLiveSession(topic, sessionId);
+    }
+    return invoke<void>('end_live_session', {
+      request: {
+        topic,
+        session_id: sessionId,
+      },
+    }).catch(() => unavailable());
+  },
+  joinLiveSession: async (topic, sessionId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.joinLiveSession(topic, sessionId);
+    }
+    return invoke<void>('join_live_session', {
+      request: {
+        topic,
+        session_id: sessionId,
+      },
+    }).catch(() => unavailable());
+  },
+  leaveLiveSession: async (topic, sessionId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.leaveLiveSession(topic, sessionId);
+    }
+    return invoke<void>('leave_live_session', {
+      request: {
+        topic,
+        session_id: sessionId,
+      },
+    }).catch(() => unavailable());
+  },
+  listGameRooms: async (topic) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listGameRooms(topic);
+    }
+    return invoke<GameRoomView[]>('list_game_rooms', {
+      request: {
+        topic,
+      },
+    }).catch(() => unavailable());
+  },
+  createGameRoom: async (topic, title, description, participants) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createGameRoom(topic, title, description, participants);
+    }
+    return invoke<string>('create_game_room', {
+      request: {
+        topic,
+        title,
+        description,
+        participants,
+      },
+    }).catch(() => unavailable());
+  },
+  updateGameRoom: async (topic, roomId, status, phaseLabel, scores) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.updateGameRoom(topic, roomId, status, phaseLabel, scores);
+    }
+    return invoke<void>('update_game_room', {
+      request: {
+        topic,
+        room_id: roomId,
+        status,
+        phase_label: phaseLabel,
+        scores,
       },
     }).catch(() => unavailable());
   },

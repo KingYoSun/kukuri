@@ -171,6 +171,28 @@ textarea {
   gap: 0.8rem;
 }
 
+.composer-compact textarea {
+  min-height: 88px;
+}
+
+.panel-subsection {
+  margin-top: 1rem;
+}
+
+.empty-state {
+  color: rgba(246, 241, 232, 0.58);
+}
+
+.score-row input,
+.composer select {
+  width: 100%;
+  border: 1px solid rgba(246, 241, 232, 0.12);
+  border-radius: 14px;
+  padding: 0.7rem 0.85rem;
+  color: inherit;
+  background: rgba(10, 16, 24, 0.8);
+}
+
 .reply-banner {
   display: flex;
   justify-content: space-between;

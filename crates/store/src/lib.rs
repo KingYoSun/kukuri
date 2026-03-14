@@ -6,7 +6,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, Event, EventId, PayloadRef, Profile, ReplicaId, ThreadRef, parse_profile,
+    BlobHash, Event, EventId, GameRoomStatus, GameScoreEntry, LiveSessionStatus, PayloadRef,
+    Profile, ReplicaId, ThreadRef, parse_profile,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -50,6 +51,46 @@ pub struct EventProjectionRow {
     pub projection_version: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveSessionProjectionRow {
+    pub session_id: String,
+    pub topic_id: String,
+    pub host_pubkey: String,
+    pub title: String,
+    pub description: String,
+    pub status: LiveSessionStatus,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub updated_at: i64,
+    pub source_replica_id: ReplicaId,
+    pub source_key: String,
+    pub manifest_blob_hash: BlobHash,
+    pub derived_at: i64,
+    pub projection_version: i64,
+    pub viewer_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameRoomProjectionRow {
+    pub room_id: String,
+    pub topic_id: String,
+    pub host_pubkey: String,
+    pub title: String,
+    pub description: String,
+    pub status: GameRoomStatus,
+    pub phase_label: Option<String>,
+    pub scores: Vec<GameScoreEntry>,
+    pub updated_at: i64,
+    pub source_replica_id: ReplicaId,
+    pub source_key: String,
+    pub manifest_blob_hash: BlobHash,
+    pub derived_at: i64,
+    pub projection_version: i64,
+}
+
+type LivePresenceKey = (String, String);
+type LivePresenceValue = (String, i64, i64);
+
 #[async_trait]
 pub trait Store: Send + Sync {
     async fn put_event(&self, event: Event) -> Result<()>;
@@ -89,6 +130,23 @@ pub trait ProjectionStore: Send + Sync {
         limit: usize,
     ) -> Result<Page<EventProjectionRow>>;
     async fn upsert_profile_cache(&self, profile: Profile) -> Result<()>;
+    async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()>;
+    async fn list_topic_live_sessions(
+        &self,
+        topic_id: &str,
+    ) -> Result<Vec<LiveSessionProjectionRow>>;
+    async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()>;
+    async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>>;
+    async fn upsert_live_presence(
+        &self,
+        topic_id: &str,
+        session_id: &str,
+        author_pubkey: &str,
+        expires_at: i64,
+        updated_at: i64,
+    ) -> Result<()>;
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()>;
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()>;
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()>;
     async fn rebuild_from_docs_blobs(&self, rows: Vec<EventProjectionRow>) -> Result<()>;
 }
@@ -353,6 +411,9 @@ pub struct MemoryStore {
     thread_edges: Arc<RwLock<HashMap<String, BTreeMap<String, EventId>>>>,
     profiles: Arc<RwLock<HashMap<String, Profile>>>,
     projection_rows: Arc<RwLock<HashMap<EventId, EventProjectionRow>>>,
+    live_session_rows: Arc<RwLock<HashMap<String, LiveSessionProjectionRow>>>,
+    game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
+    live_presence: Arc<RwLock<HashMap<LivePresenceKey, LivePresenceValue>>>,
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
 }
 
@@ -655,6 +716,197 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO live_session_cache (
+              session_id, topic_id, host_pubkey, title, description, status, started_at, ended_at,
+              updated_at, source_replica_id, source_key, manifest_blob_hash, derived_at,
+              projection_version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            ON CONFLICT(session_id) DO UPDATE SET
+              topic_id = excluded.topic_id,
+              host_pubkey = excluded.host_pubkey,
+              title = excluded.title,
+              description = excluded.description,
+              status = excluded.status,
+              started_at = excluded.started_at,
+              ended_at = excluded.ended_at,
+              updated_at = excluded.updated_at,
+              source_replica_id = excluded.source_replica_id,
+              source_key = excluded.source_key,
+              manifest_blob_hash = excluded.manifest_blob_hash,
+              derived_at = excluded.derived_at,
+              projection_version = excluded.projection_version
+            "#,
+        )
+        .bind(row.session_id.as_str())
+        .bind(row.topic_id.as_str())
+        .bind(row.host_pubkey.as_str())
+        .bind(row.title.as_str())
+        .bind(row.description.as_str())
+        .bind(live_status_name(&row.status))
+        .bind(row.started_at)
+        .bind(row.ended_at)
+        .bind(row.updated_at)
+        .bind(row.source_replica_id.as_str())
+        .bind(row.source_key.as_str())
+        .bind(row.manifest_blob_hash.as_str())
+        .bind(row.derived_at)
+        .bind(row.projection_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_topic_live_sessions(
+        &self,
+        topic_id: &str,
+    ) -> Result<Vec<LiveSessionProjectionRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT lsc.session_id, lsc.topic_id, lsc.host_pubkey, lsc.title, lsc.description,
+                   lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at, lsc.source_replica_id,
+                   lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at, lsc.projection_version,
+                   COALESCE((
+                     SELECT COUNT(*)
+                     FROM live_presence_cache lpc
+                     WHERE lpc.topic_id = lsc.topic_id
+                       AND lpc.session_id = lsc.session_id
+                   ), 0) AS viewer_count
+            FROM live_session_cache lsc
+            WHERE lsc.topic_id = ?1
+            ORDER BY lsc.started_at DESC, lsc.session_id DESC
+            "#,
+        )
+        .bind(topic_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(row_to_live_session_projection)
+            .collect()
+    }
+
+    async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()> {
+        let scores_json = serde_json::to_string(&row.scores)?;
+        sqlx::query(
+            r#"
+            INSERT INTO game_room_cache (
+              room_id, topic_id, host_pubkey, title, description, status, phase_label,
+              scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
+              derived_at, projection_version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            ON CONFLICT(room_id) DO UPDATE SET
+              topic_id = excluded.topic_id,
+              host_pubkey = excluded.host_pubkey,
+              title = excluded.title,
+              description = excluded.description,
+              status = excluded.status,
+              phase_label = excluded.phase_label,
+              scores_json = excluded.scores_json,
+              updated_at = excluded.updated_at,
+              source_replica_id = excluded.source_replica_id,
+              source_key = excluded.source_key,
+              manifest_blob_hash = excluded.manifest_blob_hash,
+              derived_at = excluded.derived_at,
+              projection_version = excluded.projection_version
+            "#,
+        )
+        .bind(row.room_id.as_str())
+        .bind(row.topic_id.as_str())
+        .bind(row.host_pubkey.as_str())
+        .bind(row.title.as_str())
+        .bind(row.description.as_str())
+        .bind(game_status_name(&row.status))
+        .bind(row.phase_label.as_deref())
+        .bind(scores_json)
+        .bind(row.updated_at)
+        .bind(row.source_replica_id.as_str())
+        .bind(row.source_key.as_str())
+        .bind(row.manifest_blob_hash.as_str())
+        .bind(row.derived_at)
+        .bind(row.projection_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT room_id, topic_id, host_pubkey, title, description, status, phase_label,
+                   scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
+                   derived_at, projection_version
+            FROM game_room_cache
+            WHERE topic_id = ?1
+            ORDER BY updated_at DESC, room_id DESC
+            "#,
+        )
+        .bind(topic_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_game_room_projection).collect()
+    }
+
+    async fn upsert_live_presence(
+        &self,
+        topic_id: &str,
+        session_id: &str,
+        author_pubkey: &str,
+        expires_at: i64,
+        updated_at: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO live_presence_cache (
+              topic_id, session_id, author_pubkey, expires_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(topic_id, session_id, author_pubkey) DO UPDATE SET
+              expires_at = excluded.expires_at,
+              updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(topic_id)
+        .bind(session_id)
+        .bind(author_pubkey)
+        .bind(expires_at)
+        .bind(updated_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM live_presence_cache
+            WHERE expires_at <= ?1
+            "#,
+        )
+        .bind(now_ms)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM live_presence_cache
+            WHERE topic_id = ?1
+            "#,
+        )
+        .bind(topic_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()> {
         sqlx::query(
             r#"
@@ -679,6 +931,15 @@ impl ProjectionStore for SqliteStore {
             .execute(&self.pool)
             .await?;
         sqlx::query("DELETE FROM topic_index_cache")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM live_session_cache")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM game_room_cache")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM live_presence_cache")
             .execute(&self.pool)
             .await?;
         for row in rows {
@@ -760,6 +1021,101 @@ impl ProjectionStore for MemoryStore {
         self.upsert_profile(profile).await
     }
 
+    async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()> {
+        self.live_session_rows
+            .write()
+            .await
+            .insert(row.session_id.clone(), row);
+        Ok(())
+    }
+
+    async fn list_topic_live_sessions(
+        &self,
+        topic_id: &str,
+    ) -> Result<Vec<LiveSessionProjectionRow>> {
+        let presence = self.live_presence.read().await;
+        let mut items = self
+            .live_session_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| row.topic_id == topic_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for row in &mut items {
+            row.viewer_count = presence
+                .iter()
+                .filter(|((session_id, _), (presence_topic, _, _))| {
+                    session_id == &row.session_id && presence_topic == topic_id
+                })
+                .count();
+        }
+        items.sort_by(|left, right| {
+            right
+                .started_at
+                .cmp(&left.started_at)
+                .then_with(|| right.session_id.cmp(&left.session_id))
+        });
+        Ok(items)
+    }
+
+    async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()> {
+        self.game_room_rows
+            .write()
+            .await
+            .insert(row.room_id.clone(), row);
+        Ok(())
+    }
+
+    async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>> {
+        let mut items = self
+            .game_room_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| row.topic_id == topic_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| right.room_id.cmp(&left.room_id))
+        });
+        Ok(items)
+    }
+
+    async fn upsert_live_presence(
+        &self,
+        topic_id: &str,
+        session_id: &str,
+        author_pubkey: &str,
+        expires_at: i64,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.live_presence.write().await.insert(
+            (session_id.to_string(), author_pubkey.to_string()),
+            (topic_id.to_string(), expires_at, updated_at),
+        );
+        Ok(())
+    }
+
+    async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()> {
+        self.live_presence
+            .write()
+            .await
+            .retain(|_, (_, expires_at, _)| *expires_at > now_ms);
+        Ok(())
+    }
+
+    async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()> {
+        self.live_presence
+            .write()
+            .await
+            .retain(|_, (presence_topic, _, _)| presence_topic != topic_id);
+        Ok(())
+    }
+
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()> {
         self.blob_statuses
             .write()
@@ -774,6 +1130,9 @@ impl ProjectionStore for MemoryStore {
         for row in rows {
             guard.insert(row.event_id.clone(), row);
         }
+        self.live_session_rows.write().await.clear();
+        self.game_room_rows.write().await.clear();
+        self.live_presence.write().await.clear();
         Ok(())
     }
 }
@@ -816,6 +1175,79 @@ fn row_to_projection(row: sqlx::sqlite::SqliteRow) -> Result<EventProjectionRow>
         derived_at: row.get("derived_at"),
         projection_version: row.get("projection_version"),
     })
+}
+
+fn row_to_live_session_projection(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<LiveSessionProjectionRow> {
+    Ok(LiveSessionProjectionRow {
+        session_id: row.get("session_id"),
+        topic_id: row.get("topic_id"),
+        host_pubkey: row.get("host_pubkey"),
+        title: row.get("title"),
+        description: row.get("description"),
+        status: parse_live_status(row.get::<String, _>("status").as_str())?,
+        started_at: row.get("started_at"),
+        ended_at: row.try_get("ended_at").ok(),
+        updated_at: row.get("updated_at"),
+        source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
+        source_key: row.get("source_key"),
+        manifest_blob_hash: BlobHash::new(row.get::<String, _>("manifest_blob_hash")),
+        derived_at: row.get("derived_at"),
+        projection_version: row.get("projection_version"),
+        viewer_count: row.get::<i64, _>("viewer_count") as usize,
+    })
+}
+
+fn row_to_game_room_projection(row: sqlx::sqlite::SqliteRow) -> Result<GameRoomProjectionRow> {
+    Ok(GameRoomProjectionRow {
+        room_id: row.get("room_id"),
+        topic_id: row.get("topic_id"),
+        host_pubkey: row.get("host_pubkey"),
+        title: row.get("title"),
+        description: row.get("description"),
+        status: parse_game_status(row.get::<String, _>("status").as_str())?,
+        phase_label: row.try_get("phase_label").ok(),
+        scores: serde_json::from_str(row.get::<String, _>("scores_json").as_str())?,
+        updated_at: row.get("updated_at"),
+        source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
+        source_key: row.get("source_key"),
+        manifest_blob_hash: BlobHash::new(row.get::<String, _>("manifest_blob_hash")),
+        derived_at: row.get("derived_at"),
+        projection_version: row.get("projection_version"),
+    })
+}
+
+fn live_status_name(status: &LiveSessionStatus) -> &'static str {
+    match status {
+        LiveSessionStatus::Live => "live",
+        LiveSessionStatus::Ended => "ended",
+    }
+}
+
+fn parse_live_status(value: &str) -> Result<LiveSessionStatus> {
+    match value {
+        "live" => Ok(LiveSessionStatus::Live),
+        "ended" => Ok(LiveSessionStatus::Ended),
+        _ => anyhow::bail!("unknown live session status: {value}"),
+    }
+}
+
+fn game_status_name(status: &GameRoomStatus) -> &'static str {
+    match status {
+        GameRoomStatus::Open => "open",
+        GameRoomStatus::InProgress => "in_progress",
+        GameRoomStatus::Finished => "finished",
+    }
+}
+
+fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
+    match value {
+        "open" => Ok(GameRoomStatus::Open),
+        "in_progress" => Ok(GameRoomStatus::InProgress),
+        "finished" => Ok(GameRoomStatus::Finished),
+        _ => anyhow::bail!("unknown game room status: {value}"),
+    }
 }
 
 fn page_from_rows(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Page<Event>> {

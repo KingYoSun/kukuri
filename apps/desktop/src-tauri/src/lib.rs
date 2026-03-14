@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
-    CreatePostRequest, DesktopRuntime, GetBlobMediaRequest, GetBlobPreviewRequest,
-    ImportPeerTicketRequest, ListThreadRequest, ListTimelineRequest, UnsubscribeTopicRequest,
+    CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest, DesktopRuntime,
+    GetBlobMediaRequest, GetBlobPreviewRequest, ImportPeerTicketRequest, ListGameRoomsRequest,
+    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    UnsubscribeTopicRequest, UpdateGameRoomRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -69,6 +71,102 @@ async fn get_sync_status(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::SyncStatus, String> {
     state.runtime.get_sync_status().await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_live_sessions(
+    state: tauri::State<'_, DesktopState>,
+    request: ListLiveSessionsRequest,
+) -> Result<Vec<kukuri_app_api::LiveSessionView>, String> {
+    state
+        .runtime
+        .list_live_sessions(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn create_live_session(
+    state: tauri::State<'_, DesktopState>,
+    request: CreateLiveSessionRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .create_live_session(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn end_live_session(
+    state: tauri::State<'_, DesktopState>,
+    request: LiveSessionCommandRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .end_live_session(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn join_live_session(
+    state: tauri::State<'_, DesktopState>,
+    request: LiveSessionCommandRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .join_live_session(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn leave_live_session(
+    state: tauri::State<'_, DesktopState>,
+    request: LiveSessionCommandRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .leave_live_session(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_game_rooms(
+    state: tauri::State<'_, DesktopState>,
+    request: ListGameRoomsRequest,
+) -> Result<Vec<kukuri_app_api::GameRoomView>, String> {
+    state
+        .runtime
+        .list_game_rooms(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn create_game_room(
+    state: tauri::State<'_, DesktopState>,
+    request: CreateGameRoomRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .create_game_room(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn update_game_room(
+    state: tauri::State<'_, DesktopState>,
+    request: UpdateGameRoomRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .update_game_room(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -168,6 +266,14 @@ pub fn run() {
             list_timeline,
             list_thread,
             get_sync_status,
+            list_live_sessions,
+            create_live_session,
+            end_live_session,
+            join_live_session,
+            leave_live_session,
+            list_game_rooms,
+            create_game_room,
+            update_game_room,
             import_peer_ticket,
             unsubscribe_topic,
             get_local_peer_ticket,

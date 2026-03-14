@@ -7,9 +7,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use kukuri_app_api::{AppService, BlobMediaPayload, PendingAttachment, SyncStatus, TimelineView};
+use kukuri_app_api::{
+    AppService, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput, GameRoomView,
+    GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
+    UpdateGameRoomInput,
+};
 use kukuri_blob_service::IrohBlobService;
-use kukuri_core::AssetRole;
+use kukuri_core::{AssetRole, GameRoomStatus};
 use kukuri_docs_sync::{IrohDocsNode, IrohDocsSync};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{IrohGossipTransport, TransportNetworkConfig};
@@ -72,6 +76,46 @@ pub struct GetBlobPreviewRequest {
 pub struct GetBlobMediaRequest {
     pub hash: String,
     pub mime: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListLiveSessionsRequest {
+    pub topic: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateLiveSessionRequest {
+    pub topic: String,
+    pub title: String,
+    pub description: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveSessionCommandRequest {
+    pub topic: String,
+    pub session_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListGameRoomsRequest {
+    pub topic: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateGameRoomRequest {
+    pub topic: String,
+    pub title: String,
+    pub description: String,
+    pub participants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateGameRoomRequest {
+    pub topic: String,
+    pub room_id: String,
+    pub status: GameRoomStatus,
+    pub phase_label: Option<String>,
+    pub scores: Vec<GameScoreView>,
 }
 
 pub struct DesktopRuntime {
@@ -180,6 +224,81 @@ impl DesktopRuntime {
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
         self.app_service.get_sync_status().await
+    }
+
+    pub async fn list_live_sessions(
+        &self,
+        request: ListLiveSessionsRequest,
+    ) -> Result<Vec<LiveSessionView>> {
+        self.app_service
+            .list_live_sessions(request.topic.as_str())
+            .await
+    }
+
+    pub async fn create_live_session(&self, request: CreateLiveSessionRequest) -> Result<String> {
+        self.app_service
+            .create_live_session(
+                request.topic.as_str(),
+                CreateLiveSessionInput {
+                    title: request.title,
+                    description: request.description,
+                },
+            )
+            .await
+    }
+
+    pub async fn end_live_session(&self, request: LiveSessionCommandRequest) -> Result<()> {
+        self.app_service
+            .end_live_session(request.topic.as_str(), request.session_id.as_str())
+            .await
+    }
+
+    pub async fn join_live_session(&self, request: LiveSessionCommandRequest) -> Result<()> {
+        self.app_service
+            .join_live_session(request.topic.as_str(), request.session_id.as_str())
+            .await
+    }
+
+    pub async fn leave_live_session(&self, request: LiveSessionCommandRequest) -> Result<()> {
+        self.app_service
+            .leave_live_session(request.topic.as_str(), request.session_id.as_str())
+            .await
+    }
+
+    pub async fn list_game_rooms(
+        &self,
+        request: ListGameRoomsRequest,
+    ) -> Result<Vec<GameRoomView>> {
+        self.app_service
+            .list_game_rooms(request.topic.as_str())
+            .await
+    }
+
+    pub async fn create_game_room(&self, request: CreateGameRoomRequest) -> Result<String> {
+        self.app_service
+            .create_game_room(
+                request.topic.as_str(),
+                CreateGameRoomInput {
+                    title: request.title,
+                    description: request.description,
+                    participants: request.participants,
+                },
+            )
+            .await
+    }
+
+    pub async fn update_game_room(&self, request: UpdateGameRoomRequest) -> Result<()> {
+        self.app_service
+            .update_game_room(
+                request.topic.as_str(),
+                request.room_id.as_str(),
+                UpdateGameRoomInput {
+                    status: request.status,
+                    phase_label: request.phase_label,
+                    scores: request.scores,
+                },
+            )
+            .await
     }
 
     pub async fn import_peer_ticket(&self, request: ImportPeerTicketRequest) -> Result<()> {
@@ -1142,5 +1261,140 @@ mod tests {
             .await
             .expect("video playback payload after restart");
         assert!(playback.is_some());
+    }
+
+    #[tokio::test]
+    async fn restart_restores_live_session_manifest() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("restart-live.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:restart-live";
+        let session_id = runtime
+            .create_live_session(CreateLiveSessionRequest {
+                topic: topic.into(),
+                title: "restart live".into(),
+                description: "session".into(),
+            })
+            .await
+            .expect("create live session");
+        runtime
+            .join_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("join live session");
+        runtime
+            .end_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("end live session");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let sessions = restarted
+            .list_live_sessions(ListLiveSessionsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list live sessions");
+        let restored = sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("restored live session");
+        assert_eq!(restored.status, kukuri_core::LiveSessionStatus::Ended);
+        assert_eq!(restored.viewer_count, 0);
+        assert!(!restored.joined_by_me);
+    }
+
+    #[tokio::test]
+    async fn restart_restores_game_room_manifest() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("restart-game.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:restart-game";
+        let room_id = runtime
+            .create_game_room(CreateGameRoomRequest {
+                topic: topic.into(),
+                title: "restart finals".into(),
+                description: "set".into(),
+                participants: vec!["Alice".into(), "Bob".into()],
+            })
+            .await
+            .expect("create game room");
+        runtime
+            .update_game_room(UpdateGameRoomRequest {
+                topic: topic.into(),
+                room_id: room_id.clone(),
+                status: GameRoomStatus::InProgress,
+                phase_label: Some("Round 3".into()),
+                scores: vec![
+                    GameScoreView {
+                        participant_id: "participant-1".into(),
+                        label: "Alice".into(),
+                        score: 2,
+                    },
+                    GameScoreView {
+                        participant_id: "participant-2".into(),
+                        label: "Bob".into(),
+                        score: 1,
+                    },
+                ],
+            })
+            .await
+            .expect("update game room");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let rooms = restarted
+            .list_game_rooms(ListGameRoomsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list game rooms");
+        let restored = rooms
+            .iter()
+            .find(|room| room.room_id == room_id)
+            .expect("restored game room");
+        assert_eq!(restored.status, GameRoomStatus::InProgress);
+        assert_eq!(restored.phase_label.as_deref(), Some("Round 3"));
+        assert_eq!(
+            restored
+                .scores
+                .iter()
+                .find(|score| score.label == "Alice")
+                .map(|score| score.score),
+            Some(2)
+        );
     }
 }

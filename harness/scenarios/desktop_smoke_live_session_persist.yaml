@@ -1,0 +1,28 @@
+name: desktop_smoke_live_session_persist
+fixtures:
+  seed: 12345
+  topic: kukuri:topic:demo
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:demo
+  - action: create_live_session
+    title: launch-party
+    description: watch-along
+  - action: join_live_session
+    title: launch-party
+  - action: assert_live_viewer_count
+    title: launch-party
+    viewer_count: 1
+  - action: end_live_session
+    title: launch-party
+  - action: restart_desktop
+  - action: assert_live_viewer_count
+    title: launch-party
+    viewer_count: 0
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

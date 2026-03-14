@@ -4,7 +4,11 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use kukuri_app_api::{AppService, SyncStatus};
+use kukuri_app_api::{
+    AppService, CreateGameRoomInput, CreateLiveSessionInput, GameScoreView, SyncStatus,
+    UpdateGameRoomInput,
+};
+use kukuri_core::GameRoomStatus;
 use kukuri_store::SqliteStore;
 use kukuri_transport::{FakeNetwork, FakeTransport};
 use serde::{Deserialize, Serialize};
@@ -41,10 +45,52 @@ pub struct ScenarioTimeouts {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ScenarioStep {
     LaunchDesktop,
-    SelectTopic { topic: String },
-    CreatePost { content: String },
-    AssertTimelineContains { text: String },
+    SelectTopic {
+        topic: String,
+    },
+    CreatePost {
+        content: String,
+    },
+    AssertTimelineContains {
+        text: String,
+    },
+    CreateLiveSession {
+        title: String,
+        description: String,
+    },
+    JoinLiveSession {
+        title: String,
+    },
+    AssertLiveViewerCount {
+        title: String,
+        viewer_count: usize,
+    },
+    EndLiveSession {
+        title: String,
+    },
+    CreateGameRoom {
+        title: String,
+        description: String,
+        participants: Vec<String>,
+    },
+    UpdateGameRoom {
+        title: String,
+        status: String,
+        phase_label: Option<String>,
+        scores: Vec<ScenarioScoreUpdate>,
+    },
+    AssertGameScore {
+        title: String,
+        label: String,
+        score: i64,
+    },
     RestartDesktop,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScenarioScoreUpdate {
+    pub label: String,
+    pub score: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -174,6 +220,185 @@ pub async fn run_scenario(
                     });
                     assertion.await.context("assertion timeout")??;
                 }
+                ScenarioStep::CreateLiveSession { title, description } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    runtime
+                        .app()?
+                        .create_live_session(
+                            &topic,
+                            CreateLiveSessionInput {
+                                title: title.clone(),
+                                description: description.clone(),
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::JoinLiveSession { title } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let session = runtime
+                        .app()?
+                        .list_live_sessions(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|session| session.title == *title)
+                        .with_context(|| format!("live session not found: {title}"))?;
+                    runtime
+                        .app()?
+                        .join_live_session(&topic, session.session_id.as_str())
+                        .await?;
+                }
+                ScenarioStep::AssertLiveViewerCount { title, viewer_count } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let expected = *viewer_count;
+                    let target = title.clone();
+                    let assertion = timeout(step_timeout, async {
+                        loop {
+                            let sessions = runtime.app()?.list_live_sessions(&topic).await?;
+                            if sessions
+                                .iter()
+                                .any(|session| session.title == target && session.viewer_count == expected)
+                            {
+                                return Ok::<(), anyhow::Error>(());
+                            }
+                            sleep(Duration::from_millis(50)).await;
+                        }
+                    });
+                    match assertion.await {
+                        Ok(result) => result?,
+                        Err(_) => {
+                            let sessions = runtime.app()?.list_live_sessions(&topic).await?;
+                            let observed = sessions
+                                .iter()
+                                .map(|session| {
+                                    format!(
+                                        "{}:{}:{}",
+                                        session.title, session.viewer_count, session.joined_by_me
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            anyhow::bail!(
+                                "assertion timeout for live viewer count title={target} expected={expected} observed={observed:?}"
+                            );
+                        }
+                    }
+                }
+                ScenarioStep::EndLiveSession { title } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let session = runtime
+                        .app()?
+                        .list_live_sessions(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|session| session.title == *title)
+                        .with_context(|| format!("live session not found: {title}"))?;
+                    runtime
+                        .app()?
+                        .end_live_session(&topic, session.session_id.as_str())
+                        .await?;
+                }
+                ScenarioStep::CreateGameRoom {
+                    title,
+                    description,
+                    participants,
+                } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    runtime
+                        .app()?
+                        .create_game_room(
+                            &topic,
+                            CreateGameRoomInput {
+                                title: title.clone(),
+                                description: description.clone(),
+                                participants: participants.clone(),
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::UpdateGameRoom {
+                    title,
+                    status,
+                    phase_label,
+                    scores,
+                } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let room = runtime
+                        .app()?
+                        .list_game_rooms(&topic)
+                        .await?
+                        .into_iter()
+                        .find(|room| room.title == *title)
+                        .with_context(|| format!("game room not found: {title}"))?;
+                    let next_scores = room
+                        .scores
+                        .iter()
+                        .map(|score| {
+                            let next = scores
+                                .iter()
+                                .find(|update| update.label == score.label)
+                                .map(|update| update.score)
+                                .unwrap_or(score.score);
+                            GameScoreView {
+                                participant_id: score.participant_id.clone(),
+                                label: score.label.clone(),
+                                score: next,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    runtime
+                        .app()?
+                        .update_game_room(
+                            &topic,
+                            room.room_id.as_str(),
+                            UpdateGameRoomInput {
+                                status: parse_game_status(status.as_str())?,
+                                phase_label: phase_label.clone(),
+                                scores: next_scores,
+                            },
+                        )
+                        .await?;
+                }
+                ScenarioStep::AssertGameScore { title, label, score } => {
+                    let topic = runtime
+                        .current_topic
+                        .clone()
+                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let expected_title = title.clone();
+                    let expected_label = label.clone();
+                    let expected_score = *score;
+                    let assertion = timeout(step_timeout, async {
+                        loop {
+                            let rooms = runtime.app()?.list_game_rooms(&topic).await?;
+                            if rooms.iter().any(|room| {
+                                room.title == expected_title
+                                    && room.scores.iter().any(|entry| {
+                                        entry.label == expected_label && entry.score == expected_score
+                                    })
+                            }) {
+                                return Ok::<(), anyhow::Error>(());
+                            }
+                            sleep(Duration::from_millis(50)).await;
+                        }
+                    });
+                    assertion.await.context("assertion timeout")??;
+                }
                 ScenarioStep::RestartDesktop => {
                     runtime.app.take();
                     runtime.launch().await?;
@@ -214,7 +439,23 @@ fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::SelectTopic { .. } => "select_topic",
         ScenarioStep::CreatePost { .. } => "create_post",
         ScenarioStep::AssertTimelineContains { .. } => "assert_timeline_contains",
+        ScenarioStep::CreateLiveSession { .. } => "create_live_session",
+        ScenarioStep::JoinLiveSession { .. } => "join_live_session",
+        ScenarioStep::AssertLiveViewerCount { .. } => "assert_live_viewer_count",
+        ScenarioStep::EndLiveSession { .. } => "end_live_session",
+        ScenarioStep::CreateGameRoom { .. } => "create_game_room",
+        ScenarioStep::UpdateGameRoom { .. } => "update_game_room",
+        ScenarioStep::AssertGameScore { .. } => "assert_game_score",
         ScenarioStep::RestartDesktop => "restart_desktop",
+    }
+}
+
+fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
+    match value {
+        "Open" => Ok(GameRoomStatus::Open),
+        "InProgress" => Ok(GameRoomStatus::InProgress),
+        "Finished" => Ok(GameRoomStatus::Finished),
+        _ => anyhow::bail!("unsupported game room status: {value}"),
     }
 }
 
@@ -248,6 +489,42 @@ mod tests {
             .join("kukuri")
             .join("desktop-smoke-test");
         let result = run_named_scenario(root, "desktop_smoke_post_persist", &artifacts)
+            .await
+            .expect("scenario");
+
+        assert_eq!(result.status, HarnessStatus::Pass);
+        assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn desktop_smoke_live_session_persist() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("desktop-smoke-live-session");
+        let result = run_named_scenario(root, "desktop_smoke_live_session_persist", &artifacts)
+            .await
+            .expect("scenario");
+
+        assert_eq!(result.status, HarnessStatus::Pass);
+        assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn desktop_smoke_game_room_persist() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("desktop-smoke-game-room");
+        let result = run_named_scenario(root, "desktop_smoke_game_room_persist", &artifacts)
             .await
             .expect("scenario");
 

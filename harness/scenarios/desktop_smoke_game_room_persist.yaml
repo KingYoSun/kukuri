@@ -1,0 +1,38 @@
+name: desktop_smoke_game_room_persist
+fixtures:
+  seed: 12345
+  topic: kukuri:topic:demo
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:demo
+  - action: create_game_room
+    title: finals
+    description: bracket
+    participants:
+      - Alice
+      - Bob
+  - action: update_game_room
+    title: finals
+    status: InProgress
+    phase_label: round-3
+    scores:
+      - label: Alice
+        score: 2
+      - label: Bob
+        score: 1
+  - action: assert_game_score
+    title: finals
+    label: Alice
+    score: 2
+  - action: restart_desktop
+  - action: assert_game_score
+    title: finals
+    label: Alice
+    score: 2
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000
