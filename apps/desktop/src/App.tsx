@@ -240,6 +240,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const draftSequenceRef = useRef(0);
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
+  const inFlightMediaFetchesRef = useRef(new Set<string>());
 
   const headline = useMemo(
     () => (syncStatus.connected ? 'Live over static peers' : 'Local-first shell'),
@@ -265,10 +266,7 @@ export function App({ api = runtimeApi }: AppProps) {
         selectVideoPoster(post),
         selectVideoManifest(post),
       ]) {
-        if (
-          attachment &&
-          (attachment.status === 'Available' || attachment.status === 'Pinned')
-        ) {
+        if (attachment) {
           attachments.set(attachment.hash, attachment);
         }
       }
@@ -336,12 +334,14 @@ export function App({ api = runtimeApi }: AppProps) {
   useEffect(() => {
     const remoteObjectUrls = remoteObjectUrlRef.current;
     const draftPreviewUrls = draftPreviewUrlRef.current;
+    const inFlightMediaFetches = inFlightMediaFetchesRef.current;
 
     return () => {
       for (const url of remoteObjectUrls.values()) {
         URL.revokeObjectURL(url);
       }
       remoteObjectUrls.clear();
+      inFlightMediaFetches.clear();
       for (const url of draftPreviewUrls.values()) {
         URL.revokeObjectURL(url);
       }
@@ -353,18 +353,26 @@ export function App({ api = runtimeApi }: AppProps) {
     let disposed = false;
 
     for (const attachment of previewableMediaAttachments) {
-      if (mediaObjectUrls[attachment.hash] !== undefined) {
+      if (
+        typeof mediaObjectUrls[attachment.hash] === 'string' ||
+        inFlightMediaFetchesRef.current.has(attachment.hash)
+      ) {
         continue;
       }
+      inFlightMediaFetchesRef.current.add(attachment.hash);
 
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
+          inFlightMediaFetchesRef.current.delete(attachment.hash);
           const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (disposed) {
             if (nextUrl) {
               URL.revokeObjectURL(nextUrl);
             }
+            return;
+          }
+          if (!nextUrl) {
             return;
           }
 
@@ -385,18 +393,10 @@ export function App({ api = runtimeApi }: AppProps) {
           });
         })
         .catch(() => {
+          inFlightMediaFetchesRef.current.delete(attachment.hash);
           if (disposed) {
             return;
           }
-          setMediaObjectUrls((current) => {
-            if (current[attachment.hash] !== undefined) {
-              return current;
-            }
-            return {
-              ...current,
-              [attachment.hash]: null,
-            };
-          });
         });
     }
 

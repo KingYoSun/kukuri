@@ -565,27 +565,28 @@ test('timeline image post renders actual preview when object-url payload is avai
 
 test('thread pane reuses the same image placeholder renderer', async () => {
   const user = userEvent.setup();
-  render(
-    <App
-      api={createMockApi({
-        seedPosts: {
-          'kukuri:topic:demo': [
-            buildImagePost(),
-            {
-              ...buildImagePost({
-                id: 'reply-post',
-                note_id: 'note1replypost',
-                content: 'reply body',
-                content_status: 'Available',
-                attachments: [],
-                reply_to: 'image-post',
-                root_id: 'image-post',
-              }),
-            },
-          ],
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildImagePost(),
+        {
+          ...buildImagePost({
+            id: 'reply-post',
+            note_id: 'note1replypost',
+            content: 'reply body',
+            content_status: 'Available',
+            attachments: [],
+            reply_to: 'image-post',
+            root_id: 'image-post',
+          }),
         },
-      })}
-    />
+      ],
+    },
+  });
+  api.getBlobMediaPayload = async () => null;
+
+  render(
+    <App api={api} />
   );
 
   await waitFor(() => {
@@ -678,6 +679,55 @@ test('poster-only video card renders poster preview without video element', asyn
   expect(posterPreview).toBeInTheDocument();
   expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
   expect(screen.getAllByText('poster ready').length).toBeGreaterThan(0);
+});
+
+test('video card fetches manifest payload even when attachment status is missing', async () => {
+  installObjectUrlMocks();
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildVideoPost({
+          attachments: [
+            {
+              hash: 'late-manifest'.repeat(4),
+              mime: 'video/mp4',
+              bytes: 9999,
+              role: 'video_manifest',
+              status: 'Missing',
+            },
+            {
+              hash: 'late-poster'.repeat(4),
+              mime: 'image/jpeg',
+              bytes: 1024,
+              role: 'video_poster',
+              status: 'Available',
+            },
+          ],
+        }),
+      ],
+    },
+  });
+  api.getBlobMediaPayload = async (hash, mime) => {
+    if (hash === 'late-manifest'.repeat(4)) {
+      return {
+        bytes_base64: 'ZmFrZS12aWRlbw==',
+        mime,
+      };
+    }
+    if (hash === 'late-poster'.repeat(4)) {
+      return {
+        bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+        mime,
+      };
+    }
+    return null;
+  };
+
+  render(<App api={api} />);
+
+  const video = await screen.findByTestId('media-video-video-post');
+  expect(video).toBeInTheDocument();
+  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
 });
 
 test('video card renders object-url playback source when manifest payload is available', async () => {
