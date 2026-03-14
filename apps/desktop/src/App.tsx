@@ -933,6 +933,7 @@ export function App({ api = runtimeApi }: AppProps) {
                   <video
                     className='media-video'
                     controls
+                    src={videoPlaybackSrc}
                     onCanPlay={logPlaybackEvent('canplay')}
                     onDurationChange={logPlaybackEvent('durationchange')}
                     onError={logPlaybackEvent('error')}
@@ -943,9 +944,7 @@ export function App({ api = runtimeApi }: AppProps) {
                     preload='metadata'
                     poster={videoPosterPreviewSrc ?? undefined}
                     data-testid={`media-video-${post.id}`}
-                  >
-                    <source src={videoPlaybackSrc} type={videoManifest?.mime ?? 'video/mp4'} />
-                  </video>
+                  />
                 ) : mediaKind === 'video' && videoPosterPreviewSrc ? (
                   <img
                     className='media-preview'

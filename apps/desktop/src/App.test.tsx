@@ -927,6 +927,5 @@ test('video card renders object-url playback source when manifest payload is ava
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
   expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
-  const source = video.querySelector('source');
-  expect(source?.getAttribute('src')).toContain('blob:mock-');
+  expect(video.getAttribute('src')).toContain('blob:mock-');
 });
