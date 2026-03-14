@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { App } from './App';
 import {
@@ -134,6 +134,12 @@ function createMockApi(options?: {
     async getLocalPeerTicket() {
       return 'peer1@127.0.0.1:7777';
     },
+    async getBlobMediaPayload(_hash, mime) {
+      return {
+        bytes_base64: mime.startsWith('video/') ? 'ZmFrZS12aWRlbw==' : 'ZmFrZS1pbWFnZQ==',
+        mime,
+      };
+    },
     async getBlobPreviewUrl() {
       return null;
     },
@@ -195,6 +201,50 @@ function buildVideoPost(overrides?: Partial<PostView>): PostView {
     root_id: 'video-post',
     ...overrides,
   };
+}
+
+function installObjectUrlMocks() {
+  let sequence = 0;
+  const createObjectUrl = vi
+    .spyOn(URL, 'createObjectURL')
+    .mockImplementation(() => `blob:mock-${++sequence}`);
+  const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+  return { createObjectUrl, revokeObjectUrl };
+}
+
+function installSuccessfulPosterGenerationMocks() {
+  Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+    configurable: true,
+    get: () => 640,
+  });
+  Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+    configurable: true,
+    get: () => 360,
+  });
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function load(
+    this: HTMLMediaElement
+  ) {
+    queueMicrotask(() => {
+      this.dispatchEvent(new Event('loadeddata'));
+    });
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback(new Blob([Uint8Array.from([9, 8, 7, 6])], { type: 'image/jpeg' }));
+  });
+}
+
+function installFailedPosterGenerationMocks() {
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function load(
+    this: HTMLMediaElement
+  ) {
+    queueMicrotask(() => {
+      this.dispatchEvent(new Event('error'));
+    });
+  });
 }
 
 test('desktop shell can publish and render a post', async () => {
@@ -299,24 +349,9 @@ test('desktop shell renders diagnostics error reasons', async () => {
   });
 });
 
-test('desktop shell can publish an image-only post from composer', async () => {
-  const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
-
-  const input = screen.getByLabelText('Attach Images');
-  await user.upload(
-    input,
-    new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' })
-  );
-  await user.click(screen.getByRole('button', { name: 'Publish' }));
-
-  await waitFor(() => {
-    expect(screen.getByText('image ready')).toBeInTheDocument();
-  });
-  expect(screen.getByText('image/png')).toBeInTheDocument();
-});
-
-test('desktop shell sends image attachments through createPost', async () => {
+test('single attach button classifies mixed image and video files', async () => {
+  installObjectUrlMocks();
+  installSuccessfulPosterGenerationMocks();
   let attachmentsSeen: CreateAttachmentInput[] = [];
   const api = createMockApi();
   const originalCreatePost = api.createPost;
@@ -327,41 +362,26 @@ test('desktop shell sends image attachments through createPost', async () => {
 
   const user = userEvent.setup();
   render(<App api={api} />);
-  const input = screen.getByLabelText('Attach Images');
-  await user.upload(
-    input,
-    new File([Uint8Array.from([7, 8, 9])], 'city.jpg', { type: 'image/jpeg' })
-  );
+
+  await user.upload(screen.getByLabelText('Attach'), [
+    new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' }),
+    new File([Uint8Array.from([5, 6, 7, 8])], 'clip.mp4', { type: 'video/mp4' }),
+  ]);
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => {
-    expect(attachmentsSeen).toHaveLength(1);
+    expect(attachmentsSeen).toHaveLength(3);
   });
-  expect(attachmentsSeen[0].mime).toBe('image/jpeg');
-  expect(attachmentsSeen[0].file_name).toBe('city.jpg');
+  expect(attachmentsSeen.map((attachment) => attachment.role)).toEqual([
+    'image_original',
+    'video_manifest',
+    'video_poster',
+  ]);
 });
 
-test('desktop shell can publish a video post with poster from composer', async () => {
-  const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
-
-  await user.upload(
-    screen.getByLabelText('Attach Videos'),
-    new File([Uint8Array.from([1, 2, 3, 4, 5])], 'clip.mp4', { type: 'video/mp4' })
-  );
-  await user.upload(
-    screen.getByLabelText('Attach Video Posters'),
-    new File([Uint8Array.from([5, 4, 3, 2, 1])], 'clip-poster.jpg', { type: 'image/jpeg' })
-  );
-  await user.click(screen.getByRole('button', { name: 'Publish' }));
-
-  await waitFor(() => {
-    expect(screen.getAllByText('video ready').length).toBeGreaterThan(0);
-  });
-  expect(screen.getByText('video/mp4')).toBeInTheDocument();
-});
-
-test('desktop shell sends video and poster attachments through createPost', async () => {
+test('video upload generates poster attachment before publish', async () => {
+  installObjectUrlMocks();
+  installSuccessfulPosterGenerationMocks();
   let attachmentsSeen: CreateAttachmentInput[] = [];
   const api = createMockApi();
   const originalCreatePost = api.createPost;
@@ -372,14 +392,17 @@ test('desktop shell sends video and poster attachments through createPost', asyn
 
   const user = userEvent.setup();
   render(<App api={api} />);
+
   await user.upload(
-    screen.getByLabelText('Attach Videos'),
+    screen.getByLabelText('Attach'),
     new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
   );
-  await user.upload(
-    screen.getByLabelText('Attach Video Posters'),
-    new File([Uint8Array.from([9, 8, 7])], 'clip-poster.png', { type: 'image/png' })
-  );
+
+  await waitFor(() => {
+    expect(screen.getByText(/video_manifest/)).toBeInTheDocument();
+  });
+  expect(screen.getByText(/video_poster/)).toBeInTheDocument();
+
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => {
@@ -387,6 +410,63 @@ test('desktop shell sends video and poster attachments through createPost', asyn
   });
   expect(attachmentsSeen.some((attachment) => attachment.role === 'video_manifest')).toBe(true);
   expect(attachmentsSeen.some((attachment) => attachment.role === 'video_poster')).toBe(true);
+});
+
+test('video poster generation failure blocks publish', async () => {
+  installObjectUrlMocks();
+  installFailedPosterGenerationMocks();
+  const api = createMockApi();
+  const createPostSpy = vi.fn(api.createPost);
+  api.createPost = createPostSpy;
+
+  const user = userEvent.setup();
+  render(<App api={api} />);
+
+  await user.upload(
+    screen.getByLabelText('Attach'),
+    new File([Uint8Array.from([1, 3, 5, 7])], 'broken.mp4', { type: 'video/mp4' })
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('failed to generate video poster')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  expect(createPostSpy).not.toHaveBeenCalled();
+});
+
+test('composer shows image draft preview before publish', async () => {
+  installObjectUrlMocks();
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.upload(
+    screen.getByLabelText('Attach'),
+    new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' })
+  );
+
+  expect(await screen.findByRole('img', { name: 'draft preview flower.png' })).toBeInTheDocument();
+  expect(screen.getByText(/image_original/)).toBeInTheDocument();
+  expect(screen.getByText(/image\/png/)).toBeInTheDocument();
+  expect(screen.getByText(/4 B/)).toBeInTheDocument();
+});
+
+test('composer shows video poster draft preview before publish', async () => {
+  installObjectUrlMocks();
+  installSuccessfulPosterGenerationMocks();
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.upload(
+    screen.getByLabelText('Attach'),
+    new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
+  );
+
+  expect(await screen.findByRole('img', { name: 'draft preview clip.mp4' })).toBeInTheDocument();
+  expect(screen.getByText(/video_manifest/)).toBeInTheDocument();
+  expect(screen.getByText(/video_poster/)).toBeInTheDocument();
+  expect(screen.getByText(/image\/jpeg/)).toBeInTheDocument();
 });
 
 test('timeline image post shows media skeleton when attachment is missing', async () => {
@@ -450,7 +530,8 @@ test('timeline image post switches to ready state when attachment becomes availa
   expect(screen.queryByText('syncing image')).not.toBeInTheDocument();
 });
 
-test('timeline image post renders actual preview when preview url is available', async () => {
+test('timeline image post renders actual preview when object-url payload is available', async () => {
+  installObjectUrlMocks();
   const api = createMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
@@ -470,13 +551,16 @@ test('timeline image post renders actual preview when preview url is available',
       ],
     },
   });
-  api.getBlobPreviewUrl = async () => 'data:image/png;base64,ZmFrZQ==';
+  api.getBlobMediaPayload = async () => ({
+    bytes_base64: 'ZmFrZS1pbWFnZQ==',
+    mime: 'image/png',
+  });
 
   render(<App api={api} />);
 
-  await waitFor(() => {
-    expect(screen.getByTestId('media-preview-image-post')).toBeInTheDocument();
-  });
+  const preview = await screen.findByTestId('media-preview-image-post');
+  expect(preview).toBeInTheDocument();
+  expect(preview.getAttribute('src')).toContain('blob:mock-');
 });
 
 test('thread pane reuses the same image placeholder renderer', async () => {
@@ -538,15 +622,14 @@ test('text body pending uses text skeleton without hiding image metadata', async
 });
 
 test('timeline video post shows poster skeleton when poster is missing', async () => {
-  render(
-    <App
-      api={createMockApi({
-        seedPosts: {
-          'kukuri:topic:demo': [buildVideoPost()],
-        },
-      })}
-    />
-  );
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [buildVideoPost()],
+    },
+  });
+  api.getBlobMediaPayload = async () => null;
+
+  render(<App api={api} />);
 
   await waitFor(() => {
     expect(screen.getByText('syncing poster')).toBeInTheDocument();
@@ -555,7 +638,8 @@ test('timeline video post shows poster skeleton when poster is missing', async (
   expect(screen.getByText('video/mp4')).toBeInTheDocument();
 });
 
-test('timeline video post renders poster preview when available', async () => {
+test('poster-only video card renders poster preview without video element', async () => {
+  installObjectUrlMocks();
   const api = createMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
@@ -566,7 +650,7 @@ test('timeline video post renders poster preview when available', async () => {
               mime: 'video/mp4',
               bytes: 8192,
               role: 'video_manifest',
-              status: 'Available',
+              status: 'Missing',
             },
             {
               hash: 'p'.repeat(64),
@@ -580,18 +664,24 @@ test('timeline video post renders poster preview when available', async () => {
       ],
     },
   });
-  api.getBlobPreviewUrl = async (hash) =>
-    hash === 'p'.repeat(64) ? 'data:image/jpeg;base64,ZmFrZQ==' : null;
+  api.getBlobMediaPayload = async (hash, mime) =>
+    hash === 'p'.repeat(64)
+      ? {
+          bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+          mime,
+        }
+      : null;
 
   render(<App api={api} />);
 
-  await waitFor(() => {
-    expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
-  });
-  expect(screen.getAllByText('video ready').length).toBeGreaterThan(0);
+  const posterPreview = await screen.findByTestId('media-preview-video-post');
+  expect(posterPreview).toBeInTheDocument();
+  expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
+  expect(screen.getAllByText('poster ready').length).toBeGreaterThan(0);
 });
 
-test('timeline video post renders playable source when manifest url is available', async () => {
+test('video card renders object-url playback source when manifest payload is available', async () => {
+  installObjectUrlMocks();
   const api = createMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
@@ -616,12 +706,18 @@ test('timeline video post renders playable source when manifest url is available
       ],
     },
   });
-  api.getBlobPreviewUrl = async (hash) => {
+  api.getBlobMediaPayload = async (hash, mime) => {
     if (hash === 'manifest'.repeat(8)) {
-      return 'data:video/mp4;base64,ZmFrZS12aWRlbw==';
+      return {
+        bytes_base64: 'ZmFrZS12aWRlbw==',
+        mime,
+      };
     }
     if (hash === 'poster'.repeat(8)) {
-      return 'data:image/jpeg;base64,ZmFrZS1wb3N0ZXI=';
+      return {
+        bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+        mime,
+      };
     }
     return null;
   };
@@ -630,6 +726,7 @@ test('timeline video post renders playable source when manifest url is available
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
+  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
   const source = video.querySelector('source');
-  expect(source?.getAttribute('src')).toContain('data:video/mp4;base64,');
+  expect(source?.getAttribute('src')).toContain('blob:mock-');
 });

@@ -53,6 +53,12 @@ pub struct AttachmentView {
     pub status: BlobViewStatus,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlobMediaPayload {
+    pub bytes_base64: String,
+    pub mime: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingAttachment {
     pub mime: String,
@@ -341,7 +347,11 @@ impl AppService {
         self.transport.export_ticket().await
     }
 
-    pub async fn blob_preview_data_url(&self, hash: &str, mime: &str) -> Result<Option<String>> {
+    pub async fn blob_media_payload(
+        &self,
+        hash: &str,
+        mime: &str,
+    ) -> Result<Option<BlobMediaPayload>> {
         let Some(bytes) = self
             .blob_service
             .fetch_blob(&kukuri_core::BlobHash::new(hash.to_string()))
@@ -349,9 +359,19 @@ impl AppService {
         else {
             return Ok(None);
         };
+        Ok(Some(BlobMediaPayload {
+            bytes_base64: BASE64_STANDARD.encode(bytes),
+            mime: mime.to_string(),
+        }))
+    }
+
+    pub async fn blob_preview_data_url(&self, hash: &str, mime: &str) -> Result<Option<String>> {
+        let Some(payload) = self.blob_media_payload(hash, mime).await? else {
+            return Ok(None);
+        };
         Ok(Some(format!(
-            "data:{mime};base64,{}",
-            BASE64_STANDARD.encode(bytes)
+            "data:{};base64,{}",
+            payload.mime, payload.bytes_base64
         )))
     }
 
@@ -1746,7 +1766,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn blob_preview_data_url_roundtrip() {
+    async fn blob_media_payload_roundtrip() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
         let blob_service = Arc::new(MemoryBlobService::default());
@@ -1764,17 +1784,18 @@ mod tests {
             .put_blob(b"fake-image".to_vec(), "image/png")
             .await
             .expect("put image");
-        let preview = app
-            .blob_preview_data_url(stored.hash.as_str(), "image/png")
+        let payload = app
+            .blob_media_payload(stored.hash.as_str(), "image/png")
             .await
-            .expect("preview data url")
-            .expect("preview present");
+            .expect("media payload")
+            .expect("media payload present");
 
-        assert_eq!(preview, "data:image/png;base64,ZmFrZS1pbWFnZQ==");
+        assert_eq!(payload.bytes_base64, "ZmFrZS1pbWFnZQ==");
+        assert_eq!(payload.mime, "image/png");
         assert!(
-            app.blob_preview_data_url(&"f".repeat(64), "image/png")
+            app.blob_media_payload(&"f".repeat(64), "image/png")
                 .await
-                .expect("missing preview")
+                .expect("missing payload")
                 .is_none()
         );
     }
@@ -1952,7 +1973,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn iroh_transport_syncs_video_post_between_apps() {
+    async fn remote_video_manifest_payload_available_after_sync() {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("video-post-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("video-post-b")).await;
@@ -2026,25 +2047,23 @@ mod tests {
             .find(|attachment| attachment.role == "video_poster")
             .expect("video poster");
         assert_eq!(poster.status, BlobViewStatus::Available);
-        assert!(
-            app_b
-                .blob_preview_data_url(poster.hash.as_str(), "image/jpeg")
-                .await
-                .expect("poster preview data url")
-                .is_some()
-        );
+        let poster_payload = app_b
+            .blob_media_payload(poster.hash.as_str(), "image/jpeg")
+            .await
+            .expect("poster media payload")
+            .expect("poster payload present");
+        assert_eq!(poster_payload.mime, "image/jpeg");
         let manifest = received
             .attachments
             .iter()
             .find(|attachment| attachment.role == "video_manifest")
             .expect("video manifest");
-        assert!(
-            app_b
-                .blob_preview_data_url(manifest.hash.as_str(), "video/mp4")
-                .await
-                .expect("video playback data url")
-                .is_some()
-        );
+        let manifest_payload = app_b
+            .blob_media_payload(manifest.hash.as_str(), "video/mp4")
+            .await
+            .expect("video media payload")
+            .expect("manifest payload present");
+        assert_eq!(manifest_payload.mime, "video/mp4");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2189,7 +2208,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn late_joiner_backfills_video_post_from_docs() {
+    async fn late_joiner_backfills_video_media_payload() {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("late-video-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("late-video-b")).await;
@@ -2243,25 +2262,23 @@ mod tests {
             .find(|attachment| attachment.role == "video_poster")
             .expect("video poster");
         assert_eq!(poster.status, BlobViewStatus::Available);
-        assert!(
-            app_b
-                .blob_preview_data_url(poster.hash.as_str(), "image/jpeg")
-                .await
-                .expect("poster preview data url")
-                .is_some()
-        );
+        let poster_payload = app_b
+            .blob_media_payload(poster.hash.as_str(), "image/jpeg")
+            .await
+            .expect("poster media payload")
+            .expect("poster payload present");
+        assert_eq!(poster_payload.mime, "image/jpeg");
         let manifest = received
             .attachments
             .iter()
             .find(|attachment| attachment.role == "video_manifest")
             .expect("video manifest");
-        assert!(
-            app_b
-                .blob_preview_data_url(manifest.hash.as_str(), "video/mp4")
-                .await
-                .expect("video playback data url")
-                .is_some()
-        );
+        let manifest_payload = app_b
+            .blob_media_payload(manifest.hash.as_str(), "video/mp4")
+            .await
+            .expect("video media payload")
+            .expect("manifest payload present");
+        assert_eq!(manifest_payload.mime, "video/mp4");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

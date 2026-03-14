@@ -36,6 +36,11 @@ export type CreateAttachmentInput = {
   role?: string | null;
 };
 
+export type BlobMediaPayload = {
+  bytes_base64: string;
+  mime: string;
+};
+
 export type TimelineView = {
   items: PostView[];
   next_cursor?: TimelineCursor | null;
@@ -83,6 +88,7 @@ export interface DesktopApi {
   importPeerTicket(ticket: string): Promise<void>;
   unsubscribeTopic(topic: string): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
+  getBlobMediaPayload(hash: string, mime: string): Promise<BlobMediaPayload | null>;
   getBlobPreviewUrl(hash: string, mime: string): Promise<string | null>;
 }
 
@@ -166,6 +172,17 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.getLocalPeerTicket();
     }
     return invoke<string | null>('get_local_peer_ticket').catch(() => unavailable());
+  },
+  getBlobMediaPayload: async (hash, mime) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getBlobMediaPayload(hash, mime);
+    }
+    return invoke<BlobMediaPayload | null>('get_blob_media_payload', {
+      request: {
+        hash,
+        mime,
+      },
+    }).catch(() => unavailable());
   },
   getBlobPreviewUrl: async (hash, mime) => {
     if (window.__KUKURI_DESKTOP__) {

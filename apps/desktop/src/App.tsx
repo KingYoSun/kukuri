@@ -1,7 +1,17 @@
-import { ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ChangeEvent,
+  FormEvent,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   AttachmentView,
+  BlobMediaPayload,
   CreateAttachmentInput,
   DesktopApi,
   PostView,
@@ -14,8 +24,16 @@ type AppProps = {
   api?: DesktopApi;
 };
 
+type DraftMediaItem = {
+  id: string;
+  source_name: string;
+  preview_url: string;
+  attachments: CreateAttachmentInput[];
+};
+
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
+const VIDEO_POSTER_TIMEOUT_MS = 5000;
 
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
@@ -34,10 +52,6 @@ function selectVideoManifest(post: PostView): AttachmentView | null {
   );
 }
 
-function attachmentPreviewSrc(): string | null {
-  return null;
-}
-
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -48,24 +62,151 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-async function fileToCreateAttachment(
-  file: File,
-  role: CreateAttachmentInput['role']
-): Promise<CreateAttachmentInput> {
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
+  return window.btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function createObjectUrlFromPayload(payload: BlobMediaPayload): string {
+  const bytes = base64ToBytes(payload.bytes_base64);
+  const normalizedBytes = new Uint8Array(bytes.length);
+  normalizedBytes.set(bytes);
+  return URL.createObjectURL(new Blob([normalizedBytes], { type: payload.mime }));
+}
+
+async function blobToCreateAttachment(
+  blob: Blob,
+  fileName: string,
+  role: CreateAttachmentInput['role']
+): Promise<CreateAttachmentInput> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
   return {
-    file_name: file.name,
-    mime: file.type || 'application/octet-stream',
-    byte_size: file.size,
-    data_base64: window.btoa(binary),
+    file_name: fileName,
+    mime: blob.type || 'application/octet-stream',
+    byte_size: blob.size,
+    data_base64: bytesToBase64(bytes),
     role,
   };
+}
+
+async function fileToCreateAttachment(
+  file: File,
+  role: CreateAttachmentInput['role']
+): Promise<CreateAttachmentInput> {
+  return blobToCreateAttachment(file, file.name, role);
+}
+
+function posterFileName(fileName: string): string {
+  const extensionIndex = fileName.lastIndexOf('.');
+  const baseName = extensionIndex >= 0 ? fileName.slice(0, extensionIndex) : fileName;
+  return `${baseName}.poster.jpg`;
+}
+
+async function generateVideoPoster(file: File): Promise<File> {
+  const videoObjectUrl = URL.createObjectURL(file);
+
+  try {
+    return await new Promise<File>((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      let finished = false;
+
+      const fail = () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        reject(new Error('failed to generate video poster'));
+      };
+
+      const timeoutId = window.setTimeout(fail, VIDEO_POSTER_TIMEOUT_MS);
+
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        video.removeAttribute('src');
+      };
+
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+
+      video.addEventListener(
+        'loadeddata',
+        () => {
+          if (finished) {
+            return;
+          }
+
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+          if (!width || !height) {
+            cleanup();
+            fail();
+            return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext('2d');
+          if (!context) {
+            cleanup();
+            fail();
+            return;
+          }
+
+          context.drawImage(video, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (finished) {
+                return;
+              }
+              cleanup();
+              if (!blob) {
+                fail();
+                return;
+              }
+              finished = true;
+              resolve(
+                new File([blob], posterFileName(file.name), {
+                  type: 'image/jpeg',
+                })
+              );
+            },
+            'image/jpeg',
+            0.85
+          );
+        },
+        { once: true }
+      );
+
+      video.addEventListener(
+        'error',
+        () => {
+          cleanup();
+          fail();
+        },
+        { once: true }
+      );
+
+      video.src = videoObjectUrl;
+      video.load();
+    });
+  } finally {
+    URL.revokeObjectURL(videoObjectUrl);
+  }
 }
 
 export function App({ api = runtimeApi }: AppProps) {
@@ -73,7 +214,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
   const [topicInput, setTopicInput] = useState('');
   const [composer, setComposer] = useState('');
-  const [draftAttachments, setDraftAttachments] = useState<CreateAttachmentInput[]>([]);
+  const [draftMediaItems, setDraftMediaItems] = useState<DraftMediaItem[]>([]);
   const [attachmentInputKey, setAttachmentInputKey] = useState(0);
   const [timelinesByTopic, setTimelinesByTopic] = useState<Record<string, PostView[]>>({
     [DEFAULT_TOPIC]: [],
@@ -83,7 +224,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
   const [peerTicket, setPeerTicket] = useState('');
   const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
-  const [blobPreviewUrls, setBlobPreviewUrls] = useState<Record<string, string | null>>({});
+  const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string | null>>({});
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     connected: false,
     peer_count: 0,
@@ -94,7 +235,11 @@ export function App({ api = runtimeApi }: AppProps) {
     subscribed_topics: [],
     topic_diagnostics: [],
   });
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const draftSequenceRef = useRef(0);
+  const remoteObjectUrlRef = useRef(new Map<string, string>());
+  const draftPreviewUrlRef = useRef(new Map<string, string>());
 
   const headline = useMemo(
     () => (syncStatus.connected ? 'Live over static peers' : 'Local-first shell'),
@@ -112,45 +257,60 @@ export function App({ api = runtimeApi }: AppProps) {
       ) as Record<string, TopicSyncStatus>,
     [syncStatus.topic_diagnostics]
   );
-
-  const loadTopics = useCallback(async (
-    currentTopics: string[],
-    currentActiveTopic: string,
-    currentThread: string | null
-  ) => {
-    try {
-      const [timelineViews, status, ticket, threadView] = await Promise.all([
-        Promise.all(
-          currentTopics.map(async (topic) => ({
-            topic,
-            timeline: await api.listTimeline(topic, null, 50),
-          }))
-        ),
-        api.getSyncStatus(),
-        api.getLocalPeerTicket(),
-        currentThread
-          ? api.listThread(currentActiveTopic, currentThread, null, 50)
-          : Promise.resolve(null),
-      ]);
-      startTransition(() => {
-        setTimelinesByTopic(
-          Object.fromEntries(
-            timelineViews.map(({ topic, timeline }) => [topic, timeline.items])
-          )
-        );
-        setSyncStatus(status);
-        setLocalPeerTicket(ticket);
-        if (threadView) {
-          setThread(threadView.items);
-        } else if (!currentThread) {
-          setThread([]);
+  const previewableMediaAttachments = useMemo(() => {
+    const attachments = new Map<string, AttachmentView>();
+    for (const post of [...activeTimeline, ...thread]) {
+      for (const attachment of [
+        selectPrimaryImage(post),
+        selectVideoPoster(post),
+        selectVideoManifest(post),
+      ]) {
+        if (
+          attachment &&
+          (attachment.status === 'Available' || attachment.status === 'Pinned')
+        ) {
+          attachments.set(attachment.hash, attachment);
         }
-        setError(null);
-      });
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
+      }
     }
-  }, [api]);
+    return [...attachments.values()];
+  }, [activeTimeline, thread]);
+
+  const loadTopics = useCallback(
+    async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
+      try {
+        const [timelineViews, status, ticket, threadView] = await Promise.all([
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              timeline: await api.listTimeline(topic, null, 50),
+            }))
+          ),
+          api.getSyncStatus(),
+          api.getLocalPeerTicket(),
+          currentThread
+            ? api.listThread(currentActiveTopic, currentThread, null, 50)
+            : Promise.resolve(null),
+        ]);
+        startTransition(() => {
+          setTimelinesByTopic(
+            Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
+          );
+          setSyncStatus(status);
+          setLocalPeerTicket(ticket);
+          if (threadView) {
+            setThread(threadView.items);
+          } else if (!currentThread) {
+            setThread([]);
+          }
+          setError(null);
+        });
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
+      }
+    },
+    [api]
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -174,34 +334,53 @@ export function App({ api = runtimeApi }: AppProps) {
   }, [activeTopic, loadTopics, selectedThread, trackedTopics]);
 
   useEffect(() => {
-    const posts = [...activeTimeline, ...thread];
-    const previewableAttachments = posts
-      .flatMap((post) => [
-        selectPrimaryImage(post),
-        selectVideoPoster(post),
-        selectVideoManifest(post),
-      ])
-      .filter((attachment): attachment is AttachmentView => attachment !== null)
-      .filter((attachment) => attachment.status === 'Available' || attachment.status === 'Pinned');
+    const remoteObjectUrls = remoteObjectUrlRef.current;
+    const draftPreviewUrls = draftPreviewUrlRef.current;
 
+    return () => {
+      for (const url of remoteObjectUrls.values()) {
+        URL.revokeObjectURL(url);
+      }
+      remoteObjectUrls.clear();
+      for (const url of draftPreviewUrls.values()) {
+        URL.revokeObjectURL(url);
+      }
+      draftPreviewUrls.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     let disposed = false;
-    for (const attachment of previewableAttachments) {
-      if (blobPreviewUrls[attachment.hash] !== undefined) {
+
+    for (const attachment of previewableMediaAttachments) {
+      if (mediaObjectUrls[attachment.hash] !== undefined) {
         continue;
       }
+
       void api
-        .getBlobPreviewUrl(attachment.hash, attachment.mime)
-        .then((url) => {
+        .getBlobMediaPayload(attachment.hash, attachment.mime)
+        .then((payload) => {
+          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (disposed) {
+            if (nextUrl) {
+              URL.revokeObjectURL(nextUrl);
+            }
             return;
           }
-          setBlobPreviewUrls((current) => {
+
+          setMediaObjectUrls((current) => {
             if (current[attachment.hash] !== undefined) {
+              if (nextUrl) {
+                URL.revokeObjectURL(nextUrl);
+              }
               return current;
+            }
+            if (nextUrl) {
+              remoteObjectUrlRef.current.set(attachment.hash, nextUrl);
             }
             return {
               ...current,
-              [attachment.hash]: url,
+              [attachment.hash]: nextUrl,
             };
           });
         })
@@ -209,7 +388,7 @@ export function App({ api = runtimeApi }: AppProps) {
           if (disposed) {
             return;
           }
-          setBlobPreviewUrls((current) => {
+          setMediaObjectUrls((current) => {
             if (current[attachment.hash] !== undefined) {
               return current;
             }
@@ -224,7 +403,55 @@ export function App({ api = runtimeApi }: AppProps) {
     return () => {
       disposed = true;
     };
-  }, [activeTimeline, api, blobPreviewUrls, thread]);
+  }, [api, mediaObjectUrls, previewableMediaAttachments]);
+
+  function nextDraftId(): string {
+    draftSequenceRef.current += 1;
+    return `draft-${draftSequenceRef.current}`;
+  }
+
+  function rememberDraftPreview(item: DraftMediaItem) {
+    draftPreviewUrlRef.current.set(item.id, item.preview_url);
+  }
+
+  function releaseDraftPreview(itemId: string) {
+    const previewUrl = draftPreviewUrlRef.current.get(itemId);
+    if (!previewUrl) {
+      return;
+    }
+    URL.revokeObjectURL(previewUrl);
+    draftPreviewUrlRef.current.delete(itemId);
+  }
+
+  function releaseAllDraftPreviews() {
+    for (const [itemId, previewUrl] of draftPreviewUrlRef.current.entries()) {
+      URL.revokeObjectURL(previewUrl);
+      draftPreviewUrlRef.current.delete(itemId);
+    }
+  }
+
+  async function buildImageDraftItem(file: File): Promise<DraftMediaItem> {
+    const attachment = await fileToCreateAttachment(file, 'image_original');
+    return {
+      id: nextDraftId(),
+      source_name: file.name,
+      preview_url: URL.createObjectURL(file),
+      attachments: [attachment],
+    };
+  }
+
+  async function buildVideoDraftItem(file: File): Promise<DraftMediaItem> {
+    const posterFile = await generateVideoPoster(file);
+    return {
+      id: nextDraftId(),
+      source_name: file.name,
+      preview_url: URL.createObjectURL(posterFile),
+      attachments: [
+        await fileToCreateAttachment(file, 'video_manifest'),
+        await blobToCreateAttachment(posterFile, posterFile.name, 'video_poster'),
+      ],
+    };
+  }
 
   function clearThreadContext() {
     setSelectedThread(null);
@@ -268,104 +495,71 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!composer.trim() && draftAttachments.length === 0) {
+    const attachments = draftMediaItems.flatMap((item) => item.attachments);
+    if (!composer.trim() && attachments.length === 0) {
       return;
     }
 
     try {
-      await api.createPost(
-        activeTopic,
-        composer.trim(),
-        replyTarget?.id ?? null,
-        draftAttachments
-      );
+      await api.createPost(activeTopic, composer.trim(), replyTarget?.id ?? null, attachments);
+      releaseAllDraftPreviews();
       setComposer('');
-      setDraftAttachments([]);
+      setDraftMediaItems([]);
       setAttachmentInputKey((value) => value + 1);
+      setComposerError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       if (selectedThread) {
         await openThread(selectedThread);
       }
       setReplyTarget(null);
     } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : 'failed to publish');
+      setComposerError(
+        publishError instanceof Error ? publishError.message : 'failed to publish'
+      );
     }
   }
 
   async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).filter((file) =>
-      file.type.startsWith('image/')
-    );
+    const files = Array.from(event.target.files ?? []);
     if (files.length === 0) {
       return;
     }
 
-    try {
-      const nextAttachments = await Promise.all(
-        files.map((file) => fileToCreateAttachment(file, 'image_original'))
-      );
-      setDraftAttachments((current) => [...current, ...nextAttachments]);
-      setError(null);
-      setAttachmentInputKey((value) => value + 1);
-    } catch (attachmentError) {
-      setError(
-        attachmentError instanceof Error
-          ? attachmentError.message
-          : 'failed to read image attachment'
-      );
+    const nextItems: DraftMediaItem[] = [];
+    const failures: string[] = [];
+
+    for (const file of files) {
+      try {
+        if (file.type.startsWith('image/')) {
+          nextItems.push(await buildImageDraftItem(file));
+          continue;
+        }
+        if (file.type.startsWith('video/')) {
+          nextItems.push(await buildVideoDraftItem(file));
+          continue;
+        }
+        failures.push(`unsupported attachment type: ${file.name}`);
+      } catch (attachmentError) {
+        failures.push(
+          attachmentError instanceof Error
+            ? attachmentError.message
+            : 'failed to generate video poster'
+        );
+      }
     }
+
+    if (nextItems.length > 0) {
+      nextItems.forEach(rememberDraftPreview);
+      setDraftMediaItems((current) => [...current, ...nextItems]);
+    }
+
+    setComposerError(failures.length > 0 ? failures[0] : null);
+    setAttachmentInputKey((value) => value + 1);
   }
 
-  async function handleVideoSelection(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).filter((file) =>
-      file.type.startsWith('video/')
-    );
-    if (files.length === 0) {
-      return;
-    }
-
-    try {
-      const nextAttachments = await Promise.all(
-        files.map((file) => fileToCreateAttachment(file, 'video_manifest'))
-      );
-      setDraftAttachments((current) => [...current, ...nextAttachments]);
-      setError(null);
-      setAttachmentInputKey((value) => value + 1);
-    } catch (attachmentError) {
-      setError(
-        attachmentError instanceof Error
-          ? attachmentError.message
-          : 'failed to read video attachment'
-      );
-    }
-  }
-
-  async function handlePosterSelection(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).filter((file) =>
-      file.type.startsWith('image/')
-    );
-    if (files.length === 0) {
-      return;
-    }
-
-    try {
-      const nextAttachments = await Promise.all(
-        files.map((file) => fileToCreateAttachment(file, 'video_poster'))
-      );
-      setDraftAttachments((current) => [...current, ...nextAttachments]);
-      setError(null);
-      setAttachmentInputKey((value) => value + 1);
-    } catch (attachmentError) {
-      setError(
-        attachmentError instanceof Error
-          ? attachmentError.message
-          : 'failed to read video poster'
-      );
-    }
-  }
-
-  function handleRemoveDraftAttachment(index: number) {
-    setDraftAttachments((current) => current.filter((_, attachmentIndex) => attachmentIndex !== index));
+  function handleRemoveDraftAttachment(itemId: string) {
+    releaseDraftPreview(itemId);
+    setDraftMediaItems((current) => current.filter((item) => item.id !== itemId));
   }
 
   async function openThread(threadId: string) {
@@ -412,59 +606,72 @@ export function App({ api = runtimeApi }: AppProps) {
     const primaryImage = selectPrimaryImage(post);
     const videoPoster = selectVideoPoster(post);
     const videoManifest = selectVideoManifest(post);
-    const primaryMedia = primaryImage ?? videoPoster ?? videoManifest;
-    const mediaKind = primaryImage ? 'image' : videoManifest ? 'video' : null;
-    const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? primaryMedia : primaryMedia;
-    const extraAttachmentCount = primaryMedia
-      ? Math.max(post.attachments.filter((attachment) => attachment !== primaryMedia).length, 0)
-      : 0;
+    const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
+    const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
+    const reservedHashes = new Set<string>();
+    if (primaryImage) {
+      reservedHashes.add(primaryImage.hash);
+    }
+    if (videoPoster) {
+      reservedHashes.add(videoPoster.hash);
+    }
+    if (videoManifest) {
+      reservedHashes.add(videoManifest.hash);
+    }
+    const extraAttachmentCount = post.attachments.filter(
+      (attachment) => !reservedHashes.has(attachment.hash)
+    ).length;
     const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
-    const imagePreviewSrc = primaryImage
-      ? blobPreviewUrls[primaryImage.hash] ?? attachmentPreviewSrc()
-      : null;
-    const videoPosterPreviewSrc = videoPoster
-      ? blobPreviewUrls[videoPoster.hash] ?? attachmentPreviewSrc()
-      : null;
-    const videoPreviewSrc = videoManifest
-      ? blobPreviewUrls[videoManifest.hash] ?? attachmentPreviewSrc()
-      : null;
-    const mediaPreviewSrc =
-      mediaKind === 'video' ? videoPosterPreviewSrc : imagePreviewSrc;
-    const mediaIsReady = primaryMedia ? primaryMedia.status !== 'Missing' : false;
+    const imagePreviewSrc =
+      primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
+        ? mediaObjectUrls[primaryImage.hash]
+        : null;
+    const videoPosterPreviewSrc =
+      videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
+        ? mediaObjectUrls[videoPoster.hash]
+        : null;
+    const videoPlaybackSrc =
+      videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
+        ? mediaObjectUrls[videoManifest.hash]
+        : null;
     const mediaStatusLabel =
       mediaKind === 'video'
-        ? mediaIsReady
-          ? 'video ready'
-          : 'syncing poster'
-        : mediaIsReady
-          ? 'image ready'
-          : 'syncing image';
+        ? videoPlaybackSrc
+          ? 'playable video'
+          : videoPosterPreviewSrc
+            ? 'poster ready'
+            : 'syncing poster'
+        : mediaKind === 'image'
+          ? imagePreviewSrc
+            ? 'image ready'
+            : 'syncing image'
+          : null;
     const threadTargetId = post.root_id ?? post.id;
 
     return (
       <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
-        <button
-          className='post-link'
-          type='button'
-          onClick={() => void openThread(threadTargetId)}
-        >
+        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
           <div className='post-meta'>
             <span>{post.author_npub}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
-          {primaryMedia ? (
+          {mediaKind ? (
             <>
               <div
-                className={mediaIsReady ? 'media-frame media-frame-ready' : 'media-frame media-frame-loading'}
+                className={
+                  mediaStatusLabel === 'syncing image' || mediaStatusLabel === 'syncing poster'
+                    ? 'media-frame media-frame-loading'
+                    : 'media-frame media-frame-ready'
+                }
               >
                 <div className='media-badges'>
-                  <span className='media-status-badge'>{mediaStatusLabel}</span>
+                  {mediaStatusLabel ? <span className='media-status-badge'>{mediaStatusLabel}</span> : null}
                   {mediaKind === 'video' ? <span className='media-type-badge'>video</span> : null}
                   {extraAttachmentCount > 0 ? (
                     <span className='media-count-badge'>+{extraAttachmentCount}</span>
                   ) : null}
                 </div>
-                {mediaKind === 'video' && videoPreviewSrc ? (
+                {mediaKind === 'video' && videoPlaybackSrc ? (
                   <video
                     className='media-video'
                     controls
@@ -472,22 +679,22 @@ export function App({ api = runtimeApi }: AppProps) {
                     poster={videoPosterPreviewSrc ?? undefined}
                     data-testid={`media-video-${post.id}`}
                   >
-                    <source src={videoPreviewSrc} type={videoManifest?.mime ?? 'video/mp4'} />
+                    <source src={videoPlaybackSrc} type={videoManifest?.mime ?? 'video/mp4'} />
                   </video>
-                ) : mediaIsReady && mediaPreviewSrc ? (
+                ) : mediaKind === 'video' && videoPosterPreviewSrc ? (
                   <img
                     className='media-preview'
-                    src={mediaPreviewSrc}
-                    alt={primaryMedia.mime}
+                    src={videoPosterPreviewSrc}
+                    alt={videoPoster?.mime ?? 'video poster'}
                     data-testid={`media-preview-${post.id}`}
                   />
-                ) : mediaIsReady ? (
-                  <div
-                    className='media-ready-placeholder'
-                    data-testid={`media-ready-${post.id}`}
-                  >
-                    <span>{mediaKind === 'video' ? 'poster preview' : 'preview pending'}</span>
-                  </div>
+                ) : mediaKind === 'image' && imagePreviewSrc ? (
+                  <img
+                    className='media-preview'
+                    src={imagePreviewSrc}
+                    alt={primaryImage?.mime ?? 'image attachment'}
+                    data-testid={`media-preview-${post.id}`}
+                  />
                 ) : (
                   <div
                     className='media-skeleton'
@@ -522,11 +729,7 @@ export function App({ api = runtimeApi }: AppProps) {
           {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
         </button>
         <div className='post-actions'>
-          <button
-            className='button button-secondary'
-            type='button'
-            onClick={() => beginReply(post)}
-          >
+          <button className='button button-secondary' type='button' onClick={() => beginReply(post)}>
             Reply
           </button>
         </div>
@@ -628,15 +831,9 @@ export function App({ api = runtimeApi }: AppProps) {
               {trackedTopics.map((topic) => (
                 <li
                   key={topic}
-                  className={
-                    topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'
-                  }
+                  className={topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'}
                 >
-                  <button
-                    className='topic-link'
-                    type='button'
-                    onClick={() => void handleSelectTopic(topic)}
-                  >
+                  <button className='topic-link' type='button' onClick={() => void handleSelectTopic(topic)}>
                     {topic}
                   </button>
                   {trackedTopics.length > 1 ? (
@@ -660,19 +857,11 @@ export function App({ api = runtimeApi }: AppProps) {
                     </small>
                   </div>
                   <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      expected:{' '}
-                      {(topicDiagnostics[topic]?.configured_peer_ids.length ?? 0)}
-                    </span>
-                    <span>
-                      missing:{' '}
-                      {(topicDiagnostics[topic]?.missing_peer_ids.length ?? 0)}
-                    </span>
+                    <span>expected: {topicDiagnostics[topic]?.configured_peer_ids.length ?? 0}</span>
+                    <span>missing: {topicDiagnostics[topic]?.missing_peer_ids.length ?? 0}</span>
                   </div>
                   <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      {topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}
-                    </span>
+                    <span>{topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}</span>
                   </div>
                   {topicDiagnostics[topic]?.last_error ? (
                     <div className='topic-diagnostic topic-diagnostic-error'>
@@ -703,11 +892,7 @@ export function App({ api = runtimeApi }: AppProps) {
                   <strong>Replying</strong>
                   <p>{replyTarget.content}</p>
                 </div>
-                <button
-                  className='button button-secondary'
-                  type='button'
-                  onClick={clearReply}
-                >
+                <button className='button button-secondary' type='button' onClick={clearReply}>
                   Clear
                 </button>
               </div>
@@ -718,58 +903,45 @@ export function App({ api = runtimeApi }: AppProps) {
               placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
             />
             <label className='field file-field'>
-              <span>Attach Images</span>
+              <span>Attach</span>
               <input
                 key={attachmentInputKey}
-                aria-label='Attach Images'
+                aria-label='Attach'
                 type='file'
-                accept='image/*'
+                accept='image/*,video/*'
                 multiple
                 onChange={(event) => {
                   void handleAttachmentSelection(event);
                 }}
               />
             </label>
-            <label className='field file-field'>
-              <span>Attach Videos</span>
-              <input
-                key={`video-${attachmentInputKey}`}
-                aria-label='Attach Videos'
-                type='file'
-                accept='video/*'
-                multiple
-                onChange={(event) => {
-                  void handleVideoSelection(event);
-                }}
-              />
-            </label>
-            <label className='field file-field'>
-              <span>Attach Video Posters</span>
-              <input
-                key={`poster-${attachmentInputKey}`}
-                aria-label='Attach Video Posters'
-                type='file'
-                accept='image/*'
-                multiple
-                onChange={(event) => {
-                  void handlePosterSelection(event);
-                }}
-              />
-            </label>
-            {draftAttachments.length > 0 ? (
+            {composerError ? <p className='error error-inline'>{composerError}</p> : null}
+            {draftMediaItems.length > 0 ? (
               <ul className='draft-attachment-list'>
-                {draftAttachments.map((attachment, index) => (
-                  <li key={`${attachment.file_name ?? attachment.mime}-${index}`} className='draft-attachment-item'>
-                    <div>
-                      <strong>{attachment.file_name ?? attachment.mime}</strong>
-                      <small>
-                        {attachment.role ?? 'attachment'} · {formatBytes(attachment.byte_size)}
-                      </small>
+                {draftMediaItems.map((item) => (
+                  <li key={item.id} className='draft-attachment-item'>
+                    <div className='draft-attachment-content'>
+                      <div className='draft-preview-frame'>
+                        <img
+                          className='draft-preview-image'
+                          src={item.preview_url}
+                          alt={`draft preview ${item.source_name}`}
+                        />
+                      </div>
+                      <div>
+                        <strong>{item.source_name}</strong>
+                        {item.attachments.map((attachment) => (
+                          <small key={`${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`}>
+                            {attachment.role ?? 'attachment'} · {attachment.mime} ·{' '}
+                            {formatBytes(attachment.byte_size)}
+                          </small>
+                        ))}
+                      </div>
                     </div>
                     <button
                       className='button button-secondary'
                       type='button'
-                      onClick={() => handleRemoveDraftAttachment(index)}
+                      onClick={() => handleRemoveDraftAttachment(item.id)}
                     >
                       Remove
                     </button>

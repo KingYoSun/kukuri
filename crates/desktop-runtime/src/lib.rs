@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use kukuri_app_api::{AppService, PendingAttachment, SyncStatus, TimelineView};
+use kukuri_app_api::{AppService, BlobMediaPayload, PendingAttachment, SyncStatus, TimelineView};
 use kukuri_blob_service::IrohBlobService;
 use kukuri_core::AssetRole;
 use kukuri_docs_sync::{IrohDocsNode, IrohDocsSync};
@@ -64,6 +64,12 @@ pub struct UnsubscribeTopicRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetBlobPreviewRequest {
+    pub hash: String,
+    pub mime: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetBlobMediaRequest {
     pub hash: String,
     pub mime: String,
 }
@@ -198,6 +204,15 @@ impl DesktopRuntime {
     ) -> Result<Option<String>> {
         self.app_service
             .blob_preview_data_url(request.hash.as_str(), request.mime.as_str())
+            .await
+    }
+
+    pub async fn get_blob_media_payload(
+        &self,
+        request: GetBlobMediaRequest,
+    ) -> Result<Option<BlobMediaPayload>> {
+        self.app_service
+            .blob_media_payload(request.hash.as_str(), request.mime.as_str())
             .await
     }
 
@@ -713,7 +728,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn late_joiner_backfills_video_post_from_docs() {
+    async fn late_joiner_backfills_video_media_payload() {
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("late-video-a.db");
         let db_b = dir.path().join("late-video-b.db");
@@ -790,12 +805,12 @@ mod tests {
             .find(|attachment| attachment.role == "video_poster")
             .expect("video poster");
         let preview = runtime_b
-            .get_blob_preview_url(GetBlobPreviewRequest {
+            .get_blob_media_payload(GetBlobMediaRequest {
                 hash: poster.hash.clone(),
                 mime: poster.mime.clone(),
             })
             .await
-            .expect("video poster preview");
+            .expect("video poster payload");
         assert!(preview.is_some());
         let manifest = received
             .attachments
@@ -803,13 +818,68 @@ mod tests {
             .find(|attachment| attachment.role == "video_manifest")
             .expect("video manifest");
         let playback = runtime_b
-            .get_blob_preview_url(GetBlobPreviewRequest {
+            .get_blob_media_payload(GetBlobMediaRequest {
                 hash: manifest.hash.clone(),
                 mime: manifest.mime.clone(),
             })
             .await
-            .expect("video playback url");
+            .expect("video playback payload");
         assert!(playback.is_some());
+    }
+
+    #[tokio::test]
+    async fn blob_media_payload_roundtrip() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("blob-media-roundtrip.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:blob-media-roundtrip";
+        let event_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "roundtrip".into(),
+                reply_to: None,
+                attachments: vec![image_attachment_request(
+                    "roundtrip.png",
+                    "image/png",
+                    b"blob-media-roundtrip",
+                )],
+            })
+            .await
+            .expect("create image post");
+        let timeline = runtime
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("timeline");
+        let created = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("created post");
+
+        let payload = runtime
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: created.attachments[0].hash.clone(),
+                mime: created.attachments[0].mime.clone(),
+            })
+            .await
+            .expect("blob media payload")
+            .expect("blob media payload present");
+
+        assert_eq!(payload.mime, "image/png");
+        assert_eq!(
+            payload.bytes_base64,
+            BASE64_STANDARD.encode(b"blob-media-roundtrip")
+        );
     }
 
     #[tokio::test]
@@ -988,7 +1058,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restart_restores_video_post_preview() {
+    async fn restart_restores_video_media_payload() {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-video.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -1052,12 +1122,12 @@ mod tests {
             .find(|attachment| attachment.role == "video_poster")
             .expect("restored poster");
         let preview = restarted
-            .get_blob_preview_url(GetBlobPreviewRequest {
+            .get_blob_media_payload(GetBlobMediaRequest {
                 hash: poster.hash.clone(),
                 mime: poster.mime.clone(),
             })
             .await
-            .expect("video preview after restart");
+            .expect("video payload after restart");
         assert!(preview.is_some());
         let manifest = restored
             .attachments
@@ -1065,12 +1135,12 @@ mod tests {
             .find(|attachment| attachment.role == "video_manifest")
             .expect("restored video manifest");
         let playback = restarted
-            .get_blob_preview_url(GetBlobPreviewRequest {
+            .get_blob_media_payload(GetBlobMediaRequest {
                 hash: manifest.hash.clone(),
                 mime: manifest.mime.clone(),
             })
             .await
-            .expect("video playback after restart");
+            .expect("video playback payload after restart");
         assert!(playback.is_some());
     }
 }

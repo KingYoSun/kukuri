@@ -29,6 +29,10 @@
 - `image_post_visible_before_full_blob_download` を attachment metadata と blob status 遷移まで広げた
 - `ADR 0004` で video post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
 - video post の最小 poster UI と sync/durability contract を追加した
+- desktop frontend の remote media 表示を `data URL` から `Blob + object URL` へ切り替え、image/video で共通 cache を使うようにした
+- composer の添付 UI を single attach に統合し、`image/*,video/*` の mixed selection を client-side で分類するようにした
+- video upload 時に browser 内の `video + canvas` で poster を自動生成し、failure 時は publish blocker にした
+- composer に draft attachment preview を追加し、image は object URL、video は generated poster で publish 前 preview できるようにした
 
 ## 検証済み
 - `cargo xtask doctor`

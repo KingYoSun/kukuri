@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
-    CreatePostRequest, DesktopRuntime, GetBlobPreviewRequest, ImportPeerTicketRequest,
-    ListThreadRequest, ListTimelineRequest, UnsubscribeTopicRequest, resolve_db_path_from_env,
+    CreatePostRequest, DesktopRuntime, GetBlobMediaRequest, GetBlobPreviewRequest,
+    ImportPeerTicketRequest, ListThreadRequest, ListTimelineRequest, UnsubscribeTopicRequest,
+    resolve_db_path_from_env,
 };
 use tauri::Manager;
 
@@ -100,6 +101,18 @@ async fn get_blob_preview_url(
         .map_err(map_error)
 }
 
+#[tauri::command]
+async fn get_blob_media_payload(
+    state: tauri::State<'_, DesktopState>,
+    request: GetBlobMediaRequest,
+) -> Result<Option<kukuri_app_api::BlobMediaPayload>, String> {
+    state
+        .runtime
+        .get_blob_media_payload(request)
+        .await
+        .map_err(map_error)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -120,6 +133,7 @@ pub fn run() {
             import_peer_ticket,
             unsubscribe_topic,
             get_local_peer_ticket,
+            get_blob_media_payload,
             get_blob_preview_url
         ])
         .run(tauri::generate_context!())
