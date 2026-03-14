@@ -797,6 +797,19 @@ mod tests {
             .await
             .expect("video poster preview");
         assert!(preview.is_some());
+        let manifest = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_manifest")
+            .expect("video manifest");
+        let playback = runtime_b
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: manifest.hash.clone(),
+                mime: manifest.mime.clone(),
+            })
+            .await
+            .expect("video playback url");
+        assert!(playback.is_some());
     }
 
     #[tokio::test]
@@ -1046,5 +1059,18 @@ mod tests {
             .await
             .expect("video preview after restart");
         assert!(preview.is_some());
+        let manifest = restored
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_manifest")
+            .expect("restored video manifest");
+        let playback = restarted
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: manifest.hash.clone(),
+                mime: manifest.mime.clone(),
+            })
+            .await
+            .expect("video playback after restart");
+        assert!(playback.is_some());
     }
 }

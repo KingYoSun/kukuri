@@ -176,7 +176,11 @@ export function App({ api = runtimeApi }: AppProps) {
   useEffect(() => {
     const posts = [...activeTimeline, ...thread];
     const previewableAttachments = posts
-      .flatMap((post) => [selectPrimaryImage(post), selectVideoPoster(post)])
+      .flatMap((post) => [
+        selectPrimaryImage(post),
+        selectVideoPoster(post),
+        selectVideoManifest(post),
+      ])
       .filter((attachment): attachment is AttachmentView => attachment !== null)
       .filter((attachment) => attachment.status === 'Available' || attachment.status === 'Pinned');
 
@@ -415,9 +419,17 @@ export function App({ api = runtimeApi }: AppProps) {
       ? Math.max(post.attachments.filter((attachment) => attachment !== primaryMedia).length, 0)
       : 0;
     const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
-    const mediaPreviewSrc = primaryMedia
-      ? blobPreviewUrls[primaryMedia.hash] ?? attachmentPreviewSrc()
+    const imagePreviewSrc = primaryImage
+      ? blobPreviewUrls[primaryImage.hash] ?? attachmentPreviewSrc()
       : null;
+    const videoPosterPreviewSrc = videoPoster
+      ? blobPreviewUrls[videoPoster.hash] ?? attachmentPreviewSrc()
+      : null;
+    const videoPreviewSrc = videoManifest
+      ? blobPreviewUrls[videoManifest.hash] ?? attachmentPreviewSrc()
+      : null;
+    const mediaPreviewSrc =
+      mediaKind === 'video' ? videoPosterPreviewSrc : imagePreviewSrc;
     const mediaIsReady = primaryMedia ? primaryMedia.status !== 'Missing' : false;
     const mediaStatusLabel =
       mediaKind === 'video'
@@ -452,7 +464,17 @@ export function App({ api = runtimeApi }: AppProps) {
                     <span className='media-count-badge'>+{extraAttachmentCount}</span>
                   ) : null}
                 </div>
-                {mediaIsReady && mediaPreviewSrc ? (
+                {mediaKind === 'video' && videoPreviewSrc ? (
+                  <video
+                    className='media-video'
+                    controls
+                    preload='metadata'
+                    poster={videoPosterPreviewSrc ?? undefined}
+                    data-testid={`media-video-${post.id}`}
+                  >
+                    <source src={videoPreviewSrc} type={videoManifest?.mime ?? 'video/mp4'} />
+                  </video>
+                ) : mediaIsReady && mediaPreviewSrc ? (
                   <img
                     className='media-preview'
                     src={mediaPreviewSrc}
@@ -460,7 +482,10 @@ export function App({ api = runtimeApi }: AppProps) {
                     data-testid={`media-preview-${post.id}`}
                   />
                 ) : mediaIsReady ? (
-                  <div className='media-ready-placeholder'>
+                  <div
+                    className='media-ready-placeholder'
+                    data-testid={`media-ready-${post.id}`}
+                  >
                     <span>{mediaKind === 'video' ? 'poster preview' : 'preview pending'}</span>
                   </div>
                 ) : (

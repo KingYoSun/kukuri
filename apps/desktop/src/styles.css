@@ -423,6 +423,13 @@ textarea {
   object-fit: cover;
 }
 
+.media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: rgba(6, 12, 18, 0.9);
+}
+
 .media-meta {
   display: flex;
   justify-content: space-between;

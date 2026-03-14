@@ -2033,6 +2033,18 @@ mod tests {
                 .expect("poster preview data url")
                 .is_some()
         );
+        let manifest = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_manifest")
+            .expect("video manifest");
+        assert!(
+            app_b
+                .blob_preview_data_url(manifest.hash.as_str(), "video/mp4")
+                .await
+                .expect("video playback data url")
+                .is_some()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2236,6 +2248,18 @@ mod tests {
                 .blob_preview_data_url(poster.hash.as_str(), "image/jpeg")
                 .await
                 .expect("poster preview data url")
+                .is_some()
+        );
+        let manifest = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_manifest")
+            .expect("video manifest");
+        assert!(
+            app_b
+                .blob_preview_data_url(manifest.hash.as_str(), "video/mp4")
+                .await
+                .expect("video playback data url")
                 .is_some()
         );
     }

@@ -356,7 +356,7 @@ test('desktop shell can publish a video post with poster from composer', async (
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => {
-    expect(screen.getByText('video ready')).toBeInTheDocument();
+    expect(screen.getAllByText('video ready').length).toBeGreaterThan(0);
   });
   expect(screen.getByText('video/mp4')).toBeInTheDocument();
 });
@@ -588,5 +588,48 @@ test('timeline video post renders poster preview when available', async () => {
   await waitFor(() => {
     expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
   });
-  expect(screen.getByText('video ready')).toBeInTheDocument();
+  expect(screen.getAllByText('video ready').length).toBeGreaterThan(0);
+});
+
+test('timeline video post renders playable source when manifest url is available', async () => {
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildVideoPost({
+          attachments: [
+            {
+              hash: 'manifest'.repeat(8),
+              mime: 'video/mp4',
+              bytes: 9999,
+              role: 'video_manifest',
+              status: 'Available',
+            },
+            {
+              hash: 'poster'.repeat(8),
+              mime: 'image/jpeg',
+              bytes: 1024,
+              role: 'video_poster',
+              status: 'Available',
+            },
+          ],
+        }),
+      ],
+    },
+  });
+  api.getBlobPreviewUrl = async (hash) => {
+    if (hash === 'manifest'.repeat(8)) {
+      return 'data:video/mp4;base64,ZmFrZS12aWRlbw==';
+    }
+    if (hash === 'poster'.repeat(8)) {
+      return 'data:image/jpeg;base64,ZmFrZS1wb3N0ZXI=';
+    }
+    return null;
+  };
+
+  render(<App api={api} />);
+
+  const video = await screen.findByTestId('media-video-video-post');
+  expect(video).toBeInTheDocument();
+  const source = video.querySelector('source');
+  expect(source?.getAttribute('src')).toContain('data:video/mp4;base64,');
 });
