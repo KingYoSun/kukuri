@@ -6,6 +6,8 @@ use kukuri_desktop_runtime::{
     resolve_db_path_from_env,
 };
 use tauri::Manager;
+use tracing::{info, warn};
+use tracing_subscriber::EnvFilter;
 
 struct DesktopState {
     runtime: Arc<DesktopRuntime>,
@@ -13,6 +15,17 @@ struct DesktopState {
 
 fn map_error(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn init_tracing() {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info")
+    });
+
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(true)
+        .try_init();
 }
 
 fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -106,15 +119,40 @@ async fn get_blob_media_payload(
     state: tauri::State<'_, DesktopState>,
     request: GetBlobMediaRequest,
 ) -> Result<Option<kukuri_app_api::BlobMediaPayload>, String> {
-    state
-        .runtime
-        .get_blob_media_payload(request)
-        .await
-        .map_err(map_error)
+    let hash = request.hash.clone();
+    let mime = request.mime.clone();
+    info!(hash = %hash, mime = %mime, "received get_blob_media_payload command");
+    match state.runtime.get_blob_media_payload(request).await {
+        Ok(Some(payload)) => {
+            info!(
+                hash = %hash,
+                mime = %mime,
+                bytes_base64_len = payload.bytes_base64.len(),
+                "returning get_blob_media_payload response"
+            );
+            Ok(Some(payload))
+        }
+        Ok(None) => {
+            warn!(hash = %hash, mime = %mime, "get_blob_media_payload returned no blob");
+            Ok(None)
+        }
+        Err(error) => {
+            let error_message = map_error(error);
+            warn!(
+                hash = %hash,
+                mime = %mime,
+                error = %error_message,
+                "get_blob_media_payload command failed"
+            );
+            Err(error_message)
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
+
     tauri::Builder::default()
         .setup(|app| {
             let db_path = resolve_db_path(app.handle())?;

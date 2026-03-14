@@ -22,6 +22,7 @@ use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tracing::{info, warn};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
@@ -352,12 +353,34 @@ impl AppService {
         hash: &str,
         mime: &str,
     ) -> Result<Option<BlobMediaPayload>> {
-        let Some(bytes) = self
+        info!(hash = %hash, mime = %mime, "blob media payload fetch requested");
+        let bytes = match self
             .blob_service
             .fetch_blob(&kukuri_core::BlobHash::new(hash.to_string()))
-            .await?
-        else {
-            return Ok(None);
+            .await
+        {
+            Ok(Some(bytes)) => {
+                info!(
+                    hash = %hash,
+                    mime = %mime,
+                    byte_len = bytes.len(),
+                    "blob media payload fetch hit"
+                );
+                bytes
+            }
+            Ok(None) => {
+                warn!(hash = %hash, mime = %mime, "blob media payload fetch miss");
+                return Ok(None);
+            }
+            Err(error) => {
+                warn!(
+                    hash = %hash,
+                    mime = %mime,
+                    error = %error,
+                    "blob media payload fetch failed"
+                );
+                return Err(error);
+            }
         };
         Ok(Some(BlobMediaPayload {
             bytes_base64: BASE64_STANDARD.encode(bytes),

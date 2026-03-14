@@ -1,6 +1,7 @@
 import {
   ChangeEvent,
   FormEvent,
+  SyntheticEvent,
   startTransition,
   useCallback,
   useEffect,
@@ -31,9 +32,13 @@ type DraftMediaItem = {
   attachments: CreateAttachmentInput[];
 };
 
+type MediaDebugValue = boolean | number | string | null | undefined;
+type MediaDebugFields = Record<string, MediaDebugValue>;
+
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
 const VIDEO_POSTER_TIMEOUT_MS = 5000;
+const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
 
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
@@ -85,6 +90,81 @@ function createObjectUrlFromPayload(payload: BlobMediaPayload): string {
   const normalizedBytes = new Uint8Array(bytes.length);
   normalizedBytes.set(bytes);
   return URL.createObjectURL(new Blob([normalizedBytes], { type: payload.mime }));
+}
+
+function isMediaDebugEnabled(): boolean {
+  if (import.meta.env.MODE === 'test') {
+    return false;
+  }
+
+  if (import.meta.env.DEV) {
+    return true;
+  }
+
+  try {
+    return window.localStorage.getItem(MEDIA_DEBUG_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function logMediaDebug(level: 'info' | 'warn', event: string, fields: MediaDebugFields): void {
+  if (!isMediaDebugEnabled()) {
+    return;
+  }
+
+  const logger = level === 'warn' ? console.warn : console.info;
+  logger(`[kukuri.media] ${event}`, fields);
+}
+
+function mediaElementDebugFields(media: HTMLMediaElement): MediaDebugFields {
+  return {
+    current_src: media.currentSrc || media.getAttribute('src') || null,
+    current_time: Number.isFinite(media.currentTime) ? media.currentTime : null,
+    duration: Number.isFinite(media.duration) ? media.duration : null,
+    ended: media.ended,
+    error_code: media.error?.code ?? null,
+    network_state: media.networkState,
+    paused: media.paused,
+    ready_state: media.readyState,
+  };
+}
+
+function attachVideoDebugListeners(
+  video: HTMLVideoElement,
+  phase: string,
+  fields: MediaDebugFields
+): () => void {
+  const eventNames = [
+    'loadstart',
+    'loadedmetadata',
+    'loadeddata',
+    'canplay',
+    'durationchange',
+    'seeked',
+    'playing',
+    'error',
+  ] as const;
+  const removeListeners = eventNames.map((eventName) => {
+    const handler = () => {
+      logMediaDebug(eventName === 'error' ? 'warn' : 'info', `${phase} ${eventName}`, {
+        ...fields,
+        ...mediaElementDebugFields(video),
+        video_height: video.videoHeight || null,
+        video_width: video.videoWidth || null,
+      });
+    };
+    video.addEventListener(eventName, handler);
+    return () => {
+      video.removeEventListener(eventName, handler);
+    };
+  });
+
+  return () => {
+    for (const removeListener of removeListeners) {
+      removeListener();
+    }
+  };
 }
 
 async function blobToCreateAttachment(
@@ -209,18 +289,37 @@ async function waitForPosterFrame(video: HTMLVideoElement): Promise<void> {
 
 async function generateVideoPoster(file: File): Promise<File> {
   const videoObjectUrl = URL.createObjectURL(file);
+  logMediaDebug('info', 'poster generation start', {
+    file_name: file.name,
+    mime: file.type || null,
+    size: file.size,
+    video_object_url: videoObjectUrl,
+  });
 
   try {
     return await new Promise<File>((resolve, reject) => {
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
       let finished = false;
+      const removeDebugListeners = attachVideoDebugListeners(video, 'poster', {
+        file_name: file.name,
+        mime: file.type || null,
+        size: file.size,
+      });
 
       const fail = () => {
         if (finished) {
           return;
         }
         finished = true;
+        logMediaDebug('warn', 'poster generation failed', {
+          file_name: file.name,
+          mime: file.type || null,
+          size: file.size,
+          ...mediaElementDebugFields(video),
+          video_height: video.videoHeight || null,
+          video_width: video.videoWidth || null,
+        });
         reject(new Error('failed to generate video poster'));
       };
 
@@ -228,6 +327,7 @@ async function generateVideoPoster(file: File): Promise<File> {
 
       const cleanup = () => {
         window.clearTimeout(timeoutId);
+        removeDebugListeners();
         try {
           video.pause();
         } catch {
@@ -264,6 +364,15 @@ async function generateVideoPoster(file: File): Promise<File> {
             return;
           }
 
+          logMediaDebug('info', 'poster frame ready', {
+            file_name: file.name,
+            height,
+            mime: file.type || null,
+            size: file.size,
+            width,
+            ...mediaElementDebugFields(video),
+          });
+
           canvas.width = width;
           canvas.height = height;
           const context = canvas.getContext('2d');
@@ -285,6 +394,13 @@ async function generateVideoPoster(file: File): Promise<File> {
                 return;
               }
               finished = true;
+              logMediaDebug('info', 'poster generation complete', {
+                blob_size: blob.size,
+                file_name: file.name,
+                mime: file.type || null,
+                poster_file_name: posterFileName(file.name),
+                size: file.size,
+              });
               resolve(
                 new File([blob], posterFileName(file.name), {
                   type: 'image/jpeg',
@@ -295,7 +411,13 @@ async function generateVideoPoster(file: File): Promise<File> {
             0.85
           );
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          logMediaDebug('warn', 'poster generation exception', {
+            error: error instanceof Error ? error.message : 'unknown error',
+            file_name: file.name,
+            mime: file.type || null,
+            size: file.size,
+          });
           cleanup();
           fail();
         });
@@ -334,6 +456,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const [composerError, setComposerError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const draftSequenceRef = useRef(0);
+  const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
 
@@ -450,6 +573,16 @@ export function App({ api = runtimeApi }: AppProps) {
         continue;
       }
 
+      const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
+      mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
+      logMediaDebug('info', 'remote media fetch start', {
+        attempt: nextAttempt,
+        hash: attachment.hash,
+        mime: attachment.mime,
+        role: attachment.role,
+        status: attachment.status,
+      });
+
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
@@ -461,8 +594,25 @@ export function App({ api = runtimeApi }: AppProps) {
             return;
           }
           if (!nextUrl) {
+            logMediaDebug('warn', 'remote media fetch missing', {
+              attempt: nextAttempt,
+              hash: attachment.hash,
+              mime: attachment.mime,
+              role: attachment.role,
+              status: attachment.status,
+            });
             return;
           }
+
+          logMediaDebug('info', 'remote media fetch hit', {
+            attempt: nextAttempt,
+            bytes_base64_length: payload?.bytes_base64.length ?? 0,
+            hash: attachment.hash,
+            mime: attachment.mime,
+            object_url: nextUrl,
+            role: attachment.role,
+            status: attachment.status,
+          });
 
           setMediaObjectUrls((current) => {
             if (current[attachment.hash] !== undefined) {
@@ -480,10 +630,18 @@ export function App({ api = runtimeApi }: AppProps) {
             };
           });
         })
-        .catch(() => {
+        .catch((fetchError: unknown) => {
           if (disposed) {
             return;
           }
+          logMediaDebug('warn', 'remote media fetch error', {
+            attempt: nextAttempt,
+            error: fetchError instanceof Error ? fetchError.message : 'unknown error',
+            hash: attachment.hash,
+            mime: attachment.mime,
+            role: attachment.role,
+            status: attachment.status,
+          });
         });
     }
 
@@ -721,6 +879,19 @@ export function App({ api = runtimeApi }: AppProps) {
       videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
         ? mediaObjectUrls[videoManifest.hash]
         : null;
+    const logPlaybackEvent = (eventName: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget;
+      logMediaDebug(eventName === 'error' ? 'warn' : 'info', `playback ${eventName}`, {
+        manifest_hash: videoManifest?.hash ?? null,
+        mime: videoManifest?.mime ?? null,
+        post_id: post.id,
+        poster_hash: videoPoster?.hash ?? null,
+        playback_src: videoPlaybackSrc,
+        ...mediaElementDebugFields(video),
+        video_height: video.videoHeight || null,
+        video_width: video.videoWidth || null,
+      });
+    };
     const mediaStatusLabel =
       mediaKind === 'video'
         ? videoPlaybackSrc
@@ -762,6 +933,13 @@ export function App({ api = runtimeApi }: AppProps) {
                   <video
                     className='media-video'
                     controls
+                    onCanPlay={logPlaybackEvent('canplay')}
+                    onDurationChange={logPlaybackEvent('durationchange')}
+                    onError={logPlaybackEvent('error')}
+                    onLoadedData={logPlaybackEvent('loadeddata')}
+                    onLoadedMetadata={logPlaybackEvent('loadedmetadata')}
+                    onLoadStart={logPlaybackEvent('loadstart')}
+                    onPlaying={logPlaybackEvent('playing')}
                     preload='metadata'
                     poster={videoPosterPreviewSrc ?? undefined}
                     data-testid={`media-video-${post.id}`}

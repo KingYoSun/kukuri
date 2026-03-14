@@ -3353,6 +3353,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -3409,6 +3410,8 @@ dependencies = [
  "serde",
  "tauri",
  "tauri-build",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
