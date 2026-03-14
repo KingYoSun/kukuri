@@ -12,6 +12,7 @@ iroh.workspace = true
 iroh-blobs.workspace = true
 serde.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-transport = { path = "../transport" }

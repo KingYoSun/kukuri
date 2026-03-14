@@ -2458,6 +2458,7 @@ dependencies = [
  "serde",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
