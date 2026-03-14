@@ -366,6 +366,21 @@ mod tests {
         }
     }
 
+    fn video_attachment_request(
+        name: &str,
+        mime: &str,
+        bytes: &[u8],
+        role: &str,
+    ) -> CreateAttachmentRequest {
+        CreateAttachmentRequest {
+            file_name: Some(name.to_string()),
+            mime: mime.to_string(),
+            byte_size: bytes.len() as u64,
+            data_base64: BASE64_STANDARD.encode(bytes),
+            role: Some(role.to_string()),
+        }
+    }
+
     #[test]
     fn legacy_next_db_migrates_to_kukuri_db() {
         let _guard = env_lock();
@@ -697,6 +712,93 @@ mod tests {
         assert!(preview.is_some());
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_video_post_from_docs() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("late-video-a.db");
+        let db_b = dir.path().join("late-video-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let topic = "kukuri:topic:late-video-runtime";
+        let event_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "late video".into(),
+                reply_to: None,
+                attachments: vec![
+                    video_attachment_request(
+                        "late-video.mp4",
+                        "video/mp4",
+                        b"late-video-runtime",
+                        "video_manifest",
+                    ),
+                    video_attachment_request(
+                        "late-poster.jpg",
+                        "image/jpeg",
+                        b"late-video-poster",
+                        "video_poster",
+                    ),
+                ],
+            })
+            .await
+            .expect("create video post before join");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a into b");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late video timeout");
+
+        let poster = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_poster")
+            .expect("video poster");
+        let preview = runtime_b
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: poster.hash.clone(),
+                mime: poster.mime.clone(),
+            })
+            .await
+            .expect("video poster preview");
+        assert!(preview.is_some());
+    }
+
     #[tokio::test]
     async fn sqlite_deletion_does_not_lose_shared_state() {
         let dir = tempdir().expect("tempdir");
@@ -869,6 +971,80 @@ mod tests {
             })
             .await
             .expect("preview after restart");
+        assert!(preview.is_some());
+    }
+
+    #[tokio::test]
+    async fn restart_restores_video_post_preview() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("restart-video.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let topic = "kukuri:topic:restart-video";
+        let event_id = runtime
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "restored video".into(),
+                reply_to: None,
+                attachments: vec![
+                    video_attachment_request(
+                        "clip.mp4",
+                        "video/mp4",
+                        b"restart-video-manifest",
+                        "video_manifest",
+                    ),
+                    video_attachment_request(
+                        "clip-poster.jpg",
+                        "image/jpeg",
+                        b"restart-video-poster",
+                        "video_poster",
+                    ),
+                ],
+            })
+            .await
+            .expect("create video post");
+        runtime.shutdown().await;
+        drop(runtime);
+        std::fs::remove_file(&db_path).expect("delete sqlite");
+
+        let restarted = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart");
+        let timeline = restarted
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("timeline");
+        let restored = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("restored video post");
+
+        let poster = restored
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_poster")
+            .expect("restored poster");
+        let preview = restarted
+            .get_blob_preview_url(GetBlobPreviewRequest {
+                hash: poster.hash.clone(),
+                mime: poster.mime.clone(),
+            })
+            .await
+            .expect("video preview after restart");
         assert!(preview.is_some());
     }
 }

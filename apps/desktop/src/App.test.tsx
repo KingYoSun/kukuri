@@ -166,6 +166,37 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
   };
 }
 
+function buildVideoPost(overrides?: Partial<PostView>): PostView {
+  return {
+    id: 'video-post',
+    author_pubkey: 'e'.repeat(64),
+    author_npub: 'npub1videoauthor',
+    note_id: 'note1videopost',
+    content: 'video caption',
+    content_status: 'Available',
+    attachments: [
+      {
+        hash: 'v'.repeat(64),
+        mime: 'video/mp4',
+        bytes: 8192,
+        role: 'video_manifest',
+        status: 'Available',
+      },
+      {
+        hash: 'p'.repeat(64),
+        mime: 'image/jpeg',
+        bytes: 1024,
+        role: 'video_poster',
+        status: 'Missing',
+      },
+    ],
+    created_at: 2,
+    reply_to: null,
+    root_id: 'video-post',
+    ...overrides,
+  };
+}
+
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createMockApi()} />);
@@ -308,6 +339,54 @@ test('desktop shell sends image attachments through createPost', async () => {
   });
   expect(attachmentsSeen[0].mime).toBe('image/jpeg');
   expect(attachmentsSeen[0].file_name).toBe('city.jpg');
+});
+
+test('desktop shell can publish a video post with poster from composer', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.upload(
+    screen.getByLabelText('Attach Videos'),
+    new File([Uint8Array.from([1, 2, 3, 4, 5])], 'clip.mp4', { type: 'video/mp4' })
+  );
+  await user.upload(
+    screen.getByLabelText('Attach Video Posters'),
+    new File([Uint8Array.from([5, 4, 3, 2, 1])], 'clip-poster.jpg', { type: 'image/jpeg' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('video ready')).toBeInTheDocument();
+  });
+  expect(screen.getByText('video/mp4')).toBeInTheDocument();
+});
+
+test('desktop shell sends video and poster attachments through createPost', async () => {
+  let attachmentsSeen: CreateAttachmentInput[] = [];
+  const api = createMockApi();
+  const originalCreatePost = api.createPost;
+  api.createPost = async (topic, content, replyTo, attachments) => {
+    attachmentsSeen = attachments ?? [];
+    return originalCreatePost(topic, content, replyTo, attachments);
+  };
+
+  const user = userEvent.setup();
+  render(<App api={api} />);
+  await user.upload(
+    screen.getByLabelText('Attach Videos'),
+    new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
+  );
+  await user.upload(
+    screen.getByLabelText('Attach Video Posters'),
+    new File([Uint8Array.from([9, 8, 7])], 'clip-poster.png', { type: 'image/png' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(attachmentsSeen).toHaveLength(2);
+  });
+  expect(attachmentsSeen.some((attachment) => attachment.role === 'video_manifest')).toBe(true);
+  expect(attachmentsSeen.some((attachment) => attachment.role === 'video_poster')).toBe(true);
 });
 
 test('timeline image post shows media skeleton when attachment is missing', async () => {
@@ -456,4 +535,58 @@ test('text body pending uses text skeleton without hiding image metadata', async
   });
   expect(screen.getByText('image/png')).toBeInTheDocument();
   expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+});
+
+test('timeline video post shows poster skeleton when poster is missing', async () => {
+  render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [buildVideoPost()],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText('syncing poster')).toBeInTheDocument();
+  });
+  expect(screen.getByTestId('media-skeleton-video-post')).toBeInTheDocument();
+  expect(screen.getByText('video/mp4')).toBeInTheDocument();
+});
+
+test('timeline video post renders poster preview when available', async () => {
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildVideoPost({
+          attachments: [
+            {
+              hash: 'v'.repeat(64),
+              mime: 'video/mp4',
+              bytes: 8192,
+              role: 'video_manifest',
+              status: 'Available',
+            },
+            {
+              hash: 'p'.repeat(64),
+              mime: 'image/jpeg',
+              bytes: 1024,
+              role: 'video_poster',
+              status: 'Available',
+            },
+          ],
+        }),
+      ],
+    },
+  });
+  api.getBlobPreviewUrl = async (hash) =>
+    hash === 'p'.repeat(64) ? 'data:image/jpeg;base64,ZmFrZQ==' : null;
+
+  render(<App api={api} />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
+  });
+  expect(screen.getByText('video ready')).toBeInTheDocument();
 });

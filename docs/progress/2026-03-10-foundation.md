@@ -5,6 +5,7 @@
 - v3 Phase4.5E data source policy lock は完了
 - v3 Phase5 cutover は完了
 - Phase6-1 image post canonical source 設計に着手
+- Phase6-6 video post canonical source 設計に着手
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -26,6 +27,8 @@
 - root 直下の pre-cutover app/service tree を `legacy/` へ移し、root 入口を current kukuri 実装中心へ縮退した
 - `ADR 0003` で image post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
 - `image_post_visible_before_full_blob_download` を attachment metadata と blob status 遷移まで広げた
+- `ADR 0004` で video post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
+- video post の最小 poster UI と sync/durability contract を追加した
 
 ## 検証済み
 - `cargo xtask doctor`

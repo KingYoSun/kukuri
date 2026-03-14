@@ -11,6 +11,7 @@
 3. `docs/progress/2026-03-10-foundation.md`
 4. `harness/scenarios/`
 5. `docs/adr/0003-image-post-data-classification.md`
+6. `docs/adr/0004-video-post-data-classification.md`
 
 ## 現在の対象
 - `desktop + core + store + static-peer transport + harness`

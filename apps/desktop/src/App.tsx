@@ -18,10 +18,18 @@ const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
 
 function selectPrimaryImage(post: PostView): AttachmentView | null {
+  return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
+}
+
+function selectVideoPoster(post: PostView): AttachmentView | null {
+  return post.attachments.find((attachment) => attachment.role === 'video_poster') ?? null;
+}
+
+function selectVideoManifest(post: PostView): AttachmentView | null {
   return (
     post.attachments.find(
       (attachment) =>
-        attachment.role === 'image_original' || attachment.mime.startsWith('image/')
+        attachment.role === 'video_manifest' || attachment.mime.startsWith('video/')
     ) ?? null
   );
 }
@@ -40,7 +48,10 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-async function fileToCreateAttachment(file: File): Promise<CreateAttachmentInput> {
+async function fileToCreateAttachment(
+  file: File,
+  role: CreateAttachmentInput['role']
+): Promise<CreateAttachmentInput> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -53,7 +64,7 @@ async function fileToCreateAttachment(file: File): Promise<CreateAttachmentInput
     mime: file.type || 'application/octet-stream',
     byte_size: file.size,
     data_base64: window.btoa(binary),
-    role: 'image_original',
+    role,
   };
 }
 
@@ -164,13 +175,13 @@ export function App({ api = runtimeApi }: AppProps) {
 
   useEffect(() => {
     const posts = [...activeTimeline, ...thread];
-    const imageAttachments = posts
-      .map(selectPrimaryImage)
+    const previewableAttachments = posts
+      .flatMap((post) => [selectPrimaryImage(post), selectVideoPoster(post)])
       .filter((attachment): attachment is AttachmentView => attachment !== null)
       .filter((attachment) => attachment.status === 'Available' || attachment.status === 'Pinned');
 
     let disposed = false;
-    for (const attachment of imageAttachments) {
+    for (const attachment of previewableAttachments) {
       if (blobPreviewUrls[attachment.hash] !== undefined) {
         continue;
       }
@@ -286,7 +297,9 @@ export function App({ api = runtimeApi }: AppProps) {
     }
 
     try {
-      const nextAttachments = await Promise.all(files.map(fileToCreateAttachment));
+      const nextAttachments = await Promise.all(
+        files.map((file) => fileToCreateAttachment(file, 'image_original'))
+      );
       setDraftAttachments((current) => [...current, ...nextAttachments]);
       setError(null);
       setAttachmentInputKey((value) => value + 1);
@@ -295,6 +308,54 @@ export function App({ api = runtimeApi }: AppProps) {
         attachmentError instanceof Error
           ? attachmentError.message
           : 'failed to read image attachment'
+      );
+    }
+  }
+
+  async function handleVideoSelection(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith('video/')
+    );
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(
+        files.map((file) => fileToCreateAttachment(file, 'video_manifest'))
+      );
+      setDraftAttachments((current) => [...current, ...nextAttachments]);
+      setError(null);
+      setAttachmentInputKey((value) => value + 1);
+    } catch (attachmentError) {
+      setError(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : 'failed to read video attachment'
+      );
+    }
+  }
+
+  async function handlePosterSelection(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith('image/')
+    );
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(
+        files.map((file) => fileToCreateAttachment(file, 'video_poster'))
+      );
+      setDraftAttachments((current) => [...current, ...nextAttachments]);
+      setError(null);
+      setAttachmentInputKey((value) => value + 1);
+    } catch (attachmentError) {
+      setError(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : 'failed to read video poster'
       );
     }
   }
@@ -345,12 +406,27 @@ export function App({ api = runtimeApi }: AppProps) {
 
   function renderPostCard(post: PostView, context: 'timeline' | 'thread') {
     const primaryImage = selectPrimaryImage(post);
-    const extraAttachmentCount = primaryImage
-      ? Math.max(post.attachments.filter((attachment) => attachment !== primaryImage).length, 0)
+    const videoPoster = selectVideoPoster(post);
+    const videoManifest = selectVideoManifest(post);
+    const primaryMedia = primaryImage ?? videoPoster ?? videoManifest;
+    const mediaKind = primaryImage ? 'image' : videoManifest ? 'video' : null;
+    const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? primaryMedia : primaryMedia;
+    const extraAttachmentCount = primaryMedia
+      ? Math.max(post.attachments.filter((attachment) => attachment !== primaryMedia).length, 0)
       : 0;
     const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
-    const mediaPreviewSrc = primaryImage ? blobPreviewUrls[primaryImage.hash] ?? attachmentPreviewSrc() : null;
-    const mediaIsReady = primaryImage ? primaryImage.status !== 'Missing' : false;
+    const mediaPreviewSrc = primaryMedia
+      ? blobPreviewUrls[primaryMedia.hash] ?? attachmentPreviewSrc()
+      : null;
+    const mediaIsReady = primaryMedia ? primaryMedia.status !== 'Missing' : false;
+    const mediaStatusLabel =
+      mediaKind === 'video'
+        ? mediaIsReady
+          ? 'video ready'
+          : 'syncing poster'
+        : mediaIsReady
+          ? 'image ready'
+          : 'syncing image';
     const threadTargetId = post.root_id ?? post.id;
 
     return (
@@ -364,15 +440,14 @@ export function App({ api = runtimeApi }: AppProps) {
             <span>{post.author_npub}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
-          {primaryImage ? (
+          {primaryMedia ? (
             <>
               <div
                 className={mediaIsReady ? 'media-frame media-frame-ready' : 'media-frame media-frame-loading'}
               >
                 <div className='media-badges'>
-                  <span className='media-status-badge'>
-                    {mediaIsReady ? 'image ready' : 'syncing image'}
-                  </span>
+                  <span className='media-status-badge'>{mediaStatusLabel}</span>
+                  {mediaKind === 'video' ? <span className='media-type-badge'>video</span> : null}
                   {extraAttachmentCount > 0 ? (
                     <span className='media-count-badge'>+{extraAttachmentCount}</span>
                   ) : null}
@@ -381,12 +456,12 @@ export function App({ api = runtimeApi }: AppProps) {
                   <img
                     className='media-preview'
                     src={mediaPreviewSrc}
-                    alt={primaryImage.mime}
+                    alt={primaryMedia.mime}
                     data-testid={`media-preview-${post.id}`}
                   />
                 ) : mediaIsReady ? (
                   <div className='media-ready-placeholder'>
-                    <span>preview pending</span>
+                    <span>{mediaKind === 'video' ? 'poster preview' : 'preview pending'}</span>
                   </div>
                 ) : (
                   <div
@@ -396,10 +471,12 @@ export function App({ api = runtimeApi }: AppProps) {
                   />
                 )}
               </div>
-              <div className='media-meta'>
-                <span>{primaryImage.mime}</span>
-                <span>{formatBytes(primaryImage.bytes)}</span>
-              </div>
+              {mediaMetaAttachment ? (
+                <div className='media-meta'>
+                  <span>{mediaMetaAttachment.mime}</span>
+                  <span>{formatBytes(mediaMetaAttachment.bytes)}</span>
+                </div>
+              ) : null}
             </>
           ) : null}
           <div className='post-body'>
@@ -628,13 +705,41 @@ export function App({ api = runtimeApi }: AppProps) {
                 }}
               />
             </label>
+            <label className='field file-field'>
+              <span>Attach Videos</span>
+              <input
+                key={`video-${attachmentInputKey}`}
+                aria-label='Attach Videos'
+                type='file'
+                accept='video/*'
+                multiple
+                onChange={(event) => {
+                  void handleVideoSelection(event);
+                }}
+              />
+            </label>
+            <label className='field file-field'>
+              <span>Attach Video Posters</span>
+              <input
+                key={`poster-${attachmentInputKey}`}
+                aria-label='Attach Video Posters'
+                type='file'
+                accept='image/*'
+                multiple
+                onChange={(event) => {
+                  void handlePosterSelection(event);
+                }}
+              />
+            </label>
             {draftAttachments.length > 0 ? (
               <ul className='draft-attachment-list'>
                 {draftAttachments.map((attachment, index) => (
                   <li key={`${attachment.file_name ?? attachment.mime}-${index}`} className='draft-attachment-item'>
                     <div>
                       <strong>{attachment.file_name ?? attachment.mime}</strong>
-                      <small>{formatBytes(attachment.byte_size)}</small>
+                      <small>
+                        {attachment.role ?? 'attachment'} · {formatBytes(attachment.byte_size)}
+                      </small>
                     </div>
                     <button
                       className='button button-secondary'

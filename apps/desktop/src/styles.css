@@ -353,6 +353,7 @@ textarea {
 }
 
 .media-status-badge,
+.media-type-badge,
 .media-count-badge {
   display: inline-flex;
   align-items: center;
@@ -367,6 +368,11 @@ textarea {
 .media-status-badge {
   color: #e9f7f6;
   background: rgba(12, 28, 39, 0.78);
+}
+
+.media-type-badge {
+  color: rgba(246, 241, 232, 0.9);
+  background: rgba(0, 179, 164, 0.18);
 }
 
 .media-count-badge {

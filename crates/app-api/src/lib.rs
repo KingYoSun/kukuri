@@ -1067,6 +1067,14 @@ mod tests {
         }
     }
 
+    fn pending_video_attachment(role: AssetRole, mime: &str, bytes: &[u8]) -> PendingAttachment {
+        PendingAttachment {
+            mime: mime.to_string(),
+            bytes: bytes.to_vec(),
+            role,
+        }
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -1233,6 +1241,55 @@ mod tests {
             .expect("image-only post");
         assert_eq!(post.attachments.len(), 1);
         assert_eq!(post.attachments[0].mime, "image/jpeg");
+    }
+
+    #[tokio::test]
+    async fn create_post_with_video_attachments_surfaces_video_metadata() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        let app = AppService::new(store, transport);
+
+        let event_id = app
+            .create_post_with_attachments(
+                "kukuri:topic:video-write",
+                "video caption",
+                None,
+                vec![
+                    pending_video_attachment(
+                        AssetRole::VideoManifest,
+                        "video/mp4",
+                        b"fake-video-manifest",
+                    ),
+                    pending_video_attachment(
+                        AssetRole::VideoPoster,
+                        "image/jpeg",
+                        b"fake-video-poster",
+                    ),
+                ],
+            )
+            .await
+            .expect("create video post");
+        let timeline = app
+            .list_timeline("kukuri:topic:video-write", None, 10)
+            .await
+            .expect("timeline");
+
+        let post = timeline
+            .items
+            .iter()
+            .find(|post| post.id == event_id)
+            .expect("video post");
+        assert_eq!(post.attachments.len(), 2);
+        assert!(
+            post.attachments
+                .iter()
+                .any(|attachment| attachment.role == "video_manifest")
+        );
+        assert!(
+            post.attachments
+                .iter()
+                .any(|attachment| attachment.role == "video_poster")
+        );
     }
 
     #[tokio::test]
@@ -1585,6 +1642,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn video_post_visible_before_full_blob_download() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let topic = TopicId::new("kukuri:topic:video");
+        let event = build_text_note(&keys, &topic, "video caption", None).expect("event");
+        let mut header = event.to_canonical_header(PayloadRef::BlobText {
+            hash: kukuri_core::BlobHash::new("f".repeat(64)),
+            mime: "text/plain".into(),
+            bytes: 13,
+        });
+        let poster_hash = kukuri_core::blob_hash(b"poster-bytes");
+        header.attachments = vec![
+            kukuri_core::AssetRef {
+                hash: kukuri_core::blob_hash(b"video-bytes"),
+                mime: "video/mp4".into(),
+                bytes: 8192,
+                role: kukuri_core::AssetRole::VideoManifest,
+            },
+            kukuri_core::AssetRef {
+                hash: poster_hash.clone(),
+                mime: "image/jpeg".into(),
+                bytes: 1024,
+                role: kukuri_core::AssetRole::VideoPoster,
+            },
+        ];
+        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
+            .await
+            .expect("persist header");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service.clone(),
+            generate_keys(),
+        );
+
+        let timeline = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline");
+        let post = &timeline.items[0];
+        assert!(
+            post.attachments
+                .iter()
+                .any(|attachment| attachment.role == "video_manifest")
+        );
+        assert!(
+            post.attachments
+                .iter()
+                .find(|attachment| attachment.role == "video_poster")
+                .is_some_and(|attachment| attachment.status == BlobViewStatus::Missing)
+        );
+
+        blob_service
+            .put_blob(b"poster-bytes".to_vec(), "image/jpeg")
+            .await
+            .expect("put poster blob");
+        let refreshed = app
+            .list_timeline(topic.as_str(), None, 20)
+            .await
+            .expect("timeline");
+        assert!(
+            refreshed.items[0]
+                .attachments
+                .iter()
+                .find(|attachment| attachment.role == "video_poster")
+                .is_some_and(|attachment| attachment.status == BlobViewStatus::Available)
+        );
+    }
+
+    #[tokio::test]
     async fn new_writes_use_blob_text_payload_refs() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
@@ -1818,6 +1952,90 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn iroh_transport_syncs_video_post_between_apps() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("video-post-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("video-post-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let topic = "kukuri:topic:video-sync";
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "video caption",
+                None,
+                vec![
+                    pending_video_attachment(AssetRole::VideoManifest, "video/mp4", b"video-sync"),
+                    pending_video_attachment(AssetRole::VideoPoster, "image/jpeg", b"poster-sync"),
+                ],
+            )
+            .await
+            .expect("create video post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("video sync timeout");
+
+        assert!(
+            received
+                .attachments
+                .iter()
+                .any(|attachment| attachment.role == "video_manifest")
+        );
+        let poster = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_poster")
+            .expect("video poster");
+        assert_eq!(poster.status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(poster.hash.as_str(), "image/jpeg")
+                .await
+                .expect("poster preview data url")
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
@@ -1954,6 +2172,70 @@ mod tests {
                 .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
                 .await
                 .expect("preview data url")
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_joiner_backfills_video_post_from_docs() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("late-video-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("late-video-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+
+        let topic = "kukuri:topic:late-video";
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "late video caption",
+                None,
+                vec![
+                    pending_video_attachment(AssetRole::VideoManifest, "video/mp4", b"late-video"),
+                    pending_video_attachment(AssetRole::VideoPoster, "image/jpeg", b"late-poster"),
+                ],
+            )
+            .await
+            .expect("create video post before join");
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late video join timeout");
+
+        let poster = received
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_poster")
+            .expect("video poster");
+        assert_eq!(poster.status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(poster.hash.as_str(), "image/jpeg")
+                .await
+                .expect("poster preview data url")
                 .is_some()
         );
     }
