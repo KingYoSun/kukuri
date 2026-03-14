@@ -443,6 +443,9 @@ export function App({ api = runtimeApi }: AppProps) {
   const [peerTicket, setPeerTicket] = useState('');
   const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string | null>>({});
+  const [unsupportedVideoManifests, setUnsupportedVideoManifests] = useState<
+    Record<string, true>
+  >({});
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     connected: false,
     peer_count: 0,
@@ -879,6 +882,9 @@ export function App({ api = runtimeApi }: AppProps) {
       videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
         ? mediaObjectUrls[videoManifest.hash]
         : null;
+    const videoUnsupportedOnClient = Boolean(
+      videoManifest && unsupportedVideoManifests[videoManifest.hash]
+    );
     const logPlaybackEvent = (eventName: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
       const video = event.currentTarget;
       logMediaDebug(eventName === 'error' ? 'warn' : 'info', `playback ${eventName}`, {
@@ -891,10 +897,23 @@ export function App({ api = runtimeApi }: AppProps) {
         video_height: video.videoHeight || null,
         video_width: video.videoWidth || null,
       });
+      if (eventName === 'error' && videoManifest) {
+        setUnsupportedVideoManifests((current) => {
+          if (current[videoManifest.hash]) {
+            return current;
+          }
+          return {
+            ...current,
+            [videoManifest.hash]: true,
+          };
+        });
+      }
     };
     const mediaStatusLabel =
       mediaKind === 'video'
-        ? videoPlaybackSrc
+        ? videoUnsupportedOnClient
+          ? 'unsupported on this client'
+          : videoPlaybackSrc
           ? 'playable video'
           : videoPosterPreviewSrc
             ? 'poster ready'
@@ -929,7 +948,7 @@ export function App({ api = runtimeApi }: AppProps) {
                     <span className='media-count-badge'>+{extraAttachmentCount}</span>
                   ) : null}
                 </div>
-                {mediaKind === 'video' && videoPlaybackSrc ? (
+                {mediaKind === 'video' && videoPlaybackSrc && !videoUnsupportedOnClient ? (
                   <video
                     className='media-video'
                     controls

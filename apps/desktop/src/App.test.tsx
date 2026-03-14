@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -928,4 +928,62 @@ test('video card renders object-url playback source when manifest payload is ava
   expect(video).toBeInTheDocument();
   expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
   expect(video.getAttribute('src')).toContain('blob:mock-');
+});
+
+test('video card falls back to poster preview when playback is unsupported on this client', async () => {
+  installObjectUrlMocks();
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        buildVideoPost({
+          attachments: [
+            {
+              hash: 'manifest'.repeat(8),
+              mime: 'video/mp4',
+              bytes: 9999,
+              role: 'video_manifest',
+              status: 'Available',
+            },
+            {
+              hash: 'poster'.repeat(8),
+              mime: 'image/jpeg',
+              bytes: 1024,
+              role: 'video_poster',
+              status: 'Available',
+            },
+          ],
+        }),
+      ],
+    },
+  });
+  api.getBlobMediaPayload = async (hash, mime) => {
+    if (hash === 'manifest'.repeat(8)) {
+      return {
+        bytes_base64: 'ZmFrZS12aWRlbw==',
+        mime,
+      };
+    }
+    if (hash === 'poster'.repeat(8)) {
+      return {
+        bytes_base64: 'ZmFrZS1wb3N0ZXI=',
+        mime,
+      };
+    }
+    return null;
+  };
+
+  render(<App api={api} />);
+
+  const video = await screen.findByTestId('media-video-video-post');
+  Object.defineProperty(video, 'error', {
+    configurable: true,
+    get: () => ({ code: 4 }),
+  });
+  fireEvent.error(video);
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
+  });
+  expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
+  expect(screen.getAllByText('unsupported on this client').length).toBeGreaterThan(0);
 });

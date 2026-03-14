@@ -33,6 +33,7 @@
 - composer の添付 UI を single attach に統合し、`image/*,video/*` の mixed selection を client-side で分類するようにした
 - video upload 時に browser 内の `video + canvas` で poster を自動生成し、failure 時は publish blocker にした
 - composer に draft attachment preview を追加し、image は object URL、video は generated poster で publish 前 preview できるようにした
+- video manifest を取得できても local decode が失敗した client では、poster-only preview と `unsupported on this client` 表示へ倒すようにした
 
 ## 検証済み
 - `cargo xtask doctor`

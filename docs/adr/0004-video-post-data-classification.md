@@ -35,4 +35,5 @@ Accepted
 - late joiner と restart 後の復元は `docs header + blobs fetch` だけで成立しなければならない。
 - poster が未取得でも video post row 自体は timeline/thread に出なければならない。
 - poster だけ先に取得できた場合は poster preview を出し、manifest payload 取得後は playable video へ昇格する。
+- client が manifest payload を decode できない場合は poster-only のまま維持し、`unsupported on this client` として扱う。
 - poster 生成 failure は publish blocker として扱う必要がある。
