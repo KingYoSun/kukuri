@@ -2777,7 +2777,7 @@ mod tests {
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
         let app_a = app_with_iroh_services(store_a, &stack_a);
-        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let app_b = app_with_iroh_services(store_b.clone(), &stack_b);
 
         let ticket_a = app_a
             .peer_ticket()
@@ -2843,7 +2843,7 @@ mod tests {
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
         let app_a = app_with_iroh_services(store_a, &stack_a);
-        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let app_b = app_with_iroh_services(store_b.clone(), &stack_b);
 
         let ticket_a = app_a
             .peer_ticket()
@@ -3308,7 +3308,7 @@ mod tests {
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
         let app_a = app_with_iroh_services(store_a, &stack_a);
-        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let app_b = app_with_iroh_services(store_b.clone(), &stack_b);
         let topic = "kukuri:topic:image-thread";
 
         let ticket_a = app_a
@@ -3346,18 +3346,21 @@ mod tests {
 
         timeout(Duration::from_secs(10), async {
             loop {
-                let timeline = app_b
-                    .list_timeline(topic, None, 20)
-                    .await
-                    .expect("timeline b");
-                if timeline.items.iter().any(|post| post.id == root_id) {
+                let projection = ProjectionStore::get_event_projection(
+                    store_b.as_ref(),
+                    &EventId::from(root_id.clone()),
+                )
+                .await
+                .expect("root projection")
+                .is_some();
+                if projection {
                     return;
                 }
                 sleep(Duration::from_millis(50)).await;
             }
         })
         .await
-        .expect("root image propagation timeout");
+        .expect("root image projection timeout");
 
         let reply_id = app_b
             .create_post_with_attachments(

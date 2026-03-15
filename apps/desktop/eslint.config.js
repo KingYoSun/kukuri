@@ -29,5 +29,12 @@ export default tseslint.config(
       'react-hooks/set-state-in-effect': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
+    },
   }
 );

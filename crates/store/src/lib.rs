@@ -191,6 +191,10 @@ impl SqliteStore {
     pub fn pool(&self) -> &Pool<Sqlite> {
         &self.pool
     }
+
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
 }
 
 #[async_trait]

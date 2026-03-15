@@ -690,9 +690,15 @@ impl Transport for IrohGossipTransport {
     }
 
     async fn export_ticket(&self) -> Result<Option<String>> {
-        Ok(Some(encode_endpoint_ticket(
-            &self.endpoint.addr(),
+        let endpoint_addr = self.endpoint.addr();
+        let ticket_config = ticket_network_config(
+            &endpoint_addr,
+            &self.endpoint.bound_sockets(),
             &self.network_config,
+        );
+        Ok(Some(encode_endpoint_ticket(
+            &endpoint_addr,
+            &ticket_config,
         )?))
     }
 
@@ -780,13 +786,57 @@ fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<Endpoin
     }
 }
 
+fn ticket_network_config(
+    endpoint_addr: &EndpointAddr,
+    bound_sockets: &[SocketAddr],
+    config: &TransportNetworkConfig,
+) -> TransportNetworkConfig {
+    let advertised_host = config.advertised_host.clone().or_else(|| {
+        bound_sockets
+            .iter()
+            .find(|addr| is_reachable_ip(addr.ip()) || addr.ip().is_loopback())
+            .map(|addr| addr.ip().to_string())
+    });
+    let advertised_port = config.advertised_port.or_else(|| {
+        bound_sockets
+            .iter()
+            .find(|addr| addr.port() != 0)
+            .map(|addr| addr.port())
+    });
+
+    if advertised_host.is_none() && advertised_port.is_none() {
+        return config.clone();
+    }
+
+    TransportNetworkConfig {
+        bind_addr: config.bind_addr,
+        advertised_host: advertised_host.or_else(|| {
+            endpoint_addr
+                .ip_addrs()
+                .find(|addr| is_reachable_ip(addr.ip()) || addr.ip().is_loopback())
+                .map(|addr| addr.ip().to_string())
+        }),
+        advertised_port: advertised_port.or_else(|| {
+            endpoint_addr
+                .ip_addrs()
+                .find(|addr| addr.port() != 0)
+                .map(|addr| addr.port())
+        }),
+    }
+}
+
 pub fn encode_endpoint_ticket(
     endpoint_addr: &EndpointAddr,
     config: &TransportNetworkConfig,
 ) -> Result<String> {
     let advertised_port = config
         .advertised_port
-        .or_else(|| endpoint_addr.ip_addrs().next().map(|addr| addr.port()))
+        .or_else(|| {
+            endpoint_addr
+                .ip_addrs()
+                .find(|addr| addr.port() != 0)
+                .map(|addr| addr.port())
+        })
         .or_else(|| match config.bind_addr {
             SocketAddr::V4(addr) if addr.port() != 0 => Some(addr.port()),
             SocketAddr::V6(addr) if addr.port() != 0 => Some(addr.port()),
@@ -1320,6 +1370,48 @@ mod tests {
             ticket,
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@192.168.10.5:40123"
         );
+    }
+
+    #[test]
+    fn encode_ticket_ignores_zero_port_from_endpoint_addr() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr =
+            EndpointAddr::new(endpoint_id).with_ip_addr("0.0.0.0:0".parse().expect("socket addr"));
+        let config = TransportNetworkConfig {
+            bind_addr: "127.0.0.1:40123".parse().expect("bind addr"),
+            advertised_host: None,
+            advertised_port: None,
+        };
+
+        let ticket = encode_endpoint_ticket(&endpoint_addr, &config).expect("ticket");
+
+        assert_eq!(
+            ticket,
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0@127.0.0.1:40123"
+        );
+    }
+
+    #[test]
+    fn ticket_network_config_uses_bound_loopback_socket_for_port_zero_bind() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr =
+            EndpointAddr::new(endpoint_id).with_ip_addr("0.0.0.0:0".parse().expect("socket addr"));
+        let config = TransportNetworkConfig::loopback();
+
+        let resolved = ticket_network_config(
+            &endpoint_addr,
+            &["127.0.0.1:40123".parse().expect("bound socket")],
+            &config,
+        );
+
+        assert_eq!(resolved.advertised_host.as_deref(), Some("127.0.0.1"));
+        assert_eq!(resolved.advertised_port, Some(40123));
     }
 
     #[test]

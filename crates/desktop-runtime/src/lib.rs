@@ -121,6 +121,7 @@ pub struct UpdateGameRoomRequest {
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
+    store: Arc<SqliteStore>,
     iroh_stack: SharedIrohStack,
 }
 
@@ -162,7 +163,7 @@ impl DesktopRuntime {
         let keys = load_or_create_keys(&db_path, identity_mode)?;
         let app_service = AppService::new_with_services(
             store.clone(),
-            store,
+            store.clone(),
             iroh_stack.transport.clone(),
             iroh_stack.transport.clone(),
             iroh_stack.docs_sync.clone(),
@@ -173,6 +174,7 @@ impl DesktopRuntime {
         Ok(Self {
             app_service,
             db_path,
+            store,
             iroh_stack,
         })
     }
@@ -338,6 +340,7 @@ impl DesktopRuntime {
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
         self.iroh_stack.shutdown().await;
+        self.store.close().await;
     }
 }
 

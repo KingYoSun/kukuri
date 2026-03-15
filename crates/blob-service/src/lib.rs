@@ -253,9 +253,42 @@ impl BlobService for IrohBlobService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::SocketAddr;
+
+    use iroh::Endpoint;
     use kukuri_transport::{TransportNetworkConfig, encode_endpoint_ticket};
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
+
+    fn loopback_ticket(endpoint: &Endpoint, config: &TransportNetworkConfig) -> String {
+        let endpoint_addr = endpoint.addr();
+        let bound_sockets = endpoint.bound_sockets();
+        let ticket_config = TransportNetworkConfig {
+            bind_addr: config.bind_addr,
+            advertised_host: config.advertised_host.clone().or_else(|| {
+                bound_sockets
+                    .iter()
+                    .find(|addr| addr.ip().is_loopback())
+                    .or_else(|| {
+                        bound_sockets
+                            .iter()
+                            .find(|addr| is_ticket_host_candidate(**addr))
+                    })
+                    .map(|addr| addr.ip().to_string())
+            }),
+            advertised_port: config.advertised_port.or_else(|| {
+                bound_sockets
+                    .iter()
+                    .find(|addr| addr.port() != 0)
+                    .map(|addr| addr.port())
+            }),
+        };
+        encode_endpoint_ticket(&endpoint_addr, &ticket_config).expect("sender ticket")
+    }
+
+    fn is_ticket_host_candidate(addr: SocketAddr) -> bool {
+        !addr.ip().is_unspecified()
+    }
 
     #[tokio::test]
     async fn blob_roundtrip_basic() {
@@ -301,8 +334,7 @@ mod tests {
         let sender = IrohBlobService::new(sender_node.clone());
         let receiver = IrohBlobService::new(receiver_node);
 
-        let ticket =
-            encode_endpoint_ticket(&sender_node.endpoint().addr(), &config).expect("sender ticket");
+        let ticket = loopback_ticket(sender_node.endpoint(), &config);
         receiver
             .import_peer_ticket(&ticket)
             .await
