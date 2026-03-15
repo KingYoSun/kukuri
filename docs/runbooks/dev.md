@@ -81,8 +81,12 @@ $env:KUKURI_INSTANCE="desktop-a"
 ## Windows native smoke
 1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
 2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author `npub` 不変を確認する。
-3. `KUKURI_INSTANCE` を分けた 2 instance で static-peer ticket import、`reply/thread`、live/game の伝播を確認する。
-4. `cargo xtask desktop-package` で NSIS installer を build し、install 後に packaged app が通常の app data dir を使って起動することを確認する。
+3. `KUKURI_DISABLE_KEYRING` を外した状態でも author `npub` が維持されることを確認する。
+4. `KUKURI_INSTANCE` を分けた 2 instance で static-peer ticket import、`reply/thread`、live/game の伝播を確認する。
+5. 片側終了時に相手側が polling で `connected: no, peers: 0` に戻ることを確認する。
+6. 複数 topic の維持、topic 単位の unsubscribe、invalid ticket import 時の `Last Error` 更新を確認する。
+7. 可能なら別 host 間でも `KUKURI_ADVERTISE_HOST` を使った static-peer 接続を確認する。
+8. `cargo xtask desktop-package` で NSIS installer を build し、install 後に packaged app が通常の app data dir を使って起動することを確認する。
 
 実機確認済み:
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立
@@ -91,6 +95,14 @@ $env:KUKURI_INSTANCE="desktop-a"
 - Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
+- Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
+- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author `npub` 不変を確認
+- Windows 実機で Credential Manager を使う keyring 有効状態でも author identity が維持されることを確認
+- Windows 実機で `KUKURI_INSTANCE` を分けた 2 instance による static-peer ticket import、`post -> reply -> thread`、live/game 伝播が成功
+- Windows 実機で片側終了後に相手側が `connected: no, peers: 0` に戻ることを確認
+- Windows 実機で複数 topic 維持、topic 単位 unsubscribe、invalid ticket import 時の `Last Error` 更新が期待どおりに機能
+- Windows 実機で別 host 間の static-peer 接続と投稿伝播が成功
+- Windows 実機で `cargo xtask desktop-package` による NSIS installer build、install、packaged app 起動が成功
 - Linux-first MVP の Phase4 desktop 縦スライスは完了
 
 ## Phase5 Cutover Check

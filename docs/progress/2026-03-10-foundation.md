@@ -6,7 +6,7 @@
 - v3 Phase5 cutover は完了
 - Phase6-1 image post canonical source 設計に着手
 - Phase6-6 video post canonical source 設計に着手
-- Phase6-7 Windows desktop support の code path / packaging / CI lane を追加
+- Phase6-7 Windows desktop support の native smoke まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -69,11 +69,19 @@
 - app-api test で `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green
 - app-api test で `thread_open_triggers_lazy_blob_fetch` / `image_post_visible_before_full_blob_download` / `new_writes_use_blob_text_payload_refs` が green
 - docs-sync test で `private_cursor_not_in_public_replica` が green
+- Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
+- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author `npub` 不変を確認
+- Windows 実機で keyring 有効状態の author identity 維持を確認
+- Windows 実機で `KUKURI_INSTANCE` を分けた 2 instance による static-peer ticket import、`post -> reply -> thread`、live/game 伝播が成功
+- Windows 実機で片側終了後に相手側が `connected: no, peers: 0` に戻ることを確認
+- Windows 実機で複数 topic 維持、topic 単位 unsubscribe、invalid ticket import 時の `Last Error` 更新が期待どおりに機能
+- Windows 実機で別 host 間の static-peer 接続と投稿伝播が成功
+- Windows 実機で `cargo xtask desktop-package` による NSIS installer build、install、packaged app 起動が成功
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
-- Windows native の `tauri:dev` / NSIS installer smoke は Windows host での確認が別途必要
+- Windows native smoke は `tauri:dev` / keyring / multi-instance static-peer / 別 host static-peer / NSIS installer まで確認済み
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み
