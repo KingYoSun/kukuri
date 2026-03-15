@@ -256,6 +256,7 @@ pub fn run() {
             let db_path = resolve_db_path(app.handle())?;
             let runtime = tauri::async_runtime::block_on(DesktopRuntime::from_env(db_path))
                 .map_err(map_error)?;
+            info!("initialized kukuri desktop runtime");
             app.manage(DesktopState {
                 runtime: Arc::new(runtime),
             });
