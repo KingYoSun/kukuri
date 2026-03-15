@@ -24,6 +24,7 @@ import {
   TopicSyncStatus,
   runtimeApi,
 } from './lib/api';
+import { blobToCreateAttachment, fileToCreateAttachment } from './lib/attachments';
 
 type AppProps = {
   api?: DesktopApi;
@@ -75,15 +76,6 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${bytes} B`;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return window.btoa(binary);
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -175,28 +167,6 @@ function attachVideoDebugListeners(
       removeListener();
     }
   };
-}
-
-async function blobToCreateAttachment(
-  blob: Blob,
-  fileName: string,
-  role: CreateAttachmentInput['role']
-): Promise<CreateAttachmentInput> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  return {
-    file_name: fileName,
-    mime: blob.type || 'application/octet-stream',
-    byte_size: blob.size,
-    data_base64: bytesToBase64(bytes),
-    role,
-  };
-}
-
-async function fileToCreateAttachment(
-  file: File,
-  role: CreateAttachmentInput['role']
-): Promise<CreateAttachmentInput> {
-  return blobToCreateAttachment(file, file.name, role);
 }
 
 function posterFileName(fileName: string): string {
@@ -827,9 +797,6 @@ export function App({ api = runtimeApi }: AppProps) {
       setAttachmentInputKey((value) => value + 1);
       setComposerError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
-      if (selectedThread) {
-        await openThread(selectedThread);
-      }
       setReplyTarget(null);
     } catch (publishError) {
       setComposerError(

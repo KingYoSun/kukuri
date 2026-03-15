@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import net from 'node:net';
+import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -9,6 +10,7 @@ import {
   buildDevUrl,
   findAvailablePort,
   parsePreferredDevPort,
+  resolveCargoTargetDir,
   resolveDevHost,
 } from './tauri-cli.mjs';
 
@@ -68,5 +70,31 @@ describe('tauri cli wrapper', () => {
     const occupiedPort = await listenOnEphemeralPort();
     const nextPort = await findAvailablePort('127.0.0.1', occupiedPort, 20);
     expect(nextPort).toBeGreaterThan(occupiedPort);
+  });
+
+  it('derives a per-instance cargo target dir for tauri dev', () => {
+    expect(resolveCargoTargetDir({ KUKURI_INSTANCE: 'desktop-b' }, '/repo/apps/desktop')).toBe(
+      path.join('/repo/apps/desktop', 'src-tauri', 'target', 'dev-instances', 'desktop-b')
+    );
+  });
+
+  it('sanitizes the instance value when deriving the cargo target dir', () => {
+    expect(
+      resolveCargoTargetDir({ KUKURI_INSTANCE: 'desktop b/test' }, '/repo/apps/desktop')
+    ).toBe(
+      path.join('/repo/apps/desktop', 'src-tauri', 'target', 'dev-instances', 'desktop-b-test')
+    );
+  });
+
+  it('preserves an explicit cargo target dir override', () => {
+    expect(
+      resolveCargoTargetDir(
+        {
+          CARGO_TARGET_DIR: '/custom/target',
+          KUKURI_INSTANCE: 'desktop-b',
+        },
+        '/repo/apps/desktop'
+      )
+    ).toBe('/custom/target');
   });
 });

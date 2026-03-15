@@ -151,132 +151,162 @@ declare global {
   }
 }
 
-const unavailable = async (): Promise<never> => {
-  throw new Error('Desktop backend is not attached.');
-};
+const BACKEND_UNAVAILABLE_MESSAGE = 'Desktop backend is not attached.';
+
+function normalizeInvokeError(error: unknown): Error {
+  const normalized =
+    error instanceof Error
+      ? error
+      : typeof error === 'string'
+        ? new Error(error)
+        : typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof error.message === 'string'
+          ? new Error(error.message)
+          : new Error(BACKEND_UNAVAILABLE_MESSAGE);
+  const message = normalized.message.toLowerCase();
+  if (
+    message.includes('__tauri') ||
+    message.includes('__tauri_ipc__') ||
+    (message.includes('ipc') && message.includes('not available')) ||
+    (message.includes('invoke') && message.includes('undefined'))
+  ) {
+    return new Error(BACKEND_UNAVAILABLE_MESSAGE);
+  }
+  return normalized;
+}
+
+async function invokeDesktop<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    throw normalizeInvokeError(error);
+  }
+}
 
 export const runtimeApi: DesktopApi = {
   createPost: async (topic, content, replyTo, attachments = []) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments);
     }
-    return invoke<string>('create_post', {
+    return invokeDesktop<string>('create_post', {
       request: {
         topic,
         content,
         reply_to: replyTo,
         attachments,
       },
-    }).catch(() => unavailable());
+    });
   },
   listTimeline: async (topic, cursor, limit) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit);
     }
-    return invoke<TimelineView>('list_timeline', {
+    return invokeDesktop<TimelineView>('list_timeline', {
       request: {
         topic,
         cursor,
         limit,
       },
-    }).catch(() => unavailable());
+    });
   },
   listThread: async (topic, threadId, cursor, limit) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.listThread(topic, threadId, cursor, limit);
     }
-    return invoke<TimelineView>('list_thread', {
+    return invokeDesktop<TimelineView>('list_thread', {
       request: {
         topic,
         thread_id: threadId,
         cursor,
         limit,
       },
-    }).catch(() => unavailable());
+    });
   },
   listLiveSessions: async (topic) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.listLiveSessions(topic);
     }
-    return invoke<LiveSessionView[]>('list_live_sessions', {
+    return invokeDesktop<LiveSessionView[]>('list_live_sessions', {
       request: {
         topic,
       },
-    }).catch(() => unavailable());
+    });
   },
   createLiveSession: async (topic, title, description) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description);
     }
-    return invoke<string>('create_live_session', {
+    return invokeDesktop<string>('create_live_session', {
       request: {
         topic,
         title,
         description,
       },
-    }).catch(() => unavailable());
+    });
   },
   endLiveSession: async (topic, sessionId) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.endLiveSession(topic, sessionId);
     }
-    return invoke<void>('end_live_session', {
+    return invokeDesktop<void>('end_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
-    }).catch(() => unavailable());
+    });
   },
   joinLiveSession: async (topic, sessionId) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.joinLiveSession(topic, sessionId);
     }
-    return invoke<void>('join_live_session', {
+    return invokeDesktop<void>('join_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
-    }).catch(() => unavailable());
+    });
   },
   leaveLiveSession: async (topic, sessionId) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.leaveLiveSession(topic, sessionId);
     }
-    return invoke<void>('leave_live_session', {
+    return invokeDesktop<void>('leave_live_session', {
       request: {
         topic,
         session_id: sessionId,
       },
-    }).catch(() => unavailable());
+    });
   },
   listGameRooms: async (topic) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.listGameRooms(topic);
     }
-    return invoke<GameRoomView[]>('list_game_rooms', {
+    return invokeDesktop<GameRoomView[]>('list_game_rooms', {
       request: {
         topic,
       },
-    }).catch(() => unavailable());
+    });
   },
   createGameRoom: async (topic, title, description, participants) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.createGameRoom(topic, title, description, participants);
     }
-    return invoke<string>('create_game_room', {
+    return invokeDesktop<string>('create_game_room', {
       request: {
         topic,
         title,
         description,
         participants,
       },
-    }).catch(() => unavailable());
+    });
   },
   updateGameRoom: async (topic, roomId, status, phaseLabel, scores) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.updateGameRoom(topic, roomId, status, phaseLabel, scores);
     }
-    return invoke<void>('update_game_room', {
+    return invokeDesktop<void>('update_game_room', {
       request: {
         topic,
         room_id: roomId,
@@ -284,60 +314,60 @@ export const runtimeApi: DesktopApi = {
         phase_label: phaseLabel,
         scores,
       },
-    }).catch(() => unavailable());
+    });
   },
   getSyncStatus: async () => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.getSyncStatus();
     }
-    return invoke<SyncStatus>('get_sync_status').catch(() => unavailable());
+    return invokeDesktop<SyncStatus>('get_sync_status');
   },
   importPeerTicket: async (ticket) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.importPeerTicket(ticket);
     }
-    return invoke<void>('import_peer_ticket', {
+    return invokeDesktop<void>('import_peer_ticket', {
       request: {
         ticket,
       },
-    }).catch(() => unavailable());
+    });
   },
   unsubscribeTopic: async (topic) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.unsubscribeTopic(topic);
     }
-    return invoke<void>('unsubscribe_topic', {
+    return invokeDesktop<void>('unsubscribe_topic', {
       request: {
         topic,
       },
-    }).catch(() => unavailable());
+    });
   },
   getLocalPeerTicket: async () => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.getLocalPeerTicket();
     }
-    return invoke<string | null>('get_local_peer_ticket').catch(() => unavailable());
+    return invokeDesktop<string | null>('get_local_peer_ticket');
   },
   getBlobMediaPayload: async (hash, mime) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.getBlobMediaPayload(hash, mime);
     }
-    return invoke<BlobMediaPayload | null>('get_blob_media_payload', {
+    return invokeDesktop<BlobMediaPayload | null>('get_blob_media_payload', {
       request: {
         hash,
         mime,
       },
-    }).catch(() => unavailable());
+    });
   },
   getBlobPreviewUrl: async (hash, mime) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.getBlobPreviewUrl(hash, mime);
     }
-    return invoke<string | null>('get_blob_preview_url', {
+    return invokeDesktop<string | null>('get_blob_preview_url', {
       request: {
         hash,
         mime,
       },
-    }).catch(() => unavailable());
+    });
   },
 };

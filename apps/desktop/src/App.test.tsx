@@ -462,6 +462,47 @@ test('desktop shell can enter reply mode and render reply state', async () => {
   expect(screen.getAllByText('Reply').length).toBeGreaterThan(0);
 });
 
+test('reply publish reloads thread only once after a successful submit', async () => {
+  const user = userEvent.setup();
+  const api = createMockApi();
+  const originalListThread = api.listThread;
+  const listThreadSpy = vi.fn((topic, threadId, cursor, limit) =>
+    originalListThread(topic, threadId, cursor, limit)
+  );
+  api.listThread = listThreadSpy;
+
+  render(<App api={api} />);
+
+  await user.type(screen.getAllByPlaceholderText('Write a post')[0], 'root post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('root post')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Reply' }));
+  await waitFor(() => {
+    expect(screen.getByPlaceholderText('Write a reply')).toBeInTheDocument();
+  });
+  const threadCallsBeforeSubmit = listThreadSpy.mock.calls.length;
+
+  const replyInput = screen.getByPlaceholderText('Write a reply');
+  await user.type(replyInput, 'reply post');
+  const composer = replyInput.closest('form');
+  if (!composer) {
+    throw new Error('reply composer form not found');
+  }
+  const submitButton = composer.querySelector('button[type="submit"]');
+  if (!(submitButton instanceof HTMLButtonElement)) {
+    throw new Error('reply submit button not found');
+  }
+  await user.click(submitButton);
+
+  await waitFor(() => {
+    expect(screen.getAllByText('reply post').length).toBeGreaterThan(0);
+  });
+  expect(listThreadSpy.mock.calls.length - threadCallsBeforeSubmit).toBe(1);
+});
+
 test('desktop shell can track multiple topics at once', async () => {
   const user = userEvent.setup();
   render(<App api={createMockApi()} />);
