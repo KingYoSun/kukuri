@@ -1,0 +1,19 @@
+services:
+  community-node-postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: cn
+      POSTGRES_PASSWORD: cn_password
+      POSTGRES_DB: cn
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cn -d cn"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - community-node-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  community-node-postgres-data:

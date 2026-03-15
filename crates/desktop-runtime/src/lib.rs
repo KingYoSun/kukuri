@@ -7,6 +7,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use kukuri_community_node_core::{
+    AUTH_EVENT_KIND, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
+    CommunityNodeResolvedUrls, normalize_http_url,
+};
 use kukuri_app_api::{
     AppService, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput, GameRoomView,
     GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
@@ -15,20 +19,29 @@ use kukuri_app_api::{
 use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_core::{AssetRole, GameRoomStatus};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
+use chrono::Utc;
+use nostr_sdk::JsonUtil;
+use nostr_sdk::prelude::{EventBuilder, Keys, Tag};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
-    TransportNetworkConfig, parse_seed_peer,
+    TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
 };
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::identity::{IdentityStorageMode, load_or_create_keys};
+use crate::identity::{
+    IdentityStorageMode, delete_optional_secret, load_optional_secret, load_or_create_keys,
+    persist_optional_secret,
+};
 
 const DB_FILE_NAME: &str = "kukuri.db";
 const DISCOVERY_CONFIG_FILE_EXTENSION: &str = "discovery.json";
+const COMMUNITY_NODE_CONFIG_FILE_EXTENSION: &str = "community-node.json";
 const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
 const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
+const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -182,12 +195,67 @@ struct StoredDiscoveryConfig {
     seed_peers: Vec<SeedPeer>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeNodeConfig {
+    pub base_url: String,
+    #[serde(default)]
+    pub resolved_urls: Option<CommunityNodeResolvedUrls>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeConfig {
+    #[serde(default)]
+    pub nodes: Vec<CommunityNodeNodeConfig>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetCommunityNodeConfigRequest {
+    pub base_urls: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeTargetRequest {
+    pub base_url: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AcceptCommunityNodeConsentsRequest {
+    pub base_url: String,
+    #[serde(default)]
+    pub policy_slugs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeAuthState {
+    pub authenticated: bool,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeNodeStatus {
+    pub base_url: String,
+    pub auth_state: CommunityNodeAuthState,
+    pub consent_state: Option<CommunityNodeConsentStatus>,
+    pub resolved_urls: Option<CommunityNodeResolvedUrls>,
+    pub last_error: Option<String>,
+    pub restart_required: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct StoredCommunityNodeToken {
+    access_token: String,
+    expires_at: i64,
+}
+
 pub struct DesktopRuntime {
     app_service: AppService,
+    author_keys: Arc<Keys>,
     db_path: PathBuf,
     store: Arc<SqliteStore>,
     iroh_stack: SharedIrohStack,
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
+    community_node_config: Arc<Mutex<CommunityNodeConfig>>,
+    startup_relay_urls: Vec<String>,
 }
 
 struct SharedIrohStack {
@@ -248,6 +316,8 @@ impl DesktopRuntime {
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         migrate_legacy_runtime_data(&db_path)?;
+        let community_node_config = load_community_node_config_from_file(&db_path)?.unwrap_or_default();
+        let relay_config = relay_config_from_community_node_config(&community_node_config);
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let iroh_stack = SharedIrohStack::new(
@@ -255,9 +325,11 @@ impl DesktopRuntime {
             network_config.clone(),
             &discovery_config,
             dht_options,
+            relay_config.clone(),
         )
         .await?;
         let keys = load_or_create_keys(&db_path, identity_mode)?;
+        let author_keys = Arc::new(keys.clone());
         let app_service = AppService::new_with_services(
             store.clone(),
             store.clone(),
@@ -270,10 +342,13 @@ impl DesktopRuntime {
 
         Ok(Self {
             app_service,
+            author_keys,
             db_path,
             store,
             iroh_stack,
             discovery_config: Arc::new(Mutex::new(discovery_config)),
+            community_node_config: Arc::new(Mutex::new(community_node_config)),
+            startup_relay_urls: relay_config.iroh_relay_urls,
         })
     }
 
@@ -474,10 +549,286 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn get_community_node_config(&self) -> Result<CommunityNodeConfig> {
+        Ok(self.community_node_config.lock().await.clone())
+    }
+
+    pub async fn get_community_node_statuses(&self) -> Result<Vec<CommunityNodeNodeStatus>> {
+        let config = self.community_node_config.lock().await.clone();
+        let mut statuses = Vec::with_capacity(config.nodes.len());
+        for node in config.nodes {
+            statuses.push(self.community_node_status(node, None, None).await?);
+        }
+        Ok(statuses)
+    }
+
+    pub async fn set_community_node_config(
+        &self,
+        request: SetCommunityNodeConfigRequest,
+    ) -> Result<CommunityNodeConfig> {
+        let nodes = request
+            .base_urls
+            .into_iter()
+            .map(|base_url| -> Result<CommunityNodeNodeConfig> {
+                Ok(CommunityNodeNodeConfig {
+                    base_url: normalize_http_url(base_url.as_str())?,
+                    resolved_urls: None,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
+        save_community_node_config(&self.db_path, &next_config)?;
+        *self.community_node_config.lock().await = next_config.clone();
+        Ok(next_config)
+    }
+
+    pub async fn clear_community_node_config(&self) -> Result<()> {
+        let existing = self.community_node_config.lock().await.clone();
+        for node in existing.nodes {
+            self.clear_community_node_token(CommunityNodeTargetRequest {
+                base_url: node.base_url,
+            })
+            .await?;
+        }
+        remove_community_node_config(&self.db_path)?;
+        *self.community_node_config.lock().await = CommunityNodeConfig::default();
+        Ok(())
+    }
+
+    pub async fn authenticate_community_node(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        let client = community_node_http_client()?;
+        let challenge_url = format!("{}/v1/auth/challenge", base_url);
+        let pubkey = self.author_keys.public_key().to_hex();
+        let challenge = client
+            .post(challenge_url)
+            .json(&serde_json::json!({ "pubkey": pubkey }))
+            .send()
+            .await
+            .context("failed to request auth challenge")?
+            .error_for_status()
+            .context("auth challenge request failed")?
+            .json::<AuthChallengeResponse>()
+            .await
+            .context("failed to decode auth challenge response")?;
+
+        let public_base_url = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .and_then(|node| node.resolved_urls.as_ref().map(|resolved| resolved.public_base_url.clone()))
+            .unwrap_or_else(|| base_url.clone());
+        let auth_event_json = build_auth_event_json(
+            self.author_keys.as_ref(),
+            challenge.challenge.as_str(),
+            public_base_url.as_str(),
+        )?;
+        let verify_url = format!("{}/v1/auth/verify", base_url);
+        let verify = client
+            .post(verify_url)
+            .json(&serde_json::json!({ "auth_event_json": auth_event_json }))
+            .send()
+            .await
+            .context("failed to verify auth event")?
+            .error_for_status()
+            .context("auth verify request failed")?
+            .json::<AuthVerifyResponse>()
+            .await
+            .context("failed to decode auth verify response")?;
+        let token = StoredCommunityNodeToken {
+            access_token: verify.access_token,
+            expires_at: verify.expires_at,
+        };
+        persist_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            base_url.as_str(),
+            &token,
+        )?;
+        self.refresh_community_node_metadata(CommunityNodeTargetRequest { base_url })
+            .await
+    }
+
+    pub async fn clear_community_node_token(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        delete_optional_secret(&self.db_path, COMMUNITY_NODE_TOKEN_PURPOSE, base_url.as_str())?;
+        let node = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .clone()
+            .into_iter()
+            .find(|node| node.base_url == base_url)
+            .ok_or_else(|| anyhow!("community node `{base_url}` is not configured"))?;
+        self.community_node_status(node, None, None).await
+    }
+
+    pub async fn get_community_node_consent_status(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        let node = self.require_community_node(base_url.as_str()).await?;
+        let client = community_node_http_client()?;
+        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
+            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let consent_url = format!("{}/v1/consents/status", base_url);
+        let response = client
+            .get(consent_url)
+            .bearer_auth(token.access_token.as_str())
+            .send()
+            .await
+            .context("failed to fetch community node consent status")?;
+        let status = response
+            .error_for_status()
+            .context("community node consent status request failed")?
+            .json::<CommunityNodeConsentStatus>()
+            .await
+            .context("failed to decode community node consent status")?;
+        self.community_node_status(node, Some(status), None).await
+    }
+
+    pub async fn accept_community_node_consents(
+        &self,
+        request: AcceptCommunityNodeConsentsRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        let node = self.require_community_node(base_url.as_str()).await?;
+        let client = community_node_http_client()?;
+        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
+            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let consent_url = format!("{}/v1/consents", base_url);
+        let response = client
+            .post(consent_url)
+            .bearer_auth(token.access_token.as_str())
+            .json(&serde_json::json!({ "policy_slugs": request.policy_slugs }))
+            .send()
+            .await
+            .context("failed to accept community node consents")?;
+        let status = response
+            .error_for_status()
+            .context("community node consent accept request failed")?
+            .json::<CommunityNodeConsentStatus>()
+            .await
+            .context("failed to decode accepted community node consents")?;
+        self.community_node_status(node, Some(status), None).await
+    }
+
+    pub async fn refresh_community_node_metadata(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let base_url = normalize_http_url(request.base_url.as_str())?;
+        let mut config = self.community_node_config.lock().await.clone();
+        let Some(index) = config.nodes.iter().position(|node| node.base_url == base_url) else {
+            bail!("community node `{base_url}` is not configured");
+        };
+        let client = community_node_http_client()?;
+        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
+            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let bootstrap_url = format!("{}/v1/bootstrap/nodes", base_url);
+        let response = client
+            .get(bootstrap_url)
+            .bearer_auth(token.access_token.as_str())
+            .send()
+            .await
+            .context("failed to refresh community node metadata")?;
+        let bootstrap = response
+            .error_for_status()
+            .context("community node bootstrap request failed")?
+            .json::<serde_json::Value>()
+            .await
+            .context("failed to decode community node bootstrap response")?;
+        let nodes = bootstrap
+            .get("nodes")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| anyhow!("community node bootstrap response is missing nodes"))?;
+        let resolved_urls = nodes
+            .iter()
+            .filter_map(|node| {
+                let candidate_base_url = node.get("base_url")?.as_str()?;
+                if candidate_base_url != base_url {
+                    return None;
+                }
+                serde_json::from_value::<CommunityNodeNodeConfig>(node.clone())
+                    .ok()
+                    .and_then(|node| node.resolved_urls)
+            })
+            .next()
+            .ok_or_else(|| anyhow!("community node bootstrap response is missing self metadata"))?;
+        config.nodes[index].resolved_urls = Some(resolved_urls);
+        let normalized = normalize_community_node_config(config)?;
+        save_community_node_config(&self.db_path, &normalized)?;
+        *self.community_node_config.lock().await = normalized.clone();
+        let node = normalized.nodes[index].clone();
+        self.community_node_status(node, None, None).await
+    }
+
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
         self.iroh_stack.shutdown().await;
         self.store.close().await;
+    }
+}
+
+impl DesktopRuntime {
+    async fn require_community_node(&self, base_url: &str) -> Result<CommunityNodeNodeConfig> {
+        self.community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .cloned()
+            .ok_or_else(|| anyhow!("community node `{base_url}` is not configured"))
+    }
+
+    async fn community_node_status(
+        &self,
+        node: CommunityNodeNodeConfig,
+        consent_state: Option<CommunityNodeConsentStatus>,
+        last_error: Option<String>,
+    ) -> Result<CommunityNodeNodeStatus> {
+        let token = load_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            node.base_url.as_str(),
+        )?;
+        let auth_state = match token {
+            Some(token) if token.expires_at > Utc::now().timestamp() => {
+                CommunityNodeAuthState {
+                    authenticated: true,
+                    expires_at: Some(token.expires_at),
+                }
+            }
+            Some(token) => CommunityNodeAuthState {
+                authenticated: false,
+                expires_at: Some(token.expires_at),
+            },
+            None => CommunityNodeAuthState::default(),
+        };
+        let current_relay_urls = relay_config_from_community_node_config(
+            &self.community_node_config.lock().await.clone(),
+        )
+        .iroh_relay_urls;
+        Ok(CommunityNodeNodeStatus {
+            base_url: node.base_url,
+            auth_state,
+            consent_state,
+            resolved_urls: node.resolved_urls,
+            last_error,
+            restart_required: current_relay_urls != self.startup_relay_urls,
+        })
     }
 }
 
@@ -592,6 +943,140 @@ fn save_discovery_config(db_path: &Path, config: &StoredDiscoveryConfig) -> Resu
         .with_context(|| format!("failed to write discovery config `{}`", path.display()))
 }
 
+fn community_node_config_path(db_path: &Path) -> PathBuf {
+    db_path.with_extension(COMMUNITY_NODE_CONFIG_FILE_EXTENSION)
+}
+
+fn load_community_node_config_from_file(db_path: &Path) -> Result<Option<CommunityNodeConfig>> {
+    let path = community_node_config_path(db_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read community-node config `{}`", path.display()))?;
+    let config = serde_json::from_str::<CommunityNodeConfig>(&raw).with_context(|| {
+        format!(
+            "failed to parse community-node config `{}`",
+            path.display()
+        )
+    })?;
+    Ok(Some(normalize_community_node_config(config)?))
+}
+
+fn save_community_node_config(db_path: &Path, config: &CommunityNodeConfig) -> Result<()> {
+    let path = community_node_config_path(db_path);
+    let normalized = normalize_community_node_config(config.clone())?;
+    let json = serde_json::to_vec_pretty(&normalized).with_context(|| {
+        format!(
+            "failed to encode community-node config `{}`",
+            path.display()
+        )
+    })?;
+    fs::write(&path, json)
+        .with_context(|| format!("failed to write community-node config `{}`", path.display()))
+}
+
+fn remove_community_node_config(db_path: &Path) -> Result<()> {
+    let path = community_node_config_path(db_path);
+    if path.exists() {
+        fs::remove_file(&path).with_context(|| {
+            format!(
+                "failed to remove community-node config `{}`",
+                path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn normalize_community_node_config(config: CommunityNodeConfig) -> Result<CommunityNodeConfig> {
+    let mut deduped = std::collections::BTreeMap::new();
+    for node in config.nodes {
+        let base_url = normalize_http_url(node.base_url.as_str())?;
+        let resolved_urls = match node.resolved_urls {
+            Some(resolved) => Some(CommunityNodeResolvedUrls::new(
+                resolved.public_base_url,
+                resolved.relay_ws_url,
+                resolved.iroh_relay_urls,
+            )?),
+            None => None,
+        };
+        deduped.insert(
+            base_url.clone(),
+            CommunityNodeNodeConfig {
+                base_url,
+                resolved_urls,
+            },
+        );
+    }
+    Ok(CommunityNodeConfig {
+        nodes: deduped.into_values().collect(),
+    })
+}
+
+fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> TransportRelayConfig {
+    let mut iroh_relay_urls = std::collections::BTreeSet::new();
+    for node in &config.nodes {
+        if let Some(resolved) = node.resolved_urls.as_ref() {
+            for relay_url in &resolved.iroh_relay_urls {
+                iroh_relay_urls.insert(relay_url.clone());
+            }
+        }
+    }
+    TransportRelayConfig {
+        iroh_relay_urls: iroh_relay_urls.into_iter().collect(),
+    }
+}
+
+fn load_community_node_token(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    base_url: &str,
+) -> Result<Option<StoredCommunityNodeToken>> {
+    let Some(raw) = load_optional_secret(db_path, mode, COMMUNITY_NODE_TOKEN_PURPOSE, base_url)? else {
+        return Ok(None);
+    };
+    let token = serde_json::from_str::<StoredCommunityNodeToken>(&raw)
+        .context("failed to decode persisted community-node token")?;
+    Ok(Some(token))
+}
+
+fn persist_community_node_token(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    base_url: &str,
+    token: &StoredCommunityNodeToken,
+) -> Result<()> {
+    let encoded = serde_json::to_string(token).context("failed to encode community-node token")?;
+    persist_optional_secret(
+        db_path,
+        mode,
+        COMMUNITY_NODE_TOKEN_PURPOSE,
+        base_url,
+        encoded.as_str(),
+    )
+}
+
+fn community_node_http_client() -> Result<Client> {
+    Client::builder()
+        .build()
+        .context("failed to build community-node http client")
+}
+
+fn build_auth_event_json(keys: &Keys, challenge: &str, public_base_url: &str) -> Result<serde_json::Value> {
+    let signed = EventBuilder::new(
+        nostr_sdk::prelude::Kind::Custom(AUTH_EVENT_KIND),
+        String::new(),
+    )
+    .tags([
+        Tag::parse(["challenge", challenge]).context("failed to build challenge tag")?,
+        Tag::parse(["relay", public_base_url]).context("failed to build relay tag")?,
+    ])
+    .sign_with_keys(keys)
+    .map_err(|error| anyhow!(error))?;
+    serde_json::from_str(signed.as_json().as_str()).context("failed to encode auth event json")
+}
+
 fn resolve_discovery_config_from_env(db_path: &Path) -> Result<DiscoveryConfig> {
     let env_mode = std::env::var(DISCOVERY_MODE_ENV).ok();
     let env_seeds = std::env::var(DISCOVERY_SEEDS_ENV).ok();
@@ -671,11 +1156,13 @@ impl SharedIrohStack {
         network_config: TransportNetworkConfig,
         discovery_config: &DiscoveryConfig,
         dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             network_config.clone(),
             dht_options,
+            relay_config.clone(),
         )
         .await?;
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
@@ -683,6 +1170,7 @@ impl SharedIrohStack {
             node.gossip().clone(),
             node.discovery(),
             network_config,
+            relay_config.connect_mode(),
         ));
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
@@ -1978,6 +2466,81 @@ mod tests {
                 .find(|score| score.label == "Alice")
                 .map(|score| score.score),
             Some(2)
+        );
+    }
+
+    #[test]
+    fn community_node_config_normalizes_base_urls_and_relay_urls() {
+        let config = normalize_community_node_config(CommunityNodeConfig {
+            nodes: vec![
+                CommunityNodeNodeConfig {
+                    base_url: "https://community.example.com/".into(),
+                    resolved_urls: Some(
+                        CommunityNodeResolvedUrls::new(
+                            "https://public.example.com/",
+                            "wss://public.example.com/relay/",
+                            vec![
+                                "https://relay-b.example.com/".into(),
+                                "https://relay-a.example.com/".into(),
+                                "https://relay-a.example.com/".into(),
+                            ],
+                        )
+                        .expect("resolved urls"),
+                    ),
+                },
+                CommunityNodeNodeConfig {
+                    base_url: "https://community.example.com".into(),
+                    resolved_urls: None,
+                },
+            ],
+        })
+        .expect("normalized config");
+
+        assert_eq!(config.nodes.len(), 1);
+        assert_eq!(config.nodes[0].base_url, "https://community.example.com");
+        assert_eq!(
+            config.nodes[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .iroh_relay_urls,
+            vec![
+                "https://relay-a.example.com".to_string(),
+                "https://relay-b.example.com".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn stored_community_node_config_restores_cached_relay_union() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("community-relay.db");
+        save_community_node_config(
+            &db_path,
+            &CommunityNodeConfig {
+                nodes: vec![CommunityNodeNodeConfig {
+                    base_url: "https://community.example.com".into(),
+                    resolved_urls: Some(
+                        CommunityNodeResolvedUrls::new(
+                            "https://public.example.com",
+                            "wss://public.example.com/relay",
+                            vec!["https://relay.example.com".into()],
+                        )
+                        .expect("resolved urls"),
+                    ),
+                }],
+            },
+        )
+        .expect("save community node config");
+        let restored = load_community_node_config_from_file(&db_path)
+            .expect("load community node config")
+            .expect("community node config");
+        let relay_config = relay_config_from_community_node_config(&restored);
+
+        assert_eq!(relay_config.connect_mode(), ConnectMode::DirectOrRelay);
+        assert_eq!(
+            relay_config.iroh_relay_urls,
+            vec!["https://relay.example.com".to_string()]
         );
     }
 }

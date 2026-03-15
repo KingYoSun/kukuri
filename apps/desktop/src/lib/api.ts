@@ -48,7 +48,7 @@ export type TimelineView = {
 
 export type DiscoveryMode = 'static_peer' | 'seeded_dht';
 
-export type ConnectMode = 'direct_only';
+export type ConnectMode = 'direct_only' | 'direct_or_relay';
 
 export type SeedPeer = {
   endpoint_id: string;
@@ -85,6 +85,48 @@ export type SyncStatus = {
   topic_diagnostics: TopicSyncStatus[];
   local_author_pubkey: string;
   discovery: DiscoveryStatus;
+};
+
+export type CommunityNodeResolvedUrls = {
+  public_base_url: string;
+  relay_ws_url: string;
+  iroh_relay_urls: string[];
+};
+
+export type CommunityNodeNodeConfig = {
+  base_url: string;
+  resolved_urls?: CommunityNodeResolvedUrls | null;
+};
+
+export type CommunityNodeConfig = {
+  nodes: CommunityNodeNodeConfig[];
+};
+
+export type CommunityNodeAuthState = {
+  authenticated: boolean;
+  expires_at?: number | null;
+};
+
+export type CommunityNodeConsentItem = {
+  policy_slug: string;
+  policy_version: number;
+  title: string;
+  required: boolean;
+  accepted_at?: number | null;
+};
+
+export type CommunityNodeConsentStatus = {
+  all_required_accepted: boolean;
+  items: CommunityNodeConsentItem[];
+};
+
+export type CommunityNodeNodeStatus = {
+  base_url: string;
+  auth_state: CommunityNodeAuthState;
+  consent_state?: CommunityNodeConsentStatus | null;
+  resolved_urls?: CommunityNodeResolvedUrls | null;
+  last_error?: string | null;
+  restart_required: boolean;
 };
 
 export type TopicSyncStatus = {
@@ -167,6 +209,18 @@ export interface DesktopApi {
   ): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
   getDiscoveryConfig(): Promise<DiscoveryConfig>;
+  getCommunityNodeConfig(): Promise<CommunityNodeConfig>;
+  getCommunityNodeStatuses(): Promise<CommunityNodeNodeStatus[]>;
+  setCommunityNodeConfig(baseUrls: string[]): Promise<CommunityNodeConfig>;
+  clearCommunityNodeConfig(): Promise<void>;
+  authenticateCommunityNode(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  getCommunityNodeConsentStatus(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  acceptCommunityNodeConsents(
+    baseUrl: string,
+    policySlugs: string[]
+  ): Promise<CommunityNodeNodeStatus>;
+  refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   importPeerTicket(ticket: string): Promise<void>;
   setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;
@@ -357,6 +411,85 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.getDiscoveryConfig();
     }
     return invokeDesktop<DiscoveryConfig>('get_discovery_config');
+  },
+  getCommunityNodeConfig: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getCommunityNodeConfig();
+    }
+    return invokeDesktop<CommunityNodeConfig>('get_community_node_config');
+  },
+  getCommunityNodeStatuses: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getCommunityNodeStatuses();
+    }
+    return invokeDesktop<CommunityNodeNodeStatus[]>('get_community_node_statuses');
+  },
+  setCommunityNodeConfig: async (baseUrls) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setCommunityNodeConfig(baseUrls);
+    }
+    return invokeDesktop<CommunityNodeConfig>('set_community_node_config', {
+      request: {
+        base_urls: baseUrls,
+      },
+    });
+  },
+  clearCommunityNodeConfig: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.clearCommunityNodeConfig();
+    }
+    return invokeDesktop<void>('clear_community_node_config');
+  },
+  authenticateCommunityNode: async (baseUrl) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.authenticateCommunityNode(baseUrl);
+    }
+    return invokeDesktop<CommunityNodeNodeStatus>('authenticate_community_node', {
+      request: {
+        base_url: baseUrl,
+      },
+    });
+  },
+  clearCommunityNodeToken: async (baseUrl) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.clearCommunityNodeToken(baseUrl);
+    }
+    return invokeDesktop<CommunityNodeNodeStatus>('clear_community_node_token', {
+      request: {
+        base_url: baseUrl,
+      },
+    });
+  },
+  getCommunityNodeConsentStatus: async (baseUrl) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getCommunityNodeConsentStatus(baseUrl);
+    }
+    return invokeDesktop<CommunityNodeNodeStatus>('get_community_node_consent_status', {
+      request: {
+        base_url: baseUrl,
+      },
+    });
+  },
+  acceptCommunityNodeConsents: async (baseUrl, policySlugs) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.acceptCommunityNodeConsents(baseUrl, policySlugs);
+    }
+    return invokeDesktop<CommunityNodeNodeStatus>('accept_community_node_consents', {
+      request: {
+        base_url: baseUrl,
+        policy_slugs: policySlugs,
+      },
+    });
+  },
+  refreshCommunityNodeMetadata: async (baseUrl) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.refreshCommunityNodeMetadata(baseUrl);
+    }
+    return invokeDesktop<CommunityNodeNodeStatus>('refresh_community_node_metadata', {
+      request: {
+        base_url: baseUrl,
+      },
+    });
   },
   importPeerTicket: async (ticket) => {
     if (window.__KUKURI_DESKTOP__) {

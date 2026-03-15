@@ -35,6 +35,33 @@ pub(crate) fn load_or_create_keys(db_path: &Path, mode: IdentityStorageMode) -> 
     load_or_create_keys_with_keyring(db_path, mode, &SystemKeyringStore)
 }
 
+pub(crate) fn load_optional_secret(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+) -> Result<Option<String>> {
+    load_optional_secret_with_keyring(db_path, mode, purpose, key, &SystemKeyringStore)
+}
+
+pub(crate) fn persist_optional_secret(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+    secret: &str,
+) -> Result<()> {
+    persist_optional_secret_with_keyring(db_path, mode, purpose, key, secret, &SystemKeyringStore)
+}
+
+pub(crate) fn delete_optional_secret(
+    db_path: &Path,
+    purpose: &str,
+    key: &str,
+) -> Result<()> {
+    delete_optional_secret_with_keyring(db_path, purpose, key, &SystemKeyringStore)
+}
+
 fn load_or_create_keys_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
@@ -108,6 +135,60 @@ fn parse_keys(secret: &str) -> Result<Keys> {
     Keys::parse(secret).context("failed to parse persisted secret key")
 }
 
+fn load_optional_secret_with_keyring(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+    keyring: &dyn KeyringStore,
+) -> Result<Option<String>> {
+    if mode == IdentityStorageMode::Auto
+        && let Some(secret) = keyring
+            .get_password(
+                KEYRING_SERVICE,
+                optional_secret_account(db_path, purpose, key).as_str(),
+            )
+            .context("failed to read optional secret from keyring")?
+    {
+        return Ok(Some(secret));
+    }
+
+    load_secret_from_file_path(optional_secret_file_path(db_path, purpose, key).as_path())
+}
+
+fn persist_optional_secret_with_keyring(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+    secret: &str,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    let account = optional_secret_account(db_path, purpose, key);
+    if mode == IdentityStorageMode::Auto
+        && keyring
+            .set_password(KEYRING_SERVICE, account.as_str(), secret)
+            .is_ok()
+    {
+        let _ = delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path());
+        return Ok(());
+    }
+
+    persist_secret_to_file_path(optional_secret_file_path(db_path, purpose, key).as_path(), secret)
+}
+
+fn delete_optional_secret_with_keyring(
+    db_path: &Path,
+    purpose: &str,
+    key: &str,
+    keyring: &dyn KeyringStore,
+) -> Result<()> {
+    let account = optional_secret_account(db_path, purpose, key);
+    keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+    delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path())?;
+    Ok(())
+}
+
 fn load_secret_from_keyring(db_path: &Path, keyring: &dyn KeyringStore) -> Result<Option<String>> {
     let new_account = keyring_account(db_path);
     if let Some(secret) = keyring
@@ -145,7 +226,10 @@ fn persist_secret_to_keyring(
 }
 
 fn load_secret_from_file(db_path: &Path) -> Result<Option<String>> {
-    let path = key_file_path(db_path);
+    load_secret_from_file_path(key_file_path(db_path).as_path())
+}
+
+fn load_secret_from_file_path(path: &Path) -> Result<Option<String>> {
     if !path.exists() {
         return Ok(None);
     }
@@ -158,8 +242,11 @@ fn load_secret_from_file(db_path: &Path) -> Result<Option<String>> {
 }
 
 fn persist_secret_to_file(db_path: &Path, secret: &str) -> Result<()> {
-    let path = key_file_path(db_path);
-    let mut file = open_private_write_file(&path)
+    persist_secret_to_file_path(key_file_path(db_path).as_path(), secret)
+}
+
+fn persist_secret_to_file_path(path: &Path, secret: &str) -> Result<()> {
+    let mut file = open_private_write_file(path)
         .with_context(|| format!("failed to create identity file `{}`", path.display()))?;
     file.write_all(secret.as_bytes())
         .with_context(|| format!("failed to write identity file `{}`", path.display()))?;
@@ -249,6 +336,32 @@ fn key_file_path(db_path: &Path) -> PathBuf {
 
 fn backend_marker_path(db_path: &Path) -> PathBuf {
     db_path.with_extension("identity-store")
+}
+
+fn optional_secret_account(db_path: &Path, purpose: &str, key: &str) -> String {
+    let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
+    format!(
+        "db:{}:{}:{}",
+        resolved.display(),
+        purpose,
+        optional_secret_suffix(key)
+    )
+}
+
+fn optional_secret_file_path(db_path: &Path, purpose: &str, key: &str) -> PathBuf {
+    db_path.with_extension(format!("{purpose}-{}", optional_secret_suffix(key)))
+}
+
+fn optional_secret_suffix(key: &str) -> String {
+    blake3::hash(key.as_bytes()).to_hex().to_string()
+}
+
+fn delete_file_if_exists(path: &Path) -> Result<()> {
+    if path.exists() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("failed to delete secret file `{}`", path.display()))?;
+    }
+    Ok(())
 }
 
 trait KeyringStore: Send + Sync {

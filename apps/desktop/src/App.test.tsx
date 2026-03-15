@@ -6,6 +6,8 @@ import { App } from './App';
 import {
   AttachmentView,
   BlobViewStatus,
+  CommunityNodeConfig,
+  CommunityNodeNodeStatus,
   CreateAttachmentInput,
   DesktopApi,
   DiscoveryConfig,
@@ -52,6 +54,10 @@ function createMockApi(options?: {
     env_locked: false,
     seed_peers: [],
   };
+  let communityNodeConfig: CommunityNodeConfig = {
+    nodes: [],
+  };
+  let communityNodeStatuses: CommunityNodeNodeStatus[] = [];
   const syncStatus: SyncStatus = {
     connected: true,
     last_sync_ts: 1,
@@ -257,6 +263,110 @@ function createMockApi(options?: {
     },
     async getDiscoveryConfig() {
       return discoveryConfig;
+    },
+    async getCommunityNodeConfig() {
+      return communityNodeConfig;
+    },
+    async getCommunityNodeStatuses() {
+      return communityNodeStatuses;
+    },
+    async setCommunityNodeConfig(baseUrls) {
+      communityNodeConfig = {
+        nodes: baseUrls.map((baseUrl) => ({
+          base_url: baseUrl,
+          resolved_urls: null,
+        })),
+      };
+      communityNodeStatuses = baseUrls.map((baseUrl) => ({
+        base_url: baseUrl,
+        auth_state: {
+          authenticated: false,
+          expires_at: null,
+        },
+        consent_state: null,
+        resolved_urls: null,
+        last_error: null,
+        restart_required: false,
+      }));
+      return communityNodeConfig;
+    },
+    async clearCommunityNodeConfig() {
+      communityNodeConfig = { nodes: [] };
+      communityNodeStatuses = [];
+    },
+    async authenticateCommunityNode(baseUrl) {
+      communityNodeStatuses = communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              auth_state: {
+                authenticated: true,
+                expires_at: Date.now(),
+              },
+            }
+          : status
+      );
+      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async clearCommunityNodeToken(baseUrl) {
+      communityNodeStatuses = communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              auth_state: {
+                authenticated: false,
+                expires_at: null,
+              },
+            }
+          : status
+      );
+      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async getCommunityNodeConsentStatus(baseUrl) {
+      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async acceptCommunityNodeConsents(baseUrl) {
+      communityNodeStatuses = communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              consent_state: {
+                all_required_accepted: true,
+                items: [],
+              },
+            }
+          : status
+      );
+      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
+    },
+    async refreshCommunityNodeMetadata(baseUrl) {
+      communityNodeStatuses = communityNodeStatuses.map((status) =>
+        status.base_url === baseUrl
+          ? {
+              ...status,
+              resolved_urls: {
+                public_base_url: baseUrl,
+                relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
+                iroh_relay_urls: [baseUrl],
+              },
+            }
+          : status
+      );
+      communityNodeConfig = {
+        nodes: communityNodeConfig.nodes.map((node) =>
+          node.base_url === baseUrl
+            ? {
+                ...node,
+                resolved_urls: {
+                  public_base_url: baseUrl,
+                  relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
+                  iroh_relay_urls: [baseUrl],
+                },
+              }
+            : node
+        ),
+      };
+      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     async importPeerTicket() {},
     async setDiscoverySeeds(seedEntries) {

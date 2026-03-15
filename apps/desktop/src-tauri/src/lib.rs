@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
-    CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest, DesktopRuntime,
-    DiscoveryConfig, GetBlobMediaRequest, GetBlobPreviewRequest, ImportPeerTicketRequest,
-    ListGameRoomsRequest, ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest,
-    LiveSessionCommandRequest, SetDiscoverySeedsRequest, UnsubscribeTopicRequest,
-    UpdateGameRoomRequest,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
+    CommunityNodeTargetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
+    CreatePostRequest, DesktopRuntime, DiscoveryConfig, GetBlobMediaRequest,
+    GetBlobPreviewRequest, ImportPeerTicketRequest, ListGameRoomsRequest,
+    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest,
+    LiveSessionCommandRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
+    UnsubscribeTopicRequest, UpdateGameRoomRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -267,6 +269,111 @@ async fn get_blob_media_payload(
     }
 }
 
+#[tauri::command]
+async fn get_community_node_config(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<CommunityNodeConfig, String> {
+    state
+        .runtime
+        .get_community_node_config()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_community_node_statuses(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<CommunityNodeNodeStatus>, String> {
+    state
+        .runtime
+        .get_community_node_statuses()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn set_community_node_config(
+    state: tauri::State<'_, DesktopState>,
+    request: SetCommunityNodeConfigRequest,
+) -> Result<CommunityNodeConfig, String> {
+    state
+        .runtime
+        .set_community_node_config(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn clear_community_node_config(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .runtime
+        .clear_community_node_config()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn authenticate_community_node(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeNodeStatus, String> {
+    state
+        .runtime
+        .authenticate_community_node(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn clear_community_node_token(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeNodeStatus, String> {
+    state
+        .runtime
+        .clear_community_node_token(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_community_node_consent_status(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeNodeStatus, String> {
+    state
+        .runtime
+        .get_community_node_consent_status(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn accept_community_node_consents(
+    state: tauri::State<'_, DesktopState>,
+    request: AcceptCommunityNodeConsentsRequest,
+) -> Result<CommunityNodeNodeStatus, String> {
+    state
+        .runtime
+        .accept_community_node_consents(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn refresh_community_node_metadata(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeNodeStatus, String> {
+    state
+        .runtime
+        .refresh_community_node_metadata(request)
+        .await
+        .map_err(map_error)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_tracing();
@@ -301,7 +408,16 @@ pub fn run() {
             unsubscribe_topic,
             get_local_peer_ticket,
             get_blob_media_payload,
-            get_blob_preview_url
+            get_blob_preview_url,
+            get_community_node_config,
+            get_community_node_statuses,
+            set_community_node_config,
+            clear_community_node_config,
+            authenticate_community_node,
+            clear_community_node_token,
+            get_community_node_consent_status,
+            accept_community_node_consents,
+            refresh_community_node_metadata
         ])
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");

@@ -13,7 +13,7 @@ use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::{DhtAddressLookup, MemoryLookup};
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{Event, GossipHint, TopicId};
@@ -87,6 +87,51 @@ pub enum DiscoveryMode {
 pub enum ConnectMode {
     #[default]
     DirectOnly,
+    DirectOrRelay,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransportRelayConfig {
+    #[serde(default)]
+    pub iroh_relay_urls: Vec<String>,
+}
+
+impl TransportRelayConfig {
+    pub fn normalized(mut self) -> Self {
+        self.iroh_relay_urls = self
+            .iroh_relay_urls
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        self
+    }
+
+    pub fn connect_mode(&self) -> ConnectMode {
+        if self.iroh_relay_urls.is_empty() {
+            ConnectMode::DirectOnly
+        } else {
+            ConnectMode::DirectOrRelay
+        }
+    }
+
+    pub fn relay_mode(&self) -> Result<RelayMode> {
+        if self.iroh_relay_urls.is_empty() {
+            return Ok(RelayMode::Disabled);
+        }
+        let relay_urls = self
+            .iroh_relay_urls
+            .iter()
+            .map(|value| {
+                value
+                    .parse::<RelayUrl>()
+                    .with_context(|| format!("invalid iroh relay url `{value}`"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(RelayMode::Custom(RelayMap::from_iter(relay_urls)))
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -491,52 +536,29 @@ pub struct IrohGossipTransport {
     topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
+    connect_mode: Arc<Mutex<ConnectMode>>,
     env_locked: Arc<Mutex<bool>>,
 }
 
 impl IrohGossipTransport {
     pub async fn bind(network_config: TransportNetworkConfig) -> Result<Self> {
-        let discovery = Arc::new(MemoryLookup::new());
-        let mut builder = build_endpoint_builder(
-            Endpoint::empty_builder(RelayMode::Disabled),
-            &discovery,
-            None,
-        )?;
-        builder = apply_bind(builder, network_config.bind_addr)?;
-        let endpoint = builder
-            .bind()
-            .await
-            .context("failed to bind iroh endpoint")?;
-        discovery.add_endpoint_info(endpoint.addr());
-
-        let gossip = Gossip::builder().spawn(endpoint.clone());
-        let router = Router::builder(endpoint.clone())
-            .accept(GOSSIP_ALPN, gossip.clone())
-            .spawn();
-
-        Ok(Self {
-            endpoint,
-            gossip,
-            _router: Some(router),
-            discovery,
+        Self::bind_with_options(
             network_config,
-            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
-            imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
-            subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
-            topic_states: Arc::new(Mutex::new(HashMap::new())),
-            last_error: Arc::new(Mutex::new(None)),
-            discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
-            env_locked: Arc::new(Mutex::new(false)),
-        })
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
+        )
+        .await
     }
 
-    pub async fn bind_with_discovery(
+    pub async fn bind_with_options(
         network_config: TransportNetworkConfig,
         dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
     ) -> Result<Self> {
+        let relay_config = relay_config.normalized();
         let discovery = Arc::new(MemoryLookup::new());
         let mut builder = build_endpoint_builder(
-            Endpoint::empty_builder(RelayMode::Disabled),
+            Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
         )?;
@@ -564,8 +586,16 @@ impl IrohGossipTransport {
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
             env_locked: Arc::new(Mutex::new(false)),
         })
+    }
+
+    pub async fn bind_with_discovery(
+        network_config: TransportNetworkConfig,
+        dht_options: DhtDiscoveryOptions,
+    ) -> Result<Self> {
+        Self::bind_with_options(network_config, dht_options, TransportRelayConfig::default()).await
     }
 
     pub fn from_shared_parts(
@@ -573,6 +603,7 @@ impl IrohGossipTransport {
         gossip: Gossip,
         discovery: Arc<MemoryLookup>,
         network_config: TransportNetworkConfig,
+        connect_mode: ConnectMode,
     ) -> Self {
         discovery.add_endpoint_info(endpoint.addr());
         Self {
@@ -587,6 +618,7 @@ impl IrohGossipTransport {
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            connect_mode: Arc::new(Mutex::new(connect_mode)),
             env_locked: Arc::new(Mutex::new(false)),
         }
     }
@@ -987,7 +1019,7 @@ impl Transport for IrohGossipTransport {
             .collect::<Vec<_>>();
         Ok(DiscoverySnapshot {
             mode: self.discovery_mode.lock().await.clone(),
-            connect_mode: ConnectMode::DirectOnly,
+            connect_mode: self.connect_mode.lock().await.clone(),
             env_locked: *self.env_locked.lock().await,
             seed_peer_ids,
             manual_ticket_peer_ids,

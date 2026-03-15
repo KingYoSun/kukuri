@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, RelayMode};
+use iroh::{Endpoint, EndpointAddr};
 use iroh_blobs::api::Store as BlobStore;
 use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore};
 use iroh_docs::api::{Doc, DocsApi};
@@ -18,8 +18,8 @@ use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use iroh_gossip::net::Gossip;
 use kukuri_core::{ReplicaId, blob_hash};
 use kukuri_transport::{
-    DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, build_endpoint_builder,
-    parse_endpoint_ticket,
+    DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
+    build_endpoint_builder, parse_endpoint_ticket,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
@@ -108,6 +108,7 @@ impl IrohDocsNode {
             None,
             TransportNetworkConfig::loopback(),
             DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
         )
         .await
     }
@@ -124,6 +125,7 @@ impl IrohDocsNode {
             root,
             network_config,
             DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
         )
         .await
     }
@@ -132,6 +134,7 @@ impl IrohDocsNode {
         root: impl AsRef<Path>,
         network_config: TransportNetworkConfig,
         dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
     ) -> Result<Arc<Self>> {
         let root = root.as_ref();
         std::fs::create_dir_all(root)
@@ -145,6 +148,7 @@ impl IrohDocsNode {
             Some(root.to_path_buf()),
             network_config,
             dht_options,
+            relay_config,
         )
         .await
     }
@@ -154,6 +158,7 @@ impl IrohDocsNode {
         root: Option<PathBuf>,
         network_config: TransportNetworkConfig,
         dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
     ) -> Result<Arc<Self>> {
         let blobs = store.into();
         let discovery = Arc::new(MemoryLookup::new());
@@ -162,8 +167,9 @@ impl IrohDocsNode {
             .map(load_endpoint_secret)
             .transpose()?
             .flatten();
+        let relay_config = relay_config.normalized();
         let mut endpoint_builder = build_endpoint_builder(
-            Endpoint::empty_builder(RelayMode::Disabled),
+            Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
         )?;

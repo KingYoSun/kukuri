@@ -13,6 +13,8 @@ import {
 import {
   AttachmentView,
   BlobMediaPayload,
+  CommunityNodeConfig,
+  CommunityNodeNodeStatus,
   CreateAttachmentInput,
   DesktopApi,
   DiscoveryConfig,
@@ -56,6 +58,9 @@ const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
   connect_mode: 'direct_only',
   env_locked: false,
   seed_peers: [],
+};
+const DEFAULT_COMMUNITY_NODE_CONFIG: CommunityNodeConfig = {
+  nodes: [],
 };
 const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
@@ -112,6 +117,10 @@ function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
 
 function seedPeersToEditorValue(config: DiscoveryConfig): string {
   return config.seed_peers.map((peer) => formatSeedPeer(peer)).join('\n');
+}
+
+function communityNodesToEditorValue(config: CommunityNodeConfig): string {
+  return config.nodes.map((node) => node.base_url).join('\n');
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -476,6 +485,13 @@ export function App({ api = runtimeApi }: AppProps) {
   const [discoverySeedInput, setDiscoverySeedInput] = useState('');
   const [discoveryEditorDirty, setDiscoveryEditorDirty] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [communityNodeConfig, setCommunityNodeConfig] = useState<CommunityNodeConfig>(
+    DEFAULT_COMMUNITY_NODE_CONFIG
+  );
+  const [communityNodeStatuses, setCommunityNodeStatuses] = useState<CommunityNodeNodeStatus[]>([]);
+  const [communityNodeInput, setCommunityNodeInput] = useState('');
+  const [communityNodeEditorDirty, setCommunityNodeEditorDirty] = useState(false);
+  const [communityNodeError, setCommunityNodeError] = useState<string | null>(null);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string | null>>({});
   const [unsupportedVideoManifests, setUnsupportedVideoManifests] = useState<
     Record<string, true>
@@ -518,6 +534,14 @@ export function App({ api = runtimeApi }: AppProps) {
     () => gameRoomsByTopic[activeTopic] ?? [],
     [activeTopic, gameRoomsByTopic]
   );
+  const communityNodeStatusByBaseUrl = useMemo(
+    () =>
+      Object.fromEntries(communityNodeStatuses.map((status) => [status.base_url, status])) as Record<
+        string,
+        CommunityNodeNodeStatus
+      >,
+    [communityNodeStatuses]
+  );
   const topicDiagnostics = useMemo(
     () =>
       Object.fromEntries(
@@ -544,7 +568,17 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, status, discovery, ticket, threadView] =
+        const [
+          timelineViews,
+          liveViews,
+          gameViews,
+          status,
+          discovery,
+          communityConfig,
+          communityStatuses,
+          ticket,
+          threadView,
+        ] =
           await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
@@ -566,6 +600,8 @@ export function App({ api = runtimeApi }: AppProps) {
           ),
           api.getSyncStatus(),
           api.getDiscoveryConfig(),
+          api.getCommunityNodeConfig(),
+          api.getCommunityNodeStatuses(),
           api.getLocalPeerTicket(),
           currentThread
             ? api.listThread(currentActiveTopic, currentThread, null, 50)
@@ -586,6 +622,11 @@ export function App({ api = runtimeApi }: AppProps) {
           if (!discoveryEditorDirty) {
             setDiscoverySeedInput(seedPeersToEditorValue(discovery));
           }
+          setCommunityNodeConfig(communityConfig);
+          setCommunityNodeStatuses(communityStatuses);
+          if (!communityNodeEditorDirty) {
+            setCommunityNodeInput(communityNodesToEditorValue(communityConfig));
+          }
           setLocalPeerTicket(ticket);
           if (threadView) {
             setThread(threadView.items);
@@ -598,7 +639,7 @@ export function App({ api = runtimeApi }: AppProps) {
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
-    [api, discoveryEditorDirty]
+    [api, communityNodeEditorDirty, discoveryEditorDirty]
   );
 
   useEffect(() => {
@@ -931,6 +972,101 @@ export function App({ api = runtimeApi }: AppProps) {
     } catch (saveError) {
       setDiscoveryError(
         saveError instanceof Error ? saveError.message : 'failed to update discovery seeds'
+      );
+    }
+  }
+
+  async function handleSaveCommunityNodes() {
+    try {
+      const baseUrls = communityNodeInput
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const nextConfig = await api.setCommunityNodeConfig(baseUrls);
+      setCommunityNodeConfig(nextConfig);
+      setCommunityNodeInput(communityNodesToEditorValue(nextConfig));
+      setCommunityNodeEditorDirty(false);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (saveError) {
+      setCommunityNodeError(
+        saveError instanceof Error ? saveError.message : 'failed to update community nodes'
+      );
+    }
+  }
+
+  async function handleClearCommunityNodes() {
+    try {
+      await api.clearCommunityNodeConfig();
+      setCommunityNodeConfig(DEFAULT_COMMUNITY_NODE_CONFIG);
+      setCommunityNodeStatuses([]);
+      setCommunityNodeInput('');
+      setCommunityNodeEditorDirty(false);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (clearError) {
+      setCommunityNodeError(
+        clearError instanceof Error ? clearError.message : 'failed to clear community nodes'
+      );
+    }
+  }
+
+  async function handleAuthenticateCommunityNode(baseUrl: string) {
+    try {
+      await api.authenticateCommunityNode(baseUrl);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (authError) {
+      setCommunityNodeError(
+        authError instanceof Error ? authError.message : 'failed to authenticate community node'
+      );
+    }
+  }
+
+  async function handleClearCommunityNodeToken(baseUrl: string) {
+    try {
+      await api.clearCommunityNodeToken(baseUrl);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (clearError) {
+      setCommunityNodeError(
+        clearError instanceof Error ? clearError.message : 'failed to clear community node token'
+      );
+    }
+  }
+
+  async function handleRefreshCommunityNode(baseUrl: string) {
+    try {
+      await api.refreshCommunityNodeMetadata(baseUrl);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (refreshError) {
+      setCommunityNodeError(
+        refreshError instanceof Error ? refreshError.message : 'failed to refresh community node'
+      );
+    }
+  }
+
+  async function handleFetchCommunityNodeConsents(baseUrl: string) {
+    try {
+      await api.getCommunityNodeConsentStatus(baseUrl);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (consentError) {
+      setCommunityNodeError(
+        consentError instanceof Error ? consentError.message : 'failed to fetch consent status'
+      );
+    }
+  }
+
+  async function handleAcceptCommunityNodeConsents(baseUrl: string) {
+    try {
+      await api.acceptCommunityNodeConsents(baseUrl, []);
+      setCommunityNodeError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (consentError) {
+      setCommunityNodeError(
+        consentError instanceof Error ? consentError.message : 'failed to accept consents'
       );
     }
   }
@@ -1407,6 +1543,124 @@ export function App({ api = runtimeApi }: AppProps) {
                 Reset
               </button>
             </div>
+          </section>
+          <section className='panel panel-subsection discovery-panel'>
+            <div className='panel-header'>
+              <h3>Community Node</h3>
+              <small>{communityNodeStatuses.length} configured</small>
+            </div>
+            <label className='field'>
+              <span>Base URLs</span>
+              <textarea
+                value={communityNodeInput}
+                onChange={(event) => {
+                  setCommunityNodeInput(event.target.value);
+                  setCommunityNodeEditorDirty(true);
+                }}
+                className='ticket-output discovery-editor'
+                placeholder='https://community.example.com'
+              />
+            </label>
+            <div className='diagnostic-block'>
+              <strong>Community Node Error</strong>
+              <p className={communityNodeError ? 'diagnostic-error' : undefined}>
+                {communityNodeError ?? 'none'}
+              </p>
+            </div>
+            <div className='discovery-actions'>
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!communityNodeEditorDirty}
+                onClick={() => void handleSaveCommunityNodes()}
+              >
+                Save Nodes
+              </button>
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!communityNodeEditorDirty}
+                onClick={() => {
+                  setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
+                  setCommunityNodeEditorDirty(false);
+                  setCommunityNodeError(null);
+                }}
+              >
+                Reset
+              </button>
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={communityNodeConfig.nodes.length === 0}
+                onClick={() => void handleClearCommunityNodes()}
+              >
+                Clear
+              </button>
+            </div>
+            {communityNodeConfig.nodes.map((node) => {
+              const status = communityNodeStatusByBaseUrl[node.base_url];
+              return (
+                <div key={node.base_url} className='diagnostic-block'>
+                  <strong>{node.base_url}</strong>
+                  <p>
+                    auth:{' '}
+                    {status?.auth_state.authenticated
+                      ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
+                      : 'no'}
+                  </p>
+                  <p>
+                    consent:{' '}
+                    {status?.consent_state
+                      ? status.consent_state.all_required_accepted
+                        ? 'accepted'
+                        : 'required'
+                      : 'unknown'}
+                  </p>
+                  <p>
+                    relay urls:{' '}
+                    {status?.resolved_urls?.iroh_relay_urls.join(', ') || 'not resolved'}
+                  </p>
+                  <p>restart required: {status?.restart_required ? 'yes' : 'no'}</p>
+                  <div className='discovery-actions'>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => void handleAuthenticateCommunityNode(node.base_url)}
+                    >
+                      Authenticate
+                    </button>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => void handleFetchCommunityNodeConsents(node.base_url)}
+                    >
+                      Consents
+                    </button>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => void handleAcceptCommunityNodeConsents(node.base_url)}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => void handleRefreshCommunityNode(node.base_url)}
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() => void handleClearCommunityNodeToken(node.base_url)}
+                    >
+                      Clear Token
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </section>
           <label className='field'>
             <span>Your Ticket</span>

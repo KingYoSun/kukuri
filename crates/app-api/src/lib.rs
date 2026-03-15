@@ -2068,6 +2068,7 @@ mod tests {
                 root,
                 kukuri_transport::TransportNetworkConfig::loopback(),
                 dht_options,
+                kukuri_transport::TransportRelayConfig::default(),
             )
             .await
             .expect("iroh docs node");
@@ -2076,6 +2077,7 @@ mod tests {
                 node.gossip().clone(),
                 node.discovery(),
                 kukuri_transport::TransportNetworkConfig::loopback(),
+                kukuri_transport::ConnectMode::DirectOnly,
             ));
             let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
             let blob_service = Arc::new(IrohBlobService::new(node.clone()));

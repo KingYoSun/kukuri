@@ -14,6 +14,8 @@ fn main() -> Result<()> {
         "doctor" => doctor(),
         "check" => check(),
         "test" => test(),
+        "community-node-check" => community_node_check(),
+        "community-node-test" => community_node_test(),
         "desktop-package" => desktop_package(),
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
@@ -105,6 +107,58 @@ fn test() -> Result<()> {
     Ok(())
 }
 
+fn community_node_check() -> Result<()> {
+    run(
+        "cargo",
+        [
+            "check",
+            "-p",
+            "kukuri-community-node-core",
+            "-p",
+            "kukuri-community-node-user-api",
+            "-p",
+            "kukuri-community-node-relay",
+            "-p",
+            "kukuri-community-node-iroh-relay",
+            "-p",
+            "kukuri-community-node-cli",
+        ],
+        &root_dir(),
+    )
+}
+
+fn community_node_test() -> Result<()> {
+    run(
+        "docker",
+        [
+            "compose",
+            "-f",
+            "docker-compose.community-node.yml",
+            "up",
+            "-d",
+            "community-node-postgres",
+        ],
+        &root_dir(),
+    )?;
+    run(
+        "cargo",
+        [
+            "test",
+            "-p",
+            "kukuri-community-node-core",
+            "-p",
+            "kukuri-community-node-user-api",
+            "-p",
+            "kukuri-community-node-relay",
+            "-p",
+            "kukuri-community-node-iroh-relay",
+            "-p",
+            "kukuri-community-node-cli",
+        ],
+        &root_dir(),
+    )
+}
+
 fn e2e_smoke(name: &str) -> Result<()> {
     let runtime = tokio::runtime::Runtime::new().context("failed to build tokio runtime")?;
     let result = runtime.block_on(kukuri_harness::run_named_scenario(
@@ -176,5 +230,7 @@ fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<
 }
 
 fn print_usage() {
-    eprintln!("usage: cargo xtask <doctor|check|test|desktop-package|e2e-smoke|scenario <name>>");
+    eprintln!(
+        "usage: cargo xtask <doctor|check|test|community-node-check|community-node-test|desktop-package|e2e-smoke|scenario <name>>"
+    );
 }
