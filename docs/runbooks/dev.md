@@ -89,6 +89,9 @@ $env:KUKURI_INSTANCE="desktop-a"
 5. 片側を再起動し、seed 再入力なしで再接続と timeline backfill が成立することを確認する。
 6. `Seed Peers` に invalid な entry を入れて保存し、apply 全体が失敗して既存 seed が保持されることを確認する。
 
+- `seeded_dht` は `direct_only` 前提なので、port または advertise address を変えた場合は新しい到達先が peer 間で到達可能であることを確認する。
+- `node_id@host:port` は addr_hint 付き接続を含む。DHT 自体の確認は `node_id` のみで行う。
+
 ## Windows native smoke
 1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
 2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author `npub` 不変を確認する。
@@ -106,6 +109,10 @@ $env:KUKURI_INSTANCE="desktop-a"
 - Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
 - Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
+- Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、ticket import なしの接続、再接続、投稿伝播が成立
+- Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、`reply/thread` と live/game の伝播、および restart 後 reconnect without reimport が成立
+- Linux 実機 2 台で片側 port 変更後も、新 port が到達可能なら seed 再入力なしで再接続、投稿伝播、reply が成立
+- Linux 実機 2 台で `seeded_dht` の invalid seed 保存が reject され、既存 seed が維持されることを確認
 - Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
 - Windows 実機で `tauri:dev` の `post -> restart -> persist` と author `npub` 不変を確認
 - Windows 実機で Credential Manager を使う keyring 有効状態でも author identity が維持されることを確認

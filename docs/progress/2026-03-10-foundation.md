@@ -7,6 +7,7 @@
 - Phase6-1 image post canonical source 設計に着手
 - Phase6-6 video post canonical source 設計に着手
 - Phase6-7 Windows desktop support の native smoke まで完了
+- Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -36,10 +37,12 @@
 - composer に draft attachment preview を追加し、image は object URL、video は generated poster で publish 前 preview できるようにした
 - video manifest を取得できても local decode が失敗した client では、poster-only preview と `unsupported on this client` 表示へ倒すようにした
 - `ADR 0007` で Windows desktop support の local identity / packaging / contract 境界を固定した
+- `ADR 0008` で seeded DHT discovery の local config / runtime DHT record / contract 境界を固定した
 - `keyring` を target 別 dependency に分離し、Linux は Secret Service、Windows は Credential Manager を標準 backend にした
 - `xtask check` に Tauri backend compile を組み込み、`desktop-package` で Windows host から NSIS installer を生成できるようにした
 - `apps/desktop/src-tauri/tauri.windows.conf.json` と Windows icon asset を追加し、Windows bundle config を base config から分離した
 - GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
+- shared iroh stack に seeded DHT discovery を統合し、desktop discovery panel / env / local config から `node_id` seed を永続・再適用できるようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -77,6 +80,11 @@
 - Windows 実機で複数 topic 維持、topic 単位 unsubscribe、invalid ticket import 時の `Last Error` 更新が期待どおりに機能
 - Windows 実機で別 host 間の static-peer 接続と投稿伝播が成功
 - Windows 実機で `cargo xtask desktop-package` による NSIS installer build、install、packaged app 起動が成功
+- DHT discovery 追加後の `cargo xtask check` / `cargo xtask test` / `cargo xtask e2e-smoke` が green
+- Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、ticket import なしの接続、再接続、投稿伝播が成功
+- Linux 実機 2 台で `seeded_dht` の `reply/thread`、live/game、restart 後 reconnect without reimport が成功
+- Linux 実機 2 台で片側 port 変更後も、新 port が到達可能なら seed を触らずに再接続、投稿伝播、reply が成功
+- Linux 実機 2 台で `seeded_dht` の invalid seed 保存が reject され、既存 seed が保持されることを確認
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
