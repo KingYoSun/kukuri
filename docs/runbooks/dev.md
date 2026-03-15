@@ -13,6 +13,8 @@ cargo xtask test
 cargo xtask e2e-smoke
 ```
 
+`cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
+
 ## frontend だけ確認する場合
 ```bash
 cd apps/desktop
@@ -20,6 +22,20 @@ npx pnpm@10.16.1 dev
 npx pnpm@10.16.1 test
 npx pnpm@10.16.1 tauri:dev
 ```
+
+## Windows 前提
+- Windows prerequisites は Tauri 公式手順を使う: <https://v2.tauri.app/start/prerequisites/#windows>
+- 初回 Windows cut の対象は `x86_64-pc-windows-msvc` のみ
+- installer build は current-user NSIS + WebView2 download bootstrapper を前提にする
+
+## Windows packaging
+```powershell
+cargo xtask desktop-package
+```
+
+- 実行可能なのは Windows host のみ
+- 生成物は `apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` に出る
+- `cargo xtask desktop-package` は `src-tauri/tauri.windows.conf.json` を使った Windows bundle config を前提にする
 
 ## remote-sync 用の環境変数
 ```bash
@@ -33,9 +49,16 @@ export KUKURI_DISABLE_KEYRING=1
 - `KUKURI_ADVERTISE_HOST` を設定すると `Your Ticket` はその host を使う。
 - `KUKURI_INSTANCE` を設定すると app data dir が分離される。
 - `KUKURI_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
-- `KUKURI_DISABLE_KEYRING=1` を設定すると Linux keyring を使わず、app data dir 内の 0600 fallback file を使う。
+- `KUKURI_DISABLE_KEYRING=1` を設定すると OS keyring を使わず、app data dir 内の fallback file を使う。
 
-## 回帰用の手動確認
+PowerShell 例:
+```powershell
+$env:KUKURI_BIND_ADDR="0.0.0.0:0"
+$env:KUKURI_ADVERTISE_HOST="<LANで到達可能なIPまたはホスト名>"
+$env:KUKURI_INSTANCE="desktop-a"
+```
+
+## Linux / Windows 共通の回帰用手動確認
 1. 各端末で `KUKURI_BIND_ADDR=0.0.0.0:0` と `KUKURI_ADVERTISE_HOST` を設定する。
 2. 同一マシンで複数起動する場合は `KUKURI_INSTANCE` も別値にする。
 3. `npx pnpm@10.16.1 tauri:dev` を起動する。
@@ -50,6 +73,14 @@ export KUKURI_DISABLE_KEYRING=1
 12. 共通購読 topic を片側で解除し、その topic 行だけ `joined: false / peers: 0` になることを確認する。
 13. invalid な `Peer Ticket` を import したときに global `Last Error` が更新されることを確認する。
 14. client 再起動後に新規 post を作成し、restart 前後で author identity が変わらないことを確認する。
+15. live session を `create -> join -> end` し、viewer count と ended state が相手側に反映されることを確認する。
+16. game room を `create -> update score/status` し、相手側に score card が反映されることを確認する。
+
+## Windows native smoke
+1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
+2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author `npub` 不変を確認する。
+3. `KUKURI_INSTANCE` を分けた 2 instance で static-peer ticket import、`reply/thread`、live/game の伝播を確認する。
+4. `cargo xtask desktop-package` で NSIS installer を build し、install 後に packaged app が通常の app data dir を使って起動することを確認する。
 
 実機確認済み:
 - Linux 実機 2 台で固定 port / 相互 ticket import による static-peer 接続が成立
@@ -65,7 +96,7 @@ export KUKURI_DISABLE_KEYRING=1
 2. `cargo xtask check` を通す。
 3. `cargo xtask test` を通す。
 4. `cargo xtask e2e-smoke` を通す。
-5. `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml` を通す。
+5. `cargo xtask check` に含まれる Tauri backend compile が通ることを確認する。
 6. `sqlite_deletion_does_not_lose_shared_state` と `restart_restores_from_docs_blobs_without_sqlite_seed` が green であることを確認する。
 7. `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green であることを確認する。
 8. `compat_event_gossip` が current code から除去されていることを確認する。
@@ -81,7 +112,8 @@ export KUKURI_DISABLE_KEYRING=1
 - `kukuri-transport` の `transport_static_peer_can_connect_endpoint` は required。
 - `kukuri-transport` の `transport_two_process_roundtrip_static_peer` は required に戻した。
 - deterministic な required lane は `FakeTransport` と `kukuri-harness` が担う。
-- Tauri wrapper の単体 compile は `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml` で確認する。
+- Tauri wrapper の単体 compile は `cargo xtask check` に含めて確認する。
+- `cargo xtask desktop-package` は Windows host 専用で、current-user NSIS installer を生成する。
 
 補足:
 - GitHub branch protection の required check 名は repo 外設定なので、`Next Fast/Nightly` から `Kukuri Fast/Nightly` への手動更新が必要。

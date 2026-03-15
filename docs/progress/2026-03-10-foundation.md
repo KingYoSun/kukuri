@@ -6,6 +6,7 @@
 - v3 Phase5 cutover は完了
 - Phase6-1 image post canonical source 設計に着手
 - Phase6-6 video post canonical source 設計に着手
+- Phase6-7 Windows desktop support の code path / packaging / CI lane を追加
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -21,7 +22,7 @@
 - desktop UI を `trackedTopics + activeTopic + timelinesByTopic` 構成へ拡張し、複数 topic を同時購読できるようにした
 - `peer診断表示の拡充` として topic ごとの `joined / peers / last_received_at` を UI 表示できるようにした
 - `peer診断表示` に global/topic ごとの `status_detail / last_error` を追加し、接続待ちと直近エラー理由を UI 表示できるようにした
-- desktop runtime で local 鍵を Linux keyring へ保存し、利用できない環境では 0600 の fallback file へ保存するようにした
+- desktop runtime で local 鍵を OS keyring へ保存し、利用できない環境では fallback file へ保存するようにした
 - v3 foundation として `kukuri-docs-sync` / `kukuri-blob-service` を追加し、shared durable state の正本を docs/blobs に寄せる最小 data plane を導入した
 - desktop-runtime で gossip/docs/blobs を shared iroh stack 上に統合し、`import_peer_ticket` が docs/blobs にも伝播するようにした
 - root 直下の pre-cutover app/service tree を `legacy/` へ移し、root 入口を current kukuri 実装中心へ縮退した
@@ -34,6 +35,11 @@
 - video upload 時に browser 内の `video + canvas` で poster を自動生成し、failure 時は publish blocker にした
 - composer に draft attachment preview を追加し、image は object URL、video は generated poster で publish 前 preview できるようにした
 - video manifest を取得できても local decode が失敗した client では、poster-only preview と `unsupported on this client` 表示へ倒すようにした
+- `ADR 0007` で Windows desktop support の local identity / packaging / contract 境界を固定した
+- `keyring` を target 別 dependency に分離し、Linux は Secret Service、Windows は Credential Manager を標準 backend にした
+- `xtask check` に Tauri backend compile を組み込み、`desktop-package` で Windows host から NSIS installer を生成できるようにした
+- `apps/desktop/src-tauri/tauri.windows.conf.json` と Windows icon asset を追加し、Windows bundle config を base config から分離した
+- GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -67,6 +73,7 @@
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
+- Windows native の `tauri:dev` / NSIS installer smoke は Windows host での確認が別途必要
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み

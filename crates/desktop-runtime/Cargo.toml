@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 base64.workspace = true
-keyring.workspace = true
 nostr-sdk.workspace = true
 serde.workspace = true
 tokio.workspace = true
@@ -17,6 +16,12 @@ kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["sync-secret-service"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
 
 [dev-dependencies]
 tempfile.workspace = true

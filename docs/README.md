@@ -7,14 +7,15 @@
 
 ## 優先参照順
 1. `docs/adr/0001-linux-first-mvp.md`
-2. `docs/runbooks/dev.md`
-3. `docs/progress/2026-03-10-foundation.md`
-4. `harness/scenarios/`
-5. `docs/adr/0003-image-post-data-classification.md`
-6. `docs/adr/0004-video-post-data-classification.md`
+2. `docs/adr/0007-windows-desktop-support.md`
+3. `docs/runbooks/dev.md`
+4. `docs/progress/2026-03-10-foundation.md`
+5. `harness/scenarios/`
+6. `docs/adr/0003-image-post-data-classification.md`
+7. `docs/adr/0004-video-post-data-classification.md`
 
 ## 現在の対象
 - `desktop + core + store + static-peer transport + harness`
-- required target は Linux のみ
+- desktop target は Linux / Windows
 - root 実行入口は `cargo xtask ...`
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。

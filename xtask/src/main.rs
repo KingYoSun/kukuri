@@ -14,6 +14,7 @@ fn main() -> Result<()> {
         "doctor" => doctor(),
         "check" => check(),
         "test" => test(),
+        "desktop-package" => desktop_package(),
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
             let name = args.next().context("scenario name is required")?;
@@ -82,6 +83,15 @@ fn check() -> Result<()> {
         ],
         &root_dir(),
     )?;
+    run(
+        "cargo",
+        [
+            "check",
+            "--manifest-path",
+            "apps/desktop/src-tauri/Cargo.toml",
+        ],
+        &root_dir(),
+    )?;
     run("cargo", ["test", "--workspace", "--lib"], &root_dir())?;
     run_pnpm(["lint"], &desktop_dir())?;
     run_pnpm(["typecheck"], &desktop_dir())?;
@@ -107,6 +117,17 @@ fn e2e_smoke(name: &str) -> Result<()> {
         println!("{key}={value}");
     }
     Ok(())
+}
+
+fn desktop_package() -> Result<()> {
+    if !cfg!(target_os = "windows") {
+        bail!("desktop-package is only supported on Windows hosts");
+    }
+
+    run_pnpm(
+        ["tauri", "build", "--target", "x86_64-pc-windows-msvc"],
+        &desktop_dir(),
+    )
 }
 
 fn run(binary: &str, args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<()> {
@@ -155,5 +176,5 @@ fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<
 }
 
 fn print_usage() {
-    eprintln!("usage: cargo xtask <doctor|check|test|e2e-smoke|scenario <name>>");
+    eprintln!("usage: cargo xtask <doctor|check|test|desktop-package|e2e-smoke|scenario <name>>");
 }

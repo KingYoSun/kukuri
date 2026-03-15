@@ -159,12 +159,7 @@ fn load_secret_from_file(db_path: &Path) -> Result<Option<String>> {
 
 fn persist_secret_to_file(db_path: &Path, secret: &str) -> Result<()> {
     let path = key_file_path(db_path);
-    let mut options = OpenOptions::new();
-    options.create(true).write(true).truncate(true);
-    #[cfg(unix)]
-    options.mode(0o600);
-    let mut file = options
-        .open(&path)
+    let mut file = open_private_write_file(&path)
         .with_context(|| format!("failed to create identity file `{}`", path.display()))?;
     file.write_all(secret.as_bytes())
         .with_context(|| format!("failed to write identity file `{}`", path.display()))?;
@@ -194,11 +189,7 @@ fn load_backend_marker(db_path: &Path) -> Result<Option<String>> {
 
 fn write_backend_marker(db_path: &Path, backend: &str) -> Result<()> {
     let path = backend_marker_path(db_path);
-    let mut options = OpenOptions::new();
-    options.create(true).write(true).truncate(true);
-    #[cfg(unix)]
-    options.mode(0o600);
-    let mut file = options.open(&path).with_context(|| {
+    let mut file = open_private_write_file(&path).with_context(|| {
         format!(
             "failed to create identity backend marker `{}`",
             path.display()
@@ -212,6 +203,23 @@ fn write_backend_marker(db_path: &Path, backend: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+fn open_private_write_file(path: &Path) -> Result<std::fs::File> {
+    let mut options = OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    configure_private_file_options(&mut options);
+    options
+        .open(path)
+        .with_context(|| format!("failed to open writable file `{}`", path.display()))
+}
+
+#[cfg(unix)]
+fn configure_private_file_options(options: &mut OpenOptions) {
+    options.mode(0o600);
+}
+
+#[cfg(not(unix))]
+fn configure_private_file_options(_options: &mut OpenOptions) {}
 
 fn keyring_account(db_path: &Path) -> String {
     let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
@@ -287,10 +295,15 @@ mod tests {
     #[derive(Clone, Default)]
     struct FakeKeyringStore {
         entries: Arc<Mutex<HashMap<(String, String), String>>>,
+        fail_get: Arc<Mutex<bool>>,
+        fail_set: Arc<Mutex<bool>>,
     }
 
     impl KeyringStore for FakeKeyringStore {
         fn get_password(&self, service: &str, account: &str) -> Result<Option<String>> {
+            if *self.fail_get.lock().expect("keyring lock") {
+                anyhow::bail!("fake keyring get failure");
+            }
             Ok(self
                 .entries
                 .lock()
@@ -300,6 +313,9 @@ mod tests {
         }
 
         fn set_password(&self, service: &str, account: &str, secret: &str) -> Result<()> {
+            if *self.fail_set.lock().expect("keyring lock") {
+                anyhow::bail!("fake keyring set failure");
+            }
             self.entries.lock().expect("keyring lock").insert(
                 (service.to_string(), account.to_string()),
                 secret.to_string(),
@@ -361,6 +377,115 @@ mod tests {
                 )
                 .expect("legacy entry lookup")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn auto_mode_prefers_keyring_secret_over_file_secret() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring_secret = Keys::generate().secret_key().to_bech32().expect("bech32");
+        let file_secret = Keys::generate().secret_key().to_bech32().expect("bech32");
+        let keyring = FakeKeyringStore::default();
+        keyring
+            .set_password(
+                KEYRING_SERVICE,
+                keyring_account(&db_path).as_str(),
+                keyring_secret.as_str(),
+            )
+            .expect("seed keyring");
+        persist_secret_to_file(&db_path, file_secret.as_str()).expect("seed file");
+
+        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+            .expect("load keys");
+
+        assert_eq!(
+            keys.secret_key().to_bech32().expect("bech32"),
+            keyring_secret
+        );
+        assert_eq!(
+            load_backend_marker(&db_path).expect("load backend marker"),
+            Some(BACKEND_KEYRING.to_string())
+        );
+    }
+
+    #[test]
+    fn auto_mode_falls_back_to_file_when_keyring_write_fails() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+        *keyring.fail_set.lock().expect("keyring lock") = true;
+
+        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+            .expect("generate keys");
+
+        assert_eq!(
+            load_backend_marker(&db_path).expect("load backend marker"),
+            Some(BACKEND_FILE.to_string())
+        );
+        assert_eq!(
+            load_secret_from_file(&db_path).expect("load file secret"),
+            Some(keys.secret_key().to_bech32().expect("bech32"))
+        );
+        assert!(
+            keyring
+                .get_password(KEYRING_SERVICE, keyring_account(&db_path).as_str())
+                .expect("keyring lookup")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn auto_mode_generated_keyring_secret_survives_restart() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+
+        let original =
+            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                .expect("create keys");
+        let restarted =
+            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                .expect("reload keys");
+
+        assert_eq!(
+            original.secret_key().to_bech32().expect("bech32"),
+            restarted.secret_key().to_bech32().expect("bech32")
+        );
+        assert_eq!(
+            load_backend_marker(&db_path).expect("load backend marker"),
+            Some(BACKEND_KEYRING.to_string())
+        );
+    }
+
+    #[test]
+    fn file_only_mode_rejects_existing_keyring_backend_marker() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let secret = Keys::generate().secret_key().to_bech32().expect("bech32");
+        let keyring = FakeKeyringStore::default();
+        keyring
+            .set_password(
+                KEYRING_SERVICE,
+                keyring_account(&db_path).as_str(),
+                secret.as_str(),
+            )
+            .expect("seed keyring");
+        write_backend_marker(&db_path, BACKEND_KEYRING).expect("write backend marker");
+
+        let error =
+            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::FileOnly, &keyring)
+                .expect_err("file-only should reject keyring backend");
+
+        assert!(
+            error
+                .to_string()
+                .contains("persisted identity is stored in keyring"),
+            "unexpected error: {error}"
         );
     }
 }
