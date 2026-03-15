@@ -21,7 +21,10 @@ use kukuri_store::{
     BlobCacheStatus, EventProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, Page,
     ProjectionStore, Store, TimelineCursor,
 };
-use kukuri_transport::{HintTransport, PeerSnapshot, TopicPeerSnapshot, Transport};
+use kukuri_transport::{
+    ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
+    TopicPeerSnapshot, Transport,
+};
 use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::Mutex;
@@ -141,6 +144,19 @@ pub struct SyncStatus {
     pub subscribed_topics: Vec<String>,
     pub topic_diagnostics: Vec<TopicSyncStatus>,
     pub local_author_pubkey: String,
+    pub discovery: DiscoveryStatus,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoveryStatus {
+    pub mode: DiscoveryMode,
+    pub connect_mode: ConnectMode,
+    pub env_locked: bool,
+    pub seed_peer_ids: Vec<String>,
+    pub manual_ticket_peer_ids: Vec<String>,
+    pub connected_peer_ids: Vec<String>,
+    pub local_endpoint_id: String,
+    pub last_discovery_error: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -688,6 +704,7 @@ impl AppService {
         } = self.transport.peers().await?;
         let subscribed_topics = normalize_topics(subscribed_topics);
         let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
+        let discovery = self.get_discovery_status().await?;
 
         Ok(SyncStatus {
             connected,
@@ -713,6 +730,30 @@ impl AppService {
                 })
                 .collect(),
             local_author_pubkey: self.current_author_pubkey(),
+            discovery,
+        })
+    }
+
+    pub async fn get_discovery_status(&self) -> Result<DiscoveryStatus> {
+        let DiscoverySnapshot {
+            mode,
+            connect_mode,
+            env_locked,
+            seed_peer_ids,
+            manual_ticket_peer_ids,
+            connected_peer_ids,
+            local_endpoint_id,
+            last_discovery_error,
+        } = self.transport.discovery().await?;
+        Ok(DiscoveryStatus {
+            mode,
+            connect_mode,
+            env_locked,
+            seed_peer_ids,
+            manual_ticket_peer_ids,
+            connected_peer_ids,
+            local_endpoint_id,
+            last_discovery_error,
         })
     }
 
@@ -720,6 +761,30 @@ impl AppService {
         self.transport.import_ticket(ticket).await?;
         self.docs_sync.import_peer_ticket(ticket).await?;
         self.blob_service.import_peer_ticket(ticket).await?;
+        let existing_topics = self
+            .subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for topic in existing_topics {
+            self.restart_topic_subscription(topic.as_str()).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_discovery_seeds(
+        &self,
+        mode: DiscoveryMode,
+        env_locked: bool,
+        seed_peers: Vec<SeedPeer>,
+    ) -> Result<()> {
+        self.transport
+            .configure_discovery(mode, env_locked, seed_peers.clone())
+            .await?;
+        self.docs_sync.set_seed_peers(seed_peers.clone()).await?;
+        self.blob_service.set_seed_peers(seed_peers).await?;
         let existing_topics = self
             .subscriptions
             .lock()
@@ -1863,14 +1928,16 @@ impl Drop for AppService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use iroh::address_lookup::EndpointInfo;
     use kukuri_blob_service::IrohBlobService;
     use kukuri_docs_sync::IrohDocsNode;
     use kukuri_docs_sync::IrohDocsSync;
     use kukuri_store::MemoryStore;
     use kukuri_transport::{
-        EventEnvelope, EventStream, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
-        IrohGossipTransport,
+        DhtDiscoveryOptions, DiscoveryMode, EventEnvelope, EventStream, FakeNetwork,
+        FakeTransport, HintEnvelope, HintStream, IrohGossipTransport, SeedPeer,
     };
+    use pkarr::{Client as PkarrClient, mainline::Testnet};
     use tempfile::tempdir;
     use tokio::sync::{Mutex as TokioMutex, broadcast};
     use tokio::time::{Duration, sleep, timeout};
@@ -1980,9 +2047,27 @@ mod tests {
 
     impl TestIrohStack {
         async fn new(root: &std::path::Path) -> Self {
-            let node = IrohDocsNode::persistent_with_config(
+            Self::new_with_discovery(root, DhtDiscoveryOptions::disabled()).await
+        }
+
+        async fn new_with_dht(root: &std::path::Path, testnet: &Testnet) -> Self {
+            let stack = Self::new_with_discovery(
+                root,
+                DhtDiscoveryOptions::with_client(dht_test_client(testnet)),
+            )
+            .await;
+            publish_endpoint_to_testnet(stack._node.endpoint(), testnet).await;
+            stack
+        }
+
+        async fn new_with_discovery(
+            root: &std::path::Path,
+            dht_options: DhtDiscoveryOptions,
+        ) -> Self {
+            let node = IrohDocsNode::persistent_with_discovery_config(
                 root,
                 kukuri_transport::TransportNetworkConfig::loopback(),
+                dht_options,
             )
             .await
             .expect("iroh docs node");
@@ -2001,6 +2086,54 @@ mod tests {
                 blob_service,
             }
         }
+    }
+
+    fn dht_test_client(testnet: &Testnet) -> PkarrClient {
+        let mut builder = PkarrClient::builder();
+        builder.no_default_network().bootstrap(&testnet.bootstrap);
+        builder.build().expect("pkarr client")
+    }
+
+    async fn publish_endpoint_to_testnet(endpoint: &iroh::Endpoint, testnet: &Testnet) {
+        let client = dht_test_client(testnet);
+        let signed_packet = EndpointInfo::from(endpoint.addr())
+            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
+            .expect("signed packet");
+        client
+            .publish(&signed_packet, None)
+            .await
+            .expect("publish endpoint info");
+        let public_key =
+            pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
+        let expected = signed_packet.as_bytes().clone();
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if client
+                    .resolve_most_recent(&public_key)
+                    .await
+                    .as_ref()
+                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("resolve published endpoint info");
+    }
+
+    async fn configure_seeded_dht(app: &AppService, remote_endpoint_id: String) {
+        app.set_discovery_seeds(
+            DiscoveryMode::SeededDht,
+            false,
+            vec![SeedPeer {
+                endpoint_id: remote_endpoint_id,
+                addr_hint: None,
+            }],
+        )
+        .await
+        .expect("configure seeded dht");
     }
 
     fn app_with_iroh_services(store: Arc<MemoryStore>, stack: &TestIrohStack) -> AppService {
@@ -3084,6 +3217,254 @@ mod tests {
         .expect("timeline sync timeout");
 
         assert_eq!(received.content, "hello after import");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn seeded_dht_syncs_post_between_apps_without_ticket_import() {
+        let dir = tempdir().expect("tempdir");
+        let testnet = Testnet::new(5).expect("testnet");
+        let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-dht-a"), &testnet).await;
+        let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-dht-b"), &testnet).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let endpoint_a = app_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .discovery
+            .local_endpoint_id;
+        let endpoint_b = app_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .discovery
+            .local_endpoint_id;
+
+        configure_seeded_dht(&app_a, endpoint_b.clone()).await;
+        configure_seeded_dht(&app_b, endpoint_a.clone()).await;
+        let topic = "kukuri:topic:seeded-dht-app";
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a timeline");
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let status_a = app_a.get_sync_status().await.expect("status a");
+                let status_b = app_b.get_sync_status().await.expect("status b");
+                let ready_a = status_a
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                let ready_b = status_b
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                if ready_a && ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht ready timeout");
+
+        let event_id = app_a
+            .create_post(topic, "seeded dht app sync", None)
+            .await
+            .expect("create post");
+
+        let received = timeout(Duration::from_secs(20), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht sync timeout");
+
+        assert_eq!(received.content, "seeded dht app sync");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn seeded_dht_rebuilds_existing_topic_subscription_after_seed_update() {
+        let dir = tempdir().expect("tempdir");
+        let testnet = Testnet::new(5).expect("testnet");
+        let stack_a =
+            TestIrohStack::new_with_dht(&dir.path().join("seeded-rebind-a"), &testnet).await;
+        let stack_b =
+            TestIrohStack::new_with_dht(&dir.path().join("seeded-rebind-b"), &testnet).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let topic = "kukuri:topic:seeded-rebind";
+
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a before seed update");
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b before seed update");
+
+        let endpoint_a = app_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .discovery
+            .local_endpoint_id;
+        let endpoint_b = app_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .discovery
+            .local_endpoint_id;
+        configure_seeded_dht(&app_a, endpoint_b.clone()).await;
+        configure_seeded_dht(&app_b, endpoint_a.clone()).await;
+
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let status_a = app_a.get_sync_status().await.expect("status a");
+                let status_b = app_b.get_sync_status().await.expect("status b");
+                let ready_a = status_a
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                let ready_b = status_b
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                if ready_a && ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht topic rebind timeout");
+
+        let event_id = app_a
+            .create_post(topic, "seeded dht rebind", None)
+            .await
+            .expect("create post");
+
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if timeline.items.iter().any(|post| post.id == event_id) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht propagation timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
+        let dir = tempdir().expect("tempdir");
+        let testnet = Testnet::new(5).expect("testnet");
+        let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-a"), &testnet).await;
+        let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-b"), &testnet).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let endpoint_a = app_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .discovery
+            .local_endpoint_id;
+        let endpoint_b = app_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .discovery
+            .local_endpoint_id;
+        configure_seeded_dht(&app_a, endpoint_b.clone()).await;
+        configure_seeded_dht(&app_b, endpoint_a.clone()).await;
+        let topic = "kukuri:topic:seeded-image";
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a timeline");
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let status_a = app_a.get_sync_status().await.expect("status a");
+                let status_b = app_b.get_sync_status().await.expect("status b");
+                let ready_a = status_a
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                let ready_b = status_b
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                if ready_a && ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht image ready timeout");
+
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "seeded image",
+                None,
+                vec![pending_image_attachment("image/png", b"seeded-image-bytes")],
+            )
+            .await
+            .expect("create image post");
+
+        let received = timeout(Duration::from_secs(20), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded dht image backfill timeout");
+
+        assert_eq!(received.attachments.len(), 1);
+        assert_eq!(received.attachments[0].status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
+                .await
+                .expect("preview")
+                .is_some()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

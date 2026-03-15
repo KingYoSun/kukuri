@@ -8,6 +8,7 @@ import {
   BlobViewStatus,
   CreateAttachmentInput,
   DesktopApi,
+  DiscoveryConfig,
   GameRoomView,
   GameScoreView,
   LiveSessionView,
@@ -45,6 +46,12 @@ function createMockApi(options?: {
     ])
   );
   let sequence = 0;
+  let discoveryConfig: DiscoveryConfig = {
+    mode: 'seeded_dht',
+    connect_mode: 'direct_only',
+    env_locked: false,
+    seed_peers: [],
+  };
   const syncStatus: SyncStatus = {
     connected: true,
     last_sync_ts: 1,
@@ -68,6 +75,16 @@ function createMockApi(options?: {
       },
     ],
     local_author_pubkey: 'f'.repeat(64),
+    discovery: {
+      mode: 'seeded_dht',
+      connect_mode: 'direct_only',
+      env_locked: false,
+      seed_peer_ids: [],
+      manual_ticket_peer_ids: [],
+      connected_peer_ids: ['peer-a'],
+      local_endpoint_id: 'local-endpoint-a',
+      last_discovery_error: null,
+    },
   };
 
   const api: DesktopApi = {
@@ -238,7 +255,26 @@ function createMockApi(options?: {
     async getSyncStatus() {
       return syncStatus;
     },
+    async getDiscoveryConfig() {
+      return discoveryConfig;
+    },
     async importPeerTicket() {},
+    async setDiscoverySeeds(seedEntries) {
+      discoveryConfig = {
+        ...discoveryConfig,
+        seed_peers: seedEntries.map((entry) => {
+          const [endpointId, addrHint] = entry.split('@', 2);
+          return {
+            endpoint_id: endpointId,
+            addr_hint: addrHint ?? null,
+          };
+        }),
+      };
+      syncStatus.discovery.seed_peer_ids = discoveryConfig.seed_peers.map(
+        (peer) => peer.endpoint_id
+      );
+      return discoveryConfig;
+    },
     async unsubscribeTopic(topic) {
       delete postsByTopic[topic];
       delete liveSessionsByTopic[topic];
@@ -422,12 +458,30 @@ test('desktop shell can publish and render a post', async () => {
   await waitFor(() => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
-  expect(screen.getByText('Live over static peers')).toBeInTheDocument();
+  expect(screen.getByText('Seeded DHT + direct peers')).toBeInTheDocument();
   expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
   expect(screen.getByText('Configured Peers')).toBeInTheDocument();
   expect(screen.getByText('Connected to all configured peers')).toBeInTheDocument();
   expect(screen.getAllByText('peer-a').length).toBeGreaterThan(0);
   expect(screen.getByText('joined / peers: 1')).toBeInTheDocument();
+});
+
+test('desktop shell can update discovery seeds', async () => {
+  const user = userEvent.setup();
+  const api = createMockApi();
+  const setDiscoverySeeds = vi.fn(api.setDiscoverySeeds);
+  api.setDiscoverySeeds = setDiscoverySeeds;
+
+  render(<App api={api} />);
+
+  const seedEditor = screen.getByPlaceholderText('node_id or node_id@host:port');
+  await user.type(seedEditor, 'seed-peer-1');
+  await user.click(screen.getByRole('button', { name: 'Save Seeds' }));
+
+  await waitFor(() => {
+    expect(setDiscoverySeeds).toHaveBeenCalledWith(['seed-peer-1']);
+  });
+  expect(screen.getAllByText('seed-peer-1').length).toBeGreaterThan(0);
 });
 
 test('desktop shell can enter reply mode and render reply state', async () => {
@@ -632,6 +686,10 @@ test('single attach button classifies mixed image and video files', async () => 
     new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' }),
     new File([Uint8Array.from([5, 6, 7, 8])], 'clip.mp4', { type: 'video/mp4' }),
   ]);
+  await waitFor(() => {
+    expect(screen.getByText('flower.png')).toBeInTheDocument();
+    expect(screen.getByText('clip.mp4')).toBeInTheDocument();
+  });
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => {

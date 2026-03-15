@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use kukuri_app_api::{
@@ -12,16 +12,23 @@ use kukuri_app_api::{
     GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
     UpdateGameRoomInput,
 };
-use kukuri_blob_service::IrohBlobService;
+use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_core::{AssetRole, GameRoomStatus};
-use kukuri_docs_sync::{IrohDocsNode, IrohDocsSync};
+use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
 use kukuri_store::{SqliteStore, TimelineCursor};
-use kukuri_transport::{IrohGossipTransport, TransportNetworkConfig};
+use kukuri_transport::{
+    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
+    TransportNetworkConfig, parse_seed_peer,
+};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 use crate::identity::{IdentityStorageMode, load_or_create_keys};
 
 const DB_FILE_NAME: &str = "kukuri.db";
+const DISCOVERY_CONFIG_FILE_EXTENSION: &str = "discovery.json";
+const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
+const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -118,11 +125,69 @@ pub struct UpdateGameRoomRequest {
     pub scores: Vec<GameScoreView>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoveryConfig {
+    pub mode: DiscoveryMode,
+    pub connect_mode: ConnectMode,
+    pub env_locked: bool,
+    pub seed_peers: Vec<SeedPeer>,
+}
+
+impl DiscoveryConfig {
+    fn static_peer_default() -> Self {
+        Self {
+            mode: DiscoveryMode::StaticPeer,
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: false,
+            seed_peers: Vec::new(),
+        }
+    }
+
+    fn seeded_dht_default() -> Self {
+        Self {
+            mode: DiscoveryMode::SeededDht,
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: false,
+            seed_peers: Vec::new(),
+        }
+    }
+
+    fn from_stored(stored: StoredDiscoveryConfig, env_locked: bool) -> Self {
+        Self {
+            mode: stored.mode,
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked,
+            seed_peers: normalize_seed_peers(stored.seed_peers),
+        }
+    }
+
+    fn stored(&self) -> StoredDiscoveryConfig {
+        StoredDiscoveryConfig {
+            mode: self.mode.clone(),
+            seed_peers: normalize_seed_peers(self.seed_peers.clone()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetDiscoverySeedsRequest {
+    pub seed_entries: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct StoredDiscoveryConfig {
+    #[serde(default)]
+    mode: DiscoveryMode,
+    #[serde(default)]
+    seed_peers: Vec<SeedPeer>,
+}
+
 pub struct DesktopRuntime {
     app_service: AppService,
     db_path: PathBuf,
     store: Arc<SqliteStore>,
     iroh_stack: SharedIrohStack,
+    discovery_config: Arc<Mutex<DiscoveryConfig>>,
 }
 
 struct SharedIrohStack {
@@ -134,10 +199,12 @@ struct SharedIrohStack {
 
 impl DesktopRuntime {
     pub async fn new(db_path: impl AsRef<Path>) -> Result<Self> {
-        Self::new_with_config_and_identity(
+        Self::new_with_config_and_identity_and_discovery(
             db_path,
             TransportNetworkConfig::loopback(),
             IdentityStorageMode::from_env(),
+            DiscoveryConfig::static_peer_default(),
+            DhtDiscoveryOptions::disabled(),
         )
         .await
     }
@@ -146,20 +213,46 @@ impl DesktopRuntime {
         db_path: impl AsRef<Path>,
         network_config: TransportNetworkConfig,
     ) -> Result<Self> {
-        Self::new_with_config_and_identity(db_path, network_config, IdentityStorageMode::from_env())
-            .await
+        Self::new_with_config_and_identity_and_discovery(
+            db_path,
+            network_config,
+            IdentityStorageMode::from_env(),
+            DiscoveryConfig::static_peer_default(),
+            DhtDiscoveryOptions::disabled(),
+        )
+        .await
     }
 
+    #[cfg(test)]
     async fn new_with_config_and_identity(
         db_path: impl AsRef<Path>,
         network_config: TransportNetworkConfig,
         identity_mode: IdentityStorageMode,
     ) -> Result<Self> {
+        Self::new_with_config_and_identity_and_discovery(
+            db_path,
+            network_config,
+            identity_mode,
+            DiscoveryConfig::static_peer_default(),
+            DhtDiscoveryOptions::disabled(),
+        )
+        .await
+    }
+
+    async fn new_with_config_and_identity_and_discovery(
+        db_path: impl AsRef<Path>,
+        network_config: TransportNetworkConfig,
+        identity_mode: IdentityStorageMode,
+        discovery_config: DiscoveryConfig,
+        dht_options: DhtDiscoveryOptions,
+    ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         migrate_legacy_runtime_data(&db_path)?;
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
-        let iroh_stack = SharedIrohStack::new(&docs_root, network_config.clone()).await?;
+        let iroh_stack =
+            SharedIrohStack::new(&docs_root, network_config.clone(), &discovery_config, dht_options)
+                .await?;
         let keys = load_or_create_keys(&db_path, identity_mode)?;
         let app_service = AppService::new_with_services(
             store.clone(),
@@ -176,11 +269,26 @@ impl DesktopRuntime {
             db_path,
             store,
             iroh_stack,
+            discovery_config: Arc::new(Mutex::new(discovery_config)),
         })
     }
 
     pub async fn from_env(db_path: impl AsRef<Path>) -> Result<Self> {
-        Self::new_with_config(db_path, TransportNetworkConfig::from_env()?).await
+        let db_path = db_path.as_ref().to_path_buf();
+        migrate_legacy_runtime_data(&db_path)?;
+        let discovery_config = resolve_discovery_config_from_env(&db_path)?;
+        let dht_options = match discovery_config.mode {
+            DiscoveryMode::SeededDht => DhtDiscoveryOptions::seeded_dht(),
+            DiscoveryMode::StaticPeer => DhtDiscoveryOptions::disabled(),
+        };
+        Self::new_with_config_and_identity_and_discovery(
+            &db_path,
+            TransportNetworkConfig::from_env()?,
+            IdentityStorageMode::from_env(),
+            discovery_config,
+            dht_options,
+        )
+        .await
     }
 
     pub fn db_path(&self) -> &Path {
@@ -226,6 +334,10 @@ impl DesktopRuntime {
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
         self.app_service.get_sync_status().await
+    }
+
+    pub async fn get_discovery_config(&self) -> Result<DiscoveryConfig> {
+        Ok(self.discovery_config.lock().await.clone())
     }
 
     pub async fn list_live_sessions(
@@ -307,6 +419,27 @@ impl DesktopRuntime {
         self.app_service
             .import_peer_ticket(request.ticket.as_str())
             .await
+    }
+
+    pub async fn set_discovery_seeds(
+        &self,
+        request: SetDiscoverySeedsRequest,
+    ) -> Result<DiscoveryConfig> {
+        let mut next_config = self.discovery_config.lock().await.clone();
+        if next_config.env_locked {
+            bail!("discovery configuration is locked by environment variables");
+        }
+        next_config.seed_peers = parse_seed_entries(&request.seed_entries)?;
+        self.app_service
+            .set_discovery_seeds(
+                next_config.mode.clone(),
+                next_config.env_locked,
+                next_config.seed_peers.clone(),
+            )
+            .await?;
+        save_discovery_config(&self.db_path, &next_config.stored())?;
+        *self.discovery_config.lock().await = next_config.clone();
+        Ok(next_config)
     }
 
     pub async fn unsubscribe_topic(&self, request: UnsubscribeTopicRequest) -> Result<()> {
@@ -431,14 +564,113 @@ fn pending_attachment_from_request(request: CreateAttachmentRequest) -> Result<P
     })
 }
 
+fn discovery_config_path(db_path: &Path) -> PathBuf {
+    db_path.with_extension(DISCOVERY_CONFIG_FILE_EXTENSION)
+}
+
+fn load_discovery_config_from_file(db_path: &Path) -> Result<Option<StoredDiscoveryConfig>> {
+    let path = discovery_config_path(db_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read discovery config `{}`", path.display()))?;
+    let config = serde_json::from_str::<StoredDiscoveryConfig>(&raw)
+        .with_context(|| format!("failed to parse discovery config `{}`", path.display()))?;
+    Ok(Some(config))
+}
+
+fn save_discovery_config(db_path: &Path, config: &StoredDiscoveryConfig) -> Result<()> {
+    let path = discovery_config_path(db_path);
+    let json = serde_json::to_vec_pretty(config)
+        .with_context(|| format!("failed to encode discovery config `{}`", path.display()))?;
+    fs::write(&path, json)
+        .with_context(|| format!("failed to write discovery config `{}`", path.display()))
+}
+
+fn resolve_discovery_config_from_env(db_path: &Path) -> Result<DiscoveryConfig> {
+    let env_mode = std::env::var(DISCOVERY_MODE_ENV).ok();
+    let env_seeds = std::env::var(DISCOVERY_SEEDS_ENV).ok();
+    let env_locked = env_mode.is_some() || env_seeds.is_some();
+
+    if env_locked {
+        let mode = match env_mode.as_deref() {
+            Some(value) => parse_discovery_mode(value)?,
+            None => DiscoveryMode::SeededDht,
+        };
+        let seed_peers = parse_seed_entries_from_csv(env_seeds.as_deref().unwrap_or(""))?;
+        return Ok(DiscoveryConfig {
+            mode,
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: true,
+            seed_peers,
+        });
+    }
+
+    if let Some(stored) = load_discovery_config_from_file(db_path)? {
+        return Ok(DiscoveryConfig::from_stored(stored, false));
+    }
+
+    Ok(DiscoveryConfig::seeded_dht_default())
+}
+
+fn parse_discovery_mode(value: &str) -> Result<DiscoveryMode> {
+    match value.trim() {
+        "static_peer" => Ok(DiscoveryMode::StaticPeer),
+        "seeded_dht" => Ok(DiscoveryMode::SeededDht),
+        other => Err(anyhow!(
+            "invalid {} value `{}` (expected static_peer or seeded_dht)",
+            DISCOVERY_MODE_ENV,
+            other
+        )),
+    }
+}
+
+fn parse_seed_entries(entries: &[String]) -> Result<Vec<SeedPeer>> {
+    parse_seed_entries_from_iter(entries.iter().map(String::as_str))
+}
+
+fn parse_seed_entries_from_csv(value: &str) -> Result<Vec<SeedPeer>> {
+    parse_seed_entries_from_iter(value.split(','))
+}
+
+fn parse_seed_entries_from_iter<'a>(
+    entries: impl IntoIterator<Item = &'a str>,
+) -> Result<Vec<SeedPeer>> {
+    let mut parsed = Vec::new();
+    for entry in entries {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        parsed.push(parse_seed_peer(trimmed)?);
+    }
+    Ok(normalize_seed_peers(parsed))
+}
+
+fn normalize_seed_peers(peers: Vec<SeedPeer>) -> Vec<SeedPeer> {
+    let mut deduped = std::collections::BTreeMap::new();
+    for peer in peers {
+        deduped.insert(peer.display(), peer);
+    }
+    deduped.into_values().collect()
+}
+
 #[cfg(test)]
 fn legacy_iroh_data_dir_name() -> String {
     format!("kukuri-{}.iroh-data", "next")
 }
 
 impl SharedIrohStack {
-    async fn new(root: &Path, network_config: TransportNetworkConfig) -> Result<Self> {
-        let node = IrohDocsNode::persistent_with_config(root, network_config.clone()).await?;
+    async fn new(
+        root: &Path,
+        network_config: TransportNetworkConfig,
+        discovery_config: &DiscoveryConfig,
+        dht_options: DhtDiscoveryOptions,
+    ) -> Result<Self> {
+        let node =
+            IrohDocsNode::persistent_with_discovery_config(root, network_config.clone(), dht_options)
+                .await?;
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
             node.endpoint().clone(),
             node.gossip().clone(),
@@ -447,6 +679,19 @@ impl SharedIrohStack {
         ));
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
+        transport
+            .configure_discovery(
+                discovery_config.mode.clone(),
+                discovery_config.env_locked,
+                discovery_config.seed_peers.clone(),
+            )
+            .await?;
+        docs_sync
+            .set_seed_peers(discovery_config.seed_peers.clone())
+            .await?;
+        blob_service
+            .set_seed_peers(discovery_config.seed_peers.clone())
+            .await?;
         Ok(Self {
             _node: node,
             transport,
@@ -465,6 +710,8 @@ mod tests {
     use super::*;
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use iroh::address_lookup::EndpointInfo;
+    use pkarr::{Client as PkarrClient, mainline::Testnet};
     use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
@@ -482,6 +729,8 @@ mod tests {
         for key in [
             "KUKURI_APP_DATA_DIR",
             "KUKURI_INSTANCE",
+            DISCOVERY_MODE_ENV,
+            DISCOVERY_SEEDS_ENV,
             legacy_app_data_dir.as_str(),
             legacy_instance.as_str(),
         ] {
@@ -516,6 +765,73 @@ mod tests {
             data_base64: BASE64_STANDARD.encode(bytes),
             role: Some(role.to_string()),
         }
+    }
+
+    fn dht_test_client(testnet: &Testnet) -> PkarrClient {
+        let mut builder = PkarrClient::builder();
+        builder.no_default_network().bootstrap(&testnet.bootstrap);
+        builder.build().expect("pkarr client")
+    }
+
+    async fn publish_runtime_endpoint_to_testnet(runtime: &DesktopRuntime, testnet: &Testnet) {
+        let endpoint = runtime.iroh_stack._node.endpoint();
+        let client = dht_test_client(testnet);
+        let signed_packet = EndpointInfo::from(endpoint.addr())
+            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
+            .expect("signed packet");
+        client
+            .publish(&signed_packet, None)
+            .await
+            .expect("publish endpoint info");
+        let public_key =
+            pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
+        let expected = signed_packet.as_bytes().clone();
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if client
+                    .resolve_most_recent(&public_key)
+                    .await
+                    .as_ref()
+                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("resolve published endpoint info");
+    }
+
+    fn seeded_dht_config(seed_peers: Vec<SeedPeer>) -> DiscoveryConfig {
+        DiscoveryConfig {
+            mode: DiscoveryMode::SeededDht,
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: false,
+            seed_peers,
+        }
+    }
+
+    async fn new_seeded_dht_runtime_with_config(
+        db_path: &Path,
+        testnet: &Testnet,
+        discovery_config: DiscoveryConfig,
+    ) -> DesktopRuntime {
+        let runtime = DesktopRuntime::new_with_config_and_identity_and_discovery(
+            db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+            discovery_config,
+            DhtDiscoveryOptions::with_client(dht_test_client(testnet)),
+        )
+        .await
+        .expect("seeded dht runtime");
+        publish_runtime_endpoint_to_testnet(&runtime, testnet).await;
+        runtime
+    }
+
+    async fn new_seeded_dht_runtime(db_path: &Path, testnet: &Testnet) -> DesktopRuntime {
+        new_seeded_dht_runtime_with_config(db_path, testnet, seeded_dht_config(Vec::new())).await
     }
 
     #[test]
@@ -711,6 +1027,263 @@ mod tests {
         assert_eq!(received.content, "hello desktop runtime");
         let status = runtime_b.get_sync_status().await.expect("sync status");
         assert!(status.last_sync_ts.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn set_discovery_seeds_reapplies_runtime_without_restart() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("seeded-a.db");
+        let db_b = dir.path().join("seeded-b.db");
+        let testnet = Testnet::new(5).expect("testnet");
+        let runtime_a = new_seeded_dht_runtime(&db_a, &testnet).await;
+        let runtime_b = new_seeded_dht_runtime(&db_b, &testnet).await;
+        let endpoint_a = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .discovery
+            .local_endpoint_id;
+        let endpoint_b = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .discovery
+            .local_endpoint_id;
+
+        runtime_a
+            .set_discovery_seeds(SetDiscoverySeedsRequest {
+                seed_entries: vec![endpoint_b.clone()],
+            })
+            .await
+            .expect("set seeds a");
+        runtime_b
+            .set_discovery_seeds(SetDiscoverySeedsRequest {
+                seed_entries: vec![endpoint_a.clone()],
+            })
+            .await
+            .expect("set seeds b");
+
+        let config_a = runtime_a
+            .get_discovery_config()
+            .await
+            .expect("discovery config a");
+        let config_b = runtime_b
+            .get_discovery_config()
+            .await
+            .expect("discovery config b");
+        assert_eq!(config_a.seed_peers[0].endpoint_id, endpoint_b);
+        assert_eq!(config_b.seed_peers[0].endpoint_id, endpoint_a);
+        let topic = "kukuri:topic:runtime-seeded-dht";
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let status_a = runtime_a.get_sync_status().await.expect("status a");
+                let status_b = runtime_b.get_sync_status().await.expect("status b");
+                let ready_a = status_a
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                let ready_b = status_b
+                    .topic_diagnostics
+                    .iter()
+                    .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+                if ready_a && ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded runtime ready timeout");
+
+        let event_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "hello seeded runtime".into(),
+                reply_to: None,
+                attachments: vec![],
+            })
+            .await
+            .expect("create post");
+
+        let received = timeout(Duration::from_secs(20), async {
+            loop {
+                let timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("seeded runtime sync timeout");
+
+        assert_eq!(received.content, "hello seeded runtime");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn restart_restores_seeded_dht_config_and_reconnects() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("restart-seeded-a.db");
+        let db_b = dir.path().join("restart-seeded-b.db");
+        let testnet = Testnet::new(5).expect("testnet");
+        let runtime_a = new_seeded_dht_runtime(&db_a, &testnet).await;
+        let runtime_b = new_seeded_dht_runtime(&db_b, &testnet).await;
+        let endpoint_a = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .discovery
+            .local_endpoint_id;
+        let endpoint_b = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .discovery
+            .local_endpoint_id;
+
+        runtime_a
+            .set_discovery_seeds(SetDiscoverySeedsRequest {
+                seed_entries: vec![endpoint_b.clone()],
+            })
+            .await
+            .expect("set seeds a");
+        runtime_b
+            .set_discovery_seeds(SetDiscoverySeedsRequest {
+                seed_entries: vec![endpoint_a.clone()],
+            })
+            .await
+            .expect("set seeds b");
+
+        timeout(Duration::from_secs(15), runtime_a.shutdown())
+            .await
+            .expect("shutdown a");
+        timeout(Duration::from_secs(15), runtime_b.shutdown())
+            .await
+            .expect("shutdown b");
+        drop(runtime_a);
+        drop(runtime_b);
+
+        let restored_a =
+            resolve_discovery_config_from_env(&db_a).expect("restored discovery config a");
+        let restored_b =
+            resolve_discovery_config_from_env(&db_b).expect("restored discovery config b");
+        let restarted_a =
+            new_seeded_dht_runtime_with_config(&db_a, &testnet, restored_a.clone()).await;
+        let restarted_b =
+            new_seeded_dht_runtime_with_config(&db_b, &testnet, restored_b.clone()).await;
+        let restarted_endpoint_a = restarted_a
+            .get_sync_status()
+            .await
+            .expect("restarted status a")
+            .discovery
+            .local_endpoint_id;
+        let restarted_endpoint_b = restarted_b
+            .get_sync_status()
+            .await
+            .expect("restarted status b")
+            .discovery
+            .local_endpoint_id;
+
+        assert_eq!(restored_a.mode, DiscoveryMode::SeededDht);
+        assert_eq!(restored_b.mode, DiscoveryMode::SeededDht);
+        assert_eq!(restored_a.seed_peers[0].endpoint_id, endpoint_b);
+        assert_eq!(restored_b.seed_peers[0].endpoint_id, endpoint_a);
+        assert_eq!(restarted_endpoint_a, endpoint_a);
+        assert_eq!(restarted_endpoint_b, endpoint_b);
+        let topic = "kukuri:topic:runtime-seeded-restart";
+        let _ = restarted_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe restarted a");
+        let _ = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe restarted b");
+
+        let event_id = restarted_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "hello after restart".into(),
+                reply_to: None,
+                attachments: vec![],
+            })
+            .await
+            .expect("create post");
+
+        let received = timeout(Duration::from_secs(20), async {
+            loop {
+                let timeline = restarted_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("timeline");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("restart seeded dht sync timeout");
+
+        assert_eq!(received.content, "hello after restart");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn invalid_seed_entry_rejected_without_mutating_runtime() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("invalid-seed.db");
+        let testnet = Testnet::new(5).expect("testnet");
+        let runtime = new_seeded_dht_runtime(&db_path, &testnet).await;
+
+        let error = runtime
+            .set_discovery_seeds(SetDiscoverySeedsRequest {
+                seed_entries: vec!["not-a-node-id".into()],
+            })
+            .await
+            .expect_err("invalid seed should fail");
+        assert!(error.to_string().contains("invalid seed endpoint id"));
+
+        let config = runtime
+            .get_discovery_config()
+            .await
+            .expect("discovery config");
+        assert!(config.seed_peers.is_empty());
+        assert!(!discovery_config_path(&db_path).exists());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

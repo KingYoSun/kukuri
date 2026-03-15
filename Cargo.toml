@@ -28,7 +28,7 @@ blake3 = "1.8.3"
 chrono = { version = "0.4.43", features = ["serde"] }
 futures-util = "0.3.32"
 hex = "0.4.3"
-iroh = { version = "0.96.1", features = ["address-lookup-mdns"] }
+iroh = { version = "0.96.1", features = ["address-lookup-mdns", "address-lookup-pkarr-dht"] }
 iroh-docs = "0.96.0"
 iroh-blobs = "0.98.0"
 iroh-gossip = "0.96.0"
@@ -44,3 +44,4 @@ tokio-stream = { version = "0.1.17", features = ["sync"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tempfile = "3.25.0"
+pkarr = { version = "=5.0.2", default-features = false, features = ["relays", "dht"] }

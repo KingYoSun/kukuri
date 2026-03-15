@@ -240,6 +240,10 @@ textarea {
   margin: 0 0 1rem;
 }
 
+.status-grid-compact {
+  margin-bottom: 0.75rem;
+}
+
 .status-grid div {
   padding: 0.85rem;
   border-radius: 16px;
@@ -325,6 +329,19 @@ textarea {
   margin: 0.35rem 0 0;
   word-break: break-all;
   color: rgba(246, 241, 232, 0.58);
+}
+
+.discovery-panel {
+  margin: 1rem 0;
+}
+
+.discovery-editor {
+  min-height: 120px;
+}
+
+.discovery-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .diagnostic-error {

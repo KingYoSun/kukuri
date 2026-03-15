@@ -17,7 +17,10 @@ use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use iroh_gossip::net::Gossip;
 use kukuri_core::{ReplicaId, blob_hash};
-use kukuri_transport::{TransportNetworkConfig, parse_endpoint_ticket};
+use kukuri_transport::{
+    DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, build_endpoint_builder,
+    parse_endpoint_ticket,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
@@ -27,6 +30,7 @@ use tracing::{info, warn};
 pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
 type ReplicaRecords = HashMap<String, Vec<u8>>;
 type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
+const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DocOp {
@@ -76,6 +80,9 @@ pub trait DocsSync: Send + Sync {
     ) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -88,10 +95,21 @@ pub struct IrohDocsNode {
     blobs: BlobStore,
 }
 
+#[derive(Serialize, Deserialize)]
+struct StoredEndpointSecret {
+    secret_key: iroh::SecretKey,
+}
+
 impl IrohDocsNode {
     pub async fn memory() -> Result<Arc<Self>> {
         let store = MemStore::new();
-        Self::spawn((*store).clone(), None, TransportNetworkConfig::loopback()).await
+        Self::spawn(
+            (*store).clone(),
+            None,
+            TransportNetworkConfig::loopback(),
+            DhtDiscoveryOptions::disabled(),
+        )
+        .await
     }
 
     pub async fn persistent(root: impl AsRef<Path>) -> Result<Arc<Self>> {
@@ -102,6 +120,19 @@ impl IrohDocsNode {
         root: impl AsRef<Path>,
         network_config: TransportNetworkConfig,
     ) -> Result<Arc<Self>> {
+        Self::persistent_with_discovery_config(
+            root,
+            network_config,
+            DhtDiscoveryOptions::disabled(),
+        )
+        .await
+    }
+
+    pub async fn persistent_with_discovery_config(
+        root: impl AsRef<Path>,
+        network_config: TransportNetworkConfig,
+        dht_options: DhtDiscoveryOptions,
+    ) -> Result<Arc<Self>> {
         let root = root.as_ref();
         std::fs::create_dir_all(root)
             .with_context(|| format!("failed to create docs root {}", root.display()))?;
@@ -109,18 +140,36 @@ impl IrohDocsNode {
         let store = iroh_blobs::store::fs::FsStore::load_with_opts(root.join("blobs.db"), options)
             .await
             .with_context(|| format!("failed to load blob store at {}", root.display()))?;
-        Self::spawn((*store).clone(), Some(root.to_path_buf()), network_config).await
+        Self::spawn(
+            (*store).clone(),
+            Some(root.to_path_buf()),
+            network_config,
+            dht_options,
+        )
+        .await
     }
 
     async fn spawn(
         store: impl Into<BlobStore>,
         root: Option<PathBuf>,
         network_config: TransportNetworkConfig,
+        dht_options: DhtDiscoveryOptions,
     ) -> Result<Arc<Self>> {
         let blobs = store.into();
         let discovery = Arc::new(MemoryLookup::new());
-        let mut endpoint_builder =
-            Endpoint::empty_builder(RelayMode::Disabled).address_lookup(discovery.clone());
+        let endpoint_secret = root
+            .as_deref()
+            .map(load_endpoint_secret)
+            .transpose()?
+            .flatten();
+        let mut endpoint_builder = build_endpoint_builder(
+            Endpoint::empty_builder(RelayMode::Disabled),
+            &discovery,
+            Some(&dht_options),
+        )?;
+        if let Some(secret_key) = endpoint_secret {
+            endpoint_builder = endpoint_builder.secret_key(secret_key);
+        }
         endpoint_builder = match network_config.bind_addr {
             std::net::SocketAddr::V4(addr) => endpoint_builder.bind_addr(addr)?,
             std::net::SocketAddr::V6(addr) => endpoint_builder.bind_addr(addr)?,
@@ -129,6 +178,9 @@ impl IrohDocsNode {
             .bind()
             .await
             .context("failed to bind iroh endpoint for docs node")?;
+        if let Some(root) = root.as_deref() {
+            save_endpoint_secret(root, endpoint.secret_key())?;
+        }
         discovery.add_endpoint_info(endpoint.addr());
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let docs_builder = match root {
@@ -180,6 +232,7 @@ impl IrohDocsNode {
 
     pub async fn shutdown(self: Arc<Self>) -> Result<()> {
         self.router.shutdown().await?;
+        self.endpoint.close().await;
         let _ = self.blobs.shutdown().await;
         Ok(())
     }
@@ -190,12 +243,41 @@ impl Drop for IrohDocsNode {
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let router = Arc::clone(&self.router);
             let blobs = self.blobs.clone();
+            let endpoint = self.endpoint.clone();
             handle.spawn(async move {
                 let _ = router.shutdown().await;
+                endpoint.close().await;
                 let _ = blobs.shutdown().await;
             });
         }
     }
+}
+
+fn endpoint_secret_path(root: &Path) -> PathBuf {
+    root.join(ENDPOINT_SECRET_FILE_NAME)
+}
+
+fn load_endpoint_secret(root: &Path) -> Result<Option<iroh::SecretKey>> {
+    let path = endpoint_secret_path(root);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("failed to read endpoint secret at {}", path.display()))?;
+    let stored: StoredEndpointSecret = serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse endpoint secret at {}", path.display()))?;
+    Ok(Some(stored.secret_key))
+}
+
+fn save_endpoint_secret(root: &Path, secret_key: &iroh::SecretKey) -> Result<()> {
+    let path = endpoint_secret_path(root);
+    let bytes = serde_json::to_vec(&StoredEndpointSecret {
+        secret_key: secret_key.clone(),
+    })
+    .with_context(|| format!("failed to serialize endpoint secret at {}", path.display()))?;
+    std::fs::write(&path, bytes)
+        .with_context(|| format!("failed to write endpoint secret at {}", path.display()))?;
+    Ok(())
 }
 
 struct ReplicaHandle {
@@ -209,6 +291,7 @@ struct ReplicaHandle {
 pub struct IrohDocsSync {
     node: Arc<IrohDocsNode>,
     replicas: Arc<Mutex<HashMap<String, ReplicaHandle>>>,
+    seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
 }
 
@@ -223,18 +306,43 @@ impl IrohDocsSync {
         Self {
             node,
             replicas: Arc::new(Mutex::new(HashMap::new())),
+            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
-    async fn ensure_replica(&self, replica_id: &ReplicaId) -> Result<Doc> {
-        let imported = self
-            .imported_peers
+    async fn sync_peers(&self) -> Vec<EndpointAddr> {
+        let mut peers = self
+            .seed_peers
             .lock()
             .await
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        for peer in self.imported_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
+        peers
+    }
+
+    async fn reapply_sync_peers(&self) -> Result<()> {
+        let peers = self.sync_peers().await;
+        let peer_ids = peers
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+        let mut replicas = self.replicas.lock().await;
+        for handle in replicas.values_mut() {
+            doc_start_sync(&handle.doc, peers.clone()).await?;
+            handle.sync_peer_ids = peer_ids.clone();
+        }
+        Ok(())
+    }
+
+    async fn ensure_replica(&self, replica_id: &ReplicaId) -> Result<Doc> {
+        let imported = self.sync_peers().await;
         let imported_ids = imported
             .iter()
             .map(|peer| peer.id.to_string())
@@ -331,12 +439,8 @@ impl IrohDocsSync {
             Ok(bytes) => Ok(Some(bytes.to_vec())),
             Err(error) => {
                 let peers = self
-                    .imported_peers
-                    .lock()
-                    .await
-                    .values()
-                    .cloned()
-                    .collect::<Vec<_>>();
+                    .sync_peers()
+                    .await;
                 info!(
                     hash = %content_hash,
                     error = %error,
@@ -592,23 +696,21 @@ impl DocsSync for IrohDocsSync {
             .lock()
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr.clone());
-        let peers = self
-            .imported_peers
-            .lock()
-            .await
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        let peer_ids = peers
-            .iter()
-            .map(|peer| peer.id.to_string())
-            .collect::<BTreeSet<_>>();
-        let mut replicas = self.replicas.lock().await;
-        for handle in replicas.values_mut() {
-            doc_start_sync(&handle.doc, peers.clone()).await?;
-            handle.sync_peer_ids = peer_ids.clone();
-        }
+        self.reapply_sync_peers().await?;
         Ok(())
+    }
+
+    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        let mut parsed = BTreeMap::new();
+        for peer in peers {
+            let endpoint_addr = peer.to_endpoint_addr()?;
+            if !endpoint_addr.is_empty() {
+                self.node.discovery().add_endpoint_info(endpoint_addr.clone());
+            }
+            parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
+        }
+        *self.seed_peers.lock().await = parsed;
+        self.reapply_sync_peers().await
     }
 }
 

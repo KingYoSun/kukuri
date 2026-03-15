@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
     CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest, DesktopRuntime,
-    GetBlobMediaRequest, GetBlobPreviewRequest, ImportPeerTicketRequest, ListGameRoomsRequest,
-    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    UnsubscribeTopicRequest, UpdateGameRoomRequest,
+    DiscoveryConfig, GetBlobMediaRequest, GetBlobPreviewRequest, ImportPeerTicketRequest,
+    ListGameRoomsRequest, ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest,
+    LiveSessionCommandRequest, SetDiscoverySeedsRequest, UnsubscribeTopicRequest,
+    UpdateGameRoomRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -71,6 +72,13 @@ async fn get_sync_status(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::SyncStatus, String> {
     state.runtime.get_sync_status().await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_discovery_config(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<DiscoveryConfig, String> {
+    state.runtime.get_discovery_config().await.map_err(map_error)
 }
 
 #[tauri::command]
@@ -182,6 +190,18 @@ async fn import_peer_ticket(
 }
 
 #[tauri::command]
+async fn set_discovery_seeds(
+    state: tauri::State<'_, DesktopState>,
+    request: SetDiscoverySeedsRequest,
+) -> Result<DiscoveryConfig, String> {
+    state
+        .runtime
+        .set_discovery_seeds(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
 async fn unsubscribe_topic(
     state: tauri::State<'_, DesktopState>,
     request: UnsubscribeTopicRequest,
@@ -267,6 +287,7 @@ pub fn run() {
             list_timeline,
             list_thread,
             get_sync_status,
+            get_discovery_config,
             list_live_sessions,
             create_live_session,
             end_live_session,
@@ -276,6 +297,7 @@ pub fn run() {
             create_game_room,
             update_game_room,
             import_peer_ticket,
+            set_discovery_seeds,
             unsubscribe_topic,
             get_local_peer_ticket,
             get_blob_media_payload,

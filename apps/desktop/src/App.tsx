@@ -15,6 +15,7 @@ import {
   BlobMediaPayload,
   CreateAttachmentInput,
   DesktopApi,
+  DiscoveryConfig,
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
@@ -50,6 +51,33 @@ const DEFAULT_TOPIC = 'kukuri:topic:demo';
 const REFRESH_INTERVAL_MS = 2000;
 const VIDEO_POSTER_TIMEOUT_MS = 5000;
 const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
+const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
+  mode: 'seeded_dht',
+  connect_mode: 'direct_only',
+  env_locked: false,
+  seed_peers: [],
+};
+const DEFAULT_SYNC_STATUS: SyncStatus = {
+  connected: false,
+  peer_count: 0,
+  pending_events: 0,
+  status_detail: 'No peer tickets imported',
+  last_error: null,
+  configured_peers: [],
+  subscribed_topics: [],
+  topic_diagnostics: [],
+  local_author_pubkey: '',
+  discovery: {
+    mode: 'seeded_dht',
+    connect_mode: 'direct_only',
+    env_locked: false,
+    seed_peer_ids: [],
+    manual_ticket_peer_ids: [],
+    connected_peer_ids: [],
+    local_endpoint_id: '',
+    last_discovery_error: null,
+  },
+};
 
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
@@ -76,6 +104,14 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${bytes} B`;
+}
+
+function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
+  return peer.addr_hint ? `${peer.endpoint_id}@${peer.addr_hint}` : peer.endpoint_id;
+}
+
+function seedPeersToEditorValue(config: DiscoveryConfig): string {
+  return config.seed_peers.map((peer) => formatSeedPeer(peer)).join('\n');
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -436,21 +472,15 @@ export function App({ api = runtimeApi }: AppProps) {
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
   const [peerTicket, setPeerTicket] = useState('');
   const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
+  const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig>(DEFAULT_DISCOVERY_CONFIG);
+  const [discoverySeedInput, setDiscoverySeedInput] = useState('');
+  const [discoveryEditorDirty, setDiscoveryEditorDirty] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string | null>>({});
   const [unsupportedVideoManifests, setUnsupportedVideoManifests] = useState<
     Record<string, true>
   >({});
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({
-    connected: false,
-    peer_count: 0,
-    pending_events: 0,
-    status_detail: 'No peer tickets imported',
-    last_error: null,
-    configured_peers: [],
-    subscribed_topics: [],
-    topic_diagnostics: [],
-    local_author_pubkey: '',
-  });
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(DEFAULT_SYNC_STATUS);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [liveTitle, setLiveTitle] = useState('');
   const [liveDescription, setLiveDescription] = useState('');
@@ -467,8 +497,13 @@ export function App({ api = runtimeApi }: AppProps) {
   const draftPreviewUrlRef = useRef(new Map<string, string>());
 
   const headline = useMemo(
-    () => (syncStatus.connected ? 'Live over static peers' : 'Local-first shell'),
-    [syncStatus.connected]
+    () => {
+      if (syncStatus.discovery.mode === 'seeded_dht') {
+        return syncStatus.connected ? 'Seeded DHT + direct peers' : 'Seeded DHT shell';
+      }
+      return syncStatus.connected ? 'Live over static peers' : 'Local-first shell';
+    },
+    [syncStatus.connected, syncStatus.discovery.mode]
   );
 
   const activeTimeline = useMemo(
@@ -509,7 +544,8 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, status, ticket, threadView] = await Promise.all([
+        const [timelineViews, liveViews, gameViews, status, discovery, ticket, threadView] =
+          await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
@@ -529,6 +565,7 @@ export function App({ api = runtimeApi }: AppProps) {
             }))
           ),
           api.getSyncStatus(),
+          api.getDiscoveryConfig(),
           api.getLocalPeerTicket(),
           currentThread
             ? api.listThread(currentActiveTopic, currentThread, null, 50)
@@ -545,6 +582,10 @@ export function App({ api = runtimeApi }: AppProps) {
             Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
           );
           setSyncStatus(status);
+          setDiscoveryConfig(discovery);
+          if (!discoveryEditorDirty) {
+            setDiscoverySeedInput(seedPeersToEditorValue(discovery));
+          }
           setLocalPeerTicket(ticket);
           if (threadView) {
             setThread(threadView.items);
@@ -557,7 +598,7 @@ export function App({ api = runtimeApi }: AppProps) {
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
-    [api]
+    [api, discoveryEditorDirty]
   );
 
   useEffect(() => {
@@ -873,6 +914,25 @@ export function App({ api = runtimeApi }: AppProps) {
 
   function clearReply() {
     setReplyTarget(null);
+  }
+
+  async function handleSaveDiscoverySeeds() {
+    try {
+      const seedEntries = discoverySeedInput
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const nextConfig = await api.setDiscoverySeeds(seedEntries);
+      setDiscoveryConfig(nextConfig);
+      setDiscoverySeedInput(seedPeersToEditorValue(nextConfig));
+      setDiscoveryEditorDirty(false);
+      setDiscoveryError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (saveError) {
+      setDiscoveryError(
+        saveError instanceof Error ? saveError.message : 'failed to update discovery seeds'
+      );
+    }
   }
 
   async function handleImportPeer() {
@@ -1265,6 +1325,89 @@ export function App({ api = runtimeApi }: AppProps) {
               {syncStatus.last_error ?? 'none'}
             </p>
           </div>
+          <section className='panel panel-subsection discovery-panel'>
+            <div className='panel-header'>
+              <h3>Discovery</h3>
+              <small>{syncStatus.discovery.mode}</small>
+            </div>
+            <dl className='status-grid status-grid-compact'>
+              <div>
+                <dt>Mode</dt>
+                <dd>{syncStatus.discovery.mode}</dd>
+              </div>
+              <div>
+                <dt>Connect</dt>
+                <dd>{syncStatus.discovery.connect_mode}</dd>
+              </div>
+              <div>
+                <dt>Env Lock</dt>
+                <dd>{discoveryConfig.env_locked ? 'yes' : 'no'}</dd>
+              </div>
+            </dl>
+            <div className='diagnostic-block'>
+              <strong>Local Endpoint ID</strong>
+              <p>{syncStatus.discovery.local_endpoint_id || 'unknown'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Connected / Discovered</strong>
+              <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Manual Ticket Peers</strong>
+              <p>{syncStatus.discovery.manual_ticket_peer_ids.join(', ') || 'none'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Stored Seed IDs</strong>
+              <p>{syncStatus.discovery.seed_peer_ids.join(', ') || 'none'}</p>
+            </div>
+            <label className='field'>
+              <span>Seed Peers</span>
+              <textarea
+                value={discoverySeedInput}
+                onChange={(event) => {
+                  setDiscoverySeedInput(event.target.value);
+                  setDiscoveryEditorDirty(true);
+                }}
+                readOnly={discoveryConfig.env_locked}
+                className='ticket-output discovery-editor'
+                placeholder='node_id or node_id@host:port'
+              />
+            </label>
+            <div className='diagnostic-block'>
+              <strong>Discovery Error</strong>
+              <p
+                className={
+                  discoveryError || syncStatus.discovery.last_discovery_error
+                    ? 'diagnostic-error'
+                    : undefined
+                }
+              >
+                {discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none'}
+              </p>
+            </div>
+            <div className='discovery-actions'>
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={discoveryConfig.env_locked || !discoveryEditorDirty}
+                onClick={() => void handleSaveDiscoverySeeds()}
+              >
+                Save Seeds
+              </button>
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!discoveryEditorDirty}
+                onClick={() => {
+                  setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
+                  setDiscoveryEditorDirty(false);
+                  setDiscoveryError(null);
+                }}
+              >
+                Reset
+              </button>
+            </div>
+          </section>
           <label className='field'>
             <span>Your Ticket</span>
             <textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />

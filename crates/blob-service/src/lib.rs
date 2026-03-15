@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::BlobHash;
 use kukuri_docs_sync::IrohDocsNode;
-use kukuri_transport::parse_endpoint_ticket;
+use kukuri_transport::{SeedPeer, parse_endpoint_ticket};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn};
@@ -32,12 +32,16 @@ pub trait BlobService: Send + Sync {
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()>;
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
 pub struct IrohBlobService {
     node: Arc<IrohDocsNode>,
     pinned: Arc<RwLock<HashSet<String>>>,
+    seed_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
 }
 
@@ -52,6 +56,7 @@ impl IrohBlobService {
         Self {
             node,
             pinned: Arc::new(RwLock::new(HashSet::new())),
+            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
@@ -77,6 +82,22 @@ impl IrohBlobService {
             candidates.push(imported_peer.clone());
         }
         candidates
+    }
+
+    async fn fetch_peers(&self) -> Vec<iroh::EndpointAddr> {
+        let mut peers = self
+            .seed_peers
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for peer in self.imported_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
+        peers
     }
 }
 
@@ -137,13 +158,7 @@ impl BlobService for IrohBlobService {
         match self.node.blobs().blobs().get_bytes(hash).await {
             Ok(bytes) => Ok(Some(bytes.to_vec())),
             Err(error) => {
-                let peers = self
-                    .imported_peers
-                    .lock()
-                    .await
-                    .values()
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let peers = self.fetch_peers().await;
                 info!(
                     hash = %hash_text,
                     error = %error,
@@ -246,6 +261,21 @@ impl BlobService for IrohBlobService {
             .lock()
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        Ok(())
+    }
+
+    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        let mut parsed = BTreeMap::new();
+        for peer in peers {
+            let endpoint_addr = peer.to_endpoint_addr()?;
+            if !endpoint_addr.is_empty() {
+                self.node
+                    .discovery()
+                    .add_endpoint_info(endpoint_addr.clone());
+            }
+            parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
+        }
+        *self.seed_peers.lock().await = parsed;
         Ok(())
     }
 }

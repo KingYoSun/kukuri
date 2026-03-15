@@ -10,13 +10,14 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::{Stream, StreamExt};
-use iroh::address_lookup::MemoryLookup;
+use iroh::address_lookup::{DhtAddressLookup, MemoryLookup};
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{Event, GossipHint, TopicId};
+use pkarr::Client as PkarrClient;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 use tokio::task::JoinHandle;
@@ -73,6 +74,85 @@ pub struct TransportNetworkConfig {
     pub advertised_port: Option<u16>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscoveryMode {
+    #[default]
+    StaticPeer,
+    SeededDht,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectMode {
+    #[default]
+    DirectOnly,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SeedPeer {
+    pub endpoint_id: String,
+    pub addr_hint: Option<String>,
+}
+
+impl SeedPeer {
+    pub fn to_endpoint_addr(&self) -> Result<EndpointAddr> {
+        let endpoint_id = EndpointId::from_str(self.endpoint_id.trim())
+            .with_context(|| format!("invalid seed endpoint id `{}`", self.endpoint_id))?;
+        let Some(addr_hint) = self.addr_hint.as_deref() else {
+            return Ok(EndpointAddr::new(endpoint_id));
+        };
+        let socket_addrs = resolve_socket_addrs(addr_hint)?;
+        build_endpoint_addr(endpoint_id, socket_addrs)
+            .ok_or_else(|| anyhow!("seed peer must resolve to at least one socket address"))
+    }
+
+    pub fn display(&self) -> String {
+        match self.addr_hint.as_deref() {
+            Some(addr_hint) => format!("{}@{}", self.endpoint_id, addr_hint.trim()),
+            None => self.endpoint_id.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoverySnapshot {
+    pub mode: DiscoveryMode,
+    pub connect_mode: ConnectMode,
+    pub env_locked: bool,
+    pub seed_peer_ids: Vec<String>,
+    pub manual_ticket_peer_ids: Vec<String>,
+    pub connected_peer_ids: Vec<String>,
+    pub local_endpoint_id: String,
+    pub last_discovery_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct DhtDiscoveryOptions {
+    pub enabled: bool,
+    pub client: Option<PkarrClient>,
+}
+
+impl DhtDiscoveryOptions {
+    pub fn disabled() -> Self {
+        Self::default()
+    }
+
+    pub fn seeded_dht() -> Self {
+        Self {
+            enabled: true,
+            client: None,
+        }
+    }
+
+    pub fn with_client(client: PkarrClient) -> Self {
+        Self {
+            enabled: true,
+            client: Some(client),
+        }
+    }
+}
+
 impl Default for TransportNetworkConfig {
     fn default() -> Self {
         Self {
@@ -126,6 +206,17 @@ pub trait Transport: Send + Sync {
     async fn peers(&self) -> Result<PeerSnapshot>;
     async fn export_ticket(&self) -> Result<Option<String>>;
     async fn import_ticket(&self, ticket: &str) -> Result<()>;
+    async fn configure_discovery(
+        &self,
+        _mode: DiscoveryMode,
+        _env_locked: bool,
+        _seed_peers: Vec<SeedPeer>,
+    ) -> Result<()> {
+        Ok(())
+    }
+    async fn discovery(&self) -> Result<DiscoverySnapshot> {
+        Ok(DiscoverySnapshot::default())
+    }
 }
 
 #[async_trait]
@@ -146,8 +237,11 @@ pub struct FakeNetwork {
 pub struct FakeTransport {
     local_id: String,
     network: FakeNetwork,
+    seed_peers: Arc<Mutex<BTreeSet<String>>>,
     imported_peers: Arc<Mutex<BTreeSet<String>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
+    discovery_mode: Arc<Mutex<DiscoveryMode>>,
+    env_locked: Arc<Mutex<bool>>,
 }
 
 impl FakeTransport {
@@ -155,8 +249,11 @@ impl FakeTransport {
         Self {
             local_id: local_id.into(),
             network,
+            seed_peers: Arc::new(Mutex::new(BTreeSet::new())),
             imported_peers: Arc::new(Mutex::new(BTreeSet::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
+            discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            env_locked: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -207,13 +304,18 @@ impl Transport for FakeTransport {
     }
 
     async fn peers(&self) -> Result<PeerSnapshot> {
-        let imported = self
+        let mut imported = self
             .imported_peers
             .lock()
             .await
             .iter()
             .cloned()
             .collect::<Vec<_>>();
+        for peer in self.seed_peers.lock().await.iter() {
+            if !imported.contains(peer) {
+                imported.push(peer.clone());
+            }
+        }
         let topics = self
             .subscribed_topics
             .lock()
@@ -279,6 +381,49 @@ impl Transport for FakeTransport {
             .insert(ticket.to_string());
         Ok(())
     }
+
+    async fn configure_discovery(
+        &self,
+        mode: DiscoveryMode,
+        env_locked: bool,
+        seed_peers: Vec<SeedPeer>,
+    ) -> Result<()> {
+        *self.discovery_mode.lock().await = mode;
+        *self.env_locked.lock().await = env_locked;
+        let parsed = seed_peers
+            .into_iter()
+            .map(|peer| peer.endpoint_id)
+            .collect::<BTreeSet<_>>();
+        *self.seed_peers.lock().await = parsed;
+        Ok(())
+    }
+
+    async fn discovery(&self) -> Result<DiscoverySnapshot> {
+        let seed_peer_ids = self.seed_peers.lock().await.iter().cloned().collect::<Vec<_>>();
+        let manual_ticket_peer_ids = self
+            .imported_peers
+            .lock()
+            .await
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut connected_peer_ids = manual_ticket_peer_ids.clone();
+        for peer in &seed_peer_ids {
+            if !connected_peer_ids.contains(peer) {
+                connected_peer_ids.push(peer.clone());
+            }
+        }
+        Ok(DiscoverySnapshot {
+            mode: self.discovery_mode.lock().await.clone(),
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: *self.env_locked.lock().await,
+            seed_peer_ids,
+            manual_ticket_peer_ids,
+            connected_peer_ids,
+            local_endpoint_id: self.local_id.clone(),
+            last_discovery_error: None,
+        })
+    }
 }
 
 #[async_trait]
@@ -334,17 +479,20 @@ pub struct IrohGossipTransport {
     _router: Option<Router>,
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
+    seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
     last_error: Arc<Mutex<Option<String>>>,
+    discovery_mode: Arc<Mutex<DiscoveryMode>>,
+    env_locked: Arc<Mutex<bool>>,
 }
 
 impl IrohGossipTransport {
     pub async fn bind(network_config: TransportNetworkConfig) -> Result<Self> {
         let discovery = Arc::new(MemoryLookup::new());
         let mut builder =
-            Endpoint::empty_builder(RelayMode::Disabled).address_lookup(discovery.clone());
+            build_endpoint_builder(Endpoint::empty_builder(RelayMode::Disabled), &discovery, None)?;
         builder = apply_bind(builder, network_config.bind_addr)?;
         let endpoint = builder
             .bind()
@@ -363,10 +511,51 @@ impl IrohGossipTransport {
             _router: Some(router),
             discovery,
             network_config,
+            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
+            discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            env_locked: Arc::new(Mutex::new(false)),
+        })
+    }
+
+    pub async fn bind_with_discovery(
+        network_config: TransportNetworkConfig,
+        dht_options: DhtDiscoveryOptions,
+    ) -> Result<Self> {
+        let discovery = Arc::new(MemoryLookup::new());
+        let mut builder = build_endpoint_builder(
+            Endpoint::empty_builder(RelayMode::Disabled),
+            &discovery,
+            Some(&dht_options),
+        )?;
+        builder = apply_bind(builder, network_config.bind_addr)?;
+        let endpoint = builder
+            .bind()
+            .await
+            .context("failed to bind iroh endpoint")?;
+        discovery.add_endpoint_info(endpoint.addr());
+
+        let gossip = Gossip::builder().spawn(endpoint.clone());
+        let router = Router::builder(endpoint.clone())
+            .accept(GOSSIP_ALPN, gossip.clone())
+            .spawn();
+
+        Ok(Self {
+            endpoint,
+            gossip,
+            _router: Some(router),
+            discovery,
+            network_config,
+            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
+            topic_states: Arc::new(Mutex::new(HashMap::new())),
+            last_error: Arc::new(Mutex::new(None)),
+            discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            env_locked: Arc::new(Mutex::new(false)),
         })
     }
 
@@ -383,10 +572,13 @@ impl IrohGossipTransport {
             _router: None,
             discovery,
             network_config,
+            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
+            discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
+            env_locked: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -406,15 +598,47 @@ impl IrohGossipTransport {
         self.subscribed_topics.lock().await.remove(topic);
     }
 
-    async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
-        let imported = self
-            .imported_peers
-            .lock()
+    async fn bootstrap_peers(&self) -> Vec<EndpointAddr> {
+        let mode = self.discovery_mode.lock().await.clone();
+        let mut peers = if mode == DiscoveryMode::SeededDht {
+            self.seed_peers
+                .lock()
+                .await
+                .values()
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        for peer in self.imported_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
+        peers
+    }
+
+    async fn configured_peer_ids(&self) -> Vec<String> {
+        self.bootstrap_peers()
             .await
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        let bootstrap_peer_ids = imported
+            .into_iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<Vec<_>>()
+    }
+
+    async fn connected_peer_ids(&self) -> Vec<String> {
+        let mut connected = BTreeSet::new();
+        for (_, state) in self.topic_states.lock().await.iter() {
+            for peer in state.neighbors.read().await.iter() {
+                connected.insert(peer.clone());
+            }
+        }
+        connected.into_iter().collect::<Vec<_>>()
+    }
+
+    async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
+        let bootstrap_peers = self.bootstrap_peers().await;
+        let bootstrap_peer_ids = bootstrap_peers
             .iter()
             .map(|peer| peer.id.to_string())
             .collect::<BTreeSet<_>>();
@@ -434,9 +658,9 @@ impl IrohGossipTransport {
             self.remove_topic_state(topic.as_str()).await;
         }
 
-        let bootstrap = imported.iter().map(|peer| peer.id).collect::<Vec<_>>();
+        let bootstrap = bootstrap_peers.iter().map(|peer| peer.id).collect::<Vec<_>>();
 
-        for peer in &imported {
+        for peer in &bootstrap_peers {
             self.discovery.add_endpoint_info(peer.clone());
         }
 
@@ -455,7 +679,7 @@ impl IrohGossipTransport {
         let (sender, mut receiver) = topic_handle.split();
         let (broadcaster, _) = broadcast::channel(256);
         let outbound = broadcaster.clone();
-        let joined = Arc::new(AtomicBool::new(imported.is_empty()));
+        let joined = Arc::new(AtomicBool::new(bootstrap_peers.is_empty()));
         let joined_notify = Arc::new(Notify::new());
         let joined_task_state = Arc::clone(&joined);
         let joined_task_notify = Arc::clone(&joined_notify);
@@ -466,7 +690,7 @@ impl IrohGossipTransport {
         let last_error = Arc::new(Mutex::new(None));
         let last_error_task = Arc::clone(&last_error);
         let transport_last_error = Arc::clone(&self.last_error);
-        let imported_count = imported.len();
+        let imported_count = bootstrap_peers.len();
 
         let task = tokio::spawn(async move {
             if imported_count > 0 {
@@ -574,10 +798,9 @@ impl Transport for IrohGossipTransport {
     async fn publish(&self, topic: &TopicId, event: Event) -> Result<()> {
         let _ = self.ensure_topic(topic).await?;
         let peer_ids = self
-            .imported_peers
-            .lock()
+            .bootstrap_peers()
             .await
-            .values()
+            .into_iter()
             .map(|peer| peer.id)
             .collect::<Vec<_>>();
         let states = self.topic_states.lock().await;
@@ -625,13 +848,7 @@ impl Transport for IrohGossipTransport {
             })
             .collect::<Vec<_>>();
         let mut connected = BTreeSet::new();
-        let configured_peers = self
-            .imported_peers
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
+        let configured_peers = self.configured_peer_ids().await;
         let mut topic_diagnostics = Vec::with_capacity(topic_states.len());
         for (topic, configured_peer_ids, neighbors, last_received_at, last_error) in topic_states {
             let peers = neighbors.read().await.iter().cloned().collect::<Vec<_>>();
@@ -719,6 +936,54 @@ impl Transport for IrohGossipTransport {
         *self.last_error.lock().await = None;
         Ok(())
     }
+
+    async fn configure_discovery(
+        &self,
+        mode: DiscoveryMode,
+        env_locked: bool,
+        seed_peers: Vec<SeedPeer>,
+    ) -> Result<()> {
+        let mut parsed = BTreeMap::new();
+        for seed in seed_peers {
+            let endpoint_addr = seed.to_endpoint_addr()?;
+            if !endpoint_addr.is_empty() {
+                self.discovery.add_endpoint_info(endpoint_addr.clone());
+            }
+            parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
+        }
+        *self.discovery_mode.lock().await = mode;
+        *self.env_locked.lock().await = env_locked;
+        *self.seed_peers.lock().await = parsed;
+        *self.last_error.lock().await = None;
+        Ok(())
+    }
+
+    async fn discovery(&self) -> Result<DiscoverySnapshot> {
+        let seed_peer_ids = self
+            .seed_peers
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let manual_ticket_peer_ids = self
+            .imported_peers
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        Ok(DiscoverySnapshot {
+            mode: self.discovery_mode.lock().await.clone(),
+            connect_mode: ConnectMode::DirectOnly,
+            env_locked: *self.env_locked.lock().await,
+            seed_peer_ids,
+            manual_ticket_peer_ids,
+            connected_peer_ids: self.connected_peer_ids().await,
+            local_endpoint_id: self.endpoint.id().to_string(),
+            last_discovery_error: self.last_error.lock().await.clone(),
+        })
+    }
 }
 
 #[async_trait]
@@ -773,6 +1038,22 @@ impl HintTransport for IrohGossipTransport {
 fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     let hash = blake3::hash(topic.as_str().as_bytes());
     GossipTopicId::from_bytes(*hash.as_bytes())
+}
+
+pub fn build_endpoint_builder(
+    builder: EndpointBuilder,
+    discovery: &Arc<MemoryLookup>,
+    dht_options: Option<&DhtDiscoveryOptions>,
+) -> Result<EndpointBuilder> {
+    let mut builder = builder.address_lookup(discovery.clone());
+    if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
+        let mut dht_builder = DhtAddressLookup::builder().include_direct_addresses(true);
+        if let Some(client) = dht_options.client.as_ref() {
+            dht_builder = dht_builder.client(client.clone());
+        }
+        builder = builder.address_lookup(dht_builder);
+    }
+    Ok(builder)
 }
 
 fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {
@@ -866,6 +1147,26 @@ pub fn encode_endpoint_ticket(
         endpoint_addr.id,
         format_host_port(&advertised_host, advertised_port)
     ))
+}
+
+pub fn parse_seed_peer(value: &str) -> Result<SeedPeer> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("seed peer must not be empty");
+    }
+    let seed = if let Some((endpoint_id, addr_hint)) = trimmed.split_once('@') {
+        SeedPeer {
+            endpoint_id: endpoint_id.trim().to_string(),
+            addr_hint: Some(addr_hint.trim().to_string()),
+        }
+    } else {
+        SeedPeer {
+            endpoint_id: trimmed.to_string(),
+            addr_hint: None,
+        }
+    };
+    let _ = seed.to_endpoint_addr()?;
+    Ok(seed)
 }
 
 pub fn parse_endpoint_ticket(ticket: &str) -> Result<EndpointAddr> {
@@ -990,7 +1291,9 @@ fn topic_status_detail(configured_peer_count: usize, connected_peer_count: usize
 #[cfg(test)]
 mod tests {
     use super::*;
+    use iroh::address_lookup::EndpointInfo;
     use kukuri_core::{TopicId, build_text_note, generate_keys};
+    use pkarr::mainline::Testnet;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Mutex, OnceLock};
 
@@ -1035,6 +1338,41 @@ mod tests {
 
     fn legacy_env(name: &str) -> String {
         format!("KUKURI_{}_{}", "NEXT", name)
+    }
+
+    fn dht_test_client(testnet: &Testnet) -> PkarrClient {
+        let mut builder = PkarrClient::builder();
+        builder.no_default_network().bootstrap(&testnet.bootstrap);
+        builder.build().expect("pkarr client")
+    }
+
+    async fn publish_endpoint_to_testnet(endpoint: &Endpoint, testnet: &Testnet) {
+        let client = dht_test_client(testnet);
+        let signed_packet = EndpointInfo::from(endpoint.addr())
+            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
+            .expect("signed packet");
+        client
+            .publish(&signed_packet, None)
+            .await
+            .expect("publish endpoint info");
+        let public_key =
+            pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
+        let expected = signed_packet.as_bytes().clone();
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if client
+                    .resolve_most_recent(&public_key)
+                    .await
+                    .as_ref()
+                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("resolve published endpoint info");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1093,6 +1431,131 @@ mod tests {
 
         assert_eq!(envelope.event.id, event.id);
         assert_eq!(envelope.event.content, "hello transport");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_seeded_dht_can_connect_by_endpoint_id_without_ticket() {
+        let testnet = Testnet::new(5).expect("testnet");
+        let config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_discovery(
+            config.clone(),
+            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+        )
+        .await
+        .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_with_discovery(
+            config,
+            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+        )
+        .await
+        .expect("transport b");
+        let discovery_a = transport_a.discovery().await.expect("discovery a");
+        let discovery_b = transport_b.discovery().await.expect("discovery b");
+        publish_endpoint_to_testnet(&transport_a.endpoint, &testnet).await;
+        publish_endpoint_to_testnet(&transport_b.endpoint, &testnet).await;
+
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::SeededDht,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: discovery_b.local_endpoint_id.clone(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure a");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::SeededDht,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: discovery_a.local_endpoint_id.clone(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure b");
+
+        let endpoint_b = EndpointId::from_str(&discovery_b.local_endpoint_id).expect("endpoint b");
+        let connection = timeout(Duration::from_secs(20), async {
+            loop {
+                match transport_a
+                    .endpoint
+                    .connect(EndpointAddr::new(endpoint_b), GOSSIP_ALPN)
+                    .await
+                {
+                    Ok(connection) => return connection,
+                    Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                }
+            }
+        })
+        .await
+        .expect("seeded dht connect timeout");
+
+        drop(connection);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_peer_snapshot_reports_seeded_dht_mode() {
+        let testnet = Testnet::new(5).expect("testnet");
+        let transport = IrohGossipTransport::bind_with_discovery(
+            TransportNetworkConfig::loopback(),
+            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+        )
+        .await
+        .expect("transport");
+        publish_endpoint_to_testnet(&transport.endpoint, &testnet).await;
+        let local_endpoint_id = transport
+            .discovery()
+            .await
+            .expect("discovery")
+            .local_endpoint_id;
+        transport
+            .configure_discovery(
+                DiscoveryMode::SeededDht,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: local_endpoint_id.clone(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure discovery");
+
+        let snapshot = transport.discovery().await.expect("discovery snapshot");
+        let peers = transport.peers().await.expect("peer snapshot");
+
+        assert_eq!(snapshot.mode, DiscoveryMode::SeededDht);
+        assert_eq!(snapshot.connect_mode, ConnectMode::DirectOnly);
+        assert_eq!(snapshot.seed_peer_ids, vec![local_endpoint_id.clone()]);
+        assert_eq!(peers.configured_peers, vec![local_endpoint_id]);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_empty_seed_list_stays_idle_without_error() {
+        let testnet = Testnet::new(5).expect("testnet");
+        let transport = IrohGossipTransport::bind_with_discovery(
+            TransportNetworkConfig::loopback(),
+            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+        )
+        .await
+        .expect("transport");
+        publish_endpoint_to_testnet(&transport.endpoint, &testnet).await;
+
+        transport
+            .configure_discovery(DiscoveryMode::SeededDht, false, Vec::new())
+            .await
+            .expect("configure discovery");
+
+        let discovery = transport.discovery().await.expect("discovery");
+        let peers = transport.peers().await.expect("peers");
+
+        assert_eq!(discovery.mode, DiscoveryMode::SeededDht);
+        assert!(discovery.seed_peer_ids.is_empty());
+        assert!(discovery.last_discovery_error.is_none());
+        assert_eq!(peers.peer_count, 0);
+        assert!(peers.last_error.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

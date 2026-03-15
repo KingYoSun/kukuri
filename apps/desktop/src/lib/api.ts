@@ -46,6 +46,33 @@ export type TimelineView = {
   next_cursor?: TimelineCursor | null;
 };
 
+export type DiscoveryMode = 'static_peer' | 'seeded_dht';
+
+export type ConnectMode = 'direct_only';
+
+export type SeedPeer = {
+  endpoint_id: string;
+  addr_hint?: string | null;
+};
+
+export type DiscoveryConfig = {
+  mode: DiscoveryMode;
+  connect_mode: ConnectMode;
+  env_locked: boolean;
+  seed_peers: SeedPeer[];
+};
+
+export type DiscoveryStatus = {
+  mode: DiscoveryMode;
+  connect_mode: ConnectMode;
+  env_locked: boolean;
+  seed_peer_ids: string[];
+  manual_ticket_peer_ids: string[];
+  connected_peer_ids: string[];
+  local_endpoint_id: string;
+  last_discovery_error?: string | null;
+};
+
 export type SyncStatus = {
   connected: boolean;
   last_sync_ts?: number | null;
@@ -57,6 +84,7 @@ export type SyncStatus = {
   subscribed_topics: string[];
   topic_diagnostics: TopicSyncStatus[];
   local_author_pubkey: string;
+  discovery: DiscoveryStatus;
 };
 
 export type TopicSyncStatus = {
@@ -138,7 +166,9 @@ export interface DesktopApi {
     scores: GameScoreView[]
   ): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
+  getDiscoveryConfig(): Promise<DiscoveryConfig>;
   importPeerTicket(ticket: string): Promise<void>;
+  setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
   getBlobMediaPayload(hash: string, mime: string): Promise<BlobMediaPayload | null>;
@@ -322,6 +352,12 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<SyncStatus>('get_sync_status');
   },
+  getDiscoveryConfig: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getDiscoveryConfig();
+    }
+    return invokeDesktop<DiscoveryConfig>('get_discovery_config');
+  },
   importPeerTicket: async (ticket) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.importPeerTicket(ticket);
@@ -329,6 +365,16 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<void>('import_peer_ticket', {
       request: {
         ticket,
+      },
+    });
+  },
+  setDiscoverySeeds: async (seedEntries) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setDiscoverySeeds(seedEntries);
+    }
+    return invokeDesktop<DiscoveryConfig>('set_discovery_seeds', {
+      request: {
+        seed_entries: seedEntries,
       },
     });
   },

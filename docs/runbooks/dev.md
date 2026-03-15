@@ -46,12 +46,15 @@ export KUKURI_ADVERTISE_HOST=<LANで到達可能なIPまたはホスト名>
 export KUKURI_ADVERTISE_PORT=<必要なら固定port>
 export KUKURI_INSTANCE=<同一マシンで複数起動する場合の識別子>
 export KUKURI_DISABLE_KEYRING=1
+export KUKURI_DISCOVERY_MODE=<static_peer|seeded_dht>
+export KUKURI_DISCOVERY_SEEDS=<node_id または node_id@host:port をカンマ区切り>
 ```
 
 - `KUKURI_ADVERTISE_HOST` を設定すると `Your Ticket` はその host を使う。
 - `KUKURI_INSTANCE` を設定すると app data dir が分離される。
 - `KUKURI_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
 - `KUKURI_DISABLE_KEYRING=1` を設定すると OS keyring を使わず、app data dir 内の fallback file を使う。
+- `KUKURI_DISCOVERY_MODE` / `KUKURI_DISCOVERY_SEEDS` を設定すると discovery panel は read-only になり、env が local file より優先される。
 
 PowerShell 例:
 ```powershell
@@ -77,6 +80,14 @@ $env:KUKURI_INSTANCE="desktop-a"
 14. client 再起動後に新規 post を作成し、restart 前後で author identity が変わらないことを確認する。
 15. live session を `create -> join -> end` し、viewer count と ended state が相手側に反映されることを確認する。
 16. game room を `create -> update score/status` し、相手側に score card が反映されることを確認する。
+
+## Seeded DHT 手動確認
+1. 2 instance とも `KUKURI_DISCOVERY_MODE=seeded_dht` を使うか、desktop の discovery panel で seed を保存できる状態にする。
+2. 両方を起動し、`Local Endpoint ID` を相互に `Seed Peers` へ登録する。`node_id` だけで通ることを確認する。
+3. `Save Seeds` 後に `Stored Seed IDs` と `Connected / Discovered` が埋まることを確認する。
+4. `Peer Ticket` import を使わずに `post -> reply/thread -> live/game` が相互に伝播することを確認する。
+5. 片側を再起動し、seed 再入力なしで再接続と timeline backfill が成立することを確認する。
+6. `Seed Peers` に invalid な entry を入れて保存し、apply 全体が失敗して既存 seed が保持されることを確認する。
 
 ## Windows native smoke
 1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
