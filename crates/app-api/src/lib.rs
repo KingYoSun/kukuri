@@ -1934,8 +1934,8 @@ mod tests {
     use kukuri_docs_sync::IrohDocsSync;
     use kukuri_store::MemoryStore;
     use kukuri_transport::{
-        DhtDiscoveryOptions, DiscoveryMode, EventEnvelope, EventStream, FakeNetwork,
-        FakeTransport, HintEnvelope, HintStream, IrohGossipTransport, SeedPeer,
+        DhtDiscoveryOptions, DiscoveryMode, EventEnvelope, EventStream, FakeNetwork, FakeTransport,
+        HintEnvelope, HintStream, IrohGossipTransport, SeedPeer,
     };
     use pkarr::{Client as PkarrClient, mainline::Testnet};
     use tempfile::tempdir;
@@ -3381,8 +3381,10 @@ mod tests {
     async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
         let dir = tempdir().expect("tempdir");
         let testnet = Testnet::new(5).expect("testnet");
-        let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-a"), &testnet).await;
-        let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-b"), &testnet).await;
+        let stack_a =
+            TestIrohStack::new_with_dht(&dir.path().join("seeded-image-a"), &testnet).await;
+        let stack_b =
+            TestIrohStack::new_with_dht(&dir.path().join("seeded-image-b"), &testnet).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
         let app_a = app_with_iroh_services(store_a, &stack_a);

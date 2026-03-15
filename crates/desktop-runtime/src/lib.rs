@@ -250,9 +250,13 @@ impl DesktopRuntime {
         migrate_legacy_runtime_data(&db_path)?;
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
-        let iroh_stack =
-            SharedIrohStack::new(&docs_root, network_config.clone(), &discovery_config, dht_options)
-                .await?;
+        let iroh_stack = SharedIrohStack::new(
+            &docs_root,
+            network_config.clone(),
+            &discovery_config,
+            dht_options,
+        )
+        .await?;
         let keys = load_or_create_keys(&db_path, identity_mode)?;
         let app_service = AppService::new_with_services(
             store.clone(),
@@ -668,9 +672,12 @@ impl SharedIrohStack {
         discovery_config: &DiscoveryConfig,
         dht_options: DhtDiscoveryOptions,
     ) -> Result<Self> {
-        let node =
-            IrohDocsNode::persistent_with_discovery_config(root, network_config.clone(), dht_options)
-                .await?;
+        let node = IrohDocsNode::persistent_with_discovery_config(
+            root,
+            network_config.clone(),
+            dht_options,
+        )
+        .await?;
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
             node.endpoint().clone(),
             node.gossip().clone(),

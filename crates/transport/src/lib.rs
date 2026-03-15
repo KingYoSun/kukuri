@@ -399,7 +399,13 @@ impl Transport for FakeTransport {
     }
 
     async fn discovery(&self) -> Result<DiscoverySnapshot> {
-        let seed_peer_ids = self.seed_peers.lock().await.iter().cloned().collect::<Vec<_>>();
+        let seed_peer_ids = self
+            .seed_peers
+            .lock()
+            .await
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
         let manual_ticket_peer_ids = self
             .imported_peers
             .lock()
@@ -491,8 +497,11 @@ pub struct IrohGossipTransport {
 impl IrohGossipTransport {
     pub async fn bind(network_config: TransportNetworkConfig) -> Result<Self> {
         let discovery = Arc::new(MemoryLookup::new());
-        let mut builder =
-            build_endpoint_builder(Endpoint::empty_builder(RelayMode::Disabled), &discovery, None)?;
+        let mut builder = build_endpoint_builder(
+            Endpoint::empty_builder(RelayMode::Disabled),
+            &discovery,
+            None,
+        )?;
         builder = apply_bind(builder, network_config.bind_addr)?;
         let endpoint = builder
             .bind()
@@ -658,7 +667,10 @@ impl IrohGossipTransport {
             self.remove_topic_state(topic.as_str()).await;
         }
 
-        let bootstrap = bootstrap_peers.iter().map(|peer| peer.id).collect::<Vec<_>>();
+        let bootstrap = bootstrap_peers
+            .iter()
+            .map(|peer| peer.id)
+            .collect::<Vec<_>>();
 
         for peer in &bootstrap_peers {
             self.discovery.add_endpoint_info(peer.clone());

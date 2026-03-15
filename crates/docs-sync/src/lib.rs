@@ -438,9 +438,7 @@ impl IrohDocsSync {
         match self.node.blobs().blobs().get_bytes(hash).await {
             Ok(bytes) => Ok(Some(bytes.to_vec())),
             Err(error) => {
-                let peers = self
-                    .sync_peers()
-                    .await;
+                let peers = self.sync_peers().await;
                 info!(
                     hash = %content_hash,
                     error = %error,
@@ -705,7 +703,9 @@ impl DocsSync for IrohDocsSync {
         for peer in peers {
             let endpoint_addr = peer.to_endpoint_addr()?;
             if !endpoint_addr.is_empty() {
-                self.node.discovery().add_endpoint_info(endpoint_addr.clone());
+                self.node
+                    .discovery()
+                    .add_endpoint_info(endpoint_addr.clone());
             }
             parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
