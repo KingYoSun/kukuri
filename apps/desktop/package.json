@@ -9,9 +9,9 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri": "node ./scripts/tauri-cli.mjs",
+    "tauri:dev": "node ./scripts/tauri-cli.mjs dev",
+    "tauri:build": "node ./scripts/tauri-cli.mjs build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
