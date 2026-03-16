@@ -1248,7 +1248,9 @@ pub fn build_endpoint_builder(
 ) -> Result<EndpointBuilder> {
     let mut builder = builder.address_lookup(discovery.clone());
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
-        let mut dht_builder = DhtAddressLookup::builder().include_direct_addresses(true);
+        let mut dht_builder = DhtAddressLookup::builder()
+            .include_direct_addresses(true)
+            .no_publish();
         if let Some(client) = dht_options.client.as_ref() {
             dht_builder = dht_builder.client(client.clone());
         }
