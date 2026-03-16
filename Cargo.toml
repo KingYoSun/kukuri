@@ -9,11 +9,11 @@ members = [
     "crates/harness",
     "crates/app-api",
     "crates/desktop-runtime",
-    "crates/community-node-core",
-    "crates/community-node-user-api",
-    "crates/community-node-relay",
-    "crates/community-node-iroh-relay",
-    "crates/community-node-cli",
+    "crates/cn-core",
+    "crates/cn-user-api",
+    "crates/cn-relay",
+    "crates/cn-iroh-relay",
+    "crates/cn-cli",
 ]
 exclude = [
     "apps/desktop/src-tauri",

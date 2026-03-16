@@ -19,7 +19,7 @@ pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
 pub const RELAY_SERVICE_NAME: &str = "relay";
-pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="community-node-user-api""#;
+pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeResolvedUrls {
@@ -128,7 +128,7 @@ impl JwtConfig {
         let issuer = std::env::var("COMMUNITY_NODE_JWT_ISSUER")
             .ok()
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| "kukuri-community-node".to_string());
+            .unwrap_or_else(|| "kukuri-cn".to_string());
         let secret = std::env::var("COMMUNITY_NODE_JWT_SECRET")
             .context("COMMUNITY_NODE_JWT_SECRET is required")?;
         let ttl_seconds = std::env::var("COMMUNITY_NODE_JWT_TTL_SECONDS")
@@ -455,9 +455,8 @@ pub async fn require_bearer_pubkey(
     let token = header
         .strip_prefix("Bearer ")
         .ok_or_else(|| auth_required_error("invalid bearer token"))?;
-    let claims = verify_access_token(jwt_config, token).map_err(|error| {
-        auth_required_error(format!("invalid bearer token: {error}"))
-    })?;
+    let claims = verify_access_token(jwt_config, token)
+        .map_err(|error| auth_required_error(format!("invalid bearer token: {error}")))?;
     let pubkey = normalize_pubkey(claims.sub.as_str())
         .map_err(|error| auth_required_error(error.to_string()))?;
     let active = sqlx::query_scalar::<_, String>(
@@ -583,7 +582,10 @@ pub fn consent_required_error(message: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::FORBIDDEN, "CONSENT_REQUIRED", message)
 }
 
-pub async fn require_consents(pool: &PgPool, pubkey: &str) -> ApiResult<CommunityNodeConsentStatus> {
+pub async fn require_consents(
+    pool: &PgPool,
+    pubkey: &str,
+) -> ApiResult<CommunityNodeConsentStatus> {
     let status = get_consent_status(pool, pubkey).await.map_err(|error| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -592,7 +594,9 @@ pub async fn require_consents(pool: &PgPool, pubkey: &str) -> ApiResult<Communit
         )
     })?;
     if !status.all_required_accepted {
-        return Err(consent_required_error("required policies have not been accepted"));
+        return Err(consent_required_error(
+            "required policies have not been accepted",
+        ));
     }
     Ok(status)
 }
@@ -696,7 +700,9 @@ pub fn parse_raw_event(value: &Value) -> Result<RawNostrEvent> {
 pub fn verify_raw_event(raw: &RawNostrEvent) -> Result<()> {
     let json = serde_json::to_string(raw)?;
     let event = NostrEvent::from_json(json).context("failed to parse auth event")?;
-    event.verify().context("auth event signature verification failed")?;
+    event
+        .verify()
+        .context("auth event signature verification failed")?;
     Ok(())
 }
 

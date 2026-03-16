@@ -1,8 +1,12 @@
 [package]
-name = "kukuri-community-node-iroh-relay"
+name = "kukuri-cn-iroh-relay"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[[bin]]
+name = "cn-iroh-relay"
+path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true

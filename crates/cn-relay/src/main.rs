@@ -10,7 +10,7 @@ use axum::{Json, Router};
 use chrono::Utc;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use kukuri_community_node_core::{
+use kukuri_cn_core::{
     AUTH_EVENT_KIND, ApiError, ApiResult, AuthRolloutConfig, CommunityNodeBootstrapNode,
     CommunityNodeResolvedUrls, RELAY_SERVICE_NAME, connect_postgres, initialize_database,
     load_auth_rollout, load_bootstrap_nodes, normalize_http_url, normalize_http_url_list,
@@ -56,8 +56,8 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:8081".to_string())
         .parse::<SocketAddr>()
         .context("failed to parse COMMUNITY_NODE_RELAY_BIND_ADDR")?;
-    let database_url =
-        std::env::var("COMMUNITY_NODE_DATABASE_URL").context("COMMUNITY_NODE_DATABASE_URL is required")?;
+    let database_url = std::env::var("COMMUNITY_NODE_DATABASE_URL")
+        .context("COMMUNITY_NODE_DATABASE_URL is required")?;
     let base_url = normalize_http_url(
         std::env::var("COMMUNITY_NODE_BASE_URL")
             .context("COMMUNITY_NODE_BASE_URL is required")?
@@ -96,7 +96,11 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("failed to bind relay at {bind_addr}"))?;
     tracing::info!(bind_addr = %bind_addr, "community-node relay listening");
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -397,7 +401,7 @@ async fn send_json(sender: &mut SplitSink<WebSocket, Message>, value: Value) -> 
 
 fn init_tracing() {
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_community_node_relay=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_relay=debug"));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_target(true)

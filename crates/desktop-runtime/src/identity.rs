@@ -54,11 +54,7 @@ pub(crate) fn persist_optional_secret(
     persist_optional_secret_with_keyring(db_path, mode, purpose, key, secret, &SystemKeyringStore)
 }
 
-pub(crate) fn delete_optional_secret(
-    db_path: &Path,
-    purpose: &str,
-    key: &str,
-) -> Result<()> {
+pub(crate) fn delete_optional_secret(db_path: &Path, purpose: &str, key: &str) -> Result<()> {
     delete_optional_secret_with_keyring(db_path, purpose, key, &SystemKeyringStore)
 }
 
@@ -174,7 +170,10 @@ fn persist_optional_secret_with_keyring(
         return Ok(());
     }
 
-    persist_secret_to_file_path(optional_secret_file_path(db_path, purpose, key).as_path(), secret)
+    persist_secret_to_file_path(
+        optional_secret_file_path(db_path, purpose, key).as_path(),
+        secret,
+    )
 }
 
 fn delete_optional_secret_with_keyring(

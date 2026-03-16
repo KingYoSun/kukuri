@@ -17,7 +17,7 @@ tokio.workspace = true
 url.workspace = true
 kukuri-app-api = { path = "../app-api" }
 kukuri-blob-service = { path = "../blob-service" }
-kukuri-community-node-core = { path = "../community-node-core" }
+kukuri-cn-core = { path = "../cn-core" }
 kukuri-core = { path = "../core" }
 kukuri-docs-sync = { path = "../docs-sync" }
 kukuri-store = { path = "../store" }

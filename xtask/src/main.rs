@@ -14,8 +14,8 @@ fn main() -> Result<()> {
         "doctor" => doctor(),
         "check" => check(),
         "test" => test(),
-        "community-node-check" => community_node_check(),
-        "community-node-test" => community_node_test(),
+        "cn-check" => cn_check(),
+        "cn-test" => cn_test(),
         "desktop-package" => desktop_package(),
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
@@ -107,27 +107,27 @@ fn test() -> Result<()> {
     Ok(())
 }
 
-fn community_node_check() -> Result<()> {
+fn cn_check() -> Result<()> {
     run(
         "cargo",
         [
             "check",
             "-p",
-            "kukuri-community-node-core",
+            "kukuri-cn-core",
             "-p",
-            "kukuri-community-node-user-api",
+            "kukuri-cn-user-api",
             "-p",
-            "kukuri-community-node-relay",
+            "kukuri-cn-relay",
             "-p",
-            "kukuri-community-node-iroh-relay",
+            "kukuri-cn-iroh-relay",
             "-p",
-            "kukuri-community-node-cli",
+            "kukuri-cn-cli",
         ],
         &root_dir(),
     )
 }
 
-fn community_node_test() -> Result<()> {
+fn cn_test() -> Result<()> {
     run(
         "docker",
         [
@@ -136,7 +136,7 @@ fn community_node_test() -> Result<()> {
             "docker-compose.community-node.yml",
             "up",
             "-d",
-            "community-node-postgres",
+            "cn-postgres",
         ],
         &root_dir(),
     )?;
@@ -145,15 +145,15 @@ fn community_node_test() -> Result<()> {
         [
             "test",
             "-p",
-            "kukuri-community-node-core",
+            "kukuri-cn-core",
             "-p",
-            "kukuri-community-node-user-api",
+            "kukuri-cn-user-api",
             "-p",
-            "kukuri-community-node-relay",
+            "kukuri-cn-relay",
             "-p",
-            "kukuri-community-node-iroh-relay",
+            "kukuri-cn-iroh-relay",
             "-p",
-            "kukuri-community-node-cli",
+            "kukuri-cn-cli",
         ],
         &root_dir(),
     )
@@ -231,6 +231,6 @@ fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|community-node-check|community-node-test|desktop-package|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|cn-check|cn-test|desktop-package|e2e-smoke|scenario <name>>"
     );
 }

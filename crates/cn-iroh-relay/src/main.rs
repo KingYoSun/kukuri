@@ -7,7 +7,11 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(long, env = "COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR", default_value = "127.0.0.1:3340")]
+    #[arg(
+        long,
+        env = "COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR",
+        default_value = "127.0.0.1:3340"
+    )]
     http_bind_addr: SocketAddr,
 }
 
@@ -27,7 +31,9 @@ async fn main() -> Result<()> {
         quic: None,
         metrics_addr: None,
     };
-    let server = Server::spawn(config).await.context("failed to spawn iroh relay")?;
+    let server = Server::spawn(config)
+        .await
+        .context("failed to spawn iroh relay")?;
     tracing::info!(
         http_addr = ?server.http_addr(),
         https_addr = ?server.https_addr(),
@@ -43,7 +49,7 @@ async fn main() -> Result<()> {
 
 fn init_tracing() {
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_community_node_iroh_relay=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_iroh_relay=debug"));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_target(true)

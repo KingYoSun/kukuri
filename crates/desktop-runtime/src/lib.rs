@@ -7,26 +7,26 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use kukuri_community_node_core::{
-    AUTH_EVENT_KIND, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, normalize_http_url,
-};
+use chrono::Utc;
 use kukuri_app_api::{
     AppService, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput, GameRoomView,
     GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
     UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, IrohBlobService};
+use kukuri_cn_core::{
+    AUTH_EVENT_KIND, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
+    CommunityNodeResolvedUrls, normalize_http_url,
+};
 use kukuri_core::{AssetRole, GameRoomStatus};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
-use chrono::Utc;
-use nostr_sdk::JsonUtil;
-use nostr_sdk::prelude::{EventBuilder, Keys, Tag};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
     TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
 };
+use nostr_sdk::JsonUtil;
+use nostr_sdk::prelude::{EventBuilder, Keys, Tag};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -316,7 +316,8 @@ impl DesktopRuntime {
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
         migrate_legacy_runtime_data(&db_path)?;
-        let community_node_config = load_community_node_config_from_file(&db_path)?.unwrap_or_default();
+        let community_node_config =
+            load_community_node_config_from_file(&db_path)?.unwrap_or_default();
         let relay_config = relay_config_from_community_node_config(&community_node_config);
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
@@ -622,7 +623,11 @@ impl DesktopRuntime {
             .nodes
             .iter()
             .find(|node| node.base_url == base_url)
-            .and_then(|node| node.resolved_urls.as_ref().map(|resolved| resolved.public_base_url.clone()))
+            .and_then(|node| {
+                node.resolved_urls
+                    .as_ref()
+                    .map(|resolved| resolved.public_base_url.clone())
+            })
             .unwrap_or_else(|| base_url.clone());
         let auth_event_json = build_auth_event_json(
             self.author_keys.as_ref(),
@@ -660,7 +665,11 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        delete_optional_secret(&self.db_path, COMMUNITY_NODE_TOKEN_PURPOSE, base_url.as_str())?;
+        delete_optional_secret(
+            &self.db_path,
+            COMMUNITY_NODE_TOKEN_PURPOSE,
+            base_url.as_str(),
+        )?;
         let node = self
             .community_node_config
             .lock()
@@ -680,8 +689,12 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
         let client = community_node_http_client()?;
-        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
-            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token = load_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            base_url.as_str(),
+        )?
+        .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let consent_url = format!("{}/v1/consents/status", base_url);
         let response = client
             .get(consent_url)
@@ -705,8 +718,12 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
         let client = community_node_http_client()?;
-        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
-            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token = load_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            base_url.as_str(),
+        )?
+        .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let consent_url = format!("{}/v1/consents", base_url);
         let response = client
             .post(consent_url)
@@ -730,12 +747,20 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let mut config = self.community_node_config.lock().await.clone();
-        let Some(index) = config.nodes.iter().position(|node| node.base_url == base_url) else {
+        let Some(index) = config
+            .nodes
+            .iter()
+            .position(|node| node.base_url == base_url)
+        else {
             bail!("community node `{base_url}` is not configured");
         };
         let client = community_node_http_client()?;
-        let token = load_community_node_token(&self.db_path, IdentityStorageMode::from_env(), base_url.as_str())?
-            .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token = load_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            base_url.as_str(),
+        )?
+        .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let bootstrap_url = format!("{}/v1/bootstrap/nodes", base_url);
         let response = client
             .get(bootstrap_url)
@@ -805,12 +830,10 @@ impl DesktopRuntime {
             node.base_url.as_str(),
         )?;
         let auth_state = match token {
-            Some(token) if token.expires_at > Utc::now().timestamp() => {
-                CommunityNodeAuthState {
-                    authenticated: true,
-                    expires_at: Some(token.expires_at),
-                }
-            }
+            Some(token) if token.expires_at > Utc::now().timestamp() => CommunityNodeAuthState {
+                authenticated: true,
+                expires_at: Some(token.expires_at),
+            },
             Some(token) => CommunityNodeAuthState {
                 authenticated: false,
                 expires_at: Some(token.expires_at),
@@ -954,12 +977,8 @@ fn load_community_node_config_from_file(db_path: &Path) -> Result<Option<Communi
     }
     let raw = fs::read_to_string(&path)
         .with_context(|| format!("failed to read community-node config `{}`", path.display()))?;
-    let config = serde_json::from_str::<CommunityNodeConfig>(&raw).with_context(|| {
-        format!(
-            "failed to parse community-node config `{}`",
-            path.display()
-        )
-    })?;
+    let config = serde_json::from_str::<CommunityNodeConfig>(&raw)
+        .with_context(|| format!("failed to parse community-node config `{}`", path.display()))?;
     Ok(Some(normalize_community_node_config(config)?))
 }
 
@@ -1033,7 +1052,8 @@ fn load_community_node_token(
     mode: IdentityStorageMode,
     base_url: &str,
 ) -> Result<Option<StoredCommunityNodeToken>> {
-    let Some(raw) = load_optional_secret(db_path, mode, COMMUNITY_NODE_TOKEN_PURPOSE, base_url)? else {
+    let Some(raw) = load_optional_secret(db_path, mode, COMMUNITY_NODE_TOKEN_PURPOSE, base_url)?
+    else {
         return Ok(None);
     };
     let token = serde_json::from_str::<StoredCommunityNodeToken>(&raw)
@@ -1063,7 +1083,11 @@ fn community_node_http_client() -> Result<Client> {
         .context("failed to build community-node http client")
 }
 
-fn build_auth_event_json(keys: &Keys, challenge: &str, public_base_url: &str) -> Result<serde_json::Value> {
+fn build_auth_event_json(
+    keys: &Keys,
+    challenge: &str,
+    public_base_url: &str,
+) -> Result<serde_json::Value> {
     let signed = EventBuilder::new(
         nostr_sdk::prelude::Kind::Custom(AUTH_EVENT_KIND),
         String::new(),

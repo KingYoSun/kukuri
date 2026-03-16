@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use kukuri_community_node_core::{
+use kukuri_cn_core::{
     ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeBootstrapNode,
     CommunityNodeResolvedUrls, JwtConfig, accept_consents, connect_postgres, create_auth_challenge,
     get_consent_status, initialize_database, load_bootstrap_nodes, normalize_http_url,
@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
         .parse::<SocketAddr>()
         .context("failed to parse COMMUNITY_NODE_BIND_ADDR")?;
-    let database_url =
-        std::env::var("COMMUNITY_NODE_DATABASE_URL").context("COMMUNITY_NODE_DATABASE_URL is required")?;
+    let database_url = std::env::var("COMMUNITY_NODE_DATABASE_URL")
+        .context("COMMUNITY_NODE_DATABASE_URL is required")?;
     let base_url = normalize_http_url(
         std::env::var("COMMUNITY_NODE_BASE_URL")
             .context("COMMUNITY_NODE_BASE_URL is required")?
@@ -94,7 +94,11 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("failed to bind user api at {bind_addr}"))?;
     tracing::info!(bind_addr = %bind_addr, "community-node user-api listening");
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -135,14 +139,20 @@ async fn auth_verify(
         &request.auth_event_json,
     )
     .await
-    .map_err(|error| ApiError::new(axum::http::StatusCode::UNAUTHORIZED, "AUTH_FAILED", error.to_string()))?;
+    .map_err(|error| {
+        ApiError::new(
+            axum::http::StatusCode::UNAUTHORIZED,
+            "AUTH_FAILED",
+            error.to_string(),
+        )
+    })?;
     Ok(Json(response))
 }
 
 async fn consent_status(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> ApiResult<Json<kukuri_community_node_core::CommunityNodeConsentStatus>> {
+) -> ApiResult<Json<kukuri_cn_core::CommunityNodeConsentStatus>> {
     let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
     let status = get_consent_status(&state.pool, pubkey.as_str())
         .await
@@ -154,7 +164,7 @@ async fn accept_consents_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<AcceptConsentsRequest>,
-) -> ApiResult<Json<kukuri_community_node_core::CommunityNodeConsentStatus>> {
+) -> ApiResult<Json<kukuri_cn_core::CommunityNodeConsentStatus>> {
     let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
     let status = accept_consents(&state.pool, pubkey.as_str(), &request.policy_slugs)
         .await
@@ -176,7 +186,7 @@ async fn bootstrap_nodes(
 
 fn init_tracing() {
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_community_node_user_api=debug"));
+        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_user_api=debug"));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_target(true)

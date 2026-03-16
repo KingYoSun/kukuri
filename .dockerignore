@@ -46,6 +46,7 @@ README.md
 Dockerfile*
 docker-compose*.yml
 .dockerignore
+!docker/cn/Dockerfile
 
 # Temporary files
 *.tmp

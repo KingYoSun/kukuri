@@ -11,9 +11,22 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
+cargo xtask cn-check
+cargo xtask cn-test
 ```
 
 `cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
+
+`cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
+
+## community-node compose
+```bash
+docker compose -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
+```
+
+- host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
+- compose 内の service 名は `cn-postgres`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
+- public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `CN_RELAY_WS_URL`, `CN_IROH_RELAY_URLS` を上書きする
 
 ## frontend だけ確認する場合
 ```bash

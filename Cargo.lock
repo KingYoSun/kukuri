@@ -2642,20 +2642,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-community-node-cli"
+name = "kukuri-cn-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "kukuri-community-node-core",
+ "kukuri-cn-core",
  "serde_json",
  "sqlx",
  "tokio",
 ]
 
 [[package]]
-name = "kukuri-community-node-core"
+name = "kukuri-cn-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2675,7 +2675,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-community-node-iroh-relay"
+name = "kukuri-cn-iroh-relay"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2687,14 +2687,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-community-node-relay"
+name = "kukuri-cn-relay"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
  "futures-util",
- "kukuri-community-node-core",
+ "kukuri-cn-core",
  "kukuri-core",
  "nostr-sdk",
  "reqwest",
@@ -2713,13 +2713,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-community-node-user-api"
+name = "kukuri-cn-user-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
- "kukuri-community-node-core",
+ "kukuri-cn-core",
  "reqwest",
  "serde",
  "serde_json",
@@ -2755,7 +2755,7 @@ dependencies = [
  "keyring",
  "kukuri-app-api",
  "kukuri-blob-service",
- "kukuri-community-node-core",
+ "kukuri-cn-core",
  "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-store",

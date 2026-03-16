@@ -3395,7 +3395,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-community-node-core"
+name = "kukuri-cn-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3435,7 +3435,7 @@ dependencies = [
  "keyring",
  "kukuri-app-api",
  "kukuri-blob-service",
- "kukuri-community-node-core",
+ "kukuri-cn-core",
  "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-store",

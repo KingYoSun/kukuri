@@ -1,5 +1,5 @@
 services:
-  community-node-postgres:
+  cn-postgres:
     image: postgres:17-bookworm
     environment:
       POSTGRES_USER: cn
@@ -13,7 +13,64 @@ services:
       timeout: 5s
       retries: 20
     volumes:
-      - community-node-postgres-data:/var/lib/postgresql/data
+      - cn-postgres-data:/var/lib/postgresql/data
+
+  cn-user-api:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-user-api
+        TARGET_BIN: cn-user-api
+    depends_on:
+      cn-postgres:
+        condition: service_healthy
+    environment:
+      COMMUNITY_NODE_BIND_ADDR: 0.0.0.0:8080
+      COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@cn-postgres:5432/cn
+      COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
+      COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
+      COMMUNITY_NODE_RELAY_WS_URL: ${CN_RELAY_WS_URL:-ws://127.0.0.1:18081/relay}
+      COMMUNITY_NODE_IROH_RELAY_URLS: ${CN_IROH_RELAY_URLS:-http://127.0.0.1:13340}
+      COMMUNITY_NODE_JWT_ISSUER: ${COMMUNITY_NODE_JWT_ISSUER:-kukuri-cn}
+      COMMUNITY_NODE_JWT_SECRET: ${COMMUNITY_NODE_JWT_SECRET:-change-me}
+      COMMUNITY_NODE_JWT_TTL_SECONDS: ${COMMUNITY_NODE_JWT_TTL_SECONDS:-86400}
+    ports:
+      - "${CN_USER_API_PORT:-18080}:8080"
+
+  cn-relay:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-relay
+        TARGET_BIN: cn-relay
+    depends_on:
+      cn-postgres:
+        condition: service_healthy
+      cn-iroh-relay:
+        condition: service_started
+    environment:
+      COMMUNITY_NODE_RELAY_BIND_ADDR: 0.0.0.0:8081
+      COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@cn-postgres:5432/cn
+      COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
+      COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
+      COMMUNITY_NODE_RELAY_WS_URL: ${CN_RELAY_WS_URL:-ws://127.0.0.1:18081/relay}
+      COMMUNITY_NODE_IROH_RELAY_URLS: ${CN_IROH_RELAY_URLS:-http://127.0.0.1:13340}
+    ports:
+      - "${CN_RELAY_PORT:-18081}:8081"
+
+  cn-iroh-relay:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-iroh-relay
+        TARGET_BIN: cn-iroh-relay
+    environment:
+      COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR: 0.0.0.0:3340
+    ports:
+      - "${CN_IROH_RELAY_PORT:-13340}:3340"
 
 volumes:
-  community-node-postgres-data:
+  cn-postgres-data:

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
-use kukuri_community_node_core::{
+use kukuri_cn_core::{
     AuthMode, AuthRolloutConfig, RELAY_SERVICE_NAME, connect_postgres, initialize_database,
     migrate_postgres, seed_default_policies, store_auth_rollout,
 };
