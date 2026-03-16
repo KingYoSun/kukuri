@@ -2549,6 +2549,38 @@ mod tests {
     }
 
     #[test]
+    fn community_node_config_preserves_public_kukuri_urls() {
+        let config = normalize_community_node_config(CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://api.kukuri.app/".into(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        "https://api.kukuri.app/",
+                        "wss://relay.kukuri.app/relay/",
+                        vec!["https://iroh-relay.kukuri.app/".into()],
+                    )
+                    .expect("resolved urls"),
+                ),
+            }],
+        })
+        .expect("normalized config");
+
+        let resolved = config.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls");
+
+        assert_eq!(config.nodes[0].base_url, "https://api.kukuri.app");
+        assert_eq!(resolved.public_base_url, "https://api.kukuri.app");
+        assert_eq!(resolved.relay_ws_url, "wss://relay.kukuri.app/relay");
+        assert_eq!(
+            resolved.iroh_relay_urls,
+            vec!["https://iroh-relay.kukuri.app".to_string()]
+        );
+        assert!(!resolved.relay_ws_url.contains("api.kukuri.app/relay"));
+    }
+
+    #[test]
     fn stored_community_node_config_restores_cached_relay_union() {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("community-relay.db");

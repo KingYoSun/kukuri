@@ -31,6 +31,7 @@ docker compose --env-file .env.community-node.example -f docker-compose.communit
 ```
 
 - host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
+- host 側 bind の既定値は loopback (`127.0.0.1`) なので、LAN/WireGuard 越しに公開する場合は `CN_*_HOST_BIND_IP` を上書きする
 - compose 内の service 名は `cn-postgres`, `cn-migrate`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
 - public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `CN_RELAY_WS_URL`, `CN_IROH_RELAY_URLS` を上書きする
 - `cn-user-api` / `cn-relay` は `COMMUNITY_NODE_DATABASE_INIT_MODE=require_ready` で起動するので、`cn-migrate` または `cn-cli prepare` を先に流さないと fail-fast する
@@ -40,6 +41,67 @@ docker compose --env-file .env.community-node.example -f docker-compose.communit
 - secret は `CN_POSTGRES_PASSWORD` と `COMMUNITY_NODE_JWT_SECRET` の 2 つを最低限上書きする
 - `COMMUNITY_NODE_JWT_SECRET` を rotate すると既存 bearer token は即時無効化される
 - `COMMUNITY_NODE_DATABASE_URL` は compose 内では `cn-postgres` 向けに組み立てる。外部 Postgres を使う場合だけ個別に差し替える
+
+## community-node 公開 manual smoke
+公開 URL を legacy と同じ構成で出す場合は、`.env.community-node` に最低限この 4 つを入れる。
+
+```dotenv
+CN_BASE_URL=https://api.kukuri.app
+CN_PUBLIC_BASE_URL=https://api.kukuri.app
+CN_RELAY_WS_URL=wss://relay.kukuri.app/relay
+CN_IROH_RELAY_URLS=https://iroh-relay.kukuri.app
+```
+
+- `api.kukuri.app` は `cn-user-api` を向ける
+- `relay.kukuri.app` は `cn-relay` の `/relay` と `/v1/p2p/info` を向ける
+- `iroh-relay.kukuri.app` は `cn-iroh-relay` を向ける
+- desktop は `relay_ws_url` と `iroh_relay_urls` を server から受け取るので、`api.kukuri.app/relay` への fallback は使わない
+
+TCP 公開を Cloudflare Tunnel で行う場合:
+
+- `CN_USER_API_HOST_BIND_IP=127.0.0.1`
+- `CN_RELAY_HOST_BIND_IP=127.0.0.1`
+- `CN_IROH_RELAY_HTTP_HOST_BIND_IP=127.0.0.1`
+- tunnel 側で `api.kukuri.app -> 127.0.0.1:${CN_USER_API_PORT}`, `relay.kukuri.app -> 127.0.0.1:${CN_RELAY_PORT}`, `iroh-relay.kukuri.app -> 127.0.0.1:${CN_IROH_RELAY_PORT}` を割り当てる
+
+`iroh-relay` の `7842/udp` を WireGuard/VPS edge 経由で公開する場合:
+
+```dotenv
+CN_IROH_RELAY_HTTPS_BIND_ADDR=0.0.0.0:3443
+CN_IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
+CN_IROH_RELAY_HTTPS_HOST_BIND_IP=127.0.0.1
+CN_IROH_RELAY_HTTPS_PORT=13443
+CN_IROH_RELAY_QUIC_HOST_BIND_IP=10.73.0.2
+CN_IROH_RELAY_QUIC_PORT=7842
+CN_IROH_RELAY_TLS_CERT_PATH=/certs/default.crt
+CN_IROH_RELAY_TLS_KEY_PATH=/certs/default.key
+CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
+```
+
+- Cloudflare Tunnel は UDP を運べないので、`7842/udp` は WireGuard/VPS edge で home 側へ直接 forward する
+- QUIC は tunnel を迂回するので、`docker/cn/certs/` には `iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を置く
+- `CN_IROH_RELAY_QUIC_HOST_BIND_IP` は WireGuard で到達可能な home 側 IP に合わせる
+- tunnel 側を HTTPS origin にしたい場合は `iroh-relay.kukuri.app -> https://127.0.0.1:${CN_IROH_RELAY_HTTPS_PORT}` を向ける。HTTP origin のままでも QUIC なしの relay path は使える
+
+起動:
+
+```bash
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d --build cn-user-api cn-relay cn-iroh-relay
+```
+
+公開確認:
+
+```bash
+curl -fsS https://api.kukuri.app/healthz
+curl -fsS https://relay.kukuri.app/v1/p2p/info | jq
+```
+
+期待値:
+
+- `relay_ws_url` は `wss://relay.kukuri.app/relay`
+- `iroh_relay_urls` は `https://iroh-relay.kukuri.app`
+- desktop relay status に `wss://api.kukuri.app/relay` が出ない
 
 ## community-node deploy 順序
 ```bash

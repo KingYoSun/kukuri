@@ -2679,8 +2679,8 @@ name = "kukuri-cn-iroh-relay"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
  "iroh-relay",
+ "rustls",
  "tokio",
  "tracing",
  "tracing-subscriber",

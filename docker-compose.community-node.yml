@@ -15,7 +15,7 @@ services:
     image: postgres:17-bookworm
     environment: *cn-postgres-env
     ports:
-      - "${CN_POSTGRES_PORT:-55432}:5432"
+      - "${CN_POSTGRES_HOST_BIND_IP:-127.0.0.1}:${CN_POSTGRES_PORT:-55432}:5432"
     healthcheck:
       test:
         [
@@ -65,7 +65,7 @@ services:
       COMMUNITY_NODE_JWT_SECRET: ${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
       COMMUNITY_NODE_JWT_TTL_SECONDS: ${COMMUNITY_NODE_JWT_TTL_SECONDS:-86400}
     ports:
-      - "${CN_USER_API_PORT:-18080}:8080"
+      - "${CN_USER_API_HOST_BIND_IP:-127.0.0.1}:${CN_USER_API_PORT:-18080}:8080"
 
   cn-relay:
     build:
@@ -84,7 +84,7 @@ services:
       COMMUNITY_NODE_RELAY_BIND_ADDR: 0.0.0.0:8081
       COMMUNITY_NODE_DATABASE_INIT_MODE: require_ready
     ports:
-      - "${CN_RELAY_PORT:-18081}:8081"
+      - "${CN_RELAY_HOST_BIND_IP:-127.0.0.1}:${CN_RELAY_PORT:-18081}:8081"
 
   cn-iroh-relay:
     build:
@@ -94,9 +94,17 @@ services:
         TARGET_PACKAGE: kukuri-cn-iroh-relay
         TARGET_BIN: cn-iroh-relay
     environment:
-      COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR: 0.0.0.0:3340
+      COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR: ${CN_IROH_RELAY_HTTP_BIND_ADDR:-0.0.0.0:3340}
+      COMMUNITY_NODE_IROH_RELAY_HTTPS_BIND_ADDR: ${CN_IROH_RELAY_HTTPS_BIND_ADDR:-}
+      COMMUNITY_NODE_IROH_RELAY_QUIC_BIND_ADDR: ${CN_IROH_RELAY_QUIC_BIND_ADDR:-}
+      COMMUNITY_NODE_IROH_RELAY_TLS_CERT_PATH: ${CN_IROH_RELAY_TLS_CERT_PATH:-}
+      COMMUNITY_NODE_IROH_RELAY_TLS_KEY_PATH: ${CN_IROH_RELAY_TLS_KEY_PATH:-}
+    volumes:
+      - ${CN_IROH_RELAY_CERTS_HOST_PATH:-./docker/cn/certs}:/certs:ro
     ports:
-      - "${CN_IROH_RELAY_PORT:-13340}:3340"
+      - "${CN_IROH_RELAY_HTTP_HOST_BIND_IP:-127.0.0.1}:${CN_IROH_RELAY_PORT:-13340}:3340"
+      - "${CN_IROH_RELAY_HTTPS_HOST_BIND_IP:-127.0.0.1}:${CN_IROH_RELAY_HTTPS_PORT:-13443}:3443"
+      - "${CN_IROH_RELAY_QUIC_HOST_BIND_IP:-127.0.0.1}:${CN_IROH_RELAY_QUIC_PORT:-17842}:7842/udp"
 
 volumes:
   cn-postgres-data:

@@ -9,6 +9,7 @@
 - Phase6-7 Windows desktop support の native smoke まで完了
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
 - Phase6 community-node relay/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
+- Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -52,6 +53,9 @@
 - `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
 - GitHub Actions fast/nightly workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加した
 - `cn-cli prepare`, `.env.community-node.example`, `cn-migrate` compose service, prepared-DB fail-fast 起動を追加し、community-node の deploy / backup / restore 手順を runbook に固定した
+- `cn-iroh-relay` に optional TLS/QUIC config を追加し、Cloudflare Tunnel の TCP path と WireGuard の `7842/udp` path を同時に扱えるようにした
+- `docker-compose.community-node.yml` と `.env.community-node.example` に host bind IP / iroh TLS / QUIC env を追加し、`api.kukuri.app` / `relay.kukuri.app` / `iroh-relay.kukuri.app` の公開 manual smoke 手順を runbook に反映した
+- desktop-runtime test に `https://api.kukuri.app` + `wss://relay.kukuri.app/relay` + `https://iroh-relay.kukuri.app` の URL contract を追加し、`api.kukuri.app/relay` fallback が復活しないようにした
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -97,6 +101,8 @@
 - `cargo xtask cn-check`
 - `cargo xtask cn-test`
 - `cargo xtask scenario community_node_public_connectivity`
+- `cargo test -p kukuri-cn-iroh-relay`
+- `cargo test -p kukuri-desktop-runtime community_node_config_preserves_public_kukuri_urls`
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
