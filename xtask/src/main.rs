@@ -244,9 +244,16 @@ fn print_usage() {
     );
 }
 
+fn cn_compose_envs() -> [(&'static str, &'static str); 2] {
+    [
+        ("CN_POSTGRES_PASSWORD", "cn_password"),
+        ("COMMUNITY_NODE_JWT_SECRET", "xtask-test-secret"),
+    ]
+}
+
 fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
     let root = root_dir();
-    run(
+    run_with_env(
         "docker",
         [
             "compose",
@@ -258,9 +265,10 @@ fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
             "cn-postgres",
         ],
         &root,
+        &cn_compose_envs(),
     )?;
     let operation_result = operation();
-    let shutdown_result = run(
+    let shutdown_result = run_with_env(
         "docker",
         [
             "compose",
@@ -271,6 +279,7 @@ fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
             "--remove-orphans",
         ],
         &root,
+        &cn_compose_envs(),
     );
     match (operation_result, shutdown_result) {
         (Ok(result), Ok(())) => Ok(result),

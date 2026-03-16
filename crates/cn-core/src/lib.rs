@@ -20,6 +20,9 @@ pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
 pub const RELAY_SERVICE_NAME: &str = "relay";
 pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
+pub const COMMUNITY_NODE_DATABASE_INIT_MODE_ENV: &str = "COMMUNITY_NODE_DATABASE_INIT_MODE";
+const DATABASE_PREPARE_HINT: &str =
+    "run `cn-cli --database-url <url> prepare` before starting cn-user-api/cn-relay";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeResolvedUrls {
@@ -158,6 +161,32 @@ impl JwtConfig {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatabaseInitMode {
+    RequireReady,
+    Prepare,
+}
+
+impl DatabaseInitMode {
+    pub fn from_env() -> Result<Self> {
+        match std::env::var(COMMUNITY_NODE_DATABASE_INIT_MODE_ENV) {
+            Ok(value) => Self::parse(value.as_str()),
+            Err(std::env::VarError::NotPresent) => Ok(Self::RequireReady),
+            Err(error) => Err(anyhow!("{COMMUNITY_NODE_DATABASE_INIT_MODE_ENV}: {error}")),
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self> {
+        match value.trim() {
+            "" | "require_ready" => Ok(Self::RequireReady),
+            "prepare" => Ok(Self::Prepare),
+            other => bail!(
+                "unsupported {COMMUNITY_NODE_DATABASE_INIT_MODE_ENV} `{other}`: expected `require_ready` or `prepare`"
+            ),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
@@ -278,6 +307,68 @@ pub async fn initialize_database(pool: &PgPool) -> Result<()> {
     migrate_postgres(pool).await?;
     seed_default_policies(pool).await?;
     ensure_default_auth_rollout(pool).await?;
+    Ok(())
+}
+
+pub async fn initialize_database_for_runtime(
+    pool: &PgPool,
+    init_mode: DatabaseInitMode,
+) -> Result<()> {
+    match init_mode {
+        DatabaseInitMode::RequireReady => ensure_database_ready(pool).await,
+        DatabaseInitMode::Prepare => initialize_database(pool).await,
+    }
+}
+
+pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
+    for (schema, table) in [
+        ("cn_auth", "auth_challenges"),
+        ("cn_user", "subscriber_accounts"),
+        ("cn_user", "policy_consents"),
+        ("cn_admin", "policies"),
+        ("cn_admin", "service_configs"),
+        ("cn_bootstrap", "bootstrap_nodes"),
+    ] {
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = $1
+                  AND table_name = $2
+            )",
+        )
+        .bind(schema)
+        .bind(table)
+        .fetch_one(pool)
+        .await?;
+        if !exists {
+            bail!(
+                "community-node database is not ready: missing `{schema}.{table}`; {DATABASE_PREPARE_HINT}"
+            );
+        }
+    }
+
+    let policy_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_admin.policies")
+        .fetch_one(pool)
+        .await?;
+    if policy_count == 0 {
+        bail!(
+            "community-node database is not ready: required policy seed is missing; {DATABASE_PREPARE_HINT}"
+        );
+    }
+
+    let rollout_exists = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM cn_admin.service_configs WHERE service_name = $1",
+    )
+    .bind(RELAY_SERVICE_NAME)
+    .fetch_optional(pool)
+    .await?;
+    if rollout_exists.is_none() {
+        bail!(
+            "community-node database is not ready: relay auth rollout seed is missing; {DATABASE_PREPARE_HINT}"
+        );
+    }
+
     Ok(())
 }
 
@@ -859,6 +950,18 @@ fn normalize_slug_list(values: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn database_init_mode_defaults_to_require_ready() {
+        let parsed = DatabaseInitMode::parse("").expect("parse");
+        assert_eq!(parsed, DatabaseInitMode::RequireReady);
+    }
+
+    #[test]
+    fn database_init_mode_accepts_prepare() {
+        let parsed = DatabaseInitMode::parse("prepare").expect("parse");
+        assert_eq!(parsed, DatabaseInitMode::Prepare);
+    }
 
     #[test]
     fn auth_rollout_defaults_to_off() {

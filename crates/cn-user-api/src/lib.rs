@@ -7,10 +7,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_core::{
     ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeBootstrapNode,
-    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, JwtConfig, accept_consents,
-    connect_postgres, create_auth_challenge, get_consent_status, initialize_database,
-    load_bootstrap_nodes, normalize_http_url, normalize_http_url_list, normalize_ws_url,
-    require_bearer_pubkey, require_consents, verify_auth_event_and_issue_token,
+    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
+    accept_consents, connect_postgres, create_auth_challenge, get_consent_status,
+    initialize_database, initialize_database_for_runtime, load_bootstrap_nodes, normalize_http_url,
+    normalize_http_url_list, normalize_ws_url, require_bearer_pubkey, require_consents,
+    verify_auth_event_and_issue_token,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -98,6 +99,16 @@ impl UserApiConfig {
 pub async fn build_state(config: &UserApiConfig) -> Result<UserApiState> {
     let pool = connect_postgres(config.database_url.as_str()).await?;
     initialize_database(&pool).await?;
+    build_state_from_pool(config, pool).await
+}
+
+async fn build_runtime_state(config: &UserApiConfig) -> Result<UserApiState> {
+    let pool = connect_postgres(config.database_url.as_str()).await?;
+    initialize_database_for_runtime(&pool, DatabaseInitMode::from_env()?).await?;
+    build_state_from_pool(config, pool).await
+}
+
+async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<UserApiState> {
     Ok(UserApiState {
         pool,
         jwt_config: config.jwt_config.clone(),
@@ -129,7 +140,7 @@ pub async fn run_from_env() -> Result<()> {
 
     let config = UserApiConfig::from_env()?;
     let bind_addr = config.bind_addr;
-    let state = build_state(&config).await?;
+    let state = build_runtime_state(&config).await?;
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await

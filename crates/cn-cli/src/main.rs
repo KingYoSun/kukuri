@@ -16,6 +16,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    Prepare,
     Migrate,
     SeedPolicies,
     SetAuthRollout {
@@ -44,6 +45,10 @@ async fn main() -> Result<()> {
     let pool = connect_postgres(cli.database_url.as_str()).await?;
 
     match cli.command {
+        Command::Prepare => {
+            initialize_database(&pool).await?;
+            println!("database prepared");
+        }
         Command::Migrate => {
             migrate_postgres(&pool).await?;
             println!("migrations applied");

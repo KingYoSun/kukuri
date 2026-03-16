@@ -26,12 +26,58 @@ cargo xtask scenario community_node_public_connectivity
 
 ## community-node compose
 ```bash
-docker compose -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
+docker compose --env-file .env.community-node.example -f docker-compose.community-node.yml run --rm cn-migrate
+docker compose --env-file .env.community-node.example -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
 ```
 
 - host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
-- compose 内の service 名は `cn-postgres`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
+- compose 内の service 名は `cn-postgres`, `cn-migrate`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
 - public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `CN_RELAY_WS_URL`, `CN_IROH_RELAY_URLS` を上書きする
+- `cn-user-api` / `cn-relay` は `COMMUNITY_NODE_DATABASE_INIT_MODE=require_ready` で起動するので、`cn-migrate` または `cn-cli prepare` を先に流さないと fail-fast する
+
+## community-node env 標準形
+- `.env.community-node.example` をコピーして `.env.community-node` を作り、compose では `--env-file .env.community-node` を使う
+- secret は `CN_POSTGRES_PASSWORD` と `COMMUNITY_NODE_JWT_SECRET` の 2 つを最低限上書きする
+- `COMMUNITY_NODE_JWT_SECRET` を rotate すると既存 bearer token は即時無効化される
+- `COMMUNITY_NODE_DATABASE_URL` は compose 内では `cn-postgres` 向けに組み立てる。外部 Postgres を使う場合だけ個別に差し替える
+
+## community-node deploy 順序
+```bash
+cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" prepare
+cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" set-auth-rollout --mode off
+cargo run -p kukuri-cn-user-api
+cargo run -p kukuri-cn-relay
+cargo run -p kukuri-cn-iroh-relay
+```
+
+1. migration/seed は `cn-cli prepare` だけで行う
+2. `cn-user-api` / `cn-relay` は prepared DB を前提に起動する
+3. rollout 変更は deploy 後に `cn-cli set-auth-rollout` で行う
+4. `COMMUNITY_NODE_DATABASE_INIT_MODE=prepare` は local bring-up と test 用に限定し、常用しない
+
+compose を使う場合:
+```bash
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d cn-user-api cn-relay cn-iroh-relay
+```
+
+## community-node backup / restore
+backup:
+```bash
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml exec -T cn-postgres \
+  sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > cn-postgres.dump
+```
+
+restore:
+```bash
+cat cn-postgres.dump | docker compose --env-file .env.community-node -f docker-compose.community-node.yml exec -T cn-postgres \
+  sh -lc 'dropdb --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB" && pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+- backup は schema + data をまとめて保持する `pg_dump -Fc` を標準にする
+- restore 前に `cn-user-api` / `cn-relay` を停止して、Postgres への新規接続を止める
+- restore 後に追加 migration がある場合だけ `cn-cli prepare` を流す
+- `cn-postgres-data` volume を直接コピーして backup 代わりにしない
 
 ## community-node 検証
 ```bash

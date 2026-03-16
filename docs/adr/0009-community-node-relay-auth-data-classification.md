@@ -30,5 +30,6 @@ Accepted
 
 ## Consequences
 - server 側の query/migration/testing は最初から `Postgres` 前提に揃える。
+- migration/seed の標準入口は `cn-cli prepare` とし、`cn-user-api` / `cn-relay` は prepared DB を既定前提に fail-fast 起動する。
 - `docs/blobs/gossip/SQLite` の既存責務を community-node 導入で変更してはならない。
 - desktop の community-node 設定変更は `iroh` endpoint 再生成が必要な場合に限り `restart_required` を返す。

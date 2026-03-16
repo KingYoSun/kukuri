@@ -1,19 +1,51 @@
+x-cn-postgres-env: &cn-postgres-env
+  POSTGRES_USER: ${CN_POSTGRES_USER:-cn}
+  POSTGRES_PASSWORD: ${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}
+  POSTGRES_DB: ${CN_POSTGRES_DB:-cn}
+
+x-cn-service-env: &cn-service-env
+  COMMUNITY_NODE_DATABASE_URL: postgres://${CN_POSTGRES_USER:-cn}:${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}@cn-postgres:5432/${CN_POSTGRES_DB:-cn}
+  COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
+  COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
+  COMMUNITY_NODE_RELAY_WS_URL: ${CN_RELAY_WS_URL:-ws://127.0.0.1:18081/relay}
+  COMMUNITY_NODE_IROH_RELAY_URLS: ${CN_IROH_RELAY_URLS:-http://127.0.0.1:13340}
+
 services:
   cn-postgres:
     image: postgres:17-bookworm
-    environment:
-      POSTGRES_USER: cn
-      POSTGRES_PASSWORD: cn_password
-      POSTGRES_DB: cn
+    environment: *cn-postgres-env
     ports:
-      - "55432:5432"
+      - "${CN_POSTGRES_PORT:-55432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cn -d cn"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${CN_POSTGRES_USER:-cn} -d ${CN_POSTGRES_DB:-cn}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
     volumes:
       - cn-postgres-data:/var/lib/postgresql/data
+
+  cn-migrate:
+    build:
+      context: .
+      dockerfile: docker/cn/Dockerfile
+      args:
+        TARGET_PACKAGE: kukuri-cn-cli
+        TARGET_BIN: cn-cli
+    depends_on:
+      cn-postgres:
+        condition: service_healthy
+    environment: *cn-service-env
+    command:
+      [
+        "--database-url",
+        "postgres://${CN_POSTGRES_USER:-cn}:${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}@cn-postgres:5432/${CN_POSTGRES_DB:-cn}",
+        "prepare",
+      ]
+    restart: "no"
 
   cn-user-api:
     build:
@@ -23,17 +55,14 @@ services:
         TARGET_PACKAGE: kukuri-cn-user-api
         TARGET_BIN: cn-user-api
     depends_on:
-      cn-postgres:
-        condition: service_healthy
+      cn-migrate:
+        condition: service_completed_successfully
     environment:
+      <<: *cn-service-env
       COMMUNITY_NODE_BIND_ADDR: 0.0.0.0:8080
-      COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@cn-postgres:5432/cn
-      COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
-      COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
-      COMMUNITY_NODE_RELAY_WS_URL: ${CN_RELAY_WS_URL:-ws://127.0.0.1:18081/relay}
-      COMMUNITY_NODE_IROH_RELAY_URLS: ${CN_IROH_RELAY_URLS:-http://127.0.0.1:13340}
+      COMMUNITY_NODE_DATABASE_INIT_MODE: require_ready
       COMMUNITY_NODE_JWT_ISSUER: ${COMMUNITY_NODE_JWT_ISSUER:-kukuri-cn}
-      COMMUNITY_NODE_JWT_SECRET: ${COMMUNITY_NODE_JWT_SECRET:-change-me}
+      COMMUNITY_NODE_JWT_SECRET: ${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
       COMMUNITY_NODE_JWT_TTL_SECONDS: ${COMMUNITY_NODE_JWT_TTL_SECONDS:-86400}
     ports:
       - "${CN_USER_API_PORT:-18080}:8080"
@@ -46,17 +75,14 @@ services:
         TARGET_PACKAGE: kukuri-cn-relay
         TARGET_BIN: cn-relay
     depends_on:
-      cn-postgres:
-        condition: service_healthy
+      cn-migrate:
+        condition: service_completed_successfully
       cn-iroh-relay:
         condition: service_started
     environment:
+      <<: *cn-service-env
       COMMUNITY_NODE_RELAY_BIND_ADDR: 0.0.0.0:8081
-      COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@cn-postgres:5432/cn
-      COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
-      COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
-      COMMUNITY_NODE_RELAY_WS_URL: ${CN_RELAY_WS_URL:-ws://127.0.0.1:18081/relay}
-      COMMUNITY_NODE_IROH_RELAY_URLS: ${CN_IROH_RELAY_URLS:-http://127.0.0.1:13340}
+      COMMUNITY_NODE_DATABASE_INIT_MODE: require_ready
     ports:
       - "${CN_RELAY_PORT:-18081}:8081"
 

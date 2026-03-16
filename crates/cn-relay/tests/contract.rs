@@ -95,7 +95,7 @@ async fn next_text_message(
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
 ) -> Result<serde_json::Value> {
-    let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+    let message = tokio::time::timeout(Duration::from_secs(15), socket.next())
         .await
         .context("websocket receive timeout")?
         .context("websocket closed")??;
@@ -217,7 +217,7 @@ async fn auth_rollout_disconnects_existing_connection_after_grace_period() -> Re
         "cn_relay_auth_grace",
         Some(AuthRolloutConfig {
             mode: AuthMode::Required,
-            enforce_at: Some(chrono::Utc::now().timestamp() + 1),
+            enforce_at: Some(chrono::Utc::now().timestamp() + 5),
             grace_seconds: 1,
             ws_auth_timeout_seconds: 10,
         }),

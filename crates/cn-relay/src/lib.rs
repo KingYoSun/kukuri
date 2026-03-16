@@ -11,10 +11,11 @@ use chrono::Utc;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use kukuri_cn_core::{
-    AUTH_EVENT_KIND, ApiError, ApiResult, AuthRolloutConfig, CommunityNodeBootstrapNode,
-    CommunityNodeResolvedUrls, RELAY_SERVICE_NAME, connect_postgres, initialize_database,
-    load_auth_rollout, load_bootstrap_nodes, normalize_http_url, normalize_http_url_list,
-    normalize_pubkey, normalize_ws_url, parse_raw_event, verify_raw_event,
+    AUTH_EVENT_KIND, ApiError, ApiResult, AuthMode, AuthRolloutConfig, CommunityNodeBootstrapNode,
+    CommunityNodeResolvedUrls, DatabaseInitMode, RELAY_SERVICE_NAME, connect_postgres,
+    initialize_database, initialize_database_for_runtime, load_auth_rollout, load_bootstrap_nodes,
+    normalize_http_url, normalize_http_url_list, normalize_pubkey, normalize_ws_url,
+    parse_raw_event, verify_raw_event,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -98,6 +99,16 @@ impl RelayConfig {
 pub async fn build_state(config: &RelayConfig) -> Result<RelayState> {
     let pool = connect_postgres(config.database_url.as_str()).await?;
     initialize_database(&pool).await?;
+    build_state_from_pool(config, pool).await
+}
+
+async fn build_runtime_state(config: &RelayConfig) -> Result<RelayState> {
+    let pool = connect_postgres(config.database_url.as_str()).await?;
+    initialize_database_for_runtime(&pool, DatabaseInitMode::from_env()?).await?;
+    build_state_from_pool(config, pool).await
+}
+
+async fn build_state_from_pool(config: &RelayConfig, pool: PgPool) -> Result<RelayState> {
     let (events_tx, _) = broadcast::channel(256);
     Ok(RelayState {
         pool,
@@ -127,7 +138,7 @@ pub async fn run_from_env() -> Result<()> {
 
     let config = RelayConfig::from_env()?;
     let bind_addr = config.bind_addr;
-    let state = build_state(&config).await?;
+    let state = build_runtime_state(&config).await?;
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
@@ -185,7 +196,7 @@ async fn handle_socket(state: RelayState, _addr: SocketAddr, socket: WebSocket) 
     let mut tick = tokio::time::interval(Duration::from_secs(1));
 
     if let Ok(rollout) = load_auth_rollout(&state.pool, RELAY_SERVICE_NAME).await
-        && rollout.requires_auth(Utc::now().timestamp())
+        && rollout.mode == AuthMode::Required
     {
         let _ = send_auth_challenge(&mut sender, &mut session).await;
     }
@@ -402,19 +413,23 @@ async fn enforce_auth_timeout(
     rollout: &AuthRolloutConfig,
 ) -> Result<()> {
     let now = Utc::now().timestamp();
-    if !rollout.requires_auth(now) || session.pubkey.is_some() {
+    if rollout.mode != AuthMode::Required || session.pubkey.is_some() {
         return Ok(());
     }
     if session.challenge.is_none() {
         send_auth_challenge(sender, session).await?;
     }
+    let requires_auth = rollout.requires_auth(now);
     if let Some(deadline) = rollout.disconnect_deadline_for_connection(session.connected_at)
+        && requires_auth
         && now >= deadline
     {
         bail!("auth-required: grace deadline reached");
     }
     if let Some(issued_at) = session.challenge_issued_at
-        && now - issued_at >= rollout.ws_auth_timeout_seconds.max(1)
+        && requires_auth
+        && now - issued_at.max(rollout.enforce_at.unwrap_or(issued_at))
+            >= rollout.ws_auth_timeout_seconds.max(1)
     {
         bail!("auth-required: timeout");
     }

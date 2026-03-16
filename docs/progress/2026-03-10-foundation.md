@@ -51,6 +51,7 @@
 - `cn-user-api` / `cn-relay` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
 - `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
 - GitHub Actions fast/nightly workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加した
+- `cn-cli prepare`, `.env.community-node.example`, `cn-migrate` compose service, prepared-DB fail-fast 起動を追加し、community-node の deploy / backup / restore 手順を runbook に固定した
 
 ## 検証済み
 - `cargo xtask doctor`
