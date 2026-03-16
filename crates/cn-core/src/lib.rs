@@ -357,13 +357,17 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         );
     }
 
-    let rollout_exists = sqlx::query_scalar::<_, i64>(
-        "SELECT 1 FROM cn_admin.service_configs WHERE service_name = $1",
+    let rollout_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+            SELECT 1
+            FROM cn_admin.service_configs
+            WHERE service_name = $1
+        )",
     )
     .bind(RELAY_SERVICE_NAME)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
-    if rollout_exists.is_none() {
+    if !rollout_exists {
         bail!(
             "community-node database is not ready: relay auth rollout seed is missing; {DATABASE_PREPARE_HINT}"
         );
