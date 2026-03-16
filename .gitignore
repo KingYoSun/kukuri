@@ -43,6 +43,7 @@ Thumbs.db
 .env.local
 .env.*.local
 *.env
+.env.community-node
 
 # Build outputs
 build/

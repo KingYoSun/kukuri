@@ -26,8 +26,8 @@ cargo xtask scenario community_node_public_connectivity
 
 ## community-node compose
 ```bash
-docker compose --env-file .env.community-node.example -f docker-compose.community-node.yml run --rm cn-migrate
-docker compose --env-file .env.community-node.example -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
 ```
 
 - host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
