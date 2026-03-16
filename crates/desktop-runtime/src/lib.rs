@@ -1207,8 +1207,8 @@ impl SharedIrohStack {
             node.gossip().clone(),
             node.discovery(),
             network_config,
-            relay_config.connect_mode(),
-        ));
+            relay_config.clone(),
+        )?);
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
         transport

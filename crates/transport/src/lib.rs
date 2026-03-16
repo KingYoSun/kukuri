@@ -125,19 +125,22 @@ impl TransportRelayConfig {
         }
     }
 
-    pub fn relay_mode(&self) -> Result<RelayMode> {
-        if self.iroh_relay_urls.is_empty() {
-            return Ok(RelayMode::Disabled);
-        }
-        let relay_urls = self
-            .iroh_relay_urls
+    pub fn parsed_relay_urls(&self) -> Result<Vec<RelayUrl>> {
+        self.iroh_relay_urls
             .iter()
             .map(|value| {
                 value
                     .parse::<RelayUrl>()
                     .with_context(|| format!("invalid iroh relay url `{value}`"))
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect()
+    }
+
+    pub fn relay_mode(&self) -> Result<RelayMode> {
+        if self.iroh_relay_urls.is_empty() {
+            return Ok(RelayMode::Disabled);
+        }
+        let relay_urls = self.parsed_relay_urls()?;
         Ok(RelayMode::Custom(RelayMap::from_iter(relay_urls)))
     }
 }
@@ -150,14 +153,24 @@ pub struct SeedPeer {
 
 impl SeedPeer {
     pub fn to_endpoint_addr(&self) -> Result<EndpointAddr> {
+        self.to_endpoint_addr_with_relays(&[])
+    }
+
+    pub fn to_endpoint_addr_with_relays(&self, relay_urls: &[RelayUrl]) -> Result<EndpointAddr> {
         let endpoint_id = EndpointId::from_str(self.endpoint_id.trim())
             .with_context(|| format!("invalid seed endpoint id `{}`", self.endpoint_id))?;
-        let Some(addr_hint) = self.addr_hint.as_deref() else {
-            return Ok(EndpointAddr::new(endpoint_id));
+        let mut endpoint_addr = match self.addr_hint.as_deref() {
+            Some(addr_hint) => {
+                let socket_addrs = resolve_socket_addrs(addr_hint)?;
+                build_endpoint_addr(endpoint_id, socket_addrs)
+                    .ok_or_else(|| anyhow!("seed peer must resolve to at least one socket address"))?
+            }
+            None => EndpointAddr::new(endpoint_id),
         };
-        let socket_addrs = resolve_socket_addrs(addr_hint)?;
-        build_endpoint_addr(endpoint_id, socket_addrs)
-            .ok_or_else(|| anyhow!("seed peer must resolve to at least one socket address"))
+        for relay_url in relay_urls {
+            endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
+        }
+        Ok(endpoint_addr)
     }
 
     pub fn display(&self) -> String {
@@ -214,6 +227,7 @@ impl DhtDiscoveryOptions {
         }
         let mut builder = PkarrClient::builder();
         builder.no_default_network();
+        builder.cache_size(0);
         builder.dht(|dht| dht);
         Ok(Some(
             builder
@@ -562,6 +576,7 @@ pub struct IrohGossipTransport {
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
     connect_mode: Arc<Mutex<ConnectMode>>,
+    relay_urls: Vec<RelayUrl>,
     env_locked: Arc<Mutex<bool>>,
 }
 
@@ -581,6 +596,7 @@ impl IrohGossipTransport {
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
+        let relay_urls = relay_config.parsed_relay_urls()?;
         let (endpoint, discovery, publish_task) =
             bind_endpoint_with_options(network_config.bind_addr, &dht_options, &relay_config, None)
                 .await?;
@@ -604,6 +620,7 @@ impl IrohGossipTransport {
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
+            relay_urls,
             env_locked: Arc::new(Mutex::new(false)),
         })
     }
@@ -620,10 +637,12 @@ impl IrohGossipTransport {
         gossip: Gossip,
         discovery: Arc<MemoryLookup>,
         network_config: TransportNetworkConfig,
-        connect_mode: ConnectMode,
-    ) -> Self {
+        relay_config: TransportRelayConfig,
+    ) -> Result<Self> {
+        let relay_config = relay_config.normalized();
+        let relay_urls = relay_config.parsed_relay_urls()?;
         discovery.add_endpoint_info(endpoint.addr());
-        Self {
+        Ok(Self {
             endpoint,
             gossip,
             _router: None,
@@ -636,9 +655,10 @@ impl IrohGossipTransport {
             topic_states: Arc::new(Mutex::new(HashMap::new())),
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
-            connect_mode: Arc::new(Mutex::new(connect_mode)),
+            connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
+            relay_urls,
             env_locked: Arc::new(Mutex::new(false)),
-        }
+        })
     }
 
     pub async fn bind_local() -> Result<Self> {
@@ -880,7 +900,8 @@ pub async fn prepare_endpoint_for_discovery(
     dht_options: &DhtDiscoveryOptions,
     relay_config: &TransportRelayConfig,
 ) -> Result<Option<JoinHandle<()>>> {
-    if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
+    let relay_backed = relay_config.connect_mode() == ConnectMode::DirectOrRelay;
+    if relay_backed {
         endpoint.online().await;
     }
     discovery.add_endpoint_info(endpoint.addr());
@@ -904,8 +925,20 @@ pub async fn prepare_endpoint_for_discovery(
     .await
     {
         Ok(Ok(())) => {}
-        Ok(Err(error)) => warn!("initial endpoint publication failed: {error:#}"),
-        Err(_) => warn!("initial endpoint publication timed out; continuing with background retries"),
+        Ok(Err(error)) => {
+            if relay_backed {
+                debug!("initial endpoint publication failed; continuing with relay-only startup: {error:#}");
+            } else {
+                warn!("initial endpoint publication failed: {error:#}");
+            }
+        }
+        Err(_) => {
+            if relay_backed {
+                debug!("initial endpoint publication timed out; continuing with relay-only startup");
+            } else {
+                warn!("initial endpoint publication timed out; continuing with background retries");
+            }
+        }
     }
 
     let endpoint = endpoint.clone();
@@ -915,7 +948,11 @@ pub async fn prepare_endpoint_for_discovery(
                 Ok(true) => DHT_PUBLISH_REPUBLISH_INTERVAL,
                 Ok(false) => DHT_PUBLISH_RETRY_INTERVAL,
                 Err(error) => {
-                    warn!("failed to publish endpoint address to pkarr: {error:#}");
+                    if relay_backed {
+                        debug!("failed to publish endpoint address to pkarr; relay path remains available: {error:#}");
+                    } else {
+                        warn!("failed to publish endpoint address to pkarr: {error:#}");
+                    }
                     DHT_PUBLISH_RETRY_INTERVAL
                 }
             };
@@ -1146,7 +1183,7 @@ impl Transport for IrohGossipTransport {
     ) -> Result<()> {
         let mut parsed = BTreeMap::new();
         for seed in seed_peers {
-            let endpoint_addr = seed.to_endpoint_addr()?;
+            let endpoint_addr = seed.to_endpoint_addr_with_relays(&self.relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.discovery.add_endpoint_info(endpoint_addr.clone());
             }
@@ -1754,6 +1791,85 @@ mod tests {
         })
         .await
         .expect("endpoint relay info never replaced stale packet");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_custom_relay_seed_peers_connect_without_dht_publish() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport b");
+        let discovery_a = transport_a.discovery().await.expect("discovery a");
+        let discovery_b = transport_b.discovery().await.expect("discovery b");
+
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::SeededDht,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: discovery_b.local_endpoint_id.clone(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure a");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::SeededDht,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: discovery_a.local_endpoint_id.clone(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure b");
+
+        let endpoint_b = EndpointId::from_str(&discovery_b.local_endpoint_id).expect("endpoint b");
+        let connection = timeout(Duration::from_secs(20), async {
+            loop {
+                match transport_a
+                    .endpoint
+                    .connect(EndpointAddr::new(endpoint_b), GOSSIP_ALPN)
+                    .await
+                {
+                    Ok(connection) => return connection,
+                    Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                }
+            }
+        })
+        .await
+        .expect("custom relay seed connect timeout");
+
+        drop(connection);
+    }
+
+    #[test]
+    fn dht_publish_client_disables_pkarr_cache() {
+        let client = DhtDiscoveryOptions::seeded_dht()
+            .publish_client()
+            .expect("publish client")
+            .expect("pkarr client");
+
+        assert!(client.cache().is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

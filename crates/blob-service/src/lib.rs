@@ -267,7 +267,7 @@ impl BlobService for IrohBlobService {
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         let mut parsed = BTreeMap::new();
         for peer in peers {
-            let endpoint_addr = peer.to_endpoint_addr()?;
+            let endpoint_addr = peer.to_endpoint_addr_with_relays(self.node.relay_urls())?;
             if !endpoint_addr.is_empty() {
                 self.node
                     .discovery()

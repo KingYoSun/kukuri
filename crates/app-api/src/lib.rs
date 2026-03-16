@@ -2085,8 +2085,9 @@ mod tests {
                 node.gossip().clone(),
                 node.discovery(),
                 kukuri_transport::TransportNetworkConfig::loopback(),
-                kukuri_transport::ConnectMode::DirectOnly,
-            ));
+                kukuri_transport::TransportRelayConfig::default(),
+            )
+            .expect("transport"));
             let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
             let blob_service = Arc::new(IrohBlobService::new(node.clone()));
             Self {

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr};
+use iroh::{Endpoint, EndpointAddr, RelayUrl};
 use iroh_blobs::api::Store as BlobStore;
 use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore};
 use iroh_docs::api::{Doc, DocsApi};
@@ -90,6 +90,7 @@ pub struct IrohDocsNode {
     endpoint: Endpoint,
     gossip: Gossip,
     discovery: Arc<MemoryLookup>,
+    relay_urls: Vec<RelayUrl>,
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
@@ -169,6 +170,7 @@ impl IrohDocsNode {
             .transpose()?
             .flatten();
         let relay_config = relay_config.normalized();
+        let relay_urls = relay_config.parsed_relay_urls()?;
         let mut endpoint_builder = build_endpoint_builder(
             Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
@@ -213,6 +215,7 @@ impl IrohDocsNode {
             endpoint,
             gossip,
             discovery,
+            relay_urls,
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
@@ -230,6 +233,10 @@ impl IrohDocsNode {
 
     pub fn discovery(&self) -> Arc<MemoryLookup> {
         self.discovery.clone()
+    }
+
+    pub fn relay_urls(&self) -> &[RelayUrl] {
+        &self.relay_urls
     }
 
     pub fn docs(&self) -> &DocsApi {
@@ -717,7 +724,7 @@ impl DocsSync for IrohDocsSync {
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         let mut parsed = BTreeMap::new();
         for peer in peers {
-            let endpoint_addr = peer.to_endpoint_addr()?;
+            let endpoint_addr = peer.to_endpoint_addr_with_relays(self.node.relay_urls())?;
             if !endpoint_addr.is_empty() {
                 self.node
                     .discovery()
