@@ -163,6 +163,7 @@ npx pnpm@10.16.1 tauri:dev
 ```
 
 - `pnpm tauri dev` / `pnpm tauri:dev` は loopback の空き port を自動選択し、5173 が使用中なら次の空き port へ退避する。
+- desktop の Tauri backend は `mainline::rpc::socket` を既定で `error` へ落としている。Windows の DHT timeout や shutdown noise を調べたいときだけ `RUST_LOG=warn,mainline::rpc::socket=warn` を明示する。
 
 ## Windows 前提
 - Windows prerequisites は Tauri 公式手順を使う: <https://v2.tauri.app/start/prerequisites/#windows>

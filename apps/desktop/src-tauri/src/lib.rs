@@ -18,14 +18,31 @@ struct DesktopState {
     runtime: Arc<DesktopRuntime>,
 }
 
+const DEFAULT_TRACING_DIRECTIVES: &str =
+    "warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info";
+const MAINLINE_SUPPRESS_DIRECTIVE: &str = "mainline::rpc::socket=error";
+
 fn map_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+fn resolve_tracing_directives(rust_log: Option<&str>) -> String {
+    let directives = rust_log
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_TRACING_DIRECTIVES)
+        .to_owned();
+    if directives.contains("mainline::rpc::socket") {
+        return directives;
+    }
+
+    format!("{directives},{MAINLINE_SUPPRESS_DIRECTIVE}")
+}
+
 fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info")
-    });
+    let env_filter = EnvFilter::new(resolve_tracing_directives(
+        std::env::var("RUST_LOG").ok().as_deref(),
+    ));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
@@ -421,4 +438,30 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        MAINLINE_SUPPRESS_DIRECTIVE, DEFAULT_TRACING_DIRECTIVES,
+        resolve_tracing_directives,
+    };
+
+    #[test]
+    fn default_tracing_directives_suppress_mainline_socket_warnings() {
+        let directives = resolve_tracing_directives(None);
+        assert!(directives.contains(DEFAULT_TRACING_DIRECTIVES));
+        assert!(directives.contains(MAINLINE_SUPPRESS_DIRECTIVE));
+    }
+
+    #[test]
+    fn explicit_rust_log_keeps_mainline_override() {
+        let directives = resolve_tracing_directives(Some(
+            "info,mainline::rpc::socket=warn,kukuri_desktop_tauri_lib=debug",
+        ));
+        assert_eq!(
+            directives,
+            "info,mainline::rpc::socket=warn,kukuri_desktop_tauri_lib=debug"
+        );
+    }
 }
