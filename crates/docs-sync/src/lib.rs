@@ -20,6 +20,7 @@ use kukuri_core::{ReplicaId, blob_hash};
 use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
     build_endpoint_builder, parse_endpoint_ticket,
+    prepare_endpoint_for_discovery,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
@@ -85,7 +86,6 @@ pub trait DocsSync: Send + Sync {
     }
 }
 
-#[derive(Clone)]
 pub struct IrohDocsNode {
     endpoint: Endpoint,
     gossip: Gossip,
@@ -93,6 +93,7 @@ pub struct IrohDocsNode {
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
+    endpoint_publish_task: Option<JoinHandle<()>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -187,7 +188,9 @@ impl IrohDocsNode {
         if let Some(root) = root.as_deref() {
             save_endpoint_secret(root, endpoint.secret_key())?;
         }
-        discovery.add_endpoint_info(endpoint.addr());
+        let endpoint_publish_task =
+            prepare_endpoint_for_discovery(&endpoint, &discovery, &dht_options, &relay_config)
+                .await?;
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let docs_builder = match root {
             Some(path) => iroh_docs::protocol::Docs::persistent(path),
@@ -213,6 +216,7 @@ impl IrohDocsNode {
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
+            endpoint_publish_task,
         }))
     }
 
@@ -237,6 +241,9 @@ impl IrohDocsNode {
     }
 
     pub async fn shutdown(self: Arc<Self>) -> Result<()> {
+        if let Some(task) = &self.endpoint_publish_task {
+            task.abort();
+        }
         self.router.shutdown().await?;
         self.endpoint.close().await;
         let _ = self.blobs.shutdown().await;
@@ -246,6 +253,9 @@ impl IrohDocsNode {
 
 impl Drop for IrohDocsNode {
     fn drop(&mut self) {
+        if let Some(task) = self.endpoint_publish_task.take() {
+            task.abort();
+        }
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let router = Arc::clone(&self.router);
             let blobs = self.blobs.clone();

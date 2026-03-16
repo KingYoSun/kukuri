@@ -2102,6 +2102,7 @@ version = "0.96.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5236da4d5681f317ec393c8fe2b7e3d360d31c6bb40383991d0b7429ca5ad117"
 dependencies = [
+ "axum",
  "backon",
  "bytes",
  "cfg_aliases",
@@ -2845,6 +2846,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]

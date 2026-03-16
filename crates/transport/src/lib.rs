@@ -10,22 +10,30 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::{Stream, StreamExt};
-use iroh::address_lookup::{DhtAddressLookup, MemoryLookup};
+use iroh::address_lookup::{DhtAddressLookup, EndpointInfo, MemoryLookup};
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{Event, GossipHint, TopicId};
 use pkarr::Client as PkarrClient;
+use pkarr::{SignedPacket, Timestamp};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
+use tracing::{debug, warn};
 
 pub type EventStream = Pin<Box<dyn Stream<Item = EventEnvelope> + Send>>;
 pub type HintStream = Pin<Box<dyn Stream<Item = HintEnvelope> + Send>>;
+
+const IROH_TXT_NAME: &str = "_iroh";
+const DHT_PUBLISH_TTL_SECONDS: u32 = 30;
+const DHT_PUBLISH_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+const DHT_PUBLISH_REPUBLISH_INTERVAL: Duration = Duration::from_secs(30);
+const DHT_PUBLISH_STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventEnvelope {
@@ -195,6 +203,23 @@ impl DhtDiscoveryOptions {
             enabled: true,
             client: Some(client),
         }
+    }
+
+    fn publish_client(&self) -> Result<Option<PkarrClient>> {
+        if !self.enabled {
+            return Ok(None);
+        }
+        if let Some(client) = self.client.as_ref() {
+            return Ok(Some(client.clone()));
+        }
+        let mut builder = PkarrClient::builder();
+        builder.no_default_network();
+        builder.dht(|dht| dht);
+        Ok(Some(
+            builder
+                .build()
+                .context("failed to build pkarr client for endpoint publication")?,
+        ))
     }
 }
 
@@ -523,11 +548,11 @@ struct TopicState {
     _receiver_task: JoinHandle<()>,
 }
 
-#[derive(Clone)]
 pub struct IrohGossipTransport {
     endpoint: Endpoint,
     gossip: Gossip,
     _router: Option<Router>,
+    _endpoint_publish_task: Option<JoinHandle<()>>,
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
     seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
@@ -556,18 +581,9 @@ impl IrohGossipTransport {
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
-        let discovery = Arc::new(MemoryLookup::new());
-        let mut builder = build_endpoint_builder(
-            Endpoint::empty_builder(relay_config.relay_mode()?),
-            &discovery,
-            Some(&dht_options),
-        )?;
-        builder = apply_bind(builder, network_config.bind_addr)?;
-        let endpoint = builder
-            .bind()
-            .await
-            .context("failed to bind iroh endpoint")?;
-        discovery.add_endpoint_info(endpoint.addr());
+        let (endpoint, discovery, publish_task) =
+            bind_endpoint_with_options(network_config.bind_addr, &dht_options, &relay_config, None)
+                .await?;
 
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
@@ -578,6 +594,7 @@ impl IrohGossipTransport {
             endpoint,
             gossip,
             _router: Some(router),
+            _endpoint_publish_task: publish_task,
             discovery,
             network_config,
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
@@ -610,6 +627,7 @@ impl IrohGossipTransport {
             endpoint,
             gossip,
             _router: None,
+            _endpoint_publish_task: None,
             discovery,
             network_config,
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
@@ -824,6 +842,145 @@ impl IrohGossipTransport {
         let stream =
             BroadcastStream::new(sender.subscribe()).filter_map(|event| async move { event.ok() });
         Box::pin(stream)
+    }
+}
+
+async fn bind_endpoint_with_options(
+    bind_addr: SocketAddr,
+    dht_options: &DhtDiscoveryOptions,
+    relay_config: &TransportRelayConfig,
+    secret_key: Option<SecretKey>,
+) -> Result<(Endpoint, Arc<MemoryLookup>, Option<JoinHandle<()>>)> {
+    let discovery = Arc::new(MemoryLookup::new());
+    let mut builder = build_endpoint_builder(
+        Endpoint::empty_builder(relay_config.relay_mode()?),
+        &discovery,
+        Some(dht_options),
+    )?;
+    if let Some(secret_key) = secret_key {
+        builder = builder.secret_key(secret_key);
+    }
+    #[cfg(test)]
+    if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
+        builder = builder.insecure_skip_relay_cert_verify(true);
+    }
+    builder = apply_bind(builder, bind_addr)?;
+    let endpoint = builder
+        .bind()
+        .await
+        .context("failed to bind iroh endpoint")?;
+    let publish_task =
+        prepare_endpoint_for_discovery(&endpoint, &discovery, dht_options, relay_config).await?;
+    Ok((endpoint, discovery, publish_task))
+}
+
+pub async fn prepare_endpoint_for_discovery(
+    endpoint: &Endpoint,
+    discovery: &Arc<MemoryLookup>,
+    dht_options: &DhtDiscoveryOptions,
+    relay_config: &TransportRelayConfig,
+) -> Result<Option<JoinHandle<()>>> {
+    if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
+        endpoint.online().await;
+    }
+    discovery.add_endpoint_info(endpoint.addr());
+
+    let Some(client) = dht_options.publish_client()? else {
+        return Ok(None);
+    };
+
+    match timeout(DHT_PUBLISH_STARTUP_TIMEOUT, async {
+        loop {
+            match publish_endpoint_addr_once(endpoint, &client).await {
+                Ok(true) => return Ok::<(), anyhow::Error>(()),
+                Ok(false) => sleep(DHT_PUBLISH_RETRY_INTERVAL).await,
+                Err(error) => {
+                    debug!("initial endpoint publish retrying: {error:#}");
+                    sleep(DHT_PUBLISH_RETRY_INTERVAL).await;
+                }
+            }
+        }
+    })
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => warn!("initial endpoint publication failed: {error:#}"),
+        Err(_) => warn!("initial endpoint publication timed out; continuing with background retries"),
+    }
+
+    let endpoint = endpoint.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            let delay = match publish_endpoint_addr_once(&endpoint, &client).await {
+                Ok(true) => DHT_PUBLISH_REPUBLISH_INTERVAL,
+                Ok(false) => DHT_PUBLISH_RETRY_INTERVAL,
+                Err(error) => {
+                    warn!("failed to publish endpoint address to pkarr: {error:#}");
+                    DHT_PUBLISH_RETRY_INTERVAL
+                }
+            };
+            sleep(delay).await;
+        }
+    });
+    Ok(Some(task))
+}
+
+async fn publish_endpoint_addr_once(endpoint: &Endpoint, client: &PkarrClient) -> Result<bool> {
+    let endpoint_addr = endpoint.addr();
+    if endpoint_addr.is_empty() {
+        return Ok(false);
+    }
+    let endpoint_info = EndpointInfo::from(endpoint_addr);
+    let public_key =
+        pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
+    let previous_timestamp = client
+        .resolve_most_recent(&public_key)
+        .await
+        .map(|packet| packet.timestamp());
+    let now = Timestamp::now();
+    let timestamp = match previous_timestamp {
+        Some(previous) if previous >= now => previous + 1,
+        _ => now,
+    };
+    let signed_packet = build_signed_packet_with_timestamp(
+        &endpoint_info,
+        endpoint.secret_key(),
+        DHT_PUBLISH_TTL_SECONDS,
+        timestamp,
+    )?;
+    client
+        .publish(&signed_packet, previous_timestamp)
+        .await
+        .context("pkarr publish failed")?;
+    Ok(true)
+}
+
+fn build_signed_packet_with_timestamp(
+    endpoint_info: &EndpointInfo,
+    secret_key: &SecretKey,
+    ttl: u32,
+    timestamp: Timestamp,
+) -> Result<SignedPacket> {
+    use pkarr::dns::{self, rdata};
+
+    let keypair = pkarr::Keypair::from_secret_key(&secret_key.to_bytes());
+    let mut builder = SignedPacket::builder().timestamp(timestamp);
+    let name = dns::Name::new(IROH_TXT_NAME).expect("iroh txt name");
+    for entry in endpoint_info.to_txt_strings() {
+        let mut txt = rdata::TXT::new();
+        txt.add_string(&entry).context("invalid endpoint info txt entry")?;
+        builder = builder.txt(name.clone(), txt.into_owned(), ttl);
+    }
+    builder
+        .sign(&keypair)
+        .context("failed to sign endpoint info packet")
+}
+
+impl Drop for IrohGossipTransport {
+    fn drop(&mut self) {
+        if let Some(task) = self._endpoint_publish_task.take() {
+            task.abort();
+        }
     }
 }
 
@@ -1338,6 +1495,7 @@ mod tests {
     use iroh::address_lookup::EndpointInfo;
     use kukuri_core::{TopicId, build_text_note, generate_keys};
     use pkarr::mainline::Testnet;
+    use pkarr::Timestamp;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Mutex, OnceLock};
 
@@ -1538,6 +1696,62 @@ mod tests {
         .expect("seeded dht connect timeout");
 
         drop(connection);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_relay_backed_dht_publish_replaces_newer_stale_packet() {
+        let testnet = Testnet::new(5).expect("testnet");
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let secret_key = SecretKey::from_bytes(&[7u8; 32]);
+        let client = dht_test_client(&testnet);
+        let stale_info = EndpointInfo::from_parts(
+            secret_key.public(),
+            iroh::address_lookup::EndpointData::new([iroh::TransportAddr::Relay(
+                "https://stale-relay.invalid".parse().expect("stale relay url"),
+            )]),
+        );
+        let stale_packet = build_signed_packet_with_timestamp(
+            &stale_info,
+            &secret_key,
+            30,
+            Timestamp::now() + 300_000_000,
+        )
+        .expect("build stale packet");
+        client
+            .publish(&stale_packet, None)
+            .await
+            .expect("publish stale packet");
+
+        let (endpoint, _discovery, _publish_task) = bind_endpoint_with_options(
+            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
+            &DhtDiscoveryOptions::with_client(client.clone()),
+            &relay_config,
+            Some(secret_key.clone()),
+        )
+        .await
+        .expect("bind endpoint");
+
+        let public_key =
+            pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
+        timeout(Duration::from_secs(6), async {
+            loop {
+                if let Some(packet) = client.resolve_most_recent(&public_key).await
+                    && let Ok(info) = EndpointInfo::from_pkarr_signed_packet(&packet)
+                    && info.relay_urls().any(|candidate| candidate == &relay_url)
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("endpoint relay info never replaced stale packet");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
