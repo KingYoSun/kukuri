@@ -67,10 +67,7 @@ TCP 公開を Cloudflare Tunnel で行う場合:
 `iroh-relay` の `7842/udp` を WireGuard/VPS edge 経由で公開する場合:
 
 ```dotenv
-CN_IROH_RELAY_HTTPS_BIND_ADDR=0.0.0.0:3443
 CN_IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
-CN_IROH_RELAY_HTTPS_HOST_BIND_IP=127.0.0.1
-CN_IROH_RELAY_HTTPS_PORT=13443
 CN_IROH_RELAY_QUIC_HOST_BIND_IP=10.73.0.2
 CN_IROH_RELAY_QUIC_PORT=7842
 CN_IROH_RELAY_TLS_CERT_PATH=/certs/default.crt
@@ -81,7 +78,9 @@ CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
 - Cloudflare Tunnel は UDP を運べないので、`7842/udp` は WireGuard/VPS edge で home 側へ直接 forward する
 - QUIC は tunnel を迂回するので、`docker/cn/certs/` には `iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を置く
 - `CN_IROH_RELAY_QUIC_HOST_BIND_IP` は WireGuard で到達可能な home 側 IP に合わせる
-- tunnel 側を HTTPS origin にしたい場合は `iroh-relay.kukuri.app -> https://127.0.0.1:${CN_IROH_RELAY_HTTPS_PORT}` を向ける。HTTP origin のままでも QUIC なしの relay path は使える
+- Cloudflare Tunnel で `iroh-relay.kukuri.app` の TCP を公開しつつ QUIC を直公開したい場合は、`CN_IROH_RELAY_HTTPS_BIND_ADDR` を空のままにして `iroh-relay.kukuri.app -> http://127.0.0.1:${CN_IROH_RELAY_PORT}` を向ける
+- `CN_IROH_RELAY_HTTPS_BIND_ADDR` を設定した場合、local HTTP listener は captive portal 用の `/generate_204` しか返さない。`/`, `/ping`, `/relay`, `/healthz` を Cloudflare Tunnel で通したいなら `iroh-relay.kukuri.app -> https://127.0.0.1:${CN_IROH_RELAY_HTTPS_PORT}` を向ける
+- `https://iroh-relay.kukuri.app/ping` が `404 Not Found` を返す場合は、Cloudflare Tunnel が HTTP origin (`${CN_IROH_RELAY_PORT}`) に向いているのに `CN_IROH_RELAY_HTTPS_BIND_ADDR` が有効な構成になっている
 
 起動:
 

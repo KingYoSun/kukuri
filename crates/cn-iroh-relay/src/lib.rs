@@ -18,16 +18,18 @@ const DEFAULT_TLS_KEY_PATH: &str = "/certs/default.key";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IrohRelayTlsConfig {
-    pub https_bind_addr: SocketAddr,
+    pub https_bind_addr: Option<SocketAddr>,
     pub quic_bind_addr: Option<SocketAddr>,
     pub cert_path: PathBuf,
     pub key_path: PathBuf,
 }
 
 impl IrohRelayTlsConfig {
-    fn effective_quic_bind_addr(&self) -> SocketAddr {
-        self.quic_bind_addr
-            .unwrap_or_else(|| SocketAddr::new(self.https_bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT))
+    fn effective_quic_bind_addr(&self) -> Option<SocketAddr> {
+        self.quic_bind_addr.or_else(|| {
+            self.https_bind_addr
+                .map(|bind_addr| SocketAddr::new(bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT))
+        })
     }
 }
 
@@ -35,6 +37,13 @@ impl IrohRelayTlsConfig {
 pub struct IrohRelayConfig {
     pub http_bind_addr: SocketAddr,
     pub tls: Option<IrohRelayTlsConfig>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrohRelayPublicOriginMode {
+    HttpOnly,
+    LocalHttps,
+    UpstreamTlsTermination,
 }
 
 impl IrohRelayConfig {
@@ -54,6 +63,14 @@ impl IrohRelayConfig {
             )?,
             tls: parse_tls_config_from_lookup(lookup)?,
         })
+    }
+
+    pub fn public_origin_mode(&self) -> IrohRelayPublicOriginMode {
+        match self.tls.as_ref() {
+            Some(tls) if tls.https_bind_addr.is_some() => IrohRelayPublicOriginMode::LocalHttps,
+            Some(_) => IrohRelayPublicOriginMode::UpstreamTlsTermination,
+            None => IrohRelayPublicOriginMode::HttpOnly,
+        }
     }
 }
 
@@ -82,17 +99,21 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
     let (relay_tls, quic) = match config.tls.as_ref() {
         Some(tls_config) => {
             let (certs, server_config) = load_tls_materials(tls_config)?;
-            let relay_tls = TlsConfig {
-                https_bind_addr: tls_config.https_bind_addr,
-                quic_bind_addr: tls_config.effective_quic_bind_addr(),
+            let relay_tls = tls_config.https_bind_addr.map(|https_bind_addr| TlsConfig {
+                https_bind_addr,
+                quic_bind_addr: tls_config
+                    .effective_quic_bind_addr()
+                    .unwrap_or_else(|| {
+                        SocketAddr::new(https_bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT)
+                    }),
                 cert: CertConfig::<(), ()>::Manual { certs },
                 server_config: server_config.clone(),
-            };
+            });
             let quic = tls_config.quic_bind_addr.map(|bind_addr| QuicConfig {
                 bind_addr,
                 server_config,
             });
-            (Some(relay_tls), quic)
+            (relay_tls, quic)
         }
         None => (None, None),
     };
@@ -152,9 +173,11 @@ where
         return Ok(None);
     }
 
-    let https_bind_addr = https_bind_addr.context(
-        "COMMUNITY_NODE_IROH_RELAY_HTTPS_BIND_ADDR is required when enabling iroh relay TLS/QUIC",
-    )?;
+    if https_bind_addr.is_none() && quic_bind_addr.is_none() {
+        bail!(
+            "COMMUNITY_NODE_IROH_RELAY_HTTPS_BIND_ADDR or COMMUNITY_NODE_IROH_RELAY_QUIC_BIND_ADDR is required when enabling iroh relay TLS/QUIC"
+        );
+    }
     Ok(Some(IrohRelayTlsConfig {
         https_bind_addr,
         quic_bind_addr,
@@ -264,15 +287,17 @@ mod tests {
             ("COMMUNITY_NODE_IROH_RELAY_TLS_KEY_PATH", "/certs/iroh.key"),
         ])
         .expect("config");
+        let public_origin_mode = config.public_origin_mode();
         let tls = config.tls.expect("tls config");
 
         assert_eq!(
             config.http_bind_addr,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 3340)
         );
+        assert_eq!(public_origin_mode, IrohRelayPublicOriginMode::LocalHttps);
         assert_eq!(
             tls.https_bind_addr,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 3443)
+            Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 3443))
         );
         assert_eq!(
             tls.quic_bind_addr,
@@ -283,16 +308,25 @@ mod tests {
     }
 
     #[test]
-    fn from_env_rejects_quic_without_https_bind_addr() {
-        let error =
-            config_from_vars(&[("COMMUNITY_NODE_IROH_RELAY_QUIC_BIND_ADDR", "0.0.0.0:7842")])
-                .expect_err("expected error");
+    fn from_env_allows_quic_without_https_bind_addr_for_upstream_tls_termination() {
+        let config = config_from_vars(&[
+            ("COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR", "0.0.0.0:3340"),
+            ("COMMUNITY_NODE_IROH_RELAY_QUIC_BIND_ADDR", "0.0.0.0:7842"),
+            ("COMMUNITY_NODE_IROH_RELAY_TLS_CERT_PATH", "/certs/iroh.crt"),
+            ("COMMUNITY_NODE_IROH_RELAY_TLS_KEY_PATH", "/certs/iroh.key"),
+        ])
+        .expect("config");
+        let public_origin_mode = config.public_origin_mode();
+        let tls = config.tls.expect("tls config");
 
-        assert!(
-            error
-                .to_string()
-                .contains("COMMUNITY_NODE_IROH_RELAY_HTTPS_BIND_ADDR is required")
+        assert_eq!(public_origin_mode, IrohRelayPublicOriginMode::UpstreamTlsTermination);
+        assert_eq!(tls.https_bind_addr, None);
+        assert_eq!(
+            tls.quic_bind_addr,
+            Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 7842))
         );
+        assert_eq!(tls.cert_path, PathBuf::from("/certs/iroh.crt"));
+        assert_eq!(tls.key_path, PathBuf::from("/certs/iroh.key"));
     }
 
     fn config_from_vars(vars: &[(&str, &str)]) -> Result<IrohRelayConfig> {
