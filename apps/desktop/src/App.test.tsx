@@ -303,6 +303,10 @@ function createMockApi(options?: {
                 authenticated: true,
                 expires_at: Date.now(),
               },
+              consent_state: {
+                all_required_accepted: false,
+                items: [],
+              },
             }
           : status
       );
@@ -326,6 +330,11 @@ function createMockApi(options?: {
       return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     async acceptCommunityNodeConsents(baseUrl) {
+      const resolvedUrls = {
+        public_base_url: baseUrl,
+        relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
+        iroh_relay_urls: [baseUrl],
+      };
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
           ? {
@@ -334,9 +343,21 @@ function createMockApi(options?: {
                 all_required_accepted: true,
                 items: [],
               },
+              resolved_urls: resolvedUrls,
+              restart_required: true,
             }
           : status
       );
+      communityNodeConfig = {
+        nodes: communityNodeConfig.nodes.map((node) =>
+          node.base_url === baseUrl
+            ? {
+                ...node,
+                resolved_urls: resolvedUrls,
+              }
+            : node
+        ),
+      };
       return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     async refreshCommunityNodeMetadata(baseUrl) {
@@ -1369,4 +1390,39 @@ test('video card falls back to poster preview when playback is unsupported on th
   });
   expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
   expect(screen.getAllByText('unsupported on this client').length).toBeGreaterThan(0);
+});
+
+test('community node panel shows consent then restart guidance for relay activation', async () => {
+  const api = createMockApi();
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+
+  await user.type(screen.getByPlaceholderText('https://community.example.com'), 'https://api.kukuri.app');
+  await user.click(screen.getByRole('button', { name: 'Save Nodes' }));
+
+  const nodeHeading = await screen.findByText(
+    (_content, element) =>
+      element?.tagName === 'STRONG' && element.textContent === 'https://api.kukuri.app'
+  );
+  const block = nodeHeading.closest('.diagnostic-block');
+  expect(block).not.toBeNull();
+
+  await user.click(within(block!).getByRole('button', { name: 'Authenticate' }));
+
+  await waitFor(() => {
+    expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
+      'accept required policies to resolve relay urls'
+    );
+  });
+
+  await user.click(within(block!).getByRole('button', { name: 'Accept' }));
+
+  await waitFor(() => {
+    expect(within(block!).getByText(/relay urls:/i)).toHaveTextContent('https://api.kukuri.app');
+    expect(within(block!).getByText(/restart required:/i)).toHaveTextContent('yes');
+    expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
+      'restart the app to apply community relay urls'
+    );
+  });
 });

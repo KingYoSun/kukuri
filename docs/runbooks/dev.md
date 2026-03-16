@@ -102,6 +102,9 @@ curl -fsS https://relay.kukuri.app/v1/p2p/info | jq
 - `relay_ws_url` は `wss://relay.kukuri.app/relay`
 - `iroh_relay_urls` は `https://iroh-relay.kukuri.app`
 - desktop relay status に `wss://api.kukuri.app/relay` が出ない
+- desktop client 側は `Save Nodes -> Authenticate -> Accept -> app restart` の順で進める
+- `Authenticate` 直後の `relay urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
+- `restart required: yes` が出たら、その session ではまだ custom relay が transport に入っていない
 
 ## community-node deploy 順序
 ```bash

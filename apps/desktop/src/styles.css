@@ -341,7 +341,13 @@ textarea {
 
 .discovery-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.discovery-actions .button {
+  flex: 1 1 9.5rem;
+  min-width: 0;
 }
 
 .diagnostic-error {
@@ -595,5 +601,13 @@ textarea {
   .hero,
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .discovery-actions {
+    flex-direction: column;
+  }
+
+  .discovery-actions .button {
+    width: 100%;
   }
 }

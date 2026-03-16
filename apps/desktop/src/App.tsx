@@ -123,6 +123,88 @@ function communityNodesToEditorValue(config: CommunityNodeConfig): string {
   return config.nodes.map((node) => node.base_url).join('\n');
 }
 
+function communityNodeRelayUrlsLabel(status?: CommunityNodeNodeStatus): string {
+  if (status?.resolved_urls?.iroh_relay_urls?.length) {
+    return status.resolved_urls.iroh_relay_urls.join(', ');
+  }
+  if (status?.consent_state && !status.consent_state.all_required_accepted) {
+    return 'pending consent acceptance';
+  }
+  if (status?.auth_state.authenticated) {
+    return 'not resolved yet';
+  }
+  return 'not resolved';
+}
+
+function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): string {
+  if (!status) {
+    return 'save nodes to begin authentication';
+  }
+  if (!status.auth_state.authenticated) {
+    return 'authenticate this node';
+  }
+  if (status.consent_state && !status.consent_state.all_required_accepted) {
+    return 'accept required policies to resolve relay urls';
+  }
+  if (status.restart_required) {
+    return 'restart the app to apply community relay urls';
+  }
+  if (!status.resolved_urls) {
+    return 'refresh metadata if relay urls stay unresolved';
+  }
+  return 'relay urls active on current session';
+}
+
+function mergeCommunityNodeStatus(
+  previous: CommunityNodeNodeStatus | undefined,
+  next: CommunityNodeNodeStatus
+): CommunityNodeNodeStatus {
+  return {
+    ...next,
+    consent_state: next.auth_state.authenticated
+      ? next.consent_state ?? previous?.consent_state ?? null
+      : next.consent_state ?? null,
+    resolved_urls: next.resolved_urls ?? previous?.resolved_urls ?? null,
+    last_error: next.last_error ?? previous?.last_error ?? null,
+  };
+}
+
+function mergeCommunityNodeStatuses(
+  previous: CommunityNodeNodeStatus[],
+  next: CommunityNodeNodeStatus[]
+): CommunityNodeNodeStatus[] {
+  const previousByBaseUrl = Object.fromEntries(
+    previous.map((status) => [status.base_url, status])
+  ) as Record<string, CommunityNodeNodeStatus>;
+  return next.map((status) => mergeCommunityNodeStatus(previousByBaseUrl[status.base_url], status));
+}
+
+function upsertCommunityNodeStatus(
+  current: CommunityNodeNodeStatus[],
+  next: CommunityNodeNodeStatus
+): CommunityNodeNodeStatus[] {
+  const previous = current.find((status) => status.base_url === next.base_url);
+  const merged = mergeCommunityNodeStatus(previous, next);
+  const remaining = current.filter((status) => status.base_url !== next.base_url);
+  return [...remaining, merged].sort((left, right) => left.base_url.localeCompare(right.base_url));
+}
+
+function syncCommunityNodeConfigWithStatus(
+  current: CommunityNodeConfig,
+  status: CommunityNodeNodeStatus
+): CommunityNodeConfig {
+  return {
+    nodes: current.nodes.map((node) =>
+      node.base_url === status.base_url
+        ? {
+            ...node,
+            resolved_urls: status.resolved_urls ?? node.resolved_urls ?? null,
+          }
+        : node
+    ),
+  };
+}
+
 function base64ToBytes(base64: string): Uint8Array {
   const binary = window.atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -623,7 +705,7 @@ export function App({ api = runtimeApi }: AppProps) {
             setDiscoverySeedInput(seedPeersToEditorValue(discovery));
           }
           setCommunityNodeConfig(communityConfig);
-          setCommunityNodeStatuses(communityStatuses);
+          setCommunityNodeStatuses((current) => mergeCommunityNodeStatuses(current, communityStatuses));
           if (!communityNodeEditorDirty) {
             setCommunityNodeInput(communityNodesToEditorValue(communityConfig));
           }
@@ -1013,7 +1095,9 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handleAuthenticateCommunityNode(baseUrl: string) {
     try {
-      await api.authenticateCommunityNode(baseUrl);
+      const nextStatus = await api.authenticateCommunityNode(baseUrl);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (authError) {
@@ -1025,7 +1109,9 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handleClearCommunityNodeToken(baseUrl: string) {
     try {
-      await api.clearCommunityNodeToken(baseUrl);
+      const nextStatus = await api.clearCommunityNodeToken(baseUrl);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (clearError) {
@@ -1037,7 +1123,9 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handleRefreshCommunityNode(baseUrl: string) {
     try {
-      await api.refreshCommunityNodeMetadata(baseUrl);
+      const nextStatus = await api.refreshCommunityNodeMetadata(baseUrl);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (refreshError) {
@@ -1049,7 +1137,9 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handleFetchCommunityNodeConsents(baseUrl: string) {
     try {
-      await api.getCommunityNodeConsentStatus(baseUrl);
+      const nextStatus = await api.getCommunityNodeConsentStatus(baseUrl);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
@@ -1061,7 +1151,9 @@ export function App({ api = runtimeApi }: AppProps) {
 
   async function handleAcceptCommunityNodeConsents(baseUrl: string) {
     try {
-      await api.acceptCommunityNodeConsents(baseUrl, []);
+      const nextStatus = await api.acceptCommunityNodeConsents(baseUrl, []);
+      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
+      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
@@ -1618,9 +1710,10 @@ export function App({ api = runtimeApi }: AppProps) {
                   </p>
                   <p>
                     relay urls:{' '}
-                    {status?.resolved_urls?.iroh_relay_urls.join(', ') || 'not resolved'}
+                    {communityNodeRelayUrlsLabel(status)}
                   </p>
                   <p>restart required: {status?.restart_required ? 'yes' : 'no'}</p>
+                  <p>next step: {communityNodeNextStepLabel(status)}</p>
                   <div className='discovery-actions'>
                     <button
                       className='button button-secondary'
