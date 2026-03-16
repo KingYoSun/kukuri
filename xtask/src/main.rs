@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
             let name = args.next().context("scenario name is required")?;
-            e2e_smoke(name.as_str())
+            scenario(name.as_str())
         }
         _ => {
             print_usage();
@@ -128,35 +128,26 @@ fn cn_check() -> Result<()> {
 }
 
 fn cn_test() -> Result<()> {
-    run(
-        "docker",
-        [
-            "compose",
-            "-f",
-            "docker-compose.community-node.yml",
-            "up",
-            "-d",
-            "cn-postgres",
-        ],
-        &root_dir(),
-    )?;
-    run(
-        "cargo",
-        [
-            "test",
-            "-p",
-            "kukuri-cn-core",
-            "-p",
-            "kukuri-cn-user-api",
-            "-p",
-            "kukuri-cn-relay",
-            "-p",
-            "kukuri-cn-iroh-relay",
-            "-p",
-            "kukuri-cn-cli",
-        ],
-        &root_dir(),
-    )
+    with_cn_postgres(|| {
+        run_with_env(
+            "cargo",
+            [
+                "test",
+                "-p",
+                "kukuri-cn-core",
+                "-p",
+                "kukuri-cn-user-api",
+                "-p",
+                "kukuri-cn-relay",
+                "-p",
+                "kukuri-cn-iroh-relay",
+                "-p",
+                "kukuri-cn-cli",
+            ],
+            &root_dir(),
+            &[("KUKURI_CN_RUN_INTEGRATION_TESTS", "1")],
+        )
+    })
 }
 
 fn e2e_smoke(name: &str) -> Result<()> {
@@ -173,6 +164,14 @@ fn e2e_smoke(name: &str) -> Result<()> {
     Ok(())
 }
 
+fn scenario(name: &str) -> Result<()> {
+    if scenario_requires_cn_postgres(name) {
+        with_cn_postgres(|| e2e_smoke(name))
+    } else {
+        e2e_smoke(name)
+    }
+}
+
 fn desktop_package() -> Result<()> {
     if !cfg!(target_os = "windows") {
         bail!("desktop-package is only supported on Windows hosts");
@@ -185,9 +184,19 @@ fn desktop_package() -> Result<()> {
 }
 
 fn run(binary: &str, args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<()> {
+    run_with_env(binary, args, cwd, &[])
+}
+
+fn run_with_env(
+    binary: &str,
+    args: impl IntoIterator<Item = &'static str>,
+    cwd: &Path,
+    envs: &[(&str, &str)],
+) -> Result<()> {
     let status = Command::new(binary)
         .args(args)
         .current_dir(cwd)
+        .envs(envs.iter().copied())
         .status()
         .with_context(|| format!("failed to execute {binary}"))?;
     if !status.success() {
@@ -233,4 +242,46 @@ fn print_usage() {
     eprintln!(
         "usage: cargo xtask <doctor|check|test|cn-check|cn-test|desktop-package|e2e-smoke|scenario <name>>"
     );
+}
+
+fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
+    let root = root_dir();
+    run(
+        "docker",
+        [
+            "compose",
+            "-f",
+            "docker-compose.community-node.yml",
+            "up",
+            "-d",
+            "--wait",
+            "cn-postgres",
+        ],
+        &root,
+    )?;
+    let operation_result = operation();
+    let shutdown_result = run(
+        "docker",
+        [
+            "compose",
+            "-f",
+            "docker-compose.community-node.yml",
+            "down",
+            "-v",
+            "--remove-orphans",
+        ],
+        &root,
+    );
+    match (operation_result, shutdown_result) {
+        (Ok(result), Ok(())) => Ok(result),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+        (Err(operation_error), Err(shutdown_error)) => Err(operation_error.context(format!(
+            "failed to tear down cn-postgres after error: {shutdown_error:#}"
+        ))),
+    }
+}
+
+fn scenario_requires_cn_postgres(name: &str) -> bool {
+    matches!(name, "community_node_public_connectivity")
 }

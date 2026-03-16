@@ -13,11 +13,16 @@ cargo xtask test
 cargo xtask e2e-smoke
 cargo xtask cn-check
 cargo xtask cn-test
+cargo xtask scenario community_node_public_connectivity
 ```
 
 `cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
 
 `cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
+
+- `cargo xtask test` は workspace 全体を通すが、Postgres が必要な `cn-*` integration test は実行しない。
+- `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
+- `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-relay` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
 
 ## community-node compose
 ```bash
@@ -27,6 +32,16 @@ docker compose -f docker-compose.community-node.yml up --build cn-user-api cn-re
 - host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
 - compose 内の service 名は `cn-postgres`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
 - public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `CN_RELAY_WS_URL`, `CN_IROH_RELAY_URLS` を上書きする
+
+## community-node 検証
+```bash
+cargo xtask cn-test
+cargo xtask scenario community_node_public_connectivity
+```
+
+- `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes`, `/v1/p2p/info`, `/relay` の contract を確認する。
+- `community_node_public_connectivity` scenario は `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
+- crate test を直接叩く場合は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` と `COMMUNITY_NODE_DATABASE_URL` を明示する。
 
 ## frontend だけ確認する場合
 ```bash

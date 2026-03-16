@@ -2,8 +2,6 @@ use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use iroh_relay::server::{AccessConfig, RelayConfig as HttpRelayConfig, Server, ServerConfig};
-use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -18,25 +16,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    init_tracing();
-
-    let config = ServerConfig::<(), ()> {
-        relay: Some(HttpRelayConfig {
-            http_bind_addr: args.http_bind_addr,
-            tls: None,
-            limits: Default::default(),
-            key_cache_capacity: Some(1024),
-            access: AccessConfig::Everyone,
-        }),
-        quic: None,
-        metrics_addr: None,
-    };
-    let server = Server::spawn(config)
-        .await
-        .context("failed to spawn iroh relay")?;
+    kukuri_cn_iroh_relay::init_tracing();
+    let server = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
+        http_bind_addr: args.http_bind_addr,
+    })
+    .await
+    .context("failed to spawn iroh relay")?;
     tracing::info!(
-        http_addr = ?server.http_addr(),
-        https_addr = ?server.https_addr(),
+        http_addr = %server.http_addr(),
         "community-node iroh relay listening"
     );
 
@@ -45,13 +32,4 @@ async fn main() -> Result<()> {
         .context("failed to wait for ctrl-c")?;
     drop(server);
     Ok(())
-}
-
-fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,kukuri_cn_iroh_relay=debug"));
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(true)
-        .try_init();
 }

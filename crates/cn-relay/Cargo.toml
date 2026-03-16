@@ -28,6 +28,7 @@ kukuri-cn-core = { path = "../cn-core" }
 kukuri-core = { path = "../core" }
 
 [dev-dependencies]
+nostr-sdk.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
 tokio-tungstenite.workspace = true

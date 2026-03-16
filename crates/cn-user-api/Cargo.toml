@@ -23,5 +23,6 @@ url.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
 
 [dev-dependencies]
+nostr-sdk.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true

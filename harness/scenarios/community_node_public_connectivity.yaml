@@ -1,0 +1,12 @@
+name: community_node_public_connectivity
+kind: community_node_public_connectivity
+fixtures:
+  seed: 20260316
+  topic: kukuri:topic:community-node-public
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 20000

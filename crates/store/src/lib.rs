@@ -1162,10 +1162,12 @@ fn row_to_projection(row: sqlx::sqlite::SqliteRow) -> Result<EventProjectionRow>
         root_id: row
             .try_get::<String, _>("root_event_id")
             .ok()
+            .filter(|value| !value.trim().is_empty())
             .map(EventId::from),
         reply_to: row
             .try_get::<String, _>("reply_to_event_id")
             .ok()
+            .filter(|value| !value.trim().is_empty())
             .map(EventId::from),
         payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
         content: row.try_get("content").ok(),

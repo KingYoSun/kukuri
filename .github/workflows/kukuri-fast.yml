@@ -58,6 +58,12 @@ jobs:
       - name: Fast checks
         run: cargo xtask check
 
+      - name: Community-node checks
+        run: cargo xtask cn-check
+
+      - name: Community-node integration tests
+        run: cargo xtask cn-test
+
       - name: E2E smoke
         run: cargo xtask e2e-smoke
 

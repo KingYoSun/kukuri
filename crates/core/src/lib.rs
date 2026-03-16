@@ -356,6 +356,7 @@ impl Event {
                     && tag.get(3).map(String::as_str) == Some("root")
             })
             .and_then(|tag| tag.get(1).cloned())
+            .filter(|value| !value.trim().is_empty())
             .map(EventId::from);
         let reply = self
             .tags
@@ -365,6 +366,7 @@ impl Event {
                     && tag.get(3).map(String::as_str) == Some("reply")
             })
             .and_then(|tag| tag.get(1).cloned())
+            .filter(|value| !value.trim().is_empty())
             .map(EventId::from);
 
         root.or_else(|| reply.clone()).map(|root| ThreadRef {
@@ -432,9 +434,12 @@ pub fn build_text_note(
             root: parent.id.clone(),
             reply_to: Some(parent.id.clone()),
         });
-        let root_id = nostr_sdk::EventId::from_hex(thread.root.as_str())?;
-        let reply_id = nostr_sdk::EventId::from_hex(parent.id.as_str())?;
-        let parent_pubkey = PublicKey::from_hex(parent.pubkey.as_str())?;
+        let root_id = nostr_sdk::EventId::from_hex(thread.root.as_str())
+            .context("invalid root event id hex")?;
+        let reply_id = nostr_sdk::EventId::from_hex(parent.id.as_str())
+            .context("invalid reply event id hex")?;
+        let parent_pubkey =
+            PublicKey::from_hex(parent.pubkey.as_str()).context("invalid parent pubkey hex")?;
 
         tags.push(Tag::from_standardized(TagStandard::Event {
             event_id: root_id,

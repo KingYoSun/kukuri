@@ -33,8 +33,14 @@ jobs:
       - name: Workspace tests
         run: cargo xtask test
 
+      - name: Community-node integration tests
+        run: cargo xtask cn-test
+
       - name: E2E smoke
         run: cargo xtask e2e-smoke
+
+      - name: Community-node connectivity scenario
+        run: cargo xtask scenario community_node_public_connectivity
 
       - name: Upload kukuri artifacts
         if: always()

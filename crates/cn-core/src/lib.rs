@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header::AUTHORI
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use nostr_sdk::prelude::{Event as NostrEvent, JsonUtil};
+use nostr_sdk::prelude::{Event as NostrEvent, EventBuilder, JsonUtil, Keys, Tag};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -124,6 +124,14 @@ pub struct JwtConfig {
 }
 
 impl JwtConfig {
+    pub fn new(issuer: impl Into<String>, secret: impl Into<String>, ttl_seconds: i64) -> Self {
+        Self {
+            issuer: issuer.into(),
+            secret: secret.into(),
+            ttl_seconds: ttl_seconds.max(60),
+        }
+    }
+
     pub fn from_env() -> Result<Self> {
         let issuer = std::env::var("COMMUNITY_NODE_JWT_ISSUER")
             .ok()
@@ -138,11 +146,7 @@ impl JwtConfig {
             .transpose()
             .context("failed to parse COMMUNITY_NODE_JWT_TTL_SECONDS")?
             .unwrap_or(DEFAULT_TOKEN_TTL_SECONDS);
-        Ok(Self {
-            issuer,
-            secret,
-            ttl_seconds: ttl_seconds.max(60),
-        })
+        Ok(Self::new(issuer, secret, ttl_seconds))
     }
 
     fn encoding_key(&self) -> EncodingKey {
@@ -656,6 +660,81 @@ pub async fn upsert_bootstrap_node(pool: &PgPool, node: &CommunityNodeBootstrapN
     .execute(pool)
     .await?;
     Ok(())
+}
+
+pub fn build_auth_event_json(keys: &Keys, challenge: &str, public_base_url: &str) -> Result<Value> {
+    let signed = EventBuilder::new(
+        nostr_sdk::prelude::Kind::Custom(AUTH_EVENT_KIND),
+        String::new(),
+    )
+    .tags([
+        Tag::parse(["challenge", challenge]).context("failed to build challenge tag")?,
+        Tag::parse(["relay", public_base_url]).context("failed to build relay tag")?,
+    ])
+    .sign_with_keys(keys)
+    .map_err(|error| anyhow!(error))?;
+    serde_json::from_str(signed.as_json().as_str()).context("failed to encode auth event json")
+}
+
+#[derive(Clone, Debug)]
+pub struct TestDatabase {
+    admin_database_url: String,
+    pub database_name: String,
+    pub database_url: String,
+}
+
+impl TestDatabase {
+    pub async fn create(admin_database_url: &str, prefix: &str) -> Result<Self> {
+        let sanitized_prefix = prefix
+            .chars()
+            .map(|ch| match ch {
+                'a'..='z' | '0'..='9' => ch,
+                'A'..='Z' => ch.to_ascii_lowercase(),
+                _ => '_',
+            })
+            .collect::<String>();
+        let sanitized_prefix = sanitized_prefix.trim_matches('_');
+        let prefix = if sanitized_prefix.is_empty() {
+            "cn_test"
+        } else {
+            sanitized_prefix
+        };
+        let suffix = Uuid::new_v4().simple().to_string();
+        let mut database_name = format!("{prefix}_{suffix}");
+        database_name.truncate(63);
+
+        let admin_pool = connect_postgres(admin_database_url).await?;
+        let create_sql = format!("CREATE DATABASE \"{}\"", database_name.replace('"', "\"\""));
+        admin_pool.execute(create_sql.as_str()).await?;
+
+        let mut parsed =
+            Url::parse(admin_database_url).context("failed to parse admin database url")?;
+        parsed.set_path(format!("/{database_name}").as_str());
+        Ok(Self {
+            admin_database_url: admin_database_url.to_string(),
+            database_name,
+            database_url: parsed.to_string(),
+        })
+    }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        let admin_pool = connect_postgres(self.admin_database_url.as_str()).await?;
+        sqlx::query(
+            "SELECT pg_terminate_backend(pid)
+             FROM pg_stat_activity
+             WHERE datname = $1
+               AND pid <> pg_backend_pid()",
+        )
+        .bind(&self.database_name)
+        .execute(&admin_pool)
+        .await?;
+        let drop_sql = format!(
+            "DROP DATABASE IF EXISTS \"{}\"",
+            self.database_name.replace('"', "\"\"")
+        );
+        admin_pool.execute(drop_sql.as_str()).await?;
+        Ok(())
+    }
 }
 
 pub fn normalize_http_url(value: &str) -> Result<String> {

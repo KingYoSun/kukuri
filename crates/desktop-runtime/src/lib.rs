@@ -15,8 +15,8 @@ use kukuri_app_api::{
 };
 use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_cn_core::{
-    AUTH_EVENT_KIND, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, normalize_http_url,
+    AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
+    CommunityNodeResolvedUrls, build_auth_event_json, normalize_http_url,
 };
 use kukuri_core::{AssetRole, GameRoomStatus};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
@@ -25,8 +25,7 @@ use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
     TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
 };
-use nostr_sdk::JsonUtil;
-use nostr_sdk::prelude::{EventBuilder, Keys, Tag};
+use nostr_sdk::prelude::Keys;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -656,7 +655,29 @@ impl DesktopRuntime {
             base_url.as_str(),
             &token,
         )?;
-        self.refresh_community_node_metadata(CommunityNodeTargetRequest { base_url })
+        let node = self.require_community_node(base_url.as_str()).await?;
+        let consent_state = client
+            .get(format!("{}/v1/consents/status", base_url))
+            .bearer_auth(token.access_token.as_str())
+            .send()
+            .await
+            .context("failed to fetch community node consent status")?
+            .error_for_status()
+            .context("community node consent status request failed")?
+            .json::<CommunityNodeConsentStatus>()
+            .await
+            .context("failed to decode community node consent status")?;
+        if consent_state.all_required_accepted {
+            self.refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: base_url.clone(),
+            })
+            .await?;
+            let refreshed = self.require_community_node(base_url.as_str()).await?;
+            return self
+                .community_node_status(refreshed, Some(consent_state), None)
+                .await;
+        }
+        self.community_node_status(node, Some(consent_state), None)
             .await
     }
 
@@ -738,6 +759,16 @@ impl DesktopRuntime {
             .json::<CommunityNodeConsentStatus>()
             .await
             .context("failed to decode accepted community node consents")?;
+        if status.all_required_accepted {
+            self.refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: base_url.clone(),
+            })
+            .await?;
+            let refreshed = self.require_community_node(base_url.as_str()).await?;
+            return self
+                .community_node_status(refreshed, Some(status), None)
+                .await;
+        }
         self.community_node_status(node, Some(status), None).await
     }
 
@@ -1081,24 +1112,6 @@ fn community_node_http_client() -> Result<Client> {
     Client::builder()
         .build()
         .context("failed to build community-node http client")
-}
-
-fn build_auth_event_json(
-    keys: &Keys,
-    challenge: &str,
-    public_base_url: &str,
-) -> Result<serde_json::Value> {
-    let signed = EventBuilder::new(
-        nostr_sdk::prelude::Kind::Custom(AUTH_EVENT_KIND),
-        String::new(),
-    )
-    .tags([
-        Tag::parse(["challenge", challenge]).context("failed to build challenge tag")?,
-        Tag::parse(["relay", public_base_url]).context("failed to build relay tag")?,
-    ])
-    .sign_with_keys(keys)
-    .map_err(|error| anyhow!(error))?;
-    serde_json::from_str(signed.as_json().as_str()).context("failed to encode auth event json")
 }
 
 fn resolve_discovery_config_from_env(db_path: &Path) -> Result<DiscoveryConfig> {

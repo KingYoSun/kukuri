@@ -1222,7 +1222,11 @@ impl AppService {
             vec!["t".into(), projection.topic_id.clone()],
             vec!["topic".into(), projection.topic_id.clone()],
         ];
-        if let Some(root_id) = projection.root_id.clone() {
+        if let Some(root_id) = projection
+            .root_id
+            .clone()
+            .filter(|value| !value.as_str().trim().is_empty())
+        {
             tags.push(vec![
                 "e".into(),
                 root_id.0.clone(),
@@ -1230,7 +1234,11 @@ impl AppService {
                 "root".into(),
             ]);
         }
-        if let Some(reply_to) = projection.reply_to.clone() {
+        if let Some(reply_to) = projection
+            .reply_to
+            .clone()
+            .filter(|value| !value.as_str().trim().is_empty())
+        {
             tags.push(vec![
                 "e".into(),
                 reply_to.0.clone(),

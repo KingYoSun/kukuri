@@ -6,11 +6,18 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+tempfile.workspace = true
 tokio.workspace = true
 kukuri-app-api = { path = "../app-api" }
+kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-iroh-relay = { path = "../cn-iroh-relay" }
+kukuri-cn-relay = { path = "../cn-relay" }
+kukuri-cn-user-api = { path = "../cn-user-api" }
 kukuri-core = { path = "../core" }
+kukuri-desktop-runtime = { path = "../desktop-runtime" }
 kukuri-store = { path = "../store" }
 kukuri-transport = { path = "../transport" }

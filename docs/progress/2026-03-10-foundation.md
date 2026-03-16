@@ -8,6 +8,7 @@
 - Phase6-6 video post canonical source 設計に着手
 - Phase6-7 Windows desktop support の native smoke まで完了
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
+- Phase6 community-node relay/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -38,11 +39,18 @@
 - video manifest を取得できても local decode が失敗した client では、poster-only preview と `unsupported on this client` 表示へ倒すようにした
 - `ADR 0007` で Windows desktop support の local identity / packaging / contract 境界を固定した
 - `ADR 0008` で seeded DHT discovery の local config / runtime DHT record / contract 境界を固定した
+- `ADR 0009` で community-node relay/auth の server persistence / desktop config / token storage 境界を固定した
 - `keyring` を target 別 dependency に分離し、Linux は Secret Service、Windows は Credential Manager を標準 backend にした
 - `xtask check` に Tauri backend compile を組み込み、`desktop-package` で Windows host から NSIS installer を生成できるようにした
 - `apps/desktop/src-tauri/tauri.windows.conf.json` と Windows icon asset を追加し、Windows bundle config を base config から分離した
 - GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
 - shared iroh stack に seeded DHT discovery を統合し、desktop discovery panel / env / local config から `node_id` seed を永続・再適用できるようにした
+- `cn-core`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`, `cn-cli` を root workspace に追加し、community-node server slice を Postgres 前提で起動できるようにした
+- desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only custom relay union を追加した
+- `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-relay`, `cn-iroh-relay` を起動できるようにした
+- `cn-user-api` / `cn-relay` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
+- `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
+- GitHub Actions fast/nightly workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -85,6 +93,9 @@
 - Linux 実機 2 台で `seeded_dht` の `reply/thread`、live/game、restart 後 reconnect without reimport が成功
 - Linux 実機 2 台で片側 port 変更後も、新 port が到達可能なら seed を触らずに再接続、投稿伝播、reply が成功
 - Linux 実機 2 台で `seeded_dht` の invalid seed 保存が reject され、既存 seed が保持されることを確認
+- `cargo xtask cn-check`
+- `cargo xtask cn-test`
+- `cargo xtask scenario community_node_public_connectivity`
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み

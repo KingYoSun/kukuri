@@ -2720,6 +2720,7 @@ dependencies = [
  "axum",
  "chrono",
  "kukuri-cn-core",
+ "nostr-sdk",
  "reqwest",
  "serde",
  "serde_json",
@@ -2797,13 +2798,20 @@ name = "kukuri-harness"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "kukuri-app-api",
+ "kukuri-cn-core",
+ "kukuri-cn-iroh-relay",
+ "kukuri-cn-relay",
+ "kukuri-cn-user-api",
  "kukuri-core",
+ "kukuri-desktop-runtime",
  "kukuri-store",
  "kukuri-transport",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "tokio",
 ]
 
