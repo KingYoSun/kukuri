@@ -10,7 +10,9 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::{Stream, StreamExt};
-use iroh::address_lookup::{DhtAddressLookup, EndpointInfo, MemoryLookup};
+use iroh::address_lookup::{
+    AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem, MemoryLookup,
+};
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
@@ -165,7 +167,7 @@ impl SeedPeer {
                 build_endpoint_addr(endpoint_id, socket_addrs)
                     .ok_or_else(|| anyhow!("seed peer must resolve to at least one socket address"))?
             }
-            None => EndpointAddr::new(endpoint_id),
+            None => endpoint_addr_with_relays(endpoint_id, relay_urls),
         };
         for relay_url in relay_urls {
             endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
@@ -562,6 +564,37 @@ struct TopicState {
     _receiver_task: JoinHandle<()>,
 }
 
+#[derive(Clone, Debug)]
+struct RelayFallbackLookup {
+    relay_urls: Vec<RelayUrl>,
+}
+
+impl RelayFallbackLookup {
+    fn new(relay_urls: Vec<RelayUrl>) -> Self {
+        Self { relay_urls }
+    }
+}
+
+impl AddressLookup for RelayFallbackLookup {
+    fn resolve(
+        &self,
+        endpoint_id: EndpointId,
+    ) -> Option<futures_util::stream::BoxStream<'static, Result<AddressLookupItem, iroh::address_lookup::Error>>>
+    {
+        if self.relay_urls.is_empty() {
+            return None;
+        }
+        let endpoint_info = EndpointInfo::from(endpoint_addr_with_relays(endpoint_id, &self.relay_urls));
+        Some(Box::pin(futures_util::stream::once(async move {
+            Ok(AddressLookupItem::new(
+                endpoint_info,
+                "community-relay-fallback",
+                None,
+            ))
+        })))
+    }
+}
+
 pub struct IrohGossipTransport {
     endpoint: Endpoint,
     gossip: Gossip,
@@ -876,6 +909,7 @@ async fn bind_endpoint_with_options(
         Endpoint::empty_builder(relay_config.relay_mode()?),
         &discovery,
         Some(dht_options),
+        relay_config,
     )?;
     if let Some(secret_key) = secret_key {
         builder = builder.secret_key(secret_key);
@@ -1282,8 +1316,13 @@ pub fn build_endpoint_builder(
     builder: EndpointBuilder,
     discovery: &Arc<MemoryLookup>,
     dht_options: Option<&DhtDiscoveryOptions>,
+    relay_config: &TransportRelayConfig,
 ) -> Result<EndpointBuilder> {
     let mut builder = builder.address_lookup(discovery.clone());
+    let relay_urls = relay_config.parsed_relay_urls()?;
+    if !relay_urls.is_empty() {
+        builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
+    }
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
         let mut dht_builder = DhtAddressLookup::builder()
             .include_direct_addresses(true)
@@ -1432,6 +1471,14 @@ fn build_endpoint_addr(
         endpoint_addr = endpoint_addr.with_ip_addr(socket_addr);
     }
     Some(endpoint_addr)
+}
+
+fn endpoint_addr_with_relays(endpoint_id: EndpointId, relay_urls: &[RelayUrl]) -> EndpointAddr {
+    let mut endpoint_addr = EndpointAddr::new(endpoint_id);
+    for relay_url in relay_urls {
+        endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
+    }
+    endpoint_addr
 }
 
 fn resolve_socket_addrs(value: &str) -> Result<Vec<SocketAddr>> {
@@ -1858,6 +1905,47 @@ mod tests {
         })
         .await
         .expect("custom relay seed connect timeout");
+
+        drop(connection);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_custom_relay_lookup_connects_unknown_peer_without_dht_publish() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport a");
+        let transport_b =
+            IrohGossipTransport::bind_with_options(config, DhtDiscoveryOptions::disabled(), relay_config)
+                .await
+                .expect("transport b");
+
+        let endpoint_b = transport_b.endpoint.id();
+        let connection = timeout(Duration::from_secs(20), async {
+            loop {
+                match transport_a
+                    .endpoint
+                    .connect(EndpointAddr::new(endpoint_b), GOSSIP_ALPN)
+                    .await
+                {
+                    Ok(connection) => return connection,
+                    Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                }
+            }
+        })
+        .await
+        .expect("custom relay lookup connect timeout");
 
         drop(connection);
     }

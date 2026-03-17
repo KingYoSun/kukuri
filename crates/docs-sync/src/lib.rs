@@ -175,6 +175,7 @@ impl IrohDocsNode {
             Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
+            &relay_config,
         )?;
         if let Some(secret_key) = endpoint_secret {
             endpoint_builder = endpoint_builder.secret_key(secret_key);
