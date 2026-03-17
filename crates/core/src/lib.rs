@@ -2,11 +2,12 @@ use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use nostr_sdk::prelude::{Keys, PublicKey};
-use nostr_sdk::secp256k1::Message;
-use nostr_sdk::secp256k1::schnorr::Signature;
-use nostr_sdk::{SECP256K1, hashes::Hash, hashes::sha256};
+use bech32::{Bech32, Hrp};
+use secp256k1::rand::thread_rng;
+use secp256k1::schnorr::Signature;
+use secp256k1::{Keypair, Message, SECP256K1, SecretKey, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -50,6 +51,82 @@ impl From<&str> for Pubkey {
     fn from(value: &str) -> Self {
         Self(value.to_string())
     }
+}
+
+pub const LEGACY_SECRET_HRP: &str = "nsec";
+
+#[derive(Clone)]
+pub struct KukuriKeys {
+    secret_key: SecretKey,
+}
+
+impl std::fmt::Debug for KukuriKeys {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KukuriKeys").finish_non_exhaustive()
+    }
+}
+
+impl KukuriKeys {
+    pub fn generate() -> Self {
+        Self {
+            secret_key: SecretKey::new(&mut thread_rng()),
+        }
+    }
+
+    pub fn parse(secret: &str) -> Result<Self> {
+        let secret_key = parse_secret_key(secret)?;
+        Ok(Self { secret_key })
+    }
+
+    pub fn public_key_hex(&self) -> String {
+        let keypair = Keypair::from_secret_key(SECP256K1, &self.secret_key);
+        let (pubkey, _) = keypair.x_only_public_key();
+        pubkey.to_string()
+    }
+
+    pub fn public_key(&self) -> Pubkey {
+        Pubkey(self.public_key_hex())
+    }
+
+    pub fn export_secret_hex(&self) -> String {
+        hex::encode(self.secret_key.secret_bytes())
+    }
+
+    pub fn sign_schnorr(&self, message: &Message) -> Signature {
+        let keypair = Keypair::from_secret_key(SECP256K1, &self.secret_key);
+        SECP256K1.sign_schnorr(message, &keypair)
+    }
+}
+
+fn parse_secret_key(secret: &str) -> Result<SecretKey> {
+    let trimmed = secret.trim();
+    if let Ok(bytes) = hex::decode(trimmed)
+        && bytes.len() == 32
+    {
+        return SecretKey::from_slice(bytes.as_slice()).context("invalid hex secret key");
+    }
+
+    let (hrp, bytes) = bech32::decode(trimmed).context("failed to decode secret key")?;
+    if hrp.as_str() != LEGACY_SECRET_HRP {
+        bail!("unsupported secret key hrp `{}`", hrp.as_str());
+    }
+    SecretKey::from_slice(bytes.as_slice()).context("invalid bech32 secret key")
+}
+
+pub fn encode_secret_key_bech32(secret_key_hex: &str, hrp: &str) -> Result<String> {
+    let bytes = hex::decode(secret_key_hex).context("invalid hex secret key")?;
+    if bytes.len() != 32 {
+        bail!("invalid secret key length");
+    }
+    bech32::encode::<Bech32>(
+        Hrp::parse(hrp).context("invalid secret key hrp")?,
+        bytes.as_slice(),
+    )
+    .context("failed to encode secret key")
+}
+
+fn sha256_digest(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -386,18 +463,17 @@ impl KukuriEnvelope {
             &self.tags,
             self.content.as_str(),
         )?;
-        let digest = sha256::Hash::hash(canonical.as_bytes()).to_byte_array();
+        let digest = sha256_digest(canonical.as_bytes());
         let computed_id = hex::encode(digest);
         if computed_id != self.id.0 {
             bail!("envelope id mismatch");
         }
-        let message = Message::from_digest(digest);
+        let message = Message::from_digest_slice(&digest).context("invalid envelope digest")?;
         let signature = Signature::from_str(self.sig.as_str()).context("invalid envelope sig")?;
         let public_key =
-            PublicKey::from_hex(self.pubkey.as_str()).context("invalid envelope pubkey")?;
-        let xonly = public_key.xonly().context("invalid xonly pubkey")?;
+            XOnlyPublicKey::from_str(self.pubkey.as_str()).context("invalid envelope pubkey")?;
         SECP256K1
-            .verify_schnorr(&signature, &message, &xonly)
+            .verify_schnorr(&signature, &message, &public_key)
             .context("envelope signature verification failed")?;
         Ok(())
     }
@@ -494,12 +570,12 @@ pub fn timeline_sort_key(created_at: i64, object_id: &EnvelopeId) -> String {
     format!("{created_at:020}-{}", object_id.as_str())
 }
 
-pub fn generate_keys() -> Keys {
-    Keys::generate()
+pub fn generate_keys() -> KukuriKeys {
+    KukuriKeys::generate()
 }
 
 pub fn build_post_envelope(
-    keys: &Keys,
+    keys: &KukuriKeys,
     topic: &TopicId,
     body: &str,
     reply_to: Option<&KukuriEnvelope>,
@@ -518,7 +594,7 @@ pub fn build_post_envelope(
 }
 
 pub fn build_post_envelope_with_payload(
-    keys: &Keys,
+    keys: &KukuriKeys,
     topic: &TopicId,
     payload_ref: PayloadRef,
     attachments: Vec<AssetRef>,
@@ -570,7 +646,7 @@ pub fn build_post_envelope_with_payload(
 }
 
 pub fn build_media_manifest_envelope(
-    keys: &Keys,
+    keys: &KukuriKeys,
     topic: &TopicId,
     manifest: &KukuriMediaManifestV1,
 ) -> Result<KukuriEnvelope> {
@@ -587,7 +663,7 @@ pub fn build_media_manifest_envelope(
 }
 
 pub fn build_live_session_envelope<T: Serialize>(
-    keys: &Keys,
+    keys: &KukuriKeys,
     topic: &TopicId,
     session_id: &str,
     content: &T,
@@ -605,7 +681,7 @@ pub fn build_live_session_envelope<T: Serialize>(
 }
 
 pub fn build_game_session_envelope<T: Serialize>(
-    keys: &Keys,
+    keys: &KukuriKeys,
     topic: &TopicId,
     room_id: &str,
     content: &T,
@@ -653,7 +729,7 @@ pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
 }
 
 pub fn sign_envelope_json<T: Serialize>(
-    keys: &Keys,
+    keys: &KukuriKeys,
     kind: impl Into<String>,
     tags: Vec<Vec<String>>,
     content: &T,
@@ -663,7 +739,7 @@ pub fn sign_envelope_json<T: Serialize>(
 }
 
 pub fn sign_envelope(
-    keys: &Keys,
+    keys: &KukuriKeys,
     kind: impl Into<String>,
     tags: Vec<Vec<String>>,
     content: String,
@@ -676,14 +752,14 @@ pub fn sign_envelope(
 }
 
 pub fn sign_envelope_at(
-    keys: &Keys,
+    keys: &KukuriKeys,
     kind: impl Into<String>,
     tags: Vec<Vec<String>>,
     content: String,
     created_at: i64,
 ) -> Result<KukuriEnvelope> {
     let kind = kind.into();
-    let pubkey = keys.public_key().to_hex();
+    let pubkey = keys.public_key_hex();
     let canonical = canonical_envelope_payload(
         pubkey.as_str(),
         created_at,
@@ -691,9 +767,9 @@ pub fn sign_envelope_at(
         &tags,
         content.as_str(),
     )?;
-    let digest = sha256::Hash::hash(canonical.as_bytes()).to_byte_array();
+    let digest = sha256_digest(canonical.as_bytes());
     let id = hex::encode(digest);
-    let message = Message::from_digest(digest);
+    let message = Message::from_digest_slice(&digest).context("invalid envelope digest")?;
     let sig = keys.sign_schnorr(&message).to_string();
     Ok(KukuriEnvelope {
         id: EnvelopeId(id),
@@ -777,7 +853,7 @@ mod tests {
             &TopicId::new("kukuri:topic:media"),
             &KukuriMediaManifestV1 {
                 manifest_id: "manifest-1".into(),
-                owner_pubkey: Pubkey(keys.public_key().to_hex()),
+                owner_pubkey: keys.public_key(),
                 created_at: 1,
                 items: vec![MediaManifestItem {
                     blob_hash: BlobHash::new("blob-1"),

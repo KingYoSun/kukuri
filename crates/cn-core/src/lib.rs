@@ -6,7 +6,6 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header::AUTHORI
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -14,7 +13,7 @@ use sqlx::{Executor, Row};
 use url::Url;
 use uuid::Uuid;
 
-use kukuri_core::{KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json};
+use kukuri_core::{KukuriAuthEnvelopeContentV1, KukuriEnvelope, KukuriKeys, sign_envelope_json};
 
 pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
@@ -708,7 +707,7 @@ pub async fn upsert_bootstrap_node(pool: &PgPool, node: &CommunityNodeBootstrapN
 }
 
 pub fn build_auth_envelope_json(
-    keys: &Keys,
+    keys: &KukuriKeys,
     challenge: &str,
     public_base_url: &str,
 ) -> Result<Value> {

@@ -9,7 +9,6 @@ anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
-nostr-sdk.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

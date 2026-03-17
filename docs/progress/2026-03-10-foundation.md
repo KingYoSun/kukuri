@@ -47,7 +47,8 @@
 - GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
 - shared iroh stack に seeded DHT discovery を統合し、desktop discovery panel / env / local config から `node_id` seed を永続・再適用できるようにした
 - `cn-core`, `cn-user-api`, `cn-iroh-relay`, `cn-cli` を root workspace の active scope とし、community-node server slice を Postgres + connectivity assist 前提で起動できるようにした
-- `cn-relay` と legacy runtime migration shim を active scope から除去し、desktop は reset 前提の current identity/runtime path だけを扱うようにした
+- legacy community-node relay shim と runtime migration shim を active scope から除去し、desktop は reset 前提の current identity/runtime path だけを扱うようにした
+- active path の `nostr-sdk` 依存を除去し、core signing / desktop identity / community-node auth を protocol-native key path に切り替えた
 - desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only connectivity union を追加した
 - `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-iroh-relay` を起動できるようにした
 - `cn-user-api` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした

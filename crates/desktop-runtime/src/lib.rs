@@ -18,14 +18,13 @@ use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
     CommunityNodeResolvedUrls, build_auth_envelope_json, normalize_http_url,
 };
-use kukuri_core::{AssetRole, GameRoomStatus};
+use kukuri_core::{AssetRole, GameRoomStatus, KukuriKeys};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
     TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
 };
-use nostr_sdk::prelude::Keys;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -248,7 +247,7 @@ struct StoredCommunityNodeToken {
 
 pub struct DesktopRuntime {
     app_service: AppService,
-    author_keys: Arc<Keys>,
+    author_keys: Arc<KukuriKeys>,
     db_path: PathBuf,
     store: Arc<SqliteStore>,
     iroh_stack: SharedIrohStack,
@@ -600,7 +599,7 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let client = community_node_http_client()?;
         let challenge_url = format!("{}/v1/auth/challenge", base_url);
-        let pubkey = self.author_keys.public_key().to_hex();
+        let pubkey = self.author_keys.public_key_hex();
         let challenge = client
             .post(challenge_url)
             .json(&serde_json::json!({ "pubkey": pubkey }))

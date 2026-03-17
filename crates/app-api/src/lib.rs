@@ -10,7 +10,7 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant,
     GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    HintObjectRef, KukuriEnvelope, KukuriMediaManifestV1, LIVE_MANIFEST_MIME,
+    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, LIVE_MANIFEST_MIME,
     LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
     MediaManifestItem, ObjectVisibility, PayloadRef, Pubkey, ReplicaId, TopicId,
     build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
@@ -25,7 +25,6 @@ use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
     TopicPeerSnapshot, Transport,
 };
-use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -179,7 +178,7 @@ pub struct AppService {
     hint_transport: Arc<dyn HintTransport>,
     docs_sync: Arc<dyn DocsSync>,
     blob_service: Arc<dyn BlobService>,
-    keys: Arc<Keys>,
+    keys: Arc<KukuriKeys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
@@ -211,7 +210,7 @@ impl AppService {
         hint_transport: Arc<dyn HintTransport>,
         docs_sync: Arc<dyn DocsSync>,
         blob_service: Arc<dyn BlobService>,
-        keys: Keys,
+        keys: KukuriKeys,
     ) -> Self {
         Self {
             store,
@@ -1035,7 +1034,7 @@ impl AppService {
     }
 
     fn current_author_pubkey(&self) -> String {
-        self.keys.public_key().to_hex()
+        self.keys.public_key_hex()
     }
 
     async fn stop_live_presence_task(&self, topic_id: &str, session_id: &str) {
@@ -2166,7 +2165,7 @@ mod tests {
     async fn persist_test_post(
         docs_sync: &dyn DocsSync,
         projection_store: Option<&dyn ProjectionStore>,
-        keys: &nostr_sdk::prelude::Keys,
+        keys: &KukuriKeys,
         topic: &TopicId,
         payload_ref: PayloadRef,
         attachments: Vec<kukuri_core::AssetRef>,

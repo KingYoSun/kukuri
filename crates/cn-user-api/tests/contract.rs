@@ -5,7 +5,7 @@ use kukuri_cn_core::{
     JwtConfig, TestDatabase, USER_API_BEARER_CHALLENGE, build_auth_envelope_json,
 };
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
-use nostr_sdk::prelude::Keys;
+use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
@@ -74,9 +74,9 @@ fn integration_test_admin_database_url() -> Option<String> {
 async fn authenticate(
     client: &Client,
     base_url: &str,
-    keys: &Keys,
+    keys: &KukuriKeys,
 ) -> Result<(String, serde_json::Value)> {
-    let pubkey = keys.public_key().to_hex();
+    let pubkey = keys.public_key_hex();
     let challenge = client
         .post(format!("{base_url}/v1/auth/challenge"))
         .json(&serde_json::json!({ "pubkey": pubkey }))
@@ -122,7 +122,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     let unauthenticated_body = unauthenticated.json::<serde_json::Value>().await?;
     assert_eq!(unauthenticated_body["code"], "AUTH_REQUIRED");
 
-    let keys = Keys::generate();
+    let keys = generate_keys();
     let (access_token, auth_envelope_json) = authenticate(&client, &server.base_url, &keys).await?;
 
     let reused = client
@@ -194,10 +194,10 @@ async fn auth_verify_rejects_capability_url_mismatch() -> Result<()> {
     let server =
         TestServer::spawn(admin_database_url.as_str(), "cn_user_api_capability_url").await?;
     let client = Client::new();
-    let keys = Keys::generate();
+    let keys = generate_keys();
     let challenge = client
         .post(format!("{}/v1/auth/challenge", server.base_url))
-        .json(&serde_json::json!({ "pubkey": keys.public_key().to_hex() }))
+        .json(&serde_json::json!({ "pubkey": keys.public_key_hex() }))
         .send()
         .await?
         .error_for_status()?

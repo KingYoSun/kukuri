@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow};
 use keyring::{Entry, Error as KeyringError};
-use nostr_sdk::prelude::{Keys, ToBech32};
+use kukuri_core::KukuriKeys;
 
 const KEYRING_SERVICE: &str = "org.kukuri.desktop";
 const BACKEND_FILE: &str = "file";
@@ -31,7 +31,7 @@ impl IdentityStorageMode {
     }
 }
 
-pub(crate) fn load_or_create_keys(db_path: &Path, mode: IdentityStorageMode) -> Result<Keys> {
+pub(crate) fn load_or_create_keys(db_path: &Path, mode: IdentityStorageMode) -> Result<KukuriKeys> {
     load_or_create_keys_with_keyring(db_path, mode, &SystemKeyringStore)
 }
 
@@ -62,7 +62,7 @@ fn load_or_create_keys_with_keyring(
     db_path: &Path,
     mode: IdentityStorageMode,
     keyring: &dyn KeyringStore,
-) -> Result<Keys> {
+) -> Result<KukuriKeys> {
     if let Some(backend) = load_backend_marker(db_path)? {
         return load_keys_with_backend(db_path, backend.as_str(), mode, keyring);
     }
@@ -83,11 +83,8 @@ fn load_or_create_keys_with_keyring(
         return parse_keys(secret.as_str());
     }
 
-    let keys = Keys::generate();
-    let encoded = keys
-        .secret_key()
-        .to_bech32()
-        .context("failed to encode generated secret key")?;
+    let keys = KukuriKeys::generate();
+    let encoded = keys.export_secret_hex();
 
     if mode == IdentityStorageMode::Auto
         && persist_secret_to_keyring(db_path, encoded.as_str(), keyring).is_ok()
@@ -106,7 +103,7 @@ fn load_keys_with_backend(
     backend: &str,
     mode: IdentityStorageMode,
     keyring: &dyn KeyringStore,
-) -> Result<Keys> {
+) -> Result<KukuriKeys> {
     match backend {
         BACKEND_KEYRING => {
             if mode == IdentityStorageMode::FileOnly {
@@ -127,8 +124,8 @@ fn load_keys_with_backend(
     }
 }
 
-fn parse_keys(secret: &str) -> Result<Keys> {
-    Keys::parse(secret).context("failed to parse persisted secret key")
+fn parse_keys(secret: &str) -> Result<KukuriKeys> {
+    KukuriKeys::parse(secret).context("failed to parse persisted secret key")
 }
 
 fn load_optional_secret_with_keyring(
@@ -209,7 +206,11 @@ fn persist_secret_to_keyring(
 }
 
 fn load_secret_from_file(db_path: &Path) -> Result<Option<String>> {
-    load_secret_from_file_path(key_file_path(db_path).as_path())
+    let primary = key_file_path(db_path);
+    if let Some(secret) = load_secret_from_file_path(primary.as_path())? {
+        return Ok(Some(secret));
+    }
+    load_secret_from_file_path(legacy_key_file_path(db_path).as_path())
 }
 
 fn load_secret_from_file_path(path: &Path) -> Result<Option<String>> {
@@ -225,7 +226,8 @@ fn load_secret_from_file_path(path: &Path) -> Result<Option<String>> {
 }
 
 fn persist_secret_to_file(db_path: &Path, secret: &str) -> Result<()> {
-    persist_secret_to_file_path(key_file_path(db_path).as_path(), secret)
+    persist_secret_to_file_path(key_file_path(db_path).as_path(), secret)?;
+    delete_file_if_exists(legacy_key_file_path(db_path).as_path())
 }
 
 fn persist_secret_to_file_path(path: &Path, secret: &str) -> Result<()> {
@@ -297,6 +299,10 @@ fn keyring_account(db_path: &Path) -> String {
 }
 
 fn key_file_path(db_path: &Path) -> PathBuf {
+    db_path.with_extension("identity-key")
+}
+
+fn legacy_key_file_path(db_path: &Path) -> PathBuf {
     db_path.with_extension("nsec")
 }
 
@@ -420,8 +426,8 @@ mod tests {
         clear_identity_env();
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("kukuri.db");
-        let keyring_secret = Keys::generate().secret_key().to_bech32().expect("bech32");
-        let file_secret = Keys::generate().secret_key().to_bech32().expect("bech32");
+        let keyring_secret = KukuriKeys::generate().export_secret_hex();
+        let file_secret = KukuriKeys::generate().export_secret_hex();
         let keyring = FakeKeyringStore::default();
         keyring
             .set_password(
@@ -435,10 +441,7 @@ mod tests {
         let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
             .expect("load keys");
 
-        assert_eq!(
-            keys.secret_key().to_bech32().expect("bech32"),
-            keyring_secret
-        );
+        assert_eq!(keys.export_secret_hex(), keyring_secret);
         assert_eq!(
             load_backend_marker(&db_path).expect("load backend marker"),
             Some(BACKEND_KEYRING.to_string())
@@ -462,7 +465,7 @@ mod tests {
         );
         assert_eq!(
             load_secret_from_file(&db_path).expect("load file secret"),
-            Some(keys.secret_key().to_bech32().expect("bech32"))
+            Some(keys.export_secret_hex())
         );
         assert!(
             keyring
@@ -486,10 +489,7 @@ mod tests {
             load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
                 .expect("reload keys");
 
-        assert_eq!(
-            original.secret_key().to_bech32().expect("bech32"),
-            restarted.secret_key().to_bech32().expect("bech32")
-        );
+        assert_eq!(original.export_secret_hex(), restarted.export_secret_hex());
         assert_eq!(
             load_backend_marker(&db_path).expect("load backend marker"),
             Some(BACKEND_KEYRING.to_string())
@@ -501,7 +501,7 @@ mod tests {
         clear_identity_env();
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("kukuri.db");
-        let secret = Keys::generate().secret_key().to_bech32().expect("bech32");
+        let secret = KukuriKeys::generate().export_secret_hex();
         let keyring = FakeKeyringStore::default();
         keyring
             .set_password(
@@ -522,5 +522,32 @@ mod tests {
                 .contains("persisted identity is stored in keyring"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn legacy_nsec_file_still_loads() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keys = KukuriKeys::generate();
+        let legacy_secret = kukuri_core::encode_secret_key_bech32(
+            keys.export_secret_hex().as_str(),
+            kukuri_core::LEGACY_SECRET_HRP,
+        )
+        .expect("legacy bech32");
+        persist_secret_to_file_path(
+            legacy_key_file_path(&db_path).as_path(),
+            legacy_secret.as_str(),
+        )
+        .expect("persist legacy file");
+
+        let restored = load_or_create_keys_with_keyring(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            &FakeKeyringStore::default(),
+        )
+        .expect("load legacy keys");
+
+        assert_eq!(restored.export_secret_hex(), keys.export_secret_hex());
     }
 }
