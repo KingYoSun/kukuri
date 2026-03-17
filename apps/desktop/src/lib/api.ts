@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export type TimelineCursor = {
   created_at: number;
-  event_id: string;
+  object_id: string;
 };
 
 export type PostView = {

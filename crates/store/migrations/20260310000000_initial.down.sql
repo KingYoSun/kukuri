@@ -1,4 +1,4 @@
 DROP TABLE IF EXISTS profiles;
-DROP TABLE IF EXISTS thread_edges;
-DROP TABLE IF EXISTS topic_posts;
-DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS object_threads;
+DROP TABLE IF EXISTS topic_objects;
+DROP TABLE IF EXISTS envelopes;

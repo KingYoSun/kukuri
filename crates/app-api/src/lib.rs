@@ -12,13 +12,13 @@ use kukuri_core::{
     GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
     HintObjectRef, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
     LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
-    PayloadRef, Pubkey, ReplicaId, TopicId, build_game_session_envelope,
+    PayloadRef, Pubkey, ReplicaId, TopicId, KukuriEnvelope, build_game_session_envelope,
     build_live_session_envelope, build_media_manifest_envelope, build_post_envelope_with_payload,
     generate_keys, timeline_sort_key,
 };
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 use kukuri_store::{
-    BlobCacheStatus, EventProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, Page,
+    BlobCacheStatus, GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page,
     ProjectionStore, Store, TimelineCursor,
 };
 use kukuri_transport::{
@@ -247,7 +247,7 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
-            self.resolve_parent_event(&EnvelopeId::from(reply_to))
+            self.resolve_parent_object(&EnvelopeId::from(reply_to))
                 .await?
         } else {
             None
@@ -1300,12 +1300,12 @@ impl AppService {
 
     async fn ingest_event(
         &self,
-        event: kukuri_core::Event,
+        envelope: KukuriEnvelope,
         _stored_blob: Option<StoredBlob>,
         attachments: Vec<(AssetRole, StoredBlob)>,
     ) -> Result<()> {
-        self.store.put_event(event.clone()).await?;
-        let mut object = event
+        self.store.put_envelope(envelope.clone()).await?;
+        let mut object = envelope
             .to_post_object()?
             .ok_or_else(|| anyhow::anyhow!("expected post/comment envelope"))?;
         object.attachments = attachments
@@ -1325,8 +1325,8 @@ impl AppService {
                 .await?
                 .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
         };
-        persist_post_object(self.docs_sync.as_ref(), object.clone(), event.clone()).await?;
-        ProjectionStore::put_projection_row(
+        persist_post_object(self.docs_sync.as_ref(), object.clone(), envelope.clone()).await?;
+        ProjectionStore::put_object_projection(
             self.projection_store.as_ref(),
             projection_row_from_header(&object, content),
         )
@@ -1351,53 +1351,45 @@ impl AppService {
         Ok(())
     }
 
-    async fn resolve_parent_event(
+    async fn resolve_parent_object(
         &self,
-        event_id: &EnvelopeId,
-    ) -> Result<Option<kukuri_core::Event>> {
-        if let Some(event) = self.store.get_event(event_id).await? {
-            return Ok(Some(event));
+        object_id: &EnvelopeId,
+    ) -> Result<Option<KukuriEnvelope>> {
+        if let Some(envelope) = self.store.get_envelope(object_id).await? {
+            return Ok(Some(envelope));
         }
 
         let Some(projection) =
-            ProjectionStore::get_event_projection(self.projection_store.as_ref(), event_id).await?
+            ProjectionStore::get_object_projection(self.projection_store.as_ref(), object_id)
+                .await?
         else {
             return Ok(None);
         };
 
-        Ok(Some(kukuri_core::Event {
-            id: projection.event_id,
+        let object_kind = if projection.reply_to_object_id.is_some() {
+            "comment"
+        } else {
+            "post"
+        };
+
+        Ok(Some(KukuriEnvelope {
+            id: projection.object_id,
             pubkey: projection.author_pubkey.into(),
             created_at: projection.created_at,
-            kind: if projection.reply_to.is_some() {
-                "comment".into()
-            } else {
-                "post".into()
-            },
+            kind: object_kind.into(),
             tags: vec![
                 vec!["topic".into(), projection.topic_id.clone()],
-                vec![
-                    "object".into(),
-                    if projection.reply_to.is_some() {
-                        "comment".into()
-                    } else {
-                        "post".into()
-                    },
-                ],
+                vec!["object".into(), object_kind.into()],
             ],
             content: serde_json::to_string(&kukuri_core::KukuriPostEnvelopeContentV1 {
-                object_kind: if projection.reply_to.is_some() {
-                    "comment".into()
-                } else {
-                    "post".into()
-                },
+                object_kind: object_kind.into(),
                 topic_id: TopicId::new(projection.topic_id.clone()),
                 payload_ref: projection.payload_ref.clone(),
                 attachments: Vec::new(),
                 media_manifest_refs: Vec::new(),
                 visibility: ObjectVisibility::Public,
-                reply_to: projection.reply_to.clone(),
-                root_id: projection.root_id.clone(),
+                reply_to: projection.reply_to_object_id.clone(),
+                root_id: projection.root_object_id.clone(),
             })?,
             sig: String::new(),
         }))
@@ -1413,7 +1405,7 @@ impl AppService {
         .await
     }
 
-    async fn page_to_view(&self, page: Page<EventProjectionRow>) -> Result<TimelineView> {
+    async fn page_to_view(&self, page: Page<ObjectProjectionRow>) -> Result<TimelineView> {
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
             items.push(self.row_to_view(row).await?);
@@ -1424,7 +1416,7 @@ impl AppService {
         })
     }
 
-    async fn row_to_view(&self, row: EventProjectionRow) -> Result<PostView> {
+    async fn row_to_view(&self, row: ObjectProjectionRow) -> Result<PostView> {
         let post_object = fetch_post_object_for_projection(
             self.docs_sync.as_ref(),
             &row.source_replica_id,
@@ -1440,16 +1432,16 @@ impl AppService {
         };
 
         Ok(PostView {
-            object_id: row.event_id.0.clone(),
-            envelope_id: row.source_event_id.0.clone(),
+            object_id: row.object_id.0.clone(),
+            envelope_id: row.source_envelope_id.0.clone(),
             author_pubkey: row.author_pubkey.clone(),
             content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
             content_status,
             attachments,
             created_at: row.created_at,
-            reply_to: row.reply_to.clone().map(|id| id.0),
-            root_id: row.root_id.clone().map(|id| id.0),
-            object_kind: if row.reply_to.is_some() {
+            reply_to: row.reply_to_object_id.clone().map(|id| id.0),
+            root_id: row.root_object_id.clone().map(|id| id.0),
+            object_kind: if row.reply_to_object_id.is_some() {
                 "comment".into()
             } else {
                 "post".into()
@@ -1461,7 +1453,7 @@ impl AppService {
 async fn persist_post_object(
     docs_sync: &dyn DocsSync,
     object: CanonicalPostHeader,
-    envelope: kukuri_core::Event,
+    envelope: KukuriEnvelope,
 ) -> Result<()> {
     let topic_replica = topic_replica_id(object.topic_id.as_str());
     let sort_key = timeline_sort_key(object.created_at, &object.object_id);
@@ -1533,7 +1525,7 @@ async fn persist_post_object(
 
 async fn persist_media_manifest(
     topic: &TopicId,
-    envelope: &kukuri_core::Event,
+    envelope: &KukuriEnvelope,
     manifest: &KukuriMediaManifestV1,
     docs_sync: &dyn DocsSync,
 ) -> Result<()> {
@@ -1707,23 +1699,23 @@ fn game_projection_row_from_state(
 fn projection_row_from_header(
     header: &CanonicalPostHeader,
     content: Option<String>,
-) -> EventProjectionRow {
+) -> ObjectProjectionRow {
     let source_blob_hash = match &header.payload_ref {
         PayloadRef::BlobText { hash, .. } => Some(hash.clone()),
         PayloadRef::InlineText { .. } => None,
     };
-    EventProjectionRow {
-        event_id: header.object_id.clone(),
+    ObjectProjectionRow {
+        object_id: header.object_id.clone(),
         topic_id: header.topic_id.as_str().to_string(),
         author_pubkey: header.author.as_str().to_string(),
         created_at: header.created_at,
-        root_id: header.root.clone(),
-        reply_to: header.reply_to.clone(),
+        root_object_id: header.root.clone(),
+        reply_to_object_id: header.reply_to.clone(),
         payload_ref: header.payload_ref.clone(),
         content,
         source_replica_id: topic_replica_id(header.topic_id.as_str()),
         source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
-        source_event_id: header.envelope_id.clone(),
+        source_envelope_id: header.envelope_id.clone(),
         source_blob_hash,
         derived_at: Utc::now().timestamp_millis(),
         projection_version: 1,
@@ -1776,7 +1768,7 @@ async fn hydrate_topic_projection_with_services(
                 .await?;
         }
         projection_store
-            .put_projection_row(projection_row_from_header(&header, content))
+            .put_object_projection(projection_row_from_header(&header, content))
             .await?;
         hydrated += 1;
     }
@@ -1886,7 +1878,7 @@ fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
     }
 }
 
-fn projection_page_needs_hydration(page: &Page<EventProjectionRow>) -> bool {
+fn projection_page_needs_hydration(page: &Page<ObjectProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
 }
 
@@ -2178,9 +2170,9 @@ mod tests {
         topic: &TopicId,
         payload_ref: PayloadRef,
         attachments: Vec<kukuri_core::AssetRef>,
-        reply_to: Option<&kukuri_core::Event>,
-    ) -> kukuri_core::Event {
-        let event = build_post_envelope_with_payload(
+        reply_to: Option<&KukuriEnvelope>,
+    ) -> KukuriEnvelope {
+        let envelope = build_post_envelope_with_payload(
             keys,
             topic,
             payload_ref,
@@ -2190,22 +2182,22 @@ mod tests {
             ObjectVisibility::Public,
         )
         .expect("event");
-        let object = event
+        let object = envelope
             .to_post_object()
             .expect("post object")
             .expect("post object");
-        persist_post_object(docs_sync, object.clone(), event.clone())
+        persist_post_object(docs_sync, object.clone(), envelope.clone())
             .await
             .expect("persist post object");
         if let Some(projection_store) = projection_store {
-            ProjectionStore::put_projection_row(
+            ProjectionStore::put_object_projection(
                 projection_store,
                 projection_row_from_header(&object, None),
             )
             .await
             .expect("put placeholder projection");
         }
-        event
+        envelope
     }
 
     #[async_trait]
@@ -3104,7 +3096,7 @@ mod tests {
             .await
             .expect("create post");
         let projection =
-            ProjectionStore::get_event_projection(store.as_ref(), &EnvelopeId::from(event_id))
+            ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(event_id))
                 .await
                 .expect("projection")
                 .expect("projection row");
@@ -4115,7 +4107,7 @@ mod tests {
 
         timeout(Duration::from_secs(10), async {
             loop {
-                let projection = ProjectionStore::get_event_projection(
+                let projection = ProjectionStore::get_object_projection(
                     store_b.as_ref(),
                     &EnvelopeId::from(root_id.clone()),
                 )

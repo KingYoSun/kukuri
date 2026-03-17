@@ -1040,15 +1040,23 @@ fn remove_community_node_config(db_path: &Path) -> Result<()> {
 }
 
 fn normalize_community_node_config(config: CommunityNodeConfig) -> Result<CommunityNodeConfig> {
-    let mut deduped = std::collections::BTreeMap::new();
+    let mut deduped = std::collections::BTreeMap::<String, CommunityNodeNodeConfig>::new();
     for node in config.nodes {
         let base_url = normalize_http_url(node.base_url.as_str())?;
-        let resolved_urls = match node.resolved_urls {
+        let incoming_resolved_urls = match node.resolved_urls {
             Some(resolved) => Some(CommunityNodeResolvedUrls::new(
                 resolved.public_base_url,
                 resolved.connectivity_urls,
             )?),
             None => None,
+        };
+        let resolved_urls = if let Some(existing) = deduped.get(&base_url) {
+            merge_community_node_resolved_urls(
+                existing.resolved_urls.clone(),
+                incoming_resolved_urls,
+            )?
+        } else {
+            incoming_resolved_urls
         };
         deduped.insert(
             base_url.clone(),
@@ -1061,6 +1069,28 @@ fn normalize_community_node_config(config: CommunityNodeConfig) -> Result<Commun
     Ok(CommunityNodeConfig {
         nodes: deduped.into_values().collect(),
     })
+}
+
+fn merge_community_node_resolved_urls(
+    current: Option<CommunityNodeResolvedUrls>,
+    incoming: Option<CommunityNodeResolvedUrls>,
+) -> Result<Option<CommunityNodeResolvedUrls>> {
+    match (current, incoming) {
+        (None, None) => Ok(None),
+        (Some(resolved), None) | (None, Some(resolved)) => Ok(Some(resolved)),
+        (Some(current), Some(incoming)) => {
+            let public_base_url = incoming.public_base_url;
+            let connectivity_urls = current
+                .connectivity_urls
+                .into_iter()
+                .chain(incoming.connectivity_urls)
+                .collect();
+            Ok(Some(CommunityNodeResolvedUrls::new(
+                public_base_url,
+                connectivity_urls,
+            )?))
+        }
+    }
 }
 
 fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> TransportRelayConfig {
@@ -1242,7 +1272,8 @@ mod tests {
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use iroh::address_lookup::EndpointInfo;
-    use pkarr::{Client as PkarrClient, mainline::Testnet};
+    use pkarr::errors::{ConcurrencyError, PublishError};
+    use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
     use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
@@ -1304,26 +1335,68 @@ mod tests {
         builder.build().expect("pkarr client")
     }
 
+    fn build_endpoint_signed_packet_with_timestamp(
+        endpoint_info: &EndpointInfo,
+        secret_key: &iroh::SecretKey,
+        ttl: u32,
+        timestamp: Timestamp,
+    ) -> SignedPacket {
+        use pkarr::dns::{self, rdata};
+
+        let keypair = pkarr::Keypair::from_secret_key(&secret_key.to_bytes());
+        let mut builder = SignedPacket::builder().timestamp(timestamp);
+        let name = dns::Name::new("_iroh").expect("iroh txt name");
+        for entry in endpoint_info.to_txt_strings() {
+            let mut txt = rdata::TXT::new();
+            txt.add_string(&entry)
+                .expect("valid endpoint info txt entry");
+            builder = builder.txt(name.clone(), txt.into_owned(), ttl);
+        }
+        builder.sign(&keypair).expect("sign endpoint info packet")
+    }
+
     async fn publish_runtime_endpoint_to_testnet(runtime: &DesktopRuntime, testnet: &Testnet) {
         let endpoint = runtime.iroh_stack._node.endpoint();
         let client = dht_test_client(testnet);
-        let signed_packet = EndpointInfo::from(endpoint.addr())
-            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
-            .expect("signed packet");
-        client
-            .publish(&signed_packet, None)
-            .await
-            .expect("publish endpoint info");
         let public_key =
             pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
-        let expected = signed_packet.as_bytes().clone();
+        let expected_info = EndpointInfo::from(endpoint.addr());
+        for _ in 0..20 {
+            let previous_timestamp = client
+                .resolve_most_recent(&public_key)
+                .await
+                .map(|packet| packet.timestamp());
+            let now = Timestamp::now();
+            let timestamp = match previous_timestamp {
+                Some(previous) if previous >= now => previous + 1,
+                _ => now,
+            };
+            let signed_packet = build_endpoint_signed_packet_with_timestamp(
+                &expected_info,
+                endpoint.secret_key(),
+                1,
+                timestamp,
+            );
+            match client.publish(&signed_packet, previous_timestamp).await {
+                Ok(()) => break,
+                Err(PublishError::Concurrency(
+                    ConcurrencyError::ConflictRisk
+                    | ConcurrencyError::NotMostRecent
+                    | ConcurrencyError::CasFailed,
+                )) => sleep(Duration::from_millis(50)).await,
+                Err(error) => panic!("publish endpoint info: {error}"),
+            }
+        }
         timeout(Duration::from_secs(5), async {
             loop {
                 if client
                     .resolve_most_recent(&public_key)
                     .await
                     .as_ref()
-                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                    .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                    .is_some_and(|packet_info| {
+                        packet_info.to_txt_strings() == expected_info.to_txt_strings()
+                    })
                 {
                     return;
                 }

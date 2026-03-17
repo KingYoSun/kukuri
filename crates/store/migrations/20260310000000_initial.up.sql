@@ -1,5 +1,5 @@
-CREATE TABLE IF NOT EXISTS events (
-    event_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS envelopes (
+    envelope_id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     kind TEXT NOT NULL,
@@ -8,28 +8,28 @@ CREATE TABLE IF NOT EXISTS events (
     sig TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS topic_posts (
+CREATE TABLE IF NOT EXISTS topic_objects (
     topic_id TEXT NOT NULL,
-    event_id TEXT NOT NULL,
+    object_id TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    PRIMARY KEY (topic_id, event_id),
-    FOREIGN KEY (event_id) REFERENCES events (event_id)
+    PRIMARY KEY (topic_id, object_id),
+    FOREIGN KEY (object_id) REFERENCES envelopes (envelope_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_topic_posts_timeline
-    ON topic_posts (topic_id, created_at DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_topic_objects_timeline
+    ON topic_objects (topic_id, created_at DESC, object_id DESC);
 
-CREATE TABLE IF NOT EXISTS thread_edges (
+CREATE TABLE IF NOT EXISTS object_threads (
     topic_id TEXT NOT NULL,
-    event_id TEXT PRIMARY KEY,
-    root_event_id TEXT NOT NULL,
-    parent_event_id TEXT,
+    object_id TEXT PRIMARY KEY,
+    root_object_id TEXT NOT NULL,
+    reply_to_object_id TEXT,
     created_at INTEGER NOT NULL,
-    FOREIGN KEY (event_id) REFERENCES events (event_id)
+    FOREIGN KEY (object_id) REFERENCES envelopes (envelope_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_thread_edges_root
-    ON thread_edges (topic_id, root_event_id, created_at ASC, event_id ASC);
+CREATE INDEX IF NOT EXISTS idx_object_threads_root
+    ON object_threads (topic_id, root_object_id, created_at ASC, object_id ASC);
 
 CREATE TABLE IF NOT EXISTS profiles (
     pubkey TEXT PRIMARY KEY,
