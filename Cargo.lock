@@ -2688,32 +2688,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kukuri-cn-relay"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "futures-util",
- "kukuri-cn-core",
- "kukuri-core",
- "nostr-sdk",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite 0.26.2",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "kukuri-cn-user-api"
 version = "0.1.0"
 dependencies = [
@@ -2740,6 +2714,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "hex",
  "nostr-sdk",
  "serde",
  "serde_json",
@@ -2803,7 +2778,6 @@ dependencies = [
  "kukuri-app-api",
  "kukuri-cn-core",
  "kukuri-cn-iroh-relay",
- "kukuri-cn-relay",
  "kukuri-cn-user-api",
  "kukuri-core",
  "kukuri-desktop-runtime",

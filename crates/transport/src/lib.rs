@@ -1301,7 +1301,7 @@ impl HintTransport for IrohGossipTransport {
             )),
             pubkey: kukuri_core::Pubkey::from("hint"),
             created_at: Utc::now().timestamp(),
-            kind: 1,
+            kind: "hint".into(),
             tags: vec![vec!["topic".into(), hint_topic.as_str().into()]],
             content: payload,
             sig: String::new(),
@@ -1590,7 +1590,7 @@ fn topic_status_detail(configured_peer_count: usize, connected_peer_count: usize
 mod tests {
     use super::*;
     use iroh::address_lookup::EndpointInfo;
-    use kukuri_core::{TopicId, build_text_note, generate_keys};
+    use kukuri_core::{TopicId, build_post_envelope, generate_keys};
     use pkarr::Timestamp;
     use pkarr::mainline::Testnet;
     use std::net::{Ipv4Addr, SocketAddrV4};
@@ -1717,7 +1717,7 @@ mod tests {
         .await
         .expect("peer snapshot timeout");
         let event =
-            build_text_note(&generate_keys(), &topic, "hello transport", None).expect("event");
+            build_post_envelope(&generate_keys(), &topic, "hello transport", None).expect("event");
 
         transport_a
             .publish(&topic, event.clone())
@@ -1729,7 +1729,17 @@ mod tests {
             .expect("stream event");
 
         assert_eq!(envelope.event.id, event.id);
-        assert_eq!(envelope.event.content, "hello transport");
+        assert_eq!(
+            envelope
+                .event
+                .post_content()
+                .expect("post content")
+                .expect("post content")
+                .payload_ref,
+            kukuri_core::PayloadRef::InlineText {
+                text: "hello transport".into(),
+            }
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2198,7 +2208,7 @@ mod tests {
             .expect("join b timeout")
             .expect("join b");
 
-        let event = build_text_note(
+        let event = build_post_envelope(
             &generate_keys(),
             &TopicId::new("kukuri:topic:baseline"),
             "hello baseline",
@@ -2228,7 +2238,16 @@ mod tests {
         .expect("receive timeout");
 
         assert_eq!(received.id, event.id);
-        assert_eq!(received.content, "hello baseline");
+        assert_eq!(
+            received
+                .post_content()
+                .expect("post content")
+                .expect("post content")
+                .payload_ref,
+            kukuri_core::PayloadRef::InlineText {
+                text: "hello baseline".into(),
+            }
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2269,7 +2288,8 @@ mod tests {
         let mut right_stream = right.subscribe(&topic).await.expect("right subscribe");
 
         left.import_ticket("right").await.expect("import");
-        let event = build_text_note(&generate_keys(), &topic, "hello fake", None).expect("event");
+        let event =
+            build_post_envelope(&generate_keys(), &topic, "hello fake", None).expect("event");
         left.publish(&topic, event.clone()).await.expect("publish");
 
         let received = timeout(Duration::from_secs(1), right_stream.next())

@@ -123,9 +123,9 @@ function communityNodesToEditorValue(config: CommunityNodeConfig): string {
   return config.nodes.map((node) => node.base_url).join('\n');
 }
 
-function communityNodeRelayUrlsLabel(status?: CommunityNodeNodeStatus): string {
-  if (status?.resolved_urls?.iroh_relay_urls?.length) {
-    return status.resolved_urls.iroh_relay_urls.join(', ');
+function communityNodeConnectivityUrlsLabel(status?: CommunityNodeNodeStatus): string {
+  if (status?.resolved_urls?.connectivity_urls?.length) {
+    return status.resolved_urls.connectivity_urls.join(', ');
   }
   if (status?.consent_state && !status.consent_state.all_required_accepted) {
     return 'pending consent acceptance';
@@ -144,15 +144,15 @@ function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): string {
     return 'authenticate this node';
   }
   if (status.consent_state && !status.consent_state.all_required_accepted) {
-    return 'accept required policies to resolve relay urls';
+    return 'accept required policies to resolve connectivity urls';
   }
   if (status.restart_required) {
-    return 'restart the app to apply community relay urls';
+    return 'restart the app to apply connectivity urls';
   }
   if (!status.resolved_urls) {
-    return 'refresh metadata if relay urls stay unresolved';
+    return 'refresh metadata if connectivity urls stay unresolved';
   }
-  return 'relay urls active on current session';
+  return 'connectivity urls active on current session';
 }
 
 function mergeCommunityNodeStatus(
@@ -1031,8 +1031,8 @@ export function App({ api = runtimeApi }: AppProps) {
       void openThread(post.root_id);
       return;
     }
-    setSelectedThread(post.id);
-    void openThread(post.id);
+    setSelectedThread(post.object_id);
+    void openThread(post.object_id);
   }
 
   function clearReply() {
@@ -1353,7 +1353,7 @@ export function App({ api = runtimeApi }: AppProps) {
       logMediaDebug(eventName === 'error' ? 'warn' : 'info', `playback ${eventName}`, {
         manifest_hash: videoManifest?.hash ?? null,
         mime: videoManifest?.mime ?? null,
-        post_id: post.id,
+        post_id: post.object_id,
         poster_hash: videoPoster?.hash ?? null,
         playback_src: videoPlaybackSrc,
         ...mediaElementDebugFields(video),
@@ -1386,13 +1386,14 @@ export function App({ api = runtimeApi }: AppProps) {
             ? 'image ready'
             : 'syncing image'
           : null;
-    const threadTargetId = post.root_id ?? post.id;
+    const threadTargetId = post.root_id ?? post.object_id;
 
     return (
       <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
         <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
           <div className='post-meta'>
-            <span>{post.author_npub}</span>
+            <span>{post.author_pubkey.slice(0, 12)}</span>
+            <span>{post.object_kind}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
           {mediaKind ? (
@@ -1425,26 +1426,26 @@ export function App({ api = runtimeApi }: AppProps) {
                     onPlaying={logPlaybackEvent('playing')}
                     preload='metadata'
                     poster={videoPosterPreviewSrc ?? undefined}
-                    data-testid={`media-video-${post.id}`}
+                    data-testid={`media-video-${post.object_id}`}
                   />
                 ) : mediaKind === 'video' && videoPosterPreviewSrc ? (
                   <img
                     className='media-preview'
                     src={videoPosterPreviewSrc}
                     alt={videoPoster?.mime ?? 'video poster'}
-                    data-testid={`media-preview-${post.id}`}
+                    data-testid={`media-preview-${post.object_id}`}
                   />
                 ) : mediaKind === 'image' && imagePreviewSrc ? (
                   <img
                     className='media-preview'
                     src={imagePreviewSrc}
                     alt={primaryImage?.mime ?? 'image attachment'}
-                    data-testid={`media-preview-${post.id}`}
+                    data-testid={`media-preview-${post.object_id}`}
                   />
                 ) : (
                   <div
                     className='media-skeleton'
-                    data-testid={`media-skeleton-${post.id}`}
+                    data-testid={`media-skeleton-${post.object_id}`}
                     aria-hidden='true'
                   />
                 )}
@@ -1461,7 +1462,7 @@ export function App({ api = runtimeApi }: AppProps) {
             {isPendingText ? (
               <div
                 className='text-skeleton-group'
-                data-testid={`text-skeleton-${post.id}`}
+                data-testid={`text-skeleton-${post.object_id}`}
                 aria-hidden='true'
               >
                 <span className='text-skeleton text-skeleton-line' />
@@ -1471,7 +1472,7 @@ export function App({ api = runtimeApi }: AppProps) {
               <strong className='post-title'>{post.content}</strong>
             )}
           </div>
-          <small>{post.note_id}</small>
+          <small>{post.envelope_id}</small>
           {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
         </button>
         <div className='post-actions'>
@@ -1709,8 +1710,8 @@ export function App({ api = runtimeApi }: AppProps) {
                       : 'unknown'}
                   </p>
                   <p>
-                    relay urls:{' '}
-                    {communityNodeRelayUrlsLabel(status)}
+                    connectivity urls:{' '}
+                    {communityNodeConnectivityUrlsLabel(status)}
                   </p>
                   <p>restart required: {status?.restart_required ? 'yes' : 'no'}</p>
                   <p>next step: {communityNodeNextStepLabel(status)}</p>
@@ -2088,9 +2089,10 @@ export function App({ api = runtimeApi }: AppProps) {
                                 }))
                               }
                             >
-                              <option value='Open'>Open</option>
-                              <option value='InProgress'>InProgress</option>
-                              <option value='Finished'>Finished</option>
+                              <option value='Waiting'>Waiting</option>
+                              <option value='Running'>Running</option>
+                              <option value='Paused'>Paused</option>
+                              <option value='Ended'>Ended</option>
                             </select>
                           </label>
                           <label className='field'>
@@ -2123,7 +2125,7 @@ export function App({ api = runtimeApi }: AppProps) {
           </section>
           <ul className='post-list'>
             {activeTimeline.map((post) => (
-              <li key={post.id}>{renderPostCard(post, 'timeline')}</li>
+              <li key={post.object_id}>{renderPostCard(post, 'timeline')}</li>
             ))}
           </ul>
         </section>
@@ -2148,7 +2150,7 @@ export function App({ api = runtimeApi }: AppProps) {
           {selectedThread ? (
             <ul className='thread-list'>
               {thread.map((post) => (
-                <li key={post.id} className='thread-item'>
+                <li key={post.object_id} className='thread-item'>
                   {renderPostCard(post, 'thread')}
                 </li>
               ))}

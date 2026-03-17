@@ -6,10 +6,10 @@ export type TimelineCursor = {
 };
 
 export type PostView = {
-  id: string;
+  object_id: string;
+  envelope_id: string;
   author_pubkey: string;
-  author_npub: string;
-  note_id: string;
+  object_kind: string;
   content: string;
   content_status: BlobViewStatus;
   attachments: AttachmentView[];
@@ -89,8 +89,7 @@ export type SyncStatus = {
 
 export type CommunityNodeResolvedUrls = {
   public_base_url: string;
-  relay_ws_url: string;
-  iroh_relay_urls: string[];
+  connectivity_urls: string[];
 };
 
 export type CommunityNodeNodeConfig = {
@@ -141,7 +140,7 @@ export type TopicSyncStatus = {
   last_error?: string | null;
 };
 
-export type LiveSessionStatus = 'Live' | 'Ended';
+export type LiveSessionStatus = 'Scheduled' | 'Live' | 'Paused' | 'Ended';
 
 export type LiveSessionView = {
   session_id: string;
@@ -155,7 +154,7 @@ export type LiveSessionView = {
   joined_by_me: boolean;
 };
 
-export type GameRoomStatus = 'Open' | 'InProgress' | 'Finished';
+export type GameRoomStatus = 'Waiting' | 'Running' | 'Paused' | 'Ended';
 
 export type GameScoreView = {
   participant_id: string;

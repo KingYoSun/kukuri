@@ -46,18 +46,18 @@
 - `apps/desktop/src-tauri/tauri.windows.conf.json` と Windows icon asset を追加し、Windows bundle config を base config から分離した
 - GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
 - shared iroh stack に seeded DHT discovery を統合し、desktop discovery panel / env / local config から `node_id` seed を永続・再適用できるようにした
-- `cn-core`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`, `cn-cli` を root workspace に追加し、community-node server slice を Postgres 前提で起動できるようにした
-- desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only custom relay union を追加した
-- `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-relay`, `cn-iroh-relay` を起動できるようにした
-- `cn-user-api` / `cn-relay` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
+- `cn-core`, `cn-user-api`, `cn-iroh-relay`, `cn-cli` を root workspace の active scope とし、community-node server slice を Postgres + connectivity assist 前提で起動できるようにした
+- desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only connectivity union を追加した
+- `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-iroh-relay` を起動できるようにした
+- `cn-user-api` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
 - `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
 - GitHub Actions fast/nightly workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加した
 - `cn-cli prepare`, `.env.community-node.example`, `cn-migrate` compose service, prepared-DB fail-fast 起動を追加し、community-node の deploy / backup / restore 手順を runbook に固定した
 - `cn-iroh-relay` に optional TLS/QUIC config を追加し、Cloudflare Tunnel の TCP path と WireGuard の `7842/udp` path を同時に扱えるようにした
 - `docker-compose.community-node.yml` と `.env.community-node.example` に host bind IP / iroh TLS / QUIC env を追加し、`api.kukuri.app` / `relay.kukuri.app` / `iroh-relay.kukuri.app` の公開 manual smoke 手順を runbook に反映した
-- desktop-runtime test に `https://api.kukuri.app` + `wss://relay.kukuri.app/relay` + `https://iroh-relay.kukuri.app` の URL contract を追加し、`api.kukuri.app/relay` fallback が復活しないようにした
-- community-node relay で seed peer / unknown peer lookup に configured relay URL を付与し、docs event の source peer から blob sender を学習して imported ticket なしでも relay 経由の blob fetch が成立するようにした
-- desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node relay 検証時の iroh internal warning noise を抑制した
+- desktop-runtime test に `https://api.kukuri.app` + `https://iroh-relay.kukuri.app` の URL contract を追加し、relay websocket fallback が復活しないようにした
+- community-node connectivity assist で seed peer / unknown peer lookup に configured relay URL を付与し、docs event の source peer から blob sender を学習して imported ticket なしでも relay assist 経由の blob fetch が成立するようにした
+- desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
 
 ## 検証済み
 - `cargo xtask doctor`

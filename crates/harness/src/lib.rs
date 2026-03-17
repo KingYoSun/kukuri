@@ -11,9 +11,6 @@ use kukuri_app_api::{
 };
 use kukuri_cn_core::{JwtConfig, TestDatabase};
 use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
-use kukuri_cn_relay::{
-    RelayConfig, app_router as relay_app_router, build_state as build_relay_state,
-};
 use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
@@ -173,10 +170,8 @@ impl ScenarioRuntime {
 struct CommunityNodeStack {
     database: TestDatabase,
     user_api_task: tokio::task::JoinHandle<()>,
-    relay_task: tokio::task::JoinHandle<()>,
     _iroh_relay: SpawnedIrohRelay,
     base_url: String,
-    relay_ws_url: String,
     iroh_relay_url: String,
 }
 
@@ -188,6 +183,7 @@ impl CommunityNodeStack {
             http_bind_addr: "127.0.0.1:0"
                 .parse()
                 .expect("valid loopback relay bind addr"),
+            tls: None,
         })
         .await?;
         let iroh_relay_url = format!("http://{}", iroh_relay.http_addr());
@@ -198,19 +194,12 @@ impl CommunityNodeStack {
         let user_api_addr = user_api_listener.local_addr()?;
         let base_url = format!("http://{user_api_addr}");
 
-        let relay_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .context("failed to bind community-node relay listener")?;
-        let relay_addr = relay_listener.local_addr()?;
-        let relay_ws_url = format!("ws://{relay_addr}/relay");
-
         let user_api_state = build_user_api_state(&UserApiConfig {
             bind_addr: user_api_addr,
             database_url: database.database_url.clone(),
             base_url: base_url.clone(),
             public_base_url: base_url.clone(),
-            relay_ws_url: relay_ws_url.clone(),
-            iroh_relay_urls: vec![iroh_relay_url.clone()],
+            connectivity_urls: vec![iroh_relay_url.clone()],
             jwt_config: JwtConfig::new("kukuri-cn-harness", "test-secret", 3600),
         })
         .await
@@ -225,39 +214,17 @@ impl CommunityNodeStack {
             .expect("community-node user-api server");
         });
 
-        let relay_state = build_relay_state(&RelayConfig {
-            bind_addr: relay_addr,
-            database_url: database.database_url.clone(),
-            base_url: base_url.clone(),
-            public_base_url: base_url.clone(),
-            relay_ws_url: relay_ws_url.clone(),
-            iroh_relay_urls: vec![iroh_relay_url.clone()],
-        })
-        .await
-        .context("failed to build community-node relay state")?;
-        let relay_task = tokio::spawn(async move {
-            axum::serve(
-                relay_listener,
-                relay_app_router(relay_state).into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .await
-            .expect("community-node relay server");
-        });
-
         Ok(Self {
             database,
             user_api_task,
-            relay_task,
             _iroh_relay: iroh_relay,
             base_url,
-            relay_ws_url,
             iroh_relay_url,
         })
     }
 
     async fn shutdown(self) -> Result<()> {
         self.user_api_task.abort();
-        self.relay_task.abort();
         self.database.cleanup().await
     }
 }
@@ -673,23 +640,7 @@ async fn run_community_node_public_connectivity(
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls a")
-                .relay_ws_url,
-            stack.relay_ws_url
-        );
-        assert_eq!(
-            accepted_b
-                .resolved_urls
-                .as_ref()
-                .expect("resolved urls b")
-                .relay_ws_url,
-            stack.relay_ws_url
-        );
-        assert_eq!(
-            accepted_a
-                .resolved_urls
-                .as_ref()
-                .expect("resolved urls a")
-                .iroh_relay_urls,
+                .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         assert_eq!(
@@ -697,7 +648,7 @@ async fn run_community_node_public_connectivity(
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls b")
-                .iroh_relay_urls,
+                .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         assert!(accepted_a.restart_required);
@@ -736,7 +687,7 @@ async fn run_community_node_public_connectivity(
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls a after restart")
-                .iroh_relay_urls,
+                .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         assert_eq!(
@@ -744,7 +695,7 @@ async fn run_community_node_public_connectivity(
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls b after restart")
-                .iroh_relay_urls,
+                .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         let sync_a = runtime_a
@@ -896,7 +847,7 @@ async fn run_community_node_public_connectivity(
             .update_game_room(kukuri_desktop_runtime::UpdateGameRoomRequest {
                 topic: topic.to_string(),
                 room_id: room_id.clone(),
-                status: GameRoomStatus::InProgress,
+                status: GameRoomStatus::Running,
                 phase_label: Some("Round 1".to_string()),
                 scores,
             })
@@ -1054,7 +1005,7 @@ async fn wait_for_timeline_event(
                     limit: Some(50),
                 })
                 .await?;
-            if timeline.items.iter().any(|item| item.id == event_id) {
+            if timeline.items.iter().any(|item| item.object_id == event_id) {
                 return Ok::<(), anyhow::Error>(());
             }
             sleep(Duration::from_millis(50)).await;
@@ -1081,7 +1032,7 @@ async fn wait_for_thread_event(
                     limit: Some(50),
                 })
                 .await?;
-            if thread.items.iter().any(|item| item.id == event_id) {
+            if thread.items.iter().any(|item| item.object_id == event_id) {
                 return Ok::<(), anyhow::Error>(());
             }
             sleep(Duration::from_millis(50)).await;
@@ -1266,9 +1217,10 @@ fn step_name(step: &ScenarioStep) -> &'static str {
 
 fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
     match value {
-        "Open" => Ok(GameRoomStatus::Open),
-        "InProgress" => Ok(GameRoomStatus::InProgress),
-        "Finished" => Ok(GameRoomStatus::Finished),
+        "Waiting" => Ok(GameRoomStatus::Waiting),
+        "Running" => Ok(GameRoomStatus::Running),
+        "Paused" => Ok(GameRoomStatus::Paused),
+        "Ended" => Ok(GameRoomStatus::Ended),
         _ => anyhow::bail!("unsupported game room status: {value}"),
     }
 }

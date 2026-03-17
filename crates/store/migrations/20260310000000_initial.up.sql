@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS events (
     event_id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    kind INTEGER NOT NULL,
+    kind TEXT NOT NULL,
     content TEXT NOT NULL,
     tags_json TEXT NOT NULL,
     sig TEXT NOT NULL

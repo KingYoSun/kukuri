@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header::AUTHORI
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use nostr_sdk::prelude::{Event as NostrEvent, EventBuilder, JsonUtil, Keys, Tag};
+use nostr_sdk::prelude::Keys;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -14,7 +14,9 @@ use sqlx::{Executor, Row};
 use url::Url;
 use uuid::Uuid;
 
-pub const AUTH_EVENT_KIND: u16 = 22242;
+use kukuri_core::{Event as KukuriEnvelope, KukuriAuthEnvelopeContentV1, sign_envelope_json};
+
+pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
@@ -22,28 +24,24 @@ pub const RELAY_SERVICE_NAME: &str = "relay";
 pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 pub const COMMUNITY_NODE_DATABASE_INIT_MODE_ENV: &str = "COMMUNITY_NODE_DATABASE_INIT_MODE";
 const DATABASE_PREPARE_HINT: &str =
-    "run `cn-cli --database-url <url> prepare` before starting cn-user-api/cn-relay";
+    "run `cn-cli --database-url <url> prepare` before starting cn-user-api";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeResolvedUrls {
     pub public_base_url: String,
-    pub relay_ws_url: String,
-    pub iroh_relay_urls: Vec<String>,
+    pub connectivity_urls: Vec<String>,
 }
 
 impl CommunityNodeResolvedUrls {
     pub fn new(
         public_base_url: impl Into<String>,
-        relay_ws_url: impl Into<String>,
-        iroh_relay_urls: Vec<String>,
+        connectivity_urls: Vec<String>,
     ) -> Result<Self> {
         let public_base_url = normalize_http_url(public_base_url.into().as_str())?;
-        let relay_ws_url = normalize_ws_url(relay_ws_url.into().as_str())?;
-        let iroh_relay_urls = normalize_http_url_list(iroh_relay_urls)?;
+        let connectivity_urls = normalize_http_url_list(connectivity_urls)?;
         Ok(Self {
             public_base_url,
-            relay_ws_url,
-            iroh_relay_urls,
+            connectivity_urls,
         })
     }
 }
@@ -81,42 +79,6 @@ pub struct CommunityNodeConsentItem {
 pub struct CommunityNodeConsentStatus {
     pub all_required_accepted: bool,
     pub items: Vec<CommunityNodeConsentItem>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RawNostrEvent {
-    pub id: String,
-    pub pubkey: String,
-    pub created_at: i64,
-    pub kind: u32,
-    pub tags: Vec<Vec<String>>,
-    pub content: String,
-    pub sig: String,
-}
-
-impl RawNostrEvent {
-    pub fn first_tag_value(&self, name: &str) -> Option<&str> {
-        self.tags.iter().find_map(|tag| {
-            if tag.first().map(String::as_str) == Some(name) {
-                tag.get(1).map(String::as_str)
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn tag_values(&self, name: &str) -> Vec<&str> {
-        self.tags
-            .iter()
-            .filter_map(|tag| {
-                if tag.first().map(String::as_str) == Some(name) {
-                    tag.get(1).map(String::as_str)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -474,30 +436,28 @@ pub async fn create_auth_challenge(pool: &PgPool, pubkey: &str) -> Result<AuthCh
     })
 }
 
-pub async fn verify_auth_event_and_issue_token(
+pub async fn verify_auth_envelope_and_issue_token(
     pool: &PgPool,
     jwt_config: &JwtConfig,
     public_base_url: &str,
-    auth_event_json: &Value,
+    auth_envelope_json: &Value,
 ) -> Result<AuthVerifyResponse> {
     let public_base_url = normalize_http_url(public_base_url)?;
-    let raw = parse_raw_event(auth_event_json)?;
-    verify_raw_event(&raw)?;
-    if raw.kind != u32::from(AUTH_EVENT_KIND) {
-        bail!("auth event kind mismatch");
+    let envelope = parse_auth_envelope(auth_envelope_json)?;
+    verify_auth_envelope(&envelope)?;
+    if envelope.kind != AUTH_ENVELOPE_KIND {
+        bail!("auth envelope kind mismatch");
     }
     let now = Utc::now().timestamp();
-    if (now - raw.created_at).abs() > AUTH_EVENT_MAX_SKEW_SECONDS {
-        bail!("auth event is stale");
+    if (now - envelope.created_at).abs() > AUTH_EVENT_MAX_SKEW_SECONDS {
+        bail!("auth envelope is stale");
     }
-    let relay_tag = raw
-        .first_tag_value("relay")
-        .ok_or_else(|| anyhow!("missing relay tag"))?;
-    if relay_tag != public_base_url {
-        bail!("relay tag mismatch");
+    let capability_url = first_tag_value(&envelope, "capability_url")
+        .ok_or_else(|| anyhow!("missing capability_url tag"))?;
+    if capability_url != public_base_url {
+        bail!("capability_url tag mismatch");
     }
-    let challenge = raw
-        .first_tag_value("challenge")
+    let challenge = first_tag_value(&envelope, "challenge")
         .ok_or_else(|| anyhow!("missing challenge tag"))?;
     let row = sqlx::query(
         "SELECT pubkey, expires_at, used_at
@@ -516,7 +476,7 @@ pub async fn verify_auth_event_and_issue_token(
     if used_at.is_some() || Utc::now() > expires_at {
         bail!("challenge expired or already used");
     }
-    let normalized_pubkey = normalize_pubkey(raw.pubkey.as_str())?;
+    let normalized_pubkey = normalize_pubkey(envelope.pubkey.as_str())?;
     if normalized_pubkey != stored_pubkey {
         bail!("pubkey mismatch");
     }
@@ -705,7 +665,7 @@ pub async fn load_bootstrap_nodes(
     self_node: Option<CommunityNodeBootstrapNode>,
 ) -> Result<Vec<CommunityNodeBootstrapNode>> {
     let rows = sqlx::query(
-        "SELECT base_url, public_base_url, relay_ws_url, iroh_relay_urls
+        "SELECT base_url, public_base_url, connectivity_urls
          FROM cn_bootstrap.bootstrap_nodes
          WHERE is_active = TRUE
          ORDER BY base_url ASC",
@@ -719,16 +679,11 @@ pub async fn load_bootstrap_nodes(
     for row in rows {
         let base_url: String = row.try_get("base_url")?;
         let public_base_url: String = row.try_get("public_base_url")?;
-        let relay_ws_url: String = row.try_get("relay_ws_url")?;
-        let iroh_relay_urls: Value = row.try_get("iroh_relay_urls")?;
-        let iroh_relay_urls = serde_json::from_value::<Vec<String>>(iroh_relay_urls)?;
+        let connectivity_urls: Value = row.try_get("connectivity_urls")?;
+        let connectivity_urls = serde_json::from_value::<Vec<String>>(connectivity_urls)?;
         let node = CommunityNodeBootstrapNode {
             base_url: normalize_http_url(base_url.as_str())?,
-            resolved_urls: CommunityNodeResolvedUrls::new(
-                public_base_url,
-                relay_ws_url,
-                iroh_relay_urls,
-            )?,
+            resolved_urls: CommunityNodeResolvedUrls::new(public_base_url, connectivity_urls)?,
         };
         nodes.insert(node.base_url.clone(), node);
     }
@@ -736,39 +691,42 @@ pub async fn load_bootstrap_nodes(
 }
 
 pub async fn upsert_bootstrap_node(pool: &PgPool, node: &CommunityNodeBootstrapNode) -> Result<()> {
-    let relay_urls = serde_json::to_value(&node.resolved_urls.iroh_relay_urls)?;
+    let relay_urls = serde_json::to_value(&node.resolved_urls.connectivity_urls)?;
     sqlx::query(
         "INSERT INTO cn_bootstrap.bootstrap_nodes
-            (base_url, public_base_url, relay_ws_url, iroh_relay_urls, is_active)
-         VALUES ($1, $2, $3, $4, TRUE)
+            (base_url, public_base_url, connectivity_urls, is_active)
+         VALUES ($1, $2, $3, TRUE)
          ON CONFLICT (base_url) DO UPDATE
          SET public_base_url = EXCLUDED.public_base_url,
-             relay_ws_url = EXCLUDED.relay_ws_url,
-             iroh_relay_urls = EXCLUDED.iroh_relay_urls,
+             connectivity_urls = EXCLUDED.connectivity_urls,
              is_active = TRUE,
              updated_at = NOW()",
     )
     .bind(&node.base_url)
     .bind(&node.resolved_urls.public_base_url)
-    .bind(&node.resolved_urls.relay_ws_url)
     .bind(relay_urls)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub fn build_auth_event_json(keys: &Keys, challenge: &str, public_base_url: &str) -> Result<Value> {
-    let signed = EventBuilder::new(
-        nostr_sdk::prelude::Kind::Custom(AUTH_EVENT_KIND),
-        String::new(),
-    )
-    .tags([
-        Tag::parse(["challenge", challenge]).context("failed to build challenge tag")?,
-        Tag::parse(["relay", public_base_url]).context("failed to build relay tag")?,
-    ])
-    .sign_with_keys(keys)
-    .map_err(|error| anyhow!(error))?;
-    serde_json::from_str(signed.as_json().as_str()).context("failed to encode auth event json")
+pub fn build_auth_envelope_json(
+    keys: &Keys,
+    challenge: &str,
+    public_base_url: &str,
+) -> Result<Value> {
+    let signed = sign_envelope_json(
+        keys,
+        AUTH_ENVELOPE_KIND,
+        vec![
+            vec!["challenge".into(), challenge.to_string()],
+            vec!["capability_url".into(), normalize_http_url(public_base_url)?],
+        ],
+        &KukuriAuthEnvelopeContentV1 {
+            scope: "community-node-auth".into(),
+        },
+    )?;
+    serde_json::to_value(signed).context("failed to encode auth envelope json")
 }
 
 #[derive(Clone, Debug)]
@@ -867,17 +825,24 @@ pub fn normalize_http_url_list(values: Vec<String>) -> Result<Vec<String>> {
     Ok(deduped.into_iter().collect())
 }
 
-pub fn parse_raw_event(value: &Value) -> Result<RawNostrEvent> {
-    serde_json::from_value(value.clone()).context("invalid event json")
+pub fn parse_auth_envelope(value: &Value) -> Result<KukuriEnvelope> {
+    serde_json::from_value(value.clone()).context("invalid auth envelope json")
 }
 
-pub fn verify_raw_event(raw: &RawNostrEvent) -> Result<()> {
-    let json = serde_json::to_string(raw)?;
-    let event = NostrEvent::from_json(json).context("failed to parse auth event")?;
-    event
-        .verify()
-        .context("auth event signature verification failed")?;
+pub fn verify_auth_envelope(raw: &KukuriEnvelope) -> Result<()> {
+    raw.verify()
+        .context("auth envelope signature verification failed")?;
     Ok(())
+}
+
+pub fn first_tag_value<'a>(envelope: &'a KukuriEnvelope, name: &str) -> Option<&'a str> {
+    envelope.tags.iter().find_map(|tag| {
+        if tag.first().map(String::as_str) == Some(name) {
+            tag.get(1).map(String::as_str)
+        } else {
+            None
+        }
+    })
 }
 
 pub fn normalize_pubkey(value: &str) -> Result<String> {

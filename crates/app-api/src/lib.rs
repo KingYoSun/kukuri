@@ -8,14 +8,16 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, CanonicalPostHeader, EventId, GAME_MANIFEST_MIME, GameParticipant,
-    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus,
-    LiveSignalKind, ManifestBlobRef, PayloadRef, Pubkey, ReplicaId, TopicId, build_text_note,
-    generate_keys, timeline_sort_key,
+    AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant, GossipHint,
+    HintObjectRef, KukuriMediaManifestV1, LiveSessionManifestBlobV1, LiveSessionStateDocV1,
+    LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility, PayloadRef, Pubkey,
+    ReplicaId, TopicId, LIVE_MANIFEST_MIME, build_game_session_envelope,
+    build_live_session_envelope, build_media_manifest_envelope, build_post_envelope_with_payload,
+    generate_keys, timeline_sort_key, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus,
+    GameScoreEntry,
 };
 use kukuri_docs_sync::{
-    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
+    DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id,
 };
 use kukuri_store::{
     BlobCacheStatus, EventProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, Page,
@@ -33,16 +35,16 @@ use tracing::{info, warn};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
-    pub id: String,
+    pub object_id: String,
+    pub envelope_id: String,
     pub author_pubkey: String,
-    pub author_npub: String,
-    pub note_id: String,
     pub content: String,
     pub content_status: BlobViewStatus,
     pub attachments: Vec<AttachmentView>,
     pub created_at: i64,
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
+    pub object_kind: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,11 +249,11 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
-            self.resolve_parent_event(&EventId::from(reply_to)).await?
+            self.resolve_parent_event(&EnvelopeId::from(reply_to)).await?
         } else {
             None
         };
-        let event = build_text_note(self.keys.as_ref(), &topic, content, parent.as_ref())?;
+        let now = Utc::now().timestamp_millis();
         let stored_blob = self
             .blob_service
             .put_blob(content.as_bytes().to_vec(), "text/plain")
@@ -266,18 +268,76 @@ impl AppService {
             },
         ))
         .await?;
-        self.ingest_event(event.clone(), Some(stored_blob.clone()), stored_attachments)
+        let manifest_ids = if stored_attachments.is_empty() {
+            Vec::new()
+        } else {
+            let manifest_id = format!(
+                "media-{}-{}",
+                now,
+                short_id_suffix(self.current_author_pubkey().as_str())
+            );
+            let manifest = KukuriMediaManifestV1 {
+                manifest_id: manifest_id.clone(),
+                owner_pubkey: Pubkey::from(self.current_author_pubkey()),
+                created_at: now,
+                items: stored_attachments
+                    .iter()
+                    .map(|(role, stored)| MediaManifestItem {
+                        blob_hash: stored.hash.clone(),
+                        mime: stored.mime.clone(),
+                        size: stored.bytes,
+                        width: None,
+                        height: None,
+                        duration_ms: None,
+                        codec: None,
+                        thumbnail_blob_hash: match role {
+                            AssetRole::VideoManifest => None,
+                            _ => None,
+                        },
+                    })
+                    .collect(),
+            };
+            let envelope =
+                build_media_manifest_envelope(self.keys.as_ref(), &topic, &manifest)?;
+            persist_media_manifest(&topic, &envelope, &manifest, self.docs_sync.as_ref()).await?;
+            vec![manifest_id]
+        };
+        let envelope = build_post_envelope_with_payload(
+            self.keys.as_ref(),
+            &topic,
+            PayloadRef::BlobText {
+                hash: stored_blob.hash.clone(),
+                mime: stored_blob.mime.clone(),
+                bytes: stored_blob.bytes,
+            },
+            stored_attachments
+                .iter()
+                .map(|(role, stored)| kukuri_core::AssetRef {
+                    hash: stored.hash.clone(),
+                    mime: stored.mime.clone(),
+                    bytes: stored.bytes,
+                    role: role.clone(),
+                })
+                .collect(),
+            manifest_ids,
+            parent.as_ref(),
+            ObjectVisibility::Public,
+        )?;
+        self.ingest_event(envelope.clone(), Some(stored_blob.clone()), stored_attachments)
             .await?;
         self.hint_transport
             .publish_hint(
                 &topic,
-                GossipHint::TopicIndexUpdated {
+                GossipHint::TopicObjectsChanged {
                     topic_id: topic.clone(),
-                    event_ids: vec![event.id.clone()],
+                    objects: vec![HintObjectRef {
+                        object_id: envelope.id.0.clone(),
+                        object_kind: envelope.kind.clone(),
+                    }],
                 },
             )
             .await?;
-        Ok(event.id.0)
+        Ok(envelope.id.0)
     }
 
     pub async fn list_timeline(
@@ -325,7 +385,7 @@ impl AppService {
         let mut page = ProjectionStore::list_thread(
             self.projection_store.as_ref(),
             topic_id,
-            &EventId::from(thread_id),
+            &EnvelopeId::from(thread_id),
             cursor.clone(),
             limit,
         )
@@ -337,7 +397,7 @@ impl AppService {
             page = ProjectionStore::list_thread(
                 self.projection_store.as_ref(),
                 topic_id,
-                &EventId::from(thread_id),
+                &EnvelopeId::from(thread_id),
                 cursor,
                 limit,
             )
@@ -423,8 +483,20 @@ impl AppService {
             started_at: now,
             ended_at: None,
         };
+        let envelope = build_live_session_envelope(
+            self.keys.as_ref(),
+            &topic,
+            session_id.as_str(),
+            &serde_json::json!({
+                "session_id": session_id,
+                "topic_id": topic,
+                "status": "live",
+                "title": manifest.title,
+                "description": manifest.description,
+            }),
+        )?;
         let state = self
-            .persist_live_session_manifest(topic_id, manifest.clone(), now)
+            .persist_live_session_manifest(topic_id, manifest.clone(), now, envelope.id.clone())
             .await?;
         self.projection_store
             .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
@@ -432,10 +504,10 @@ impl AppService {
         self.hint_transport
             .publish_hint(
                 &topic,
-                GossipHint::LiveSignal {
+                GossipHint::SessionChanged {
                     topic_id: topic.clone(),
                     session_id: session_id.clone(),
-                    kind: LiveSignalKind::SessionStarted,
+                    object_kind: "live-session".into(),
                 },
             )
             .await?;
@@ -460,8 +532,23 @@ impl AppService {
         let now = Utc::now().timestamp_millis();
         manifest.status = LiveSessionStatus::Ended;
         manifest.ended_at = Some(now);
+        let envelope = build_live_session_envelope(
+            self.keys.as_ref(),
+            &TopicId::new(topic_id),
+            session_id,
+            &serde_json::json!({
+                "session_id": session_id,
+                "topic_id": topic_id,
+                "status": "ended",
+            }),
+        )?;
         let state = self
-            .persist_live_session_manifest(topic_id, manifest.clone(), state.created_at)
+            .persist_live_session_manifest(
+                topic_id,
+                manifest.clone(),
+                state.created_at,
+                envelope.id.clone(),
+            )
             .await?;
         self.projection_store
             .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
@@ -470,10 +557,10 @@ impl AppService {
         self.hint_transport
             .publish_hint(
                 &TopicId::new(topic_id),
-                GossipHint::LiveSignal {
+                GossipHint::SessionChanged {
                     topic_id: TopicId::new(topic_id),
                     session_id: session_id.to_string(),
-                    kind: LiveSignalKind::SessionEnded,
+                    object_kind: "live-session".into(),
                 },
             )
             .await?;
@@ -617,7 +704,7 @@ impl AppService {
             owner_pubkey: Pubkey::from(self.current_author_pubkey()),
             title: title.to_string(),
             description: input.description.trim().to_string(),
-            status: GameRoomStatus::Open,
+            status: GameRoomStatus::Waiting,
             phase_label: None,
             participants: participants
                 .iter()
@@ -634,15 +721,35 @@ impl AppService {
                     participant_id: format!("participant-{}", index + 1),
                     label: label.clone(),
                     score: 0,
-                })
-                .collect(),
+            })
+            .collect(),
             updated_at: now,
         };
+        let envelope = build_game_session_envelope(
+            self.keys.as_ref(),
+            &TopicId::new(topic_id),
+            room_id.as_str(),
+            &serde_json::json!({
+                "room_id": room_id,
+                "topic_id": topic_id,
+                "status": "waiting",
+            }),
+        )?;
         let state = self
-            .persist_game_room_manifest(topic_id, manifest.clone(), now)
+            .persist_game_room_manifest(topic_id, manifest.clone(), now, envelope.id.clone())
             .await?;
         self.projection_store
             .upsert_game_room_cache(game_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        self.hint_transport
+            .publish_hint(
+                &TopicId::new(topic_id),
+                GossipHint::SessionChanged {
+                    topic_id: TopicId::new(topic_id),
+                    session_id: room_id.clone(),
+                    object_kind: "game-session".into(),
+                },
+            )
             .await?;
         *self.last_sync_ts.lock().await = Some(now);
         Ok(room_id)
@@ -680,11 +787,37 @@ impl AppService {
             })
             .collect();
         manifest.updated_at = Utc::now().timestamp_millis();
+        let envelope = build_game_session_envelope(
+            self.keys.as_ref(),
+            &TopicId::new(topic_id),
+            room_id,
+            &serde_json::json!({
+                "room_id": room_id,
+                "topic_id": topic_id,
+                "status": format!("{:?}", manifest.status).to_lowercase(),
+                "phase_label": manifest.phase_label,
+            }),
+        )?;
         let state = self
-            .persist_game_room_manifest(topic_id, manifest.clone(), state.created_at)
+            .persist_game_room_manifest(
+                topic_id,
+                manifest.clone(),
+                state.created_at,
+                envelope.id.clone(),
+            )
             .await?;
         self.projection_store
             .upsert_game_room_cache(game_projection_row_from_state(&state, &manifest, topic_id))
+            .await?;
+        self.hint_transport
+            .publish_hint(
+                &TopicId::new(topic_id),
+                GossipHint::SessionChanged {
+                    topic_id: TopicId::new(topic_id),
+                    session_id: room_id.to_string(),
+                    object_kind: "game-session".into(),
+                },
+            )
             .await?;
         *self.last_sync_ts.lock().await = Some(manifest.updated_at);
         Ok(())
@@ -961,6 +1094,7 @@ impl AppService {
         topic_id: &str,
         manifest: LiveSessionManifestBlobV1,
         created_at: i64,
+        last_envelope_id: EnvelopeId,
     ) -> Result<LiveSessionStateDocV1> {
         let now = Utc::now().timestamp_millis();
         let stored =
@@ -977,6 +1111,7 @@ impl AppService {
                 mime: stored.mime.clone(),
                 bytes: stored.bytes,
             },
+            last_envelope_id,
         };
         persist_live_session_state(self.docs_sync.as_ref(), &state).await?;
         self.projection_store
@@ -990,6 +1125,7 @@ impl AppService {
         topic_id: &str,
         manifest: GameRoomManifestBlobV1,
         created_at: i64,
+        last_envelope_id: EnvelopeId,
     ) -> Result<GameRoomStateDocV1> {
         let now = Utc::now().timestamp_millis();
         let stored =
@@ -1006,6 +1142,7 @@ impl AppService {
                 mime: stored.mime.clone(),
                 bytes: stored.bytes,
             },
+            last_envelope_id,
         };
         persist_game_room_state(self.docs_sync.as_ref(), &state).await?;
         self.projection_store
@@ -1163,24 +1300,14 @@ impl AppService {
     async fn ingest_event(
         &self,
         event: kukuri_core::Event,
-        stored_blob: Option<StoredBlob>,
+        _stored_blob: Option<StoredBlob>,
         attachments: Vec<(AssetRole, StoredBlob)>,
     ) -> Result<()> {
         self.store.put_event(event.clone()).await?;
-        let blob = match stored_blob {
-            Some(blob) => blob,
-            None => {
-                self.blob_service
-                    .put_blob(event.content.as_bytes().to_vec(), "text/plain")
-                    .await?
-            }
-        };
-        let mut header = event.to_canonical_header(PayloadRef::BlobText {
-            hash: blob.hash.clone(),
-            mime: blob.mime.clone(),
-            bytes: blob.bytes,
-        });
-        header.attachments = attachments
+        let mut object = event
+            .to_post_object()?
+            .ok_or_else(|| anyhow::anyhow!("expected post/comment envelope"))?;
+        object.attachments = attachments
             .iter()
             .map(|(role, stored)| kukuri_core::AssetRef {
                 hash: stored.hash.clone(),
@@ -1189,23 +1316,28 @@ impl AppService {
                 role: role.clone(),
             })
             .collect();
-        persist_header(
-            self.docs_sync.as_ref(),
-            header.clone(),
-            event.pubkey.as_str(),
-        )
-        .await?;
+        let content = match &object.payload_ref {
+            PayloadRef::InlineText { text } => Some(text.clone()),
+            PayloadRef::BlobText { hash, .. } => self
+                .blob_service
+                .fetch_blob(hash)
+                .await?
+                .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
+        };
+        persist_post_object(self.docs_sync.as_ref(), object.clone(), event.clone()).await?;
         ProjectionStore::put_projection_row(
             self.projection_store.as_ref(),
-            projection_row_from_header(&header, Some(event.content.clone())),
+            projection_row_from_header(&object, content),
         )
         .await?;
-        ProjectionStore::mark_blob_status(
-            self.projection_store.as_ref(),
-            &blob.hash,
-            BlobCacheStatus::Available,
-        )
-        .await?;
+        if let PayloadRef::BlobText { hash, .. } = &object.payload_ref {
+            ProjectionStore::mark_blob_status(
+                self.projection_store.as_ref(),
+                hash,
+                BlobCacheStatus::Available,
+            )
+            .await?;
+        }
         for (_, attachment) in attachments {
             ProjectionStore::mark_blob_status(
                 self.projection_store.as_ref(),
@@ -1218,7 +1350,10 @@ impl AppService {
         Ok(())
     }
 
-    async fn resolve_parent_event(&self, event_id: &EventId) -> Result<Option<kukuri_core::Event>> {
+    async fn resolve_parent_event(
+        &self,
+        event_id: &EnvelopeId,
+    ) -> Result<Option<kukuri_core::Event>> {
         if let Some(event) = self.store.get_event(event_id).await? {
             return Ok(Some(event));
         }
@@ -1229,42 +1364,40 @@ impl AppService {
             return Ok(None);
         };
 
-        let mut tags = vec![
-            vec!["t".into(), projection.topic_id.clone()],
-            vec!["topic".into(), projection.topic_id.clone()],
-        ];
-        if let Some(root_id) = projection
-            .root_id
-            .clone()
-            .filter(|value| !value.as_str().trim().is_empty())
-        {
-            tags.push(vec![
-                "e".into(),
-                root_id.0.clone(),
-                String::new(),
-                "root".into(),
-            ]);
-        }
-        if let Some(reply_to) = projection
-            .reply_to
-            .clone()
-            .filter(|value| !value.as_str().trim().is_empty())
-        {
-            tags.push(vec![
-                "e".into(),
-                reply_to.0.clone(),
-                String::new(),
-                "reply".into(),
-            ]);
-        }
-
         Ok(Some(kukuri_core::Event {
             id: projection.event_id,
             pubkey: projection.author_pubkey.into(),
             created_at: projection.created_at,
-            kind: 1,
-            tags,
-            content: projection.content.unwrap_or_default(),
+            kind: if projection.reply_to.is_some() {
+                "comment".into()
+            } else {
+                "post".into()
+            },
+            tags: vec![
+                vec!["topic".into(), projection.topic_id.clone()],
+                vec![
+                    "object".into(),
+                    if projection.reply_to.is_some() {
+                        "comment".into()
+                    } else {
+                        "post".into()
+                    },
+                ],
+            ],
+            content: serde_json::to_string(&kukuri_core::KukuriPostEnvelopeContentV1 {
+                object_kind: if projection.reply_to.is_some() {
+                    "comment".into()
+                } else {
+                    "post".into()
+                },
+                topic_id: TopicId::new(projection.topic_id.clone()),
+                payload_ref: projection.payload_ref.clone(),
+                attachments: Vec::new(),
+                media_manifest_refs: Vec::new(),
+                visibility: ObjectVisibility::Public,
+                reply_to: projection.reply_to.clone(),
+                root_id: projection.root_id.clone(),
+            })?,
             sig: String::new(),
         }))
     }
@@ -1291,7 +1424,7 @@ impl AppService {
     }
 
     async fn row_to_view(&self, row: EventProjectionRow) -> Result<PostView> {
-        let header = fetch_header_for_projection(
+        let post_object = fetch_post_object_for_projection(
             self.docs_sync.as_ref(),
             &row.source_replica_id,
             row.source_key.as_str(),
@@ -1299,44 +1432,55 @@ impl AppService {
         .await?;
         let content_status =
             blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
-        let attachments = if let Some(header) = header {
-            attachment_views(self.blob_service.as_ref(), &header).await?
+        let attachments = if let Some(post_object) = post_object {
+            attachment_views(self.blob_service.as_ref(), &post_object).await?
         } else {
             Vec::new()
         };
 
         Ok(PostView {
-            id: row.event_id.0.clone(),
+            object_id: row.event_id.0.clone(),
+            envelope_id: row.source_event_id.0.clone(),
             author_pubkey: row.author_pubkey.clone(),
-            author_npub: row.author_pubkey.clone(),
-            note_id: row.event_id.0.clone(),
             content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
             content_status,
             attachments,
             created_at: row.created_at,
-            reply_to: row.reply_to.map(|id| id.0),
-            root_id: row.root_id.map(|id| id.0),
+            reply_to: row.reply_to.clone().map(|id| id.0),
+            root_id: row.root_id.clone().map(|id| id.0),
+            object_kind: if row.reply_to.is_some() {
+                "comment".into()
+            } else {
+                "post".into()
+            },
         })
     }
 }
 
-async fn persist_header(
+async fn persist_post_object(
     docs_sync: &dyn DocsSync,
-    header: CanonicalPostHeader,
-    author_pubkey: &str,
+    object: CanonicalPostHeader,
+    envelope: kukuri_core::Event,
 ) -> Result<()> {
-    let topic_replica = topic_replica_id(header.topic_id.as_str());
-    let author_replica = author_replica_id(author_pubkey);
-    let sort_key = timeline_sort_key(header.created_at, &header.event_id);
-    let header_json = serde_json::to_value(&header)?;
+    let topic_replica = topic_replica_id(object.topic_id.as_str());
+    let sort_key = timeline_sort_key(object.created_at, &object.object_id);
+    let object_json = serde_json::to_value(&object)?;
     docs_sync.open_replica(&topic_replica).await?;
-    docs_sync.open_replica(&author_replica).await?;
     docs_sync
         .apply_doc_op(
             &topic_replica,
             DocOp::SetJson {
-                key: stable_key("post", &format!("{}/header", header.event_id.as_str())),
-                value: header_json.clone(),
+                key: stable_key("objects", &format!("{}/state", object.object_id.as_str())),
+                value: object_json,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &topic_replica,
+            DocOp::SetJson {
+                key: stable_key("objects", &format!("{}/envelope", object.object_id.as_str())),
+                value: serde_json::to_value(envelope)?,
             },
         )
         .await?;
@@ -1345,49 +1489,73 @@ async fn persist_header(
             &topic_replica,
             DocOp::SetJson {
                 key: stable_key(
-                    "timeline",
-                    &format!("{sort_key}/{}", header.event_id.as_str()),
+                    "indexes/timeline",
+                    &format!("{sort_key}/{}", object.object_id.as_str()),
                 ),
                 value: serde_json::json!({
-                    "event_id": header.event_id,
-                    "created_at": header.created_at,
+                    "object_id": object.object_id,
+                    "created_at": object.created_at,
+                    "object_kind": object.object_kind,
                 }),
             },
         )
         .await?;
-    let root_id = header
+    let root_id = object
         .root
         .clone()
-        .unwrap_or_else(|| header.event_id.clone());
+        .unwrap_or_else(|| object.object_id.clone());
     docs_sync
         .apply_doc_op(
             &topic_replica,
             DocOp::SetJson {
                 key: stable_key(
-                    "thread",
+                    "indexes/thread",
                     &format!(
                         "{}/{sort_key}/{}",
                         root_id.as_str(),
-                        header.event_id.as_str()
+                        object.object_id.as_str()
                     ),
                 ),
                 value: serde_json::json!({
-                    "event_id": header.event_id,
+                    "object_id": object.object_id,
                     "root_id": root_id,
-                    "reply_to": header.reply_to,
+                    "reply_to": object.reply_to,
                 }),
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+async fn persist_media_manifest(
+    topic: &TopicId,
+    envelope: &kukuri_core::Event,
+    manifest: &KukuriMediaManifestV1,
+    docs_sync: &dyn DocsSync,
+) -> Result<()> {
+    let replica = topic_replica_id(topic.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "manifests/media",
+                    &format!("{}/state", manifest.manifest_id),
+                ),
+                value: serde_json::to_value(manifest)?,
             },
         )
         .await?;
     docs_sync
         .apply_doc_op(
-            &author_replica,
+            &replica,
             DocOp::SetJson {
-                key: stable_key("posts", &format!("{sort_key}/{}", header.event_id.as_str())),
-                value: serde_json::json!({
-                    "event_id": header.event_id,
-                    "topic_id": header.topic_id,
-                }),
+                key: stable_key(
+                    "manifests/media",
+                    &format!("{}/envelope", manifest.manifest_id),
+                ),
+                value: serde_json::to_value(envelope)?,
             },
         )
         .await?;
@@ -1404,7 +1572,7 @@ async fn persist_live_session_state(
         .apply_doc_op(
             &replica,
             DocOp::SetJson {
-                key: stable_key("live", &format!("{}/state", state.session_id)),
+                key: stable_key("sessions/live", &format!("{}/state", state.session_id)),
                 value: serde_json::to_value(state)?,
             },
         )
@@ -1422,7 +1590,7 @@ async fn persist_game_room_state(
         .apply_doc_op(
             &replica,
             DocOp::SetJson {
-                key: stable_key("game", &format!("{}/state", state.room_id)),
+                key: stable_key("sessions/game", &format!("{}/state", state.room_id)),
                 value: serde_json::to_value(state)?,
             },
         )
@@ -1458,7 +1626,7 @@ async fn fetch_live_session_state(
     let records = docs_sync
         .query_replica(
             &replica,
-            DocQuery::Exact(stable_key("live", &format!("{session_id}/state"))),
+            DocQuery::Exact(stable_key("sessions/live", &format!("{session_id}/state"))),
         )
         .await?;
     let Some(record) = records.into_iter().next() else {
@@ -1476,7 +1644,7 @@ async fn fetch_game_room_state(
     let records = docs_sync
         .query_replica(
             &replica,
-            DocQuery::Exact(stable_key("game", &format!("{room_id}/state"))),
+            DocQuery::Exact(stable_key("sessions/game", &format!("{room_id}/state"))),
         )
         .await?;
     let Some(record) = records.into_iter().next() else {
@@ -1501,7 +1669,7 @@ fn live_projection_row_from_state(
         ended_at: manifest.ended_at,
         updated_at: state.updated_at,
         source_replica_id: topic_replica_id(topic_id),
-        source_key: stable_key("live", &format!("{}/state", state.session_id)),
+        source_key: stable_key("sessions/live", &format!("{}/state", state.session_id)),
         manifest_blob_hash: state.current_manifest.hash.clone(),
         derived_at: Utc::now().timestamp_millis(),
         projection_version: 1,
@@ -1525,7 +1693,7 @@ fn game_projection_row_from_state(
         scores: manifest.scores.clone(),
         updated_at: state.updated_at,
         source_replica_id: topic_replica_id(topic_id),
-        source_key: stable_key("game", &format!("{}/state", state.room_id)),
+        source_key: stable_key("sessions/game", &format!("{}/state", state.room_id)),
         manifest_blob_hash: state.current_manifest.hash.clone(),
         derived_at: Utc::now().timestamp_millis(),
         projection_version: 1,
@@ -1541,7 +1709,7 @@ fn projection_row_from_header(
         PayloadRef::InlineText { .. } => None,
     };
     EventProjectionRow {
-        event_id: header.event_id.clone(),
+        event_id: header.object_id.clone(),
         topic_id: header.topic_id.as_str().to_string(),
         author_pubkey: header.author.as_str().to_string(),
         created_at: header.created_at,
@@ -1550,8 +1718,8 @@ fn projection_row_from_header(
         payload_ref: header.payload_ref.clone(),
         content,
         source_replica_id: topic_replica_id(header.topic_id.as_str()),
-        source_key: stable_key("post", &format!("{}/header", header.event_id.as_str())),
-        source_event_id: header.event_id.clone(),
+        source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
+        source_event_id: header.envelope_id.clone(),
         source_blob_hash,
         derived_at: Utc::now().timestamp_millis(),
         projection_version: 1,
@@ -1566,10 +1734,13 @@ async fn hydrate_topic_projection_with_services(
 ) -> Result<usize> {
     let replica = topic_replica_id(topic_id);
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("post/".into()))
+        .query_replica(&replica, DocQuery::Prefix("objects/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
+        if !record.key.ends_with("/state") {
+            continue;
+        }
         let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
         let content = match &header.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
@@ -1634,7 +1805,7 @@ async fn hydrate_live_sessions_with_services(
 ) -> Result<usize> {
     let replica = topic_replica_id(topic_id);
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("live/".into()))
+        .query_replica(&replica, DocQuery::Prefix("sessions/live/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
@@ -1671,7 +1842,7 @@ async fn hydrate_game_rooms_with_services(
 ) -> Result<usize> {
     let replica = topic_replica_id(topic_id);
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("game/".into()))
+        .query_replica(&replica, DocQuery::Prefix("sessions/game/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
@@ -1702,10 +1873,10 @@ async fn hydrate_game_rooms_with_services(
 
 fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
     match hint {
-        GossipHint::TopicIndexUpdated { topic_id, .. }
+        GossipHint::TopicObjectsChanged { topic_id, .. }
         | GossipHint::Presence { topic_id, .. }
         | GossipHint::Typing { topic_id, .. }
-        | GossipHint::LiveSignal { topic_id, .. }
+        | GossipHint::SessionChanged { topic_id, .. }
         | GossipHint::LivePresence { topic_id, .. } => topic_id.as_str() == topic,
         GossipHint::ThreadUpdated { .. } | GossipHint::ProfileUpdated { .. } => true,
     }
@@ -1715,7 +1886,7 @@ fn projection_page_needs_hydration(page: &Page<EventProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
 }
 
-async fn fetch_header_for_projection(
+async fn fetch_post_object_for_projection(
     docs_sync: &dyn DocsSync,
     replica_id: &ReplicaId,
     source_key: &str,
@@ -1805,17 +1976,25 @@ fn sanitize_game_participants(participants: Vec<String>) -> Result<Vec<String>> 
 
 fn validate_game_room_transition(current: &GameRoomStatus, next: &GameRoomStatus) -> Result<()> {
     match (current, next) {
-        (GameRoomStatus::Finished, GameRoomStatus::Finished) => {
-            anyhow::bail!("finished game room cannot be updated")
+        (GameRoomStatus::Ended, GameRoomStatus::Ended) => {
+            anyhow::bail!("ended game room cannot be updated")
         }
-        (GameRoomStatus::Finished, _) => anyhow::bail!("finished game room cannot be updated"),
-        (GameRoomStatus::Open, GameRoomStatus::Open)
-        | (GameRoomStatus::Open, GameRoomStatus::InProgress)
-        | (GameRoomStatus::Open, GameRoomStatus::Finished)
-        | (GameRoomStatus::InProgress, GameRoomStatus::InProgress)
-        | (GameRoomStatus::InProgress, GameRoomStatus::Finished) => Ok(()),
-        (GameRoomStatus::InProgress, GameRoomStatus::Open) => {
-            anyhow::bail!("game room cannot move back to open")
+        (GameRoomStatus::Ended, _) => anyhow::bail!("ended game room cannot be updated"),
+        (GameRoomStatus::Waiting, GameRoomStatus::Waiting)
+        | (GameRoomStatus::Waiting, GameRoomStatus::Running)
+        | (GameRoomStatus::Waiting, GameRoomStatus::Ended)
+        | (GameRoomStatus::Running, GameRoomStatus::Running)
+        | (GameRoomStatus::Running, GameRoomStatus::Paused)
+        | (GameRoomStatus::Running, GameRoomStatus::Ended)
+        | (GameRoomStatus::Paused, GameRoomStatus::Paused)
+        | (GameRoomStatus::Paused, GameRoomStatus::Running)
+        | (GameRoomStatus::Paused, GameRoomStatus::Ended) => Ok(()),
+        (GameRoomStatus::Waiting, GameRoomStatus::Paused) => {
+            anyhow::bail!("game room cannot pause before it starts")
+        }
+        (GameRoomStatus::Running, GameRoomStatus::Waiting)
+        | (GameRoomStatus::Paused, GameRoomStatus::Waiting) => {
+            anyhow::bail!("game room cannot move back to waiting")
         }
     }
 }
@@ -1995,6 +2174,43 @@ mod tests {
                 .or_insert_with(|| broadcast::channel(64).0)
                 .clone()
         }
+    }
+
+    async fn persist_test_post(
+        docs_sync: &dyn DocsSync,
+        projection_store: Option<&dyn ProjectionStore>,
+        keys: &nostr_sdk::prelude::Keys,
+        topic: &TopicId,
+        payload_ref: PayloadRef,
+        attachments: Vec<kukuri_core::AssetRef>,
+        reply_to: Option<&kukuri_core::Event>,
+    ) -> kukuri_core::Event {
+        let event = build_post_envelope_with_payload(
+            keys,
+            topic,
+            payload_ref,
+            attachments,
+            Vec::new(),
+            reply_to,
+            ObjectVisibility::Public,
+        )
+        .expect("event");
+        let object = event
+            .to_post_object()
+            .expect("post object")
+            .expect("post object");
+        persist_post_object(docs_sync, object.clone(), event.clone())
+            .await
+            .expect("persist post object");
+        if let Some(projection_store) = projection_store {
+            ProjectionStore::put_projection_row(
+                projection_store,
+                projection_row_from_header(&object, None),
+            )
+            .await
+            .expect("put placeholder projection");
+        }
+        event
     }
 
     #[async_trait]
@@ -2255,7 +2471,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -2283,7 +2499,7 @@ mod tests {
             .expect("timeline");
 
         assert_eq!(timeline.items.len(), 1);
-        assert_eq!(timeline.items[0].id, event_id);
+        assert_eq!(timeline.items[0].object_id, event_id);
         assert_eq!(timeline.items[0].content, "hello app");
     }
 
@@ -2314,7 +2530,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("image post");
         assert_eq!(post.content, "caption");
         assert_eq!(post.attachments.len(), 1);
@@ -2350,7 +2566,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("image-only post");
         assert_eq!(post.attachments.len(), 1);
         assert_eq!(post.attachments[0].mime, "image/jpeg");
@@ -2390,7 +2606,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("video post");
         assert_eq!(post.attachments.len(), 2);
         assert!(
@@ -2468,25 +2684,24 @@ mod tests {
         let blob_service = Arc::new(MemoryBlobService::default());
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:hydrate");
-        let event = build_text_note(&keys, &topic, "hello after blob fetch", None).expect("event");
         let stored_blob = blob_service
             .put_blob(b"hello after blob fetch".to_vec(), "text/plain")
             .await
             .expect("put blob");
-        let header = event.to_canonical_header(PayloadRef::BlobText {
-            hash: stored_blob.hash.clone(),
-            mime: stored_blob.mime.clone(),
-            bytes: stored_blob.bytes,
-        });
-        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
-            .await
-            .expect("persist header");
-        ProjectionStore::put_projection_row(
-            store.as_ref(),
-            projection_row_from_header(&header, None),
+        persist_test_post(
+            docs_sync.as_ref(),
+            Some(store.as_ref()),
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: stored_blob.hash.clone(),
+                mime: stored_blob.mime.clone(),
+                bytes: stored_blob.bytes,
+            },
+            Vec::new(),
+            None,
         )
-        .await
-        .expect("put placeholder projection");
+        .await;
 
         let app = AppService::new_with_services(
             store.clone(),
@@ -2515,19 +2730,24 @@ mod tests {
         let blob_service = Arc::new(MemoryBlobService::default());
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:on-demand-sync-ts");
-        let event = build_text_note(&keys, &topic, "hydrate updates sync ts", None).expect("event");
         let stored_blob = blob_service
             .put_blob(b"hydrate updates sync ts".to_vec(), "text/plain")
             .await
             .expect("put blob");
-        let header = event.to_canonical_header(PayloadRef::BlobText {
-            hash: stored_blob.hash,
-            mime: stored_blob.mime,
-            bytes: stored_blob.bytes,
-        });
-        persist_header(docs_sync.as_ref(), header, event.pubkey.as_str())
-            .await
-            .expect("persist header");
+        persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: stored_blob.hash,
+                mime: stored_blob.mime,
+                bytes: stored_blob.bytes,
+            },
+            Vec::new(),
+            None,
+        )
+        .await;
 
         let app = AppService::new_with_services(
             store.clone(),
@@ -2643,29 +2863,42 @@ mod tests {
         let blob_service = Arc::new(MemoryBlobService::default());
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:thread-lazy");
-        let root = build_text_note(&keys, &topic, "root body", None).expect("root");
-        let reply = build_text_note(&keys, &topic, "reply body", Some(&root)).expect("reply");
-
-        for event in [root.clone(), reply.clone()] {
-            let blob = blob_service
-                .put_blob(event.content.as_bytes().to_vec(), "text/plain")
-                .await
-                .expect("put blob");
-            let header = event.to_canonical_header(PayloadRef::BlobText {
-                hash: blob.hash,
-                mime: blob.mime,
-                bytes: blob.bytes,
-            });
-            persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
-                .await
-                .expect("persist header");
-            ProjectionStore::put_projection_row(
-                store.as_ref(),
-                projection_row_from_header(&header, None),
-            )
+        let root_blob = blob_service
+            .put_blob(b"root body".to_vec(), "text/plain")
             .await
-            .expect("placeholder row");
-        }
+            .expect("put root blob");
+        let root = persist_test_post(
+            docs_sync.as_ref(),
+            Some(store.as_ref()),
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: root_blob.hash,
+                mime: root_blob.mime,
+                bytes: root_blob.bytes,
+            },
+            Vec::new(),
+            None,
+        )
+        .await;
+        let reply_blob = blob_service
+            .put_blob(b"reply body".to_vec(), "text/plain")
+            .await
+            .expect("put reply blob");
+        let _reply = persist_test_post(
+            docs_sync.as_ref(),
+            Some(store.as_ref()),
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: reply_blob.hash,
+                mime: reply_blob.mime,
+                bytes: reply_blob.bytes,
+            },
+            Vec::new(),
+            Some(&root),
+        )
+        .await;
 
         let app = AppService::new_with_services(
             store.clone(),
@@ -2695,23 +2928,27 @@ mod tests {
         let blob_service = Arc::new(MemoryBlobService::default());
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:image");
-        let event = build_text_note(&keys, &topic, "", None).expect("event");
         let image_bytes = b"fake image bytes".to_vec();
         let image_hash = kukuri_core::blob_hash(&image_bytes);
-        let mut header = event.to_canonical_header(PayloadRef::BlobText {
-            hash: kukuri_core::BlobHash::new("f".repeat(64)),
-            mime: "text/plain".into(),
-            bytes: 0,
-        });
-        header.attachments = vec![kukuri_core::AssetRef {
-            hash: image_hash.clone(),
-            mime: "image/png".into(),
-            bytes: image_bytes.len() as u64,
-            role: kukuri_core::AssetRole::ImageOriginal,
-        }];
-        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
-            .await
-            .expect("persist header");
+        persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: kukuri_core::BlobHash::new("f".repeat(64)),
+                mime: "text/plain".into(),
+                bytes: 0,
+            },
+            vec![kukuri_core::AssetRef {
+                hash: image_hash.clone(),
+                mime: "image/png".into(),
+                bytes: image_bytes.len() as u64,
+                role: kukuri_core::AssetRole::ImageOriginal,
+            }],
+            None,
+        )
+        .await;
 
         let app = AppService::new_with_services(
             store.clone(),
@@ -2762,30 +2999,34 @@ mod tests {
         let blob_service = Arc::new(MemoryBlobService::default());
         let keys = generate_keys();
         let topic = TopicId::new("kukuri:topic:video");
-        let event = build_text_note(&keys, &topic, "video caption", None).expect("event");
-        let mut header = event.to_canonical_header(PayloadRef::BlobText {
-            hash: kukuri_core::BlobHash::new("f".repeat(64)),
-            mime: "text/plain".into(),
-            bytes: 13,
-        });
         let poster_hash = kukuri_core::blob_hash(b"poster-bytes");
-        header.attachments = vec![
-            kukuri_core::AssetRef {
-                hash: kukuri_core::blob_hash(b"video-bytes"),
-                mime: "video/mp4".into(),
-                bytes: 8192,
-                role: kukuri_core::AssetRole::VideoManifest,
+        persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &keys,
+            &topic,
+            PayloadRef::BlobText {
+                hash: kukuri_core::BlobHash::new("f".repeat(64)),
+                mime: "text/plain".into(),
+                bytes: 13,
             },
-            kukuri_core::AssetRef {
-                hash: poster_hash.clone(),
-                mime: "image/jpeg".into(),
-                bytes: 1024,
-                role: kukuri_core::AssetRole::VideoPoster,
-            },
-        ];
-        persist_header(docs_sync.as_ref(), header.clone(), event.pubkey.as_str())
-            .await
-            .expect("persist header");
+            vec![
+                kukuri_core::AssetRef {
+                    hash: kukuri_core::blob_hash(b"video-bytes"),
+                    mime: "video/mp4".into(),
+                    bytes: 8192,
+                    role: kukuri_core::AssetRole::VideoManifest,
+                },
+                kukuri_core::AssetRef {
+                    hash: poster_hash.clone(),
+                    mime: "image/jpeg".into(),
+                    bytes: 1024,
+                    role: kukuri_core::AssetRole::VideoPoster,
+                },
+            ],
+            None,
+        )
+        .await;
 
         let app = AppService::new_with_services(
             store.clone(),
@@ -2843,7 +3084,7 @@ mod tests {
             .await
             .expect("create post");
         let projection =
-            ProjectionStore::get_event_projection(store.as_ref(), &EventId::from(event_id))
+            ProjectionStore::get_event_projection(store.as_ref(), &EnvelopeId::from(event_id))
                 .await
                 .expect("projection")
                 .expect("projection row");
@@ -2972,7 +3213,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3043,7 +3284,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3119,7 +3360,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3231,7 +3472,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3309,7 +3550,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3391,7 +3632,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if timeline.items.iter().any(|post| post.id == event_id) {
+                if timeline.items.iter().any(|post| post.object_id == event_id) {
                     return;
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3473,7 +3714,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3530,7 +3771,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3595,7 +3836,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3655,7 +3896,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3734,7 +3975,7 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if timeline.items.iter().any(|post| post.id == root_id) {
+                if timeline.items.iter().any(|post| post.object_id == root_id) {
                     return;
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3753,7 +3994,7 @@ mod tests {
                     .list_thread(topic, root_id.as_str(), None, 20)
                     .await
                     .expect("thread a");
-                if thread.items.iter().any(|post| post.id == reply_id) {
+                if thread.items.iter().any(|post| post.object_id == reply_id) {
                     return thread;
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3766,7 +4007,7 @@ mod tests {
         let reply = thread
             .items
             .iter()
-            .find(|post| post.id == reply_id)
+            .find(|post| post.object_id == reply_id)
             .expect("reply in thread");
         assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
         assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
@@ -3820,7 +4061,7 @@ mod tests {
             loop {
                 let projection = ProjectionStore::get_event_projection(
                     store_b.as_ref(),
-                    &EventId::from(root_id.clone()),
+                    &EnvelopeId::from(root_id.clone()),
                 )
                 .await
                 .expect("root projection")
@@ -3849,7 +4090,7 @@ mod tests {
                     .list_thread(topic, root_id.as_str(), None, 20)
                     .await
                     .expect("thread a");
-                if thread.items.iter().any(|post| post.id == reply_id) {
+                if thread.items.iter().any(|post| post.object_id == reply_id) {
                     return thread;
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3861,12 +4102,12 @@ mod tests {
         let root = thread
             .items
             .iter()
-            .find(|post| post.id == root_id)
+            .find(|post| post.object_id == root_id)
             .expect("root in thread");
         let reply = thread
             .items
             .iter()
-            .find(|post| post.id == reply_id)
+            .find(|post| post.object_id == reply_id)
             .expect("reply in thread");
         assert_eq!(root.attachments[0].mime, "image/png");
         assert_eq!(reply.attachments[0].mime, "image/jpeg");
@@ -3940,8 +4181,8 @@ mod tests {
                     .list_timeline(topic_two, None, 20)
                     .await
                     .expect("timeline a");
-                let has_one = timeline_b.items.iter().any(|post| post.id == id_one);
-                let has_two = timeline_a.items.iter().any(|post| post.id == id_two);
+                let has_one = timeline_b.items.iter().any(|post| post.object_id == id_one);
+                let has_two = timeline_a.items.iter().any(|post| post.object_id == id_two);
                 if has_one && has_two {
                     return;
                 }
@@ -4136,7 +4377,7 @@ mod tests {
                 topic,
                 room_id.as_str(),
                 UpdateGameRoomInput {
-                    status: GameRoomStatus::InProgress,
+                    status: GameRoomStatus::Running,
                     phase_label: Some("Round 2".into()),
                     scores: vec![
                         GameScoreView {
@@ -4167,7 +4408,7 @@ mod tests {
         .await
         .expect("game room replication timeout");
 
-        assert_eq!(received.status, GameRoomStatus::InProgress);
+        assert_eq!(received.status, GameRoomStatus::Running);
         assert_eq!(received.phase_label.as_deref(), Some("Round 2"));
         assert_eq!(
             received
@@ -4201,7 +4442,7 @@ mod tests {
             topic,
             room_id.as_str(),
             UpdateGameRoomInput {
-                status: GameRoomStatus::Finished,
+                status: GameRoomStatus::Ended,
                 phase_label: Some("Final".into()),
                 scores: vec![
                     GameScoreView {
@@ -4225,7 +4466,7 @@ mod tests {
                 topic,
                 room_id.as_str(),
                 UpdateGameRoomInput {
-                    status: GameRoomStatus::Finished,
+                    status: GameRoomStatus::Ended,
                     phase_label: Some("After".into()),
                     scores: vec![
                         GameScoreView {
@@ -4242,7 +4483,7 @@ mod tests {
                 },
             )
             .await
-            .expect_err("finished room update should fail");
-        assert!(error.to_string().contains("finished game room"));
+            .expect_err("ended room update should fail");
+        assert!(error.to_string().contains("ended game room"));
     }
 }

@@ -16,7 +16,7 @@ use kukuri_app_api::{
 use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, build_auth_event_json, normalize_http_url,
+    CommunityNodeResolvedUrls, build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{AssetRole, GameRoomStatus};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
@@ -254,7 +254,7 @@ pub struct DesktopRuntime {
     iroh_stack: SharedIrohStack,
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
     community_node_config: Arc<Mutex<CommunityNodeConfig>>,
-    startup_relay_urls: Vec<String>,
+    startup_connectivity_urls: Vec<String>,
 }
 
 struct SharedIrohStack {
@@ -348,7 +348,7 @@ impl DesktopRuntime {
             iroh_stack,
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
-            startup_relay_urls: relay_config.iroh_relay_urls,
+            startup_connectivity_urls: relay_config.iroh_relay_urls,
         })
     }
 
@@ -628,7 +628,7 @@ impl DesktopRuntime {
                     .map(|resolved| resolved.public_base_url.clone())
             })
             .unwrap_or_else(|| base_url.clone());
-        let auth_event_json = build_auth_event_json(
+        let auth_envelope_json = build_auth_envelope_json(
             self.author_keys.as_ref(),
             challenge.challenge.as_str(),
             public_base_url.as_str(),
@@ -636,10 +636,10 @@ impl DesktopRuntime {
         let verify_url = format!("{}/v1/auth/verify", base_url);
         let verify = client
             .post(verify_url)
-            .json(&serde_json::json!({ "auth_event_json": auth_event_json }))
+            .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json }))
             .send()
             .await
-            .context("failed to verify auth event")?
+            .context("failed to verify auth envelope")?
             .error_for_status()
             .context("auth verify request failed")?
             .json::<AuthVerifyResponse>()
@@ -871,7 +871,7 @@ impl DesktopRuntime {
             },
             None => CommunityNodeAuthState::default(),
         };
-        let current_relay_urls = relay_config_from_community_node_config(
+        let current_connectivity_urls = relay_config_from_community_node_config(
             &self.community_node_config.lock().await.clone(),
         )
         .iroh_relay_urls;
@@ -881,7 +881,7 @@ impl DesktopRuntime {
             consent_state,
             resolved_urls: node.resolved_urls,
             last_error,
-            restart_required: current_relay_urls != self.startup_relay_urls,
+            restart_required: current_connectivity_urls != self.startup_connectivity_urls,
         })
     }
 }
@@ -1046,8 +1046,7 @@ fn normalize_community_node_config(config: CommunityNodeConfig) -> Result<Commun
         let resolved_urls = match node.resolved_urls {
             Some(resolved) => Some(CommunityNodeResolvedUrls::new(
                 resolved.public_base_url,
-                resolved.relay_ws_url,
-                resolved.iroh_relay_urls,
+                resolved.connectivity_urls,
             )?),
             None => None,
         };
@@ -1068,7 +1067,7 @@ fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> Tran
     let mut iroh_relay_urls = std::collections::BTreeSet::new();
     for node in &config.nodes {
         if let Some(resolved) = node.resolved_urls.as_ref() {
-            for relay_url in &resolved.iroh_relay_urls {
+            for relay_url in &resolved.connectivity_urls {
                 iroh_relay_urls.insert(relay_url.clone());
             }
         }
@@ -1455,22 +1454,22 @@ mod tests {
             .await
             .expect("timeline");
 
-        assert!(timeline.items.iter().any(|post| post.id == event_id));
+        assert!(timeline.items.iter().any(|post| post.object_id == event_id));
         assert!(
             timeline
                 .items
                 .iter()
-                .any(|post| post.id == restarted_event_id)
+                .any(|post| post.object_id == restarted_event_id)
         );
         let original_post = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("original post");
         let restarted_post = timeline
             .items
             .iter()
-            .find(|post| post.id == restarted_event_id)
+            .find(|post| post.object_id == restarted_event_id)
             .expect("restarted post");
         assert_eq!(original_post.author_pubkey, restarted_post.author_pubkey);
         assert_eq!(restarted.db_path(), db_path.as_path());
@@ -1547,7 +1546,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1663,7 +1662,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1783,7 +1782,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1868,7 +1867,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1934,7 +1933,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -2017,7 +2016,7 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -2090,7 +2089,7 @@ mod tests {
         let created = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("created post");
 
         let payload = runtime
@@ -2168,10 +2167,10 @@ mod tests {
             .await
             .expect("thread");
 
-        assert!(timeline.items.iter().any(|post| post.id == root_id));
-        assert!(timeline.items.iter().any(|post| post.id == reply_id));
-        assert!(thread.items.iter().any(|post| post.id == root_id));
-        assert!(thread.items.iter().any(|post| post.id == reply_id));
+        assert!(timeline.items.iter().any(|post| post.object_id == root_id));
+        assert!(timeline.items.iter().any(|post| post.object_id == reply_id));
+        assert!(thread.items.iter().any(|post| post.object_id == root_id));
+        assert!(thread.items.iter().any(|post| post.object_id == reply_id));
     }
 
     #[tokio::test]
@@ -2218,7 +2217,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("restored post");
         assert_eq!(restored.content, "restored from docs");
     }
@@ -2270,7 +2269,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("restored image post");
 
         assert_eq!(restored.attachments.len(), 1);
@@ -2340,7 +2339,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.id == event_id)
+            .find(|post| post.object_id == event_id)
             .expect("restored video post");
 
         let poster = restored
@@ -2456,7 +2455,7 @@ mod tests {
             .update_game_room(UpdateGameRoomRequest {
                 topic: topic.into(),
                 room_id: room_id.clone(),
-                status: GameRoomStatus::InProgress,
+                status: GameRoomStatus::Running,
                 phase_label: Some("Round 3".into()),
                 scores: vec![
                     GameScoreView {
@@ -2494,7 +2493,7 @@ mod tests {
             .iter()
             .find(|room| room.room_id == room_id)
             .expect("restored game room");
-        assert_eq!(restored.status, GameRoomStatus::InProgress);
+        assert_eq!(restored.status, GameRoomStatus::Running);
         assert_eq!(restored.phase_label.as_deref(), Some("Round 3"));
         assert_eq!(
             restored
@@ -2507,7 +2506,7 @@ mod tests {
     }
 
     #[test]
-    fn community_node_config_normalizes_base_urls_and_relay_urls() {
+    fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
         let config = normalize_community_node_config(CommunityNodeConfig {
             nodes: vec![
                 CommunityNodeNodeConfig {
@@ -2515,7 +2514,6 @@ mod tests {
                     resolved_urls: Some(
                         CommunityNodeResolvedUrls::new(
                             "https://public.example.com/",
-                            "wss://public.example.com/relay/",
                             vec![
                                 "https://relay-b.example.com/".into(),
                                 "https://relay-a.example.com/".into(),
@@ -2540,7 +2538,7 @@ mod tests {
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls")
-                .iroh_relay_urls,
+                .connectivity_urls,
             vec![
                 "https://relay-a.example.com".to_string(),
                 "https://relay-b.example.com".to_string(),
@@ -2556,7 +2554,6 @@ mod tests {
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
                         "https://api.kukuri.app/",
-                        "wss://relay.kukuri.app/relay/",
                         vec!["https://iroh-relay.kukuri.app/".into()],
                     )
                     .expect("resolved urls"),
@@ -2572,16 +2569,20 @@ mod tests {
 
         assert_eq!(config.nodes[0].base_url, "https://api.kukuri.app");
         assert_eq!(resolved.public_base_url, "https://api.kukuri.app");
-        assert_eq!(resolved.relay_ws_url, "wss://relay.kukuri.app/relay");
         assert_eq!(
-            resolved.iroh_relay_urls,
+            resolved.connectivity_urls,
             vec!["https://iroh-relay.kukuri.app".to_string()]
         );
-        assert!(!resolved.relay_ws_url.contains("api.kukuri.app/relay"));
+        assert!(
+            resolved
+                .connectivity_urls
+                .iter()
+                .all(|url| !url.contains("api.kukuri.app/relay"))
+        );
     }
 
     #[test]
-    fn stored_community_node_config_restores_cached_relay_union() {
+    fn stored_community_node_config_restores_cached_connectivity_union() {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("community-relay.db");
         save_community_node_config(
@@ -2592,7 +2593,6 @@ mod tests {
                     resolved_urls: Some(
                         CommunityNodeResolvedUrls::new(
                             "https://public.example.com",
-                            "wss://public.example.com/relay",
                             vec!["https://relay.example.com".into()],
                         )
                         .expect("resolved urls"),

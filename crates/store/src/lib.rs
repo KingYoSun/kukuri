@@ -218,7 +218,7 @@ impl Store for SqliteStore {
         .bind(event.id.as_str())
         .bind(event.pubkey.as_str())
         .bind(event.created_at)
-        .bind(i64::from(event.kind))
+        .bind(event.kind.as_str())
         .bind(event.content.as_str())
         .bind(tags_json)
         .bind(event.sig.as_str())
@@ -1146,7 +1146,7 @@ fn row_to_event(row: sqlx::sqlite::SqliteRow) -> Result<Event> {
         id: row.get::<String, _>("event_id").into(),
         pubkey: row.get::<String, _>("pubkey").into(),
         created_at: row.get("created_at"),
-        kind: row.get::<i64, _>("kind") as u16,
+        kind: row.get("kind"),
         content: row.get("content"),
         tags: serde_json::from_str(row.get::<String, _>("tags_json").as_str())?,
         sig: row.get("sig"),
@@ -1226,14 +1226,18 @@ fn row_to_game_room_projection(row: sqlx::sqlite::SqliteRow) -> Result<GameRoomP
 
 fn live_status_name(status: &LiveSessionStatus) -> &'static str {
     match status {
+        LiveSessionStatus::Scheduled => "scheduled",
         LiveSessionStatus::Live => "live",
+        LiveSessionStatus::Paused => "paused",
         LiveSessionStatus::Ended => "ended",
     }
 }
 
 fn parse_live_status(value: &str) -> Result<LiveSessionStatus> {
     match value {
+        "scheduled" => Ok(LiveSessionStatus::Scheduled),
         "live" => Ok(LiveSessionStatus::Live),
+        "paused" => Ok(LiveSessionStatus::Paused),
         "ended" => Ok(LiveSessionStatus::Ended),
         _ => anyhow::bail!("unknown live session status: {value}"),
     }
@@ -1241,17 +1245,19 @@ fn parse_live_status(value: &str) -> Result<LiveSessionStatus> {
 
 fn game_status_name(status: &GameRoomStatus) -> &'static str {
     match status {
-        GameRoomStatus::Open => "open",
-        GameRoomStatus::InProgress => "in_progress",
-        GameRoomStatus::Finished => "finished",
+        GameRoomStatus::Waiting => "waiting",
+        GameRoomStatus::Running => "running",
+        GameRoomStatus::Paused => "paused",
+        GameRoomStatus::Ended => "ended",
     }
 }
 
 fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
     match value {
-        "open" => Ok(GameRoomStatus::Open),
-        "in_progress" => Ok(GameRoomStatus::InProgress),
-        "finished" => Ok(GameRoomStatus::Finished),
+        "open" | "waiting" => Ok(GameRoomStatus::Waiting),
+        "in_progress" | "running" => Ok(GameRoomStatus::Running),
+        "paused" => Ok(GameRoomStatus::Paused),
+        "finished" | "ended" => Ok(GameRoomStatus::Ended),
         _ => anyhow::bail!("unknown game room status: {value}"),
     }
 }
@@ -1385,7 +1391,7 @@ fn apply_asc_projection_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kukuri_core::{BlobHash, PayloadRef, ReplicaId, TopicId, build_text_note, generate_keys};
+    use kukuri_core::{BlobHash, PayloadRef, ReplicaId, TopicId, build_post_envelope, generate_keys};
 
     #[tokio::test]
     async fn store_timeline_cursor_stable() {
@@ -1393,9 +1399,9 @@ mod tests {
         let topic = TopicId::new("kukuri:topic:timeline");
         let keys = generate_keys();
 
-        let first = build_text_note(&keys, &topic, "one", None).expect("first");
-        let second = build_text_note(&keys, &topic, "two", None).expect("second");
-        let third = build_text_note(&keys, &topic, "three", None).expect("third");
+        let first = build_post_envelope(&keys, &topic, "one", None).expect("first");
+        let second = build_post_envelope(&keys, &topic, "two", None).expect("second");
+        let third = build_post_envelope(&keys, &topic, "three", None).expect("third");
         store.put_event(first.clone()).await.expect("insert first");
         store
             .put_event(second.clone())
@@ -1428,8 +1434,8 @@ mod tests {
         let topic = TopicId::new("kukuri:topic:thread");
         let keys = generate_keys();
 
-        let root = build_text_note(&keys, &topic, "root", None).expect("root");
-        let reply = build_text_note(&keys, &topic, "reply", Some(&root)).expect("reply");
+        let root = build_post_envelope(&keys, &topic, "root", None).expect("root");
+        let reply = build_post_envelope(&keys, &topic, "reply", Some(&root)).expect("reply");
         store.put_event(root.clone()).await.expect("insert root");
         store.put_event(reply.clone()).await.expect("insert reply");
 

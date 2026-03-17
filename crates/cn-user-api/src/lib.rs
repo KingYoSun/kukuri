@@ -10,8 +10,8 @@ use kukuri_cn_core::{
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
     accept_consents, connect_postgres, create_auth_challenge, get_consent_status,
     initialize_database, initialize_database_for_runtime, load_bootstrap_nodes, normalize_http_url,
-    normalize_http_url_list, normalize_ws_url, require_bearer_pubkey, require_consents,
-    verify_auth_event_and_issue_token,
+    normalize_http_url_list, require_bearer_pubkey, require_consents,
+    verify_auth_envelope_and_issue_token,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -32,8 +32,7 @@ pub struct UserApiConfig {
     pub database_url: String,
     pub base_url: String,
     pub public_base_url: String,
-    pub relay_ws_url: String,
-    pub iroh_relay_urls: Vec<String>,
+    pub connectivity_urls: Vec<String>,
     pub jwt_config: JwtConfig,
 }
 
@@ -44,7 +43,7 @@ struct AuthChallengeRequest {
 
 #[derive(Debug, Deserialize)]
 struct AuthVerifyRequest {
-    auth_event_json: Value,
+    auth_envelope_json: Value,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -77,20 +76,14 @@ impl UserApiConfig {
                 .as_deref()
                 .unwrap_or(base_url.as_str()),
         )?;
-        let relay_ws_url = normalize_ws_url(
-            std::env::var("COMMUNITY_NODE_RELAY_WS_URL")
-                .context("COMMUNITY_NODE_RELAY_WS_URL is required")?
-                .as_str(),
-        )?;
-        let iroh_relay_urls =
-            normalize_http_url_list(parse_csv_env("COMMUNITY_NODE_IROH_RELAY_URLS"))?;
+        let connectivity_urls =
+            normalize_http_url_list(parse_csv_env("COMMUNITY_NODE_CONNECTIVITY_URLS"))?;
         Ok(Self {
             bind_addr,
             database_url,
             base_url,
             public_base_url,
-            relay_ws_url,
-            iroh_relay_urls,
+            connectivity_urls,
             jwt_config: JwtConfig::from_env()?,
         })
     }
@@ -116,8 +109,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
             base_url: config.base_url.clone(),
             resolved_urls: CommunityNodeResolvedUrls::new(
                 config.public_base_url.clone(),
-                config.relay_ws_url.clone(),
-                config.iroh_relay_urls.clone(),
+                config.connectivity_urls.clone(),
             )?,
         },
     })
@@ -181,11 +173,11 @@ async fn auth_verify(
     State(state): State<UserApiState>,
     Json(request): Json<AuthVerifyRequest>,
 ) -> ApiResult<Json<AuthVerifyResponse>> {
-    let response = verify_auth_event_and_issue_token(
+    let response = verify_auth_envelope_and_issue_token(
         &state.pool,
         &state.jwt_config,
         state.self_node.resolved_urls.public_base_url.as_str(),
-        &request.auth_event_json,
+        &request.auth_envelope_json,
     )
     .await
     .map_err(|error| {

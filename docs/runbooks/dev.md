@@ -22,19 +22,19 @@ cargo xtask scenario community_node_public_connectivity
 
 - `cargo xtask test` は workspace 全体を通すが、Postgres が必要な `cn-*` integration test は実行しない。
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
-- `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-relay` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
+- `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
 
 ## community-node compose
 ```bash
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
-docker compose --env-file .env.community-node -f docker-compose.community-node.yml up --build cn-user-api cn-relay cn-iroh-relay
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up --build cn-user-api cn-iroh-relay
 ```
 
-- host port の既定値は `18080` (`cn-user-api`), `18081` (`cn-relay`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
+- host port の既定値は `18080` (`cn-user-api`), `13340` (`cn-iroh-relay`), `55432` (`cn-postgres`)
 - host 側 bind の既定値は loopback (`127.0.0.1`) なので、LAN/WireGuard 越しに公開する場合は `CN_*_HOST_BIND_IP` を上書きする
-- compose 内の service 名は `cn-postgres`, `cn-migrate`, `cn-user-api`, `cn-relay`, `cn-iroh-relay`
-- public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `CN_RELAY_WS_URL`, `CN_IROH_RELAY_URLS` を上書きする
-- `cn-user-api` / `cn-relay` は `COMMUNITY_NODE_DATABASE_INIT_MODE=require_ready` で起動するので、`cn-migrate` または `cn-cli prepare` を先に流さないと fail-fast する
+- compose 内の service 名は `cn-postgres`, `cn-migrate`, `cn-user-api`, `cn-iroh-relay`
+- public URL を変える場合は `CN_BASE_URL`, `CN_PUBLIC_BASE_URL`, `COMMUNITY_NODE_CONNECTIVITY_URLS` を上書きする
+- `cn-user-api` は `COMMUNITY_NODE_DATABASE_INIT_MODE=require_ready` で起動するので、`cn-migrate` または `cn-cli prepare` を先に流さないと fail-fast する
 
 ## community-node env 標準形
 - `.env.community-node.example` をコピーして `.env.community-node` を作り、compose では `--env-file .env.community-node` を使う
@@ -48,21 +48,18 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 ```dotenv
 CN_BASE_URL=https://api.kukuri.app
 CN_PUBLIC_BASE_URL=https://api.kukuri.app
-CN_RELAY_WS_URL=wss://relay.kukuri.app/relay
-CN_IROH_RELAY_URLS=https://iroh-relay.kukuri.app
+COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
 ```
 
 - `api.kukuri.app` は `cn-user-api` を向ける
-- `relay.kukuri.app` は `cn-relay` の `/relay` と `/v1/p2p/info` を向ける
 - `iroh-relay.kukuri.app` は `cn-iroh-relay` を向ける
-- desktop は `relay_ws_url` と `iroh_relay_urls` を server から受け取るので、`api.kukuri.app/relay` への fallback は使わない
+- desktop は `connectivity_urls` を server から受け取るので、relay websocket fallback は使わない
 
 TCP 公開を Cloudflare Tunnel で行う場合:
 
 - `CN_USER_API_HOST_BIND_IP=127.0.0.1`
-- `CN_RELAY_HOST_BIND_IP=127.0.0.1`
 - `CN_IROH_RELAY_HTTP_HOST_BIND_IP=127.0.0.1`
-- tunnel 側で `api.kukuri.app -> 127.0.0.1:${CN_USER_API_PORT}`, `relay.kukuri.app -> 127.0.0.1:${CN_RELAY_PORT}`, `iroh-relay.kukuri.app -> 127.0.0.1:${CN_IROH_RELAY_PORT}` を割り当てる
+- tunnel 側で `api.kukuri.app -> 127.0.0.1:${CN_USER_API_PORT}`, `iroh-relay.kukuri.app -> 127.0.0.1:${CN_IROH_RELAY_PORT}` を割り当てる
 
 `iroh-relay` の `7842/udp` を WireGuard/VPS edge 経由で公開する場合:
 
@@ -86,45 +83,42 @@ CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
 
 ```bash
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
-docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d --build cn-user-api cn-relay cn-iroh-relay
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d --build cn-user-api cn-iroh-relay
 ```
 
 公開確認:
 
 ```bash
 curl -fsS https://api.kukuri.app/healthz
-curl -fsS https://relay.kukuri.app/v1/p2p/info | jq
+curl -fsS https://iroh-relay.kukuri.app/ping
 ```
 
 期待値:
 
-- `relay_ws_url` は `wss://relay.kukuri.app/relay`
-- `iroh_relay_urls` は `https://iroh-relay.kukuri.app`
-- desktop relay status に `wss://api.kukuri.app/relay` が出ない
+- `connectivity_urls` は `https://iroh-relay.kukuri.app`
 - desktop client 側は `Save Nodes -> Authenticate -> Accept -> app restart` の順で進める
-- `Authenticate` 直後の `relay urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
-- `restart required: yes` が出たら、その session ではまだ custom relay が transport に入っていない
+- `Authenticate` 直後の `connectivity urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
+- `restart required: yes` が出たら、その session ではまだ connectivity assist URL が transport に入っていない
 - Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> app restart -> post -> reply/thread -> blob sync` まで成功を確認済み
-- 現状の `Sync Status` / `Tracked Topics` diagnostics は community-node relay 配下の docs/blob 接続を peer count に反映しないため、`connected: no`, `peers: 0`, `idle` の表示でも post/reply/blob の伝播成功を優先して判定する
+- 現状の `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob 接続を peer count に完全反映しないため、`connected: no`, `peers: 0`, `idle` の表示でも post/reply/blob の伝播成功を優先して判定する
 
 ## community-node deploy 順序
 ```bash
 cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" prepare
 cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" set-auth-rollout --mode off
 cargo run -p kukuri-cn-user-api
-cargo run -p kukuri-cn-relay
 cargo run -p kukuri-cn-iroh-relay
 ```
 
 1. migration/seed は `cn-cli prepare` だけで行う
-2. `cn-user-api` / `cn-relay` は prepared DB を前提に起動する
+2. `cn-user-api` は prepared DB を前提に起動する
 3. rollout 変更は deploy 後に `cn-cli set-auth-rollout` で行う
 4. `COMMUNITY_NODE_DATABASE_INIT_MODE=prepare` は local bring-up と test 用に限定し、常用しない
 
 compose を使う場合:
 ```bash
 docker compose --env-file .env.community-node -f docker-compose.community-node.yml run --rm cn-migrate
-docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d cn-user-api cn-relay cn-iroh-relay
+docker compose --env-file .env.community-node -f docker-compose.community-node.yml up -d cn-user-api cn-iroh-relay
 ```
 
 ## community-node backup / restore
@@ -141,7 +135,7 @@ cat cn-postgres.dump | docker compose --env-file .env.community-node -f docker-c
 ```
 
 - backup は schema + data をまとめて保持する `pg_dump -Fc` を標準にする
-- restore 前に `cn-user-api` / `cn-relay` を停止して、Postgres への新規接続を止める
+- restore 前に `cn-user-api` を停止して、Postgres への新規接続を止める
 - restore 後に追加 migration がある場合だけ `cn-cli prepare` を流す
 - `cn-postgres-data` volume を直接コピーして backup 代わりにしない
 
@@ -151,7 +145,7 @@ cargo xtask cn-test
 cargo xtask scenario community_node_public_connectivity
 ```
 
-- `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes`, `/v1/p2p/info`, `/relay` の contract を確認する。
+- `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes` の contract を確認する。
 - `community_node_public_connectivity` scenario は `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
 - crate test を直接叩く場合は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` と `COMMUNITY_NODE_DATABASE_URL` を明示する。
 - 公開 community-node の手動確認では UI の peer count より、timeline / thread / attachment preview / blob media payload fetch の成否を優先して見る。
@@ -165,7 +159,7 @@ npx pnpm@10.16.1 tauri:dev
 ```
 
 - `pnpm tauri dev` / `pnpm tauri:dev` は loopback の空き port を自動選択し、5173 が使用中なら次の空き port へ退避する。
-- desktop の Tauri backend は `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落としている。community-node relay / DHT / docs sync の内部 warning を調べたいときだけ `RUST_LOG=warn,mainline::rpc::socket=warn,iroh_quinn_proto::connection=warn,iroh::socket::remote_map::remote_state=warn,iroh_docs::engine::live=warn,iroh_gossip::net=warn` を明示する。
+- desktop の Tauri backend は `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落としている。community-node connectivity assist / DHT / docs sync の内部 warning を調べたいときだけ `RUST_LOG=warn,mainline::rpc::socket=warn,iroh_quinn_proto::connection=warn,iroh::socket::remote_map::remote_state=warn,iroh_docs::engine::live=warn,iroh_gossip::net=warn` を明示する。
 
 ## Windows 前提
 - Windows prerequisites は Tauri 公式手順を使う: <https://v2.tauri.app/start/prerequisites/#windows>

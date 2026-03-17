@@ -51,8 +51,7 @@ CREATE TABLE IF NOT EXISTS cn_admin.service_configs (
 CREATE TABLE IF NOT EXISTS cn_bootstrap.bootstrap_nodes (
     base_url TEXT PRIMARY KEY,
     public_base_url TEXT NOT NULL,
-    relay_ws_url TEXT NOT NULL,
-    iroh_relay_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+    connectivity_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

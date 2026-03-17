@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
+hex.workspace = true
 nostr-sdk.workspace = true
 serde.workspace = true
 serde_json.workspace = true

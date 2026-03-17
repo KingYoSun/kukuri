@@ -96,13 +96,13 @@ function createMockApi(options?: {
   const api: DesktopApi = {
     async createPost(topic, content, replyTo, attachments) {
       sequence += 1;
-      const id = `${topic}-${sequence}`;
+      const objectId = `${topic}-${sequence}`;
       const posts = postsByTopic[topic] ?? [];
       const rootId = replyTo
-        ? posts.find((post) => post.id === replyTo)?.root_id ?? replyTo
-        : id;
+        ? posts.find((post) => post.object_id === replyTo)?.root_id ?? replyTo
+        : objectId;
       const postAttachments: AttachmentView[] = (attachments ?? []).map((attachment, index) => ({
-        hash: `${id}-attachment-${index}`,
+        hash: `${objectId}-attachment-${index}`,
         mime: attachment.mime,
         bytes: attachment.byte_size,
         role: attachment.role ?? 'image_original',
@@ -110,10 +110,10 @@ function createMockApi(options?: {
       }));
       postsByTopic[topic] = [
         {
-          id,
+          object_id: objectId,
+          envelope_id: `envelope-${sequence}`,
           author_pubkey: 'f'.repeat(64),
-          author_npub: 'npub1testauthor',
-          note_id: `note1${sequence}`,
+          object_kind: replyTo ? 'comment' : 'post',
           content,
           content_status: 'Available',
           attachments: postAttachments,
@@ -137,7 +137,7 @@ function createMockApi(options?: {
           last_error: null,
         });
       }
-      return id;
+      return objectId;
     },
     async listTimeline(topic) {
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
@@ -159,7 +159,7 @@ function createMockApi(options?: {
     async listThread(topic, threadId) {
       const posts = postsByTopic[topic] ?? [];
       return {
-        items: posts.filter((post) => post.root_id === threadId || post.id === threadId),
+        items: posts.filter((post) => post.root_id === threadId || post.object_id === threadId),
         next_cursor: null,
       };
     },
@@ -236,7 +236,7 @@ function createMockApi(options?: {
           host_pubkey: syncStatus.local_author_pubkey,
           title,
           description,
-          status: 'Open',
+          status: 'Waiting',
           phase_label: null,
           scores,
           updated_at: Date.now(),
@@ -332,8 +332,7 @@ function createMockApi(options?: {
     async acceptCommunityNodeConsents(baseUrl) {
       const resolvedUrls = {
         public_base_url: baseUrl,
-        relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
-        iroh_relay_urls: [baseUrl],
+        connectivity_urls: [baseUrl],
       };
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
@@ -367,8 +366,7 @@ function createMockApi(options?: {
               ...status,
               resolved_urls: {
                 public_base_url: baseUrl,
-                relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
-                iroh_relay_urls: [baseUrl],
+                connectivity_urls: [baseUrl],
               },
             }
           : status
@@ -380,8 +378,7 @@ function createMockApi(options?: {
                 ...node,
                 resolved_urls: {
                   public_base_url: baseUrl,
-                  relay_ws_url: `${baseUrl.replace('http', 'ws')}/relay`,
-                  iroh_relay_urls: [baseUrl],
+                  connectivity_urls: [baseUrl],
                 },
               }
             : node
@@ -440,10 +437,10 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
   };
 
   return {
-    id: 'image-post',
+    object_id: 'image-post',
+    envelope_id: 'envelope-image-post',
     author_pubkey: 'f'.repeat(64),
-    author_npub: 'npub1imageauthor',
-    note_id: 'note1imagepost',
+    object_kind: 'post',
     content: '[blob pending]',
     content_status: 'Missing',
     attachments: [attachment],
@@ -456,10 +453,10 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
 
 function buildVideoPost(overrides?: Partial<PostView>): PostView {
   return {
-    id: 'video-post',
+    object_id: 'video-post',
+    envelope_id: 'envelope-video-post',
     author_pubkey: 'e'.repeat(64),
-    author_npub: 'npub1videoauthor',
-    note_id: 'note1videopost',
+    object_kind: 'post',
     content: 'video caption',
     content_status: 'Available',
     attachments: [
@@ -785,7 +782,7 @@ test('desktop shell can create and update a game room', async () => {
   expect(screen.getByText('set one')).toBeInTheDocument();
   expect(screen.getByLabelText(/game-.*-Alice-score/)).toBeInTheDocument();
 
-  await user.selectOptions(screen.getByLabelText(/game-.*-status/), 'InProgress');
+  await user.selectOptions(screen.getByLabelText(/game-.*-status/), 'Running');
   await user.clear(screen.getByLabelText(/game-.*-phase/));
   await user.type(screen.getByLabelText(/game-.*-phase/), 'Round 3');
   await user.clear(screen.getByLabelText(/game-.*-Alice-score/));
@@ -793,7 +790,7 @@ test('desktop shell can create and update a game room', async () => {
   await user.click(screen.getByRole('button', { name: 'Save Room' }));
 
   await waitFor(() => {
-    expect(screen.getByLabelText(/game-.*-status/)).toHaveValue('InProgress');
+    expect(screen.getByLabelText(/game-.*-status/)).toHaveValue('Running');
   });
   expect(screen.getByText('phase: Round 3')).toBeInTheDocument();
   expect(screen.getByDisplayValue('2')).toBeInTheDocument();
@@ -1050,8 +1047,9 @@ test('thread pane reuses the same image placeholder renderer', async () => {
         buildImagePost(),
         {
           ...buildImagePost({
-            id: 'reply-post',
-            note_id: 'note1replypost',
+            object_id: 'reply-post',
+            envelope_id: 'envelope-reply-post',
+            object_kind: 'comment',
             content: 'reply body',
             content_status: 'Available',
             attachments: [],
@@ -1069,9 +1067,9 @@ test('thread pane reuses the same image placeholder renderer', async () => {
   );
 
   await waitFor(() => {
-    expect(screen.getByText('note1imagepost')).toBeInTheDocument();
+    expect(screen.getByText('envelope-image-post')).toBeInTheDocument();
   });
-  await user.click(screen.getByText('note1imagepost'));
+  await user.click(screen.getByText('envelope-image-post'));
   const threadPanel = screen.getByRole('heading', { name: 'Thread' }).closest('section');
   if (!threadPanel) {
     throw new Error('thread panel not found');
@@ -1412,17 +1410,19 @@ test('community node panel shows consent then restart guidance for relay activat
 
   await waitFor(() => {
     expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
-      'accept required policies to resolve relay urls'
+      'accept required policies to resolve connectivity urls'
     );
   });
 
   await user.click(within(block!).getByRole('button', { name: 'Accept' }));
 
   await waitFor(() => {
-    expect(within(block!).getByText(/relay urls:/i)).toHaveTextContent('https://api.kukuri.app');
+    expect(within(block!).getByText(/connectivity urls:/i)).toHaveTextContent(
+      'https://api.kukuri.app'
+    );
     expect(within(block!).getByText(/restart required:/i)).toHaveTextContent('yes');
     expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
-      'restart the app to apply community relay urls'
+      'restart the app to apply connectivity urls'
     );
   });
 });

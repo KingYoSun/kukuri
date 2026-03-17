@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
-use kukuri_cn_core::{JwtConfig, TestDatabase, USER_API_BEARER_CHALLENGE, build_auth_event_json};
+use kukuri_cn_core::{
+    JwtConfig, TestDatabase, USER_API_BEARER_CHALLENGE, build_auth_envelope_json,
+};
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use nostr_sdk::prelude::Keys;
 use reqwest::{Client, StatusCode};
@@ -27,8 +29,7 @@ impl TestServer {
             database_url: database.database_url.clone(),
             base_url: base_url.clone(),
             public_base_url: base_url.clone(),
-            relay_ws_url: "ws://127.0.0.1:18081/relay".to_string(),
-            iroh_relay_urls: vec!["http://127.0.0.1:13340".to_string()],
+            connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
             jwt_config: JwtConfig::new("kukuri-cn-tests", "test-secret", 3600),
         })
         .await?;
@@ -84,16 +85,17 @@ async fn authenticate(
         .error_for_status()?
         .json::<kukuri_cn_core::AuthChallengeResponse>()
         .await?;
-    let auth_event_json = build_auth_event_json(keys, challenge.challenge.as_str(), base_url)?;
+    let auth_envelope_json =
+        build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
     let verify = client
         .post(format!("{base_url}/v1/auth/verify"))
-        .json(&serde_json::json!({ "auth_event_json": auth_event_json.clone() }))
+        .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json.clone() }))
         .send()
         .await?
         .error_for_status()?
         .json::<kukuri_cn_core::AuthVerifyResponse>()
         .await?;
-    Ok((verify.access_token, auth_event_json))
+    Ok((verify.access_token, auth_envelope_json))
 }
 
 #[tokio::test]
@@ -121,11 +123,12 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     assert_eq!(unauthenticated_body["code"], "AUTH_REQUIRED");
 
     let keys = Keys::generate();
-    let (access_token, auth_event_json) = authenticate(&client, &server.base_url, &keys).await?;
+    let (access_token, auth_envelope_json) =
+        authenticate(&client, &server.base_url, &keys).await?;
 
     let reused = client
         .post(format!("{}/v1/auth/verify", server.base_url))
-        .json(&serde_json::json!({ "auth_event_json": auth_event_json }))
+        .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json }))
         .send()
         .await?;
     assert_eq!(reused.status(), StatusCode::UNAUTHORIZED);
@@ -176,11 +179,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
         .await?;
     assert_eq!(bootstrap["nodes"][0]["base_url"], server.base_url);
     assert_eq!(
-        bootstrap["nodes"][0]["resolved_urls"]["relay_ws_url"],
-        "ws://127.0.0.1:18081/relay"
-    );
-    assert_eq!(
-        bootstrap["nodes"][0]["resolved_urls"]["iroh_relay_urls"][0],
+        bootstrap["nodes"][0]["resolved_urls"]["connectivity_urls"][0],
         "http://127.0.0.1:13340"
     );
 
@@ -204,11 +203,11 @@ async fn auth_verify_rejects_wrong_relay_tag() -> Result<()> {
         .error_for_status()?
         .json::<kukuri_cn_core::AuthChallengeResponse>()
         .await?;
-    let auth_event_json =
-        build_auth_event_json(&keys, challenge.challenge.as_str(), "http://wrong.example")?;
+    let auth_envelope_json =
+        build_auth_envelope_json(&keys, challenge.challenge.as_str(), "http://wrong.example")?;
     let response = client
         .post(format!("{}/v1/auth/verify", server.base_url))
-        .json(&serde_json::json!({ "auth_event_json": auth_event_json }))
+        .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json }))
         .send()
         .await?;
 
