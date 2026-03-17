@@ -6,12 +6,12 @@ use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_core::{
-    ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeBootstrapNode,
-    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
-    accept_consents, connect_postgres, create_auth_challenge, get_consent_status,
-    initialize_database, initialize_database_for_runtime, load_bootstrap_nodes,
-    load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list, require_bearer_pubkey,
-    require_consents,
+    ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
+    CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
+    DatabaseInitMode, JwtConfig, accept_consents, connect_postgres, create_auth_challenge,
+    get_consent_status, initialize_database, initialize_database_for_runtime, load_bootstrap_nodes,
+    load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list,
+    refresh_bootstrap_peer_registration, require_bearer_pubkey, require_consents,
     verify_auth_envelope_and_issue_token,
 };
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,11 @@ struct AuthVerifyRequest {
 struct AcceptConsentsRequest {
     #[serde(default)]
     policy_slugs: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BootstrapHeartbeatRequest {
+    endpoint_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -127,6 +132,7 @@ pub fn app_router(state: UserApiState) -> Router {
         .route("/v1/consents/status", get(consent_status))
         .route("/v1/consents", post(accept_consents_handler))
         .route("/v1/bootstrap/nodes", get(bootstrap_nodes))
+        .route("/v1/bootstrap/heartbeat", post(bootstrap_heartbeat))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -236,6 +242,22 @@ async fn bootstrap_nodes(
         }
     }
     Ok(Json(BootstrapNodesResponse { nodes }))
+}
+
+async fn bootstrap_heartbeat(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapHeartbeatRequest>,
+) -> ApiResult<Json<BootstrapHeartbeatResponse>> {
+    let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
+    let response = refresh_bootstrap_peer_registration(
+        &state.pool,
+        pubkey.as_str(),
+        request.endpoint_id.as_str(),
+    )
+    .await
+    .map_err(internal_error)?;
+    Ok(Json(response))
 }
 
 fn internal_error(error: impl std::fmt::Display) -> ApiError {

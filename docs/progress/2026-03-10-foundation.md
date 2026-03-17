@@ -60,6 +60,8 @@
 - desktop-runtime test に `https://api.kukuri.app` + `https://iroh-relay.kukuri.app` の URL contract を追加し、relay websocket fallback が復活しないようにした
 - community-node connectivity assist で seed peer / unknown peer lookup に configured relay URL を付与し、docs event の source peer から blob sender を学習して imported ticket なしでも relay assist 経由の blob fetch が成立するようにした
 - community-node bootstrap に authenticated desktop endpoint registration を追加し、relay-assisted static-peer path でも import ticket なしの初回 `post -> reply/thread -> live -> game` 伝播が成立するようにした
+- discovery diagnostics を `configured seed / community bootstrap seed / manual ticket` に分離し、relay-only community-node path の接続元を UI と app-api status で判別できるようにした
+- community-node bootstrap peer registration を TTL 付き multi-endpoint table へ更新し、authenticated heartbeat で stale peer を prune/refresh できるようにした
 - desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
 
 ## 検証済み
@@ -112,12 +114,14 @@
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml explicit_rust_log_keeps_target_specific_override -- --nocapture`
 - Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
 - `community_node_public_connectivity` scenario を ticket import なしの relay-only bootstrap regression として通した
+- Linux 実機 2 台で relay-only community-node に対し、一度も ticket import せずに peer 間接続、`reply/thread`、live/game 伝播まで成立することを確認
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 - Windows native smoke は `tauri:dev` / keyring / multi-instance static-peer / 別 host static-peer / NSIS installer まで確認済み
 - community-node relay 使用時の `Sync Status` と `Tracked Topics` diagnostics は gossip neighbor を主に見ており、relay-backed docs/blob connectivity を peer count へ反映しない。そのため `connected: no / peers: 0 / idle` の表示でも `post -> reply/thread -> blob sync` が成立することがある
+- discovery diagnostics 上は `Community Bootstrap Peers` / `Configured Seed IDs` / `Manual Ticket Peers` を分離済みだが、peer count 自体は引き続き gossip neighbor 主体であり、relay-backed docs/blob connectivity の全量は表さない
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み

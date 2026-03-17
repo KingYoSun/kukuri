@@ -19,6 +19,7 @@ pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
+pub const BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS: i64 = 90;
 pub const COMMUNITY_NODE_AUTH_SERVICE_NAME: &str = "community_node_auth";
 pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 pub const COMMUNITY_NODE_DATABASE_INIT_MODE_ENV: &str = "COMMUNITY_NODE_DATABASE_INIT_MODE";
@@ -107,6 +108,11 @@ pub struct AuthVerifyResponse {
     pub token_type: String,
     pub expires_at: i64,
     pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapHeartbeatResponse {
+    pub expires_at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -493,8 +499,8 @@ pub async fn verify_auth_envelope_and_issue_token(
     if envelope.kind != AUTH_ENVELOPE_KIND {
         bail!("auth envelope kind mismatch");
     }
-    let now = Utc::now().timestamp();
-    if (now - envelope.created_at).abs() > AUTH_EVENT_MAX_SKEW_SECONDS {
+    let now = Utc::now();
+    if (now.timestamp() - envelope.created_at).abs() > AUTH_EVENT_MAX_SKEW_SECONDS {
         bail!("auth envelope is stale");
     }
     let capability_url = first_tag_value(&envelope, "capability_url")
@@ -527,6 +533,7 @@ pub async fn verify_auth_envelope_and_issue_token(
     }
 
     let mut tx = pool.begin().await?;
+    prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
     sqlx::query(
         "UPDATE cn_auth.auth_challenges
          SET used_at = NOW()
@@ -538,7 +545,7 @@ pub async fn verify_auth_envelope_and_issue_token(
     ensure_active_subscriber(&mut *tx, normalized_pubkey.as_str()).await?;
     if let Some(endpoint_id) = endpoint_id {
         let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, None)?;
-        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), &seed_peer)
+        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), &seed_peer, now)
             .await?;
     }
     tx.commit().await?;
@@ -549,6 +556,25 @@ pub async fn verify_auth_envelope_and_issue_token(
         token_type: "Bearer".to_string(),
         expires_at,
         pubkey: normalized_pubkey,
+    })
+}
+
+pub async fn refresh_bootstrap_peer_registration(
+    pool: &PgPool,
+    pubkey: &str,
+    endpoint_id: &str,
+) -> Result<BootstrapHeartbeatResponse> {
+    let pubkey = normalize_pubkey(pubkey)?;
+    let mut tx = pool.begin().await?;
+    prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
+    ensure_active_subscriber(&mut *tx, pubkey.as_str()).await?;
+    let now = Utc::now();
+    let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, None)?;
+    let expires_at =
+        upsert_bootstrap_peer_registration(&mut *tx, pubkey.as_str(), &seed_peer, now).await?;
+    tx.commit().await?;
+    Ok(BootstrapHeartbeatResponse {
+        expires_at: expires_at.timestamp(),
     })
 }
 
@@ -769,14 +795,16 @@ pub async fn load_bootstrap_seed_peers(
     exclude_pubkey: Option<&str>,
 ) -> Result<Vec<CommunityNodeSeedPeer>> {
     let exclude_pubkey = exclude_pubkey.map(normalize_pubkey).transpose()?;
+    prune_expired_bootstrap_peer_registrations(pool).await?;
     let rows = sqlx::query(
         "SELECT peers.endpoint_id, peers.addr_hint
          FROM cn_bootstrap.peer_registrations peers
          JOIN cn_user.subscriber_accounts subscribers
            ON subscribers.subscriber_pubkey = peers.subscriber_pubkey
          WHERE subscribers.status = 'active'
+           AND peers.expires_at > NOW()
            AND ($1::TEXT IS NULL OR peers.subscriber_pubkey <> $1)
-         ORDER BY peers.subscriber_pubkey ASC",
+         ORDER BY peers.last_seen_at DESC, peers.subscriber_pubkey ASC, peers.endpoint_id ASC",
     )
     .bind(exclude_pubkey.as_deref())
     .fetch_all(pool)
@@ -992,26 +1020,41 @@ async fn upsert_bootstrap_peer_registration<'e, E>(
     executor: E,
     pubkey: &str,
     seed_peer: &CommunityNodeSeedPeer,
-) -> Result<()>
+    now: DateTime<Utc>,
+) -> Result<DateTime<Utc>>
 where
     E: Executor<'e, Database = sqlx::Postgres>,
 {
-    let seed_peer = CommunityNodeSeedPeer::new(
-        seed_peer.endpoint_id.clone(),
-        seed_peer.addr_hint.clone(),
-    )?;
+    let seed_peer =
+        CommunityNodeSeedPeer::new(seed_peer.endpoint_id.clone(), seed_peer.addr_hint.clone())?;
+    let expires_at = now + Duration::seconds(BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS);
     sqlx::query(
         "INSERT INTO cn_bootstrap.peer_registrations
-            (subscriber_pubkey, endpoint_id, addr_hint)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (subscriber_pubkey) DO UPDATE
-         SET endpoint_id = EXCLUDED.endpoint_id,
-             addr_hint = EXCLUDED.addr_hint,
-             updated_at = NOW()",
+            (subscriber_pubkey, endpoint_id, addr_hint, last_seen_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (subscriber_pubkey, endpoint_id) DO UPDATE
+         SET addr_hint = EXCLUDED.addr_hint,
+             last_seen_at = EXCLUDED.last_seen_at,
+             expires_at = EXCLUDED.expires_at",
     )
     .bind(pubkey)
     .bind(seed_peer.endpoint_id)
     .bind(seed_peer.addr_hint)
+    .bind(now)
+    .bind(expires_at)
+    .execute(executor)
+    .await?;
+    Ok(expires_at)
+}
+
+async fn prune_expired_bootstrap_peer_registrations<'e, E>(executor: E) -> Result<()>
+where
+    E: Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        "DELETE FROM cn_bootstrap.peer_registrations
+         WHERE expires_at <= NOW()",
+    )
     .execute(executor)
     .await?;
     Ok(())

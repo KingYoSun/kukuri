@@ -181,7 +181,8 @@ pub struct DiscoverySnapshot {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,
     pub env_locked: bool,
-    pub seed_peer_ids: Vec<String>,
+    pub configured_seed_peer_ids: Vec<String>,
+    pub bootstrap_seed_peer_ids: Vec<String>,
     pub manual_ticket_peer_ids: Vec<String>,
     pub connected_peer_ids: Vec<String>,
     pub local_endpoint_id: String,
@@ -284,7 +285,8 @@ pub trait Transport: Send + Sync {
         &self,
         _mode: DiscoveryMode,
         _env_locked: bool,
-        _seed_peers: Vec<SeedPeer>,
+        _configured_seed_peers: Vec<SeedPeer>,
+        _bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
         Ok(())
     }
@@ -310,7 +312,8 @@ pub struct FakeNetwork {
 pub struct FakeTransport {
     local_id: String,
     network: FakeNetwork,
-    seed_peers: Arc<Mutex<BTreeSet<String>>>,
+    configured_seed_peers: Arc<Mutex<BTreeSet<String>>>,
+    bootstrap_seed_peers: Arc<Mutex<BTreeSet<String>>>,
     imported_peers: Arc<Mutex<BTreeSet<String>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
@@ -322,7 +325,8 @@ impl FakeTransport {
         Self {
             local_id: local_id.into(),
             network,
-            seed_peers: Arc::new(Mutex::new(BTreeSet::new())),
+            configured_seed_peers: Arc::new(Mutex::new(BTreeSet::new())),
+            bootstrap_seed_peers: Arc::new(Mutex::new(BTreeSet::new())),
             imported_peers: Arc::new(Mutex::new(BTreeSet::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
@@ -349,7 +353,12 @@ impl Transport for FakeTransport {
             .iter()
             .cloned()
             .collect::<Vec<_>>();
-        for peer in self.seed_peers.lock().await.iter() {
+        for peer in self.configured_seed_peers.lock().await.iter() {
+            if !imported.contains(peer) {
+                imported.push(peer.clone());
+            }
+        }
+        for peer in self.bootstrap_seed_peers.lock().await.iter() {
             if !imported.contains(peer) {
                 imported.push(peer.clone());
             }
@@ -424,21 +433,34 @@ impl Transport for FakeTransport {
         &self,
         mode: DiscoveryMode,
         env_locked: bool,
-        seed_peers: Vec<SeedPeer>,
+        configured_seed_peers: Vec<SeedPeer>,
+        bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
         *self.discovery_mode.lock().await = mode;
         *self.env_locked.lock().await = env_locked;
-        let parsed = seed_peers
+        let configured = configured_seed_peers
             .into_iter()
             .map(|peer| peer.endpoint_id)
             .collect::<BTreeSet<_>>();
-        *self.seed_peers.lock().await = parsed;
+        let bootstrap = bootstrap_seed_peers
+            .into_iter()
+            .map(|peer| peer.endpoint_id)
+            .collect::<BTreeSet<_>>();
+        *self.configured_seed_peers.lock().await = configured;
+        *self.bootstrap_seed_peers.lock().await = bootstrap;
         Ok(())
     }
 
     async fn discovery(&self) -> Result<DiscoverySnapshot> {
-        let seed_peer_ids = self
-            .seed_peers
+        let configured_seed_peer_ids = self
+            .configured_seed_peers
+            .lock()
+            .await
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        let bootstrap_seed_peer_ids = self
+            .bootstrap_seed_peers
             .lock()
             .await
             .iter()
@@ -452,7 +474,10 @@ impl Transport for FakeTransport {
             .cloned()
             .collect::<Vec<_>>();
         let mut connected_peer_ids = manual_ticket_peer_ids.clone();
-        for peer in &seed_peer_ids {
+        for peer in configured_seed_peer_ids
+            .iter()
+            .chain(bootstrap_seed_peer_ids.iter())
+        {
             if !connected_peer_ids.contains(peer) {
                 connected_peer_ids.push(peer.clone());
             }
@@ -461,7 +486,8 @@ impl Transport for FakeTransport {
             mode: self.discovery_mode.lock().await.clone(),
             connect_mode: ConnectMode::DirectOnly,
             env_locked: *self.env_locked.lock().await,
-            seed_peer_ids,
+            configured_seed_peer_ids,
+            bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids,
             local_endpoint_id: self.local_id.clone(),
@@ -557,7 +583,8 @@ pub struct IrohGossipTransport {
     _endpoint_publish_task: Option<JoinHandle<()>>,
     discovery: Arc<MemoryLookup>,
     network_config: TransportNetworkConfig,
-    seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
+    configured_seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
+    bootstrap_seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, HintTopicState>>>,
@@ -601,7 +628,8 @@ impl IrohGossipTransport {
             _endpoint_publish_task: publish_task,
             discovery,
             network_config,
-            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            configured_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            bootstrap_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
@@ -637,7 +665,8 @@ impl IrohGossipTransport {
             _endpoint_publish_task: None,
             discovery,
             network_config,
-            seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            configured_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            bootstrap_seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             subscribed_topics: Arc::new(Mutex::new(BTreeSet::new())),
             topic_states: Arc::new(Mutex::new(HashMap::new())),
@@ -667,18 +696,41 @@ impl IrohGossipTransport {
 
     async fn bootstrap_peers(&self) -> Vec<EndpointAddr> {
         let mut peers = self
-            .seed_peers
+            .configured_seed_peers
             .lock()
             .await
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        for peer in self.bootstrap_seed_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
         for peer in self.imported_peers.lock().await.values() {
             if !peers.iter().any(|existing| existing.id == peer.id) {
                 peers.push(peer.clone());
             }
         }
         peers
+    }
+
+    async fn configured_seed_peer_ids(&self) -> Vec<String> {
+        self.configured_seed_peers
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
+    async fn bootstrap_seed_peer_ids(&self) -> Vec<String> {
+        self.bootstrap_seed_peers
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
     }
 
     async fn configured_peer_ids(&self) -> Vec<String> {
@@ -1123,31 +1175,36 @@ impl Transport for IrohGossipTransport {
         &self,
         mode: DiscoveryMode,
         env_locked: bool,
-        seed_peers: Vec<SeedPeer>,
+        configured_seed_peers: Vec<SeedPeer>,
+        bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
-        let mut parsed = BTreeMap::new();
-        for seed in seed_peers {
+        let mut configured = BTreeMap::new();
+        for seed in configured_seed_peers {
             let endpoint_addr = seed.to_endpoint_addr_with_relays(&self.relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.discovery.add_endpoint_info(endpoint_addr.clone());
             }
-            parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
+            configured.insert(endpoint_addr.id.to_string(), endpoint_addr);
+        }
+        let mut bootstrap = BTreeMap::new();
+        for seed in bootstrap_seed_peers {
+            let endpoint_addr = seed.to_endpoint_addr_with_relays(&self.relay_urls)?;
+            if !endpoint_addr.is_empty() {
+                self.discovery.add_endpoint_info(endpoint_addr.clone());
+            }
+            bootstrap.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
         *self.discovery_mode.lock().await = mode;
         *self.env_locked.lock().await = env_locked;
-        *self.seed_peers.lock().await = parsed;
+        *self.configured_seed_peers.lock().await = configured;
+        *self.bootstrap_seed_peers.lock().await = bootstrap;
         *self.last_error.lock().await = None;
         Ok(())
     }
 
     async fn discovery(&self) -> Result<DiscoverySnapshot> {
-        let seed_peer_ids = self
-            .seed_peers
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
+        let configured_seed_peer_ids = self.configured_seed_peer_ids().await;
+        let bootstrap_seed_peer_ids = self.bootstrap_seed_peer_ids().await;
         let manual_ticket_peer_ids = self
             .imported_peers
             .lock()
@@ -1159,7 +1216,8 @@ impl Transport for IrohGossipTransport {
             mode: self.discovery_mode.lock().await.clone(),
             connect_mode: self.connect_mode.lock().await.clone(),
             env_locked: *self.env_locked.lock().await,
-            seed_peer_ids,
+            configured_seed_peer_ids,
+            bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids: self.connected_peer_ids().await,
             local_endpoint_id: self.endpoint.id().to_string(),
@@ -1447,7 +1505,7 @@ fn peer_status_detail(
     subscribed_topic_count: usize,
 ) -> String {
     if configured_peer_count == 0 {
-        "No peer tickets imported".to_string()
+        "No peers configured".to_string()
     } else if subscribed_topic_count == 0 {
         "No topics subscribed locally".to_string()
     } else if connected_peer_count == 0 {
@@ -1678,6 +1736,7 @@ mod tests {
                     endpoint_id: discovery_b.local_endpoint_id.clone(),
                     addr_hint: None,
                 }],
+                Vec::new(),
             )
             .await
             .expect("configure a");
@@ -1689,6 +1748,7 @@ mod tests {
                     endpoint_id: discovery_a.local_endpoint_id.clone(),
                     addr_hint: None,
                 }],
+                Vec::new(),
             )
             .await
             .expect("configure b");
@@ -1805,6 +1865,7 @@ mod tests {
                     endpoint_id: discovery_b.local_endpoint_id.clone(),
                     addr_hint: None,
                 }],
+                Vec::new(),
             )
             .await
             .expect("configure a");
@@ -1816,6 +1877,7 @@ mod tests {
                     endpoint_id: discovery_a.local_endpoint_id.clone(),
                     addr_hint: None,
                 }],
+                Vec::new(),
             )
             .await
             .expect("configure b");
@@ -1916,6 +1978,7 @@ mod tests {
                     endpoint_id: local_endpoint_id.clone(),
                     addr_hint: None,
                 }],
+                Vec::new(),
             )
             .await
             .expect("configure discovery");
@@ -1925,7 +1988,11 @@ mod tests {
 
         assert_eq!(snapshot.mode, DiscoveryMode::SeededDht);
         assert_eq!(snapshot.connect_mode, ConnectMode::DirectOnly);
-        assert_eq!(snapshot.seed_peer_ids, vec![local_endpoint_id.clone()]);
+        assert_eq!(
+            snapshot.configured_seed_peer_ids,
+            vec![local_endpoint_id.clone()]
+        );
+        assert!(snapshot.bootstrap_seed_peer_ids.is_empty());
         assert_eq!(peers.configured_peers, vec![local_endpoint_id]);
     }
 
@@ -1941,7 +2008,7 @@ mod tests {
         publish_endpoint_to_testnet(&transport.endpoint, &testnet).await;
 
         transport
-            .configure_discovery(DiscoveryMode::SeededDht, false, Vec::new())
+            .configure_discovery(DiscoveryMode::SeededDht, false, Vec::new(), Vec::new())
             .await
             .expect("configure discovery");
 
@@ -1949,10 +2016,59 @@ mod tests {
         let peers = transport.peers().await.expect("peers");
 
         assert_eq!(discovery.mode, DiscoveryMode::SeededDht);
-        assert!(discovery.seed_peer_ids.is_empty());
+        assert!(discovery.configured_seed_peer_ids.is_empty());
+        assert!(discovery.bootstrap_seed_peer_ids.is_empty());
         assert!(discovery.last_discovery_error.is_none());
         assert_eq!(peers.peer_count, 0);
         assert!(peers.last_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn fake_transport_discovery_reports_seed_sources_separately() {
+        let transport = FakeTransport::new("local-peer", FakeNetwork::default());
+
+        transport
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: "configured-peer".into(),
+                    addr_hint: None,
+                }],
+                vec![SeedPeer {
+                    endpoint_id: "bootstrap-peer".into(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure discovery");
+        transport
+            .import_ticket("manual-ticket-peer")
+            .await
+            .expect("import ticket");
+
+        let discovery = transport.discovery().await.expect("discovery");
+
+        assert_eq!(
+            discovery.configured_seed_peer_ids,
+            vec!["configured-peer".to_string()]
+        );
+        assert_eq!(
+            discovery.bootstrap_seed_peer_ids,
+            vec!["bootstrap-peer".to_string()]
+        );
+        assert_eq!(
+            discovery.manual_ticket_peer_ids,
+            vec!["manual-ticket-peer".to_string()]
+        );
+        assert_eq!(
+            discovery.connected_peer_ids,
+            vec![
+                "manual-ticket-peer".to_string(),
+                "configured-peer".to_string(),
+                "bootstrap-peer".to_string(),
+            ]
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

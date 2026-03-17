@@ -7,6 +7,7 @@ use kukuri_cn_core::{
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
 use reqwest::{Client, StatusCode};
+use sqlx::postgres::PgPool;
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
 
@@ -186,7 +187,12 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
         bootstrap["nodes"][0]["resolved_urls"]["connectivity_urls"][0],
         "http://127.0.0.1:13340"
     );
-    assert_eq!(bootstrap["nodes"][0]["resolved_urls"]["seed_peers"].as_array().map(Vec::len), Some(0));
+    assert_eq!(
+        bootstrap["nodes"][0]["resolved_urls"]["seed_peers"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
 
     server.shutdown().await
 }
@@ -243,6 +249,96 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
         bootstrap_b["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
         "peer-a"
     );
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_them() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_user_api_peer_registration_ttl",
+    )
+    .await?;
+    let client = Client::new();
+    let pool = PgPool::connect(server.database.database_url.as_str()).await?;
+
+    let keys_a = generate_keys();
+    let keys_b = generate_keys();
+    let (_token_a_initial, _) =
+        authenticate(&client, &server.base_url, &keys_a, "peer-a-1").await?;
+    let (token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-2").await?;
+    let (token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
+
+    for access_token in [&token_a, &token_b] {
+        let accepted = client
+            .post(format!("{}/v1/consents", server.base_url))
+            .bearer_auth(access_token.as_str())
+            .json(&serde_json::json!({ "policy_slugs": [] }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+            .await?;
+        assert!(accepted.all_required_accepted);
+    }
+
+    sqlx::query(
+        "UPDATE cn_bootstrap.peer_registrations
+         SET expires_at = NOW() - INTERVAL '1 second'
+         WHERE subscriber_pubkey = $1
+           AND endpoint_id = 'peer-a-1'",
+    )
+    .bind(keys_a.public_key_hex())
+    .execute(&pool)
+    .await?;
+
+    let bootstrap_before = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let seed_peers_before = bootstrap_before["nodes"][0]["resolved_urls"]["seed_peers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seed_peers_before.len(), 1);
+    assert_eq!(seed_peers_before[0]["endpoint_id"], "peer-a-2");
+
+    client
+        .post(format!("{}/v1/bootstrap/heartbeat", server.base_url))
+        .bearer_auth(token_a.as_str())
+        .json(&serde_json::json!({ "endpoint_id": "peer-a-1" }))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let bootstrap_after = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let seed_peers_after = bootstrap_after["nodes"][0]["resolved_urls"]["seed_peers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seed_peers_after.len(), 2);
+    let endpoint_ids = seed_peers_after
+        .iter()
+        .filter_map(|peer| peer["endpoint_id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(endpoint_ids.contains(&"peer-a-1"));
+    assert!(endpoint_ids.contains(&"peer-a-2"));
 
     server.shutdown().await
 }

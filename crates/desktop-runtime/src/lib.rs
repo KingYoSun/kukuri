@@ -1,5 +1,6 @@
 mod identity;
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -15,9 +16,9 @@ use kukuri_app_api::{
 };
 use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_cn_core::{
-    AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, CommunityNodeSeedPeer, build_auth_envelope_json,
-    normalize_http_url,
+    AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
+    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
+    build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{AssetRole, GameRoomStatus, KukuriKeys};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
@@ -41,6 +42,8 @@ const COMMUNITY_NODE_CONFIG_FILE_EXTENSION: &str = "community-node.json";
 const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
 const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
+const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
+const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -254,6 +257,7 @@ pub struct DesktopRuntime {
     iroh_stack: SharedIrohStack,
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
     community_node_config: Arc<Mutex<CommunityNodeConfig>>,
+    community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     startup_connectivity_urls: Vec<String>,
 }
 
@@ -317,16 +321,15 @@ impl DesktopRuntime {
         let community_node_config =
             load_community_node_config_from_file(&db_path)?.unwrap_or_default();
         let relay_config = relay_config_from_community_node_config(&community_node_config);
-        let effective_discovery_config = DiscoveryConfig {
-            seed_peers: effective_seed_peers(&discovery_config, &community_node_config),
-            ..discovery_config.clone()
-        };
+        let community_node_seed_peers =
+            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let iroh_stack = SharedIrohStack::new(
             &docs_root,
             network_config.clone(),
-            &effective_discovery_config,
+            &discovery_config,
+            &community_node_seed_peers,
             dht_options,
             relay_config.clone(),
         )
@@ -351,6 +354,7 @@ impl DesktopRuntime {
             iroh_stack,
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
+            community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
             startup_connectivity_urls: relay_config.iroh_relay_urls,
         })
     }
@@ -553,7 +557,15 @@ impl DesktopRuntime {
         let config = self.community_node_config.lock().await.clone();
         let mut statuses = Vec::with_capacity(config.nodes.len());
         for node in config.nodes {
-            statuses.push(self.community_node_status(node, None, None).await?);
+            let heartbeat_error = self
+                .refresh_community_node_registration_if_due(node.base_url.as_str())
+                .await
+                .err()
+                .map(|error| error.to_string());
+            statuses.push(
+                self.community_node_status(node, None, heartbeat_error)
+                    .await?,
+            );
         }
         Ok(statuses)
     }
@@ -589,6 +601,7 @@ impl DesktopRuntime {
         }
         remove_community_node_config(&self.db_path)?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
+        self.community_node_heartbeat_deadlines.lock().await.clear();
         self.apply_effective_seed_peers().await?;
         Ok(())
     }
@@ -699,6 +712,10 @@ impl DesktopRuntime {
             COMMUNITY_NODE_TOKEN_PURPOSE,
             base_url.as_str(),
         )?;
+        self.community_node_heartbeat_deadlines
+            .lock()
+            .await
+            .remove(base_url.as_str());
         let node = self
             .community_node_config
             .lock()
@@ -847,6 +864,71 @@ impl DesktopRuntime {
 }
 
 impl DesktopRuntime {
+    async fn refresh_community_node_registration_if_due(&self, base_url: &str) -> Result<()> {
+        let base_url = normalize_http_url(base_url)?;
+        let token = load_community_node_token(
+            &self.db_path,
+            IdentityStorageMode::from_env(),
+            base_url.as_str(),
+        )?;
+        let Some(token) = token else {
+            return Ok(());
+        };
+        let now = Utc::now().timestamp();
+        if token.expires_at <= now {
+            return Ok(());
+        }
+        let next_due_at = self
+            .community_node_heartbeat_deadlines
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .copied()
+            .unwrap_or_default();
+        if next_due_at > now {
+            return Ok(());
+        }
+        let endpoint_id = self
+            .iroh_stack
+            .transport
+            .discovery()
+            .await
+            .context("failed to read local endpoint id for community node heartbeat")?
+            .local_endpoint_id;
+        let client = community_node_http_client()?;
+        let response = client
+            .post(format!("{}/v1/bootstrap/heartbeat", base_url))
+            .bearer_auth(token.access_token.as_str())
+            .json(&serde_json::json!({ "endpoint_id": endpoint_id }))
+            .send()
+            .await
+            .context("failed to refresh community node bootstrap registration");
+        match response {
+            Ok(response) => {
+                let heartbeat = response
+                    .error_for_status()
+                    .context("community node bootstrap heartbeat request failed")?
+                    .json::<BootstrapHeartbeatResponse>()
+                    .await
+                    .context("failed to decode community node bootstrap heartbeat response")?;
+                self.community_node_heartbeat_deadlines.lock().await.insert(
+                    base_url,
+                    heartbeat
+                        .expires_at
+                        .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
+                );
+                Ok(())
+            }
+            Err(error) => {
+                self.community_node_heartbeat_deadlines.lock().await.insert(
+                    base_url,
+                    now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS),
+                );
+                Err(error)
+            }
+        }
+    }
+
     async fn require_community_node(&self, base_url: &str) -> Result<CommunityNodeNodeConfig> {
         self.community_node_config
             .lock()
@@ -897,12 +979,14 @@ impl DesktopRuntime {
     async fn apply_effective_seed_peers(&self) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
-        let seed_peers = effective_seed_peers(&discovery_config, &community_node_config);
+        let bootstrap_seed_peers =
+            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
         self.app_service
             .set_discovery_seeds(
                 discovery_config.mode.clone(),
                 discovery_config.env_locked,
-                seed_peers,
+                discovery_config.seed_peers,
+                bootstrap_seed_peers,
             )
             .await
     }
@@ -1079,14 +1163,14 @@ fn merge_community_node_resolved_urls(
 
 fn effective_seed_peers(
     discovery_config: &DiscoveryConfig,
-    community_node_config: &CommunityNodeConfig,
+    bootstrap_seed_peers: &[SeedPeer],
 ) -> Vec<SeedPeer> {
     normalize_seed_peers(
         discovery_config
             .seed_peers
             .iter()
             .cloned()
-            .chain(community_node_seed_peers(community_node_config))
+            .chain(bootstrap_seed_peers.iter().cloned())
             .collect(),
     )
 }
@@ -1234,6 +1318,7 @@ impl SharedIrohStack {
         root: &Path,
         network_config: TransportNetworkConfig,
         discovery_config: &DiscoveryConfig,
+        bootstrap_seed_peers: &[SeedPeer],
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
@@ -1258,14 +1343,14 @@ impl SharedIrohStack {
                 discovery_config.mode.clone(),
                 discovery_config.env_locked,
                 discovery_config.seed_peers.clone(),
+                bootstrap_seed_peers.to_vec(),
             )
             .await?;
+        let effective_seed_peers = effective_seed_peers(discovery_config, bootstrap_seed_peers);
         docs_sync
-            .set_seed_peers(discovery_config.seed_peers.clone())
+            .set_seed_peers(effective_seed_peers.clone())
             .await?;
-        blob_service
-            .set_seed_peers(discovery_config.seed_peers.clone())
-            .await?;
+        blob_service.set_seed_peers(effective_seed_peers).await?;
         Ok(Self {
             _node: node,
             transport,

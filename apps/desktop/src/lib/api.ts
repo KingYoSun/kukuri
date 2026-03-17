@@ -66,7 +66,8 @@ export type DiscoveryStatus = {
   mode: DiscoveryMode;
   connect_mode: ConnectMode;
   env_locked: boolean;
-  seed_peer_ids: string[];
+  configured_seed_peer_ids: string[];
+  bootstrap_seed_peer_ids: string[];
   manual_ticket_peer_ids: string[];
   connected_peer_ids: string[];
   local_endpoint_id: string;
@@ -90,6 +91,7 @@ export type SyncStatus = {
 export type CommunityNodeResolvedUrls = {
   public_base_url: string;
   connectivity_urls: string[];
+  seed_peers?: SeedPeer[];
 };
 
 export type CommunityNodeNodeConfig = {

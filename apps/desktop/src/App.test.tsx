@@ -85,7 +85,8 @@ function createMockApi(options?: {
       mode: 'seeded_dht',
       connect_mode: 'direct_only',
       env_locked: false,
-      seed_peer_ids: [],
+      configured_seed_peer_ids: [],
+      bootstrap_seed_peer_ids: [],
       manual_ticket_peer_ids: [],
       connected_peer_ids: ['peer-a'],
       local_endpoint_id: 'local-endpoint-a',
@@ -398,7 +399,7 @@ function createMockApi(options?: {
           };
         }),
       };
-      syncStatus.discovery.seed_peer_ids = discoveryConfig.seed_peers.map(
+      syncStatus.discovery.configured_seed_peer_ids = discoveryConfig.seed_peers.map(
         (peer) => peer.endpoint_id
       );
       return discoveryConfig;

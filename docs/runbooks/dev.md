@@ -97,8 +97,10 @@ curl -fsS https://iroh-relay.kukuri.app/ping
 
 - `connectivity_urls` は `https://iroh-relay.kukuri.app`
 - desktop client 側は `Save Nodes -> Authenticate -> Accept -> app restart` の順で進める
+- 公開 community-node path では `Peer Ticket` import は不要
 - `Authenticate` 直後の `connectivity urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
 - `restart required: yes` が出たら、その session ではまだ connectivity assist URL が transport に入っていない
+- discovery diagnostics では `Community Bootstrap Peers` が community-node 由来、`Configured Seed IDs` が local seed 設定、`Manual Ticket Peers` が手動 import を表す
 - Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> app restart -> post -> reply/thread -> blob sync` まで成功を確認済み
 - 現状の `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob 接続を peer count に完全反映しないため、`connected: no`, `peers: 0`, `idle` の表示でも post/reply/blob の伝播成功を優先して判定する
 
@@ -249,6 +251,7 @@ $env:KUKURI_INSTANCE="desktop-a"
 - Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、`reply/thread` と live/game の伝播、および restart 後 reconnect without reimport が成立
 - Linux 実機 2 台で片側 port 変更後も、新 port が到達可能なら seed 再入力なしで再接続、投稿伝播、reply が成立
 - Linux 実機 2 台で `seeded_dht` の invalid seed 保存が reject され、既存 seed が維持されることを確認
+- Linux 実機 2 台で relay-only community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) に対し、ticket import なしの peer 間接続、`post -> reply/thread -> live -> game` 伝播が成立
 - Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
 - Windows 実機で `tauri:dev` の `post -> restart -> persist` と author pubkey 不変を確認
 - Windows 実機で Credential Manager を使う keyring 有効状態でも author identity が維持されることを確認

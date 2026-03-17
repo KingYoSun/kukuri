@@ -117,7 +117,18 @@ impl IrohBlobService {
 
     async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
         let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
-        let mut endpoint_addr = iroh::EndpointAddr::new(endpoint_id);
+        let mut endpoint_addr = self
+            .node
+            .endpoint()
+            .remote_info(endpoint_id)
+            .await
+            .map(|remote_info| {
+                iroh::EndpointAddr::from_parts(
+                    remote_info.id(),
+                    remote_info.into_addrs().map(|addr| addr.into_addr()),
+                )
+            })
+            .unwrap_or_else(|| iroh::EndpointAddr::new(endpoint_id));
         for relay_url in self.node.relay_urls() {
             endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
         }
@@ -518,5 +529,67 @@ mod tests {
         let candidates = receiver.connect_candidates(&sender_addr).await;
         assert!(!candidates.is_empty());
         assert_eq!(candidates[0], sender_addr);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn learn_peer_snapshots_remote_info_addrs_for_future_blob_fetches() {
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
+
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+            .await
+            .expect("sender node");
+        let receiver_node = IrohDocsNode::persistent_with_config(receiver_dir.path(), config)
+            .await
+            .expect("receiver node");
+
+        let sender = IrohBlobService::new(sender_node.clone());
+        let receiver = IrohBlobService::new(receiver_node.clone());
+
+        let seeded = sender_node
+            .endpoint()
+            .connect(receiver_node.endpoint().addr(), iroh_blobs::ALPN)
+            .await
+            .expect("seed connection");
+        drop(seeded);
+
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if receiver_node
+                    .endpoint()
+                    .remote_info(sender_node.endpoint().id())
+                    .await
+                    .is_some()
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("receiver should learn sender remote info");
+
+        receiver
+            .learn_peer(&sender_node.endpoint().id().to_string())
+            .await
+            .expect("learn sender peer");
+
+        let learned = receiver.fetch_peers().await;
+        assert!(
+            learned
+                .iter()
+                .find(|peer| peer.id == sender_node.endpoint().id())
+                .is_some_and(|peer| !peer.is_empty()),
+            "learned peer should retain usable address information"
+        );
+
+        let stored = sender
+            .put_blob(b"learned-peer-fetch".to_vec(), "image/png")
+            .await
+            .expect("put blob");
+
+        let payload = receiver.fetch_blob(&stored.hash).await.expect("fetch blob");
+        assert_eq!(payload, Some(b"learned-peer-fetch".to_vec()));
     }
 }

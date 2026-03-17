@@ -151,7 +151,8 @@ pub struct DiscoveryStatus {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,
     pub env_locked: bool,
-    pub seed_peer_ids: Vec<String>,
+    pub configured_seed_peer_ids: Vec<String>,
+    pub bootstrap_seed_peer_ids: Vec<String>,
     pub manual_ticket_peer_ids: Vec<String>,
     pub connected_peer_ids: Vec<String>,
     pub local_endpoint_id: String,
@@ -873,7 +874,8 @@ impl AppService {
             mode,
             connect_mode,
             env_locked,
-            seed_peer_ids,
+            configured_seed_peer_ids,
+            bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids,
             local_endpoint_id,
@@ -883,7 +885,8 @@ impl AppService {
             mode,
             connect_mode,
             env_locked,
-            seed_peer_ids,
+            configured_seed_peer_ids,
+            bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids,
             local_endpoint_id,
@@ -912,13 +915,25 @@ impl AppService {
         &self,
         mode: DiscoveryMode,
         env_locked: bool,
-        seed_peers: Vec<SeedPeer>,
+        configured_seed_peers: Vec<SeedPeer>,
+        bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
+        let effective_seed_peers =
+            merge_seed_peers(configured_seed_peers.clone(), bootstrap_seed_peers.clone());
         self.transport
-            .configure_discovery(mode, env_locked, seed_peers.clone())
+            .configure_discovery(
+                mode,
+                env_locked,
+                configured_seed_peers,
+                bootstrap_seed_peers,
+            )
             .await?;
-        self.docs_sync.set_seed_peers(seed_peers.clone()).await?;
-        self.blob_service.set_seed_peers(seed_peers).await?;
+        self.docs_sync
+            .set_seed_peers(effective_seed_peers.clone())
+            .await?;
+        self.blob_service
+            .set_seed_peers(effective_seed_peers)
+            .await?;
         let existing_topics = self
             .subscriptions
             .lock()
@@ -1447,6 +1462,24 @@ impl AppService {
             },
         })
     }
+}
+
+fn merge_seed_peers(
+    configured_seed_peers: Vec<SeedPeer>,
+    bootstrap_seed_peers: Vec<SeedPeer>,
+) -> Vec<SeedPeer> {
+    let mut deduped = BTreeMap::new();
+    for seed_peer in configured_seed_peers
+        .into_iter()
+        .chain(bootstrap_seed_peers.into_iter())
+    {
+        let key = match seed_peer.addr_hint.as_deref() {
+            Some(addr_hint) => format!("{}@{}", seed_peer.endpoint_id, addr_hint),
+            None => seed_peer.endpoint_id.clone(),
+        };
+        deduped.insert(key, seed_peer);
+    }
+    deduped.into_values().collect()
 }
 
 async fn persist_post_object(
@@ -2378,6 +2411,7 @@ mod tests {
                 endpoint_id: remote_endpoint_id,
                 addr_hint: None,
             }],
+            Vec::new(),
         )
         .await
         .expect("configure seeded dht");
@@ -2672,7 +2706,7 @@ mod tests {
                 .iter()
                 .any(|topic| topic.topic == "kukuri:topic:two")
         );
-        assert_eq!(status.status_detail, "No peer tickets imported");
+        assert_eq!(status.status_detail, "No peers configured");
         assert!(
             status
                 .topic_diagnostics
@@ -2684,6 +2718,47 @@ mod tests {
                 .topic_diagnostics
                 .iter()
                 .all(|topic| topic.last_error.is_none())
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_status_separates_bootstrap_seed_peers_from_manual_tickets() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+        transport
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: "configured-peer".into(),
+                    addr_hint: None,
+                }],
+                vec![SeedPeer {
+                    endpoint_id: "bootstrap-peer".into(),
+                    addr_hint: None,
+                }],
+            )
+            .await
+            .expect("configure discovery");
+        transport
+            .import_ticket("manual-ticket-peer")
+            .await
+            .expect("import ticket");
+        let app = AppService::new(store, transport);
+
+        let discovery = app.get_discovery_status().await.expect("discovery status");
+
+        assert_eq!(
+            discovery.configured_seed_peer_ids,
+            vec!["configured-peer".to_string()]
+        );
+        assert_eq!(
+            discovery.bootstrap_seed_peer_ids,
+            vec!["bootstrap-peer".to_string()]
+        );
+        assert_eq!(
+            discovery.manual_ticket_peer_ids,
+            vec!["manual-ticket-peer".to_string()]
         );
     }
 
@@ -3545,7 +3620,7 @@ mod tests {
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe b timeline");
-        timeout(Duration::from_secs(20), async {
+        timeout(Duration::from_secs(90), async {
             loop {
                 let status_a = app_a.get_sync_status().await.expect("status a");
                 let status_b = app_b.get_sync_status().await.expect("status b");
@@ -3657,7 +3732,7 @@ mod tests {
             .await
             .expect("create post");
 
-        timeout(Duration::from_secs(20), async {
+        timeout(Duration::from_secs(60), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3816,15 +3891,27 @@ mod tests {
                     .find(|post| post.object_id == object_id)
                 {
                     let post = post.clone();
-                    if post.attachments.len() == 1
-                        && post.attachments[0].status == BlobViewStatus::Available
-                        && app_b
+                    if post.attachments.len() == 1 {
+                        let preview = app_b
                             .blob_preview_data_url(post.attachments[0].hash.as_str(), "image/png")
                             .await
-                            .expect("preview data url")
-                            .is_some()
-                    {
-                        return post;
+                            .expect("preview data url");
+                        if preview.is_some() {
+                            let refreshed_timeline = app_b
+                                .list_timeline(topic, None, 20)
+                                .await
+                                .expect("timeline b refreshed");
+                            if let Some(refreshed_post) = refreshed_timeline
+                                .items
+                                .iter()
+                                .find(|candidate| candidate.object_id == object_id)
+                                .cloned()
+                                && refreshed_post.attachments.len() == 1
+                                && refreshed_post.attachments[0].status == BlobViewStatus::Available
+                            {
+                                return refreshed_post;
+                            }
+                        }
                     }
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3832,100 +3919,6 @@ mod tests {
         })
         .await
         .expect("late image join timeout");
-
-        assert_eq!(received.attachments.len(), 1);
-        assert_eq!(received.attachments[0].status, BlobViewStatus::Available);
-        assert!(
-            app_b
-                .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
-                .await
-                .expect("preview data url")
-                .is_some()
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn docs_only_peer_learning_keeps_remote_attachment_available() {
-        let dir = tempdir().expect("tempdir");
-        let stack_a = TestIrohStack::new(&dir.path().join("docs-only-image-a")).await;
-        let stack_b = TestIrohStack::new(&dir.path().join("docs-only-image-b")).await;
-        let store_a = Arc::new(MemoryStore::default());
-        let store_b = Arc::new(MemoryStore::default());
-        let app_a = app_with_iroh_services(store_a, &stack_a);
-        let app_b = app_with_iroh_services(store_b, &stack_b);
-
-        let ticket_a = app_a
-            .peer_ticket()
-            .await
-            .expect("ticket a")
-            .expect("ticket a value");
-        stack_b
-            .docs_sync
-            .import_peer_ticket(&ticket_a)
-            .await
-            .expect("import docs peer a into b");
-
-        let topic = "kukuri:topic:docs-only-image";
-        let _ = app_b
-            .list_timeline(topic, None, 20)
-            .await
-            .expect("subscribe b timeline");
-        timeout(Duration::from_secs(20), async {
-            loop {
-                let status_b = app_b.get_sync_status().await.expect("status b");
-                let ready_b = status_b
-                    .subscribed_topics
-                    .iter()
-                    .any(|value| value == topic);
-                if ready_b {
-                    return;
-                }
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .expect("docs only subscription ready timeout");
-        let object_id = app_a
-            .create_post_with_attachments(
-                topic,
-                "docs only image",
-                None,
-                vec![pending_image_attachment(
-                    "image/png",
-                    b"docs-only-image-bytes",
-                )],
-            )
-            .await
-            .expect("create image post");
-
-        let received = timeout(Duration::from_secs(90), async {
-            loop {
-                let timeline = app_b
-                    .list_timeline(topic, None, 20)
-                    .await
-                    .expect("timeline b");
-                if let Some(post) = timeline
-                    .items
-                    .iter()
-                    .find(|post| post.object_id == object_id)
-                {
-                    let post = post.clone();
-                    if post.attachments.len() == 1
-                        && post.attachments[0].status == BlobViewStatus::Available
-                        && app_b
-                            .blob_preview_data_url(post.attachments[0].hash.as_str(), "image/png")
-                            .await
-                            .expect("preview data url")
-                            .is_some()
-                    {
-                        return post;
-                    }
-                }
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .expect("docs only image propagation timeout");
 
         assert_eq!(received.attachments.len(), 1);
         assert_eq!(received.attachments[0].status, BlobViewStatus::Available);

@@ -66,7 +66,7 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
   peer_count: 0,
   pending_events: 0,
-  status_detail: 'No peer tickets imported',
+  status_detail: 'No peers configured',
   last_error: null,
   configured_peers: [],
   subscribed_topics: [],
@@ -76,7 +76,8 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
     mode: 'seeded_dht',
     connect_mode: 'direct_only',
     env_locked: false,
-    seed_peer_ids: [],
+    configured_seed_peer_ids: [],
+    bootstrap_seed_peer_ids: [],
     manual_ticket_peer_ids: [],
     connected_peer_ids: [],
     local_endpoint_id: '',
@@ -1583,7 +1584,7 @@ export function App({ api = runtimeApi }: AppProps) {
               <p>{syncStatus.discovery.local_endpoint_id || 'unknown'}</p>
             </div>
             <div className='diagnostic-block'>
-              <strong>Connected / Discovered</strong>
+              <strong>Connected Peers</strong>
               <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
             </div>
             <div className='diagnostic-block'>
@@ -1591,8 +1592,12 @@ export function App({ api = runtimeApi }: AppProps) {
               <p>{syncStatus.discovery.manual_ticket_peer_ids.join(', ') || 'none'}</p>
             </div>
             <div className='diagnostic-block'>
-              <strong>Stored Seed IDs</strong>
-              <p>{syncStatus.discovery.seed_peer_ids.join(', ') || 'none'}</p>
+              <strong>Community Bootstrap Peers</strong>
+              <p>{syncStatus.discovery.bootstrap_seed_peer_ids.join(', ') || 'none'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Configured Seed IDs</strong>
+              <p>{syncStatus.discovery.configured_seed_peer_ids.join(', ') || 'none'}</p>
             </div>
             <label className='field'>
               <span>Seed Peers</span>
