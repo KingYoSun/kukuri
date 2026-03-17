@@ -101,11 +101,9 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
             let (certs, server_config) = load_tls_materials(tls_config)?;
             let relay_tls = tls_config.https_bind_addr.map(|https_bind_addr| TlsConfig {
                 https_bind_addr,
-                quic_bind_addr: tls_config
-                    .effective_quic_bind_addr()
-                    .unwrap_or_else(|| {
-                        SocketAddr::new(https_bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT)
-                    }),
+                quic_bind_addr: tls_config.effective_quic_bind_addr().unwrap_or_else(|| {
+                    SocketAddr::new(https_bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT)
+                }),
                 cert: CertConfig::<(), ()>::Manual { certs },
                 server_config: server_config.clone(),
             });
@@ -319,7 +317,10 @@ mod tests {
         let public_origin_mode = config.public_origin_mode();
         let tls = config.tls.expect("tls config");
 
-        assert_eq!(public_origin_mode, IrohRelayPublicOriginMode::UpstreamTlsTermination);
+        assert_eq!(
+            public_origin_mode,
+            IrohRelayPublicOriginMode::UpstreamTlsTermination
+        );
         assert_eq!(tls.https_bind_addr, None);
         assert_eq!(
             tls.quic_bind_addr,

@@ -19,8 +19,7 @@ use iroh_gossip::net::Gossip;
 use kukuri_core::{ReplicaId, blob_hash};
 use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
-    build_endpoint_builder, parse_endpoint_ticket,
-    prepare_endpoint_for_discovery,
+    build_endpoint_builder, parse_endpoint_ticket, prepare_endpoint_for_discovery,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
@@ -68,6 +67,7 @@ pub struct DocEvent {
     pub replica_id: ReplicaId,
     pub key: String,
     pub content_hash: String,
+    pub source_peer: Option<String>,
 }
 
 #[async_trait]
@@ -402,16 +402,26 @@ impl IrohDocsSync {
         let live_events = tx.clone();
         let task = tokio::spawn(async move {
             while let Some(item) = live.next().await {
-                if let Ok(
-                    iroh_docs::engine::LiveEvent::InsertLocal { entry }
-                    | iroh_docs::engine::LiveEvent::InsertRemote { entry, .. },
-                ) = item
-                {
-                    let _ = live_events.send(DocEvent {
-                        replica_id: live_replica.clone(),
-                        key: String::from_utf8_lossy(entry.key()).to_string(),
-                        content_hash: entry.content_hash().to_string(),
-                    });
+                if let Ok(event) = item {
+                    match event {
+                        iroh_docs::engine::LiveEvent::InsertLocal { entry } => {
+                            let _ = live_events.send(DocEvent {
+                                replica_id: live_replica.clone(),
+                                key: String::from_utf8_lossy(entry.key()).to_string(),
+                                content_hash: entry.content_hash().to_string(),
+                                source_peer: None,
+                            });
+                        }
+                        iroh_docs::engine::LiveEvent::InsertRemote { from, entry, .. } => {
+                            let _ = live_events.send(DocEvent {
+                                replica_id: live_replica.clone(),
+                                key: String::from_utf8_lossy(entry.key()).to_string(),
+                                content_hash: entry.content_hash().to_string(),
+                                source_peer: Some(from.to_string()),
+                            });
+                        }
+                        _ => {}
+                    }
                 }
             }
         });
@@ -557,6 +567,7 @@ impl DocsSync for MemoryDocsSync {
                         replica_id: replica_id.clone(),
                         key,
                         content_hash: value_hash(bytes),
+                        source_peer: None,
                     });
             }
             DocOp::SetBytes { key, value } => {
@@ -573,6 +584,7 @@ impl DocsSync for MemoryDocsSync {
                         replica_id: replica_id.clone(),
                         key,
                         content_hash: hash,
+                        source_peer: None,
                     });
             }
             DocOp::DeletePrefix { prefix } => {
@@ -652,6 +664,7 @@ impl DocsSync for IrohDocsSync {
                     replica_id: replica_id.clone(),
                     key,
                     content_hash: content_hash.to_string(),
+                    source_peer: None,
                 });
             }
             DocOp::SetBytes { key, value } => {
@@ -662,6 +675,7 @@ impl DocsSync for IrohDocsSync {
                     replica_id: replica_id.clone(),
                     key,
                     content_hash: content_hash.to_string(),
+                    source_peer: None,
                 });
             }
             DocOp::DeletePrefix { prefix } => {

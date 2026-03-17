@@ -28,7 +28,8 @@ async fn require_ready_accepts_prepared_database() -> Result<()> {
         eprintln!("skipping cn-core integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
     };
-    let database = TestDatabase::create(admin_database_url.as_str(), "cn_core_runtime_ready").await?;
+    let database =
+        TestDatabase::create(admin_database_url.as_str(), "cn_core_runtime_ready").await?;
     let pool = connect_postgres(database.database_url.as_str()).await?;
 
     initialize_database(&pool).await?;

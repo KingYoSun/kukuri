@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use iroh::EndpointId;
 use kukuri_core::BlobHash;
 use kukuri_docs_sync::IrohDocsNode;
 use kukuri_transport::{SeedPeer, parse_endpoint_ticket};
@@ -32,6 +33,9 @@ pub trait BlobService: Send + Sync {
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()>;
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {
+        Ok(())
+    }
     async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
         Ok(())
     }
@@ -41,6 +45,7 @@ pub trait BlobService: Send + Sync {
 pub struct IrohBlobService {
     node: Arc<IrohDocsNode>,
     pinned: Arc<RwLock<HashSet<String>>>,
+    learned_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
     seed_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
 }
@@ -56,6 +61,7 @@ impl IrohBlobService {
         Self {
             node,
             pinned: Arc::new(RwLock::new(HashSet::new())),
+            learned_peers: Arc::new(Mutex::new(BTreeMap::new())),
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
         }
@@ -79,7 +85,10 @@ impl IrohBlobService {
                 candidates.push(learned_peer);
             }
         }
-        if !candidates.iter().any(|candidate| candidate == imported_peer) {
+        if !candidates
+            .iter()
+            .any(|candidate| candidate == imported_peer)
+        {
             candidates.push(imported_peer.clone());
         }
         candidates
@@ -87,18 +96,41 @@ impl IrohBlobService {
 
     async fn fetch_peers(&self) -> Vec<iroh::EndpointAddr> {
         let mut peers = self
-            .seed_peers
+            .learned_peers
             .lock()
             .await
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        for peer in self.seed_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
         for peer in self.imported_peers.lock().await.values() {
             if !peers.iter().any(|existing| existing.id == peer.id) {
                 peers.push(peer.clone());
             }
         }
         peers
+    }
+
+    async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
+        let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
+        let mut endpoint_addr = iroh::EndpointAddr::new(endpoint_id);
+        for relay_url in self.node.relay_urls() {
+            endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
+        }
+        if !endpoint_addr.is_empty() {
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
+        }
+        self.learned_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        Ok(())
     }
 }
 
@@ -263,6 +295,10 @@ impl BlobService for IrohBlobService {
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr);
         Ok(())
+    }
+
+    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
+        self.record_learned_peer(endpoint_id).await
     }
 
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
@@ -445,17 +481,16 @@ mod tests {
         let config = TransportNetworkConfig::loopback();
 
         let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
-        .await
-        .expect("sender node");
+            .await
+            .expect("sender node");
         let receiver_node = IrohDocsNode::persistent_with_config(receiver_dir.path(), config)
-        .await
-        .expect("receiver node");
+            .await
+            .expect("receiver node");
 
         let receiver = IrohBlobService::new(receiver_node.clone());
-        let relay_url = "https://relay.example.invalid/"
-            .parse()
-            .expect("relay url");
-        let sender_addr = iroh::EndpointAddr::new(sender_node.endpoint().id()).with_relay_url(relay_url);
+        let relay_url = "https://relay.example.invalid/".parse().expect("relay url");
+        let sender_addr =
+            iroh::EndpointAddr::new(sender_node.endpoint().id()).with_relay_url(relay_url);
 
         let seeded = sender_node
             .endpoint()

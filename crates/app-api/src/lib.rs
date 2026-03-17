@@ -1096,16 +1096,27 @@ impl AppService {
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
-                        if event.is_ok()
-                            && let Ok(count) = hydrate_topic_state_with_services(
+                        if let Ok(event) = event {
+                            if let Some(source_peer) = event.source_peer.as_deref()
+                                && let Err(error) = blob_service.learn_peer(source_peer).await
+                            {
+                                warn!(
+                                    topic = %topic,
+                                    source_peer = %source_peer,
+                                    error = %error,
+                                    "failed to learn blob peer from docs sync event"
+                                );
+                            }
+                            if let Ok(count) = hydrate_topic_state_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
                             ).await
                             && count > 0
-                        {
-                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            {
+                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            }
                         }
                     }
                     Some(event) = hint_stream.next() => {
@@ -2080,14 +2091,16 @@ mod tests {
             )
             .await
             .expect("iroh docs node");
-            let transport = Arc::new(IrohGossipTransport::from_shared_parts(
-                node.endpoint().clone(),
-                node.gossip().clone(),
-                node.discovery(),
-                kukuri_transport::TransportNetworkConfig::loopback(),
-                kukuri_transport::TransportRelayConfig::default(),
-            )
-            .expect("transport"));
+            let transport = Arc::new(
+                IrohGossipTransport::from_shared_parts(
+                    node.endpoint().clone(),
+                    node.gossip().clone(),
+                    node.discovery(),
+                    kukuri_transport::TransportNetworkConfig::loopback(),
+                    kukuri_transport::TransportRelayConfig::default(),
+                )
+                .expect("transport"),
+            );
             let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
             let blob_service = Arc::new(IrohBlobService::new(node.clone()));
             Self {
@@ -3525,6 +3538,71 @@ mod tests {
         })
         .await
         .expect("late image join timeout");
+
+        assert_eq!(received.attachments.len(), 1);
+        assert_eq!(received.attachments[0].status, BlobViewStatus::Available);
+        assert!(
+            app_b
+                .blob_preview_data_url(received.attachments[0].hash.as_str(), "image/png")
+                .await
+                .expect("preview data url")
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn docs_only_peer_learning_keeps_remote_attachment_available() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("docs-only-image-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("docs-only-image-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        stack_b
+            .docs_sync
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import docs peer a into b");
+
+        let topic = "kukuri:topic:docs-only-image";
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe b timeline");
+        let event_id = app_a
+            .create_post_with_attachments(
+                topic,
+                "docs only image",
+                None,
+                vec![pending_image_attachment(
+                    "image/png",
+                    b"docs-only-image-bytes",
+                )],
+            )
+            .await
+            .expect("create image post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if let Some(post) = timeline.items.iter().find(|post| post.id == event_id) {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("docs only image propagation timeout");
 
         assert_eq!(received.attachments.len(), 1);
         assert_eq!(received.attachments[0].status, BlobViewStatus::Available);

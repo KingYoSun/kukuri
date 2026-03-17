@@ -164,8 +164,9 @@ impl SeedPeer {
         let mut endpoint_addr = match self.addr_hint.as_deref() {
             Some(addr_hint) => {
                 let socket_addrs = resolve_socket_addrs(addr_hint)?;
-                build_endpoint_addr(endpoint_id, socket_addrs)
-                    .ok_or_else(|| anyhow!("seed peer must resolve to at least one socket address"))?
+                build_endpoint_addr(endpoint_id, socket_addrs).ok_or_else(|| {
+                    anyhow!("seed peer must resolve to at least one socket address")
+                })?
             }
             None => endpoint_addr_with_relays(endpoint_id, relay_urls),
         };
@@ -231,11 +232,9 @@ impl DhtDiscoveryOptions {
         builder.no_default_network();
         builder.cache_size(0);
         builder.dht(|dht| dht);
-        Ok(Some(
-            builder
-                .build()
-                .context("failed to build pkarr client for endpoint publication")?,
-        ))
+        Ok(Some(builder.build().context(
+            "failed to build pkarr client for endpoint publication",
+        )?))
     }
 }
 
@@ -579,12 +578,17 @@ impl AddressLookup for RelayFallbackLookup {
     fn resolve(
         &self,
         endpoint_id: EndpointId,
-    ) -> Option<futures_util::stream::BoxStream<'static, Result<AddressLookupItem, iroh::address_lookup::Error>>>
-    {
+    ) -> Option<
+        futures_util::stream::BoxStream<
+            'static,
+            Result<AddressLookupItem, iroh::address_lookup::Error>,
+        >,
+    > {
         if self.relay_urls.is_empty() {
             return None;
         }
-        let endpoint_info = EndpointInfo::from(endpoint_addr_with_relays(endpoint_id, &self.relay_urls));
+        let endpoint_info =
+            EndpointInfo::from(endpoint_addr_with_relays(endpoint_id, &self.relay_urls));
         Some(Box::pin(futures_util::stream::once(async move {
             Ok(AddressLookupItem::new(
                 endpoint_info,
@@ -961,14 +965,18 @@ pub async fn prepare_endpoint_for_discovery(
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
             if relay_backed {
-                debug!("initial endpoint publication failed; continuing with relay-only startup: {error:#}");
+                debug!(
+                    "initial endpoint publication failed; continuing with relay-only startup: {error:#}"
+                );
             } else {
                 warn!("initial endpoint publication failed: {error:#}");
             }
         }
         Err(_) => {
             if relay_backed {
-                debug!("initial endpoint publication timed out; continuing with relay-only startup");
+                debug!(
+                    "initial endpoint publication timed out; continuing with relay-only startup"
+                );
             } else {
                 warn!("initial endpoint publication timed out; continuing with background retries");
             }
@@ -983,7 +991,9 @@ pub async fn prepare_endpoint_for_discovery(
                 Ok(false) => DHT_PUBLISH_RETRY_INTERVAL,
                 Err(error) => {
                     if relay_backed {
-                        debug!("failed to publish endpoint address to pkarr; relay path remains available: {error:#}");
+                        debug!(
+                            "failed to publish endpoint address to pkarr; relay path remains available: {error:#}"
+                        );
                     } else {
                         warn!("failed to publish endpoint address to pkarr: {error:#}");
                     }
@@ -1039,7 +1049,8 @@ fn build_signed_packet_with_timestamp(
     let name = dns::Name::new(IROH_TXT_NAME).expect("iroh txt name");
     for entry in endpoint_info.to_txt_strings() {
         let mut txt = rdata::TXT::new();
-        txt.add_string(&entry).context("invalid endpoint info txt entry")?;
+        txt.add_string(&entry)
+            .context("invalid endpoint info txt entry")?;
         builder = builder.txt(name.clone(), txt.into_owned(), ttl);
     }
     builder
@@ -1580,8 +1591,8 @@ mod tests {
     use super::*;
     use iroh::address_lookup::EndpointInfo;
     use kukuri_core::{TopicId, build_text_note, generate_keys};
-    use pkarr::mainline::Testnet;
     use pkarr::Timestamp;
+    use pkarr::mainline::Testnet;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Mutex, OnceLock};
 
@@ -1799,7 +1810,9 @@ mod tests {
         let stale_info = EndpointInfo::from_parts(
             secret_key.public(),
             iroh::address_lookup::EndpointData::new([iroh::TransportAddr::Relay(
-                "https://stale-relay.invalid".parse().expect("stale relay url"),
+                "https://stale-relay.invalid"
+                    .parse()
+                    .expect("stale relay url"),
             )]),
         );
         let stale_packet = build_signed_packet_with_timestamp(
@@ -1926,10 +1939,13 @@ mod tests {
         )
         .await
         .expect("transport a");
-        let transport_b =
-            IrohGossipTransport::bind_with_options(config, DhtDiscoveryOptions::disabled(), relay_config)
-                .await
-                .expect("transport b");
+        let transport_b = IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("transport b");
 
         let endpoint_b = transport_b.endpoint.id();
         let connection = timeout(Duration::from_secs(20), async {
