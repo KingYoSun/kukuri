@@ -1391,7 +1391,9 @@ fn apply_asc_projection_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kukuri_core::{BlobHash, PayloadRef, ReplicaId, TopicId, build_post_envelope, generate_keys};
+    use kukuri_core::{
+        BlobHash, PayloadRef, ReplicaId, TopicId, build_post_envelope, generate_keys,
+    };
 
     #[tokio::test]
     async fn store_timeline_cursor_stable() {

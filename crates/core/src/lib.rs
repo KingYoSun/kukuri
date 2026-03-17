@@ -96,8 +96,14 @@ impl BlobHash {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayloadRef {
-    InlineText { text: String },
-    BlobText { hash: BlobHash, mime: String, bytes: u64 },
+    InlineText {
+        text: String,
+    },
+    BlobText {
+        hash: BlobHash,
+        mime: String,
+        bytes: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -522,18 +528,24 @@ pub fn build_post_envelope_with_payload(
     reply_to: Option<&KukuriEnvelope>,
     visibility: ObjectVisibility,
 ) -> Result<KukuriEnvelope> {
-    let thread = reply_to.and_then(KukuriEnvelope::thread_ref).unwrap_or_else(|| {
-        reply_to
-            .map(|parent| ThreadRef {
-                root: parent.id.clone(),
-                reply_to: Some(parent.id.clone()),
-            })
-            .unwrap_or(ThreadRef {
-                root: EnvelopeId::default(),
-                reply_to: None,
-            })
-    });
-    let kind = if reply_to.is_some() { "comment" } else { "post" };
+    let thread = reply_to
+        .and_then(KukuriEnvelope::thread_ref)
+        .unwrap_or_else(|| {
+            reply_to
+                .map(|parent| ThreadRef {
+                    root: parent.id.clone(),
+                    reply_to: Some(parent.id.clone()),
+                })
+                .unwrap_or(ThreadRef {
+                    root: EnvelopeId::default(),
+                    reply_to: None,
+                })
+        });
+    let kind = if reply_to.is_some() {
+        "comment"
+    } else {
+        "post"
+    };
     let root_id = reply_to.map(|_| thread.root.clone());
     let reply_id = reply_to.map(|parent| parent.id.clone());
     let content = KukuriPostEnvelopeContentV1 {
@@ -703,8 +715,10 @@ fn canonical_envelope_payload(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String> {
-    serde_json::to_string(&serde_json::json!([0, pubkey, created_at, kind, tags, content]))
-        .context("failed to encode canonical envelope payload")
+    serde_json::to_string(&serde_json::json!([
+        0, pubkey, created_at, kind, tags, content
+    ]))
+    .context("failed to encode canonical envelope payload")
 }
 
 #[cfg(test)]
@@ -727,9 +741,8 @@ mod tests {
     #[test]
     fn comment_envelope_tracks_root_and_reply() {
         let keys = generate_keys();
-        let root =
-            build_post_envelope(&keys, &TopicId::new("kukuri:topic:thread"), "root", None)
-                .expect("root");
+        let root = build_post_envelope(&keys, &TopicId::new("kukuri:topic:thread"), "root", None)
+            .expect("root");
         let reply = build_post_envelope(
             &keys,
             &TopicId::new("kukuri:topic:thread"),

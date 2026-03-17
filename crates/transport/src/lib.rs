@@ -18,7 +18,7 @@ use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
-use kukuri_core::{Event, GossipHint, TopicId};
+use kukuri_core::{GossipHint, TopicId};
 use pkarr::Client as PkarrClient;
 use pkarr::{SignedPacket, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,6 @@ use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, warn};
 
-pub type EventStream = Pin<Box<dyn Stream<Item = EventEnvelope> + Send>>;
 pub type HintStream = Pin<Box<dyn Stream<Item = HintEnvelope> + Send>>;
 
 const IROH_TXT_NAME: &str = "_iroh";
@@ -36,13 +35,6 @@ const DHT_PUBLISH_TTL_SECONDS: u32 = 30;
 const DHT_PUBLISH_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 const DHT_PUBLISH_REPUBLISH_INTERVAL: Duration = Duration::from_secs(30);
 const DHT_PUBLISH_STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EventEnvelope {
-    pub event: Event,
-    pub received_at: i64,
-    pub source_peer: String,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HintEnvelope {
@@ -285,9 +277,6 @@ impl TransportNetworkConfig {
 
 #[async_trait]
 pub trait Transport: Send + Sync {
-    async fn subscribe(&self, topic: &TopicId) -> Result<EventStream>;
-    async fn unsubscribe(&self, topic: &TopicId) -> Result<()>;
-    async fn publish(&self, topic: &TopicId, event: Event) -> Result<()>;
     async fn peers(&self) -> Result<PeerSnapshot>;
     async fn export_ticket(&self) -> Result<Option<String>>;
     async fn import_ticket(&self, ticket: &str) -> Result<()>;
@@ -313,7 +302,6 @@ pub trait HintTransport: Send + Sync {
 
 #[derive(Clone, Default)]
 pub struct FakeNetwork {
-    topics: Arc<Mutex<HashMap<String, broadcast::Sender<EventEnvelope>>>>,
     hints: Arc<Mutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
     known_peers: Arc<Mutex<BTreeSet<String>>>,
 }
@@ -342,20 +330,6 @@ impl FakeTransport {
         }
     }
 
-    fn stream_from_sender(sender: &broadcast::Sender<EventEnvelope>) -> EventStream {
-        let receiver = sender.subscribe();
-        let stream = BroadcastStream::new(receiver).filter_map(|event| async move { event.ok() });
-        Box::pin(stream)
-    }
-
-    async fn topic_sender(&self, topic: &TopicId) -> broadcast::Sender<EventEnvelope> {
-        let mut topics = self.network.topics.lock().await;
-        topics
-            .entry(topic.0.clone())
-            .or_insert_with(|| broadcast::channel(128).0)
-            .clone()
-    }
-
     async fn hint_sender(&self, topic: &TopicId) -> broadcast::Sender<HintEnvelope> {
         let mut topics = self.network.hints.lock().await;
         topics
@@ -367,27 +341,6 @@ impl FakeTransport {
 
 #[async_trait]
 impl Transport for FakeTransport {
-    async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
-        self.subscribed_topics.lock().await.insert(topic.0.clone());
-        let sender = self.topic_sender(topic).await;
-        Ok(Self::stream_from_sender(&sender))
-    }
-
-    async fn unsubscribe(&self, topic: &TopicId) -> Result<()> {
-        self.subscribed_topics.lock().await.remove(topic.as_str());
-        Ok(())
-    }
-
-    async fn publish(&self, topic: &TopicId, event: Event) -> Result<()> {
-        let sender = self.topic_sender(topic).await;
-        let _ = sender.send(EventEnvelope {
-            event,
-            received_at: Utc::now().timestamp_millis(),
-            source_peer: self.local_id.clone(),
-        });
-        Ok(())
-    }
-
     async fn peers(&self) -> Result<PeerSnapshot> {
         let mut imported = self
             .imported_peers
@@ -551,11 +504,9 @@ impl HintTransport for FakeTransport {
     }
 }
 
-struct TopicState {
+struct HintTopicState {
     sender: Arc<Mutex<GossipSender>>,
-    broadcaster: broadcast::Sender<EventEnvelope>,
-    joined: Arc<AtomicBool>,
-    joined_notify: Arc<Notify>,
+    broadcaster: broadcast::Sender<HintEnvelope>,
     bootstrap_peer_ids: BTreeSet<String>,
     neighbors: Arc<RwLock<BTreeSet<String>>>,
     last_received_at: Arc<Mutex<Option<i64>>>,
@@ -609,7 +560,7 @@ pub struct IrohGossipTransport {
     seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
-    topic_states: Arc<Mutex<HashMap<String, TopicState>>>,
+    topic_states: Arc<Mutex<HashMap<String, HintTopicState>>>,
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
     connect_mode: Arc<Mutex<ConnectMode>>,
@@ -752,7 +703,7 @@ impl IrohGossipTransport {
         connected.into_iter().collect::<Vec<_>>()
     }
 
-    async fn ensure_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<EventEnvelope>> {
+    async fn ensure_hint_topic(&self, topic: &TopicId) -> Result<broadcast::Sender<HintEnvelope>> {
         let bootstrap_peers = self.bootstrap_peers().await;
         let bootstrap_peer_ids = bootstrap_peers
             .iter()
@@ -842,17 +793,17 @@ impl IrohGossipTransport {
                             .collect::<BTreeSet<_>>();
                         *neighbors_task.write().await = current_neighbors;
                         *last_received_at_task.lock().await = Some(Utc::now().timestamp_millis());
-                        if let Ok(parsed) = serde_json::from_slice::<Event>(&message.content) {
+                        if let Ok(parsed) = serde_json::from_slice::<GossipHint>(&message.content) {
                             *last_error_task.lock().await = None;
                             *transport_last_error.lock().await = None;
-                            let _ = outbound.send(EventEnvelope {
-                                event: parsed,
+                            let _ = outbound.send(HintEnvelope {
+                                hint: parsed,
                                 received_at: Utc::now().timestamp_millis(),
                                 source_peer: String::new(),
                             });
                         } else {
                             *last_error_task.lock().await =
-                                Some("failed to decode gossip payload".to_string());
+                                Some("failed to decode hint payload".to_string());
                         }
                     }
                     Ok(GossipEvent::NeighborUp(peer_id)) => {
@@ -879,11 +830,9 @@ impl IrohGossipTransport {
         self.subscribed_topics.lock().await.insert(topic.0.clone());
         self.topic_states.lock().await.insert(
             topic.0.clone(),
-            TopicState {
+            HintTopicState {
                 sender: Arc::new(Mutex::new(sender)),
                 broadcaster: broadcaster.clone(),
-                joined,
-                joined_notify,
                 bootstrap_peer_ids,
                 neighbors,
                 last_received_at,
@@ -895,7 +844,7 @@ impl IrohGossipTransport {
         Ok(broadcaster)
     }
 
-    fn stream_from_sender(sender: &broadcast::Sender<EventEnvelope>) -> EventStream {
+    fn stream_from_sender(sender: &broadcast::Sender<HintEnvelope>) -> HintStream {
         let stream =
             BroadcastStream::new(sender.subscribe()).filter_map(|event| async move { event.ok() });
         Box::pin(stream)
@@ -1068,52 +1017,6 @@ impl Drop for IrohGossipTransport {
 
 #[async_trait]
 impl Transport for IrohGossipTransport {
-    async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
-        let sender = self.ensure_topic(topic).await?;
-        Ok(Self::stream_from_sender(&sender))
-    }
-
-    async fn unsubscribe(&self, topic: &TopicId) -> Result<()> {
-        self.remove_topic_state(topic.as_str()).await;
-        Ok(())
-    }
-
-    async fn publish(&self, topic: &TopicId, event: Event) -> Result<()> {
-        let _ = self.ensure_topic(topic).await?;
-        let peer_ids = self
-            .bootstrap_peers()
-            .await
-            .into_iter()
-            .map(|peer| peer.id)
-            .collect::<Vec<_>>();
-        let states = self.topic_states.lock().await;
-        let state = states
-            .get(topic.as_str())
-            .ok_or_else(|| anyhow!("missing topic sender"))?;
-        if !peer_ids.is_empty()
-            && !state.joined.load(Ordering::SeqCst)
-            && timeout(Duration::from_secs(10), state.joined_notify.notified())
-                .await
-                .is_err()
-        {
-            let message = "timed out waiting for gossip topic join".to_string();
-            *state.last_error.lock().await = Some(message.clone());
-            *self.last_error.lock().await = Some(format!("topic {}: {message}", topic.as_str()));
-            return Err(anyhow!(message));
-        }
-        let payload = serde_json::to_vec(&event)?;
-        let sender = state.sender.lock().await;
-        if let Err(error) = sender.broadcast(payload.into()).await {
-            let message = format!("failed to broadcast gossip event: {error}");
-            *state.last_error.lock().await = Some(message.clone());
-            *self.last_error.lock().await = Some(message.clone());
-            return Err(anyhow!(message));
-        }
-        *state.last_error.lock().await = None;
-        *self.last_error.lock().await = None;
-        Ok(())
-    }
-
     async fn peers(&self) -> Result<PeerSnapshot> {
         let topic_states = self
             .topic_states
@@ -1273,47 +1176,33 @@ impl Transport for IrohGossipTransport {
 impl HintTransport for IrohGossipTransport {
     async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
         let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
-        let stream = self.subscribe(&hint_topic).await?;
-        let mapped = stream.filter_map(|envelope| async move {
-            serde_json::from_str::<GossipHint>(envelope.event.content.as_str())
-                .ok()
-                .map(|hint| HintEnvelope {
-                    hint,
-                    received_at: envelope.received_at,
-                    source_peer: envelope.source_peer,
-                })
-        });
-        Ok(Box::pin(mapped))
+        let sender = self.ensure_hint_topic(&hint_topic).await?;
+        Ok(Self::stream_from_sender(&sender))
     }
 
     async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
         let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
-        self.unsubscribe(&hint_topic).await
+        self.remove_topic_state(hint_topic.as_str()).await;
+        Ok(())
     }
 
     async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
         let hint_topic = TopicId::new(format!("hint/{}", topic.as_str()));
-        let payload = serde_json::to_string(&hint)?;
-        let event = Event {
-            id: kukuri_core::EventId::from(format!(
-                "hint-{}",
-                blake3::hash(payload.as_bytes()).to_hex()
-            )),
-            pubkey: kukuri_core::Pubkey::from("hint"),
-            created_at: Utc::now().timestamp(),
-            kind: "hint".into(),
-            tags: vec![vec!["topic".into(), hint_topic.as_str().into()]],
-            content: payload,
-            sig: String::new(),
-        };
-        let _ = self.ensure_topic(&hint_topic).await?;
+        let _ = self.ensure_hint_topic(&hint_topic).await?;
         let states = self.topic_states.lock().await;
         let state = states
             .get(hint_topic.as_str())
             .ok_or_else(|| anyhow!("missing hint topic sender"))?;
         let sender = state.sender.lock().await;
-        let payload = serde_json::to_vec(&event)?;
-        let _ = sender.broadcast(payload.into()).await;
+        let payload = serde_json::to_vec(&hint)?;
+        if let Err(error) = sender.broadcast(payload.into()).await {
+            let message = format!("failed to broadcast gossip hint: {error}");
+            *state.last_error.lock().await = Some(message.clone());
+            *self.last_error.lock().await = Some(message.clone());
+            return Err(anyhow!(message));
+        }
+        *state.last_error.lock().await = None;
+        *self.last_error.lock().await = None;
         Ok(())
     }
 }
@@ -1590,7 +1479,9 @@ fn topic_status_detail(configured_peer_count: usize, connected_peer_count: usize
 mod tests {
     use super::*;
     use iroh::address_lookup::EndpointInfo;
-    use kukuri_core::{TopicId, build_post_envelope, generate_keys};
+    use kukuri_core::{
+        Event, GossipHint, HintObjectRef, TopicId, build_post_envelope, generate_keys,
+    };
     use pkarr::Timestamp;
     use pkarr::mainline::Testnet;
     use std::net::{Ipv4Addr, SocketAddrV4};
@@ -1675,7 +1566,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn transport_two_process_roundtrip_static_peer() {
+    async fn transport_two_process_hint_roundtrip_static_peer() {
         let transport_a = IrohGossipTransport::bind_local()
             .await
             .expect("transport a");
@@ -1701,9 +1592,11 @@ mod tests {
             .await
             .expect("import a");
         let topic = TopicId::new("kukuri:topic:transport");
-        let (_stream_a, mut stream_b) =
-            tokio::try_join!(transport_a.subscribe(&topic), transport_b.subscribe(&topic))
-                .expect("subscribe both");
+        let (_stream_a, mut stream_b) = tokio::try_join!(
+            transport_a.subscribe_hints(&topic),
+            transport_b.subscribe_hints(&topic)
+        )
+        .expect("subscribe both");
         timeout(Duration::from_secs(10), async {
             loop {
                 let peers_a = transport_a.peers().await.expect("peers a");
@@ -1716,30 +1609,24 @@ mod tests {
         })
         .await
         .expect("peer snapshot timeout");
-        let event =
-            build_post_envelope(&generate_keys(), &topic, "hello transport", None).expect("event");
+        let hint = GossipHint::TopicObjectsChanged {
+            topic_id: topic.clone(),
+            objects: vec![HintObjectRef {
+                object_id: "object-1".into(),
+                object_kind: "post".into(),
+            }],
+        };
 
         transport_a
-            .publish(&topic, event.clone())
+            .publish_hint(&topic, hint.clone())
             .await
-            .expect("publish");
+            .expect("publish hint");
         let envelope = timeout(Duration::from_secs(10), stream_b.next())
             .await
             .expect("receive timeout")
             .expect("stream event");
 
-        assert_eq!(envelope.event.id, event.id);
-        assert_eq!(
-            envelope
-                .event
-                .post_content()
-                .expect("post content")
-                .expect("post content")
-                .payload_ref,
-            kukuri_core::PayloadRef::InlineText {
-                text: "hello transport".into(),
-            }
-        );
+        assert_eq!(envelope.hint, hint);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2279,24 +2166,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fake_transport_roundtrip() {
+    async fn fake_transport_hint_roundtrip() {
         let network = FakeNetwork::default();
         let left = FakeTransport::new("left", network.clone());
         let right = FakeTransport::new("right", network);
         let topic = TopicId::new("kukuri:topic:fake");
-        let _left_stream = left.subscribe(&topic).await.expect("left subscribe");
-        let mut right_stream = right.subscribe(&topic).await.expect("right subscribe");
+        let _left_stream = left
+            .subscribe_hints(&topic)
+            .await
+            .expect("left subscribe hints");
+        let mut right_stream = right
+            .subscribe_hints(&topic)
+            .await
+            .expect("right subscribe hints");
 
         left.import_ticket("right").await.expect("import");
-        let event =
-            build_post_envelope(&generate_keys(), &topic, "hello fake", None).expect("event");
-        left.publish(&topic, event.clone()).await.expect("publish");
+        let hint = GossipHint::Presence {
+            topic_id: topic.clone(),
+            author: "author-1".into(),
+            ttl_ms: 30_000,
+        };
+        left.publish_hint(&topic, hint.clone())
+            .await
+            .expect("publish hint");
 
         let received = timeout(Duration::from_secs(1), right_stream.next())
             .await
             .expect("receive timeout")
             .expect("event");
-        assert_eq!(received.event.id, event.id);
+        assert_eq!(received.hint, hint);
     }
 
     #[test]

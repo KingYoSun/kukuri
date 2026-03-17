@@ -8,17 +8,15 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant, GossipHint,
-    HintObjectRef, KukuriMediaManifestV1, LiveSessionManifestBlobV1, LiveSessionStateDocV1,
-    LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility, PayloadRef, Pubkey,
-    ReplicaId, TopicId, LIVE_MANIFEST_MIME, build_game_session_envelope,
+    AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant,
+    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
+    HintObjectRef, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
+    PayloadRef, Pubkey, ReplicaId, TopicId, build_game_session_envelope,
     build_live_session_envelope, build_media_manifest_envelope, build_post_envelope_with_payload,
-    generate_keys, timeline_sort_key, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus,
-    GameScoreEntry,
+    generate_keys, timeline_sort_key,
 };
-use kukuri_docs_sync::{
-    DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id,
-};
+use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 use kukuri_store::{
     BlobCacheStatus, EventProjectionRow, GameRoomProjectionRow, LiveSessionProjectionRow, Page,
     ProjectionStore, Store, TimelineCursor,
@@ -249,7 +247,8 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {
-            self.resolve_parent_event(&EnvelopeId::from(reply_to)).await?
+            self.resolve_parent_event(&EnvelopeId::from(reply_to))
+                .await?
         } else {
             None
         };
@@ -297,8 +296,7 @@ impl AppService {
                     })
                     .collect(),
             };
-            let envelope =
-                build_media_manifest_envelope(self.keys.as_ref(), &topic, &manifest)?;
+            let envelope = build_media_manifest_envelope(self.keys.as_ref(), &topic, &manifest)?;
             persist_media_manifest(&topic, &envelope, &manifest, self.docs_sync.as_ref()).await?;
             vec![manifest_id]
         };
@@ -323,8 +321,12 @@ impl AppService {
             parent.as_ref(),
             ObjectVisibility::Public,
         )?;
-        self.ingest_event(envelope.clone(), Some(stored_blob.clone()), stored_attachments)
-            .await?;
+        self.ingest_event(
+            envelope.clone(),
+            Some(stored_blob.clone()),
+            stored_attachments,
+        )
+        .await?;
         self.hint_transport
             .publish_hint(
                 &topic,
@@ -721,8 +723,8 @@ impl AppService {
                     participant_id: format!("participant-{}", index + 1),
                     label: label.clone(),
                     score: 0,
-            })
-            .collect(),
+                })
+                .collect(),
             updated_at: now,
         };
         let envelope = build_game_session_envelope(
@@ -953,8 +955,7 @@ impl AppService {
         }
         self.hint_transport
             .unsubscribe_hints(&TopicId::new(topic_id))
-            .await?;
-        self.transport.unsubscribe(&TopicId::new(topic_id)).await
+            .await
     }
 
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
@@ -1479,7 +1480,10 @@ async fn persist_post_object(
         .apply_doc_op(
             &topic_replica,
             DocOp::SetJson {
-                key: stable_key("objects", &format!("{}/envelope", object.object_id.as_str())),
+                key: stable_key(
+                    "objects",
+                    &format!("{}/envelope", object.object_id.as_str()),
+                ),
                 value: serde_json::to_value(envelope)?,
             },
         )
@@ -2132,10 +2136,11 @@ mod tests {
     use kukuri_docs_sync::IrohDocsSync;
     use kukuri_store::MemoryStore;
     use kukuri_transport::{
-        DhtDiscoveryOptions, DiscoveryMode, EventEnvelope, EventStream, FakeNetwork, FakeTransport,
-        HintEnvelope, HintStream, IrohGossipTransport, SeedPeer,
+        DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
+        IrohGossipTransport, SeedPeer,
     };
-    use pkarr::{Client as PkarrClient, mainline::Testnet};
+    use pkarr::errors::{ConcurrencyError, PublishError};
+    use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
     use tempfile::tempdir;
     use tokio::sync::{Mutex as TokioMutex, broadcast};
     use tokio::time::{Duration, sleep, timeout};
@@ -2144,7 +2149,6 @@ mod tests {
     #[derive(Clone)]
     struct StaticTransport {
         peers: Arc<TokioMutex<PeerSnapshot>>,
-        events: Arc<TokioMutex<HashMap<String, broadcast::Sender<EventEnvelope>>>>,
         hints: Arc<TokioMutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
         local_ticket: String,
     }
@@ -2153,18 +2157,9 @@ mod tests {
         fn new(peers: PeerSnapshot) -> Self {
             Self {
                 peers: Arc::new(TokioMutex::new(peers)),
-                events: Arc::new(TokioMutex::new(HashMap::new())),
                 hints: Arc::new(TokioMutex::new(HashMap::new())),
                 local_ticket: "static-peer".into(),
             }
-        }
-
-        async fn event_sender(&self, topic: &TopicId) -> broadcast::Sender<EventEnvelope> {
-            let mut guard = self.events.lock().await;
-            guard
-                .entry(topic.as_str().to_string())
-                .or_insert_with(|| broadcast::channel(64).0)
-                .clone()
         }
 
         async fn hint_sender(&self, topic: &TopicId) -> broadcast::Sender<HintEnvelope> {
@@ -2215,27 +2210,6 @@ mod tests {
 
     #[async_trait]
     impl Transport for StaticTransport {
-        async fn subscribe(&self, topic: &TopicId) -> Result<EventStream> {
-            let sender = self.event_sender(topic).await;
-            let stream = BroadcastStream::new(sender.subscribe())
-                .filter_map(|item| async move { item.ok() });
-            Ok(Box::pin(stream))
-        }
-
-        async fn unsubscribe(&self, _topic: &TopicId) -> Result<()> {
-            Ok(())
-        }
-
-        async fn publish(&self, topic: &TopicId, event: kukuri_core::Event) -> Result<()> {
-            let sender = self.event_sender(topic).await;
-            let _ = sender.send(EventEnvelope {
-                event,
-                received_at: Utc::now().timestamp_millis(),
-                source_peer: "static".into(),
-            });
-            Ok(())
-        }
-
         async fn peers(&self) -> Result<PeerSnapshot> {
             Ok(self.peers.lock().await.clone())
         }
@@ -2334,25 +2308,67 @@ mod tests {
         builder.build().expect("pkarr client")
     }
 
+    fn build_endpoint_signed_packet_with_timestamp(
+        endpoint_info: &EndpointInfo,
+        secret_key: &iroh::SecretKey,
+        ttl: u32,
+        timestamp: Timestamp,
+    ) -> SignedPacket {
+        use pkarr::dns::{self, rdata};
+
+        let keypair = pkarr::Keypair::from_secret_key(&secret_key.to_bytes());
+        let mut builder = SignedPacket::builder().timestamp(timestamp);
+        let name = dns::Name::new("_iroh").expect("iroh txt name");
+        for entry in endpoint_info.to_txt_strings() {
+            let mut txt = rdata::TXT::new();
+            txt.add_string(&entry)
+                .expect("valid endpoint info txt entry");
+            builder = builder.txt(name.clone(), txt.into_owned(), ttl);
+        }
+        builder.sign(&keypair).expect("sign endpoint info packet")
+    }
+
     async fn publish_endpoint_to_testnet(endpoint: &iroh::Endpoint, testnet: &Testnet) {
         let client = dht_test_client(testnet);
-        let signed_packet = EndpointInfo::from(endpoint.addr())
-            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
-            .expect("signed packet");
-        client
-            .publish(&signed_packet, None)
-            .await
-            .expect("publish endpoint info");
         let public_key =
             pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
-        let expected = signed_packet.as_bytes().clone();
+        let expected_info = EndpointInfo::from(endpoint.addr());
+        for _ in 0..20 {
+            let previous_timestamp = client
+                .resolve_most_recent(&public_key)
+                .await
+                .map(|packet| packet.timestamp());
+            let now = Timestamp::now();
+            let timestamp = match previous_timestamp {
+                Some(previous) if previous >= now => previous + 1,
+                _ => now,
+            };
+            let signed_packet = build_endpoint_signed_packet_with_timestamp(
+                &expected_info,
+                endpoint.secret_key(),
+                1,
+                timestamp,
+            );
+            match client.publish(&signed_packet, previous_timestamp).await {
+                Ok(()) => break,
+                Err(PublishError::Concurrency(
+                    ConcurrencyError::ConflictRisk
+                    | ConcurrencyError::NotMostRecent
+                    | ConcurrencyError::CasFailed,
+                )) => sleep(Duration::from_millis(50)).await,
+                Err(error) => panic!("publish endpoint info: {error}"),
+            }
+        }
         timeout(Duration::from_secs(5), async {
             loop {
                 if client
                     .resolve_most_recent(&public_key)
                     .await
                     .as_ref()
-                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                    .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                    .is_some_and(|packet_info| {
+                        packet_info.to_txt_strings() == expected_info.to_txt_strings()
+                    })
                 {
                     return;
                 }
@@ -2471,7 +2487,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3213,7 +3233,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3284,7 +3308,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3360,7 +3388,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3472,7 +3504,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline should load");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3550,7 +3586,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3714,7 +3754,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3771,7 +3815,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3836,7 +3884,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3896,7 +3948,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;

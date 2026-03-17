@@ -1546,7 +1546,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1662,7 +1666,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1782,7 +1790,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1867,7 +1879,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -1933,7 +1949,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -2016,7 +2036,11 @@ mod tests {
                     })
                     .await
                     .expect("timeline b");
-                if let Some(post) = timeline.items.iter().find(|post| post.object_id == event_id) {
+                if let Some(post) = timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == event_id)
+                {
                     return post.clone();
                 }
                 sleep(Duration::from_millis(50)).await;

@@ -33,10 +33,7 @@ pub struct CommunityNodeResolvedUrls {
 }
 
 impl CommunityNodeResolvedUrls {
-    pub fn new(
-        public_base_url: impl Into<String>,
-        connectivity_urls: Vec<String>,
-    ) -> Result<Self> {
+    pub fn new(public_base_url: impl Into<String>, connectivity_urls: Vec<String>) -> Result<Self> {
         let public_base_url = normalize_http_url(public_base_url.into().as_str())?;
         let connectivity_urls = normalize_http_url_list(connectivity_urls)?;
         Ok(Self {
@@ -457,8 +454,8 @@ pub async fn verify_auth_envelope_and_issue_token(
     if capability_url != public_base_url {
         bail!("capability_url tag mismatch");
     }
-    let challenge = first_tag_value(&envelope, "challenge")
-        .ok_or_else(|| anyhow!("missing challenge tag"))?;
+    let challenge =
+        first_tag_value(&envelope, "challenge").ok_or_else(|| anyhow!("missing challenge tag"))?;
     let row = sqlx::query(
         "SELECT pubkey, expires_at, used_at
          FROM cn_auth.auth_challenges
@@ -720,7 +717,10 @@ pub fn build_auth_envelope_json(
         AUTH_ENVELOPE_KIND,
         vec![
             vec!["challenge".into(), challenge.to_string()],
-            vec!["capability_url".into(), normalize_http_url(public_base_url)?],
+            vec![
+                "capability_url".into(),
+                normalize_http_url(public_base_url)?,
+            ],
         ],
         &KukuriAuthEnvelopeContentV1 {
             scope: "community-node-auth".into(),

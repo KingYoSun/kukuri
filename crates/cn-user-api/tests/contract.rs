@@ -123,8 +123,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     assert_eq!(unauthenticated_body["code"], "AUTH_REQUIRED");
 
     let keys = Keys::generate();
-    let (access_token, auth_envelope_json) =
-        authenticate(&client, &server.base_url, &keys).await?;
+    let (access_token, auth_envelope_json) = authenticate(&client, &server.base_url, &keys).await?;
 
     let reused = client
         .post(format!("{}/v1/auth/verify", server.base_url))
