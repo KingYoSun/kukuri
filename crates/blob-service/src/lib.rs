@@ -66,6 +66,10 @@ impl IrohBlobService {
         imported_peer: &iroh::EndpointAddr,
     ) -> Vec<iroh::EndpointAddr> {
         let mut candidates = Vec::new();
+        let imported_uses_relay = imported_peer.relay_urls().next().is_some();
+        if imported_uses_relay {
+            candidates.push(imported_peer.clone());
+        }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
             let learned_peer = iroh::EndpointAddr::from_parts(
                 remote_info.id(),
@@ -75,10 +79,7 @@ impl IrohBlobService {
                 candidates.push(learned_peer);
             }
         }
-        if !candidates
-            .iter()
-            .any(|candidate| candidate == imported_peer)
-        {
+        if !candidates.iter().any(|candidate| candidate == imported_peer) {
             candidates.push(imported_peer.clone());
         }
         candidates
@@ -435,5 +436,52 @@ mod tests {
         let payload = receiver.fetch_blob(&stored.hash).await.expect("fetch blob");
 
         assert_eq!(payload, Some(b"stale-ticket-fallback".to_vec()));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn connect_candidates_prefers_relay_hint_before_learned_remote_info() {
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
+
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+        .await
+        .expect("sender node");
+        let receiver_node = IrohDocsNode::persistent_with_config(receiver_dir.path(), config)
+        .await
+        .expect("receiver node");
+
+        let receiver = IrohBlobService::new(receiver_node.clone());
+        let relay_url = "https://relay.example.invalid/"
+            .parse()
+            .expect("relay url");
+        let sender_addr = iroh::EndpointAddr::new(sender_node.endpoint().id()).with_relay_url(relay_url);
+
+        let seeded = sender_node
+            .endpoint()
+            .connect(receiver_node.endpoint().addr(), iroh_blobs::ALPN)
+            .await
+            .expect("seed connection");
+        drop(seeded);
+
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if receiver_node
+                    .endpoint()
+                    .remote_info(sender_node.endpoint().id())
+                    .await
+                    .is_some()
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("receiver should learn sender remote info");
+
+        let candidates = receiver.connect_candidates(&sender_addr).await;
+        assert!(!candidates.is_empty());
+        assert_eq!(candidates[0], sender_addr);
     }
 }
