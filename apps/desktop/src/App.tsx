@@ -80,6 +80,7 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
     bootstrap_seed_peer_ids: [],
     manual_ticket_peer_ids: [],
     connected_peer_ids: [],
+    assist_peer_ids: [],
     local_endpoint_id: '',
     last_discovery_error: null,
   },
@@ -632,6 +633,16 @@ export function App({ api = runtimeApi }: AppProps) {
       ) as Record<string, TopicSyncStatus>,
     [syncStatus.topic_diagnostics]
   );
+  const effectivePeerIds = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...syncStatus.topic_diagnostics.flatMap((diagnostic) => diagnostic.connected_peers),
+          ...syncStatus.discovery.assist_peer_ids,
+        ]),
+      ],
+    [syncStatus.discovery.assist_peer_ids, syncStatus.topic_diagnostics]
+  );
   const previewableMediaAttachments = useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
     for (const post of [...activeTimeline, ...thread]) {
@@ -651,18 +662,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [
-          timelineViews,
-          liveViews,
-          gameViews,
-          status,
-          discovery,
-          communityConfig,
-          communityStatuses,
-          ticket,
-          threadView,
-        ] =
-          await Promise.all([
+        const [timelineViews, liveViews, gameViews, threadView] = await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
@@ -681,14 +681,16 @@ export function App({ api = runtimeApi }: AppProps) {
               rooms: await api.listGameRooms(topic),
             }))
           ),
+          currentThread
+            ? api.listThread(currentActiveTopic, currentThread, null, 50)
+            : Promise.resolve(null),
+        ]);
+        const [status, discovery, communityConfig, communityStatuses, ticket] = await Promise.all([
           api.getSyncStatus(),
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
           api.getCommunityNodeStatuses(),
           api.getLocalPeerTicket(),
-          currentThread
-            ? api.listThread(currentActiveTopic, currentThread, null, 50)
-            : Promise.resolve(null),
         ]);
         startTransition(() => {
           setTimelinesByTopic(
@@ -1546,13 +1548,8 @@ export function App({ api = runtimeApi }: AppProps) {
             <p>{syncStatus.status_detail}</p>
           </div>
           <div className='diagnostic-block'>
-            <strong>Connected Peers</strong>
-            <p>
-              {syncStatus.topic_diagnostics
-                .flatMap((diagnostic) => diagnostic.connected_peers)
-                .filter((peer, index, peers) => peers.indexOf(peer) === index)
-                .join(', ') || 'none'}
-            </p>
+            <strong>Effective Peers</strong>
+            <p>{effectivePeerIds.join(', ') || 'none'}</p>
           </div>
           <div className='diagnostic-block'>
             <strong>Last Error</strong>
@@ -1586,6 +1583,10 @@ export function App({ api = runtimeApi }: AppProps) {
             <div className='diagnostic-block'>
               <strong>Connected Peers</strong>
               <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Relay-assisted Peers</strong>
+              <p>{syncStatus.discovery.assist_peer_ids.join(', ') || 'none'}</p>
             </div>
             <div className='diagnostic-block'>
               <strong>Manual Ticket Peers</strong>
@@ -1806,7 +1807,13 @@ export function App({ api = runtimeApi }: AppProps) {
                   ) : null}
                   <div className='topic-diagnostic'>
                     <span>
-                      {topicDiagnostics[topic]?.joined ? 'joined' : 'idle'} / peers:{' '}
+                      {topicDiagnostics[topic]?.connected_peers.length
+                        ? 'joined'
+                        : topicDiagnostics[topic]?.assist_peer_ids.length
+                          ? 'relay-assisted'
+                          : topicDiagnostics[topic]?.joined
+                            ? 'joined'
+                            : 'idle'} / peers:{' '}
                       {topicDiagnostics[topic]?.peer_count ?? 0}
                     </span>
                     <small>

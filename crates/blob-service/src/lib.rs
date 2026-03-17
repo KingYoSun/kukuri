@@ -39,6 +39,9 @@ pub trait BlobService: Send + Sync {
     async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
         Ok(())
     }
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Clone)]
@@ -113,6 +116,17 @@ impl IrohBlobService {
             }
         }
         peers
+    }
+
+    async fn available_fetch_peer_ids(&self) -> Vec<String> {
+        let peers = self.fetch_peers().await;
+        let mut available = std::collections::BTreeSet::new();
+        for peer in peers {
+            if !peer.is_empty() || self.node.endpoint().remote_info(peer.id).await.is_some() {
+                available.insert(peer.id.to_string());
+            }
+        }
+        available.into_iter().collect()
     }
 
     async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
@@ -325,6 +339,10 @@ impl BlobService for IrohBlobService {
         }
         *self.seed_peers.lock().await = parsed;
         Ok(())
+    }
+
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        Ok(self.available_fetch_peer_ids().await)
     }
 }
 

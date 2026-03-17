@@ -70,6 +70,7 @@ export type DiscoveryStatus = {
   bootstrap_seed_peer_ids: string[];
   manual_ticket_peer_ids: string[];
   connected_peer_ids: string[];
+  assist_peer_ids: string[];
   local_endpoint_id: string;
   last_discovery_error?: string | null;
 };
@@ -135,6 +136,7 @@ export type TopicSyncStatus = {
   joined: boolean;
   peer_count: number;
   connected_peers: string[];
+  assist_peer_ids: string[];
   configured_peer_ids: string[];
   missing_peer_ids: string[];
   last_received_at?: number | null;

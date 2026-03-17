@@ -22,10 +22,13 @@ import {
 function createMockApi(options?: {
   globalLastError?: string | null;
   topicLastError?: string | null;
+  assistPeerIds?: string[];
   seedPosts?: Record<string, TimelineView['items']>;
   seedLiveSessions?: Record<string, LiveSessionView[]>;
   seedGameRooms?: Record<string, GameRoomView[]>;
 }) {
+  const assistPeerIds = options?.assistPeerIds ?? [];
+  const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
     Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
       topic,
@@ -61,7 +64,7 @@ function createMockApi(options?: {
   const syncStatus: SyncStatus = {
     connected: true,
     last_sync_ts: 1,
-    peer_count: 1,
+    peer_count: effectivePeerIds.length,
     pending_events: 0,
     status_detail: 'Connected to all configured peers',
     last_error: options?.globalLastError ?? null,
@@ -71,8 +74,9 @@ function createMockApi(options?: {
       {
         topic: 'kukuri:topic:demo',
         joined: true,
-        peer_count: 1,
+        peer_count: effectivePeerIds.length,
         connected_peers: ['peer-a'],
+        assist_peer_ids: assistPeerIds,
         configured_peer_ids: ['peer-a'],
         missing_peer_ids: [],
         last_received_at: 1,
@@ -89,6 +93,7 @@ function createMockApi(options?: {
       bootstrap_seed_peer_ids: [],
       manual_ticket_peer_ids: [],
       connected_peer_ids: ['peer-a'],
+      assist_peer_ids: assistPeerIds,
       local_endpoint_id: 'local-endpoint-a',
       last_discovery_error: null,
     },
@@ -131,6 +136,7 @@ function createMockApi(options?: {
           joined: true,
           peer_count: 1,
           connected_peers: ['peer-a'],
+          assist_peer_ids: assistPeerIds,
           configured_peer_ids: ['peer-a'],
           missing_peer_ids: [],
           last_received_at: sequence,
@@ -146,12 +152,16 @@ function createMockApi(options?: {
         syncStatus.topic_diagnostics.push({
           topic,
           joined: false,
-          peer_count: 0,
+          peer_count: assistPeerIds.length,
           connected_peers: [],
+          assist_peer_ids: assistPeerIds,
           configured_peer_ids: [],
           missing_peer_ids: [],
           last_received_at: null,
-          status_detail: 'No peers configured for this topic',
+          status_detail:
+            assistPeerIds.length > 0
+              ? `relay-assisted sync available via ${assistPeerIds.length} peer(s)`
+              : 'No peers configured for this topic',
           last_error: null,
         });
       }
@@ -260,7 +270,26 @@ function createMockApi(options?: {
       );
     },
     async getSyncStatus() {
-      return syncStatus;
+      return {
+        ...syncStatus,
+        configured_peers: [...syncStatus.configured_peers],
+        subscribed_topics: [...syncStatus.subscribed_topics],
+        topic_diagnostics: syncStatus.topic_diagnostics.map((diagnostic) => ({
+          ...diagnostic,
+          connected_peers: [...diagnostic.connected_peers],
+          assist_peer_ids: [...diagnostic.assist_peer_ids],
+          configured_peer_ids: [...diagnostic.configured_peer_ids],
+          missing_peer_ids: [...diagnostic.missing_peer_ids],
+        })),
+        discovery: {
+          ...syncStatus.discovery,
+          configured_seed_peer_ids: [...syncStatus.discovery.configured_seed_peer_ids],
+          bootstrap_seed_peer_ids: [...syncStatus.discovery.bootstrap_seed_peer_ids],
+          manual_ticket_peer_ids: [...syncStatus.discovery.manual_ticket_peer_ids],
+          connected_peer_ids: [...syncStatus.discovery.connected_peer_ids],
+          assist_peer_ids: [...syncStatus.discovery.assist_peer_ids],
+        },
+      };
     },
     async getDiscoveryConfig() {
       return discoveryConfig;
@@ -715,6 +744,26 @@ test('desktop shell can track multiple topics at once', async () => {
   expect(
     screen.getByText('Connected to all configured peers for this topic')
   ).toBeInTheDocument();
+});
+
+test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi({ assistPeerIds: ['relay-peer'] })} />);
+
+  await waitFor(() => {
+    expect(screen.getByText('Relay-assisted Peers')).toBeInTheDocument();
+    expect(screen.getByText('relay-peer')).toBeInTheDocument();
+  });
+
+  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:relay');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+
+  await waitFor(() => {
+    const relayTopic = screen.getByRole('button', { name: 'kukuri:topic:relay' }).closest('li');
+    expect(relayTopic).not.toBeNull();
+    expect(relayTopic).toHaveTextContent('relay-assisted / peers: 1');
+    expect(relayTopic).toHaveTextContent('relay-assisted sync available via 1 peer(s)');
+  });
 });
 
 test('desktop shell renders diagnostics error reasons', async () => {

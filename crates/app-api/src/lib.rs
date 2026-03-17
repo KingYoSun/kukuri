@@ -155,6 +155,7 @@ pub struct DiscoveryStatus {
     pub bootstrap_seed_peer_ids: Vec<String>,
     pub manual_ticket_peer_ids: Vec<String>,
     pub connected_peer_ids: Vec<String>,
+    pub assist_peer_ids: Vec<String>,
     pub local_endpoint_id: String,
     pub last_discovery_error: Option<String>,
 }
@@ -165,6 +166,7 @@ pub struct TopicSyncStatus {
     pub joined: bool,
     pub peer_count: usize,
     pub connected_peers: Vec<String>,
+    pub assist_peer_ids: Vec<String>,
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
@@ -829,7 +831,7 @@ impl AppService {
         let PeerSnapshot {
             connected,
             peer_count,
-            connected_peers: _,
+            connected_peers,
             configured_peers,
             subscribed_topics,
             pending_events,
@@ -839,29 +841,51 @@ impl AppService {
         } = self.transport.peers().await?;
         let subscribed_topics = normalize_topics(subscribed_topics);
         let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
+        let assist_peer_ids = self.assisted_peer_ids().await?;
+        let effective_connected_peer_ids =
+            merge_peer_ids(connected_peers.clone(), assist_peer_ids.clone());
         let discovery = self.get_discovery_status().await?;
 
         Ok(SyncStatus {
-            connected,
+            connected: connected || !assist_peer_ids.is_empty(),
             last_sync_ts: *self.last_sync_ts.lock().await,
-            peer_count,
+            peer_count: peer_count.max(effective_connected_peer_ids.len()),
             pending_events,
-            status_detail,
+            status_detail: effective_sync_status_detail(
+                status_detail.as_str(),
+                connected_peers.len(),
+                assist_peer_ids.len(),
+                subscribed_topics.len(),
+            ),
             last_error,
             configured_peers,
             subscribed_topics,
             topic_diagnostics: topic_diagnostics
                 .into_iter()
-                .map(|diagnostic| TopicSyncStatus {
-                    topic: diagnostic.topic,
-                    joined: diagnostic.joined,
-                    peer_count: diagnostic.peer_count,
-                    connected_peers: diagnostic.connected_peers,
-                    configured_peer_ids: diagnostic.configured_peer_ids,
-                    missing_peer_ids: diagnostic.missing_peer_ids,
-                    last_received_at: diagnostic.last_received_at,
-                    status_detail: diagnostic.status_detail,
-                    last_error: diagnostic.last_error,
+                .map(|diagnostic| {
+                    let gossip_peer_count = diagnostic.connected_peers.len();
+                    TopicSyncStatus {
+                        topic: diagnostic.topic,
+                        joined: diagnostic.joined || !assist_peer_ids.is_empty(),
+                        peer_count: diagnostic.peer_count.max(
+                            merge_peer_ids(
+                                diagnostic.connected_peers.clone(),
+                                assist_peer_ids.clone(),
+                            )
+                            .len(),
+                        ),
+                        connected_peers: diagnostic.connected_peers,
+                        assist_peer_ids: assist_peer_ids.clone(),
+                        configured_peer_ids: diagnostic.configured_peer_ids,
+                        missing_peer_ids: diagnostic.missing_peer_ids,
+                        last_received_at: diagnostic.last_received_at,
+                        status_detail: effective_topic_status_detail(
+                            diagnostic.status_detail.as_str(),
+                            gossip_peer_count,
+                            assist_peer_ids.len(),
+                        ),
+                        last_error: diagnostic.last_error,
+                    }
                 })
                 .collect(),
             local_author_pubkey: self.current_author_pubkey(),
@@ -881,6 +905,7 @@ impl AppService {
             local_endpoint_id,
             last_discovery_error,
         } = self.transport.discovery().await?;
+        let assist_peer_ids = self.assisted_peer_ids().await?;
         Ok(DiscoveryStatus {
             mode,
             connect_mode,
@@ -889,9 +914,17 @@ impl AppService {
             bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids,
+            assist_peer_ids,
             local_endpoint_id,
             last_discovery_error,
         })
+    }
+
+    async fn assisted_peer_ids(&self) -> Result<Vec<String>> {
+        Ok(merge_peer_ids(
+            self.docs_sync.assist_peer_ids().await?,
+            self.blob_service.assist_peer_ids().await?,
+        ))
     }
 
     pub async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
@@ -2135,6 +2168,42 @@ fn normalize_topic_diagnostics(diagnostics: Vec<TopicPeerSnapshot>) -> Vec<Topic
     merged.into_values().collect()
 }
 
+fn merge_peer_ids(left: Vec<String>, right: Vec<String>) -> Vec<String> {
+    left.into_iter()
+        .chain(right)
+        .filter(|peer| !peer.trim().is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn effective_sync_status_detail(
+    base: &str,
+    gossip_peer_count: usize,
+    assist_peer_count: usize,
+    subscribed_topic_count: usize,
+) -> String {
+    if gossip_peer_count > 0 || assist_peer_count == 0 {
+        return base.to_string();
+    }
+    if subscribed_topic_count > 0 {
+        format!("relay-assisted sync available via {assist_peer_count} peer(s)")
+    } else {
+        format!("relay-assisted connectivity available via {assist_peer_count} peer(s)")
+    }
+}
+
+fn effective_topic_status_detail(
+    base: &str,
+    gossip_peer_count: usize,
+    assist_peer_count: usize,
+) -> String {
+    if gossip_peer_count > 0 || assist_peer_count == 0 {
+        return base.to_string();
+    }
+    format!("relay-assisted sync available via {assist_peer_count} peer(s)")
+}
+
 impl Drop for AppService {
     fn drop(&mut self) {
         if let Ok(mut subscriptions) = self.subscriptions.try_lock() {
@@ -2192,6 +2261,100 @@ mod tests {
                 .entry(topic.as_str().to_string())
                 .or_insert_with(|| broadcast::channel(64).0)
                 .clone()
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct AssistedDocsSync {
+        peer_ids: Vec<String>,
+    }
+
+    impl AssistedDocsSync {
+        fn new(peer_ids: Vec<&str>) -> Self {
+            Self {
+                peer_ids: peer_ids.into_iter().map(str::to_string).collect(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl DocsSync for AssistedDocsSync {
+        async fn open_replica(&self, _replica_id: &ReplicaId) -> Result<()> {
+            Ok(())
+        }
+
+        async fn apply_doc_op(&self, _replica_id: &ReplicaId, _op: DocOp) -> Result<()> {
+            Ok(())
+        }
+
+        async fn query_replica(
+            &self,
+            _replica_id: &ReplicaId,
+            _query: DocQuery,
+        ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
+            Ok(Vec::new())
+        }
+
+        async fn subscribe_replica(
+            &self,
+            _replica_id: &ReplicaId,
+        ) -> Result<kukuri_docs_sync::DocEventStream> {
+            let (sender, _) = broadcast::channel::<kukuri_docs_sync::DocEvent>(1);
+            let stream = BroadcastStream::new(sender.subscribe())
+                .filter_map(|item| async move { item.ok().map(Ok) });
+            Ok(Box::pin(stream))
+        }
+
+        async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+            Ok(self.peer_ids.clone())
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct AssistedBlobService {
+        peer_ids: Vec<String>,
+    }
+
+    impl AssistedBlobService {
+        fn new(peer_ids: Vec<&str>) -> Self {
+            Self {
+                peer_ids: peer_ids.into_iter().map(str::to_string).collect(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl BlobService for AssistedBlobService {
+        async fn put_blob(&self, _data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+            Ok(StoredBlob {
+                hash: kukuri_core::BlobHash::new("test-hash"),
+                mime: mime.to_string(),
+                bytes: 0,
+            })
+        }
+
+        async fn fetch_blob(&self, _hash: &kukuri_core::BlobHash) -> Result<Option<Vec<u8>>> {
+            Ok(None)
+        }
+
+        async fn pin_blob(&self, _hash: &kukuri_core::BlobHash) -> Result<()> {
+            Ok(())
+        }
+
+        async fn blob_status(&self, _hash: &kukuri_core::BlobHash) -> Result<BlobStatus> {
+            Ok(BlobStatus::Missing)
+        }
+
+        async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+            Ok(self.peer_ids.clone())
         }
     }
 
@@ -2759,6 +2922,76 @@ mod tests {
         assert_eq!(
             discovery.manual_ticket_peer_ids,
             vec!["manual-ticket-peer".to_string()]
+        );
+        assert!(discovery.assist_peer_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn relay_assisted_peers_contribute_to_sync_status_and_topic_counts() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot {
+            connected: false,
+            peer_count: 0,
+            connected_peers: Vec::new(),
+            configured_peers: vec!["peer-a".into(), "peer-b".into()],
+            subscribed_topics: vec!["kukuri:topic:relay-assisted".into()],
+            pending_events: 0,
+            status_detail: "No peers configured".into(),
+            last_error: None,
+            topic_diagnostics: vec![TopicPeerSnapshot {
+                topic: "kukuri:topic:relay-assisted".into(),
+                joined: false,
+                peer_count: 0,
+                connected_peers: Vec::new(),
+                configured_peer_ids: vec!["peer-a".into(), "peer-b".into()],
+                missing_peer_ids: vec!["peer-a".into(), "peer-b".into()],
+                last_received_at: None,
+                status_detail: "No peers configured".into(),
+                last_error: None,
+            }],
+        }));
+        let docs_sync = Arc::new(AssistedDocsSync::new(vec!["peer-a", "peer-b"]));
+        let blob_service = Arc::new(AssistedBlobService::new(vec!["peer-b", "peer-c"]));
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+
+        let status = app.get_sync_status().await.expect("sync status");
+
+        assert!(status.connected);
+        assert_eq!(status.peer_count, 3);
+        assert_eq!(
+            status.status_detail,
+            "relay-assisted sync available via 3 peer(s)"
+        );
+        assert_eq!(
+            status.discovery.assist_peer_ids,
+            vec![
+                "peer-a".to_string(),
+                "peer-b".to_string(),
+                "peer-c".to_string()
+            ]
+        );
+        assert_eq!(status.topic_diagnostics.len(), 1);
+        assert!(status.topic_diagnostics[0].joined);
+        assert_eq!(status.topic_diagnostics[0].peer_count, 3);
+        assert_eq!(
+            status.topic_diagnostics[0].assist_peer_ids,
+            vec![
+                "peer-a".to_string(),
+                "peer-b".to_string(),
+                "peer-c".to_string()
+            ]
+        );
+        assert_eq!(
+            status.topic_diagnostics[0].status_detail,
+            "relay-assisted sync available via 3 peer(s)"
         );
     }
 
