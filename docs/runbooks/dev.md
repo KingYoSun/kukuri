@@ -104,6 +104,8 @@ curl -fsS https://relay.kukuri.app/v1/p2p/info | jq
 - desktop client 側は `Save Nodes -> Authenticate -> Accept -> app restart` の順で進める
 - `Authenticate` 直後の `relay urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
 - `restart required: yes` が出たら、その session ではまだ custom relay が transport に入っていない
+- Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> app restart -> post -> reply/thread -> blob sync` まで成功を確認済み
+- 現状の `Sync Status` / `Tracked Topics` diagnostics は community-node relay 配下の docs/blob 接続を peer count に反映しないため、`connected: no`, `peers: 0`, `idle` の表示でも post/reply/blob の伝播成功を優先して判定する
 
 ## community-node deploy 順序
 ```bash
@@ -152,6 +154,7 @@ cargo xtask scenario community_node_public_connectivity
 - `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes`, `/v1/p2p/info`, `/relay` の contract を確認する。
 - `community_node_public_connectivity` scenario は `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
 - crate test を直接叩く場合は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` と `COMMUNITY_NODE_DATABASE_URL` を明示する。
+- 公開 community-node の手動確認では UI の peer count より、timeline / thread / attachment preview / blob media payload fetch の成否を優先して見る。
 
 ## frontend だけ確認する場合
 ```bash

@@ -9,7 +9,7 @@
 - Phase6-7 Windows desktop support の native smoke まで完了
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
 - Phase6 community-node relay/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
-- Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract まで完了
+- Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract と Linux 実機 `post -> reply/thread -> blob sync` 検証まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -56,6 +56,8 @@
 - `cn-iroh-relay` に optional TLS/QUIC config を追加し、Cloudflare Tunnel の TCP path と WireGuard の `7842/udp` path を同時に扱えるようにした
 - `docker-compose.community-node.yml` と `.env.community-node.example` に host bind IP / iroh TLS / QUIC env を追加し、`api.kukuri.app` / `relay.kukuri.app` / `iroh-relay.kukuri.app` の公開 manual smoke 手順を runbook に反映した
 - desktop-runtime test に `https://api.kukuri.app` + `wss://relay.kukuri.app/relay` + `https://iroh-relay.kukuri.app` の URL contract を追加し、`api.kukuri.app/relay` fallback が復活しないようにした
+- community-node relay で seed peer / unknown peer lookup に configured relay URL を付与し、docs event の source peer から blob sender を学習して imported ticket なしでも relay 経由の blob fetch が成立するようにした
+- desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node relay 検証時の iroh internal warning noise を抑制した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -103,11 +105,15 @@
 - `cargo xtask scenario community_node_public_connectivity`
 - `cargo test -p kukuri-cn-iroh-relay`
 - `cargo test -p kukuri-desktop-runtime community_node_config_preserves_public_kukuri_urls`
+- `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml tracing_directives -- --nocapture`
+- `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml explicit_rust_log_keeps_target_specific_override -- --nocapture`
+- Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `wss://relay.kukuri.app/relay`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 - Windows native smoke は `tauri:dev` / keyring / multi-instance static-peer / 別 host static-peer / NSIS installer まで確認済み
+- community-node relay 使用時の `Sync Status` と `Tracked Topics` diagnostics は gossip neighbor を主に見ており、relay-backed docs/blob connectivity を peer count へ反映しない。そのため `connected: no / peers: 0 / idle` の表示でも `post -> reply/thread -> blob sync` が成立することがある
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み
