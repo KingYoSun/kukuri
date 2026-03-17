@@ -20,7 +20,13 @@ struct DesktopState {
 
 const DEFAULT_TRACING_DIRECTIVES: &str =
     "warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info";
-const MAINLINE_SUPPRESS_DIRECTIVE: &str = "mainline::rpc::socket=error";
+const DEFAULT_SUPPRESS_DIRECTIVES: &[&str] = &[
+    "mainline::rpc::socket=error",
+    "iroh_quinn_proto::connection=error",
+    "iroh::socket::remote_map::remote_state=error",
+    "iroh_docs::engine::live=error",
+    "iroh_gossip::net=error",
+];
 
 fn map_error(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -32,11 +38,29 @@ fn resolve_tracing_directives(rust_log: Option<&str>) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_TRACING_DIRECTIVES)
         .to_owned();
-    if directives.contains("mainline::rpc::socket") {
-        return directives;
+
+    let mut resolved = directives.clone();
+    for suppress_directive in DEFAULT_SUPPRESS_DIRECTIVES {
+        let target = suppress_directive
+            .split('=')
+            .next()
+            .expect("suppress directives must have a target");
+        if directives_contains_target(&directives, target) {
+            continue;
+        }
+        resolved.push(',');
+        resolved.push_str(suppress_directive);
     }
 
-    format!("{directives},{MAINLINE_SUPPRESS_DIRECTIVE}")
+    resolved
+}
+
+fn directives_contains_target(directives: &str, target: &str) -> bool {
+    directives
+        .split(',')
+        .map(str::trim)
+        .filter(|directive| !directive.is_empty())
+        .any(|directive| directive == target || directive.starts_with(&format!("{target}=")))
 }
 
 fn init_tracing() {
@@ -443,25 +467,30 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        MAINLINE_SUPPRESS_DIRECTIVE, DEFAULT_TRACING_DIRECTIVES,
+        DEFAULT_SUPPRESS_DIRECTIVES, DEFAULT_TRACING_DIRECTIVES,
         resolve_tracing_directives,
     };
 
     #[test]
-    fn default_tracing_directives_suppress_mainline_socket_warnings() {
+    fn default_tracing_directives_add_noise_suppression() {
         let directives = resolve_tracing_directives(None);
         assert!(directives.contains(DEFAULT_TRACING_DIRECTIVES));
-        assert!(directives.contains(MAINLINE_SUPPRESS_DIRECTIVE));
+        for suppress_directive in DEFAULT_SUPPRESS_DIRECTIVES {
+            assert!(directives.contains(suppress_directive));
+        }
     }
 
     #[test]
-    fn explicit_rust_log_keeps_mainline_override() {
+    fn explicit_rust_log_keeps_target_specific_override() {
         let directives = resolve_tracing_directives(Some(
-            "info,mainline::rpc::socket=warn,kukuri_desktop_tauri_lib=debug",
+            "info,iroh_docs::engine::live=warn,kukuri_desktop_tauri_lib=debug",
         ));
-        assert_eq!(
-            directives,
-            "info,mainline::rpc::socket=warn,kukuri_desktop_tauri_lib=debug"
+        assert!(
+            directives.contains("iroh_docs::engine::live=warn"),
+            "expected explicit target override to be preserved"
         );
+        assert!(!directives.contains("iroh_docs::engine::live=error"));
+        assert!(directives.contains("iroh_quinn_proto::connection=error"));
+        assert!(directives.contains("mainline::rpc::socket=error"));
     }
 }
