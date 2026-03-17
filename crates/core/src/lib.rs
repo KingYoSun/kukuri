@@ -375,8 +375,6 @@ pub struct KukuriEnvelope {
     pub sig: String,
 }
 
-pub type Event = KukuriEnvelope;
-pub type EventId = EnvelopeId;
 pub type CanonicalPostHeader = KukuriPostObjectV1;
 
 impl KukuriEnvelope {

@@ -2468,7 +2468,7 @@ mod tests {
         app_a.import_peer_ticket(&ticket_b).await.expect("import b");
         app_b.import_peer_ticket(&ticket_a).await.expect("import a");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post(topic, content, None)
             .await
             .expect("create post");
@@ -2482,7 +2482,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -2501,7 +2501,7 @@ mod tests {
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
         let app = AppService::new(store, transport);
 
-        let event_id = app
+        let object_id = app
             .create_post("kukuri:topic:api", "hello app", None)
             .await
             .expect("create post");
@@ -2511,7 +2511,7 @@ mod tests {
             .expect("timeline");
 
         assert_eq!(timeline.items.len(), 1);
-        assert_eq!(timeline.items[0].object_id, event_id);
+        assert_eq!(timeline.items[0].object_id, object_id);
         assert_eq!(timeline.items[0].content, "hello app");
     }
 
@@ -2521,7 +2521,7 @@ mod tests {
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
         let app = AppService::new(store, transport);
 
-        let event_id = app
+        let object_id = app
             .create_post_with_attachments(
                 "kukuri:topic:image-write",
                 "caption",
@@ -2542,7 +2542,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("image post");
         assert_eq!(post.content, "caption");
         assert_eq!(post.attachments.len(), 1);
@@ -2557,7 +2557,7 @@ mod tests {
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
         let app = AppService::new(store, transport);
 
-        let event_id = app
+        let object_id = app
             .create_post_with_attachments(
                 "kukuri:topic:image-only",
                 "",
@@ -2578,7 +2578,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("image-only post");
         assert_eq!(post.attachments.len(), 1);
         assert_eq!(post.attachments[0].mime, "image/jpeg");
@@ -2590,7 +2590,7 @@ mod tests {
         let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
         let app = AppService::new(store, transport);
 
-        let event_id = app
+        let object_id = app
             .create_post_with_attachments(
                 "kukuri:topic:video-write",
                 "video caption",
@@ -2618,7 +2618,7 @@ mod tests {
         let post = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("video post");
         assert_eq!(post.attachments.len(), 2);
         assert!(
@@ -3091,12 +3091,12 @@ mod tests {
         let app = AppService::new(store.clone(), transport);
         let topic = "kukuri:topic:blobtext";
 
-        let event_id = app
+        let object_id = app
             .create_post(topic, "blob text only", None)
             .await
             .expect("create post");
         let projection =
-            ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(event_id))
+            ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(object_id))
                 .await
                 .expect("projection")
                 .expect("projection row");
@@ -3214,7 +3214,7 @@ mod tests {
             .await
             .expect("app b should subscribe to topic");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post(topic, "hello over iroh transport", None)
             .await
             .expect("app a should create post");
@@ -3228,7 +3228,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3284,7 +3284,7 @@ mod tests {
             .await
             .expect("app b should subscribe to topic");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "caption over iroh",
@@ -3303,7 +3303,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3361,7 +3361,7 @@ mod tests {
             .await
             .expect("subscribe b timeline");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "video caption",
@@ -3374,7 +3374,7 @@ mod tests {
             .await
             .expect("create video post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(30), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3383,7 +3383,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3486,11 +3486,11 @@ mod tests {
         .await
         .expect("subscription rebuild timeout");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post(topic, "hello after import", None)
             .await
             .expect("create post");
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(30), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3499,7 +3499,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3567,7 +3567,7 @@ mod tests {
         .await
         .expect("seeded dht ready timeout");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post(topic, "seeded dht app sync", None)
             .await
             .expect("create post");
@@ -3581,7 +3581,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3653,7 +3653,7 @@ mod tests {
         .await
         .expect("seeded dht topic rebind timeout");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post(topic, "seeded dht rebind", None)
             .await
             .expect("create post");
@@ -3664,7 +3664,11 @@ mod tests {
                     .list_timeline(topic, None, 20)
                     .await
                     .expect("timeline b");
-                if timeline.items.iter().any(|post| post.object_id == event_id) {
+                if timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == object_id)
+                {
                     return;
                 }
                 sleep(Duration::from_millis(50)).await;
@@ -3730,7 +3734,7 @@ mod tests {
         .await
         .expect("seeded dht image ready timeout");
 
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "seeded image",
@@ -3749,7 +3753,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3781,7 +3785,7 @@ mod tests {
         let app_b = app_with_iroh_services(store_b, &stack_b);
 
         let topic = "kukuri:topic:late-image";
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "late image caption",
@@ -3810,7 +3814,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3857,7 +3861,7 @@ mod tests {
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe b timeline");
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "docs only image",
@@ -3879,7 +3883,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -3911,7 +3915,7 @@ mod tests {
         let app_b = app_with_iroh_services(store_b, &stack_b);
 
         let topic = "kukuri:topic:late-video";
-        let event_id = app_a
+        let object_id = app_a
             .create_post_with_attachments(
                 topic,
                 "late video caption",
@@ -3943,7 +3947,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }

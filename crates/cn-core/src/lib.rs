@@ -14,7 +14,7 @@ use sqlx::{Executor, Row};
 use url::Url;
 use uuid::Uuid;
 
-use kukuri_core::{Event as KukuriEnvelope, KukuriAuthEnvelopeContentV1, sign_envelope_json};
+use kukuri_core::{KukuriAuthEnvelopeContentV1, KukuriEnvelope, sign_envelope_json};
 
 pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;

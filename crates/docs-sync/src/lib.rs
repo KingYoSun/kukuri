@@ -797,7 +797,7 @@ mod tests {
             DocOp::SetJson {
                 key: stable_key("timeline", "0001-event"),
                 value: serde_json::json!({
-                    "event_id": "event-1",
+                    "object_id": "event-1",
                     "topic_id": "kukuri:topic:docs"
                 }),
             },

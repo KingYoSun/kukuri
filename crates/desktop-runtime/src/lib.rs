@@ -1392,7 +1392,7 @@ mod tests {
         .await
         .expect("runtime creation timeout")
         .expect("runtime");
-        let event_id = runtime
+        let object_id = runtime
             .create_post(CreatePostRequest {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me".into(),
@@ -1417,7 +1417,7 @@ mod tests {
         .await
         .expect("runtime restart timeout")
         .expect("runtime restart");
-        let restarted_event_id = restarted
+        let restarted_object_id = restarted
             .create_post(CreatePostRequest {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me again".into(),
@@ -1435,22 +1435,27 @@ mod tests {
             .await
             .expect("timeline");
 
-        assert!(timeline.items.iter().any(|post| post.object_id == event_id));
         assert!(
             timeline
                 .items
                 .iter()
-                .any(|post| post.object_id == restarted_event_id)
+                .any(|post| post.object_id == object_id)
+        );
+        assert!(
+            timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == restarted_object_id)
         );
         let original_post = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("original post");
         let restarted_post = timeline
             .items
             .iter()
-            .find(|post| post.object_id == restarted_event_id)
+            .find(|post| post.object_id == restarted_object_id)
             .expect("restarted post");
         assert_eq!(original_post.author_pubkey, restarted_post.author_pubkey);
         assert_eq!(restarted.db_path(), db_path.as_path());
@@ -1507,7 +1512,7 @@ mod tests {
             })
             .await
             .expect("subscribe b");
-        let event_id = runtime_a
+        let object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "hello desktop runtime".into(),
@@ -1530,7 +1535,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -1627,7 +1632,7 @@ mod tests {
         .await
         .expect("seeded runtime ready timeout");
 
-        let event_id = runtime_a
+        let object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "hello seeded runtime".into(),
@@ -1650,7 +1655,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -1751,7 +1756,7 @@ mod tests {
             .await
             .expect("subscribe restarted b");
 
-        let event_id = restarted_a
+        let object_id = restarted_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "hello after restart".into(),
@@ -1774,7 +1779,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -1823,7 +1828,7 @@ mod tests {
         .await
         .expect("runtime a");
         let topic = "kukuri:topic:late-join";
-        let event_id = runtime_a
+        let object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "hello from before join".into(),
@@ -1863,7 +1868,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -1889,7 +1894,7 @@ mod tests {
         .await
         .expect("runtime a");
         let topic = "kukuri:topic:late-image-runtime";
-        let event_id = runtime_a
+        let object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "late image".into(),
@@ -1933,7 +1938,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -1967,7 +1972,7 @@ mod tests {
         .await
         .expect("runtime a");
         let topic = "kukuri:topic:late-video-runtime";
-        let event_id = runtime_a
+        let object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "late video".into(),
@@ -2020,7 +2025,7 @@ mod tests {
                 if let Some(post) = timeline
                     .items
                     .iter()
-                    .find(|post| post.object_id == event_id)
+                    .find(|post| post.object_id == object_id)
                 {
                     return post.clone();
                 }
@@ -2070,7 +2075,7 @@ mod tests {
         .await
         .expect("runtime");
         let topic = "kukuri:topic:blob-media-roundtrip";
-        let event_id = runtime
+        let object_id = runtime
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "roundtrip".into(),
@@ -2094,7 +2099,7 @@ mod tests {
         let created = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("created post");
 
         let payload = runtime
@@ -2190,7 +2195,7 @@ mod tests {
         .await
         .expect("runtime");
         let topic = "kukuri:topic:restart-no-seed";
-        let event_id = runtime
+        let object_id = runtime
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "restored from docs".into(),
@@ -2222,7 +2227,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("restored post");
         assert_eq!(restored.content, "restored from docs");
     }
@@ -2239,7 +2244,7 @@ mod tests {
         .await
         .expect("runtime");
         let topic = "kukuri:topic:restart-image";
-        let event_id = runtime
+        let object_id = runtime
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "restored image".into(),
@@ -2274,7 +2279,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("restored image post");
 
         assert_eq!(restored.attachments.len(), 1);
@@ -2300,7 +2305,7 @@ mod tests {
         .await
         .expect("runtime");
         let topic = "kukuri:topic:restart-video";
-        let event_id = runtime
+        let object_id = runtime
             .create_post(CreatePostRequest {
                 topic: topic.into(),
                 content: "restored video".into(),
@@ -2344,7 +2349,7 @@ mod tests {
         let restored = timeline
             .items
             .iter()
-            .find(|post| post.object_id == event_id)
+            .find(|post| post.object_id == object_id)
             .expect("restored video post");
 
         let poster = restored

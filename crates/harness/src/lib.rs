@@ -762,7 +762,7 @@ async fn run_community_node_public_connectivity(
             })
             .await
             .context("failed to create scenario post on desktop a")?;
-        wait_for_timeline_event(&runtime_b, topic, post_id.as_str(), step_timeout)
+        wait_for_timeline_object(&runtime_b, topic, post_id.as_str(), step_timeout)
             .await
             .context("desktop b did not receive the initial scenario post")?;
         push_named_step(&mut steps, "post", started_at);
@@ -777,7 +777,7 @@ async fn run_community_node_public_connectivity(
             })
             .await
             .context("failed to create scenario reply on desktop b")?;
-        wait_for_thread_event(
+        wait_for_thread_object(
             &runtime_a,
             topic,
             post_id.as_str(),
@@ -904,7 +904,7 @@ async fn run_community_node_public_connectivity(
             })
             .await
             .context("failed to create reconnect post on desktop a")?;
-        wait_for_timeline_event(&runtime_b, topic, reconnect_post.as_str(), step_timeout)
+        wait_for_timeline_object(&runtime_b, topic, reconnect_post.as_str(), step_timeout)
             .await
             .context("desktop b did not receive the reconnect post after restart")?;
         let metrics_snapshot = if scenario.artifacts.metrics_snapshot {
@@ -990,10 +990,10 @@ fn push_named_step(steps: &mut Vec<StepResult>, action: &str, started_at: Instan
     });
 }
 
-async fn wait_for_timeline_event(
+async fn wait_for_timeline_object(
     runtime: &DesktopRuntime,
     topic: &str,
-    event_id: &str,
+    object_id: &str,
     step_timeout: Duration,
 ) -> Result<()> {
     timeout(step_timeout, async {
@@ -1005,7 +1005,11 @@ async fn wait_for_timeline_event(
                     limit: Some(50),
                 })
                 .await?;
-            if timeline.items.iter().any(|item| item.object_id == event_id) {
+            if timeline
+                .items
+                .iter()
+                .any(|item| item.object_id == object_id)
+            {
                 return Ok::<(), anyhow::Error>(());
             }
             sleep(Duration::from_millis(50)).await;
@@ -1015,11 +1019,11 @@ async fn wait_for_timeline_event(
     .context("timeline assertion timeout")?
 }
 
-async fn wait_for_thread_event(
+async fn wait_for_thread_object(
     runtime: &DesktopRuntime,
     topic: &str,
     thread_id: &str,
-    event_id: &str,
+    object_id: &str,
     step_timeout: Duration,
 ) -> Result<()> {
     timeout(step_timeout, async {
@@ -1032,7 +1036,7 @@ async fn wait_for_thread_event(
                     limit: Some(50),
                 })
                 .await?;
-            if thread.items.iter().any(|item| item.object_id == event_id) {
+            if thread.items.iter().any(|item| item.object_id == object_id) {
                 return Ok::<(), anyhow::Error>(());
             }
             sleep(Duration::from_millis(50)).await;
@@ -1217,10 +1221,10 @@ fn step_name(step: &ScenarioStep) -> &'static str {
 
 fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
     match value {
-        "Waiting" => Ok(GameRoomStatus::Waiting),
-        "Running" => Ok(GameRoomStatus::Running),
+        "Open" | "Waiting" => Ok(GameRoomStatus::Waiting),
+        "InProgress" | "Running" => Ok(GameRoomStatus::Running),
         "Paused" => Ok(GameRoomStatus::Paused),
-        "Ended" => Ok(GameRoomStatus::Ended),
+        "Finished" | "Ended" => Ok(GameRoomStatus::Ended),
         _ => anyhow::bail!("unsupported game room status: {value}"),
     }
 }

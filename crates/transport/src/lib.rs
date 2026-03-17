@@ -1480,7 +1480,7 @@ mod tests {
     use super::*;
     use iroh::address_lookup::EndpointInfo;
     use kukuri_core::{
-        Event, GossipHint, HintObjectRef, TopicId, build_post_envelope, generate_keys,
+        GossipHint, HintObjectRef, KukuriEnvelope, TopicId, build_post_envelope, generate_keys,
     };
     use pkarr::Timestamp;
     use pkarr::mainline::Testnet;
@@ -2111,7 +2111,7 @@ mod tests {
             while let Some(message) = receiver_b.next().await {
                 match message.expect("gossip event") {
                     GossipEvent::Received(message) => {
-                        let parsed: Event =
+                        let parsed: KukuriEnvelope =
                             serde_json::from_slice(&message.content).expect("parse event");
                         return parsed;
                     }
