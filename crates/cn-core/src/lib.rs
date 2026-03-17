@@ -20,7 +20,7 @@ pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
-pub const RELAY_SERVICE_NAME: &str = "relay";
+pub const COMMUNITY_NODE_AUTH_SERVICE_NAME: &str = "community_node_auth";
 pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 pub const COMMUNITY_NODE_DATABASE_INIT_MODE_ENV: &str = "COMMUNITY_NODE_DATABASE_INIT_MODE";
 const DATABASE_PREPARE_HINT: &str =
@@ -323,12 +323,12 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
             WHERE service_name = $1
         )",
     )
-    .bind(RELAY_SERVICE_NAME)
+    .bind(COMMUNITY_NODE_AUTH_SERVICE_NAME)
     .fetch_one(pool)
     .await?;
     if !rollout_exists {
         bail!(
-            "community-node database is not ready: relay auth rollout seed is missing; {DATABASE_PREPARE_HINT}"
+            "community-node database is not ready: auth rollout seed is missing; {DATABASE_PREPARE_HINT}"
         );
     }
 
@@ -373,7 +373,7 @@ pub async fn ensure_default_auth_rollout(pool: &PgPool) -> Result<()> {
          VALUES ($1, 1, $2)
          ON CONFLICT (service_name) DO NOTHING",
     )
-    .bind(RELAY_SERVICE_NAME)
+    .bind(COMMUNITY_NODE_AUTH_SERVICE_NAME)
     .bind(config_json)
     .execute(pool)
     .await?;

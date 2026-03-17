@@ -24,7 +24,7 @@ Accepted
   - Windows native smoke として `post -> restart -> persist -> static-peer sync -> live create/join/end -> game create/update` を確認する
 
 ## Decision
-- Windows 対応は現行 `static-peer` 前提 desktop feature set の parity に限定し、DHT discovery と community-node relay/auth は含めない。
+- Windows 対応は現行 `static-peer` 前提 desktop feature set の parity に限定し、DHT discovery と community-node connectivity/auth は含めない。
 - Windows の local identity backend は Credential Manager を標準にし、利用できない場合のみ既存 file backend へ fallback する。
 - backend marker の値は `keyring` / `file` を維持し、platform 別の追加 marker は導入しない。
 - Tauri の Windows packaging は別 overlay config で扱い、v1 の配布物は current-user NSIS installer のみを正式サポートにする。

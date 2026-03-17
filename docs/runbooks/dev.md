@@ -43,7 +43,7 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 - `COMMUNITY_NODE_DATABASE_URL` は compose 内では `cn-postgres` 向けに組み立てる。外部 Postgres を使う場合だけ個別に差し替える
 
 ## community-node 公開 manual smoke
-公開 URL を legacy と同じ構成で出す場合は、`.env.community-node` に最低限この 4 つを入れる。
+公開 URL を current community-node 構成で出す場合は、`.env.community-node` に最低限この 3 つを入れる。
 
 ```dotenv
 CN_BASE_URL=https://api.kukuri.app
@@ -53,7 +53,7 @@ COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
 
 - `api.kukuri.app` は `cn-user-api` を向ける
 - `iroh-relay.kukuri.app` は `cn-iroh-relay` を向ける
-- desktop は `connectivity_urls` を server から受け取るので、relay websocket fallback は使わない
+- desktop は `connectivity_urls` を server から受け取るので、websocket relay 前提は使わない
 
 TCP 公開を Cloudflare Tunnel で行う場合:
 
@@ -230,8 +230,8 @@ $env:KUKURI_INSTANCE="desktop-a"
 
 ## Windows native smoke
 1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
-2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author `npub` 不変を確認する。
-3. `KUKURI_DISABLE_KEYRING` を外した状態でも author `npub` が維持されることを確認する。
+2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author pubkey 不変を確認する。
+3. `KUKURI_DISABLE_KEYRING` を外した状態でも author pubkey が維持されることを確認する。
 4. `KUKURI_INSTANCE` を分けた 2 instance で static-peer ticket import、`reply/thread`、live/game の伝播を確認する。
 5. 片側終了時に相手側が polling で `connected: no, peers: 0` に戻ることを確認する。
 6. 複数 topic の維持、topic 単位の unsubscribe、invalid ticket import 時の `Last Error` 更新を確認する。
@@ -244,13 +244,13 @@ $env:KUKURI_INSTANCE="desktop-a"
 - Linux 実機 2 台で topic 単位の unsubscribe と peer diagnostics 表示が期待どおりに機能
 - Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が期待どおりに機能
-- Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
+- Linux 実機で client 再起動後も author pubkey が変わらず、author identity が維持されることを確認
 - Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、ticket import なしの接続、再接続、投稿伝播が成立
 - Linux 実機 2 台で `seeded_dht` + 相互 `node_id` seed 設定だけで、`reply/thread` と live/game の伝播、および restart 後 reconnect without reimport が成立
 - Linux 実機 2 台で片側 port 変更後も、新 port が到達可能なら seed 再入力なしで再接続、投稿伝播、reply が成立
 - Linux 実機 2 台で `seeded_dht` の invalid seed 保存が reject され、既存 seed が維持されることを確認
 - Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
-- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author `npub` 不変を確認
+- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author pubkey 不変を確認
 - Windows 実機で Credential Manager を使う keyring 有効状態でも author identity が維持されることを確認
 - Windows 実機で `KUKURI_INSTANCE` を分けた 2 instance による static-peer ticket import、`post -> reply -> thread`、live/game 伝播が成功
 - Windows 実機で片側終了後に相手側が `connected: no, peers: 0` に戻ることを確認

@@ -3419,6 +3419,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "hex",
  "nostr-sdk",
  "serde",
  "serde_json",

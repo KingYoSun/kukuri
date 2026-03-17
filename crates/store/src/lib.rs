@@ -507,7 +507,11 @@ impl Store for MemoryStore {
             .get(topic_id)
             .into_iter()
             .flat_map(|entries| entries.keys())
-            .filter_map(|object_id| envelopes.get(&EnvelopeId::from(object_id.as_str())).cloned())
+            .filter_map(|object_id| {
+                envelopes
+                    .get(&EnvelopeId::from(object_id.as_str()))
+                    .cloned()
+            })
             .filter(|envelope| {
                 envelope.id == *thread_root_object_id
                     || envelope
@@ -604,7 +608,12 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.object_id.as_str())
         .bind(row.topic_id.as_str())
-        .bind(row.root_object_id.as_ref().unwrap_or(&row.object_id).as_str())
+        .bind(
+            row.root_object_id
+                .as_ref()
+                .unwrap_or(&row.object_id)
+                .as_str(),
+        )
         .bind(row.created_at)
         .execute(&self.pool)
         .await?;
@@ -1317,8 +1326,7 @@ fn apply_desc_cursor(
         .filter(|envelope| {
             cursor.as_ref().is_none_or(|cursor| {
                 envelope.created_at < cursor.created_at
-                    || (envelope.created_at == cursor.created_at
-                        && envelope.id < cursor.object_id)
+                    || (envelope.created_at == cursor.created_at && envelope.id < cursor.object_id)
             })
         })
         .take(limit)
@@ -1343,8 +1351,7 @@ fn apply_asc_cursor(
         .filter(|envelope| {
             cursor.as_ref().is_none_or(|cursor| {
                 envelope.created_at > cursor.created_at
-                    || (envelope.created_at == cursor.created_at
-                        && envelope.id > cursor.object_id)
+                    || (envelope.created_at == cursor.created_at && envelope.id > cursor.object_id)
             })
         })
         .take(limit)
@@ -1425,12 +1432,18 @@ mod tests {
         let first = build_post_envelope(&keys, &topic, "one", None).expect("first");
         let second = build_post_envelope(&keys, &topic, "two", None).expect("second");
         let third = build_post_envelope(&keys, &topic, "three", None).expect("third");
-        store.put_envelope(first.clone()).await.expect("insert first");
+        store
+            .put_envelope(first.clone())
+            .await
+            .expect("insert first");
         store
             .put_envelope(second.clone())
             .await
             .expect("insert second");
-        store.put_envelope(third.clone()).await.expect("insert third");
+        store
+            .put_envelope(third.clone())
+            .await
+            .expect("insert third");
 
         let first_page = Store::list_topic_timeline(&store, topic.as_str(), None, 2)
             .await
@@ -1460,7 +1473,10 @@ mod tests {
         let root = build_post_envelope(&keys, &topic, "root", None).expect("root");
         let reply = build_post_envelope(&keys, &topic, "reply", Some(&root)).expect("reply");
         store.put_envelope(root.clone()).await.expect("insert root");
-        store.put_envelope(reply.clone()).await.expect("insert reply");
+        store
+            .put_envelope(reply.clone())
+            .await
+            .expect("insert reply");
 
         let thread = Store::list_thread(&store, topic.as_str(), &root.id, None, 10)
             .await

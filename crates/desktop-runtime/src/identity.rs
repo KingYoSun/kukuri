@@ -189,29 +189,13 @@ fn delete_optional_secret_with_keyring(
 }
 
 fn load_secret_from_keyring(db_path: &Path, keyring: &dyn KeyringStore) -> Result<Option<String>> {
-    let new_account = keyring_account(db_path);
     if let Some(secret) = keyring
-        .get_password(KEYRING_SERVICE, new_account.as_str())
+        .get_password(KEYRING_SERVICE, keyring_account(db_path).as_str())
         .context("failed to read secret from keyring")?
     {
         return Ok(Some(secret));
     }
-
-    let legacy_account = legacy_keyring_account(db_path);
-    let Some(secret) = keyring
-        .get_password(legacy_keyring_service().as_str(), legacy_account.as_str())
-        .context("failed to read legacy secret from keyring")?
-    else {
-        return Ok(None);
-    };
-
-    keyring
-        .set_password(KEYRING_SERVICE, new_account.as_str(), secret.as_str())
-        .context("failed to migrate secret into new keyring service")?;
-    keyring
-        .delete_password(legacy_keyring_service().as_str(), legacy_account.as_str())
-        .context("failed to delete legacy keyring secret")?;
-    Ok(Some(secret))
+    Ok(None)
 }
 
 fn persist_secret_to_keyring(
@@ -233,7 +217,7 @@ fn load_secret_from_file_path(path: &Path) -> Result<Option<String>> {
         return Ok(None);
     }
     let mut secret = String::new();
-    let mut file = std::fs::File::open(&path)
+    let mut file = std::fs::File::open(path)
         .with_context(|| format!("failed to open identity file `{}`", path.display()))?;
     file.read_to_string(&mut secret)
         .with_context(|| format!("failed to read identity file `{}`", path.display()))?;
@@ -310,23 +294,6 @@ fn configure_private_file_options(_options: &mut OpenOptions) {}
 fn keyring_account(db_path: &Path) -> String {
     let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
     format!("db:{}", resolved.display())
-}
-
-fn legacy_keyring_account(db_path: &Path) -> String {
-    let Some(parent) = db_path.parent() else {
-        return keyring_account(db_path);
-    };
-    let legacy = parent.join(legacy_db_file_name());
-    let resolved = std::fs::canonicalize(&legacy).unwrap_or(legacy);
-    format!("db:{}", resolved.display())
-}
-
-fn legacy_db_file_name() -> String {
-    format!("kukuri-{}.db", "next")
-}
-
-fn legacy_keyring_service() -> String {
-    format!("org.kukuri.{}", "next")
 }
 
 fn key_file_path(db_path: &Path) -> PathBuf {
@@ -445,51 +412,7 @@ mod tests {
     }
 
     fn clear_identity_env() {
-        let legacy_disable_keyring = legacy_disable_keyring_env();
-        for key in ["KUKURI_DISABLE_KEYRING", legacy_disable_keyring.as_str()] {
-            unsafe { std::env::remove_var(key) };
-        }
-    }
-
-    fn legacy_disable_keyring_env() -> String {
-        format!("KUKURI_{}_DISABLE_KEYRING", "NEXT")
-    }
-
-    #[test]
-    fn legacy_next_keyring_entry_migrates_to_kukuri_service() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let legacy_db_path = dir.path().join(legacy_db_file_name());
-        let secret = Keys::generate().secret_key().to_bech32().expect("bech32");
-        let keyring = FakeKeyringStore::default();
-        keyring
-            .set_password(
-                legacy_keyring_service().as_str(),
-                legacy_keyring_account(&legacy_db_path).as_str(),
-                secret.as_str(),
-            )
-            .expect("seed legacy keyring");
-
-        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-            .expect("migrated keys");
-
-        assert_eq!(keys.secret_key().to_bech32().expect("bech32"), secret,);
-        assert!(
-            keyring
-                .get_password(KEYRING_SERVICE, keyring_account(&db_path).as_str())
-                .expect("new entry lookup")
-                .is_some()
-        );
-        assert!(
-            keyring
-                .get_password(
-                    legacy_keyring_service().as_str(),
-                    legacy_keyring_account(&legacy_db_path).as_str()
-                )
-                .expect("legacy entry lookup")
-                .is_none()
-        );
+        unsafe { std::env::remove_var("KUKURI_DISABLE_KEYRING") };
     }
 
     #[test]

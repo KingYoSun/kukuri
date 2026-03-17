@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use kukuri_cn_core::{
-    AuthMode, AuthRolloutConfig, RELAY_SERVICE_NAME, connect_postgres, initialize_database,
-    migrate_postgres, seed_default_policies, store_auth_rollout,
+    AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, connect_postgres,
+    initialize_database, migrate_postgres, seed_default_policies, store_auth_rollout,
 };
 
 #[derive(Debug, Parser)]
@@ -20,7 +20,7 @@ enum Command {
     Migrate,
     SeedPolicies,
     SetAuthRollout {
-        #[arg(long, default_value = RELAY_SERVICE_NAME)]
+        #[arg(long, default_value = COMMUNITY_NODE_AUTH_SERVICE_NAME)]
         service: String,
         #[arg(long)]
         mode: AuthModeArg,

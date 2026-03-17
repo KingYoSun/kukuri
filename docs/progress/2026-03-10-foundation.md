@@ -8,7 +8,7 @@
 - Phase6-6 video post canonical source 設計に着手
 - Phase6-7 Windows desktop support の native smoke まで完了
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
-- Phase6 community-node relay/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
+- Phase6 community-node connectivity/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
 - Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract と Linux 実機 `post -> reply/thread -> blob sync` 検証まで完了
 
 ## 実装済み
@@ -40,13 +40,14 @@
 - video manifest を取得できても local decode が失敗した client では、poster-only preview と `unsupported on this client` 表示へ倒すようにした
 - `ADR 0007` で Windows desktop support の local identity / packaging / contract 境界を固定した
 - `ADR 0008` で seeded DHT discovery の local config / runtime DHT record / contract 境界を固定した
-- `ADR 0009` で community-node relay/auth の server persistence / desktop config / token storage 境界を固定した
+- `ADR 0009` で community-node connectivity/auth の server persistence / desktop config / token storage 境界を固定した
 - `keyring` を target 別 dependency に分離し、Linux は Secret Service、Windows は Credential Manager を標準 backend にした
 - `xtask check` に Tauri backend compile を組み込み、`desktop-package` で Windows host から NSIS installer を生成できるようにした
 - `apps/desktop/src-tauri/tauri.windows.conf.json` と Windows icon asset を追加し、Windows bundle config を base config から分離した
 - GitHub Actions fast workflow に non-required の `windows-fast` lane を追加した
 - shared iroh stack に seeded DHT discovery を統合し、desktop discovery panel / env / local config から `node_id` seed を永続・再適用できるようにした
 - `cn-core`, `cn-user-api`, `cn-iroh-relay`, `cn-cli` を root workspace の active scope とし、community-node server slice を Postgres + connectivity assist 前提で起動できるようにした
+- `cn-relay` と legacy runtime migration shim を active scope から除去し、desktop は reset 前提の current identity/runtime path だけを扱うようにした
 - desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only connectivity union を追加した
 - `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-iroh-relay` を起動できるようにした
 - `cn-user-api` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
@@ -75,7 +76,7 @@
 - Linux 実機で `片側だけ購読 -> 0`, `後から参加 -> 1`, `再び片側だけ -> 0` が topic peer diagnostics に反映され続けることを確認
 - Linux 実機で追加した peer diagnostics 表示が正常に機能することを確認
 - Linux 実機で global の `Connection Detail / Last Error` と topic ごとの `status_detail / error:` 表示が正常に機能することを確認
-- Linux 実機で client 再起動後も `npub` が変わらず、author identity が維持されることを確認
+- Linux 実機で client 再起動後も author pubkey が変わらず、author identity が維持されることを確認
 - desktop-runtime test で restart 後も author pubkey が維持されることを確認
 - desktop-runtime test で `late_joiner_backfills_timeline_from_docs` が green
 - desktop-runtime test で `sqlite_deletion_does_not_lose_shared_state` が green
@@ -88,7 +89,7 @@
 - app-api test で `thread_open_triggers_lazy_blob_fetch` / `image_post_visible_before_full_blob_download` / `new_writes_use_blob_text_payload_refs` が green
 - docs-sync test で `private_cursor_not_in_public_replica` が green
 - Windows 実機で `cargo xtask doctor` / `cargo xtask check` / `cargo xtask test` が成功
-- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author `npub` 不変を確認
+- Windows 実機で `tauri:dev` の `post -> restart -> persist` と author pubkey 不変を確認
 - Windows 実機で keyring 有効状態の author identity 維持を確認
 - Windows 実機で `KUKURI_INSTANCE` を分けた 2 instance による static-peer ticket import、`post -> reply -> thread`、live/game 伝播が成功
 - Windows 実機で片側終了後に相手側が `connected: no, peers: 0` に戻ることを確認
@@ -107,7 +108,7 @@
 - `cargo test -p kukuri-desktop-runtime community_node_config_preserves_public_kukuri_urls`
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml tracing_directives -- --nocapture`
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml explicit_rust_log_keeps_target_specific_override -- --nocapture`
-- Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `wss://relay.kukuri.app/relay`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
+- Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み

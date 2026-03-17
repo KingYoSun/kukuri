@@ -141,7 +141,7 @@ fn cn_test() -> Result<()> {
                 "kukuri-cn-cli",
             ],
             &root_dir(),
-            &[("KUKURI_CN_RUN_INTEGRATION_TESTS", "1")],
+            &cn_test_envs(),
         )
     })
 }
@@ -244,6 +244,16 @@ fn cn_compose_envs() -> [(&'static str, &'static str); 2] {
     [
         ("CN_POSTGRES_PASSWORD", "cn_password"),
         ("COMMUNITY_NODE_JWT_SECRET", "xtask-test-secret"),
+    ]
+}
+
+fn cn_test_envs() -> [(&'static str, &'static str); 2] {
+    [
+        ("KUKURI_CN_RUN_INTEGRATION_TESTS", "1"),
+        (
+            "COMMUNITY_NODE_DATABASE_URL",
+            "postgres://cn:cn_password@127.0.0.1:55432/cn",
+        ),
     ]
 }
 

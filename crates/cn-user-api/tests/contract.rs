@@ -186,12 +186,13 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
 }
 
 #[tokio::test]
-async fn auth_verify_rejects_wrong_relay_tag() -> Result<()> {
+async fn auth_verify_rejects_capability_url_mismatch() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
     };
-    let server = TestServer::spawn(admin_database_url.as_str(), "cn_user_api_relay_tag").await?;
+    let server =
+        TestServer::spawn(admin_database_url.as_str(), "cn_user_api_capability_url").await?;
     let client = Client::new();
     let keys = Keys::generate();
     let challenge = client

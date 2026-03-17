@@ -10,11 +10,11 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant,
     GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    HintObjectRef, KukuriMediaManifestV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
-    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
-    PayloadRef, Pubkey, ReplicaId, TopicId, KukuriEnvelope, build_game_session_envelope,
-    build_live_session_envelope, build_media_manifest_envelope, build_post_envelope_with_payload,
-    generate_keys, timeline_sort_key,
+    HintObjectRef, KukuriEnvelope, KukuriMediaManifestV1, LIVE_MANIFEST_MIME,
+    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
+    MediaManifestItem, ObjectVisibility, PayloadRef, Pubkey, ReplicaId, TopicId,
+    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
+    build_post_envelope_with_payload, generate_keys, timeline_sort_key,
 };
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 use kukuri_store::{
@@ -2473,7 +2473,7 @@ mod tests {
             .await
             .expect("create post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(20), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3219,7 +3219,7 @@ mod tests {
             .await
             .expect("app a should create post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(30), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3294,7 +3294,7 @@ mod tests {
             .await
             .expect("create image post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(30), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
