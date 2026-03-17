@@ -3805,7 +3805,7 @@ mod tests {
             .await
             .expect("import a into b");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(60), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3816,7 +3816,17 @@ mod tests {
                     .iter()
                     .find(|post| post.object_id == object_id)
                 {
-                    return post.clone();
+                    let post = post.clone();
+                    if post.attachments.len() == 1
+                        && post.attachments[0].status == BlobViewStatus::Available
+                        && app_b
+                            .blob_preview_data_url(post.attachments[0].hash.as_str(), "image/png")
+                            .await
+                            .expect("preview data url")
+                            .is_some()
+                    {
+                        return post;
+                    }
                 }
                 sleep(Duration::from_millis(50)).await;
             }
@@ -3861,6 +3871,21 @@ mod tests {
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe b timeline");
+        timeout(Duration::from_secs(20), async {
+            loop {
+                let status_b = app_b.get_sync_status().await.expect("status b");
+                let ready_b = status_b
+                    .subscribed_topics
+                    .iter()
+                    .any(|value| value == topic);
+                if ready_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("docs only subscription ready timeout");
         let object_id = app_a
             .create_post_with_attachments(
                 topic,
@@ -3874,7 +3899,7 @@ mod tests {
             .await
             .expect("create image post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(90), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
@@ -3885,7 +3910,17 @@ mod tests {
                     .iter()
                     .find(|post| post.object_id == object_id)
                 {
-                    return post.clone();
+                    let post = post.clone();
+                    if post.attachments.len() == 1
+                        && post.attachments[0].status == BlobViewStatus::Available
+                        && app_b
+                            .blob_preview_data_url(post.attachments[0].hash.as_str(), "image/png")
+                            .await
+                            .expect("preview data url")
+                            .is_some()
+                    {
+                        return post;
+                    }
                 }
                 sleep(Duration::from_millis(50)).await;
             }
@@ -4448,11 +4483,21 @@ mod tests {
             .await
             .expect("update game room");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(Duration::from_secs(60), async {
             loop {
                 let rooms = app_b.list_game_rooms(topic).await.expect("list game rooms");
                 if let Some(room) = rooms.into_iter().find(|room| room.room_id == room_id) {
-                    return room;
+                    let alice_score = room
+                        .scores
+                        .iter()
+                        .find(|score| score.label == "Alice")
+                        .map(|score| score.score);
+                    if room.status == GameRoomStatus::Running
+                        && room.phase_label.as_deref() == Some("Round 2")
+                        && alice_score == Some(2)
+                    {
+                        return room;
+                    }
                 }
                 sleep(Duration::from_millis(50)).await;
             }

@@ -228,7 +228,7 @@ fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<
     {
         run("pnpm", args.iter().copied(), cwd)
     } else {
-        let mut fallback = vec!["pnpm@10.16.1"];
+        let mut fallback = vec!["--yes", "pnpm@10.16.1"];
         fallback.extend(args);
         run("npx", fallback, cwd)
     }

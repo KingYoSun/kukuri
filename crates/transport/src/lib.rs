@@ -1483,6 +1483,7 @@ mod tests {
         GossipHint, HintObjectRef, KukuriEnvelope, TopicId, build_post_envelope, generate_keys,
     };
     use pkarr::Timestamp;
+    use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::mainline::Testnet;
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Mutex, OnceLock};
@@ -1538,23 +1539,46 @@ mod tests {
 
     async fn publish_endpoint_to_testnet(endpoint: &Endpoint, testnet: &Testnet) {
         let client = dht_test_client(testnet);
-        let signed_packet = EndpointInfo::from(endpoint.addr())
-            .to_pkarr_signed_packet(endpoint.secret_key(), 1)
-            .expect("signed packet");
-        client
-            .publish(&signed_packet, None)
-            .await
-            .expect("publish endpoint info");
         let public_key =
             pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
-        let expected = signed_packet.as_bytes().clone();
+        let expected_info = EndpointInfo::from(endpoint.addr());
+        for _ in 0..20 {
+            let previous_timestamp = client
+                .resolve_most_recent(&public_key)
+                .await
+                .map(|packet| packet.timestamp());
+            let now = Timestamp::now();
+            let timestamp = match previous_timestamp {
+                Some(previous) if previous >= now => previous + 1,
+                _ => now,
+            };
+            let signed_packet = build_signed_packet_with_timestamp(
+                &expected_info,
+                endpoint.secret_key(),
+                1,
+                timestamp,
+            )
+            .expect("signed packet");
+            match client.publish(&signed_packet, previous_timestamp).await {
+                Ok(()) => break,
+                Err(PublishError::Concurrency(
+                    ConcurrencyError::ConflictRisk
+                    | ConcurrencyError::NotMostRecent
+                    | ConcurrencyError::CasFailed,
+                )) => tokio::time::sleep(Duration::from_millis(50)).await,
+                Err(error) => panic!("publish endpoint info: {error}"),
+            }
+        }
         timeout(Duration::from_secs(5), async {
             loop {
                 if client
                     .resolve_most_recent(&public_key)
                     .await
                     .as_ref()
-                    .is_some_and(|packet| packet.as_bytes() == &expected)
+                    .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                    .is_some_and(|packet_info| {
+                        packet_info.to_txt_strings() == expected_info.to_txt_strings()
+                    })
                 {
                     return;
                 }

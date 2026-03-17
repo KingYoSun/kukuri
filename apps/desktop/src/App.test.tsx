@@ -1403,25 +1403,26 @@ test('community node panel shows consent then restart guidance for relay activat
     (_content, element) =>
       element?.tagName === 'STRONG' && element.textContent === 'https://api.kukuri.app'
   );
-  const block = nodeHeading.closest('.diagnostic-block');
+  const block = nodeHeading.closest('.diagnostic-block') as HTMLElement | null;
   expect(block).not.toBeNull();
+  const blockElement = block as HTMLElement;
 
-  await user.click(within(block!).getByRole('button', { name: 'Authenticate' }));
+  await user.click(within(blockElement).getByRole('button', { name: 'Authenticate' }));
 
   await waitFor(() => {
-    expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
+    expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
       'accept required policies to resolve connectivity urls'
     );
   });
 
-  await user.click(within(block!).getByRole('button', { name: 'Accept' }));
+  await user.click(within(blockElement).getByRole('button', { name: 'Accept' }));
 
   await waitFor(() => {
-    expect(within(block!).getByText(/connectivity urls:/i)).toHaveTextContent(
+    expect(within(blockElement).getByText(/connectivity urls:/i)).toHaveTextContent(
       'https://api.kukuri.app'
     );
-    expect(within(block!).getByText(/restart required:/i)).toHaveTextContent('yes');
-    expect(within(block!).getByText(/next step:/i)).toHaveTextContent(
+    expect(within(blockElement).getByText(/restart required:/i)).toHaveTextContent('yes');
+    expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
       'restart the app to apply connectivity urls'
     );
   });

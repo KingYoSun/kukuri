@@ -954,7 +954,12 @@ export function App({ api = runtimeApi }: AppProps) {
     }
 
     try {
-      await api.createPost(activeTopic, composer.trim(), replyTarget?.id ?? null, attachments);
+      await api.createPost(
+        activeTopic,
+        composer.trim(),
+        replyTarget?.object_id ?? null,
+        attachments
+      );
       releaseAllDraftPreviews();
       setComposer('');
       setDraftMediaItems([]);
