@@ -314,7 +314,6 @@ impl DesktopRuntime {
         dht_options: DhtDiscoveryOptions,
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
-        migrate_legacy_runtime_data(&db_path)?;
         let community_node_config =
             load_community_node_config_from_file(&db_path)?.unwrap_or_default();
         let relay_config = relay_config_from_community_node_config(&community_node_config);
@@ -354,7 +353,6 @@ impl DesktopRuntime {
 
     pub async fn from_env(db_path: impl AsRef<Path>) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
-        migrate_legacy_runtime_data(&db_path)?;
         let discovery_config = resolve_discovery_config_from_env(&db_path)?;
         let dht_options = match discovery_config.mode {
             DiscoveryMode::SeededDht => DhtDiscoveryOptions::seeded_dht(),
@@ -907,52 +905,7 @@ pub fn resolve_db_path_from_env(base_app_data_dir: &Path) -> Result<PathBuf> {
         .with_context(|| format!("failed to create app data dir `{}`", app_data_dir.display()))?;
 
     let db_path = app_data_dir.join(DB_FILE_NAME);
-    migrate_legacy_runtime_data(&db_path)?;
     Ok(db_path)
-}
-
-fn migrate_legacy_runtime_data(db_path: &Path) -> Result<()> {
-    let parent = db_path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "runtime db path `{}` has no parent directory",
-            db_path.display()
-        )
-    })?;
-    let legacy_db_path = parent.join(legacy_db_file_name());
-
-    migrate_if_missing(&legacy_db_path, db_path)?;
-    migrate_if_missing(
-        &legacy_db_path.with_extension("iroh-data"),
-        &db_path.with_extension("iroh-data"),
-    )?;
-    migrate_if_missing(
-        &legacy_db_path.with_extension("nsec"),
-        &db_path.with_extension("nsec"),
-    )?;
-    migrate_if_missing(
-        &legacy_db_path.with_extension("identity-store"),
-        &db_path.with_extension("identity-store"),
-    )?;
-
-    Ok(())
-}
-
-fn migrate_if_missing(old_path: &Path, new_path: &Path) -> Result<()> {
-    if new_path.exists() || !old_path.exists() {
-        return Ok(());
-    }
-
-    fs::rename(old_path, new_path).with_context(|| {
-        format!(
-            "failed to migrate `{}` to `{}`",
-            old_path.display(),
-            new_path.display()
-        )
-    })
-}
-
-fn legacy_db_file_name() -> String {
-    format!("kukuri-{}.db", "next")
 }
 
 fn pending_attachment_from_request(request: CreateAttachmentRequest) -> Result<PendingAttachment> {
@@ -1211,11 +1164,6 @@ fn normalize_seed_peers(peers: Vec<SeedPeer>) -> Vec<SeedPeer> {
     deduped.into_values().collect()
 }
 
-#[cfg(test)]
-fn legacy_iroh_data_dir_name() -> String {
-    format!("kukuri-{}.iroh-data", "next")
-}
-
 impl SharedIrohStack {
     async fn new(
         root: &Path,
@@ -1274,35 +1222,8 @@ mod tests {
     use iroh::address_lookup::EndpointInfo;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
-    use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("env lock")
-    }
-
-    fn clear_runtime_env() {
-        let legacy_app_data_dir = legacy_env("APP_DATA_DIR");
-        let legacy_instance = legacy_env("INSTANCE");
-        for key in [
-            "KUKURI_APP_DATA_DIR",
-            "KUKURI_INSTANCE",
-            DISCOVERY_MODE_ENV,
-            DISCOVERY_SEEDS_ENV,
-            legacy_app_data_dir.as_str(),
-            legacy_instance.as_str(),
-        ] {
-            unsafe { std::env::remove_var(key) };
-        }
-    }
-
-    fn legacy_env(name: &str) -> String {
-        format!("KUKURI_{}_{}", "NEXT", name)
-    }
 
     fn image_attachment_request(name: &str, mime: &str, bytes: &[u8]) -> CreateAttachmentRequest {
         CreateAttachmentRequest {
@@ -1439,34 +1360,21 @@ mod tests {
     }
 
     #[test]
-    fn legacy_next_db_migrates_to_kukuri_db() {
-        let _guard = env_lock();
-        clear_runtime_env();
+    fn resolve_db_path_ignores_legacy_runtime_artifacts() {
         let dir = tempdir().expect("tempdir");
-        let legacy_db_path = dir.path().join(legacy_db_file_name());
+        let legacy_db_path = dir.path().join("kukuri-next.db");
+        let legacy_data_dir = dir.path().join("kukuri-next.iroh-data");
         fs::write(&legacy_db_path, b"sqlite").expect("legacy db");
-
-        let resolved = resolve_db_path_from_env(dir.path()).expect("resolved db path");
-
-        assert_eq!(resolved, dir.path().join("kukuri.db"));
-        assert!(resolved.exists());
-        assert!(!legacy_db_path.exists());
-    }
-
-    #[test]
-    fn legacy_next_iroh_data_migrates_to_kukuri_data_dir() {
-        let _guard = env_lock();
-        clear_runtime_env();
-        let dir = tempdir().expect("tempdir");
-        let legacy_data_dir = dir.path().join(legacy_iroh_data_dir_name());
         fs::create_dir_all(&legacy_data_dir).expect("legacy data dir");
         fs::write(legacy_data_dir.join("blob.bin"), b"blob").expect("legacy blob");
 
         let resolved = resolve_db_path_from_env(dir.path()).expect("resolved db path");
-        let new_data_dir = resolved.with_extension("iroh-data");
 
-        assert!(new_data_dir.join("blob.bin").exists());
-        assert!(!legacy_data_dir.exists());
+        assert_eq!(resolved, dir.path().join("kukuri.db"));
+        assert!(!resolved.exists());
+        assert!(!resolved.with_extension("iroh-data").exists());
+        assert!(legacy_db_path.exists());
+        assert!(legacy_data_dir.join("blob.bin").exists());
     }
 
     #[tokio::test]
