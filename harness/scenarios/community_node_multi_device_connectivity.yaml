@@ -1,0 +1,12 @@
+name: community_node_multi_device_connectivity
+kind: community_node_multi_device_connectivity
+fixtures:
+  seed: 20260318
+  topic: kukuri:topic:community-node-multi-device
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 20000

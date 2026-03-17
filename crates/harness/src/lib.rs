@@ -14,7 +14,7 @@ use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
 use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
-use kukuri_core::GameRoomStatus;
+use kukuri_core::{GameRoomStatus, KukuriKeys};
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreatePostRequest,
     DesktopRuntime, ListGameRoomsRequest, ListLiveSessionsRequest, ListThreadRequest,
@@ -33,6 +33,13 @@ pub enum ScenarioKind {
     #[default]
     DesktopSmoke,
     CommunityNodePublicConnectivity,
+    CommunityNodeMultiDeviceConnectivity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommunityNodeIdentityMode {
+    DistinctUsers,
+    SharedIdentity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -261,7 +268,20 @@ pub async fn run_scenario(
             run_desktop_smoke_scenario(root, scenario, artifacts_dir).await
         }
         ScenarioKind::CommunityNodePublicConnectivity => {
-            run_community_node_public_connectivity(scenario, artifacts_dir).await
+            run_community_node_connectivity(
+                scenario,
+                artifacts_dir,
+                CommunityNodeIdentityMode::DistinctUsers,
+            )
+            .await
+        }
+        ScenarioKind::CommunityNodeMultiDeviceConnectivity => {
+            run_community_node_connectivity(
+                scenario,
+                artifacts_dir,
+                CommunityNodeIdentityMode::SharedIdentity,
+            )
+            .await
         }
     }
 }
@@ -531,15 +551,20 @@ async fn run_desktop_smoke_scenario(
     .context("scenario exceeded overall timeout")?
 }
 
-async fn run_community_node_public_connectivity(
+async fn run_community_node_connectivity(
     scenario: &ScenarioSpec,
     artifacts_dir: &Path,
+    identity_mode: CommunityNodeIdentityMode,
 ) -> Result<HarnessResult> {
     unsafe { std::env::set_var("KUKURI_DISABLE_KEYRING", "1") };
 
     let step_timeout = Duration::from_millis(scenario.timeouts.step_ms);
     let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
-    let stack = CommunityNodeStack::spawn("community_node_public_connectivity").await?;
+    let stack = CommunityNodeStack::spawn(match identity_mode {
+        CommunityNodeIdentityMode::DistinctUsers => "community_node_public_connectivity",
+        CommunityNodeIdentityMode::SharedIdentity => "community_node_multi_device_connectivity",
+    })
+    .await?;
 
     let scenario_result = timeout(overall_timeout, async {
         cleanup_runtime_artifacts(&artifacts_dir.join("cn-desktop-a.db"))?;
@@ -547,6 +572,11 @@ async fn run_community_node_public_connectivity(
 
         let db_a = artifacts_dir.join("cn-desktop-a.db");
         let db_b = artifacts_dir.join("cn-desktop-b.db");
+        if identity_mode == CommunityNodeIdentityMode::SharedIdentity {
+            let shared_keys = KukuriKeys::generate();
+            persist_runtime_identity(&db_a, &shared_keys)?;
+            persist_runtime_identity(&db_b, &shared_keys)?;
+        }
         let mut steps = Vec::new();
 
         let started_at = Instant::now();
@@ -706,6 +736,14 @@ async fn run_community_node_public_connectivity(
             .get_sync_status()
             .await
             .context("failed to load sync status for desktop b after restart")?;
+        match identity_mode {
+            CommunityNodeIdentityMode::DistinctUsers => {
+                assert_ne!(sync_a.local_author_pubkey, sync_b.local_author_pubkey);
+            }
+            CommunityNodeIdentityMode::SharedIdentity => {
+                assert_eq!(sync_a.local_author_pubkey, sync_b.local_author_pubkey);
+            }
+        }
         assert_eq!(sync_a.discovery.connect_mode, ConnectMode::DirectOrRelay);
         assert_eq!(sync_b.discovery.connect_mode, ConnectMode::DirectOrRelay);
         push_named_step(&mut steps, "restart_desktops", started_at);
@@ -771,82 +809,87 @@ async fn run_community_node_public_connectivity(
         .await?;
         push_named_step(&mut steps, "reply_thread", started_at);
 
-        let started_at = Instant::now();
-        let session_id = runtime_a
-            .create_live_session(kukuri_desktop_runtime::CreateLiveSessionRequest {
-                topic: topic.to_string(),
-                title: "community live".to_string(),
-                description: "live session".to_string(),
-            })
-            .await
-            .context("failed to create live session on desktop a")?;
-        wait_for_live_session(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
-        runtime_b
-            .join_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
-                topic: topic.to_string(),
-                session_id: session_id.clone(),
-            })
-            .await
-            .context("failed to join live session on desktop b")?;
-        wait_for_live_viewer_count(&runtime_a, topic, session_id.as_str(), 1, step_timeout).await?;
-        runtime_a
-            .end_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
-                topic: topic.to_string(),
-                session_id: session_id.clone(),
-            })
-            .await
-            .context("failed to end live session on desktop a")?;
-        wait_for_live_ended(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
-        push_named_step(&mut steps, "live", started_at);
+        if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
+            let started_at = Instant::now();
+            let session_id = runtime_a
+                .create_live_session(kukuri_desktop_runtime::CreateLiveSessionRequest {
+                    topic: topic.to_string(),
+                    title: "community live".to_string(),
+                    description: "live session".to_string(),
+                })
+                .await
+                .context("failed to create live session on desktop a")?;
+            wait_for_live_session(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
+            runtime_b
+                .join_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
+                    topic: topic.to_string(),
+                    session_id: session_id.clone(),
+                })
+                .await
+                .context("failed to join live session on desktop b")?;
+            wait_for_live_viewer_count(&runtime_a, topic, session_id.as_str(), 1, step_timeout)
+                .await?;
+            runtime_a
+                .end_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
+                    topic: topic.to_string(),
+                    session_id: session_id.clone(),
+                })
+                .await
+                .context("failed to end live session on desktop a")?;
+            wait_for_live_ended(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
+            push_named_step(&mut steps, "live", started_at);
 
-        let started_at = Instant::now();
-        let room_id = runtime_a
-            .create_game_room(kukuri_desktop_runtime::CreateGameRoomRequest {
-                topic: topic.to_string(),
-                title: "community finals".to_string(),
-                description: "set".to_string(),
-                participants: vec!["Alice".to_string(), "Bob".to_string()],
-            })
-            .await
-            .context("failed to create game room on desktop a")?;
-        let room_a = wait_for_game_room(&runtime_a, topic, room_id.as_str(), step_timeout).await?;
-        let _room_b = wait_for_game_room(&runtime_b, topic, room_id.as_str(), step_timeout).await?;
-        let scores = room_a
-            .scores
-            .iter()
-            .map(|entry| {
-                let score = match entry.label.as_str() {
-                    "Alice" => 2,
-                    "Bob" => 1,
-                    _ => entry.score,
-                };
-                GameScoreView {
-                    participant_id: entry.participant_id.clone(),
-                    label: entry.label.clone(),
-                    score,
-                }
-            })
-            .collect();
-        runtime_a
-            .update_game_room(kukuri_desktop_runtime::UpdateGameRoomRequest {
-                topic: topic.to_string(),
-                room_id: room_id.clone(),
-                status: GameRoomStatus::Running,
-                phase_label: Some("Round 1".to_string()),
-                scores,
-            })
-            .await
-            .context("failed to update game room on desktop a")?;
-        wait_for_game_score(
-            &runtime_b,
-            topic,
-            room_id.as_str(),
-            "Alice",
-            2,
-            step_timeout,
-        )
-        .await?;
-        push_named_step(&mut steps, "game", started_at);
+            let started_at = Instant::now();
+            let room_id = runtime_a
+                .create_game_room(kukuri_desktop_runtime::CreateGameRoomRequest {
+                    topic: topic.to_string(),
+                    title: "community finals".to_string(),
+                    description: "set".to_string(),
+                    participants: vec!["Alice".to_string(), "Bob".to_string()],
+                })
+                .await
+                .context("failed to create game room on desktop a")?;
+            let room_a =
+                wait_for_game_room(&runtime_a, topic, room_id.as_str(), step_timeout).await?;
+            let _room_b =
+                wait_for_game_room(&runtime_b, topic, room_id.as_str(), step_timeout).await?;
+            let scores = room_a
+                .scores
+                .iter()
+                .map(|entry| {
+                    let score = match entry.label.as_str() {
+                        "Alice" => 2,
+                        "Bob" => 1,
+                        _ => entry.score,
+                    };
+                    GameScoreView {
+                        participant_id: entry.participant_id.clone(),
+                        label: entry.label.clone(),
+                        score,
+                    }
+                })
+                .collect();
+            runtime_a
+                .update_game_room(kukuri_desktop_runtime::UpdateGameRoomRequest {
+                    topic: topic.to_string(),
+                    room_id: room_id.clone(),
+                    status: GameRoomStatus::Running,
+                    phase_label: Some("Round 1".to_string()),
+                    scores,
+                })
+                .await
+                .context("failed to update game room on desktop a")?;
+            wait_for_game_score(
+                &runtime_b,
+                topic,
+                room_id.as_str(),
+                "Alice",
+                2,
+                step_timeout,
+            )
+            .await?;
+            push_named_step(&mut steps, "game", started_at);
+        }
 
         let started_at = Instant::now();
         runtime_b.shutdown().await;
@@ -927,6 +970,14 @@ fn community_node_admin_database_url() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_CN_ADMIN_DATABASE_URL.to_string())
+}
+
+fn persist_runtime_identity(db_path: &Path, keys: &KukuriKeys) -> Result<()> {
+    std::fs::write(
+        db_path.with_extension("identity-key"),
+        keys.export_secret_hex(),
+    )
+    .with_context(|| format!("failed to seed identity for {}", db_path.display()))
 }
 
 fn cleanup_runtime_artifacts(db_path: &Path) -> Result<()> {

@@ -250,6 +250,14 @@ struct AccessTokenClaims {
     iss: String,
     iat: usize,
     exp: usize,
+    #[serde(default)]
+    endpoint_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BearerIdentity {
+    pub pubkey: String,
+    pub endpoint_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -531,6 +539,9 @@ pub async fn verify_auth_envelope_and_issue_token(
     if normalized_pubkey != stored_pubkey {
         bail!("pubkey mismatch");
     }
+    let registered_endpoint = endpoint_id
+        .map(|value| CommunityNodeSeedPeer::new(value, None))
+        .transpose()?;
 
     let mut tx = pool.begin().await?;
     prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
@@ -543,14 +554,19 @@ pub async fn verify_auth_envelope_and_issue_token(
     .execute(&mut *tx)
     .await?;
     ensure_active_subscriber(&mut *tx, normalized_pubkey.as_str()).await?;
-    if let Some(endpoint_id) = endpoint_id {
-        let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, None)?;
-        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), &seed_peer, now)
+    if let Some(seed_peer) = registered_endpoint.as_ref() {
+        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), seed_peer, now)
             .await?;
     }
     tx.commit().await?;
 
-    let (access_token, expires_at) = issue_access_token(jwt_config, normalized_pubkey.as_str())?;
+    let (access_token, expires_at) = issue_access_token(
+        jwt_config,
+        normalized_pubkey.as_str(),
+        registered_endpoint
+            .as_ref()
+            .map(|seed_peer| seed_peer.endpoint_id.as_str()),
+    )?;
     Ok(AuthVerifyResponse {
         access_token,
         token_type: "Bearer".to_string(),
@@ -578,11 +594,11 @@ pub async fn refresh_bootstrap_peer_registration(
     })
 }
 
-pub async fn require_bearer_pubkey(
+pub async fn require_bearer_identity(
     pool: &PgPool,
     jwt_config: &JwtConfig,
     headers: &HeaderMap,
-) -> ApiResult<String> {
+) -> ApiResult<BearerIdentity> {
     let header = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -594,6 +610,13 @@ pub async fn require_bearer_pubkey(
         .map_err(|error| auth_required_error(format!("invalid bearer token: {error}")))?;
     let pubkey = normalize_pubkey(claims.sub.as_str())
         .map_err(|error| auth_required_error(error.to_string()))?;
+    let endpoint_id = claims
+        .endpoint_id
+        .as_deref()
+        .map(|value| CommunityNodeSeedPeer::new(value, None))
+        .transpose()
+        .map_err(|error| auth_required_error(format!("invalid bearer token endpoint: {error}")))?
+        .map(|seed_peer| seed_peer.endpoint_id);
     let active = sqlx::query_scalar::<_, String>(
         "SELECT status FROM cn_user.subscriber_accounts WHERE subscriber_pubkey = $1",
     )
@@ -608,10 +631,23 @@ pub async fn require_bearer_pubkey(
         )
     })?;
     match active.as_deref() {
-        Some("active") => Ok(pubkey),
+        Some("active") => Ok(BearerIdentity {
+            pubkey,
+            endpoint_id,
+        }),
         Some(_) => Err(auth_required_error("subscriber is not active")),
         None => Err(auth_required_error("subscriber is not registered")),
     }
+}
+
+pub async fn require_bearer_pubkey(
+    pool: &PgPool,
+    jwt_config: &JwtConfig,
+    headers: &HeaderMap,
+) -> ApiResult<String> {
+    Ok(require_bearer_identity(pool, jwt_config, headers)
+        .await?
+        .pubkey)
 }
 
 pub async fn get_consent_status(pool: &PgPool, pubkey: &str) -> Result<CommunityNodeConsentStatus> {
@@ -793,8 +829,13 @@ pub async fn upsert_bootstrap_node(pool: &PgPool, node: &CommunityNodeBootstrapN
 pub async fn load_bootstrap_seed_peers(
     pool: &PgPool,
     exclude_pubkey: Option<&str>,
+    exclude_endpoint_id: Option<&str>,
 ) -> Result<Vec<CommunityNodeSeedPeer>> {
     let exclude_pubkey = exclude_pubkey.map(normalize_pubkey).transpose()?;
+    let exclude_endpoint_id = exclude_endpoint_id
+        .map(|value| CommunityNodeSeedPeer::new(value, None))
+        .transpose()?
+        .map(|seed_peer| seed_peer.endpoint_id);
     prune_expired_bootstrap_peer_registrations(pool).await?;
     let rows = sqlx::query(
         "SELECT peers.endpoint_id, peers.addr_hint
@@ -803,10 +844,15 @@ pub async fn load_bootstrap_seed_peers(
            ON subscribers.subscriber_pubkey = peers.subscriber_pubkey
          WHERE subscribers.status = 'active'
            AND peers.expires_at > NOW()
-           AND ($1::TEXT IS NULL OR peers.subscriber_pubkey <> $1)
+           AND (
+             $1::TEXT IS NULL
+             OR ($2::TEXT IS NULL AND peers.subscriber_pubkey <> $1)
+             OR ($2::TEXT IS NOT NULL AND (peers.subscriber_pubkey <> $1 OR peers.endpoint_id <> $2))
+           )
          ORDER BY peers.last_seen_at DESC, peers.subscriber_pubkey ASC, peers.endpoint_id ASC",
     )
     .bind(exclude_pubkey.as_deref())
+    .bind(exclude_endpoint_id.as_deref())
     .fetch_all(pool)
     .await?;
     let mut seed_peers = Vec::with_capacity(rows.len());
@@ -978,7 +1024,11 @@ pub fn auth_required_error(message: impl Into<String>) -> ApiError {
     )
 }
 
-fn issue_access_token(jwt_config: &JwtConfig, pubkey: &str) -> Result<(String, i64)> {
+fn issue_access_token(
+    jwt_config: &JwtConfig,
+    pubkey: &str,
+    endpoint_id: Option<&str>,
+) -> Result<(String, i64)> {
     let issued_at = Utc::now().timestamp();
     let expires_at = issued_at + jwt_config.ttl_seconds;
     let claims = AccessTokenClaims {
@@ -986,6 +1036,7 @@ fn issue_access_token(jwt_config: &JwtConfig, pubkey: &str) -> Result<(String, i
         iss: jwt_config.issuer.clone(),
         iat: issued_at as usize,
         exp: expires_at as usize,
+        endpoint_id: endpoint_id.map(str::to_string),
     };
     let token = encode(&Header::default(), &claims, &jwt_config.encoding_key())?;
     Ok((token, expires_at))

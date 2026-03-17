@@ -298,5 +298,8 @@ fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
 }
 
 fn scenario_requires_cn_postgres(name: &str) -> bool {
-    matches!(name, "community_node_public_connectivity")
+    matches!(
+        name,
+        "community_node_public_connectivity" | "community_node_multi_device_connectivity"
+    )
 }

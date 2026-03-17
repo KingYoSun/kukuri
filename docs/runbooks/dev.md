@@ -14,6 +14,7 @@ cargo xtask e2e-smoke
 cargo xtask cn-check
 cargo xtask cn-test
 cargo xtask scenario community_node_public_connectivity
+cargo xtask scenario community_node_multi_device_connectivity
 ```
 
 `cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
@@ -23,6 +24,7 @@ cargo xtask scenario community_node_public_connectivity
 - `cargo xtask test` は workspace 全体を通すが、Postgres が必要な `cn-*` integration test は実行しない。
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
 - `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
+- `cargo xtask scenario community_node_multi_device_connectivity` は same-author 2 desktop の endpoint-bound bootstrap で `post -> reply/thread -> reconnect` を確認する。
 
 ## community-node compose
 ```bash
@@ -102,7 +104,7 @@ curl -fsS https://iroh-relay.kukuri.app/ping
 - `restart required: yes` が出たら、その session ではまだ connectivity assist URL が transport に入っていない
 - discovery diagnostics では `Community Bootstrap Peers` が community-node 由来、`Configured Seed IDs` が local seed 設定、`Manual Ticket Peers` が手動 import を表す
 - Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> app restart -> post -> reply/thread -> blob sync` まで成功を確認済み
-- 現状の `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob 接続を peer count に完全反映しないため、`connected: no`, `peers: 0`, `idle` の表示でも post/reply/blob の伝播成功を優先して判定する
+- relay-only public path でも `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob peer を含めて `connected` と `peer_count` を出す
 
 ## community-node deploy 順序
 ```bash
@@ -145,12 +147,14 @@ cat cn-postgres.dump | docker compose --env-file .env.community-node -f docker-c
 ```bash
 cargo xtask cn-test
 cargo xtask scenario community_node_public_connectivity
+cargo xtask scenario community_node_multi_device_connectivity
 ```
 
 - `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes` の contract を確認する。
 - `community_node_public_connectivity` scenario は `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
+- `community_node_multi_device_connectivity` scenario は same-author 2 desktop の `auth -> consent -> restart -> post -> reply/thread -> reconnect` を確認する。
 - crate test を直接叩く場合は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` と `COMMUNITY_NODE_DATABASE_URL` を明示する。
-- 公開 community-node の手動確認では UI の peer count より、timeline / thread / attachment preview / blob media payload fetch の成否を優先して見る。
+- 公開 community-node の手動確認では UI の peer source と peer count を見つつ、timeline / thread / attachment preview / blob media payload fetch の成否まで確認する。
 
 ## frontend だけ確認する場合
 ```bash

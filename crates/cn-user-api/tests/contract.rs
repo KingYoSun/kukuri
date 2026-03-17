@@ -254,6 +254,64 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
 }
 
 #[tokio::test]
+async fn bootstrap_exposes_other_endpoints_for_same_subscriber() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server =
+        TestServer::spawn(admin_database_url.as_str(), "cn_user_api_same_subscriber").await?;
+    let client = Client::new();
+
+    let keys = generate_keys();
+    let (access_token_a1, _) = authenticate(&client, &server.base_url, &keys, "peer-a-1").await?;
+    let (access_token_a2, _) = authenticate(&client, &server.base_url, &keys, "peer-a-2").await?;
+
+    let accepted = client
+        .post(format!("{}/v1/consents", server.base_url))
+        .bearer_auth(access_token_a1.as_str())
+        .json(&serde_json::json!({ "policy_slugs": [] }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .await?;
+    assert!(accepted.all_required_accepted);
+
+    let bootstrap_a1 = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(access_token_a1.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let seed_peers_a1 = bootstrap_a1["nodes"][0]["resolved_urls"]["seed_peers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seed_peers_a1.len(), 1);
+    assert_eq!(seed_peers_a1[0]["endpoint_id"], "peer-a-2");
+
+    let bootstrap_a2 = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(access_token_a2.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    let seed_peers_a2 = bootstrap_a2["nodes"][0]["resolved_urls"]["seed_peers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seed_peers_a2.len(), 1);
+    assert_eq!(seed_peers_a2[0]["endpoint_id"], "peer-a-1");
+
+    server.shutdown().await
+}
+
+#[tokio::test]
 async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_them() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
@@ -269,7 +327,7 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
 
     let keys_a = generate_keys();
     let keys_b = generate_keys();
-    let (_token_a_initial, _) =
+    let (token_a_initial, _) =
         authenticate(&client, &server.base_url, &keys_a, "peer-a-1").await?;
     let (token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-2").await?;
     let (token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
@@ -314,7 +372,7 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
 
     client
         .post(format!("{}/v1/bootstrap/heartbeat", server.base_url))
-        .bearer_auth(token_a.as_str())
+        .bearer_auth(token_a_initial.as_str())
         .json(&serde_json::json!({ "endpoint_id": "peer-a-1" }))
         .send()
         .await?

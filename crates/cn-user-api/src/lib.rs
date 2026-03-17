@@ -8,10 +8,11 @@ use axum::{Json, Router};
 use kukuri_cn_core::{
     ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
     CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-    DatabaseInitMode, JwtConfig, accept_consents, connect_postgres, create_auth_challenge,
-    get_consent_status, initialize_database, initialize_database_for_runtime, load_bootstrap_nodes,
-    load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list,
-    refresh_bootstrap_peer_registration, require_bearer_pubkey, require_consents,
+    DatabaseInitMode, JwtConfig, accept_consents, auth_required_error, connect_postgres,
+    create_auth_challenge, get_consent_status, initialize_database,
+    initialize_database_for_runtime, load_bootstrap_nodes, load_bootstrap_seed_peers,
+    normalize_http_url, normalize_http_url_list, refresh_bootstrap_peer_registration,
+    require_bearer_identity, require_bearer_pubkey, require_consents,
     verify_auth_envelope_and_issue_token,
 };
 use serde::{Deserialize, Serialize};
@@ -228,14 +229,18 @@ async fn bootstrap_nodes(
     State(state): State<UserApiState>,
     headers: HeaderMap,
 ) -> ApiResult<Json<BootstrapNodesResponse>> {
-    let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
-    let _ = require_consents(&state.pool, pubkey.as_str()).await?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
     let mut nodes = load_bootstrap_nodes(&state.pool, Some(state.self_node.clone()))
         .await
         .map_err(internal_error)?;
-    let seed_peers = load_bootstrap_seed_peers(&state.pool, Some(pubkey.as_str()))
-        .await
-        .map_err(internal_error)?;
+    let seed_peers = load_bootstrap_seed_peers(
+        &state.pool,
+        Some(identity.pubkey.as_str()),
+        identity.endpoint_id.as_deref(),
+    )
+    .await
+    .map_err(internal_error)?;
     for node in &mut nodes {
         if node.base_url == state.self_node.base_url {
             node.resolved_urls.seed_peers = seed_peers.clone();
@@ -249,10 +254,15 @@ async fn bootstrap_heartbeat(
     headers: HeaderMap,
     Json(request): Json<BootstrapHeartbeatRequest>,
 ) -> ApiResult<Json<BootstrapHeartbeatResponse>> {
-    let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    if let Some(bound_endpoint_id) = identity.endpoint_id.as_deref()
+        && bound_endpoint_id != request.endpoint_id
+    {
+        return Err(auth_required_error("bearer token endpoint mismatch"));
+    }
     let response = refresh_bootstrap_peer_registration(
         &state.pool,
-        pubkey.as_str(),
+        identity.pubkey.as_str(),
         request.endpoint_id.as_str(),
     )
     .await

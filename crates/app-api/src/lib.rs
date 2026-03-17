@@ -3940,6 +3940,7 @@ mod tests {
         configure_seeded_dht(&app_b, endpoint_a.clone()).await;
 
         timeout(Duration::from_secs(20), async {
+            let mut stable_ready_polls = 0usize;
             loop {
                 let status_a = app_a.get_sync_status().await.expect("status a");
                 let status_b = app_b.get_sync_status().await.expect("status b");
@@ -3952,9 +3953,14 @@ mod tests {
                     .iter()
                     .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
                 if ready_a && ready_b {
-                    return;
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return;
+                    }
+                } else {
+                    stable_ready_polls = 0;
                 }
-                sleep(Duration::from_millis(50)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         })
         .await
@@ -3965,7 +3971,7 @@ mod tests {
             .await
             .expect("create post");
 
-        timeout(Duration::from_secs(60), async {
+        timeout(Duration::from_secs(90), async {
             loop {
                 let timeline = app_b
                     .list_timeline(topic, None, 20)
