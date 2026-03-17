@@ -666,17 +666,13 @@ impl IrohGossipTransport {
     }
 
     async fn bootstrap_peers(&self) -> Vec<EndpointAddr> {
-        let mode = self.discovery_mode.lock().await.clone();
-        let mut peers = if mode == DiscoveryMode::SeededDht {
-            self.seed_peers
-                .lock()
-                .await
-                .values()
-                .cloned()
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
+        let mut peers = self
+            .seed_peers
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
         for peer in self.imported_peers.lock().await.values() {
             if !peers.iter().any(|existing| existing.id == peer.id) {
                 peers.push(peer.clone());
@@ -1775,7 +1771,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn transport_custom_relay_seed_peers_connect_without_dht_publish() {
+    async fn transport_custom_relay_static_peer_seed_peers_connect_without_ticket_import() {
         let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
             .await
             .expect("relay server");
@@ -1803,7 +1799,7 @@ mod tests {
 
         transport_a
             .configure_discovery(
-                DiscoveryMode::SeededDht,
+                DiscoveryMode::StaticPeer,
                 false,
                 vec![SeedPeer {
                     endpoint_id: discovery_b.local_endpoint_id.clone(),
@@ -1814,7 +1810,7 @@ mod tests {
             .expect("configure a");
         transport_b
             .configure_discovery(
-                DiscoveryMode::SeededDht,
+                DiscoveryMode::StaticPeer,
                 false,
                 vec![SeedPeer {
                     endpoint_id: discovery_a.local_endpoint_id.clone(),

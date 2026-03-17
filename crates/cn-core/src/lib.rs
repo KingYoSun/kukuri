@@ -29,15 +29,62 @@ const DATABASE_PREPARE_HINT: &str =
 pub struct CommunityNodeResolvedUrls {
     pub public_base_url: String,
     pub connectivity_urls: Vec<String>,
+    #[serde(default)]
+    pub seed_peers: Vec<CommunityNodeSeedPeer>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommunityNodeSeedPeer {
+    pub endpoint_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub addr_hint: Option<String>,
+}
+
+impl CommunityNodeSeedPeer {
+    pub fn new(endpoint_id: impl Into<String>, addr_hint: Option<String>) -> Result<Self> {
+        let endpoint_id = endpoint_id.into().trim().to_string();
+        if endpoint_id.is_empty() {
+            bail!("community-node seed peer endpoint id must not be empty");
+        }
+        let addr_hint = addr_hint
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        Ok(Self {
+            endpoint_id,
+            addr_hint,
+        })
+    }
+
+    pub fn display(&self) -> String {
+        match self.addr_hint.as_deref() {
+            Some(addr_hint) => format!("{}@{}", self.endpoint_id, addr_hint),
+            None => self.endpoint_id.clone(),
+        }
+    }
+}
+
+fn normalize_seed_peers(values: Vec<CommunityNodeSeedPeer>) -> Result<Vec<CommunityNodeSeedPeer>> {
+    let mut deduped = BTreeMap::new();
+    for value in values {
+        let normalized = CommunityNodeSeedPeer::new(value.endpoint_id, value.addr_hint)?;
+        deduped.insert(normalized.display(), normalized);
+    }
+    Ok(deduped.into_values().collect())
 }
 
 impl CommunityNodeResolvedUrls {
-    pub fn new(public_base_url: impl Into<String>, connectivity_urls: Vec<String>) -> Result<Self> {
+    pub fn new(
+        public_base_url: impl Into<String>,
+        connectivity_urls: Vec<String>,
+        seed_peers: Vec<CommunityNodeSeedPeer>,
+    ) -> Result<Self> {
         let public_base_url = normalize_http_url(public_base_url.into().as_str())?;
         let connectivity_urls = normalize_http_url_list(connectivity_urls)?;
+        let seed_peers = normalize_seed_peers(seed_peers)?;
         Ok(Self {
             public_base_url,
             connectivity_urls,
+            seed_peers,
         })
     }
 }
@@ -286,6 +333,7 @@ pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
         ("cn_admin", "policies"),
         ("cn_admin", "service_configs"),
         ("cn_bootstrap", "bootstrap_nodes"),
+        ("cn_bootstrap", "peer_registrations"),
     ] {
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (
@@ -437,6 +485,7 @@ pub async fn verify_auth_envelope_and_issue_token(
     jwt_config: &JwtConfig,
     public_base_url: &str,
     auth_envelope_json: &Value,
+    endpoint_id: Option<&str>,
 ) -> Result<AuthVerifyResponse> {
     let public_base_url = normalize_http_url(public_base_url)?;
     let envelope = parse_auth_envelope(auth_envelope_json)?;
@@ -487,6 +536,11 @@ pub async fn verify_auth_envelope_and_issue_token(
     .execute(&mut *tx)
     .await?;
     ensure_active_subscriber(&mut *tx, normalized_pubkey.as_str()).await?;
+    if let Some(endpoint_id) = endpoint_id {
+        let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, None)?;
+        upsert_bootstrap_peer_registration(&mut *tx, normalized_pubkey.as_str(), &seed_peer)
+            .await?;
+    }
     tx.commit().await?;
 
     let (access_token, expires_at) = issue_access_token(jwt_config, normalized_pubkey.as_str())?;
@@ -679,7 +733,11 @@ pub async fn load_bootstrap_nodes(
         let connectivity_urls = serde_json::from_value::<Vec<String>>(connectivity_urls)?;
         let node = CommunityNodeBootstrapNode {
             base_url: normalize_http_url(base_url.as_str())?,
-            resolved_urls: CommunityNodeResolvedUrls::new(public_base_url, connectivity_urls)?,
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                public_base_url,
+                connectivity_urls,
+                Vec::new(),
+            )?,
         };
         nodes.insert(node.base_url.clone(), node);
     }
@@ -704,6 +762,32 @@ pub async fn upsert_bootstrap_node(pool: &PgPool, node: &CommunityNodeBootstrapN
     .execute(pool)
     .await?;
     Ok(())
+}
+
+pub async fn load_bootstrap_seed_peers(
+    pool: &PgPool,
+    exclude_pubkey: Option<&str>,
+) -> Result<Vec<CommunityNodeSeedPeer>> {
+    let exclude_pubkey = exclude_pubkey.map(normalize_pubkey).transpose()?;
+    let rows = sqlx::query(
+        "SELECT peers.endpoint_id, peers.addr_hint
+         FROM cn_bootstrap.peer_registrations peers
+         JOIN cn_user.subscriber_accounts subscribers
+           ON subscribers.subscriber_pubkey = peers.subscriber_pubkey
+         WHERE subscribers.status = 'active'
+           AND ($1::TEXT IS NULL OR peers.subscriber_pubkey <> $1)
+         ORDER BY peers.subscriber_pubkey ASC",
+    )
+    .bind(exclude_pubkey.as_deref())
+    .fetch_all(pool)
+    .await?;
+    let mut seed_peers = Vec::with_capacity(rows.len());
+    for row in rows {
+        let endpoint_id: String = row.try_get("endpoint_id")?;
+        let addr_hint: Option<String> = row.try_get("addr_hint")?;
+        seed_peers.push(CommunityNodeSeedPeer::new(endpoint_id, addr_hint)?);
+    }
+    normalize_seed_peers(seed_peers)
 }
 
 pub fn build_auth_envelope_json(
@@ -899,6 +983,35 @@ where
              last_authenticated_at = NOW()",
     )
     .bind(pubkey)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+async fn upsert_bootstrap_peer_registration<'e, E>(
+    executor: E,
+    pubkey: &str,
+    seed_peer: &CommunityNodeSeedPeer,
+) -> Result<()>
+where
+    E: Executor<'e, Database = sqlx::Postgres>,
+{
+    let seed_peer = CommunityNodeSeedPeer::new(
+        seed_peer.endpoint_id.clone(),
+        seed_peer.addr_hint.clone(),
+    )?;
+    sqlx::query(
+        "INSERT INTO cn_bootstrap.peer_registrations
+            (subscriber_pubkey, endpoint_id, addr_hint)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (subscriber_pubkey) DO UPDATE
+         SET endpoint_id = EXCLUDED.endpoint_id,
+             addr_hint = EXCLUDED.addr_hint,
+             updated_at = NOW()",
+    )
+    .bind(pubkey)
+    .bind(seed_peer.endpoint_id)
+    .bind(seed_peer.addr_hint)
     .execute(executor)
     .await?;
     Ok(())

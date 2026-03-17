@@ -9,8 +9,9 @@ use kukuri_cn_core::{
     ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, CommunityNodeBootstrapNode,
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, DatabaseInitMode, JwtConfig,
     accept_consents, connect_postgres, create_auth_challenge, get_consent_status,
-    initialize_database, initialize_database_for_runtime, load_bootstrap_nodes, normalize_http_url,
-    normalize_http_url_list, require_bearer_pubkey, require_consents,
+    initialize_database, initialize_database_for_runtime, load_bootstrap_nodes,
+    load_bootstrap_seed_peers, normalize_http_url, normalize_http_url_list, require_bearer_pubkey,
+    require_consents,
     verify_auth_envelope_and_issue_token,
 };
 use serde::{Deserialize, Serialize};
@@ -44,6 +45,8 @@ struct AuthChallengeRequest {
 #[derive(Debug, Deserialize)]
 struct AuthVerifyRequest {
     auth_envelope_json: Value,
+    #[serde(default)]
+    endpoint_id: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -110,6 +113,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
             resolved_urls: CommunityNodeResolvedUrls::new(
                 config.public_base_url.clone(),
                 config.connectivity_urls.clone(),
+                Vec::new(),
             )?,
         },
     })
@@ -178,6 +182,7 @@ async fn auth_verify(
         &state.jwt_config,
         state.self_node.resolved_urls.public_base_url.as_str(),
         &request.auth_envelope_json,
+        request.endpoint_id.as_deref(),
     )
     .await
     .map_err(|error| {
@@ -219,9 +224,17 @@ async fn bootstrap_nodes(
 ) -> ApiResult<Json<BootstrapNodesResponse>> {
     let pubkey = require_bearer_pubkey(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, pubkey.as_str()).await?;
-    let nodes = load_bootstrap_nodes(&state.pool, Some(state.self_node.clone()))
+    let mut nodes = load_bootstrap_nodes(&state.pool, Some(state.self_node.clone()))
         .await
         .map_err(internal_error)?;
+    let seed_peers = load_bootstrap_seed_peers(&state.pool, Some(pubkey.as_str()))
+        .await
+        .map_err(internal_error)?;
+    for node in &mut nodes {
+        if node.base_url == state.self_node.base_url {
+            node.resolved_urls.seed_peers = seed_peers.clone();
+        }
+    }
     Ok(Json(BootstrapNodesResponse { nodes }))
 }
 

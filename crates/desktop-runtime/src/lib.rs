@@ -16,7 +16,8 @@ use kukuri_app_api::{
 use kukuri_blob_service::{BlobService, IrohBlobService};
 use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    CommunityNodeResolvedUrls, build_auth_envelope_json, normalize_http_url,
+    CommunityNodeResolvedUrls, CommunityNodeSeedPeer, build_auth_envelope_json,
+    normalize_http_url,
 };
 use kukuri_core::{AssetRole, GameRoomStatus, KukuriKeys};
 use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
@@ -316,12 +317,16 @@ impl DesktopRuntime {
         let community_node_config =
             load_community_node_config_from_file(&db_path)?.unwrap_or_default();
         let relay_config = relay_config_from_community_node_config(&community_node_config);
+        let effective_discovery_config = DiscoveryConfig {
+            seed_peers: effective_seed_peers(&discovery_config, &community_node_config),
+            ..discovery_config.clone()
+        };
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let iroh_stack = SharedIrohStack::new(
             &docs_root,
             network_config.clone(),
-            &discovery_config,
+            &effective_discovery_config,
             dht_options,
             relay_config.clone(),
         )
@@ -506,15 +511,9 @@ impl DesktopRuntime {
             bail!("discovery configuration is locked by environment variables");
         }
         next_config.seed_peers = parse_seed_entries(&request.seed_entries)?;
-        self.app_service
-            .set_discovery_seeds(
-                next_config.mode.clone(),
-                next_config.env_locked,
-                next_config.seed_peers.clone(),
-            )
-            .await?;
         save_discovery_config(&self.db_path, &next_config.stored())?;
         *self.discovery_config.lock().await = next_config.clone();
+        self.apply_effective_seed_peers().await?;
         Ok(next_config)
     }
 
@@ -576,6 +575,7 @@ impl DesktopRuntime {
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
+        self.apply_effective_seed_peers().await?;
         Ok(next_config)
     }
 
@@ -589,6 +589,7 @@ impl DesktopRuntime {
         }
         remove_community_node_config(&self.db_path)?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
+        self.apply_effective_seed_peers().await?;
         Ok(())
     }
 
@@ -600,6 +601,13 @@ impl DesktopRuntime {
         let client = community_node_http_client()?;
         let challenge_url = format!("{}/v1/auth/challenge", base_url);
         let pubkey = self.author_keys.public_key_hex();
+        let endpoint_id = self
+            .iroh_stack
+            .transport
+            .discovery()
+            .await
+            .context("failed to read local endpoint id for community node auth")?
+            .local_endpoint_id;
         let challenge = client
             .post(challenge_url)
             .json(&serde_json::json!({ "pubkey": pubkey }))
@@ -633,7 +641,10 @@ impl DesktopRuntime {
         let verify_url = format!("{}/v1/auth/verify", base_url);
         let verify = client
             .post(verify_url)
-            .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json }))
+            .json(&serde_json::json!({
+                "auth_envelope_json": auth_envelope_json,
+                "endpoint_id": endpoint_id,
+            }))
             .send()
             .await
             .context("failed to verify auth envelope")?
@@ -823,6 +834,7 @@ impl DesktopRuntime {
         let normalized = normalize_community_node_config(config)?;
         save_community_node_config(&self.db_path, &normalized)?;
         *self.community_node_config.lock().await = normalized.clone();
+        self.apply_effective_seed_peers().await?;
         let node = normalized.nodes[index].clone();
         self.community_node_status(node, None, None).await
     }
@@ -880,6 +892,19 @@ impl DesktopRuntime {
             last_error,
             restart_required: current_connectivity_urls != self.startup_connectivity_urls,
         })
+    }
+
+    async fn apply_effective_seed_peers(&self) -> Result<()> {
+        let discovery_config = self.discovery_config.lock().await.clone();
+        let community_node_config = self.community_node_config.lock().await.clone();
+        let seed_peers = effective_seed_peers(&discovery_config, &community_node_config);
+        self.app_service
+            .set_discovery_seeds(
+                discovery_config.mode.clone(),
+                discovery_config.env_locked,
+                seed_peers,
+            )
+            .await
     }
 }
 
@@ -999,6 +1024,7 @@ fn normalize_community_node_config(config: CommunityNodeConfig) -> Result<Commun
             Some(resolved) => Some(CommunityNodeResolvedUrls::new(
                 resolved.public_base_url,
                 resolved.connectivity_urls,
+                resolved.seed_peers,
             )?),
             None => None,
         };
@@ -1037,12 +1063,52 @@ fn merge_community_node_resolved_urls(
                 .into_iter()
                 .chain(incoming.connectivity_urls)
                 .collect();
+            let seed_peers = current
+                .seed_peers
+                .into_iter()
+                .chain(incoming.seed_peers)
+                .collect();
             Ok(Some(CommunityNodeResolvedUrls::new(
                 public_base_url,
                 connectivity_urls,
+                seed_peers,
             )?))
         }
     }
+}
+
+fn effective_seed_peers(
+    discovery_config: &DiscoveryConfig,
+    community_node_config: &CommunityNodeConfig,
+) -> Vec<SeedPeer> {
+    normalize_seed_peers(
+        discovery_config
+            .seed_peers
+            .iter()
+            .cloned()
+            .chain(community_node_seed_peers(community_node_config))
+            .collect(),
+    )
+}
+
+fn community_node_seed_peers(config: &CommunityNodeConfig) -> impl Iterator<Item = SeedPeer> + '_ {
+    config
+        .nodes
+        .iter()
+        .filter_map(|node| node.resolved_urls.as_ref())
+        .flat_map(|resolved| resolved.seed_peers.iter())
+        .filter_map(seed_peer_from_community_node)
+}
+
+fn seed_peer_from_community_node(seed_peer: &CommunityNodeSeedPeer) -> Option<SeedPeer> {
+    let endpoint_id = seed_peer.endpoint_id.trim();
+    if endpoint_id.is_empty() {
+        return None;
+    }
+    Some(SeedPeer {
+        endpoint_id: endpoint_id.to_string(),
+        addr_hint: seed_peer.addr_hint.clone(),
+    })
 }
 
 fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> TransportRelayConfig {
@@ -2528,6 +2594,7 @@ mod tests {
                                 "https://relay-a.example.com/".into(),
                                 "https://relay-a.example.com/".into(),
                             ],
+                            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")],
                         )
                         .expect("resolved urls"),
                     ),
@@ -2553,6 +2620,14 @@ mod tests {
                 "https://relay-b.example.com".to_string(),
             ]
         );
+        assert_eq!(
+            config.nodes[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")]
+        );
     }
 
     #[test]
@@ -2564,6 +2639,7 @@ mod tests {
                     CommunityNodeResolvedUrls::new(
                         "https://api.kukuri.app/",
                         vec!["https://iroh-relay.kukuri.app/".into()],
+                        Vec::new(),
                     )
                     .expect("resolved urls"),
                 ),
@@ -2603,6 +2679,7 @@ mod tests {
                         CommunityNodeResolvedUrls::new(
                             "https://public.example.com",
                             vec!["https://relay.example.com".into()],
+                            vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")],
                         )
                         .expect("resolved urls"),
                     ),
@@ -2619,6 +2696,14 @@ mod tests {
         assert_eq!(
             relay_config.iroh_relay_urls,
             vec!["https://relay.example.com".to_string()]
+        );
+        assert_eq!(
+            restored.nodes[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")]
         );
     }
 }

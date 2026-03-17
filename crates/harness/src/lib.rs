@@ -17,8 +17,8 @@ use kukuri_cn_user_api::{
 use kukuri_core::GameRoomStatus;
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreatePostRequest,
-    DesktopRuntime, ImportPeerTicketRequest, ListGameRoomsRequest, ListLiveSessionsRequest,
-    ListThreadRequest, ListTimelineRequest, SetCommunityNodeConfigRequest,
+    DesktopRuntime, ListGameRoomsRequest, ListLiveSessionsRequest, ListThreadRequest,
+    ListTimelineRequest, SetCommunityNodeConfigRequest,
 };
 use kukuri_store::SqliteStore;
 use kukuri_transport::{ConnectMode, FakeNetwork, FakeTransport, TransportNetworkConfig};
@@ -712,22 +712,6 @@ async fn run_community_node_public_connectivity(
 
         let topic = scenario.fixtures.topic.as_str();
         let started_at = Instant::now();
-        let ticket_a = runtime_a
-            .local_peer_ticket()
-            .await?
-            .context("desktop a peer ticket is unavailable")?;
-        let ticket_b = runtime_b
-            .local_peer_ticket()
-            .await?
-            .context("desktop b peer ticket is unavailable")?;
-        runtime_a
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
-            .await
-            .context("failed to import desktop b ticket into desktop a")?;
-        runtime_b
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
-            .await
-            .context("failed to import desktop a ticket into desktop b")?;
         let _ = runtime_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
@@ -749,8 +733,8 @@ async fn run_community_node_public_connectivity(
             .context("desktop a did not observe initial topic peer connectivity")?;
         wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
             .await
-            .context("desktop b did not observe initial topic peer connectivity")?;
-        push_named_step(&mut steps, "connect_desktops", started_at);
+            .context("desktop b did not observe initial community-node topic peer connectivity")?;
+        push_named_step(&mut steps, "community_node_connectivity", started_at);
 
         let started_at = Instant::now();
         let post_id = runtime_a
@@ -869,24 +853,6 @@ async fn run_community_node_public_connectivity(
         let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
-        let ticket_a = runtime_a
-            .local_peer_ticket()
-            .await
-            .context("failed to read desktop a peer ticket for reconnect")?
-            .context("desktop a peer ticket is unavailable for reconnect")?;
-        let ticket_b = runtime_b
-            .local_peer_ticket()
-            .await
-            .context("failed to read desktop b peer ticket after reconnect restart")?
-            .context("desktop b peer ticket is unavailable after reconnect restart")?;
-        runtime_a
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
-            .await
-            .context("failed to reimport desktop b ticket into desktop a after restart")?;
-        runtime_b
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
-            .await
-            .context("failed to reimport desktop a ticket into desktop b after restart")?;
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),

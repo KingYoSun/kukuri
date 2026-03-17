@@ -75,6 +75,7 @@ async fn authenticate(
     client: &Client,
     base_url: &str,
     keys: &KukuriKeys,
+    endpoint_id: &str,
 ) -> Result<(String, serde_json::Value)> {
     let pubkey = keys.public_key_hex();
     let challenge = client
@@ -89,7 +90,10 @@ async fn authenticate(
         build_auth_envelope_json(keys, challenge.challenge.as_str(), base_url)?;
     let verify = client
         .post(format!("{base_url}/v1/auth/verify"))
-        .json(&serde_json::json!({ "auth_envelope_json": auth_envelope_json.clone() }))
+        .json(&serde_json::json!({
+            "auth_envelope_json": auth_envelope_json.clone(),
+            "endpoint_id": endpoint_id,
+        }))
         .send()
         .await?
         .error_for_status()?
@@ -123,7 +127,8 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     assert_eq!(unauthenticated_body["code"], "AUTH_REQUIRED");
 
     let keys = generate_keys();
-    let (access_token, auth_envelope_json) = authenticate(&client, &server.base_url, &keys).await?;
+    let (access_token, auth_envelope_json) =
+        authenticate(&client, &server.base_url, &keys, "peer-a").await?;
 
     let reused = client
         .post(format!("{}/v1/auth/verify", server.base_url))
@@ -180,6 +185,63 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
     assert_eq!(
         bootstrap["nodes"][0]["resolved_urls"]["connectivity_urls"][0],
         "http://127.0.0.1:13340"
+    );
+    assert_eq!(bootstrap["nodes"][0]["resolved_urls"]["seed_peers"].as_array().map(Vec::len), Some(0));
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(admin_database_url.as_str(), "cn_user_api_seed_peers").await?;
+    let client = Client::new();
+
+    let keys_a = generate_keys();
+    let keys_b = generate_keys();
+    let (access_token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a").await?;
+    let (access_token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
+
+    for access_token in [&access_token_a, &access_token_b] {
+        let accepted = client
+            .post(format!("{}/v1/consents", server.base_url))
+            .bearer_auth(access_token.as_str())
+            .json(&serde_json::json!({ "policy_slugs": [] }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+            .await?;
+        assert!(accepted.all_required_accepted);
+    }
+
+    let bootstrap_a = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(access_token_a.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        bootstrap_a["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
+        "peer-b"
+    );
+
+    let bootstrap_b = client
+        .get(format!("{}/v1/bootstrap/nodes", server.base_url))
+        .bearer_auth(access_token_b.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        bootstrap_b["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
+        "peer-a"
     );
 
     server.shutdown().await

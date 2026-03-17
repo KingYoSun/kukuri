@@ -59,6 +59,7 @@
 - `docker-compose.community-node.yml` と `.env.community-node.example` に host bind IP / iroh TLS / QUIC env を追加し、`api.kukuri.app` / `relay.kukuri.app` / `iroh-relay.kukuri.app` の公開 manual smoke 手順を runbook に反映した
 - desktop-runtime test に `https://api.kukuri.app` + `https://iroh-relay.kukuri.app` の URL contract を追加し、relay websocket fallback が復活しないようにした
 - community-node connectivity assist で seed peer / unknown peer lookup に configured relay URL を付与し、docs event の source peer から blob sender を学習して imported ticket なしでも relay assist 経由の blob fetch が成立するようにした
+- community-node bootstrap に authenticated desktop endpoint registration を追加し、relay-assisted static-peer path でも import ticket なしの初回 `post -> reply/thread -> live -> game` 伝播が成立するようにした
 - desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
 
 ## 検証済み
@@ -110,6 +111,7 @@
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml tracing_directives -- --nocapture`
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml explicit_rust_log_keeps_target_specific_override -- --nocapture`
 - Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
+- `community_node_public_connectivity` scenario を ticket import なしの relay-only bootstrap regression として通した
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
