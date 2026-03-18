@@ -15,7 +15,9 @@ use iroh::address_lookup::{
 };
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey};
+use iroh::{
+    Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
+};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{GossipHint, TopicId};
@@ -1311,7 +1313,10 @@ pub async fn sync_endpoint_relay_config(
     }
     for relay_url in next.difference(&current) {
         endpoint
-            .insert_relay(relay_url.clone(), Arc::new(RelayConfig::from(relay_url.clone())))
+            .insert_relay(
+                relay_url.clone(),
+                Arc::new(RelayConfig::from(relay_url.clone())),
+            )
             .await;
     }
     Ok(())

@@ -327,8 +327,7 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
 
     let keys_a = generate_keys();
     let keys_b = generate_keys();
-    let (token_a_initial, _) =
-        authenticate(&client, &server.base_url, &keys_a, "peer-a-1").await?;
+    let (token_a_initial, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-1").await?;
     let (token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-2").await?;
     let (token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
 

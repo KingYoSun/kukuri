@@ -98,12 +98,12 @@ curl -fsS https://iroh-relay.kukuri.app/ping
 期待値:
 
 - `connectivity_urls` は `https://iroh-relay.kukuri.app`
-- desktop client 側は `Save Nodes -> Authenticate -> Accept -> app restart` の順で進める
+- desktop client 側は `Save Nodes -> Authenticate -> Accept` の順で進め、その session のまま relay-assisted path を使える
 - 公開 community-node path では `Peer Ticket` import は不要
 - `Authenticate` 直後の `connectivity urls: pending consent acceptance` は正常で、`Accept` 後に resolved される
-- `restart required: yes` が出たら、その session ではまだ connectivity assist URL が transport に入っていない
+- `Accept` 後に `restart required: no` のまま relay-assisted sync へ移るのが正常で、`yes` が出たら regression とみなす
 - discovery diagnostics では `Community Bootstrap Peers` が community-node 由来、`Configured Seed IDs` が local seed 設定、`Manual Ticket Peers` が手動 import を表す
-- Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> app restart -> post -> reply/thread -> blob sync` まで成功を確認済み
+- Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> post -> reply/thread -> blob sync` まで restart なしで成功を確認済み
 - relay-only public path でも `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob peer を含めて `connected` と `peer_count` を出す
 
 ## community-node deploy 順序
@@ -151,8 +151,8 @@ cargo xtask scenario community_node_multi_device_connectivity
 ```
 
 - `cn-test` は `/v1/auth/challenge`, `/v1/auth/verify`, `/v1/consents/status`, `/v1/consents`, `/v1/bootstrap/nodes` の contract を確認する。
-- `community_node_public_connectivity` scenario は `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
-- `community_node_multi_device_connectivity` scenario は same-author 2 desktop の `auth -> consent -> restart -> post -> reply/thread -> reconnect` を確認する。
+- `community_node_public_connectivity` scenario は `config -> auth -> consent -> post -> reply/thread -> live -> game -> reconnect` を 1 community-node stack + 2 desktops で確認する。
+- `community_node_multi_device_connectivity` scenario は same-author 2 desktop の `auth -> consent -> post -> reply/thread -> reconnect` を確認する。
 - crate test を直接叩く場合は `KUKURI_CN_RUN_INTEGRATION_TESTS=1` と `COMMUNITY_NODE_DATABASE_URL` を明示する。
 - 公開 community-node の手動確認では UI の peer source と peer count を見つつ、timeline / thread / attachment preview / blob media payload fetch の成否まで確認する。
 

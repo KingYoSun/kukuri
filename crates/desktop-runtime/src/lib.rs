@@ -21,15 +21,17 @@ use kukuri_cn_core::{
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
     build_auth_envelope_json, normalize_http_url,
 };
-use kukuri_core::{AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, ReplicaId, TopicId};
+use kukuri_core::{
+    AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, ReplicaId, TopicId,
+};
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
 };
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
-    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, HintStream,
-    HintTransport, IrohGossipTransport, PeerSnapshot, SeedPeer, Transport,
-    TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
+    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, HintStream, HintTransport,
+    IrohGossipTransport, PeerSnapshot, SeedPeer, Transport, TransportNetworkConfig,
+    TransportRelayConfig, parse_seed_peer,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -336,7 +338,12 @@ impl Transport for ReloadableTransport {
     ) -> Result<()> {
         self.current()
             .await
-            .configure_discovery(mode, env_locked, configured_seed_peers, bootstrap_seed_peers)
+            .configure_discovery(
+                mode,
+                env_locked,
+                configured_seed_peers,
+                bootstrap_seed_peers,
+            )
             .await
     }
 
@@ -386,7 +393,11 @@ impl DocsSync for ReloadableDocsSync {
         self.current().await.apply_doc_op(replica_id, op).await
     }
 
-    async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>> {
+    async fn query_replica(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+    ) -> Result<Vec<DocRecord>> {
         self.current().await.query_replica(replica_id, query).await
     }
 
@@ -1051,8 +1062,11 @@ impl DesktopRuntime {
 
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), self.iroh_stack.shutdown())
-            .await;
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            self.iroh_stack.shutdown(),
+        )
+        .await;
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.store.close()).await;
     }
 }
@@ -1178,7 +1192,11 @@ impl DesktopRuntime {
         let bootstrap_seed_peers =
             community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
         self.iroh_stack
-            .rebuild(&discovery_config, &bootstrap_seed_peers, relay_config.clone())
+            .rebuild(
+                &discovery_config,
+                &bootstrap_seed_peers,
+                relay_config.clone(),
+            )
             .await?;
         *self.active_connectivity_urls.lock().await = relay_config.iroh_relay_urls;
         Ok(())

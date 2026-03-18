@@ -49,12 +49,12 @@
 - `cn-core`, `cn-user-api`, `cn-iroh-relay`, `cn-cli` を root workspace の active scope とし、community-node server slice を Postgres + connectivity assist 前提で起動できるようにした
 - legacy community-node relay shim と runtime migration shim を active scope から除去し、desktop は reset 前提の current identity/runtime path だけを扱うようにした
 - active path の `nostr-sdk` 依存を除去し、core signing / desktop identity / community-node auth を protocol-native key path に切り替えた
-- desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, startup-only connectivity union を追加した
+- desktop-runtime に multi-node `community-node.json`, secure token fallback, auth/consent/metadata refresh, runtime connectivity rebuild を追加した
 - `docker-compose.community-node.yml` から `cn-postgres`, `cn-user-api`, `cn-iroh-relay` を起動できるようにした
 - `cn-user-api` の contract test を追加し、`cargo xtask cn-test` で Docker Compose の Postgres を自動起動して流せるようにした
-- `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> restart -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
+- `community_node_public_connectivity` scenario を追加し、1 community-node stack + 2 desktops の `config -> auth -> consent -> post -> reply/thread -> live -> game -> reconnect` を自動確認できるようにした
 - `community_node_multi_device_connectivity` scenario を追加し、same-author 2 desktop の endpoint-bound bootstrap で `post -> reply/thread -> reconnect` を自動確認できるようにした
-- GitHub Actions fast/nightly workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加した
+- GitHub Actions workflow に `cn-check`, `cn-test`, `community_node_public_connectivity` scenario を追加し、nightly では `community_node_multi_device_connectivity` も流すようにした
 - `cn-cli prepare`, `.env.community-node.example`, `cn-migrate` compose service, prepared-DB fail-fast 起動を追加し、community-node の deploy / backup / restore 手順を runbook に固定した
 - `cn-iroh-relay` に optional TLS/QUIC config を追加し、Cloudflare Tunnel の TCP path と WireGuard の `7842/udp` path を同時に扱えるようにした
 - `docker-compose.community-node.yml` と `.env.community-node.example` に host bind IP / iroh TLS / QUIC env を追加し、`api.kukuri.app` / `relay.kukuri.app` / `iroh-relay.kukuri.app` の公開 manual smoke 手順を runbook に反映した
@@ -115,10 +115,11 @@
 - `cargo test -p kukuri-desktop-runtime community_node_config_preserves_public_kukuri_urls`
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml tracing_directives -- --nocapture`
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml explicit_rust_log_keeps_target_specific_override -- --nocapture`
-- Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> restart -> post -> reply/thread -> blob sync` が成功
+- Linux 実機 2 台で公開 community-node (`https://api.kukuri.app`, `https://iroh-relay.kukuri.app`) を使った `Save Nodes -> Authenticate -> Accept -> post -> reply/thread -> blob sync` が restart なしで成功
 - `community_node_public_connectivity` scenario を ticket import なしの relay-only bootstrap regression として通した
 - `community_node_multi_device_connectivity` scenario を same-author multi-endpoint bootstrap regression として通した
 - Linux 実機 2 台で relay-only community-node に対し、一度も ticket import せずに peer 間接続、`reply/thread`、live/game 伝播まで成立することを確認
+- `community_node_public_connectivity` / `community_node_multi_device_connectivity` を no-restart consent path の regression として通した
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
