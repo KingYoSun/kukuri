@@ -67,6 +67,9 @@ jobs:
       - name: E2E smoke
         run: cargo xtask e2e-smoke
 
+      - name: Community-node connectivity scenario
+        run: cargo xtask scenario community_node_public_connectivity
+
       - name: Upload kukuri artifacts
         if: always()
         uses: actions/upload-artifact@v4

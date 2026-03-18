@@ -149,12 +149,31 @@ function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): string {
     return 'accept required policies to resolve connectivity urls';
   }
   if (status.restart_required) {
-    return 'restart the app to apply connectivity urls';
+    return 'unexpected restart requirement; refresh metadata or restart only as fallback';
   }
   if (!status.resolved_urls) {
     return 'refresh metadata if connectivity urls stay unresolved';
   }
   return 'connectivity urls active on current session';
+}
+
+function communityNodeSessionActivationLabel(status?: CommunityNodeNodeStatus): string {
+  if (!status) {
+    return 'unknown';
+  }
+  if (status.restart_required) {
+    return 'restart required (unexpected)';
+  }
+  if (status.resolved_urls?.connectivity_urls?.length) {
+    return 'active on current session';
+  }
+  if (status.consent_state && !status.consent_state.all_required_accepted) {
+    return 'waiting for consent acceptance';
+  }
+  if (status.auth_state.authenticated) {
+    return 'awaiting connectivity metadata';
+  }
+  return 'not authenticated';
 }
 
 function mergeCommunityNodeStatus(
@@ -1724,7 +1743,7 @@ export function App({ api = runtimeApi }: AppProps) {
                     connectivity urls:{' '}
                     {communityNodeConnectivityUrlsLabel(status)}
                   </p>
-                  <p>restart required: {status?.restart_required ? 'yes' : 'no'}</p>
+                  <p>session activation: {communityNodeSessionActivationLabel(status)}</p>
                   <p>next step: {communityNodeNextStepLabel(status)}</p>
                   <div className='discovery-actions'>
                     <button

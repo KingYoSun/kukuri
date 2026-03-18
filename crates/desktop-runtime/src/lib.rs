@@ -50,6 +50,7 @@ const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
+const IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -281,6 +282,7 @@ pub struct DesktopRuntime {
     app_service: AppService,
     author_keys: Arc<KukuriKeys>,
     db_path: PathBuf,
+    identity_mode: IdentityStorageMode,
     store: Arc<SqliteStore>,
     iroh_stack: SharedIrohStack,
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
@@ -551,6 +553,7 @@ impl DesktopRuntime {
             app_service,
             author_keys,
             db_path,
+            identity_mode,
             store,
             iroh_stack,
             discovery_config: Arc::new(Mutex::new(discovery_config)),
@@ -873,12 +876,7 @@ impl DesktopRuntime {
             access_token: verify.access_token,
             expires_at: verify.expires_at,
         };
-        persist_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            base_url.as_str(),
-            &token,
-        )?;
+        persist_community_node_token(&self.db_path, self.identity_mode, base_url.as_str(), &token)?;
         let node = self.require_community_node(base_url.as_str()).await?;
         let consent_state = client
             .get(format!("{}/v1/consents/status", base_url))
@@ -912,6 +910,7 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         delete_optional_secret(
             &self.db_path,
+            self.identity_mode,
             COMMUNITY_NODE_TOKEN_PURPOSE,
             base_url.as_str(),
         )?;
@@ -938,12 +937,9 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
         let client = community_node_http_client()?;
-        let token = load_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            base_url.as_str(),
-        )?
-        .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
+                .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let consent_url = format!("{}/v1/consents/status", base_url);
         let response = client
             .get(consent_url)
@@ -967,12 +963,9 @@ impl DesktopRuntime {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
         let client = community_node_http_client()?;
-        let token = load_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            base_url.as_str(),
-        )?
-        .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
+                .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let consent_url = format!("{}/v1/consents", base_url);
         let response = client
             .post(consent_url)
@@ -1014,12 +1007,9 @@ impl DesktopRuntime {
             bail!("community node `{base_url}` is not configured");
         };
         let client = community_node_http_client()?;
-        let token = load_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            base_url.as_str(),
-        )?
-        .ok_or_else(|| anyhow!("community node authentication is required"))?;
+        let token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
+                .ok_or_else(|| anyhow!("community node authentication is required"))?;
         let bootstrap_url = format!("{}/v1/bootstrap/nodes", base_url);
         let response = client
             .get(bootstrap_url)
@@ -1074,11 +1064,8 @@ impl DesktopRuntime {
 impl DesktopRuntime {
     async fn refresh_community_node_registration_if_due(&self, base_url: &str) -> Result<()> {
         let base_url = normalize_http_url(base_url)?;
-        let token = load_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            base_url.as_str(),
-        )?;
+        let token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?;
         let Some(token) = token else {
             return Ok(());
         };
@@ -1154,11 +1141,8 @@ impl DesktopRuntime {
         consent_state: Option<CommunityNodeConsentStatus>,
         last_error: Option<String>,
     ) -> Result<CommunityNodeNodeStatus> {
-        let token = load_community_node_token(
-            &self.db_path,
-            IdentityStorageMode::from_env(),
-            node.base_url.as_str(),
-        )?;
+        let token =
+            load_community_node_token(&self.db_path, self.identity_mode, node.base_url.as_str())?;
         let auth_state = match token {
             Some(token) if token.expires_at > Utc::now().timestamp() => CommunityNodeAuthState {
                 authenticated: true,
@@ -1578,7 +1562,11 @@ impl SharedIrohStack {
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
         let mut current = self.current.lock().await;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS),
+            current.shutdown(),
+        )
+        .await;
         let next = BoundIrohStack::new(
             &self.root,
             self.network_config.clone(),
@@ -3083,5 +3071,87 @@ mod tests {
                 .seed_peers,
             vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")]
         );
+    }
+
+    #[tokio::test]
+    async fn community_node_status_does_not_require_restart_when_connectivity_is_active() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("community-status.db");
+        let test_timeout = Duration::from_secs(15);
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+        let base_url = "https://community.example.com".to_string();
+        let connectivity_url = "http://127.0.0.1:9".to_string();
+        let resolved_urls = CommunityNodeResolvedUrls::new(
+            base_url.clone(),
+            vec![connectivity_url.clone()],
+            Vec::new(),
+        )
+        .expect("resolved urls");
+        let node = CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            resolved_urls: Some(resolved_urls.clone()),
+        };
+        persist_community_node_token(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            base_url.as_str(),
+            &StoredCommunityNodeToken {
+                access_token: "fake-token".to_string(),
+                expires_at: Utc::now().timestamp() + 3600,
+            },
+        )
+        .expect("persist community-node token");
+        *runtime.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![node.clone()],
+        };
+        *runtime.active_connectivity_urls.lock().await = vec![connectivity_url.clone()];
+
+        let status = timeout(
+            test_timeout,
+            runtime.community_node_status(
+                node,
+                Some(CommunityNodeConsentStatus {
+                    all_required_accepted: true,
+                    items: vec![kukuri_cn_core::CommunityNodeConsentItem {
+                        policy_slug: "community-basic".to_string(),
+                        policy_version: 1,
+                        title: "Community Basic".to_string(),
+                        required: true,
+                        accepted_at: Some(Utc::now().timestamp()),
+                    }],
+                }),
+                None,
+            ),
+        )
+        .await
+        .expect("community-node status timeout")
+        .expect("community-node status");
+        assert!(status.auth_state.authenticated);
+        assert!(
+            status
+                .consent_state
+                .as_ref()
+                .expect("consent state")
+                .all_required_accepted
+        );
+        assert_eq!(
+            status
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .connectivity_urls,
+            vec![connectivity_url]
+        );
+        assert!(!status.restart_required);
+
+        timeout(test_timeout, runtime.shutdown())
+            .await
+            .expect("runtime shutdown timeout");
     }
 }

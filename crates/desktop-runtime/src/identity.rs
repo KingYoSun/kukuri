@@ -54,8 +54,13 @@ pub(crate) fn persist_optional_secret(
     persist_optional_secret_with_keyring(db_path, mode, purpose, key, secret, &SystemKeyringStore)
 }
 
-pub(crate) fn delete_optional_secret(db_path: &Path, purpose: &str, key: &str) -> Result<()> {
-    delete_optional_secret_with_keyring(db_path, purpose, key, &SystemKeyringStore)
+pub(crate) fn delete_optional_secret(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    purpose: &str,
+    key: &str,
+) -> Result<()> {
+    delete_optional_secret_with_keyring(db_path, mode, purpose, key, &SystemKeyringStore)
 }
 
 fn load_or_create_keys_with_keyring(
@@ -175,12 +180,15 @@ fn persist_optional_secret_with_keyring(
 
 fn delete_optional_secret_with_keyring(
     db_path: &Path,
+    mode: IdentityStorageMode,
     purpose: &str,
     key: &str,
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
     let account = optional_secret_account(db_path, purpose, key);
-    keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+    if mode == IdentityStorageMode::Auto {
+        keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+    }
     delete_file_if_exists(optional_secret_file_path(db_path, purpose, key).as_path())?;
     Ok(())
 }

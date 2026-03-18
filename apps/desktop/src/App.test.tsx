@@ -364,6 +364,7 @@ function createMockApi(options?: {
         public_base_url: baseUrl,
         connectivity_urls: [baseUrl],
       };
+      syncStatus.discovery.connect_mode = 'direct_or_relay';
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
           ? {
@@ -373,7 +374,7 @@ function createMockApi(options?: {
                 items: [],
               },
               resolved_urls: resolvedUrls,
-              restart_required: true,
+              restart_required: false,
             }
           : status
       );
@@ -390,6 +391,7 @@ function createMockApi(options?: {
       return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
     async refreshCommunityNodeMetadata(baseUrl) {
+      syncStatus.discovery.connect_mode = 'direct_or_relay';
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
           ? {
@@ -398,6 +400,7 @@ function createMockApi(options?: {
                 public_base_url: baseUrl,
                 connectivity_urls: [baseUrl],
               },
+              restart_required: false,
             }
           : status
       );
@@ -1440,7 +1443,7 @@ test('video card falls back to poster preview when playback is unsupported on th
   expect(screen.getAllByText('unsupported on this client').length).toBeGreaterThan(0);
 });
 
-test('community node panel shows consent then restart guidance for relay activation', async () => {
+test('community node panel activates relay connectivity on the current session after consent', async () => {
   const api = createMockApi();
   const user = userEvent.setup();
 
@@ -1463,6 +1466,9 @@ test('community node panel shows consent then restart guidance for relay activat
     expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
       'accept required policies to resolve connectivity urls'
     );
+    expect(within(blockElement).getByText(/session activation:/i)).toHaveTextContent(
+      'waiting for consent acceptance'
+    );
   });
 
   await user.click(within(blockElement).getByRole('button', { name: 'Accept' }));
@@ -1471,9 +1477,11 @@ test('community node panel shows consent then restart guidance for relay activat
     expect(within(blockElement).getByText(/connectivity urls:/i)).toHaveTextContent(
       'https://api.kukuri.app'
     );
-    expect(within(blockElement).getByText(/restart required:/i)).toHaveTextContent('yes');
+    expect(within(blockElement).getByText(/session activation:/i)).toHaveTextContent(
+      'active on current session'
+    );
     expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
-      'restart the app to apply connectivity urls'
+      'connectivity urls active on current session'
     );
   });
 });
