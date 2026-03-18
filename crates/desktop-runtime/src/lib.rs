@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, bail};
+use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
@@ -14,22 +15,25 @@ use kukuri_app_api::{
     GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
     UpdateGameRoomInput,
 };
-use kukuri_blob_service::{BlobService, IrohBlobService};
+use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
     build_auth_envelope_json, normalize_http_url,
 };
-use kukuri_core::{AssetRole, GameRoomStatus, KukuriKeys};
-use kukuri_docs_sync::{DocsSync, IrohDocsNode, IrohDocsSync};
+use kukuri_core::{AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, ReplicaId, TopicId};
+use kukuri_docs_sync::{
+    DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
+};
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
-    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, IrohGossipTransport, SeedPeer, Transport,
+    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, HintStream,
+    HintTransport, IrohGossipTransport, PeerSnapshot, SeedPeer, Transport,
     TransportNetworkConfig, TransportRelayConfig, parse_seed_peer,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::identity::{
     IdentityStorageMode, delete_optional_secret, load_optional_secret, load_or_create_keys,
@@ -249,6 +253,28 @@ struct StoredCommunityNodeToken {
     expires_at: i64,
 }
 
+struct BoundIrohStack {
+    node: Arc<IrohDocsNode>,
+    transport: Arc<IrohGossipTransport>,
+    docs_sync: Arc<IrohDocsSync>,
+    blob_service: Arc<IrohBlobService>,
+}
+
+#[derive(Clone)]
+struct ReloadableTransport {
+    inner: Arc<RwLock<Arc<IrohGossipTransport>>>,
+}
+
+#[derive(Clone)]
+struct ReloadableDocsSync {
+    inner: Arc<RwLock<Arc<IrohDocsSync>>>,
+}
+
+#[derive(Clone)]
+struct ReloadableBlobService {
+    inner: Arc<RwLock<Arc<IrohBlobService>>>,
+}
+
 pub struct DesktopRuntime {
     app_service: AppService,
     author_keys: Arc<KukuriKeys>,
@@ -258,14 +284,178 @@ pub struct DesktopRuntime {
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
     community_node_config: Arc<Mutex<CommunityNodeConfig>>,
     community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
-    startup_connectivity_urls: Vec<String>,
+    active_connectivity_urls: Arc<Mutex<Vec<String>>>,
 }
 
 struct SharedIrohStack {
-    _node: Arc<IrohDocsNode>,
-    transport: Arc<IrohGossipTransport>,
-    docs_sync: Arc<IrohDocsSync>,
-    blob_service: Arc<IrohBlobService>,
+    root: PathBuf,
+    network_config: TransportNetworkConfig,
+    dht_options: DhtDiscoveryOptions,
+    current: Mutex<BoundIrohStack>,
+    transport: Arc<ReloadableTransport>,
+    docs_sync: Arc<ReloadableDocsSync>,
+    blob_service: Arc<ReloadableBlobService>,
+}
+
+impl ReloadableTransport {
+    fn new(inner: Arc<IrohGossipTransport>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(inner)),
+        }
+    }
+
+    async fn current(&self) -> Arc<IrohGossipTransport> {
+        self.inner.read().await.clone()
+    }
+
+    async fn swap(&self, inner: Arc<IrohGossipTransport>) {
+        *self.inner.write().await = inner;
+    }
+}
+
+#[async_trait]
+impl Transport for ReloadableTransport {
+    async fn peers(&self) -> Result<PeerSnapshot> {
+        self.current().await.peers().await
+    }
+
+    async fn export_ticket(&self) -> Result<Option<String>> {
+        self.current().await.export_ticket().await
+    }
+
+    async fn import_ticket(&self, ticket: &str) -> Result<()> {
+        self.current().await.import_ticket(ticket).await
+    }
+
+    async fn configure_discovery(
+        &self,
+        mode: DiscoveryMode,
+        env_locked: bool,
+        configured_seed_peers: Vec<SeedPeer>,
+        bootstrap_seed_peers: Vec<SeedPeer>,
+    ) -> Result<()> {
+        self.current()
+            .await
+            .configure_discovery(mode, env_locked, configured_seed_peers, bootstrap_seed_peers)
+            .await
+    }
+
+    async fn discovery(&self) -> Result<DiscoverySnapshot> {
+        self.current().await.discovery().await
+    }
+}
+
+#[async_trait]
+impl HintTransport for ReloadableTransport {
+    async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+        self.current().await.subscribe_hints(topic).await
+    }
+
+    async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
+        self.current().await.unsubscribe_hints(topic).await
+    }
+
+    async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
+        self.current().await.publish_hint(topic, hint).await
+    }
+}
+
+impl ReloadableDocsSync {
+    fn new(inner: Arc<IrohDocsSync>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(inner)),
+        }
+    }
+
+    async fn current(&self) -> Arc<IrohDocsSync> {
+        self.inner.read().await.clone()
+    }
+
+    async fn swap(&self, inner: Arc<IrohDocsSync>) {
+        *self.inner.write().await = inner;
+    }
+}
+
+#[async_trait]
+impl DocsSync for ReloadableDocsSync {
+    async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.current().await.open_replica(replica_id).await
+    }
+
+    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
+        self.current().await.apply_doc_op(replica_id, op).await
+    }
+
+    async fn query_replica(&self, replica_id: &ReplicaId, query: DocQuery) -> Result<Vec<DocRecord>> {
+        self.current().await.query_replica(replica_id, query).await
+    }
+
+    async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream> {
+        self.current().await.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.current().await.import_peer_ticket(ticket).await
+    }
+
+    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        self.current().await.set_seed_peers(peers).await
+    }
+
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        self.current().await.assist_peer_ids().await
+    }
+}
+
+impl ReloadableBlobService {
+    fn new(inner: Arc<IrohBlobService>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(inner)),
+        }
+    }
+
+    async fn current(&self) -> Arc<IrohBlobService> {
+        self.inner.read().await.clone()
+    }
+
+    async fn swap(&self, inner: Arc<IrohBlobService>) {
+        *self.inner.write().await = inner;
+    }
+}
+
+#[async_trait]
+impl BlobService for ReloadableBlobService {
+    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+        self.current().await.put_blob(data, mime).await
+    }
+
+    async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        self.current().await.fetch_blob(hash).await
+    }
+
+    async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.current().await.pin_blob(hash).await
+    }
+
+    async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        self.current().await.blob_status(hash).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.current().await.import_peer_ticket(ticket).await
+    }
+
+    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
+        self.current().await.learn_peer(endpoint_id).await
+    }
+
+    async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        self.current().await.set_seed_peers(peers).await
+    }
+
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        self.current().await.assist_peer_ids().await
+    }
 }
 
 impl DesktopRuntime {
@@ -355,7 +545,7 @@ impl DesktopRuntime {
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
-            startup_connectivity_urls: relay_config.iroh_relay_urls,
+            active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
         })
     }
 
@@ -587,6 +777,7 @@ impl DesktopRuntime {
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
+        self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(next_config)
     }
@@ -602,6 +793,7 @@ impl DesktopRuntime {
         remove_community_node_config(&self.db_path)?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
         self.community_node_heartbeat_deadlines.lock().await.clear();
+        self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(())
     }
@@ -851,6 +1043,7 @@ impl DesktopRuntime {
         let normalized = normalize_community_node_config(config)?;
         save_community_node_config(&self.db_path, &normalized)?;
         *self.community_node_config.lock().await = normalized.clone();
+        self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         let node = normalized.nodes[index].clone();
         self.community_node_status(node, None, None).await
@@ -858,8 +1051,9 @@ impl DesktopRuntime {
 
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
-        self.iroh_stack.shutdown().await;
-        self.store.close().await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), self.iroh_stack.shutdown())
+            .await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.store.close()).await;
     }
 }
 
@@ -972,8 +1166,22 @@ impl DesktopRuntime {
             consent_state,
             resolved_urls: node.resolved_urls,
             last_error,
-            restart_required: current_connectivity_urls != self.startup_connectivity_urls,
+            restart_required: current_connectivity_urls
+                != *self.active_connectivity_urls.lock().await,
         })
+    }
+
+    async fn apply_runtime_connectivity_assist(&self) -> Result<()> {
+        let community_node_config = self.community_node_config.lock().await.clone();
+        let relay_config = relay_config_from_community_node_config(&community_node_config);
+        let discovery_config = self.discovery_config.lock().await.clone();
+        let bootstrap_seed_peers =
+            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
+        self.iroh_stack
+            .rebuild(&discovery_config, &bootstrap_seed_peers, relay_config.clone())
+            .await?;
+        *self.active_connectivity_urls.lock().await = relay_config.iroh_relay_urls;
+        Ok(())
     }
 
     async fn apply_effective_seed_peers(&self) -> Result<()> {
@@ -1322,6 +1530,73 @@ impl SharedIrohStack {
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
+        let current = BoundIrohStack::new(
+            root,
+            network_config.clone(),
+            discovery_config,
+            bootstrap_seed_peers,
+            dht_options.clone(),
+            relay_config,
+        )
+        .await?;
+        let transport = Arc::new(ReloadableTransport::new(current.transport.clone()));
+        let docs_sync = Arc::new(ReloadableDocsSync::new(current.docs_sync.clone()));
+        let blob_service = Arc::new(ReloadableBlobService::new(current.blob_service.clone()));
+        Ok(Self {
+            root: root.to_path_buf(),
+            network_config,
+            dht_options,
+            current: Mutex::new(current),
+            transport,
+            docs_sync,
+            blob_service,
+        })
+    }
+
+    async fn rebuild(
+        &self,
+        discovery_config: &DiscoveryConfig,
+        bootstrap_seed_peers: &[SeedPeer],
+        relay_config: TransportRelayConfig,
+    ) -> Result<()> {
+        let mut current = self.current.lock().await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+        let next = BoundIrohStack::new(
+            &self.root,
+            self.network_config.clone(),
+            discovery_config,
+            bootstrap_seed_peers,
+            self.dht_options.clone(),
+            relay_config,
+        )
+        .await?;
+        self.transport.swap(next.transport.clone()).await;
+        self.docs_sync.swap(next.docs_sync.clone()).await;
+        self.blob_service.swap(next.blob_service.clone()).await;
+        *current = next;
+        Ok(())
+    }
+
+    async fn shutdown(&self) {
+        let current = self.current.lock().await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+    }
+
+    #[cfg(test)]
+    async fn endpoint(&self) -> iroh::Endpoint {
+        self.current.lock().await.node.endpoint().clone()
+    }
+}
+
+impl BoundIrohStack {
+    async fn new(
+        root: &Path,
+        network_config: TransportNetworkConfig,
+        discovery_config: &DiscoveryConfig,
+        bootstrap_seed_peers: &[SeedPeer],
+        dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
+    ) -> Result<Self> {
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             network_config.clone(),
@@ -1352,7 +1627,7 @@ impl SharedIrohStack {
             .await?;
         blob_service.set_seed_peers(effective_seed_peers).await?;
         Ok(Self {
-            _node: node,
+            node,
             transport,
             docs_sync,
             blob_service,
@@ -1360,7 +1635,7 @@ impl SharedIrohStack {
     }
 
     async fn shutdown(&self) {
-        let _ = self._node.clone().shutdown().await;
+        let _ = self.node.clone().shutdown().await;
     }
 }
 
@@ -1427,7 +1702,7 @@ mod tests {
     }
 
     async fn publish_runtime_endpoint_to_testnet(runtime: &DesktopRuntime, testnet: &Testnet) {
-        let endpoint = runtime.iroh_stack._node.endpoint();
+        let endpoint = runtime.iroh_stack.endpoint().await;
         let client = dht_test_client(testnet);
         let public_key =
             pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");

@@ -131,6 +131,7 @@ impl IrohBlobService {
 
     async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
         let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
+        let relay_urls = self.node.relay_urls().await;
         let mut endpoint_addr = self
             .node
             .endpoint()
@@ -143,7 +144,7 @@ impl IrohBlobService {
                 )
             })
             .unwrap_or_else(|| iroh::EndpointAddr::new(endpoint_id));
-        for relay_url in self.node.relay_urls() {
+        for relay_url in relay_urls {
             endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
         }
         if !endpoint_addr.is_empty() {
@@ -327,9 +328,10 @@ impl BlobService for IrohBlobService {
     }
 
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        let relay_urls = self.node.relay_urls().await;
         let mut parsed = BTreeMap::new();
         for peer in peers {
-            let endpoint_addr = peer.to_endpoint_addr_with_relays(self.node.relay_urls())?;
+            let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.node
                     .discovery()

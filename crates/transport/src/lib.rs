@@ -15,7 +15,7 @@ use iroh::address_lookup::{
 };
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{GossipHint, TopicId};
@@ -591,7 +591,7 @@ pub struct IrohGossipTransport {
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
     connect_mode: Arc<Mutex<ConnectMode>>,
-    relay_urls: Vec<RelayUrl>,
+    relay_urls: Mutex<Vec<RelayUrl>>,
     env_locked: Arc<Mutex<bool>>,
 }
 
@@ -636,7 +636,7 @@ impl IrohGossipTransport {
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
-            relay_urls,
+            relay_urls: Mutex::new(relay_urls),
             env_locked: Arc::new(Mutex::new(false)),
         })
     }
@@ -673,7 +673,7 @@ impl IrohGossipTransport {
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
-            relay_urls,
+            relay_urls: Mutex::new(relay_urls),
             env_locked: Arc::new(Mutex::new(false)),
         })
     }
@@ -692,6 +692,15 @@ impl IrohGossipTransport {
             drop(state.sender);
         }
         self.subscribed_topics.lock().await.remove(topic);
+    }
+
+    pub async fn update_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
+        let relay_config = relay_config.normalized();
+        let relay_urls = relay_config.parsed_relay_urls()?;
+        *self.connect_mode.lock().await = relay_config.connect_mode();
+        *self.relay_urls.lock().await = relay_urls;
+        *self.last_error.lock().await = None;
+        Ok(())
     }
 
     async fn bootstrap_peers(&self) -> Vec<EndpointAddr> {
@@ -916,7 +925,7 @@ async fn bind_endpoint_with_options(
         builder = builder.secret_key(secret_key);
     }
     #[cfg(test)]
-    if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
+    {
         builder = builder.insecure_skip_relay_cert_verify(true);
     }
     builder = apply_bind(builder, bind_addr)?;
@@ -1178,9 +1187,10 @@ impl Transport for IrohGossipTransport {
         configured_seed_peers: Vec<SeedPeer>,
         bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
+        let relay_urls = self.relay_urls.lock().await.clone();
         let mut configured = BTreeMap::new();
         for seed in configured_seed_peers {
-            let endpoint_addr = seed.to_endpoint_addr_with_relays(&self.relay_urls)?;
+            let endpoint_addr = seed.to_endpoint_addr_with_relays(&relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.discovery.add_endpoint_info(endpoint_addr.clone());
             }
@@ -1188,7 +1198,7 @@ impl Transport for IrohGossipTransport {
         }
         let mut bootstrap = BTreeMap::new();
         for seed in bootstrap_seed_peers {
-            let endpoint_addr = seed.to_endpoint_addr_with_relays(&self.relay_urls)?;
+            let endpoint_addr = seed.to_endpoint_addr_with_relays(&relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.discovery.add_endpoint_info(endpoint_addr.clone());
             }
@@ -1287,6 +1297,24 @@ pub fn build_endpoint_builder(
         builder = builder.address_lookup(dht_builder);
     }
     Ok(builder)
+}
+
+pub async fn sync_endpoint_relay_config(
+    endpoint: &Endpoint,
+    current: &[RelayUrl],
+    next: &[RelayUrl],
+) -> Result<()> {
+    let current = current.iter().cloned().collect::<BTreeSet<_>>();
+    let next = next.iter().cloned().collect::<BTreeSet<_>>();
+    for relay_url in current.difference(&next) {
+        endpoint.remove_relay(relay_url).await;
+    }
+    for relay_url in next.difference(&current) {
+        endpoint
+            .insert_relay(relay_url.clone(), Arc::new(RelayConfig::from(relay_url.clone())))
+            .await;
+    }
+    Ok(())
 }
 
 fn apply_bind(builder: EndpointBuilder, bind_addr: SocketAddr) -> Result<EndpointBuilder> {

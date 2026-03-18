@@ -681,61 +681,53 @@ async fn run_community_node_connectivity(
                 .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
-        assert!(accepted_a.restart_required);
-        assert!(accepted_b.restart_required);
+        assert!(!accepted_a.restart_required);
+        assert!(!accepted_b.restart_required);
         push_named_step(&mut steps, "accept_consents", started_at);
 
         let started_at = Instant::now();
-        runtime_a.shutdown().await;
-        runtime_b.shutdown().await;
-        let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
-            .await
-            .context("failed to restart community-node desktop a")?;
-        let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
-            .await
-            .context("failed to restart community-node desktop b")?;
-        let restarted_a = runtime_a
+        let refreshed_a = runtime_a
             .get_community_node_statuses()
             .await
-            .context("failed to load community-node status for desktop a after restart")?
+            .context("failed to load community-node status for desktop a after consent")?
             .into_iter()
             .next()
-            .context("missing community-node status for desktop a after restart")?;
-        let restarted_b = runtime_b
+            .context("missing community-node status for desktop a after consent")?;
+        let refreshed_b = runtime_b
             .get_community_node_statuses()
             .await
-            .context("failed to load community-node status for desktop b after restart")?
+            .context("failed to load community-node status for desktop b after consent")?
             .into_iter()
             .next()
-            .context("missing community-node status for desktop b after restart")?;
-        assert!(restarted_a.auth_state.authenticated);
-        assert!(restarted_b.auth_state.authenticated);
-        assert!(!restarted_a.restart_required);
-        assert!(!restarted_b.restart_required);
+            .context("missing community-node status for desktop b after consent")?;
+        assert!(refreshed_a.auth_state.authenticated);
+        assert!(refreshed_b.auth_state.authenticated);
+        assert!(!refreshed_a.restart_required);
+        assert!(!refreshed_b.restart_required);
         assert_eq!(
-            restarted_a
+            refreshed_a
                 .resolved_urls
                 .as_ref()
-                .expect("resolved urls a after restart")
+                .expect("resolved urls a after consent")
                 .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         assert_eq!(
-            restarted_b
+            refreshed_b
                 .resolved_urls
                 .as_ref()
-                .expect("resolved urls b after restart")
+                .expect("resolved urls b after consent")
                 .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
         let sync_a = runtime_a
             .get_sync_status()
             .await
-            .context("failed to load sync status for desktop a after restart")?;
+            .context("failed to load sync status for desktop a after consent")?;
         let sync_b = runtime_b
             .get_sync_status()
             .await
-            .context("failed to load sync status for desktop b after restart")?;
+            .context("failed to load sync status for desktop b after consent")?;
         match identity_mode {
             CommunityNodeIdentityMode::DistinctUsers => {
                 assert_ne!(sync_a.local_author_pubkey, sync_b.local_author_pubkey);
@@ -746,7 +738,7 @@ async fn run_community_node_connectivity(
         }
         assert_eq!(sync_a.discovery.connect_mode, ConnectMode::DirectOrRelay);
         assert_eq!(sync_b.discovery.connect_mode, ConnectMode::DirectOrRelay);
-        push_named_step(&mut steps, "restart_desktops", started_at);
+        push_named_step(&mut steps, "refresh_connectivity", started_at);
 
         let topic = scenario.fixtures.topic.as_str();
         let started_at = Instant::now();
@@ -892,7 +884,9 @@ async fn run_community_node_connectivity(
         }
 
         let started_at = Instant::now();
-        runtime_b.shutdown().await;
+        shutdown_runtime(runtime_b, "desktop b reconnect pre-shutdown")
+            .await
+            .context("community-node reconnect shutdown timed out")?;
         let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
@@ -926,8 +920,12 @@ async fn run_community_node_connectivity(
         } else {
             None
         };
-        runtime_a.shutdown().await;
-        runtime_b.shutdown().await;
+        shutdown_runtime(runtime_a, "desktop a final shutdown")
+            .await
+            .context("community-node desktop a final shutdown timed out")?;
+        shutdown_runtime(runtime_b, "desktop b final shutdown")
+            .await
+            .context("community-node desktop b final shutdown timed out")?;
         push_named_step(&mut steps, "reconnect", started_at);
 
         let result = HarnessResult {
@@ -953,6 +951,13 @@ async fn run_community_node_connectivity(
             "failed to tear down community-node stack after scenario error: {shutdown_error:#}"
         ))),
     }
+}
+
+async fn shutdown_runtime(runtime: DesktopRuntime, label: &str) -> Result<()> {
+    timeout(Duration::from_secs(15), runtime.shutdown())
+        .await
+        .with_context(|| format!("timed out waiting for {label}"))?;
+    Ok(())
 }
 
 fn write_result_artifact(_root: &Path, artifacts_dir: &Path, result: &HarnessResult) -> Result<()> {

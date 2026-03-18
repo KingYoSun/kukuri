@@ -3,13 +3,14 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, RelayUrl};
+use iroh::{Endpoint, EndpointAddr, RelayUrl, Watcher};
 use iroh_blobs::api::Store as BlobStore;
 use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore};
 use iroh_docs::api::{Doc, DocsApi};
@@ -20,10 +21,12 @@ use kukuri_core::{ReplicaId, blob_hash};
 use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
     build_endpoint_builder, parse_endpoint_ticket, prepare_endpoint_for_discovery,
+    sync_endpoint_relay_config,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 
@@ -93,7 +96,7 @@ pub struct IrohDocsNode {
     endpoint: Endpoint,
     gossip: Gossip,
     discovery: Arc<MemoryLookup>,
-    relay_urls: Vec<RelayUrl>,
+    relay_urls: Mutex<Vec<RelayUrl>>,
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
@@ -180,6 +183,10 @@ impl IrohDocsNode {
             Some(&dht_options),
             &relay_config,
         )?;
+        #[cfg(test)]
+        {
+            endpoint_builder = endpoint_builder.insecure_skip_relay_cert_verify(true);
+        }
         if let Some(secret_key) = endpoint_secret {
             endpoint_builder = endpoint_builder.secret_key(secret_key);
         }
@@ -219,7 +226,7 @@ impl IrohDocsNode {
             endpoint,
             gossip,
             discovery,
-            relay_urls,
+            relay_urls: Mutex::new(relay_urls),
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
@@ -239,8 +246,39 @@ impl IrohDocsNode {
         self.discovery.clone()
     }
 
-    pub fn relay_urls(&self) -> &[RelayUrl] {
-        &self.relay_urls
+    pub async fn relay_urls(&self) -> Vec<RelayUrl> {
+        self.relay_urls.lock().await.clone()
+    }
+
+    pub async fn apply_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
+        let relay_config = relay_config.normalized();
+        let next_relay_urls = relay_config.parsed_relay_urls()?;
+        let current_relay_urls = self.relay_urls.lock().await.clone();
+        sync_endpoint_relay_config(&self.endpoint, &current_relay_urls, &next_relay_urls).await?;
+        if !next_relay_urls.is_empty() {
+            let mut addr_watcher = self.endpoint.watch_addr();
+            let expected_relays = next_relay_urls.iter().cloned().collect::<BTreeSet<_>>();
+            let relay_ready = |addr: &EndpointAddr| {
+                addr.relay_urls()
+                    .any(|relay_url| expected_relays.contains(relay_url))
+            };
+            if !relay_ready(&addr_watcher.get()) {
+                timeout(Duration::from_secs(10), async move {
+                    let mut stream = addr_watcher.stream();
+                    while let Some(addr) = stream.next().await {
+                        if relay_ready(&addr) {
+                            return Ok::<(), anyhow::Error>(());
+                        }
+                    }
+                    bail!("relay address watcher ended before any configured relay became active")
+                })
+                .await
+                .context("timed out waiting for live relay connectivity")??;
+            }
+        }
+        *self.relay_urls.lock().await = next_relay_urls;
+        self.discovery.add_endpoint_info(self.endpoint.addr());
+        Ok(())
     }
 
     pub fn docs(&self) -> &DocsApi {
@@ -751,9 +789,10 @@ impl DocsSync for IrohDocsSync {
     }
 
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
+        let relay_urls = self.node.relay_urls().await;
         let mut parsed = BTreeMap::new();
         for peer in peers {
-            let endpoint_addr = peer.to_endpoint_addr_with_relays(self.node.relay_urls())?;
+            let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
             if !endpoint_addr.is_empty() {
                 self.node
                     .discovery()
