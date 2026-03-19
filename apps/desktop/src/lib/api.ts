@@ -5,6 +5,15 @@ export type TimelineCursor = {
   object_id: string;
 };
 
+export type ChannelRef =
+  | { kind: 'public' }
+  | { kind: 'private_channel'; channel_id: string };
+
+export type TimelineScope =
+  | { kind: 'public' }
+  | { kind: 'all_joined' }
+  | { kind: 'channel'; channel_id: string };
+
 export type PostView = {
   object_id: string;
   envelope_id: string;
@@ -22,6 +31,8 @@ export type PostView = {
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+  channel_id?: string | null;
+  audience_label: string;
 };
 
 export type Profile = {
@@ -192,6 +203,8 @@ export type LiveSessionView = {
   ended_at?: number | null;
   viewer_count: number;
   joined_by_me: boolean;
+  channel_id?: string | null;
+  audience_label: string;
 };
 
 export type GameRoomStatus = 'Waiting' | 'Running' | 'Paused' | 'Ended';
@@ -211,6 +224,24 @@ export type GameRoomView = {
   phase_label?: string | null;
   scores: GameScoreView[];
   updated_at: number;
+  channel_id?: string | null;
+  audience_label: string;
+};
+
+export type JoinedPrivateChannelView = {
+  topic_id: string;
+  channel_id: string;
+  label: string;
+  creator_pubkey: string;
+};
+
+export type PrivateChannelInvitePreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  inviter_pubkey: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
 };
 
 export interface DesktopApi {
@@ -218,9 +249,15 @@ export interface DesktopApi {
     topic: string,
     content: string,
     replyTo?: string | null,
-    attachments?: CreateAttachmentInput[]
+    attachments?: CreateAttachmentInput[],
+    channelRef?: ChannelRef
   ): Promise<string>;
-  listTimeline(topic: string, cursor?: TimelineCursor | null, limit?: number): Promise<TimelineView>;
+  listTimeline(
+    topic: string,
+    cursor?: TimelineCursor | null,
+    limit?: number,
+    scope?: TimelineScope
+  ): Promise<TimelineView>;
   listThread(
     topic: string,
     threadId: string,
@@ -232,18 +269,32 @@ export interface DesktopApi {
   followAuthor(pubkey: string): Promise<AuthorSocialView>;
   unfollowAuthor(pubkey: string): Promise<AuthorSocialView>;
   getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
-  listLiveSessions(topic: string): Promise<LiveSessionView[]>;
-  createLiveSession(topic: string, title: string, description: string): Promise<string>;
+  listLiveSessions(topic: string, scope?: TimelineScope): Promise<LiveSessionView[]>;
+  createLiveSession(
+    topic: string,
+    title: string,
+    description: string,
+    channelRef?: ChannelRef
+  ): Promise<string>;
   endLiveSession(topic: string, sessionId: string): Promise<void>;
   joinLiveSession(topic: string, sessionId: string): Promise<void>;
   leaveLiveSession(topic: string, sessionId: string): Promise<void>;
-  listGameRooms(topic: string): Promise<GameRoomView[]>;
+  listGameRooms(topic: string, scope?: TimelineScope): Promise<GameRoomView[]>;
   createGameRoom(
     topic: string,
     title: string,
     description: string,
-    participants: string[]
+    participants: string[],
+    channelRef?: ChannelRef
   ): Promise<string>;
+  createPrivateChannel(topic: string, label: string): Promise<JoinedPrivateChannelView>;
+  exportPrivateChannelInvite(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importPrivateChannelInvite(token: string): Promise<PrivateChannelInvitePreview>;
+  listJoinedPrivateChannels(topic: string): Promise<JoinedPrivateChannelView[]>;
   updateGameRoom(
     topic: string,
     roomId: string,
@@ -314,26 +365,28 @@ async function invokeDesktop<T>(command: string, args?: Record<string, unknown>)
 }
 
 export const runtimeApi: DesktopApi = {
-  createPost: async (topic, content, replyTo, attachments = []) => {
+  createPost: async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments);
+      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments, channelRef);
     }
     return invokeDesktop<string>('create_post', {
       request: {
         topic,
         content,
         reply_to: replyTo,
+        channel_ref: channelRef,
         attachments,
       },
     });
   },
-  listTimeline: async (topic, cursor, limit) => {
+  listTimeline: async (topic, cursor, limit, scope = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit);
+      return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit, scope);
     }
     return invokeDesktop<TimelineView>('list_timeline', {
       request: {
         topic,
+        scope,
         cursor,
         limit,
       },
@@ -390,23 +443,25 @@ export const runtimeApi: DesktopApi = {
       request: { pubkey },
     });
   },
-  listLiveSessions: async (topic) => {
+  listLiveSessions: async (topic, scope = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listLiveSessions(topic);
+      return window.__KUKURI_DESKTOP__.listLiveSessions(topic, scope);
     }
     return invokeDesktop<LiveSessionView[]>('list_live_sessions', {
       request: {
         topic,
+        scope,
       },
     });
   },
-  createLiveSession: async (topic, title, description) => {
+  createLiveSession: async (topic, title, description, channelRef = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description);
+      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description, channelRef);
     }
     return invokeDesktop<string>('create_live_session', {
       request: {
         topic,
+        channel_ref: channelRef,
         title,
         description,
       },
@@ -445,27 +500,77 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
-  listGameRooms: async (topic) => {
+  listGameRooms: async (topic, scope = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listGameRooms(topic);
+      return window.__KUKURI_DESKTOP__.listGameRooms(topic, scope);
     }
     return invokeDesktop<GameRoomView[]>('list_game_rooms', {
       request: {
         topic,
+        scope,
       },
     });
   },
-  createGameRoom: async (topic, title, description, participants) => {
+  createGameRoom: async (
+    topic,
+    title,
+    description,
+    participants,
+    channelRef = { kind: 'public' }
+  ) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createGameRoom(topic, title, description, participants);
-    }
-    return invokeDesktop<string>('create_game_room', {
-      request: {
+      return window.__KUKURI_DESKTOP__.createGameRoom(
         topic,
         title,
         description,
         participants,
+        channelRef
+      );
+    }
+    return invokeDesktop<string>('create_game_room', {
+      request: {
+        topic,
+        channel_ref: channelRef,
+        title,
+        description,
+        participants,
       },
+    });
+  },
+  createPrivateChannel: async (topic, label) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('create_private_channel', {
+      request: { topic, label },
+    });
+  },
+  exportPrivateChannelInvite: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportPrivateChannelInvite(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_private_channel_invite', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importPrivateChannelInvite: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importPrivateChannelInvite(token);
+    }
+    return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
+      request: { token },
+    });
+  },
+  listJoinedPrivateChannels: async (topic) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listJoinedPrivateChannels(topic);
+    }
+    return invokeDesktop<JoinedPrivateChannelView[]>('list_joined_private_channels', {
+      request: { topic },
     });
   },
   updateGameRoom: async (topic, roomId, status, phaseLabel, scores) => {

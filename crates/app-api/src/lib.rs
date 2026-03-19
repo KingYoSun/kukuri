@@ -8,18 +8,22 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, EnvelopeId, FollowEdge, FollowEdgeDocV1,
-    FollowEdgeStatus, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
-    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope,
-    KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME,
+    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, ChannelId, ChannelRef,
+    CreatePrivateChannelInput, EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
+    GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1,
+    GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys,
+    KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME,
     LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
-    MediaManifestItem, ObjectVisibility, PayloadRef, Profile, Pubkey, ReplicaId, TopicId,
+    MediaManifestItem, ObjectVisibility, PayloadRef, PrivateChannelInvitePreview,
+    PrivateChannelMetadataDocV1, Profile, Pubkey, ReplicaId, TimelineScope, TopicId,
     build_follow_edge_envelope, build_game_session_envelope, build_live_session_envelope,
-    build_media_manifest_envelope, build_post_envelope_with_payload, build_profile_envelope,
-    generate_keys, parse_follow_edge, parse_profile, timeline_sort_key,
+    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
+    build_private_channel_invite_token, build_profile_envelope, generate_keys, parse_follow_edge,
+    parse_private_channel_invite_token, parse_profile, timeline_sort_key,
 };
 use kukuri_docs_sync::{
-    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
+    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_hint_topic,
+    private_channel_replica_id, stable_key, topic_replica_id,
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, GameRoomProjectionRow,
@@ -35,6 +39,7 @@ use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
 const REPLICA_SYNC_RESTART_RETRY_SECONDS: i64 = 5;
+const PUBLIC_CHANNEL_ID: &str = "public";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
@@ -54,6 +59,8 @@ pub struct PostView {
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
     pub object_kind: String,
+    pub channel_id: Option<String>,
+    pub audience_label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +126,8 @@ pub struct LiveSessionView {
     pub ended_at: Option<i64>,
     pub viewer_count: usize,
     pub joined_by_me: bool,
+    pub channel_id: Option<String>,
+    pub audience_label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,6 +140,8 @@ pub struct GameRoomView {
     pub phase_label: Option<String>,
     pub scores: Vec<GameScoreView>,
     pub updated_at: i64,
+    pub channel_id: Option<String>,
+    pub audience_label: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +175,23 @@ pub struct UpdateGameRoomInput {
 pub struct TimelineView {
     pub items: Vec<PostView>,
     pub next_cursor: Option<TimelineCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JoinedPrivateChannelView {
+    pub topic_id: String,
+    pub channel_id: String,
+    pub label: String,
+    pub creator_pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelCapability {
+    pub topic_id: String,
+    pub channel_id: String,
+    pub label: String,
+    pub creator_pubkey: String,
+    pub namespace_secret_hex: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,10 +246,21 @@ pub struct AppService {
     blob_service: Arc<dyn BlobService>,
     keys: Arc<KukuriKeys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    private_channel_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
     replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct JoinedPrivateChannelState {
+    topic_id: String,
+    channel_id: ChannelId,
+    label: String,
+    creator_pubkey: String,
+    namespace_secret_hex: String,
 }
 
 impl AppService {
@@ -261,7 +300,9 @@ impl AppService {
             blob_service,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            private_channel_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
             replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
@@ -374,13 +415,48 @@ impl AppService {
         content: &str,
         reply_to: Option<&str>,
     ) -> Result<String> {
-        self.create_post_with_attachments(topic_id, content, reply_to, Vec::new())
+        self.create_post_in_channel(topic_id, ChannelRef::Public, content, reply_to)
             .await
     }
 
     pub async fn create_post_with_attachments(
         &self,
         topic_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
+        attachments: Vec<PendingAttachment>,
+    ) -> Result<String> {
+        self.create_post_with_attachments_in_channel(
+            topic_id,
+            ChannelRef::Public,
+            content,
+            reply_to,
+            attachments,
+        )
+        .await
+    }
+
+    pub async fn create_post_in_channel(
+        &self,
+        topic_id: &str,
+        channel_ref: ChannelRef,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> Result<String> {
+        self.create_post_with_attachments_in_channel(
+            topic_id,
+            channel_ref,
+            content,
+            reply_to,
+            Vec::new(),
+        )
+        .await
+    }
+
+    pub async fn create_post_with_attachments_in_channel(
+        &self,
+        topic_id: &str,
+        channel_ref: ChannelRef,
         content: &str,
         reply_to: Option<&str>,
         attachments: Vec<PendingAttachment>,
@@ -392,6 +468,32 @@ impl AppService {
                 .await?
         } else {
             None
+        };
+        let effective_channel_id = if let Some(parent) = parent.as_ref() {
+            let content = parent
+                .post_content()?
+                .ok_or_else(|| anyhow::anyhow!("reply target is not a post object"))?;
+            if content.topic_id.as_str() != topic_id {
+                anyhow::bail!("reply target topic does not match");
+            }
+            if let Some(channel_id) = content.channel_id.clone() {
+                self.ensure_private_channel_access(topic_id, &channel_id)
+                    .await?;
+                Some(channel_id)
+            } else {
+                None
+            }
+        } else {
+            match channel_ref {
+                ChannelRef::Public => None,
+                ChannelRef::PrivateChannel { channel_id } => {
+                    self.ensure_private_channel_access(topic_id, &channel_id)
+                        .await?;
+                    self.ensure_private_channel_subscription(topic_id, channel_id.as_str())
+                        .await?;
+                    Some(channel_id)
+                }
+            }
         };
         let now = Utc::now().timestamp_millis();
         let stored_blob = self
@@ -438,10 +540,17 @@ impl AppService {
                     .collect(),
             };
             let envelope = build_media_manifest_envelope(self.keys.as_ref(), &topic, &manifest)?;
-            persist_media_manifest(&topic, &envelope, &manifest, self.docs_sync.as_ref()).await?;
+            persist_media_manifest(
+                &topic,
+                effective_channel_id.as_ref(),
+                &envelope,
+                &manifest,
+                self.docs_sync.as_ref(),
+            )
+            .await?;
             vec![manifest_id]
         };
-        let envelope = build_post_envelope_with_payload(
+        let envelope = build_post_envelope_with_payload_in_channel(
             self.keys.as_ref(),
             &topic,
             PayloadRef::BlobText {
@@ -460,7 +569,12 @@ impl AppService {
                 .collect(),
             manifest_ids,
             parent.as_ref(),
-            ObjectVisibility::Public,
+            if effective_channel_id.is_some() {
+                ObjectVisibility::Private
+            } else {
+                ObjectVisibility::Public
+            },
+            effective_channel_id.as_ref(),
         )?;
         self.ingest_event(
             envelope.clone(),
@@ -470,7 +584,7 @@ impl AppService {
         .await?;
         self.hint_transport
             .publish_hint(
-                &topic,
+                &channel_hint_topic_for(topic_id, effective_channel_id.as_ref()),
                 GossipHint::TopicObjectsChanged {
                     topic_id: topic.clone(),
                     objects: vec![HintObjectRef {
@@ -489,24 +603,38 @@ impl AppService {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<TimelineView> {
-        self.ensure_topic_subscription(topic_id).await?;
-        let mut page = ProjectionStore::list_topic_timeline(
+        self.list_timeline_scoped(topic_id, TimelineScope::Public, cursor, limit)
+            .await
+    }
+
+    pub async fn list_timeline_scoped(
+        &self,
+        topic_id: &str,
+        scope: TimelineScope,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<TimelineView> {
+        self.ensure_scope_subscriptions(topic_id, &scope).await?;
+        let mut page = filtered_timeline_page(
             self.projection_store.as_ref(),
             topic_id,
             cursor.clone(),
             limit,
+            &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
-            self.maybe_restart_topic_replica_sync(topic_id).await;
-            if self.hydrate_topic_projection(topic_id).await? > 0 {
+            self.maybe_restart_scope_replica_sync(topic_id, &scope)
+                .await;
+            if self.hydrate_scope_projection(topic_id, &scope).await? > 0 {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
-            page = ProjectionStore::list_topic_timeline(
+            page = filtered_timeline_page(
                 self.projection_store.as_ref(),
                 topic_id,
                 cursor,
                 limit,
+                &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
             )
             .await?;
         }
@@ -527,26 +655,40 @@ impl AppService {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<TimelineView> {
-        self.ensure_topic_subscription(topic_id).await?;
-        let mut page = ProjectionStore::list_thread(
+        self.ensure_scope_subscriptions(topic_id, &TimelineScope::AllJoined)
+            .await?;
+        let thread_root = EnvelopeId::from(thread_id);
+        let mut page = filtered_thread_page(
             self.projection_store.as_ref(),
             topic_id,
-            &EnvelopeId::from(thread_id),
+            &thread_root,
             cursor.clone(),
             limit,
+            None,
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
-            self.maybe_restart_topic_replica_sync(topic_id).await;
-            if self.hydrate_topic_projection(topic_id).await? > 0 {
+            self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
+                .await;
+            if self
+                .hydrate_scope_projection(topic_id, &TimelineScope::AllJoined)
+                .await?
+                > 0
+            {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
-            page = ProjectionStore::list_thread(
+            let root_channel = self
+                .projection_store
+                .get_object_projection(&thread_root)
+                .await?
+                .map(|row| row.channel_id);
+            page = filtered_thread_page(
                 self.projection_store.as_ref(),
                 topic_id,
-                &EnvelopeId::from(thread_id),
+                &thread_root,
                 cursor,
                 limit,
+                root_channel.as_deref(),
             )
             .await?;
         }
@@ -561,35 +703,45 @@ impl AppService {
     }
 
     pub async fn list_live_sessions(&self, topic_id: &str) -> Result<Vec<LiveSessionView>> {
-        self.ensure_topic_subscription(topic_id).await?;
+        self.list_live_sessions_scoped(topic_id, TimelineScope::Public)
+            .await
+    }
+
+    pub async fn list_live_sessions_scoped(
+        &self,
+        topic_id: &str,
+        scope: TimelineScope,
+    ) -> Result<Vec<LiveSessionView>> {
+        self.ensure_scope_subscriptions(topic_id, &scope).await?;
         self.projection_store
             .clear_expired_live_presence(Utc::now().timestamp_millis())
             .await?;
-        let mut rows = self
-            .projection_store
-            .list_topic_live_sessions(topic_id)
-            .await?;
+        let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
+        let mut rows = filter_channel_rows(
+            self.projection_store
+                .list_topic_live_sessions(topic_id)
+                .await?,
+            &allowed,
+            |row| row.channel_id.as_str(),
+        );
         if rows.is_empty() {
-            hydrate_live_sessions_with_services(
-                self.docs_sync.as_ref(),
-                self.blob_service.as_ref(),
-                self.projection_store.as_ref(),
-                topic_id,
-            )
-            .await?;
+            self.hydrate_scope_projection(topic_id, &scope).await?;
             self.projection_store
                 .clear_expired_live_presence(Utc::now().timestamp_millis())
                 .await?;
-            rows = self
-                .projection_store
-                .list_topic_live_sessions(topic_id)
-                .await?;
+            rows = filter_channel_rows(
+                self.projection_store
+                    .list_topic_live_sessions(topic_id)
+                    .await?,
+                &allowed,
+                |row| row.channel_id.as_str(),
+            );
         }
         self.cleanup_ended_live_presence_tasks(&rows).await;
         let joined_sessions = self.live_presence_tasks.lock().await;
-        Ok(rows
-            .into_iter()
-            .map(|row| LiveSessionView {
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            items.push(LiveSessionView {
                 session_id: row.session_id.clone(),
                 host_pubkey: row.host_pubkey,
                 title: row.title,
@@ -599,15 +751,35 @@ impl AppService {
                 ended_at: row.ended_at,
                 viewer_count: row.viewer_count,
                 joined_by_me: joined_sessions.contains_key(
-                    live_presence_task_key(topic_id, row.session_id.as_str()).as_str(),
+                    live_presence_task_key(
+                        topic_id,
+                        row.channel_id.as_str(),
+                        row.session_id.as_str(),
+                    )
+                    .as_str(),
                 ),
-            })
-            .collect())
+                channel_id: channel_id_for_view(row.channel_id.as_str()),
+                audience_label: self
+                    .audience_label_for_storage(topic_id, row.channel_id.as_str())
+                    .await,
+            });
+        }
+        Ok(items)
     }
 
     pub async fn create_live_session(
         &self,
         topic_id: &str,
+        input: CreateLiveSessionInput,
+    ) -> Result<String> {
+        self.create_live_session_in_channel(topic_id, ChannelRef::Public, input)
+            .await
+    }
+
+    pub async fn create_live_session_in_channel(
+        &self,
+        topic_id: &str,
+        channel_ref: ChannelRef,
         input: CreateLiveSessionInput,
     ) -> Result<String> {
         self.ensure_topic_subscription(topic_id).await?;
@@ -616,6 +788,16 @@ impl AppService {
         if title.is_empty() {
             anyhow::bail!("live session title is required");
         }
+        let channel_id = match channel_ref {
+            ChannelRef::Public => None,
+            ChannelRef::PrivateChannel { channel_id } => {
+                self.ensure_private_channel_access(topic_id, &channel_id)
+                    .await?;
+                self.ensure_private_channel_subscription(topic_id, channel_id.as_str())
+                    .await?;
+                Some(channel_id)
+            }
+        };
         let session_id = format!(
             "live-{}-{}",
             now,
@@ -625,6 +807,7 @@ impl AppService {
         let manifest = LiveSessionManifestBlobV1 {
             session_id: session_id.clone(),
             topic_id: topic.clone(),
+            channel_id: channel_id.clone(),
             owner_pubkey: Pubkey::from(self.current_author_pubkey()),
             title: title.to_string(),
             description: input.description.trim().to_string(),
@@ -639,6 +822,7 @@ impl AppService {
             &serde_json::json!({
                 "session_id": session_id,
                 "topic_id": topic,
+                "channel_id": channel_id.as_ref().map(|value| value.as_str()),
                 "status": "live",
                 "title": manifest.title,
                 "description": manifest.description,
@@ -652,7 +836,7 @@ impl AppService {
             .await?;
         self.hint_transport
             .publish_hint(
-                &topic,
+                &channel_hint_topic_for(topic_id, channel_id.as_ref()),
                 GossipHint::SessionChanged {
                     topic_id: topic.clone(),
                     session_id: session_id.clone(),
@@ -674,8 +858,11 @@ impl AppService {
         if state.owner_pubkey.as_str() != owner {
             anyhow::bail!("only the live session owner can end the session");
         }
+        let channel_key = channel_storage_id(state.channel_id.as_ref());
+        let hint_topic = channel_hint_topic_for(topic_id, state.channel_id.as_ref());
         if manifest.status == LiveSessionStatus::Ended {
-            self.stop_live_presence_task(topic_id, session_id).await;
+            self.stop_live_presence_task(topic_id, channel_key.as_str(), session_id)
+                .await;
             return Ok(());
         }
         let now = Utc::now().timestamp_millis();
@@ -688,6 +875,7 @@ impl AppService {
             &serde_json::json!({
                 "session_id": session_id,
                 "topic_id": topic_id,
+                "channel_id": state.channel_id.as_ref().map(|value| value.as_str()),
                 "status": "ended",
             }),
         )?;
@@ -702,10 +890,11 @@ impl AppService {
         self.projection_store
             .upsert_live_session_cache(live_projection_row_from_state(&state, &manifest, topic_id))
             .await?;
-        self.stop_live_presence_task(topic_id, session_id).await;
+        self.stop_live_presence_task(topic_id, channel_key.as_str(), session_id)
+            .await;
         self.hint_transport
             .publish_hint(
-                &TopicId::new(topic_id),
+                &hint_topic,
                 GossipHint::SessionChanged {
                     topic_id: TopicId::new(topic_id),
                     session_id: session_id.to_string(),
@@ -719,7 +908,7 @@ impl AppService {
 
     pub async fn join_live_session(&self, topic_id: &str, session_id: &str) -> Result<()> {
         self.ensure_topic_subscription(topic_id).await?;
-        let Some((_, manifest)) = self
+        let Some((state, manifest)) = self
             .fetch_live_session_state_and_manifest(topic_id, session_id)
             .await?
         else {
@@ -728,7 +917,8 @@ impl AppService {
         if manifest.status == LiveSessionStatus::Ended {
             anyhow::bail!("cannot join an ended live session");
         }
-        let task_key = live_presence_task_key(topic_id, session_id);
+        let channel_key = channel_storage_id(state.channel_id.as_ref());
+        let task_key = live_presence_task_key(topic_id, channel_key.as_str(), session_id);
         if self
             .live_presence_tasks
             .lock()
@@ -737,12 +927,13 @@ impl AppService {
         {
             return Ok(());
         }
-        self.apply_live_presence(topic_id, session_id, 30_000)
+        self.apply_live_presence(topic_id, state.channel_id.as_ref(), session_id, 30_000)
             .await?;
         let hint_transport = Arc::clone(&self.hint_transport);
         let projection_store = Arc::clone(&self.projection_store);
-        let topic = TopicId::new(topic_id);
+        let hint_topic = channel_hint_topic_for(topic_id, state.channel_id.as_ref());
         let topic_key = topic_id.to_string();
+        let channel_key_for_task = channel_key.clone();
         let session_key = session_id.to_string();
         let author = Pubkey::from(self.current_author_pubkey());
         let handle = tokio::spawn(async move {
@@ -753,6 +944,7 @@ impl AppService {
                 let _ = projection_store
                     .upsert_live_presence(
                         topic_key.as_str(),
+                        channel_key_for_task.as_str(),
                         session_key.as_str(),
                         author.as_str(),
                         now + 30_000,
@@ -761,9 +953,9 @@ impl AppService {
                     .await;
                 let _ = hint_transport
                     .publish_hint(
-                        &topic,
+                        &hint_topic,
                         GossipHint::LivePresence {
-                            topic_id: topic.clone(),
+                            topic_id: TopicId::new(topic_key.clone()),
                             session_id: session_key.clone(),
                             author: author.clone(),
                             ttl_ms: 30_000,
@@ -782,34 +974,51 @@ impl AppService {
 
     pub async fn leave_live_session(&self, topic_id: &str, session_id: &str) -> Result<()> {
         self.ensure_topic_subscription(topic_id).await?;
-        self.stop_live_presence_task(topic_id, session_id).await;
-        self.apply_live_presence(topic_id, session_id, 0).await?;
+        let (state, _) = self
+            .fetch_live_session_state_and_manifest(topic_id, session_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("live session not found"))?;
+        let channel_key = channel_storage_id(state.channel_id.as_ref());
+        self.stop_live_presence_task(topic_id, channel_key.as_str(), session_id)
+            .await;
+        self.apply_live_presence(topic_id, state.channel_id.as_ref(), session_id, 0)
+            .await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         Ok(())
     }
 
     pub async fn list_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomView>> {
-        self.ensure_topic_subscription(topic_id).await?;
-        let mut rows = self
-            .projection_store
-            .list_topic_game_rooms(topic_id)
-            .await?;
-        if rows.is_empty() {
-            hydrate_game_rooms_with_services(
-                self.docs_sync.as_ref(),
-                self.blob_service.as_ref(),
-                self.projection_store.as_ref(),
-                topic_id,
-            )
-            .await?;
-            rows = self
-                .projection_store
+        self.list_game_rooms_scoped(topic_id, TimelineScope::Public)
+            .await
+    }
+
+    pub async fn list_game_rooms_scoped(
+        &self,
+        topic_id: &str,
+        scope: TimelineScope,
+    ) -> Result<Vec<GameRoomView>> {
+        self.ensure_scope_subscriptions(topic_id, &scope).await?;
+        let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
+        let mut rows = filter_channel_rows(
+            self.projection_store
                 .list_topic_game_rooms(topic_id)
-                .await?;
+                .await?,
+            &allowed,
+            |row| row.channel_id.as_str(),
+        );
+        if rows.is_empty() {
+            self.hydrate_scope_projection(topic_id, &scope).await?;
+            rows = filter_channel_rows(
+                self.projection_store
+                    .list_topic_game_rooms(topic_id)
+                    .await?,
+                &allowed,
+                |row| row.channel_id.as_str(),
+            );
         }
-        Ok(rows
-            .into_iter()
-            .map(|row| GameRoomView {
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            items.push(GameRoomView {
                 room_id: row.room_id,
                 host_pubkey: row.host_pubkey,
                 title: row.title,
@@ -826,8 +1035,13 @@ impl AppService {
                     })
                     .collect(),
                 updated_at: row.updated_at,
-            })
-            .collect())
+                channel_id: channel_id_for_view(row.channel_id.as_str()),
+                audience_label: self
+                    .audience_label_for_storage(topic_id, row.channel_id.as_str())
+                    .await,
+            });
+        }
+        Ok(items)
     }
 
     pub async fn create_game_room(
@@ -835,7 +1049,27 @@ impl AppService {
         topic_id: &str,
         input: CreateGameRoomInput,
     ) -> Result<String> {
+        self.create_game_room_in_channel(topic_id, ChannelRef::Public, input)
+            .await
+    }
+
+    pub async fn create_game_room_in_channel(
+        &self,
+        topic_id: &str,
+        channel_ref: ChannelRef,
+        input: CreateGameRoomInput,
+    ) -> Result<String> {
         self.ensure_topic_subscription(topic_id).await?;
+        let channel_id = match channel_ref {
+            ChannelRef::Public => None,
+            ChannelRef::PrivateChannel { channel_id } => {
+                self.ensure_private_channel_access(topic_id, &channel_id)
+                    .await?;
+                self.ensure_private_channel_subscription(topic_id, channel_id.as_str())
+                    .await?;
+                Some(channel_id)
+            }
+        };
         let participants = sanitize_game_participants(input.participants)?;
         let now = Utc::now().timestamp_millis();
         let title = input.title.trim();
@@ -850,6 +1084,7 @@ impl AppService {
         let manifest = GameRoomManifestBlobV1 {
             room_id: room_id.clone(),
             topic_id: TopicId::new(topic_id),
+            channel_id: channel_id.clone(),
             owner_pubkey: Pubkey::from(self.current_author_pubkey()),
             title: title.to_string(),
             description: input.description.trim().to_string(),
@@ -881,6 +1116,7 @@ impl AppService {
             &serde_json::json!({
                 "room_id": room_id,
                 "topic_id": topic_id,
+                "channel_id": channel_id.as_ref().map(|value| value.as_str()),
                 "status": "waiting",
             }),
         )?;
@@ -892,7 +1128,7 @@ impl AppService {
             .await?;
         self.hint_transport
             .publish_hint(
-                &TopicId::new(topic_id),
+                &channel_hint_topic_for(topic_id, channel_id.as_ref()),
                 GossipHint::SessionChanged {
                     topic_id: TopicId::new(topic_id),
                     session_id: room_id.clone(),
@@ -943,6 +1179,7 @@ impl AppService {
             &serde_json::json!({
                 "room_id": room_id,
                 "topic_id": topic_id,
+                "channel_id": state.channel_id.as_ref().map(|value| value.as_str()),
                 "status": format!("{:?}", manifest.status).to_lowercase(),
                 "phase_label": manifest.phase_label,
             }),
@@ -960,7 +1197,7 @@ impl AppService {
             .await?;
         self.hint_transport
             .publish_hint(
-                &TopicId::new(topic_id),
+                &channel_hint_topic_for(topic_id, state.channel_id.as_ref()),
                 GossipHint::SessionChanged {
                     topic_id: TopicId::new(topic_id),
                     session_id: room_id.to_string(),
@@ -970,6 +1207,145 @@ impl AppService {
             .await?;
         *self.last_sync_ts.lock().await = Some(manifest.updated_at);
         Ok(())
+    }
+
+    pub async fn create_private_channel(
+        &self,
+        input: CreatePrivateChannelInput,
+    ) -> Result<JoinedPrivateChannelView> {
+        self.ensure_topic_subscription(input.topic_id.as_str())
+            .await?;
+        let label = input.label.trim();
+        if label.is_empty() {
+            anyhow::bail!("private channel label is required");
+        }
+        let now = Utc::now().timestamp_millis();
+        let channel_id = ChannelId::new(format!(
+            "channel-{}-{}",
+            now,
+            short_id_suffix(self.current_author_pubkey().as_str())
+        ));
+        let namespace_secret_hex = generate_keys().export_secret_hex();
+        let state = JoinedPrivateChannelState {
+            topic_id: input.topic_id.as_str().to_string(),
+            channel_id: channel_id.clone(),
+            label: label.to_string(),
+            creator_pubkey: self.current_author_pubkey(),
+            namespace_secret_hex: namespace_secret_hex.clone(),
+        };
+        self.register_joined_private_channel(state.clone()).await?;
+        let metadata = PrivateChannelMetadataDocV1 {
+            channel_id: channel_id.clone(),
+            topic_id: input.topic_id.clone(),
+            label: label.to_string(),
+            creator_pubkey: Pubkey::from(state.creator_pubkey.clone()),
+            created_at: now,
+        };
+        persist_private_channel_metadata(
+            self.docs_sync.as_ref(),
+            input.topic_id.as_str(),
+            &channel_id,
+            &metadata,
+        )
+        .await?;
+        Ok(joined_private_channel_view_from_state(&state))
+    }
+
+    pub async fn export_private_channel_invite(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        expires_at: Option<i64>,
+    ) -> Result<String> {
+        let state = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+            .ok_or_else(|| anyhow::anyhow!("private channel is not joined"))?;
+        build_private_channel_invite_token(
+            self.keys.as_ref(),
+            &TopicId::new(topic_id),
+            &state.channel_id,
+            state.label.as_str(),
+            state.namespace_secret_hex.as_str(),
+            expires_at,
+        )
+    }
+
+    pub async fn import_private_channel_invite(
+        &self,
+        token: &str,
+    ) -> Result<PrivateChannelInvitePreview> {
+        let preview = parse_private_channel_invite_token(token)?;
+        if let Some(expires_at) = preview.expires_at
+            && expires_at < Utc::now().timestamp_millis()
+        {
+            anyhow::bail!("private channel invite is expired");
+        }
+        let state = JoinedPrivateChannelState {
+            topic_id: preview.topic_id.as_str().to_string(),
+            channel_id: preview.channel_id.clone(),
+            label: preview.channel_label.clone(),
+            creator_pubkey: preview.inviter_pubkey.as_str().to_string(),
+            namespace_secret_hex: preview.namespace_secret_hex.clone(),
+        };
+        self.ensure_topic_subscription(preview.topic_id.as_str())
+            .await?;
+        self.register_joined_private_channel(state).await?;
+        Ok(preview)
+    }
+
+    pub async fn restore_private_channel_capability(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        label: &str,
+        creator_pubkey: &str,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        self.register_joined_private_channel(JoinedPrivateChannelState {
+            topic_id: topic_id.to_string(),
+            channel_id: ChannelId::new(channel_id.to_string()),
+            label: label.trim().to_string(),
+            creator_pubkey: creator_pubkey.to_string(),
+            namespace_secret_hex: namespace_secret_hex.to_string(),
+        })
+        .await
+    }
+
+    pub async fn list_joined_private_channels(
+        &self,
+        topic_id: &str,
+    ) -> Result<Vec<JoinedPrivateChannelView>> {
+        self.ensure_topic_subscription(topic_id).await?;
+        Ok(self
+            .joined_private_channel_states_for_topic(topic_id)
+            .await
+            .into_iter()
+            .map(|state| joined_private_channel_view_from_state(&state))
+            .collect())
+    }
+
+    pub async fn get_private_channel_capability(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<Option<PrivateChannelCapability>> {
+        Ok(self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+            .map(private_channel_capability_from_state))
+    }
+
+    pub async fn list_private_channel_capabilities(&self) -> Result<Vec<PrivateChannelCapability>> {
+        Ok(self
+            .joined_private_channels
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .map(private_channel_capability_from_state)
+            .collect())
     }
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
@@ -1086,6 +1462,22 @@ impl AppService {
         for topic in existing_topics {
             self.restart_topic_subscription(topic.as_str()).await?;
         }
+        let existing_private_topics = self
+            .joined_private_channels
+            .lock()
+            .await
+            .values()
+            .map(|state| {
+                (
+                    state.topic_id.clone(),
+                    state.channel_id.as_str().to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (topic_id, channel_id) in existing_private_topics {
+            self.restart_private_channel_subscription(topic_id.as_str(), channel_id.as_str())
+                .await?;
+        }
         let existing_authors = self
             .author_subscriptions
             .lock()
@@ -1132,6 +1524,22 @@ impl AppService {
         for topic in existing_topics {
             self.restart_topic_subscription(topic.as_str()).await?;
         }
+        let existing_private_topics = self
+            .joined_private_channels
+            .lock()
+            .await
+            .values()
+            .map(|state| {
+                (
+                    state.topic_id.clone(),
+                    state.channel_id.as_str().to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (topic_id, channel_id) in existing_private_topics {
+            self.restart_private_channel_subscription(topic_id.as_str(), channel_id.as_str())
+                .await?;
+        }
         let existing_authors = self
             .author_subscriptions
             .lock()
@@ -1149,6 +1557,29 @@ impl AppService {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
         }
+        let private_keys = self
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .keys()
+            .filter(|key| key.starts_with(&format!("{topic_id}::")))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in private_keys {
+            if let Some(handle) = self
+                .private_channel_subscriptions
+                .lock()
+                .await
+                .remove(key.as_str())
+            {
+                handle.abort();
+            }
+            if let Some((_, channel_id)) = key.split_once("::") {
+                self.hint_transport
+                    .unsubscribe_hints(&private_channel_hint_topic(channel_id))
+                    .await?;
+            }
+        }
         let keys_to_remove = self
             .live_presence_tasks
             .lock()
@@ -1158,11 +1589,11 @@ impl AppService {
             .cloned()
             .collect::<Vec<_>>();
         for key in keys_to_remove {
-            let session_id = key
-                .split_once("::")
-                .map(|(_, session_id)| session_id.to_string())
-                .unwrap_or_default();
-            self.stop_live_presence_task(topic_id, session_id.as_str())
+            let mut parts = key.splitn(3, "::");
+            let _ = parts.next();
+            let channel_id = parts.next().unwrap_or(PUBLIC_CHANNEL_ID).to_string();
+            let session_id = parts.next().unwrap_or_default().to_string();
+            self.stop_live_presence_task(topic_id, channel_id.as_str(), session_id.as_str())
                 .await;
         }
         self.hint_transport
@@ -1236,6 +1667,17 @@ impl AppService {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
+        let private_handles = {
+            let mut subscriptions = self.private_channel_subscriptions.lock().await;
+            subscriptions
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
+        };
+        for handle in private_handles {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
         let author_handles = {
             let mut subscriptions = self.author_subscriptions.lock().await;
             subscriptions
@@ -1261,8 +1703,271 @@ impl AppService {
         self.keys.public_key_hex()
     }
 
-    async fn stop_live_presence_task(&self, topic_id: &str, session_id: &str) {
-        let key = live_presence_task_key(topic_id, session_id);
+    async fn audience_label_for_storage(&self, topic_id: &str, channel_id: &str) -> String {
+        if channel_id == PUBLIC_CHANNEL_ID {
+            return "Public".to_string();
+        }
+        self.joined_private_channels
+            .lock()
+            .await
+            .get(joined_private_channel_key(topic_id, channel_id).as_str())
+            .map(|channel| channel.label.clone())
+            .unwrap_or_else(|| "Private channel".to_string())
+    }
+
+    async fn joined_private_channel_states_for_topic(
+        &self,
+        topic_id: &str,
+    ) -> Vec<JoinedPrivateChannelState> {
+        self.joined_private_channels
+            .lock()
+            .await
+            .values()
+            .filter(|state| state.topic_id == topic_id)
+            .cloned()
+            .collect()
+    }
+
+    async fn joined_private_channel_state(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Option<JoinedPrivateChannelState> {
+        self.joined_private_channels
+            .lock()
+            .await
+            .get(joined_private_channel_key(topic_id, channel_id).as_str())
+            .cloned()
+    }
+
+    async fn ensure_private_channel_access(
+        &self,
+        topic_id: &str,
+        channel_id: &ChannelId,
+    ) -> Result<()> {
+        if self
+            .joined_private_channel_state(topic_id, channel_id.as_str())
+            .await
+            .is_none()
+        {
+            anyhow::bail!("private channel is not joined");
+        }
+        Ok(())
+    }
+
+    async fn register_joined_private_channel(
+        &self,
+        state: JoinedPrivateChannelState,
+    ) -> Result<()> {
+        let replica = private_channel_replica_id(state.channel_id.as_str());
+        self.docs_sync
+            .register_private_replica_secret(&replica, state.namespace_secret_hex.as_str())
+            .await?;
+        self.joined_private_channels.lock().await.insert(
+            joined_private_channel_key(state.topic_id.as_str(), state.channel_id.as_str()),
+            state.clone(),
+        );
+        self.ensure_private_channel_subscription(
+            state.topic_id.as_str(),
+            state.channel_id.as_str(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn ensure_private_channel_subscription(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<()> {
+        let key = joined_private_channel_key(topic_id, channel_id);
+        if self
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .contains_key(key.as_str())
+        {
+            return Ok(());
+        }
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
+            anyhow::bail!("private channel is not joined");
+        };
+        self.spawn_private_channel_subscription(state).await
+    }
+
+    async fn ensure_joined_private_channel_subscriptions(&self, topic_id: &str) -> Result<()> {
+        for state in self.joined_private_channel_states_for_topic(topic_id).await {
+            self.ensure_private_channel_subscription(topic_id, state.channel_id.as_str())
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn restart_private_channel_subscription(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<()> {
+        let key = joined_private_channel_key(topic_id, channel_id);
+        if let Some(handle) = self
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .remove(key.as_str())
+        {
+            handle.abort();
+        }
+        self.hint_transport
+            .unsubscribe_hints(&private_channel_hint_topic(channel_id))
+            .await?;
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
+            return Ok(());
+        };
+        self.spawn_private_channel_subscription(state).await
+    }
+
+    async fn spawn_private_channel_subscription(
+        &self,
+        state: JoinedPrivateChannelState,
+    ) -> Result<()> {
+        let docs_sync = Arc::clone(&self.docs_sync);
+        let replica = private_channel_replica_id(state.channel_id.as_str());
+        docs_sync
+            .register_private_replica_secret(&replica, state.namespace_secret_hex.as_str())
+            .await?;
+        self.spawn_subscription_task(
+            state.topic_id.as_str(),
+            Some(state.channel_id.clone()),
+            replica,
+            private_channel_hint_topic(state.channel_id.as_str()),
+            Some(joined_private_channel_key(
+                state.topic_id.as_str(),
+                state.channel_id.as_str(),
+            )),
+        )
+        .await
+    }
+
+    async fn spawn_subscription_task(
+        &self,
+        topic_id: &str,
+        channel_id: Option<ChannelId>,
+        replica: ReplicaId,
+        hint_topic: TopicId,
+        private_key: Option<String>,
+    ) -> Result<()> {
+        let projection_store = Arc::clone(&self.projection_store);
+        let docs_sync = Arc::clone(&self.docs_sync);
+        let blob_service = Arc::clone(&self.blob_service);
+        let hint_transport = Arc::clone(&self.hint_transport);
+        let last_sync = Arc::clone(&self.last_sync_ts);
+        let topic = topic_id.to_string();
+        let storage_channel_id = channel_storage_id(channel_id.as_ref());
+        docs_sync.open_replica(&replica).await?;
+        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
+        let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
+        let replica_for_task = replica.clone();
+        let hint_topic_for_task = hint_topic.clone();
+        let handle = tokio::spawn(async move {
+            let _ = hydrate_subscription_state_with_services(
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                projection_store.as_ref(),
+                topic.as_str(),
+                &replica_for_task,
+            )
+            .await;
+            loop {
+                tokio::select! {
+                    Some(event) = doc_stream.next() => {
+                        if let Ok(event) = event {
+                            if let Some(source_peer) = event.source_peer.as_deref()
+                                && let Err(error) = blob_service.learn_peer(source_peer).await
+                            {
+                                warn!(
+                                    topic = %topic,
+                                    source_peer = %source_peer,
+                                    error = %error,
+                                    "failed to learn blob peer from docs sync event"
+                                );
+                            }
+                            if let Ok(count) = hydrate_subscription_state_with_services(
+                                docs_sync.as_ref(),
+                                blob_service.as_ref(),
+                                projection_store.as_ref(),
+                                topic.as_str(),
+                                &replica_for_task,
+                            ).await
+                            && count > 0
+                            {
+                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            }
+                        }
+                    }
+                    Some(event) = hint_stream.next() => {
+                        if hint_targets_topic(&event.hint, topic.as_str()) {
+                            match &event.hint {
+                                GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {
+                                    let now = Utc::now().timestamp_millis();
+                                    let _ = projection_store
+                                        .upsert_live_presence(
+                                            topic.as_str(),
+                                            storage_channel_id.as_str(),
+                                            session_id.as_str(),
+                                            author.as_str(),
+                                            now + i64::from(*ttl_ms),
+                                            now,
+                                        )
+                                        .await;
+                                    let _ = projection_store.clear_expired_live_presence(now).await;
+                                    *last_sync.lock().await = Some(now);
+                                }
+                                _ => {
+                                    if let Ok(count) = hydrate_subscription_state_with_services(
+                                        docs_sync.as_ref(),
+                                        blob_service.as_ref(),
+                                        projection_store.as_ref(),
+                                        topic.as_str(),
+                                        &replica_for_task,
+                                    ).await
+                                    && count > 0
+                                    {
+                                        *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else => {
+                        let _ = hint_transport.unsubscribe_hints(&hint_topic_for_task).await;
+                        break;
+                    },
+                }
+            }
+        });
+
+        if let Some(private_key) = private_key {
+            self.private_channel_subscriptions
+                .lock()
+                .await
+                .insert(private_key, handle);
+        } else {
+            self.subscriptions
+                .lock()
+                .await
+                .insert(topic_id.to_string(), handle);
+        }
+        Ok(())
+    }
+
+    async fn stop_live_presence_task(&self, topic_id: &str, channel_id: &str, session_id: &str) {
+        let key = live_presence_task_key(topic_id, channel_id, session_id);
         let handle = self.live_presence_tasks.lock().await.remove(key.as_str());
         if let Some(handle) = handle {
             handle.abort();
@@ -1273,8 +1978,12 @@ impl AppService {
     async fn cleanup_ended_live_presence_tasks(&self, rows: &[LiveSessionProjectionRow]) {
         for row in rows {
             if row.status == LiveSessionStatus::Ended {
-                self.stop_live_presence_task(row.topic_id.as_str(), row.session_id.as_str())
-                    .await;
+                self.stop_live_presence_task(
+                    row.topic_id.as_str(),
+                    row.channel_id.as_str(),
+                    row.session_id.as_str(),
+                )
+                .await;
             }
         }
     }
@@ -1282,6 +1991,7 @@ impl AppService {
     async fn apply_live_presence(
         &self,
         topic_id: &str,
+        channel_id: Option<&ChannelId>,
         session_id: &str,
         ttl_ms: u32,
     ) -> Result<()> {
@@ -1290,6 +2000,7 @@ impl AppService {
         self.projection_store
             .upsert_live_presence(
                 topic_id,
+                channel_storage_id(channel_id).as_str(),
                 session_id,
                 author.as_str(),
                 now + i64::from(ttl_ms),
@@ -1301,7 +2012,7 @@ impl AppService {
             .await?;
         self.hint_transport
             .publish_hint(
-                &TopicId::new(topic_id),
+                &channel_hint_topic_for(topic_id, channel_id),
                 GossipHint::LivePresence {
                     topic_id: TopicId::new(topic_id),
                     session_id: session_id.to_string(),
@@ -1326,6 +2037,7 @@ impl AppService {
         let state = LiveSessionStateDocV1 {
             session_id: manifest.session_id.clone(),
             topic_id: TopicId::new(topic_id),
+            channel_id: manifest.channel_id.clone(),
             owner_pubkey: manifest.owner_pubkey.clone(),
             created_at,
             updated_at: now,
@@ -1357,6 +2069,7 @@ impl AppService {
         let state = GameRoomStateDocV1 {
             room_id: manifest.room_id.clone(),
             topic_id: TopicId::new(topic_id),
+            channel_id: manifest.channel_id.clone(),
             owner_pubkey: manifest.owner_pubkey.clone(),
             created_at,
             updated_at: now,
@@ -1380,20 +2093,30 @@ impl AppService {
         topic_id: &str,
         session_id: &str,
     ) -> Result<Option<(LiveSessionStateDocV1, LiveSessionManifestBlobV1)>> {
-        let Some(state) =
-            fetch_live_session_state(self.docs_sync.as_ref(), topic_id, session_id).await?
-        else {
-            return Ok(None);
-        };
-        let Some(manifest) = fetch_manifest_blob::<LiveSessionManifestBlobV1>(
-            self.blob_service.as_ref(),
-            &state.current_manifest,
-        )
-        .await?
-        else {
-            return Ok(None);
-        };
-        Ok(Some((state, manifest)))
+        for replica in subscription_replicas_for_topic(
+            topic_id,
+            self.joined_private_channel_states_for_topic(topic_id).await,
+        ) {
+            let Some(state) = fetch_live_session_state_from_replica(
+                self.docs_sync.as_ref(),
+                &replica,
+                session_id,
+            )
+            .await?
+            else {
+                continue;
+            };
+            let Some(manifest) = fetch_manifest_blob::<LiveSessionManifestBlobV1>(
+                self.blob_service.as_ref(),
+                &state.current_manifest,
+            )
+            .await?
+            else {
+                continue;
+            };
+            return Ok(Some((state, manifest)));
+        }
+        Ok(None)
     }
 
     async fn fetch_game_room_state_and_manifest(
@@ -1401,19 +2124,27 @@ impl AppService {
         topic_id: &str,
         room_id: &str,
     ) -> Result<Option<(GameRoomStateDocV1, GameRoomManifestBlobV1)>> {
-        let Some(state) = fetch_game_room_state(self.docs_sync.as_ref(), topic_id, room_id).await?
-        else {
-            return Ok(None);
-        };
-        let Some(manifest) = fetch_manifest_blob::<GameRoomManifestBlobV1>(
-            self.blob_service.as_ref(),
-            &state.current_manifest,
-        )
-        .await?
-        else {
-            return Ok(None);
-        };
-        Ok(Some((state, manifest)))
+        for replica in subscription_replicas_for_topic(
+            topic_id,
+            self.joined_private_channel_states_for_topic(topic_id).await,
+        ) {
+            let Some(state) =
+                fetch_game_room_state_from_replica(self.docs_sync.as_ref(), &replica, room_id)
+                    .await?
+            else {
+                continue;
+            };
+            let Some(manifest) = fetch_manifest_blob::<GameRoomManifestBlobV1>(
+                self.blob_service.as_ref(),
+                &state.current_manifest,
+            )
+            .await?
+            else {
+                continue;
+            };
+            return Ok(Some((state, manifest)));
+        }
+        Ok(None)
     }
 
     async fn build_author_social_view(&self, author_pubkey: &str) -> Result<AuthorSocialView> {
@@ -1546,93 +2277,14 @@ impl AppService {
     }
 
     async fn spawn_topic_subscription(&self, topic_id: &str) -> Result<()> {
-        let projection_store = Arc::clone(&self.projection_store);
-        let docs_sync = Arc::clone(&self.docs_sync);
-        let blob_service = Arc::clone(&self.blob_service);
-        let hint_transport = Arc::clone(&self.hint_transport);
-        let last_sync = Arc::clone(&self.last_sync_ts);
-        let topic_key = topic_id.to_string();
-        let topic_replica = topic_replica_id(topic_id);
-        docs_sync.open_replica(&topic_replica).await?;
-        projection_store.clear_topic_live_presence(topic_id).await?;
-        let mut doc_stream = docs_sync.subscribe_replica(&topic_replica).await?;
-        let mut hint_stream = hint_transport
-            .subscribe_hints(&TopicId::new(topic_id))
-            .await?;
-        let topic = topic_id.to_string();
-        let handle = tokio::spawn(async move {
-            let _ = hydrate_topic_state_with_services(
-                docs_sync.as_ref(),
-                blob_service.as_ref(),
-                projection_store.as_ref(),
-                topic.as_str(),
-            )
-            .await;
-            loop {
-                tokio::select! {
-                    Some(event) = doc_stream.next() => {
-                        if let Ok(event) = event {
-                            if let Some(source_peer) = event.source_peer.as_deref()
-                                && let Err(error) = blob_service.learn_peer(source_peer).await
-                            {
-                                warn!(
-                                    topic = %topic,
-                                    source_peer = %source_peer,
-                                    error = %error,
-                                    "failed to learn blob peer from docs sync event"
-                                );
-                            }
-                            if let Ok(count) = hydrate_topic_state_with_services(
-                                docs_sync.as_ref(),
-                                blob_service.as_ref(),
-                                projection_store.as_ref(),
-                                topic.as_str(),
-                            ).await
-                            && count > 0
-                            {
-                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                            }
-                        }
-                    }
-                    Some(event) = hint_stream.next() => {
-                        if hint_targets_topic(&event.hint, topic.as_str()) {
-                            match &event.hint {
-                                GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {
-                                    let now = Utc::now().timestamp_millis();
-                                    let _ = projection_store
-                                        .upsert_live_presence(
-                                            topic.as_str(),
-                                            session_id.as_str(),
-                                            author.as_str(),
-                                            now + i64::from(*ttl_ms),
-                                            now,
-                                        )
-                                        .await;
-                                    let _ = projection_store.clear_expired_live_presence(now).await;
-                                    *last_sync.lock().await = Some(now);
-                                }
-                                _ => {
-                                    if let Ok(count) = hydrate_topic_state_with_services(
-                                        docs_sync.as_ref(),
-                                        blob_service.as_ref(),
-                                        projection_store.as_ref(),
-                                        topic.as_str(),
-                                    ).await
-                                    && count > 0
-                                    {
-                                        *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else => break,
-                }
-            }
-        });
-
-        self.subscriptions.lock().await.insert(topic_key, handle);
-        Ok(())
+        self.spawn_subscription_task(
+            topic_id,
+            None,
+            topic_replica_id(topic_id),
+            TopicId::new(topic_id),
+            None,
+        )
+        .await
     }
 
     async fn ingest_event(
@@ -1708,23 +2360,32 @@ impl AppService {
         } else {
             "post"
         };
+        let mut tags = vec![
+            vec!["topic".into(), projection.topic_id.clone()],
+            vec!["object".into(), object_kind.into()],
+        ];
+        if projection.channel_id != PUBLIC_CHANNEL_ID {
+            tags.push(vec!["channel".into(), projection.channel_id.clone()]);
+        }
 
         Ok(Some(KukuriEnvelope {
             id: projection.object_id,
             pubkey: projection.author_pubkey.into(),
             created_at: projection.created_at,
             kind: object_kind.into(),
-            tags: vec![
-                vec!["topic".into(), projection.topic_id.clone()],
-                vec!["object".into(), object_kind.into()],
-            ],
+            tags,
             content: serde_json::to_string(&kukuri_core::KukuriPostEnvelopeContentV1 {
                 object_kind: object_kind.into(),
                 topic_id: TopicId::new(projection.topic_id.clone()),
+                channel_id: channel_id_from_storage(projection.channel_id.as_str()),
                 payload_ref: projection.payload_ref.clone(),
                 attachments: Vec::new(),
                 media_manifest_refs: Vec::new(),
-                visibility: ObjectVisibility::Public,
+                visibility: if projection.channel_id == PUBLIC_CHANNEL_ID {
+                    ObjectVisibility::Public
+                } else {
+                    ObjectVisibility::Private
+                },
                 reply_to: projection.reply_to_object_id.clone(),
                 root_id: projection.root_object_id.clone(),
             })?,
@@ -1742,8 +2403,124 @@ impl AppService {
         .await
     }
 
+    async fn ensure_scope_subscriptions(
+        &self,
+        topic_id: &str,
+        scope: &TimelineScope,
+    ) -> Result<()> {
+        self.ensure_topic_subscription(topic_id).await?;
+        match scope {
+            TimelineScope::Public => Ok(()),
+            TimelineScope::AllJoined => {
+                self.ensure_joined_private_channel_subscriptions(topic_id)
+                    .await
+            }
+            TimelineScope::Channel { channel_id } => {
+                self.ensure_private_channel_access(topic_id, channel_id)
+                    .await?;
+                self.ensure_private_channel_subscription(topic_id, channel_id.as_str())
+                    .await
+            }
+        }
+    }
+
+    async fn allowed_channel_ids_for_scope(
+        &self,
+        topic_id: &str,
+        scope: &TimelineScope,
+    ) -> Result<BTreeSet<String>> {
+        let mut allowed = BTreeSet::new();
+        match scope {
+            TimelineScope::Public => {
+                allowed.insert(PUBLIC_CHANNEL_ID.to_string());
+            }
+            TimelineScope::AllJoined => {
+                allowed.insert(PUBLIC_CHANNEL_ID.to_string());
+                for state in self.joined_private_channel_states_for_topic(topic_id).await {
+                    allowed.insert(state.channel_id.as_str().to_string());
+                }
+            }
+            TimelineScope::Channel { channel_id } => {
+                self.ensure_private_channel_access(topic_id, channel_id)
+                    .await?;
+                allowed.insert(channel_id.as_str().to_string());
+            }
+        }
+        Ok(allowed)
+    }
+
+    async fn hydrate_scope_projection(
+        &self,
+        topic_id: &str,
+        scope: &TimelineScope,
+    ) -> Result<usize> {
+        let mut hydrated = hydrate_topic_state_with_services(
+            self.docs_sync.as_ref(),
+            self.blob_service.as_ref(),
+            self.projection_store.as_ref(),
+            topic_id,
+        )
+        .await?;
+        match scope {
+            TimelineScope::Public => {}
+            TimelineScope::AllJoined => {
+                for state in self.joined_private_channel_states_for_topic(topic_id).await {
+                    hydrated += hydrate_subscription_state_with_services(
+                        self.docs_sync.as_ref(),
+                        self.blob_service.as_ref(),
+                        self.projection_store.as_ref(),
+                        topic_id,
+                        &private_channel_replica_id(state.channel_id.as_str()),
+                    )
+                    .await?;
+                }
+            }
+            TimelineScope::Channel { channel_id } => {
+                self.ensure_private_channel_access(topic_id, channel_id)
+                    .await?;
+                hydrated += hydrate_subscription_state_with_services(
+                    self.docs_sync.as_ref(),
+                    self.blob_service.as_ref(),
+                    self.projection_store.as_ref(),
+                    topic_id,
+                    &private_channel_replica_id(channel_id.as_str()),
+                )
+                .await?;
+            }
+        }
+        Ok(hydrated)
+    }
+
+    async fn maybe_restart_scope_replica_sync(&self, topic_id: &str, scope: &TimelineScope) {
+        self.maybe_restart_replica_sync(topic_id, &topic_replica_id(topic_id))
+            .await;
+        match scope {
+            TimelineScope::Public => {}
+            TimelineScope::AllJoined => {
+                for state in self.joined_private_channel_states_for_topic(topic_id).await {
+                    self.maybe_restart_replica_sync(
+                        topic_id,
+                        &private_channel_replica_id(state.channel_id.as_str()),
+                    )
+                    .await;
+                }
+            }
+            TimelineScope::Channel { channel_id } => {
+                self.maybe_restart_replica_sync(
+                    topic_id,
+                    &private_channel_replica_id(channel_id.as_str()),
+                )
+                .await;
+            }
+        }
+    }
+
     async fn maybe_restart_topic_replica_sync(&self, topic_id: &str) {
-        let replica = topic_replica_id(topic_id);
+        self.maybe_restart_replica_sync(topic_id, &topic_replica_id(topic_id))
+            .await;
+    }
+
+    async fn maybe_restart_replica_sync(&self, topic_id: &str, replica: &ReplicaId) {
         let key = replica.as_str().to_string();
         let now = Utc::now().timestamp();
         {
@@ -1757,8 +2534,9 @@ impl AppService {
         if let Err(error) = self.docs_sync.restart_replica_sync(&replica).await {
             warn!(
                 topic = %topic_id,
+                replica = %replica.as_str(),
                 error = %error,
-                "failed to restart topic replica sync"
+                "failed to restart replica sync"
             );
         }
     }
@@ -1796,6 +2574,9 @@ impl AppService {
         } else {
             Vec::new()
         };
+        let audience_label = self
+            .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
+            .await;
 
         Ok(PostView {
             object_id: row.object_id.0.clone(),
@@ -1822,6 +2603,8 @@ impl AppService {
             } else {
                 "post".into()
             },
+            channel_id: channel_id_for_view(row.channel_id.as_str()),
+            audience_label,
         })
     }
 }
@@ -2140,7 +2923,7 @@ async fn persist_post_object(
     object: CanonicalPostHeader,
     envelope: KukuriEnvelope,
 ) -> Result<()> {
-    let topic_replica = topic_replica_id(object.topic_id.as_str());
+    let topic_replica = channel_replica_for(object.topic_id.as_str(), object.channel_id.as_ref());
     let sort_key = timeline_sort_key(object.created_at, &object.object_id);
     let object_json = serde_json::to_value(&object)?;
     docs_sync.open_replica(&topic_replica).await?;
@@ -2210,11 +2993,12 @@ async fn persist_post_object(
 
 async fn persist_media_manifest(
     topic: &TopicId,
+    channel_id: Option<&ChannelId>,
     envelope: &KukuriEnvelope,
     manifest: &KukuriMediaManifestV1,
     docs_sync: &dyn DocsSync,
 ) -> Result<()> {
-    let replica = topic_replica_id(topic.as_str());
+    let replica = channel_replica_for(topic.as_str(), channel_id);
     docs_sync.open_replica(&replica).await?;
     docs_sync
         .apply_doc_op(
@@ -2247,7 +3031,7 @@ async fn persist_live_session_state(
     docs_sync: &dyn DocsSync,
     state: &LiveSessionStateDocV1,
 ) -> Result<()> {
-    let replica = topic_replica_id(state.topic_id.as_str());
+    let replica = channel_replica_for(state.topic_id.as_str(), state.channel_id.as_ref());
     docs_sync.open_replica(&replica).await?;
     docs_sync
         .apply_doc_op(
@@ -2265,7 +3049,7 @@ async fn persist_game_room_state(
     docs_sync: &dyn DocsSync,
     state: &GameRoomStateDocV1,
 ) -> Result<()> {
-    let replica = topic_replica_id(state.topic_id.as_str());
+    let replica = channel_replica_for(state.topic_id.as_str(), state.channel_id.as_ref());
     docs_sync.open_replica(&replica).await?;
     docs_sync
         .apply_doc_op(
@@ -2277,6 +3061,34 @@ async fn persist_game_room_state(
         )
         .await?;
     Ok(())
+}
+
+async fn persist_private_channel_metadata(
+    docs_sync: &dyn DocsSync,
+    _topic_id: &str,
+    channel_id: &ChannelId,
+    metadata: &PrivateChannelMetadataDocV1,
+) -> Result<()> {
+    let replica = private_channel_replica_id(channel_id.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("channels", "metadata"),
+                value: serde_json::to_value(metadata)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("channels", "topic"),
+                value: serde_json::json!({ "topic_id": metadata.topic_id }),
+            },
+        )
+        .await
 }
 
 async fn store_manifest_blob<T: Serialize>(
@@ -2298,15 +3110,14 @@ async fn fetch_manifest_blob<T: DeserializeOwned>(
     Ok(Some(serde_json::from_slice(&bytes)?))
 }
 
-async fn fetch_live_session_state(
+async fn fetch_live_session_state_from_replica(
     docs_sync: &dyn DocsSync,
-    topic_id: &str,
+    replica: &ReplicaId,
     session_id: &str,
 ) -> Result<Option<LiveSessionStateDocV1>> {
-    let replica = topic_replica_id(topic_id);
     let records = docs_sync
         .query_replica(
-            &replica,
+            replica,
             DocQuery::Exact(stable_key("sessions/live", &format!("{session_id}/state"))),
         )
         .await?;
@@ -2316,15 +3127,14 @@ async fn fetch_live_session_state(
     Ok(Some(serde_json::from_slice(&record.value)?))
 }
 
-async fn fetch_game_room_state(
+async fn fetch_game_room_state_from_replica(
     docs_sync: &dyn DocsSync,
-    topic_id: &str,
+    replica: &ReplicaId,
     room_id: &str,
 ) -> Result<Option<GameRoomStateDocV1>> {
-    let replica = topic_replica_id(topic_id);
     let records = docs_sync
         .query_replica(
-            &replica,
+            replica,
             DocQuery::Exact(stable_key("sessions/game", &format!("{room_id}/state"))),
         )
         .await?;
@@ -2342,6 +3152,7 @@ fn live_projection_row_from_state(
     LiveSessionProjectionRow {
         session_id: state.session_id.clone(),
         topic_id: topic_id.to_string(),
+        channel_id: channel_storage_id(state.channel_id.as_ref()),
         host_pubkey: state.owner_pubkey.as_str().to_string(),
         title: manifest.title.clone(),
         description: manifest.description.clone(),
@@ -2349,7 +3160,7 @@ fn live_projection_row_from_state(
         started_at: manifest.started_at,
         ended_at: manifest.ended_at,
         updated_at: state.updated_at,
-        source_replica_id: topic_replica_id(topic_id),
+        source_replica_id: channel_replica_for(topic_id, state.channel_id.as_ref()),
         source_key: stable_key("sessions/live", &format!("{}/state", state.session_id)),
         manifest_blob_hash: state.current_manifest.hash.clone(),
         derived_at: Utc::now().timestamp_millis(),
@@ -2366,6 +3177,7 @@ fn game_projection_row_from_state(
     GameRoomProjectionRow {
         room_id: state.room_id.clone(),
         topic_id: topic_id.to_string(),
+        channel_id: channel_storage_id(state.channel_id.as_ref()),
         host_pubkey: state.owner_pubkey.as_str().to_string(),
         title: manifest.title.clone(),
         description: manifest.description.clone(),
@@ -2373,7 +3185,7 @@ fn game_projection_row_from_state(
         phase_label: manifest.phase_label.clone(),
         scores: manifest.scores.clone(),
         updated_at: state.updated_at,
-        source_replica_id: topic_replica_id(topic_id),
+        source_replica_id: channel_replica_for(topic_id, state.channel_id.as_ref()),
         source_key: stable_key("sessions/game", &format!("{}/state", state.room_id)),
         manifest_blob_hash: state.current_manifest.hash.clone(),
         derived_at: Utc::now().timestamp_millis(),
@@ -2392,13 +3204,17 @@ fn projection_row_from_header(
     ObjectProjectionRow {
         object_id: header.object_id.clone(),
         topic_id: header.topic_id.as_str().to_string(),
+        channel_id: channel_storage_id(header.channel_id.as_ref()),
         author_pubkey: header.author.as_str().to_string(),
         created_at: header.created_at,
         root_object_id: header.root.clone(),
         reply_to_object_id: header.reply_to.clone(),
         payload_ref: header.payload_ref.clone(),
         content,
-        source_replica_id: topic_replica_id(header.topic_id.as_str()),
+        source_replica_id: channel_replica_for(
+            header.topic_id.as_str(),
+            header.channel_id.as_ref(),
+        ),
         source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
         source_envelope_id: header.envelope_id.clone(),
         source_blob_hash,
@@ -2413,9 +3229,25 @@ async fn hydrate_topic_projection_with_services(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
 ) -> Result<usize> {
-    let replica = topic_replica_id(topic_id);
+    hydrate_object_projection_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        &topic_replica_id(topic_id),
+    )
+    .await
+}
+
+async fn hydrate_object_projection_from_replica(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+) -> Result<usize> {
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("objects/".into()))
+        .query_replica(replica, DocQuery::Prefix("objects/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
@@ -2466,15 +3298,47 @@ async fn hydrate_topic_state_with_services(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
 ) -> Result<usize> {
-    let post_count =
-        hydrate_topic_projection_with_services(docs_sync, blob_service, projection_store, topic_id)
-            .await?;
-    let live_count =
-        hydrate_live_sessions_with_services(docs_sync, blob_service, projection_store, topic_id)
-            .await?;
-    let game_count =
-        hydrate_game_rooms_with_services(docs_sync, blob_service, projection_store, topic_id)
-            .await?;
+    hydrate_subscription_state_with_services(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        &topic_replica_id(topic_id),
+    )
+    .await
+}
+
+async fn hydrate_subscription_state_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+) -> Result<usize> {
+    let post_count = hydrate_object_projection_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+    )
+    .await?;
+    let live_count = hydrate_live_sessions_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+    )
+    .await?;
+    let game_count = hydrate_game_rooms_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+    )
+    .await?;
     Ok(post_count + live_count + game_count)
 }
 
@@ -2484,9 +3348,25 @@ async fn hydrate_live_sessions_with_services(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
 ) -> Result<usize> {
-    let replica = topic_replica_id(topic_id);
+    hydrate_live_sessions_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        &topic_replica_id(topic_id),
+    )
+    .await
+}
+
+async fn hydrate_live_sessions_from_replica(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+) -> Result<usize> {
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("sessions/live/".into()))
+        .query_replica(replica, DocQuery::Prefix("sessions/live/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
@@ -2521,9 +3401,25 @@ async fn hydrate_game_rooms_with_services(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
 ) -> Result<usize> {
-    let replica = topic_replica_id(topic_id);
+    hydrate_game_rooms_from_replica(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        &topic_replica_id(topic_id),
+    )
+    .await
+}
+
+async fn hydrate_game_rooms_from_replica(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+) -> Result<usize> {
     let records = docs_sync
-        .query_replica(&replica, DocQuery::Prefix("sessions/game/".into()))
+        .query_replica(replica, DocQuery::Prefix("sessions/game/".into()))
         .await?;
     let mut hydrated = 0usize;
     for record in records {
@@ -2567,6 +3463,98 @@ fn projection_page_needs_hydration(page: &Page<ObjectProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
 }
 
+async fn filtered_timeline_page(
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    cursor: Option<TimelineCursor>,
+    limit: usize,
+    allowed_channels: &BTreeSet<String>,
+) -> Result<Page<ObjectProjectionRow>> {
+    if limit == 0 {
+        return Ok(Page {
+            items: Vec::new(),
+            next_cursor: cursor,
+        });
+    }
+    let mut current_cursor = cursor;
+    let mut items = Vec::new();
+    let page_size = limit.max(20);
+    loop {
+        let page = ProjectionStore::list_topic_timeline(
+            projection_store,
+            topic_id,
+            current_cursor.clone(),
+            page_size,
+        )
+        .await?;
+        let next_cursor = page.next_cursor.clone();
+        for row in page.items {
+            if allowed_channels.contains(row.channel_id.as_str()) {
+                items.push(row);
+                if items.len() >= limit {
+                    return Ok(Page { items, next_cursor });
+                }
+            }
+        }
+        if next_cursor.is_none() {
+            return Ok(Page { items, next_cursor });
+        }
+        current_cursor = next_cursor;
+    }
+}
+
+async fn filtered_thread_page(
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    thread_root_object_id: &EnvelopeId,
+    cursor: Option<TimelineCursor>,
+    limit: usize,
+    allowed_channel: Option<&str>,
+) -> Result<Page<ObjectProjectionRow>> {
+    if limit == 0 {
+        return Ok(Page {
+            items: Vec::new(),
+            next_cursor: cursor,
+        });
+    }
+    let mut current_cursor = cursor;
+    let mut items = Vec::new();
+    let page_size = limit.max(20);
+    loop {
+        let page = ProjectionStore::list_thread(
+            projection_store,
+            topic_id,
+            thread_root_object_id,
+            current_cursor.clone(),
+            page_size,
+        )
+        .await?;
+        let next_cursor = page.next_cursor.clone();
+        for row in page.items {
+            if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id) {
+                items.push(row);
+                if items.len() >= limit {
+                    return Ok(Page { items, next_cursor });
+                }
+            }
+        }
+        if next_cursor.is_none() {
+            return Ok(Page { items, next_cursor });
+        }
+        current_cursor = next_cursor;
+    }
+}
+
+fn filter_channel_rows<T>(
+    rows: Vec<T>,
+    allowed_channels: &BTreeSet<String>,
+    channel_id: impl Fn(&T) -> &str,
+) -> Vec<T> {
+    rows.into_iter()
+        .filter(|row| allowed_channels.contains(channel_id(row)))
+        .collect()
+}
+
 async fn fetch_post_object_for_projection(
     docs_sync: &dyn DocsSync,
     replica_id: &ReplicaId,
@@ -2583,6 +3571,42 @@ async fn fetch_post_object_for_projection(
     };
     let header = serde_json::from_slice(&record.value)?;
     Ok(Some(header))
+}
+
+fn joined_private_channel_view_from_state(
+    state: &JoinedPrivateChannelState,
+) -> JoinedPrivateChannelView {
+    JoinedPrivateChannelView {
+        topic_id: state.topic_id.clone(),
+        channel_id: state.channel_id.as_str().to_string(),
+        label: state.label.clone(),
+        creator_pubkey: state.creator_pubkey.clone(),
+    }
+}
+
+fn private_channel_capability_from_state(
+    state: JoinedPrivateChannelState,
+) -> PrivateChannelCapability {
+    PrivateChannelCapability {
+        topic_id: state.topic_id,
+        channel_id: state.channel_id.as_str().to_string(),
+        label: state.label,
+        creator_pubkey: state.creator_pubkey,
+        namespace_secret_hex: state.namespace_secret_hex,
+    }
+}
+
+fn subscription_replicas_for_topic(
+    topic_id: &str,
+    joined_channels: Vec<JoinedPrivateChannelState>,
+) -> Vec<ReplicaId> {
+    let mut replicas = vec![topic_replica_id(topic_id)];
+    replicas.extend(
+        joined_channels
+            .into_iter()
+            .map(|state| private_channel_replica_id(state.channel_id.as_str())),
+    );
+    replicas
 }
 
 async fn blob_view_status_for_payload(
@@ -2712,25 +3736,74 @@ fn validate_game_room_scores(
     Ok(())
 }
 
-fn live_presence_task_key(topic_id: &str, session_id: &str) -> String {
-    format!("{topic_id}::{session_id}")
+fn channel_storage_id(channel_id: Option<&ChannelId>) -> String {
+    channel_id
+        .map(|value| value.as_str().to_string())
+        .unwrap_or_else(|| PUBLIC_CHANNEL_ID.to_string())
+}
+
+fn channel_replica_for(topic_id: &str, channel_id: Option<&ChannelId>) -> ReplicaId {
+    channel_id
+        .map(|value| private_channel_replica_id(value.as_str()))
+        .unwrap_or_else(|| topic_replica_id(topic_id))
+}
+
+fn channel_hint_topic_for(topic_id: &str, channel_id: Option<&ChannelId>) -> TopicId {
+    channel_id
+        .map(|value| private_channel_hint_topic(value.as_str()))
+        .unwrap_or_else(|| TopicId::new(topic_id))
+}
+
+fn channel_id_from_storage(channel_id: &str) -> Option<ChannelId> {
+    (channel_id != PUBLIC_CHANNEL_ID).then(|| ChannelId::new(channel_id.to_string()))
+}
+
+fn channel_id_for_view(channel_id: &str) -> Option<String> {
+    channel_id_from_storage(channel_id).map(|value| value.as_str().to_string())
+}
+
+fn audience_label_from_storage(channel_id: &str, label: Option<&str>) -> String {
+    if channel_id == PUBLIC_CHANNEL_ID {
+        "Public".to_string()
+    } else {
+        label
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| "Private channel".to_string())
+    }
+}
+
+fn joined_private_channel_key(topic_id: &str, channel_id: &str) -> String {
+    format!("{topic_id}::{channel_id}")
+}
+
+fn live_presence_task_key(topic_id: &str, channel_id: &str, session_id: &str) -> String {
+    format!("{topic_id}::{channel_id}::{session_id}")
 }
 
 fn short_id_suffix(author_pubkey: &str) -> &str {
     author_pubkey.get(..8).unwrap_or(author_pubkey)
 }
 
-fn normalize_topic_name(topic: String) -> String {
-    topic
+fn normalize_topic_name(topic: String) -> Option<String> {
+    let normalized = topic
         .strip_prefix("hint/")
-        .map_or(topic.clone(), ToOwned::to_owned)
+        .map_or(topic.clone(), ToOwned::to_owned);
+    if normalized.starts_with("private/") {
+        None
+    } else {
+        Some(normalized)
+    }
 }
 
 fn normalize_topics(topics: Vec<String>) -> Vec<String> {
     let mut seen = BTreeSet::new();
     let mut normalized = Vec::new();
     for topic in topics {
-        let topic = normalize_topic_name(topic);
+        let Some(topic) = normalize_topic_name(topic) else {
+            continue;
+        };
         if seen.insert(topic.clone()) {
             normalized.push(topic);
         }
@@ -2741,7 +3814,9 @@ fn normalize_topics(topics: Vec<String>) -> Vec<String> {
 fn normalize_topic_diagnostics(diagnostics: Vec<TopicPeerSnapshot>) -> Vec<TopicPeerSnapshot> {
     let mut merged = BTreeMap::<String, TopicPeerSnapshot>::new();
     for diagnostic in diagnostics {
-        let topic = normalize_topic_name(diagnostic.topic);
+        let Some(topic) = normalize_topic_name(diagnostic.topic) else {
+            continue;
+        };
         let entry = merged
             .entry(topic.clone())
             .or_insert_with(|| TopicPeerSnapshot {
@@ -2831,6 +3906,11 @@ impl Drop for AppService {
                 handle.abort();
             }
         }
+        if let Ok(mut subscriptions) = self.private_channel_subscriptions.try_lock() {
+            for (_, handle) in subscriptions.drain() {
+                handle.abort();
+            }
+        }
         if let Ok(mut subscriptions) = self.author_subscriptions.try_lock() {
             for (_, handle) in subscriptions.drain() {
                 handle.abort();
@@ -2850,6 +3930,7 @@ mod tests {
     use async_trait::async_trait;
     use iroh::address_lookup::EndpointInfo;
     use kukuri_blob_service::IrohBlobService;
+    use kukuri_core::build_post_envelope_with_payload;
     use kukuri_docs_sync::IrohDocsNode;
     use kukuri_docs_sync::IrohDocsSync;
     use kukuri_store::MemoryStore;
@@ -5606,6 +6687,127 @@ mod tests {
             .await
             .expect_err("ended room update should fail");
         assert!(error.to_string().contains("ended game room"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn private_channel_invite_scopes_posts_and_replies() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("private-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("private-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b, &stack_b);
+        let topic = "kukuri:topic:private-channel";
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let channel = app_a
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "core".into(),
+            })
+            .await
+            .expect("create private channel");
+        let invite = app_a
+            .export_private_channel_invite(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export invite");
+        let preview = app_b
+            .import_private_channel_invite(invite.as_str())
+            .await
+            .expect("import invite");
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+        let private_channel_id = ChannelId::new(channel.channel_id.clone());
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+
+        let object_id = app_a
+            .create_post_in_channel(topic, private_ref.clone(), "private hello", None)
+            .await
+            .expect("create private post");
+
+        let received = timeout(Duration::from_secs(10), async {
+            loop {
+                let public = app_b
+                    .list_timeline_scoped(topic, TimelineScope::Public, None, 20)
+                    .await
+                    .expect("public timeline");
+                assert!(
+                    public.items.iter().all(|post| post.object_id != object_id),
+                    "private post leaked into public scope"
+                );
+                let private = app_b
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline");
+                if let Some(post) = private
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == object_id)
+                {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private timeline timeout");
+        assert_eq!(
+            received.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+
+        let reply_id = app_b
+            .create_post_in_channel(
+                topic,
+                ChannelRef::Public,
+                "private reply",
+                Some(object_id.as_str()),
+            )
+            .await
+            .expect("reply in private channel");
+
+        let thread = timeout(Duration::from_secs(10), async {
+            loop {
+                let thread = app_a
+                    .list_thread(topic, object_id.as_str(), None, 20)
+                    .await
+                    .expect("thread");
+                if thread.items.iter().any(|post| post.object_id == reply_id) {
+                    return thread;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private thread timeout");
+        let reply = thread
+            .items
+            .iter()
+            .find(|post| post.object_id == reply_id)
+            .expect("reply");
+        assert_eq!(
+            reply.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+        assert_eq!(reply.reply_to.as_deref(), Some(object_id.as_str()));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -12,8 +12,8 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput,
-    GameRoomView, GameScoreView, LiveSessionView, PendingAttachment, ProfileInput, SyncStatus,
-    TimelineView, UpdateGameRoomInput,
+    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
+    PrivateChannelCapability, ProfileInput, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -22,7 +22,8 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, Profile, ReplicaId, TopicId,
+    AssetRole, BlobHash, ChannelRef, CreatePrivateChannelInput, GameRoomStatus, GossipHint,
+    KukuriKeys, PrivateChannelInvitePreview, Profile, ReplicaId, TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -48,6 +49,8 @@ const COMMUNITY_NODE_CONFIG_FILE_EXTENSION: &str = "community-node.json";
 const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
 const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
+const PRIVATE_CHANNEL_CAPABILITIES_PURPOSE: &str = "private-channel-capabilities";
+const PRIVATE_CHANNEL_CAPABILITIES_KEY: &str = "registry";
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
 const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;
@@ -57,6 +60,8 @@ pub struct CreatePostRequest {
     pub topic: String,
     pub content: String,
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     #[serde(default)]
     pub attachments: Vec<CreateAttachmentRequest>,
 }
@@ -73,6 +78,8 @@ pub struct CreateAttachmentRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListTimelineRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
     pub cursor: Option<TimelineCursor>,
     pub limit: Option<usize>,
 }
@@ -123,11 +130,15 @@ pub struct SetMyProfileRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListLiveSessionsRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateLiveSessionRequest {
     pub topic: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     pub title: String,
     pub description: String,
 }
@@ -141,14 +152,41 @@ pub struct LiveSessionCommandRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListGameRoomsRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateGameRoomRequest {
     pub topic: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     pub title: String,
     pub description: String,
     pub participants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreatePrivateChannelRequest {
+    pub topic: String,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportPrivateChannelInviteRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportPrivateChannelInviteRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListJoinedPrivateChannelsRequest {
+    pub topic: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -399,6 +437,24 @@ impl DocsSync for ReloadableDocsSync {
         self.current().await.open_replica(replica_id).await
     }
 
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.current()
+            .await
+            .register_private_replica_secret(replica_id, namespace_secret_hex)
+            .await
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.current()
+            .await
+            .remove_private_replica_secret(replica_id)
+            .await
+    }
+
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
         self.current().await.apply_doc_op(replica_id, op).await
     }
@@ -552,6 +608,17 @@ impl DesktopRuntime {
             iroh_stack.blob_service.clone(),
             keys,
         );
+        for capability in load_private_channel_capabilities(&db_path, identity_mode)? {
+            app_service
+                .restore_private_channel_capability(
+                    capability.topic_id.as_str(),
+                    capability.channel_id.as_str(),
+                    capability.label.as_str(),
+                    capability.creator_pubkey.as_str(),
+                    capability.namespace_secret_hex.as_str(),
+                )
+                .await?;
+        }
         app_service.warm_social_graph().await?;
 
         Ok(Self {
@@ -590,6 +657,14 @@ impl DesktopRuntime {
         &self.db_path
     }
 
+    async fn persist_private_channel_capabilities_from_app(&self) -> Result<()> {
+        persist_private_channel_capabilities(
+            &self.db_path,
+            self.identity_mode,
+            &self.app_service.list_private_channel_capabilities().await?,
+        )
+    }
+
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<String> {
         let attachments = request
             .attachments
@@ -597,8 +672,9 @@ impl DesktopRuntime {
             .map(pending_attachment_from_request)
             .collect::<Result<Vec<_>>>()?;
         self.app_service
-            .create_post_with_attachments(
+            .create_post_with_attachments_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 request.content.as_str(),
                 request.reply_to.as_deref(),
                 attachments,
@@ -608,8 +684,9 @@ impl DesktopRuntime {
 
     pub async fn list_timeline(&self, request: ListTimelineRequest) -> Result<TimelineView> {
         self.app_service
-            .list_timeline(
+            .list_timeline_scoped(
                 request.topic.as_str(),
+                request.scope,
                 request.cursor,
                 request.limit.unwrap_or(50),
             )
@@ -673,14 +750,15 @@ impl DesktopRuntime {
         request: ListLiveSessionsRequest,
     ) -> Result<Vec<LiveSessionView>> {
         self.app_service
-            .list_live_sessions(request.topic.as_str())
+            .list_live_sessions_scoped(request.topic.as_str(), request.scope)
             .await
     }
 
     pub async fn create_live_session(&self, request: CreateLiveSessionRequest) -> Result<String> {
         self.app_service
-            .create_live_session(
+            .create_live_session_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 CreateLiveSessionInput {
                     title: request.title,
                     description: request.description,
@@ -712,20 +790,70 @@ impl DesktopRuntime {
         request: ListGameRoomsRequest,
     ) -> Result<Vec<GameRoomView>> {
         self.app_service
-            .list_game_rooms(request.topic.as_str())
+            .list_game_rooms_scoped(request.topic.as_str(), request.scope)
             .await
     }
 
     pub async fn create_game_room(&self, request: CreateGameRoomRequest) -> Result<String> {
         self.app_service
-            .create_game_room(
+            .create_game_room_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 CreateGameRoomInput {
                     title: request.title,
                     description: request.description,
                     participants: request.participants,
                 },
             )
+            .await
+    }
+
+    pub async fn create_private_channel(
+        &self,
+        request: CreatePrivateChannelRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        let channel = self
+            .app_service
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(request.topic),
+                label: request.label,
+            })
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(channel)
+    }
+
+    pub async fn export_private_channel_invite(
+        &self,
+        request: ExportPrivateChannelInviteRequest,
+    ) -> Result<String> {
+        self.app_service
+            .export_private_channel_invite(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_private_channel_invite(
+        &self,
+        request: ImportPrivateChannelInviteRequest,
+    ) -> Result<PrivateChannelInvitePreview> {
+        let preview = self
+            .app_service
+            .import_private_channel_invite(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn list_joined_private_channels(
+        &self,
+        request: ListJoinedPrivateChannelsRequest,
+    ) -> Result<Vec<JoinedPrivateChannelView>> {
+        self.app_service
+            .list_joined_private_channels(request.topic.as_str())
             .await
     }
 
@@ -1589,6 +1717,38 @@ fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> Tran
     }
 }
 
+fn load_private_channel_capabilities(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+) -> Result<Vec<PrivateChannelCapability>> {
+    let Some(raw) = load_optional_secret(
+        db_path,
+        mode,
+        PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+        PRIVATE_CHANNEL_CAPABILITIES_KEY,
+    )?
+    else {
+        return Ok(Vec::new());
+    };
+    serde_json::from_str(&raw).context("failed to decode private channel capabilities")
+}
+
+fn persist_private_channel_capabilities(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    capabilities: &[PrivateChannelCapability],
+) -> Result<()> {
+    let encoded = serde_json::to_string(capabilities)
+        .context("failed to encode private channel capabilities")?;
+    persist_optional_secret(
+        db_path,
+        mode,
+        PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+        PRIVATE_CHANNEL_CAPABILITIES_KEY,
+        encoded.as_str(),
+    )
+}
+
 fn load_community_node_token(
     db_path: &Path,
     mode: IdentityStorageMode,
@@ -2043,6 +2203,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2068,6 +2229,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me again".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2075,6 +2237,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: "kukuri:topic:runtime".into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2153,6 +2316,7 @@ mod tests {
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2163,6 +2327,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello desktop runtime".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2173,6 +2338,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2194,6 +2360,483 @@ mod tests {
         assert_eq!(received.content, "hello desktop runtime");
         let status = runtime_b.get_sync_status().await.expect("sync status");
         assert!(status.last_sync_ts.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn private_channel_invite_restores_after_restart_without_reimport() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("private-runtime-a.db");
+        let db_b = dir.path().join("private-runtime-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a");
+
+        let topic = "kukuri:topic:desktop-private-channel";
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "core".into(),
+            })
+            .await
+            .expect("create private channel");
+        let invite = runtime_a
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export invite");
+        let preview = runtime_b
+            .import_private_channel_invite(ImportPrivateChannelInviteRequest { token: invite })
+            .await
+            .expect("import invite");
+        assert_eq!(preview.topic_id.as_str(), topic);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+        let private_channel_id = kukuri_core::ChannelId::new(channel.channel_id.clone());
+        let private_channel_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "private hello".into(),
+                reply_to: None,
+                channel_ref: private_channel_ref.clone(),
+                attachments: vec![],
+            })
+            .await
+            .expect("create private post");
+
+        let private_post = timeout(Duration::from_secs(10), async {
+            loop {
+                let public_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("public timeline");
+                assert!(
+                    public_timeline
+                        .items
+                        .iter()
+                        .all(|post| post.object_id != private_post_id),
+                    "private post leaked into public timeline"
+                );
+                let private_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline");
+                if let Some(post) = private_timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == private_post_id)
+                {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private post timeout");
+        assert_eq!(
+            private_post.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+        assert_eq!(private_post.audience_label, "core");
+
+        let private_reply_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "private reply".into(),
+                reply_to: Some(private_post_id.clone()),
+                channel_ref: ChannelRef::Public,
+                attachments: vec![],
+            })
+            .await
+            .expect("create private reply");
+        let private_thread = timeout(Duration::from_secs(10), async {
+            loop {
+                let thread = runtime_a
+                    .list_thread(ListThreadRequest {
+                        topic: topic.into(),
+                        thread_id: private_post_id.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("thread");
+                if thread
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == private_reply_id)
+                {
+                    return thread;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private thread timeout");
+        let reply = private_thread
+            .items
+            .iter()
+            .find(|post| post.object_id == private_reply_id)
+            .expect("reply");
+        assert_eq!(
+            reply.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+
+        let session_id = runtime_a
+            .create_live_session(CreateLiveSessionRequest {
+                topic: topic.into(),
+                channel_ref: private_channel_ref.clone(),
+                title: "core live".into(),
+                description: "private stream".into(),
+            })
+            .await
+            .expect("create private live session");
+        let _private_session = timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_b
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list private live sessions");
+                if let Some(session) = sessions
+                    .iter()
+                    .find(|session| session.session_id == session_id)
+                {
+                    return session.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private live timeout");
+        runtime_b
+            .join_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("join live session");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_a
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list live sessions a");
+                if sessions.iter().any(|session| {
+                    session.session_id == session_id
+                        && session.viewer_count == 1
+                        && !session.joined_by_me
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("live join timeout");
+        runtime_a
+            .end_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("end live session");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_b
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list live sessions b");
+                if sessions.iter().any(|session| {
+                    session.session_id == session_id
+                        && session.status == kukuri_core::LiveSessionStatus::Ended
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("live end timeout");
+
+        let room_id = runtime_a
+            .create_game_room(CreateGameRoomRequest {
+                topic: topic.into(),
+                channel_ref: private_channel_ref.clone(),
+                title: "core room".into(),
+                description: "private set".into(),
+                participants: vec!["Alice".into(), "Bob".into()],
+            })
+            .await
+            .expect("create private game room");
+        let room_before_update = timeout(Duration::from_secs(10), async {
+            loop {
+                let rooms = runtime_b
+                    .list_game_rooms(ListGameRoomsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list private game rooms");
+                if let Some(room) = rooms.iter().find(|room| room.room_id == room_id) {
+                    return room.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private game timeout");
+        runtime_a
+            .update_game_room(UpdateGameRoomRequest {
+                topic: topic.into(),
+                room_id: room_id.clone(),
+                status: GameRoomStatus::Running,
+                phase_label: Some("Round 2".into()),
+                scores: room_before_update
+                    .scores
+                    .iter()
+                    .map(|score| GameScoreView {
+                        participant_id: score.participant_id.clone(),
+                        label: score.label.clone(),
+                        score: if score.label == "Alice" { 2 } else { 1 },
+                    })
+                    .collect(),
+            })
+            .await
+            .expect("update private game room");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let rooms = runtime_b
+                    .list_game_rooms(ListGameRoomsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list updated game rooms");
+                if rooms.iter().any(|room| {
+                    room.room_id == room_id
+                        && room.phase_label.as_deref() == Some("Round 2")
+                        && room
+                            .scores
+                            .iter()
+                            .any(|score| score.label == "Alice" && score.score == 2)
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("game update timeout");
+
+        let joined_before_restart = runtime_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels before restart");
+        assert_eq!(joined_before_restart.len(), 1);
+        assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
+
+        timeout(Duration::from_secs(30), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(Duration::from_secs(30), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+        drop(runtime_a);
+        drop(runtime_b);
+        std::fs::remove_file(&db_b).expect("delete sqlite b");
+
+        let restarted_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart runtime b");
+
+        let joined_after_restart = restarted_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels after restart");
+        assert_eq!(joined_after_restart.len(), 1);
+        assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+        assert_eq!(joined_after_restart[0].label, "core");
+
+        let public_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("public timeline after restart");
+        assert!(
+            public_timeline_after_restart
+                .items
+                .iter()
+                .all(|post| post.object_id != private_post_id)
+        );
+        let private_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private timeline after restart");
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_post_id)
+        );
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_reply_id)
+        );
+
+        let private_thread_after_restart = restarted_b
+            .list_thread(ListThreadRequest {
+                topic: topic.into(),
+                thread_id: private_post_id.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private thread after restart");
+        assert!(
+            private_thread_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_reply_id)
+        );
+
+        let sessions_after_restart = restarted_b
+            .list_live_sessions(ListLiveSessionsRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+            })
+            .await
+            .expect("live sessions after restart");
+        assert!(sessions_after_restart.iter().any(|session| {
+            session.session_id == session_id
+                && session.status == kukuri_core::LiveSessionStatus::Ended
+        }));
+
+        let rooms_after_restart = restarted_b
+            .list_game_rooms(ListGameRoomsRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+            })
+            .await
+            .expect("game rooms after restart");
+        assert!(rooms_after_restart.iter().any(|room| {
+            room.room_id == room_id
+                && room.phase_label.as_deref() == Some("Round 2")
+                && room
+                    .scores
+                    .iter()
+                    .any(|score| score.label == "Alice" && score.score == 2)
+        }));
+
+        let fresh_invite = restarted_b
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh invite");
+        assert!(fresh_invite.contains(topic));
+        assert!(fresh_invite.contains(channel.channel_id.as_str()));
+
+        timeout(Duration::from_secs(30), restarted_b.shutdown())
+            .await
+            .expect("restarted runtime shutdown timeout");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2244,6 +2887,7 @@ mod tests {
         let _ = runtime_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2252,6 +2896,7 @@ mod tests {
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2283,6 +2928,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello seeded runtime".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2293,6 +2939,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2388,6 +3035,7 @@ mod tests {
         let _ = restarted_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2396,6 +3044,7 @@ mod tests {
         let _ = restarted_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2407,6 +3056,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello after restart".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2417,6 +3067,7 @@ mod tests {
                 let timeline = restarted_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2479,6 +3130,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello from before join".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2506,6 +3158,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2545,6 +3198,7 @@ mod tests {
                 topic: topic.into(),
                 content: "late image".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "late.png",
                     "image/png",
@@ -2576,6 +3230,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2623,6 +3278,7 @@ mod tests {
                 topic: topic.into(),
                 content: "late video".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![
                     video_attachment_request(
                         "late-video.mp4",
@@ -2663,6 +3319,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2726,6 +3383,7 @@ mod tests {
                 topic: topic.into(),
                 content: "roundtrip".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "roundtrip.png",
                     "image/png",
@@ -2737,6 +3395,7 @@ mod tests {
         let timeline = runtime
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2781,6 +3440,7 @@ mod tests {
                 topic: topic.into(),
                 content: "root".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2790,6 +3450,7 @@ mod tests {
                 topic: topic.into(),
                 content: "reply".into(),
                 reply_to: Some(root_id.clone()),
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2808,6 +3469,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2846,6 +3508,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored from docs".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2864,6 +3527,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2895,6 +3559,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored image".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "restored.png",
                     "image/png",
@@ -2917,6 +3582,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2956,6 +3622,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored video".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![
                     video_attachment_request(
                         "clip.mp4",
@@ -2987,6 +3654,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -3041,6 +3709,7 @@ mod tests {
         let session_id = runtime
             .create_live_session(CreateLiveSessionRequest {
                 topic: topic.into(),
+                channel_ref: ChannelRef::Public,
                 title: "restart live".into(),
                 description: "session".into(),
             })
@@ -3074,6 +3743,7 @@ mod tests {
         let sessions = restarted
             .list_live_sessions(ListLiveSessionsRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
             })
             .await
             .expect("list live sessions");
@@ -3101,6 +3771,7 @@ mod tests {
         let room_id = runtime
             .create_game_room(CreateGameRoomRequest {
                 topic: topic.into(),
+                channel_ref: ChannelRef::Public,
                 title: "restart finals".into(),
                 description: "set".into(),
                 participants: vec!["Alice".into(), "Bob".into()],
@@ -3142,6 +3813,7 @@ mod tests {
         let rooms = restarted
             .list_game_rooms(ListGameRoomsRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
             })
             .await
             .expect("list game rooms");

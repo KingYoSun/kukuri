@@ -14,23 +14,45 @@ import {
   DiscoveryConfig,
   GameRoomView,
   GameScoreView,
+  JoinedPrivateChannelView,
   LiveSessionView,
   PostView,
   Profile,
+  PrivateChannelInvitePreview,
   SyncStatus,
+  TimelineScope,
   TimelineView,
 } from './lib/api';
 
 function withSocialPostDefaults(post: PostView): PostView {
   return {
-    author_name: null,
-    author_display_name: null,
-    following: false,
-    followed_by: false,
-    mutual: false,
-    friend_of_friend: false,
     ...post,
+    author_name: post.author_name ?? null,
+    author_display_name: post.author_display_name ?? null,
+    following: post.following ?? false,
+    followed_by: post.followed_by ?? false,
+    mutual: post.mutual ?? false,
+    friend_of_friend: post.friend_of_friend ?? false,
+    channel_id: post.channel_id ?? null,
+    audience_label: post.audience_label ?? (post.channel_id ? 'Private channel' : 'Public'),
     attachments: [...post.attachments],
+  };
+}
+
+function withLiveSessionDefaults(session: LiveSessionView): LiveSessionView {
+  return {
+    ...session,
+    channel_id: session.channel_id ?? null,
+    audience_label: session.audience_label ?? (session.channel_id ? 'Private channel' : 'Public'),
+  };
+}
+
+function withGameRoomDefaults(room: GameRoomView): GameRoomView {
+  return {
+    ...room,
+    channel_id: room.channel_id ?? null,
+    audience_label: room.audience_label ?? (room.channel_id ? 'Private channel' : 'Public'),
+    scores: room.scores.map((score) => ({ ...score })),
   };
 }
 
@@ -44,6 +66,7 @@ function createMockApi(options?: {
   myProfile?: Partial<Profile>;
   authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
   myProfileError?: string | null;
+  invitePreview?: PrivateChannelInvitePreview;
 }) {
   const assistPeerIds = options?.assistPeerIds ?? [];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
@@ -54,17 +77,18 @@ function createMockApi(options?: {
     ])
   );
   const liveSessionsByTopic: Record<string, LiveSessionView[]> = Object.fromEntries(
-    Object.entries(options?.seedLiveSessions ?? {}).map(([topic, sessions]) => [topic, [...sessions]])
+    Object.entries(options?.seedLiveSessions ?? {}).map(([topic, sessions]) => [
+      topic,
+      sessions.map((session) => withLiveSessionDefaults(session)),
+    ])
   );
   const gameRoomsByTopic: Record<string, GameRoomView[]> = Object.fromEntries(
     Object.entries(options?.seedGameRooms ?? {}).map(([topic, rooms]) => [
       topic,
-      rooms.map((room) => ({
-        ...room,
-        scores: room.scores.map((score) => ({ ...score })),
-      })),
+      rooms.map((room) => withGameRoomDefaults(room)),
     ])
   );
+  const joinedChannelsByTopic: Record<string, { topic_id: string; channel_id: string; label: string; creator_pubkey: string }[]> = {};
   let sequence = 0;
   let discoveryConfig: DiscoveryConfig = {
     mode: 'seeded_dht',
@@ -143,10 +167,11 @@ function createMockApi(options?: {
   );
 
   const api: DesktopApi = {
-    async createPost(topic, content, replyTo, attachments) {
+    async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
       sequence += 1;
       const objectId = `${topic}-${sequence}`;
       const posts = postsByTopic[topic] ?? [];
+      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
       const rootId = replyTo
         ? posts.find((post) => post.object_id === replyTo)?.root_id ?? replyTo
         : objectId;
@@ -162,6 +187,10 @@ function createMockApi(options?: {
           object_id: objectId,
           envelope_id: `envelope-${sequence}`,
           author_pubkey: 'f'.repeat(64),
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
           object_kind: replyTo ? 'comment' : 'post',
           content,
           content_status: 'Available',
@@ -169,6 +198,8 @@ function createMockApi(options?: {
           created_at: sequence,
           reply_to: replyTo ?? null,
           root_id: rootId,
+          channel_id: channelId,
+          audience_label: channelId ? 'Private channel' : 'Public',
         }),
         ...posts,
       ];
@@ -189,7 +220,12 @@ function createMockApi(options?: {
       }
       return objectId;
     },
-    async listTimeline(topic) {
+    async listTimeline(
+      topic,
+      _cursor,
+      _limit,
+      scope: TimelineScope = { kind: 'public' }
+    ) {
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
       if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
         syncStatus.topic_diagnostics.push({
@@ -208,7 +244,15 @@ function createMockApi(options?: {
           last_error: null,
         });
       }
-      return { items: postsByTopic[topic] ?? [], next_cursor: null };
+      const posts = postsByTopic[topic] ?? [];
+      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
+      const filtered =
+        scope.kind === 'channel'
+          ? posts.filter((post) => post.channel_id === scope.channel_id)
+          : scope.kind === 'all_joined'
+            ? posts.filter((post) => !post.channel_id || joinedIds.has(post.channel_id))
+            : posts.filter((post) => !post.channel_id);
+      return { items: filtered, next_cursor: null };
     },
     async listThread(topic, threadId) {
       const posts = postsByTopic[topic] ?? [];
@@ -343,14 +387,21 @@ function createMockApi(options?: {
         }
       );
     },
-    async listLiveSessions(topic) {
-      return liveSessionsByTopic[topic] ?? [];
+    async listLiveSessions(topic, scope: TimelineScope = { kind: 'public' }) {
+      const sessions = liveSessionsByTopic[topic] ?? [];
+      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
+      return scope.kind === 'channel'
+        ? sessions.filter((session) => session.channel_id === scope.channel_id)
+        : scope.kind === 'all_joined'
+          ? sessions.filter((session) => !session.channel_id || joinedIds.has(session.channel_id))
+          : sessions.filter((session) => !session.channel_id);
     },
-    async createLiveSession(topic, title, description) {
+    async createLiveSession(topic, title, description, channelRef = { kind: 'public' }) {
       sequence += 1;
       const sessionId = `live-${sequence}`;
+      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
       liveSessionsByTopic[topic] = [
-        {
+        withLiveSessionDefaults({
           session_id: sessionId,
           host_pubkey: syncStatus.local_author_pubkey,
           title,
@@ -360,7 +411,9 @@ function createMockApi(options?: {
           ended_at: null,
           viewer_count: 0,
           joined_by_me: false,
-        },
+          channel_id: channelId,
+          audience_label: channelId ? 'Private channel' : 'Public',
+        }),
         ...(liveSessionsByTopic[topic] ?? []),
       ];
       return sessionId;
@@ -399,19 +452,26 @@ function createMockApi(options?: {
           : session
       );
     },
-    async listGameRooms(topic) {
-      return gameRoomsByTopic[topic] ?? [];
+    async listGameRooms(topic, scope: TimelineScope = { kind: 'public' }) {
+      const rooms = gameRoomsByTopic[topic] ?? [];
+      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
+      return scope.kind === 'channel'
+        ? rooms.filter((room) => room.channel_id === scope.channel_id)
+        : scope.kind === 'all_joined'
+          ? rooms.filter((room) => !room.channel_id || joinedIds.has(room.channel_id))
+          : rooms.filter((room) => !room.channel_id);
     },
-    async createGameRoom(topic, title, description, participants) {
+    async createGameRoom(topic, title, description, participants, channelRef = { kind: 'public' }) {
       sequence += 1;
       const roomId = `game-${sequence}`;
+      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
       const scores: GameScoreView[] = participants.map((label, index) => ({
         participant_id: `participant-${index + 1}`,
         label,
         score: 0,
       }));
       gameRoomsByTopic[topic] = [
-        {
+        withGameRoomDefaults({
           room_id: roomId,
           host_pubkey: syncStatus.local_author_pubkey,
           title,
@@ -420,10 +480,50 @@ function createMockApi(options?: {
           phase_label: null,
           scores,
           updated_at: Date.now(),
-        },
+          channel_id: channelId,
+          audience_label: channelId ? 'Private channel' : 'Public',
+        }),
         ...(gameRoomsByTopic[topic] ?? []),
       ];
       return roomId;
+    },
+    async createPrivateChannel(topic, label) {
+      sequence += 1;
+      const channelId = `channel-${sequence}`;
+      const channel = {
+        topic_id: topic,
+        channel_id: channelId,
+        label,
+        creator_pubkey: syncStatus.local_author_pubkey,
+      };
+      joinedChannelsByTopic[topic] = [...(joinedChannelsByTopic[topic] ?? []), channel];
+      return channel;
+    },
+    async exportPrivateChannelInvite(topic, channelId) {
+      return `invite:${topic}:${channelId}`;
+    },
+    async importPrivateChannelInvite() {
+      const preview: PrivateChannelInvitePreview = options?.invitePreview ?? {
+        channel_id: 'channel-imported',
+        topic_id: 'kukuri:topic:demo',
+        channel_label: 'Imported',
+        inviter_pubkey: syncStatus.local_author_pubkey,
+        expires_at: null,
+        namespace_secret_hex: 'a'.repeat(64),
+      };
+      joinedChannelsByTopic[preview.topic_id] = [
+        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
+        {
+          topic_id: preview.topic_id,
+          channel_id: preview.channel_id,
+          label: preview.channel_label,
+          creator_pubkey: preview.inviter_pubkey,
+        },
+      ];
+      return preview;
+    },
+    async listJoinedPrivateChannels(topic) {
+      return joinedChannelsByTopic[topic] ?? [];
     },
     async updateGameRoom(topic, roomId, status, phaseLabel, scores) {
       gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
@@ -642,6 +742,12 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
     object_id: 'image-post',
     envelope_id: 'envelope-image-post',
     author_pubkey: 'f'.repeat(64),
+    author_name: null,
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
     object_kind: 'post',
     content: '[blob pending]',
     content_status: 'Missing',
@@ -649,6 +755,8 @@ function buildImagePost(overrides?: Partial<PostView>): PostView {
     created_at: 1,
     reply_to: null,
     root_id: 'image-post',
+    channel_id: null,
+    audience_label: 'Public',
     ...overrides,
   };
 }
@@ -658,6 +766,12 @@ function buildVideoPost(overrides?: Partial<PostView>): PostView {
     object_id: 'video-post',
     envelope_id: 'envelope-video-post',
     author_pubkey: 'e'.repeat(64),
+    author_name: null,
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
     object_kind: 'post',
     content: 'video caption',
     content_status: 'Available',
@@ -680,6 +794,8 @@ function buildVideoPost(overrides?: Partial<PostView>): PostView {
     created_at: 2,
     reply_to: null,
     root_id: 'video-post',
+    channel_id: null,
+    audience_label: 'Public',
     ...overrides,
   };
 }
@@ -986,6 +1102,59 @@ test('desktop shell can create, join, leave, and end a live session', async () =
   await user.click(screen.getByRole('button', { name: 'End' }));
   await waitFor(() => {
     expect(screen.getByText('Ended')).toBeInTheDocument();
+  });
+});
+
+test('desktop shell can create a private channel and export an invite', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  expect(screen.getByRole('button', { name: 'Create Invite' })).toBeDisabled();
+
+  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
+  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-1');
+    expect(screen.getByText(/Posting to: core/i)).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Create Invite' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Latest invite')).toBeInTheDocument();
+    expect(screen.getByText(/invite:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
+  });
+});
+
+test('desktop shell joins an imported private channel and selects its topic scope', async () => {
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createMockApi({
+        invitePreview: {
+          channel_id: 'channel-imported',
+          topic_id: 'kukuri:topic:private-imported',
+          channel_label: 'Imported',
+          inviter_pubkey: 'f'.repeat(64),
+          expires_at: null,
+          namespace_secret_hex: 'a'.repeat(64),
+        },
+      })}
+    />
+  );
+
+  await user.type(screen.getByPlaceholderText('paste private channel invite'), 'invite-token');
+  await user.click(screen.getByRole('button', { name: 'Join Invite' }));
+
+  await waitFor(() => {
+    expect(
+      screen.getByRole('button', { name: 'kukuri:topic:private-imported' })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('View Scope')).toHaveValue('channel:channel-imported');
+    expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-imported');
+    expect(screen.getByText(/Viewing: Imported/i)).toBeInTheDocument();
+    expect(screen.getByText(/Posting to: Imported/i)).toBeInTheDocument();
   });
 });
 
@@ -1678,6 +1847,7 @@ test('post card shows friend of friend badge and author name fallback', async ()
               created_at: 1,
               reply_to: null,
               root_id: 'post-fof',
+              audience_label: 'Public',
             },
           ],
         },
@@ -1713,6 +1883,7 @@ test('author detail shows via authors and follow action updates relationship', a
           created_at: 1,
           reply_to: null,
           root_id: 'post-author',
+          audience_label: 'Public',
         },
       ],
     },

@@ -145,6 +145,20 @@ impl TopicId {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
+pub struct ChannelId(pub String);
+
+impl ChannelId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ReplicaId(pub String);
 
 impl ReplicaId {
@@ -261,6 +275,49 @@ impl Default for ObjectStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChannelRef {
+    Public,
+    PrivateChannel { channel_id: ChannelId },
+}
+
+impl Default for ChannelRef {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
+impl ChannelRef {
+    pub fn channel_id(&self) -> Option<&ChannelId> {
+        match self {
+            Self::Public => None,
+            Self::PrivateChannel { channel_id } => Some(channel_id),
+        }
+    }
+
+    pub fn visibility(&self) -> ObjectVisibility {
+        match self {
+            Self::Public => ObjectVisibility::Public,
+            Self::PrivateChannel { .. } => ObjectVisibility::Private,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TimelineScope {
+    Public,
+    AllJoined,
+    Channel { channel_id: ChannelId },
+}
+
+impl Default for TimelineScope {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaManifestItem {
     pub blob_hash: BlobHash,
     pub mime: String,
@@ -284,6 +341,8 @@ pub struct KukuriMediaManifestV1 {
 pub struct LiveSessionManifestBlobV1 {
     pub session_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub title: String,
     pub description: String,
@@ -296,6 +355,8 @@ pub struct LiveSessionManifestBlobV1 {
 pub struct LiveSessionStateDocV1 {
     pub session_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -321,6 +382,8 @@ pub struct GameScoreEntry {
 pub struct GameRoomManifestBlobV1 {
     pub room_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub title: String,
     pub description: String,
@@ -335,6 +398,8 @@ pub struct GameRoomManifestBlobV1 {
 pub struct GameRoomStateDocV1 {
     pub room_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -390,6 +455,8 @@ pub enum GossipHint {
 pub struct KukuriPostEnvelopeContentV1 {
     pub object_kind: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub payload_ref: PayloadRef,
     #[serde(default)]
     pub attachments: Vec<AssetRef>,
@@ -407,6 +474,8 @@ pub struct KukuriPostObjectV1 {
     pub envelope_id: EnvelopeId,
     pub object_kind: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub author: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -491,6 +560,45 @@ pub struct FollowEdgeDocV1 {
 pub struct ThreadRef {
     pub root: EnvelopeId,
     pub reply_to: Option<EnvelopeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreatePrivateChannelInput {
+    pub topic_id: TopicId,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelMetadataDocV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub label: String,
+    pub creator_pubkey: Pubkey,
+    pub created_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriPrivateChannelInviteEnvelopeContentV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub namespace_secret_hex: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelInviteTokenV1 {
+    pub envelope: KukuriEnvelope,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelInvitePreview {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub inviter_pubkey: Pubkey,
+    pub expires_at: Option<i64>,
+    pub namespace_secret_hex: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -596,6 +704,7 @@ impl KukuriEnvelope {
             envelope_id: self.id.clone(),
             object_kind: content.object_kind,
             topic_id: content.topic_id,
+            channel_id: content.channel_id,
             author: self.pubkey.clone(),
             created_at: self.created_at,
             updated_at: self.created_at,
@@ -654,6 +763,28 @@ pub fn build_post_envelope_with_payload(
     reply_to: Option<&KukuriEnvelope>,
     visibility: ObjectVisibility,
 ) -> Result<KukuriEnvelope> {
+    build_post_envelope_with_payload_in_channel(
+        keys,
+        topic,
+        payload_ref,
+        attachments,
+        media_manifest_refs,
+        reply_to,
+        visibility,
+        None,
+    )
+}
+
+pub fn build_post_envelope_with_payload_in_channel(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    payload_ref: PayloadRef,
+    attachments: Vec<AssetRef>,
+    media_manifest_refs: Vec<String>,
+    reply_to: Option<&KukuriEnvelope>,
+    visibility: ObjectVisibility,
+    channel_id: Option<&ChannelId>,
+) -> Result<KukuriEnvelope> {
     let thread = reply_to
         .and_then(KukuriEnvelope::thread_ref)
         .unwrap_or_else(|| {
@@ -677,6 +808,7 @@ pub fn build_post_envelope_with_payload(
     let content = KukuriPostEnvelopeContentV1 {
         object_kind: kind.to_string(),
         topic_id: topic.clone(),
+        channel_id: channel_id.cloned(),
         payload_ref,
         attachments,
         media_manifest_refs,
@@ -693,6 +825,9 @@ pub fn build_post_envelope_with_payload(
     }
     if let Some(reply_id) = reply_id {
         tags.push(vec!["reply_to".into(), reply_id.0]);
+    }
+    if let Some(channel_id) = channel_id {
+        tags.push(vec!["channel".into(), channel_id.as_str().to_string()]);
     }
     sign_envelope_json(keys, kind, tags, &content)
 }
@@ -799,6 +934,68 @@ pub fn build_game_session_envelope<T: Serialize>(
         ],
         content,
     )
+}
+
+pub fn build_private_channel_invite_token(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    channel_id: &ChannelId,
+    channel_label: &str,
+    namespace_secret_hex: &str,
+    expires_at: Option<i64>,
+) -> Result<String> {
+    let token = PrivateChannelInviteTokenV1 {
+        envelope: sign_envelope_json(
+            keys,
+            "channel-invite",
+            vec![
+                vec!["topic".into(), topic.as_str().to_string()],
+                vec!["object".into(), "channel-invite".into()],
+                vec!["channel".into(), channel_id.as_str().to_string()],
+            ],
+            &KukuriPrivateChannelInviteEnvelopeContentV1 {
+                channel_id: channel_id.clone(),
+                topic_id: topic.clone(),
+                channel_label: channel_label.trim().to_string(),
+                namespace_secret_hex: namespace_secret_hex.trim().to_string(),
+                expires_at,
+            },
+        )?,
+    };
+    serde_json::to_string(&token).context("failed to encode private channel invite token")
+}
+
+pub fn parse_private_channel_invite_token(token: &str) -> Result<PrivateChannelInvitePreview> {
+    let token: PrivateChannelInviteTokenV1 =
+        serde_json::from_str(token).context("failed to parse private channel invite token")?;
+    token.envelope.verify()?;
+    if token.envelope.kind != "channel-invite" {
+        bail!("invite envelope kind must be channel-invite");
+    }
+    let content: KukuriPrivateChannelInviteEnvelopeContentV1 =
+        serde_json::from_str(token.envelope.content.as_str())
+            .context("failed to decode private channel invite content")?;
+    if content.channel_label.trim().is_empty() {
+        bail!("channel invite label is required");
+    }
+    let secret_bytes =
+        hex::decode(content.namespace_secret_hex.trim()).context("invalid invite secret hex")?;
+    if secret_bytes.len() != 32 {
+        bail!("invite secret must be 32 bytes");
+    }
+    if let Some(expires_at) = content.expires_at
+        && expires_at < now_timestamp_millis()?
+    {
+        bail!("invite has expired");
+    }
+    Ok(PrivateChannelInvitePreview {
+        channel_id: content.channel_id,
+        topic_id: content.topic_id,
+        channel_label: content.channel_label,
+        inviter_pubkey: token.envelope.pubkey,
+        expires_at: content.expires_at,
+        namespace_secret_hex: content.namespace_secret_hex,
+    })
 }
 
 pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
@@ -1044,12 +1241,9 @@ mod tests {
         assert_eq!(edge.target_pubkey, target);
         assert_eq!(edge.status, FollowEdgeStatus::Active);
 
-        let self_follow_error = build_follow_edge_envelope(
-            &keys,
-            &keys.public_key(),
-            FollowEdgeStatus::Active,
-        )
-        .expect_err("self follow should be rejected");
+        let self_follow_error =
+            build_follow_edge_envelope(&keys, &keys.public_key(), FollowEdgeStatus::Active)
+                .expect_err("self follow should be rejected");
         assert!(self_follow_error.to_string().contains("self follow"));
     }
 

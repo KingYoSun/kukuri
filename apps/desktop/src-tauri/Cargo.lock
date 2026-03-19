@@ -3300,6 +3300,7 @@ dependencies = [
  "async-trait",
  "blake3",
  "futures-util",
+ "hex",
  "iroh",
  "iroh-blobs",
  "iroh-docs",

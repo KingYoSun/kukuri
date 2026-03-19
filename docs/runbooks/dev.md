@@ -223,6 +223,44 @@ $env:KUKURI_INSTANCE="desktop-a"
 15. live session を `create -> join -> end` し、viewer count と ended state が相手側に反映されることを確認する。
 16. game room を `create -> update score/status` し、相手側に score card が反映されることを確認する。
 
+## Invite-only private channel manual verification
+
+最小 lane は static-peer ticket import。Phase 1 の private channel 実機確認は、必ず `Create Channel -> Create Invite -> Join via Invite` の順で行う。
+
+事前に流す自動テスト:
+
+```bash
+cargo test -p kukuri-docs-sync private_replica_requires_registered_capability -- --nocapture
+cargo test -p kukuri-app-api private_channel_invite_scopes_posts_and_replies -- --nocapture
+cargo test -p kukuri-desktop-runtime private_channel_invite_restores_after_restart_without_reimport -- --nocapture
+cargo test -p kukuri-harness private_channel_invite_connectivity -- --nocapture
+cd apps/desktop && npx pnpm@10.16.1 test
+```
+
+操作手順:
+
+1. 2 desktop を起動する。最小構成は `Peer Ticket` の相互 import。可能なら 3 台目の未招待端末 C も起動する。
+2. 両端末で同じ topic を開き、public timeline が同期することを確認する。
+3. 端末 A で `Create Channel` を押し、label を入力して private channel を明示的に作成する。
+4. 端末 A で `View Scope` と `Compose Target` が新しい channel に切り替わったことを確認する。
+5. 端末 A で `Create Invite` を押し、invite token が表示されることを確認する。
+6. 端末 B で `Join via Invite` に token を貼り付けて import し、topic が tracked state に入り、対象 channel が選択されることを確認する。
+7. 端末 A でその private channel に post し、端末 B の `All joined` または当該 channel view にだけ表示され、`Public` には出ないことを確認する。
+8. 端末 B でその private post に reply し、thread が同じ private channel 内でのみ見えることを確認する。
+9. 端末 A でその private channel 上に live session を作成し、端末 B が `join -> leave -> end` を追従できることを確認する。
+10. 端末 A でその private channel 上に game room を作成し、score / status 更新が端末 B に反映されることを確認する。
+11. 両端末を再起動し、invite 再入力なしで joined private channel が復元され、private post / thread / live / game が再表示されることを確認する。
+12. 端末 B でも `Create Invite` が可能で、fresh invite を再発行できることを確認する。
+13. 3 台目の未招待端末 C を使う場合は、同じ topic の `Public` / `All joined` から private channel content が見えないことを確認する。
+
+自動テスト対応:
+
+- `private_replica_requires_registered_capability`: capability 未登録では private replica を開けない
+- `private_channel_invite_scopes_posts_and_replies`: invite import 後の private post / reply 継承を確認する
+- `private_channel_invite_restores_after_restart_without_reimport`: desktop-runtime で restart 後の capability 復元を確認する
+- `private_channel_invite_connectivity`: 3 client static-peer scenario で private post / reply / live / game / restart を通す
+- `apps/desktop/src/App.test.tsx`: `Create Channel` 前の `Create Invite` 無効化と invite import 後の topic / audience 反映を確認する
+
 ## Seeded DHT 手動確認
 1. 2 instance とも `KUKURI_DISCOVERY_MODE=seeded_dht` を使うか、desktop の discovery panel で seed を保存できる状態にする。
 2. 両方を起動し、`Local Endpoint ID` を相互に `Seed Peers` へ登録する。`node_id` だけで通ることを確認する。

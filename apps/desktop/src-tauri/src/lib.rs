@@ -3,12 +3,13 @@ use std::sync::Arc;
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
     CommunityNodeTargetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
-    CreatePostRequest, DesktopRuntime, DiscoveryConfig, GetBlobMediaRequest,
-    GetBlobPreviewRequest, ImportPeerTicketRequest, ListGameRoomsRequest,
-    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest,
-    LiveSessionCommandRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
-    resolve_db_path_from_env,
+    CreatePostRequest, CreatePrivateChannelRequest, DesktopRuntime, DiscoveryConfig,
+    ExportPrivateChannelInviteRequest, GetBlobMediaRequest, GetBlobPreviewRequest,
+    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
+    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListThreadRequest,
+    ListTimelineRequest, LiveSessionCommandRequest, SetCommunityNodeConfigRequest,
+    SetDiscoverySeedsRequest, SetMyProfileRequest, UnsubscribeTopicRequest,
+    UpdateGameRoomRequest, AuthorRequest, resolve_db_path_from_env,
 };
 use tauri::Manager;
 use tracing::{info, warn};
@@ -88,6 +89,54 @@ async fn create_post(
     request: CreatePostRequest,
 ) -> Result<String, String> {
     state.runtime.create_post(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn create_private_channel(
+    state: tauri::State<'_, DesktopState>,
+    request: CreatePrivateChannelRequest,
+) -> Result<kukuri_app_api::JoinedPrivateChannelView, String> {
+    state
+        .runtime
+        .create_private_channel(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn export_private_channel_invite(
+    state: tauri::State<'_, DesktopState>,
+    request: ExportPrivateChannelInviteRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .export_private_channel_invite(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn import_private_channel_invite(
+    state: tauri::State<'_, DesktopState>,
+    request: ImportPrivateChannelInviteRequest,
+) -> Result<kukuri_core::PrivateChannelInvitePreview, String> {
+    state
+        .runtime
+        .import_private_channel_invite(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_joined_private_channels(
+    state: tauri::State<'_, DesktopState>,
+    request: ListJoinedPrivateChannelsRequest,
+) -> Result<Vec<kukuri_app_api::JoinedPrivateChannelView>, String> {
+    state
+        .runtime
+        .list_joined_private_channels(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -475,6 +524,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             create_post,
+            create_private_channel,
+            export_private_channel_invite,
+            import_private_channel_invite,
+            list_joined_private_channels,
             list_timeline,
             list_thread,
             get_my_profile,

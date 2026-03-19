@@ -38,6 +38,7 @@ pub enum BlobCacheStatus {
 pub struct ObjectProjectionRow {
     pub object_id: EnvelopeId,
     pub topic_id: String,
+    pub channel_id: String,
     pub author_pubkey: String,
     pub created_at: i64,
     pub root_object_id: Option<EnvelopeId>,
@@ -56,6 +57,7 @@ pub struct ObjectProjectionRow {
 pub struct LiveSessionProjectionRow {
     pub session_id: String,
     pub topic_id: String,
+    pub channel_id: String,
     pub host_pubkey: String,
     pub title: String,
     pub description: String,
@@ -75,6 +77,7 @@ pub struct LiveSessionProjectionRow {
 pub struct GameRoomProjectionRow {
     pub room_id: String,
     pub topic_id: String,
+    pub channel_id: String,
     pub host_pubkey: String,
     pub title: String,
     pub description: String,
@@ -101,8 +104,8 @@ pub struct AuthorRelationshipProjectionRow {
     pub derived_at: i64,
 }
 
-type LivePresenceKey = (String, String);
-type LivePresenceValue = (String, i64, i64);
+type LivePresenceKey = (String, String, String);
+type LivePresenceValue = (String, String, i64, i64);
 
 #[async_trait]
 pub trait Store: Send + Sync {
@@ -169,6 +172,7 @@ pub trait ProjectionStore: Send + Sync {
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
@@ -716,13 +720,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO object_index_cache (
-              object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-              payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-              source_blob_hash, derived_at, projection_version
+              object_id, topic_id, channel_id, author_pubkey, created_at, root_object_id,
+              reply_to_object_id, payload_ref_json, content, source_replica_id, source_key,
+              source_envelope_id, source_blob_hash, derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(object_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               author_pubkey = excluded.author_pubkey,
               created_at = excluded.created_at,
               root_object_id = excluded.root_object_id,
@@ -739,6 +744,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.object_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.author_pubkey.as_str())
         .bind(row.created_at)
         .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
@@ -757,17 +763,19 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO object_thread_cache (
-              object_id, topic_id, root_object_id, created_at
+              object_id, topic_id, channel_id, root_object_id, created_at
             )
-            VALUES (?1, ?2, ?3, ?4)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             ON CONFLICT(object_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               root_object_id = excluded.root_object_id,
               created_at = excluded.created_at
             "#,
         )
         .bind(row.object_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(
             row.root_object_id
                 .as_ref()
@@ -788,8 +796,8 @@ impl ProjectionStore for SqliteStore {
         let row = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   channel_id, payload_ref_json, content, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE object_id = ?1
             "#,
@@ -810,8 +818,8 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   channel_id, payload_ref_json, content, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE topic_id = ?1
               AND (
@@ -843,9 +851,9 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.root_object_id,
-                   oic.reply_to_object_id, oic.payload_ref_json, oic.content, oic.source_replica_id,
-                   oic.source_key, oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
-                   oic.projection_version
+                   oic.reply_to_object_id, oic.channel_id, oic.payload_ref_json, oic.content,
+                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
+                   oic.source_blob_hash, oic.derived_at, oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -901,13 +909,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO live_session_cache (
-              session_id, topic_id, host_pubkey, title, description, status, started_at, ended_at,
-              updated_at, source_replica_id, source_key, manifest_blob_hash, derived_at,
-              projection_version
+              session_id, topic_id, channel_id, host_pubkey, title, description, status,
+              started_at, ended_at, updated_at, source_replica_id, source_key, manifest_blob_hash,
+              derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(session_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               host_pubkey = excluded.host_pubkey,
               title = excluded.title,
               description = excluded.description,
@@ -924,6 +933,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.session_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.host_pubkey.as_str())
         .bind(row.title.as_str())
         .bind(row.description.as_str())
@@ -948,12 +958,14 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT lsc.session_id, lsc.topic_id, lsc.host_pubkey, lsc.title, lsc.description,
-                   lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at, lsc.source_replica_id,
-                   lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at, lsc.projection_version,
+                   lsc.channel_id, lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at,
+                   lsc.source_replica_id, lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at,
+                   lsc.projection_version,
                    COALESCE((
                      SELECT COUNT(*)
                      FROM live_presence_cache lpc
                      WHERE lpc.topic_id = lsc.topic_id
+                       AND lpc.channel_id = lsc.channel_id
                        AND lpc.session_id = lsc.session_id
                    ), 0) AS viewer_count
             FROM live_session_cache lsc
@@ -975,13 +987,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO game_room_cache (
-              room_id, topic_id, host_pubkey, title, description, status, phase_label,
+              room_id, topic_id, channel_id, host_pubkey, title, description, status, phase_label,
               scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
               derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(room_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               host_pubkey = excluded.host_pubkey,
               title = excluded.title,
               description = excluded.description,
@@ -998,6 +1011,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.room_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.host_pubkey.as_str())
         .bind(row.title.as_str())
         .bind(row.description.as_str())
@@ -1019,8 +1033,8 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT room_id, topic_id, host_pubkey, title, description, status, phase_label,
-                   scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
-                   derived_at, projection_version
+                   channel_id, scores_json, updated_at, source_replica_id, source_key,
+                   manifest_blob_hash, derived_at, projection_version
             FROM game_room_cache
             WHERE topic_id = ?1
             ORDER BY updated_at DESC, room_id DESC
@@ -1098,6 +1112,7 @@ impl ProjectionStore for SqliteStore {
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
@@ -1106,15 +1121,16 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO live_presence_cache (
-              topic_id, session_id, author_pubkey, expires_at, updated_at
+              topic_id, channel_id, session_id, author_pubkey, expires_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            ON CONFLICT(topic_id, session_id, author_pubkey) DO UPDATE SET
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(topic_id, channel_id, session_id, author_pubkey) DO UPDATE SET
               expires_at = excluded.expires_at,
               updated_at = excluded.updated_at
             "#,
         )
         .bind(topic_id)
+        .bind(channel_id)
         .bind(session_id)
         .bind(author_pubkey)
         .bind(expires_at)
@@ -1299,9 +1315,13 @@ impl ProjectionStore for MemoryStore {
         for row in &mut items {
             row.viewer_count = presence
                 .iter()
-                .filter(|((session_id, _), (presence_topic, _, _))| {
-                    session_id == &row.session_id && presence_topic == topic_id
-                })
+                .filter(
+                    |((presence_channel, session_id, _), (presence_topic, _, _, _))| {
+                        presence_channel == &row.channel_id
+                            && session_id == &row.session_id
+                            && presence_topic == topic_id
+                    },
+                )
                 .count();
         }
         items.sort_by(|left, right| {
@@ -1361,10 +1381,7 @@ impl ProjectionStore for MemoryStore {
         guard.retain(|(local_author, _), _| local_author != local_author_pubkey);
         for row in rows {
             guard.insert(
-                (
-                    row.local_author_pubkey.clone(),
-                    row.author_pubkey.clone(),
-                ),
+                (row.local_author_pubkey.clone(), row.author_pubkey.clone()),
                 row,
             );
         }
@@ -1374,14 +1391,24 @@ impl ProjectionStore for MemoryStore {
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
         updated_at: i64,
     ) -> Result<()> {
         self.live_presence.write().await.insert(
-            (session_id.to_string(), author_pubkey.to_string()),
-            (topic_id.to_string(), expires_at, updated_at),
+            (
+                channel_id.to_string(),
+                session_id.to_string(),
+                author_pubkey.to_string(),
+            ),
+            (
+                topic_id.to_string(),
+                channel_id.to_string(),
+                expires_at,
+                updated_at,
+            ),
         );
         Ok(())
     }
@@ -1390,7 +1417,7 @@ impl ProjectionStore for MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (_, expires_at, _)| *expires_at > now_ms);
+            .retain(|_, (_, _, expires_at, _)| *expires_at > now_ms);
         Ok(())
     }
 
@@ -1398,7 +1425,7 @@ impl ProjectionStore for MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (presence_topic, _, _)| presence_topic != topic_id);
+            .retain(|_, (presence_topic, _, _, _)| presence_topic != topic_id);
         Ok(())
     }
 
@@ -1439,6 +1466,7 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
     Ok(ObjectProjectionRow {
         object_id: row.get::<String, _>("object_id").into(),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         author_pubkey: row.get("author_pubkey"),
         created_at: row.get("created_at"),
         root_object_id: row
@@ -1481,6 +1509,7 @@ fn row_to_live_session_projection(
     Ok(LiveSessionProjectionRow {
         session_id: row.get("session_id"),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         host_pubkey: row.get("host_pubkey"),
         title: row.get("title"),
         description: row.get("description"),
@@ -1501,6 +1530,7 @@ fn row_to_game_room_projection(row: sqlx::sqlite::SqliteRow) -> Result<GameRoomP
     Ok(GameRoomProjectionRow {
         room_id: row.get("room_id"),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         host_pubkey: row.get("host_pubkey"),
         title: row.get("title"),
         description: row.get("description"),
@@ -1832,6 +1862,7 @@ mod tests {
             ObjectProjectionRow {
                 object_id: root_id.clone(),
                 topic_id: topic.to_string(),
+                channel_id: "public".into(),
                 author_pubkey: "a".repeat(64),
                 created_at: 10,
                 root_object_id: None,
@@ -1852,6 +1883,7 @@ mod tests {
             ObjectProjectionRow {
                 object_id: reply_id.clone(),
                 topic_id: topic.to_string(),
+                channel_id: "public".into(),
                 author_pubkey: "b".repeat(64),
                 created_at: 11,
                 root_object_id: Some(root_id.clone()),
@@ -1960,7 +1992,10 @@ mod tests {
         .expect("get relationship")
         .expect("relationship");
         assert!(relationship.friend_of_friend);
-        assert_eq!(relationship.friend_of_friend_via_pubkeys, vec!["c".repeat(64)]);
+        assert_eq!(
+            relationship.friend_of_friend_via_pubkeys,
+            vec!["c".repeat(64)]
+        );
         assert!(relationship.followed_by);
     }
 }

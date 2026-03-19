@@ -14,6 +14,7 @@ import {
   AuthorSocialView,
   AttachmentView,
   BlobMediaPayload,
+  ChannelRef,
   CommunityNodeConfig,
   CommunityNodeNodeStatus,
   CreateAttachmentInput,
@@ -22,11 +23,14 @@ import {
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
+  JoinedPrivateChannelView,
   LiveSessionView,
   PostView,
+  PrivateChannelInvitePreview,
   Profile,
   ProfileInput,
   SyncStatus,
+  TimelineScope,
   TopicSyncStatus,
   runtimeApi,
 } from './lib/api';
@@ -53,6 +57,8 @@ type MediaDebugValue = boolean | number | string | null | undefined;
 type MediaDebugFields = Record<string, MediaDebugValue>;
 
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
+const PUBLIC_CHANNEL_REF: ChannelRef = { kind: 'public' };
+const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };
 const REFRESH_INTERVAL_MS = 2000;
 const VIDEO_POSTER_TIMEOUT_MS = 5000;
 const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
@@ -169,6 +175,69 @@ function relationshipBadgeClassName(label: string | null): string {
     return 'relationship-badge relationship-badge-direct';
   }
   return 'relationship-badge';
+}
+
+function channelRefValue(channelRef: ChannelRef): string {
+  return channelRef.kind === 'public' ? 'public' : `channel:${channelRef.channel_id}`;
+}
+
+function channelRefFromValue(value: string): ChannelRef {
+  if (value.startsWith('channel:')) {
+    return {
+      kind: 'private_channel',
+      channel_id: value.slice('channel:'.length),
+    };
+  }
+  return PUBLIC_CHANNEL_REF;
+}
+
+function timelineScopeValue(scope: TimelineScope): string {
+  if (scope.kind === 'channel') {
+    return `channel:${scope.channel_id}`;
+  }
+  return scope.kind;
+}
+
+function timelineScopeFromValue(value: string): TimelineScope {
+  if (value.startsWith('channel:')) {
+    return {
+      kind: 'channel',
+      channel_id: value.slice('channel:'.length),
+    };
+  }
+  if (value === 'all_joined') {
+    return { kind: 'all_joined' };
+  }
+  return PUBLIC_TIMELINE_SCOPE;
+}
+
+function audienceLabelForChannelRef(
+  channelRef: ChannelRef,
+  joinedChannels: JoinedPrivateChannelView[]
+): string {
+  if (channelRef.kind === 'public') {
+    return 'Public';
+  }
+  return (
+    joinedChannels.find((channel) => channel.channel_id === channelRef.channel_id)?.label ??
+    'Private channel'
+  );
+}
+
+function audienceLabelForTimelineScope(
+  scope: TimelineScope,
+  joinedChannels: JoinedPrivateChannelView[]
+): string {
+  if (scope.kind === 'all_joined') {
+    return 'All joined';
+  }
+  if (scope.kind === 'channel') {
+    return (
+      joinedChannels.find((channel) => channel.channel_id === scope.channel_id)?.label ??
+      'Private channel'
+    );
+  }
+  return 'Public';
 }
 
 function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
@@ -637,6 +706,17 @@ export function App({ api = runtimeApi }: AppProps) {
   const [gameRoomsByTopic, setGameRoomsByTopic] = useState<Record<string, GameRoomView[]>>({
     [DEFAULT_TOPIC]: [],
   });
+  const [joinedChannelsByTopic, setJoinedChannelsByTopic] = useState<
+    Record<string, JoinedPrivateChannelView[]>
+  >({
+    [DEFAULT_TOPIC]: [],
+  });
+  const [timelineScopeByTopic, setTimelineScopeByTopic] = useState<Record<string, TimelineScope>>({
+    [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
+  });
+  const [composeChannelByTopic, setComposeChannelByTopic] = useState<Record<string, ChannelRef>>({
+    [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
+  });
   const [thread, setThread] = useState<PostView[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
@@ -669,6 +749,10 @@ export function App({ api = runtimeApi }: AppProps) {
   const [liveTitle, setLiveTitle] = useState('');
   const [liveDescription, setLiveDescription] = useState('');
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [channelLabelInput, setChannelLabelInput] = useState('');
+  const [inviteTokenInput, setInviteTokenInput] = useState('');
+  const [inviteOutput, setInviteOutput] = useState<string | null>(null);
+  const [channelError, setChannelError] = useState<string | null>(null);
   const [gameTitle, setGameTitle] = useState('');
   const [gameDescription, setGameDescription] = useState('');
   const [gameParticipantsInput, setGameParticipantsInput] = useState('');
@@ -702,6 +786,29 @@ export function App({ api = runtimeApi }: AppProps) {
     () => gameRoomsByTopic[activeTopic] ?? [],
     [activeTopic, gameRoomsByTopic]
   );
+  const activeJoinedChannels = useMemo(
+    () => joinedChannelsByTopic[activeTopic] ?? [],
+    [activeTopic, joinedChannelsByTopic]
+  );
+  const activeTimelineScope = useMemo(
+    () => timelineScopeByTopic[activeTopic] ?? PUBLIC_TIMELINE_SCOPE,
+    [activeTopic, timelineScopeByTopic]
+  );
+  const activeComposeChannel = useMemo(() => {
+    if (replyTarget?.channel_id) {
+      return {
+        kind: 'private_channel',
+        channel_id: replyTarget.channel_id,
+      } as ChannelRef;
+    }
+    return composeChannelByTopic[activeTopic] ?? PUBLIC_CHANNEL_REF;
+  }, [activeTopic, composeChannelByTopic, replyTarget]);
+  const activeComposeAudienceLabel = useMemo(() => {
+    if (replyTarget) {
+      return replyTarget.audience_label;
+    }
+    return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
+  }, [activeComposeChannel, activeJoinedChannels, replyTarget]);
   const communityNodeStatusByBaseUrl = useMemo(
     () =>
       Object.fromEntries(communityNodeStatuses.map((status) => [status.base_url, status])) as Record<
@@ -746,23 +853,41 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, threadView, status] = await Promise.all([
+        const [timelineViews, liveViews, gameViews, joinedChannelViews, threadView, status] =
+          await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              timeline: await api.listTimeline(topic, null, 50),
+              timeline: await api.listTimeline(
+                topic,
+                null,
+                50,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
             }))
           ),
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              sessions: await api.listLiveSessions(topic),
+              sessions: await api.listLiveSessions(
+                topic,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
             }))
           ),
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              rooms: await api.listGameRooms(topic),
+              rooms: await api.listGameRooms(
+                topic,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
+            }))
+          ),
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              channels: await api.listJoinedPrivateChannels(topic),
             }))
           ),
           currentThread
@@ -796,6 +921,9 @@ export function App({ api = runtimeApi }: AppProps) {
           );
           setGameRoomsByTopic(
             Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
+          );
+          setJoinedChannelsByTopic(
+            Object.fromEntries(joinedChannelViews.map(({ topic, channels }) => [topic, channels]))
           );
           setSyncStatus(status);
           if (discoveryResult.status === 'fulfilled') {
@@ -855,7 +983,14 @@ export function App({ api = runtimeApi }: AppProps) {
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
-    [api, communityNodeEditorDirty, discoveryEditorDirty, profileDirty, selectedAuthorPubkey]
+    [
+      api,
+      communityNodeEditorDirty,
+      discoveryEditorDirty,
+      profileDirty,
+      selectedAuthorPubkey,
+      timelineScopeByTopic,
+    ]
   );
 
   useEffect(() => {
@@ -1094,6 +1229,115 @@ export function App({ api = runtimeApi }: AppProps) {
     await loadTopics(nextTopics, nextActiveTopic, null);
   }
 
+  async function handleTimelineScopeChange(value: string) {
+    const nextScope = timelineScopeFromValue(value);
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [activeTopic]: nextScope,
+    }));
+    await loadTopics(trackedTopics, activeTopic, selectedThread);
+  }
+
+  function handleComposeChannelChange(value: string) {
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [activeTopic]: channelRefFromValue(value),
+    }));
+  }
+
+  async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!channelLabelInput.trim()) {
+      setChannelError('channel label is required');
+      return;
+    }
+    try {
+      const channel = await api.createPrivateChannel(activeTopic, channelLabelInput.trim());
+      setChannelLabelInput('');
+      setChannelError(null);
+      setTimelineScopeByTopic((current) => ({
+        ...current,
+        [activeTopic]: {
+          kind: 'channel',
+          channel_id: channel.channel_id,
+        },
+      }));
+      setComposeChannelByTopic((current) => ({
+        ...current,
+        [activeTopic]: {
+          kind: 'private_channel',
+          channel_id: channel.channel_id,
+        },
+      }));
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (channelCreateError) {
+      setChannelError(
+        channelCreateError instanceof Error
+          ? channelCreateError.message
+          : 'failed to create channel'
+      );
+    }
+  }
+
+  async function handleCreateInvite() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before creating an invite');
+      return;
+    }
+    try {
+      const token = await api.exportPrivateChannelInvite(
+        activeTopic,
+        activeComposeChannel.channel_id,
+        null
+      );
+      setInviteOutput(token);
+      setChannelError(null);
+    } catch (inviteError) {
+      setChannelError(
+        inviteError instanceof Error ? inviteError.message : 'failed to create invite'
+      );
+    }
+  }
+
+  async function handleJoinInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!inviteTokenInput.trim()) {
+      setChannelError('invite token is required');
+      return;
+    }
+    try {
+      const preview = await api.importPrivateChannelInvite(inviteTokenInput.trim());
+      const nextTopics = trackedTopics.includes(preview.topic_id)
+        ? trackedTopics
+        : [...trackedTopics, preview.topic_id];
+      setTrackedTopics(nextTopics);
+      setActiveTopic(preview.topic_id);
+      setTimelineScopeByTopic((current) => ({
+        ...current,
+        [preview.topic_id]: {
+          kind: 'channel',
+          channel_id: preview.channel_id,
+        },
+      }));
+      setComposeChannelByTopic((current) => ({
+        ...current,
+        [preview.topic_id]: {
+          kind: 'private_channel',
+          channel_id: preview.channel_id,
+        },
+      }));
+      setInviteTokenInput('');
+      setInviteOutput(null);
+      setChannelError(null);
+      clearThreadContext();
+      await loadTopics(nextTopics, preview.topic_id, null);
+    } catch (inviteError) {
+      setChannelError(
+        inviteError instanceof Error ? inviteError.message : 'failed to join private channel'
+      );
+    }
+  }
+
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const attachments = draftMediaItems.flatMap((item) => item.attachments);
@@ -1106,7 +1350,8 @@ export function App({ api = runtimeApi }: AppProps) {
         activeTopic,
         composer.trim(),
         replyTarget?.object_id ?? null,
-        attachments
+        attachments,
+        activeComposeChannel
       );
       releaseAllDraftPreviews();
       setComposer('');
@@ -1365,7 +1610,12 @@ export function App({ api = runtimeApi }: AppProps) {
       return;
     }
     try {
-      await api.createLiveSession(activeTopic, liveTitle.trim(), liveDescription.trim());
+      await api.createLiveSession(
+        activeTopic,
+        liveTitle.trim(),
+        liveDescription.trim(),
+        activeComposeChannel
+      );
       setLiveTitle('');
       setLiveDescription('');
       setLiveError(null);
@@ -1430,7 +1680,8 @@ export function App({ api = runtimeApi }: AppProps) {
         activeTopic,
         gameTitle.trim(),
         gameDescription.trim(),
-        participants
+        participants,
+        activeComposeChannel
       );
       setGameTitle('');
       setGameDescription('');
@@ -1591,6 +1842,7 @@ export function App({ api = runtimeApi }: AppProps) {
               <span className={relationshipBadgeClassName(relationshipLabel)}>{relationshipLabel}</span>
             ) : null}
             <span>{post.object_kind}</span>
+            <span className='reply-chip'>{post.audience_label}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
         </div>
@@ -2128,12 +2380,94 @@ export function App({ api = runtimeApi }: AppProps) {
               Refresh
             </button>
           </div>
+          <div className='topic-diagnostic'>
+            <label className='field'>
+              <span>View Scope</span>
+              <select
+                aria-label='View Scope'
+                value={timelineScopeValue(activeTimelineScope)}
+                onChange={(event) => {
+                  void handleTimelineScopeChange(event.target.value);
+                }}
+              >
+                <option value='public'>Public</option>
+                <option value='all_joined'>All joined</option>
+                {activeJoinedChannels.map((channel) => (
+                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                    {channel.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className='field'>
+              <span>Compose Target</span>
+              <select
+                aria-label='Compose Target'
+                value={channelRefValue(activeComposeChannel)}
+                disabled={Boolean(replyTarget)}
+                onChange={(event) => handleComposeChannelChange(event.target.value)}
+              >
+                <option value='public'>Public</option>
+                {activeJoinedChannels.map((channel) => (
+                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                    {channel.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>Viewing: {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}</span>
+            <span>Posting to: {activeComposeAudienceLabel}</span>
+          </div>
+          <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
+            <label className='field'>
+              <span>Create Channel</span>
+              <input
+                value={channelLabelInput}
+                onChange={(event) => setChannelLabelInput(event.target.value)}
+                placeholder='core contributors'
+              />
+            </label>
+            <button className='button button-secondary' type='submit'>
+              Create Channel
+            </button>
+            <button
+              className='button button-secondary'
+              type='button'
+              disabled={activeComposeChannel.kind !== 'private_channel'}
+              onClick={() => void handleCreateInvite()}
+            >
+              Create Invite
+            </button>
+          </form>
+          <form className='composer composer-compact' onSubmit={handleJoinInvite}>
+            <label className='field'>
+              <span>Join via Invite</span>
+              <textarea
+                value={inviteTokenInput}
+                onChange={(event) => setInviteTokenInput(event.target.value)}
+                placeholder='paste private channel invite'
+              />
+            </label>
+            <button className='button button-secondary' type='submit'>
+              Join Invite
+            </button>
+          </form>
+          {inviteOutput ? (
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>Latest invite</span>
+              <code>{inviteOutput}</code>
+            </div>
+          ) : null}
+          {channelError ? <p className='error error-inline'>{channelError}</p> : null}
           <form className='composer' onSubmit={handlePublish}>
             {replyTarget ? (
               <div className='reply-banner'>
                 <div>
                   <strong>Replying</strong>
                   <p>{replyTarget.content}</p>
+                  <small>Audience: {replyTarget.audience_label}</small>
                 </div>
                 <button className='button button-secondary' type='button' onClick={clearReply}>
                   Clear
@@ -2192,6 +2526,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 ))}
               </ul>
             ) : null}
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>Audience: {activeComposeAudienceLabel}</span>
+            </div>
             <button className='button' type='submit'>
               {replyTarget ? 'Reply' : 'Publish'}
             </button>
@@ -2219,6 +2556,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 />
               </label>
               {liveError ? <p className='error error-inline'>{liveError}</p> : null}
+              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>Audience: {activeComposeAudienceLabel}</span>
+              </div>
               <button className='button' type='submit'>
                 Start Live
               </button>
@@ -2233,6 +2573,7 @@ export function App({ api = runtimeApi }: AppProps) {
                       <div className='post-meta'>
                         <span>{session.title}</span>
                         <span>{session.status}</span>
+                        <span className='reply-chip'>{session.audience_label}</span>
                       </div>
                       <div className='post-body'>
                         <strong className='post-title'>{session.description || 'no description'}</strong>
@@ -2317,6 +2658,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 />
               </label>
               {gameError ? <p className='error error-inline'>{gameError}</p> : null}
+              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>Audience: {activeComposeAudienceLabel}</span>
+              </div>
               <button className='button' type='submit'>
                 Create Room
               </button>
@@ -2332,6 +2676,7 @@ export function App({ api = runtimeApi }: AppProps) {
                       <div className='post-meta'>
                         <span>{room.title}</span>
                         <span>{room.status}</span>
+                        <span className='reply-chip'>{room.audience_label}</span>
                       </div>
                       <div className='post-body'>
                         <strong className='post-title'>{room.description || 'no description'}</strong>

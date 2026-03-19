@@ -1,0 +1,12 @@
+name: private_channel_invite_connectivity
+kind: private_channel_invite_connectivity
+fixtures:
+  seed: 20260319
+  topic: kukuri:topic:private-channel-connectivity
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 180000
+  step_ms: 20000

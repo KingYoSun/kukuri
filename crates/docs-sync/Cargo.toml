@@ -9,6 +9,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 blake3.workspace = true
 futures-util.workspace = true
+hex.workspace = true
 iroh.workspace = true
 iroh-blobs.workspace = true
 iroh-docs.workspace = true
@@ -22,4 +23,5 @@ kukuri-core = { path = "../core" }
 kukuri-transport = { path = "../transport" }
 
 [dev-dependencies]
+iroh = { workspace = true, features = ["test-utils"] }
 tempfile.workspace = true
