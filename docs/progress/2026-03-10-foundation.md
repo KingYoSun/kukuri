@@ -12,6 +12,7 @@
 - Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract と Linux 実機 `post -> reply/thread -> blob sync` 検証まで完了
 - Phase6 social graph v1 の public profile / follow / mutual / friend-of-friend 導入まで完了
 - Phase6 community-node relay-only path の bootstrap metadata retry / topic replica sync self-heal / gossip topic resubscribe hardening と `0 -> 3クライアント同時起動` manual verification まで完了
+- Phase6 topic-first invite-only private channel Phase1 の `channel 作成 -> invite 作成 -> invite import -> private post/live/game -> restart 復元 -> fresh invite 再発行` 実装、contract/frontend/harness test、community-node + 3 client 実機 manual verification まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -69,6 +70,10 @@
 - desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
 - social graph v1 として `author::<pubkey>` replica を正本にした profile / follow-edge / local relationship projection を導入し、desktop で `profile editor`, `follow/unfollow`, `mutual`, `friend of friend` 表示まで通した
 - community-node relay-only path で `seed_peers` が空のまま固まる経路に bootstrap metadata retry を追加し、topic replica docs sync の self-heal と seed update 時の gossip topic 再購読を入れて `0 clients -> 3 clients simultaneous start` の固着を解消した
+- `ADR 0012` を topic-first invite-only private channel Phase1 の現状仕様に更新し、`Feature Data Classification` と `Create Channel -> Create Invite -> Join via Invite` の操作契約を固定した
+- `kukuri-core` / `kukuri-docs-sync` / `kukuri-store` / `kukuri-app-api` / `kukuri-desktop-runtime` を `topic + channel` モデルへ拡張し、private replica capability 登録、channel-aware projection、restart 復元、fresh invite 再発行まで通した
+- desktop UI に `Create Channel`, `Create Invite`, `Join via Invite`, `View Scope`, `Compose Target`, audience badge を追加し、private channel の post / reply-thread / live / game を topic-first UI のまま扱えるようにした
+- `private_channel_invite_connectivity` harness scenario と desktop-runtime / docs-sync / frontend contract を追加し、manual verification 手順を `docs/runbooks/dev.md` に固定した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -126,12 +131,23 @@
 - `community_node_public_connectivity` / `community_node_multi_device_connectivity` を no-restart consent path の regression として通した
 - Linux 実機 3 台で community-node 接続時の `0 connected clients -> 3 clients simultaneous start` 後も、3 クライアント全てで投稿伝播が成立することを確認
 - Linux 実機で social graph v1 の `nickname/profile 表示`, `follow`, `mutual`, `unfollow`, `friend of friend`, restart 後復元が成立することを確認
+- `cargo test -p kukuri-docs-sync private_replica_requires_registered_capability -- --nocapture`
+- `cargo test -p kukuri-app-api private_channel_invite_scopes_posts_and_replies -- --nocapture`
+- `cargo test -p kukuri-desktop-runtime private_channel_invite_restores_after_restart_without_reimport -- --nocapture`
+- `cargo test -p kukuri-harness private_channel_invite_connectivity -- --nocapture`
+- `cd apps/desktop && npx pnpm@10.16.1 test`
+- community-node + 3 client の実機で `Create Channel -> Create Invite -> Join` が成功
+- community-node + 3 client の実機で private channel の `post / live / game` 伝播が成功
+- community-node + 3 client の実機で private channel の `post / live / game` が `public / all joined` に漏れないことを確認
+- community-node + 3 client の実機で client restart 後の private channel 復元が成功
+- community-node + 3 client の実機で後参加 client の fresh invite 再発行と 3 台目 join が成功
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 - Windows native smoke は `tauri:dev` / keyring / multi-instance static-peer / 別 host static-peer / NSIS installer まで確認済み
 - same-author multi-device の自動 scenario は bootstrap/connectivity と `post -> reply/thread -> reconnect` に絞っており、live/game は distinct-author path でのみ自動確認している
+- invite-only private channel は Phase1 時点で `invite_only` のみを対象にしており、`friend_only`, `friend_plus`, member-list, approval, revocation, epoch rotation は未着手
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み
