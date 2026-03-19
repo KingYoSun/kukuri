@@ -22,8 +22,9 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, BlobHash, ChannelRef, CreatePrivateChannelInput, GameRoomStatus, GossipHint,
-    KukuriKeys, PrivateChannelInvitePreview, Profile, ReplicaId, TimelineScope, TopicId,
+    AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
+    FriendOnlyGrantPreview, GameRoomStatus, GossipHint, KukuriKeys,
+    PrivateChannelInvitePreview, Profile, ReplicaId, TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -170,6 +171,8 @@ pub struct CreateGameRoomRequest {
 pub struct CreatePrivateChannelRequest {
     pub topic: String,
     pub label: String,
+    #[serde(default)]
+    pub audience_kind: ChannelAudienceKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -182,6 +185,24 @@ pub struct ExportPrivateChannelInviteRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportPrivateChannelInviteRequest {
     pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportFriendOnlyGrantRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportFriendOnlyGrantRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RotatePrivateChannelRequest {
+    pub topic: String,
+    pub channel_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -610,13 +631,7 @@ impl DesktopRuntime {
         );
         for capability in load_private_channel_capabilities(&db_path, identity_mode)? {
             app_service
-                .restore_private_channel_capability(
-                    capability.topic_id.as_str(),
-                    capability.channel_id.as_str(),
-                    capability.label.as_str(),
-                    capability.creator_pubkey.as_str(),
-                    capability.namespace_secret_hex.as_str(),
-                )
+                .restore_private_channel_capability(capability)
                 .await?;
         }
         app_service.warm_social_graph().await?;
@@ -817,6 +832,7 @@ impl DesktopRuntime {
             .create_private_channel(CreatePrivateChannelInput {
                 topic_id: TopicId::new(request.topic),
                 label: request.label,
+                audience_kind: request.audience_kind,
             })
             .await?;
         self.persist_private_channel_capabilities_from_app().await?;
@@ -846,6 +862,43 @@ impl DesktopRuntime {
             .await?;
         self.persist_private_channel_capabilities_from_app().await?;
         Ok(preview)
+    }
+
+    pub async fn export_friend_only_grant(
+        &self,
+        request: ExportFriendOnlyGrantRequest,
+    ) -> Result<String> {
+        self.app_service
+            .export_friend_only_grant(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_friend_only_grant(
+        &self,
+        request: ImportFriendOnlyGrantRequest,
+    ) -> Result<FriendOnlyGrantPreview> {
+        let preview = self
+            .app_service
+            .import_friend_only_grant(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn rotate_private_channel(
+        &self,
+        request: RotatePrivateChannelRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        let view = self
+            .app_service
+            .rotate_private_channel(request.topic.as_str(), request.channel_id.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(view)
     }
 
     pub async fn list_joined_private_channels(
@@ -2425,6 +2478,7 @@ mod tests {
             .create_private_channel(CreatePrivateChannelRequest {
                 topic: topic.into(),
                 label: "core".into(),
+                audience_kind: ChannelAudienceKind::InviteOnly,
             })
             .await
             .expect("create private channel");
@@ -2833,6 +2887,296 @@ mod tests {
             .expect("export fresh invite");
         assert!(fresh_invite.contains(topic));
         assert!(fresh_invite.contains(channel.channel_id.as_str()));
+
+        timeout(Duration::from_secs(30), restarted_b.shutdown())
+            .await
+            .expect("restarted runtime shutdown timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn friend_only_channel_restore_keeps_archived_epoch_history() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("friend-only-runtime-a.db");
+        let db_b = dir.path().join("friend-only-runtime-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let a_view = runtime_a
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: b_pubkey.clone(),
+                    })
+                    .await
+                    .expect("a loads b");
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b loads a");
+                if a_view.mutual && b_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("mutual propagation timeout");
+
+        let topic = "kukuri:topic:desktop-friend-only-restart";
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "friends".into(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create friend-only channel");
+        let grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export friend-only grant");
+        let preview = runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: grant })
+            .await
+            .expect("import friend-only grant");
+        let original_epoch_id = preview.epoch_id.clone();
+        assert_eq!(preview.topic_id.as_str(), topic);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+        let private_channel_id = kukuri_core::ChannelId::new(channel.channel_id.clone());
+        let private_channel_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "friends hello".into(),
+                reply_to: None,
+                channel_ref: private_channel_ref,
+                attachments: vec![],
+            })
+            .await
+            .expect("create friend-only post");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let public_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("public timeline");
+                assert!(
+                    public_timeline
+                        .items
+                        .iter()
+                        .all(|post| post.object_id != private_post_id),
+                    "friend-only post leaked into public timeline"
+                );
+                let private_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline");
+                if private_timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == private_post_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("friend-only post timeout");
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-only channel");
+        assert_ne!(rotated.current_epoch_id, original_epoch_id);
+        assert_eq!(rotated.archived_epoch_ids, vec![original_epoch_id.clone()]);
+
+        let fresh_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh friend-only grant");
+        let fresh_preview = runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: fresh_grant })
+            .await
+            .expect("import fresh friend-only grant");
+        assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
+
+        let joined_before_restart = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = runtime_b
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.into(),
+                    })
+                    .await
+                    .expect("list joined channels before restart");
+                if joined.iter().any(|entry| {
+                    entry.channel_id == channel.channel_id
+                        && entry.current_epoch_id == rotated.current_epoch_id
+                        && entry.archived_epoch_ids == vec![original_epoch_id.clone()]
+                }) {
+                    return joined;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("joined channel update timeout");
+        assert_eq!(joined_before_restart.len(), 1);
+
+        timeout(Duration::from_secs(30), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(Duration::from_secs(30), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+        drop(runtime_a);
+        drop(runtime_b);
+        std::fs::remove_file(&db_b).expect("delete sqlite b");
+
+        let restarted_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart runtime b");
+
+        let joined_after_restart = restarted_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels after restart");
+        assert_eq!(joined_after_restart.len(), 1);
+        assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+        assert_eq!(joined_after_restart[0].audience_kind, ChannelAudienceKind::FriendOnly);
+        assert_eq!(
+            joined_after_restart[0].current_epoch_id,
+            rotated.current_epoch_id
+        );
+        assert_eq!(
+            joined_after_restart[0].archived_epoch_ids,
+            vec![original_epoch_id.clone()]
+        );
+
+        let private_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private timeline after restart");
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_post_id)
+        );
 
         timeout(Duration::from_secs(30), restarted_b.shutdown())
             .await

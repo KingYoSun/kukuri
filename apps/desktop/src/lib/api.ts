@@ -14,6 +14,9 @@ export type TimelineScope =
   | { kind: 'all_joined' }
   | { kind: 'channel'; channel_id: string };
 
+export type ChannelAudienceKind = 'invite_only' | 'friend_only';
+export type ChannelSharingState = 'open' | 'frozen';
+
 export type PostView = {
   object_id: string;
   envelope_id: string;
@@ -233,6 +236,15 @@ export type JoinedPrivateChannelView = {
   channel_id: string;
   label: string;
   creator_pubkey: string;
+  owner_pubkey: string;
+  audience_kind: ChannelAudienceKind;
+  is_owner: boolean;
+  current_epoch_id: string;
+  archived_epoch_ids: string[];
+  sharing_state: ChannelSharingState;
+  rotation_required: boolean;
+  participant_count: number;
+  stale_participant_count: number;
 };
 
 export type PrivateChannelInvitePreview = {
@@ -240,6 +252,16 @@ export type PrivateChannelInvitePreview = {
   topic_id: string;
   channel_label: string;
   inviter_pubkey: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
+};
+
+export type FriendOnlyGrantPreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  owner_pubkey: string;
+  epoch_id: string;
   expires_at?: number | null;
   namespace_secret_hex: string;
 };
@@ -287,13 +309,24 @@ export interface DesktopApi {
     participants: string[],
     channelRef?: ChannelRef
   ): Promise<string>;
-  createPrivateChannel(topic: string, label: string): Promise<JoinedPrivateChannelView>;
+  createPrivateChannel(
+    topic: string,
+    label: string,
+    audienceKind?: ChannelAudienceKind
+  ): Promise<JoinedPrivateChannelView>;
   exportPrivateChannelInvite(
     topic: string,
     channelId: string,
     expiresAt?: number | null
   ): Promise<string>;
   importPrivateChannelInvite(token: string): Promise<PrivateChannelInvitePreview>;
+  exportFriendOnlyGrant(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importFriendOnlyGrant(token: string): Promise<FriendOnlyGrantPreview>;
+  rotatePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
   listJoinedPrivateChannels(topic: string): Promise<JoinedPrivateChannelView[]>;
   updateGameRoom(
     topic: string,
@@ -537,12 +570,12 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
-  createPrivateChannel: async (topic, label) => {
+  createPrivateChannel: async (topic, label, audienceKind = 'invite_only') => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label);
+      return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label, audienceKind);
     }
     return invokeDesktop<JoinedPrivateChannelView>('create_private_channel', {
-      request: { topic, label },
+      request: { topic, label, audience_kind: audienceKind },
     });
   },
   exportPrivateChannelInvite: async (topic, channelId, expiresAt = null) => {
@@ -563,6 +596,37 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
       request: { token },
+    });
+  },
+  exportFriendOnlyGrant: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportFriendOnlyGrant(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_friend_only_grant', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importFriendOnlyGrant: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importFriendOnlyGrant(token);
+    }
+    return invokeDesktop<FriendOnlyGrantPreview>('import_friend_only_grant', {
+      request: { token },
+    });
+  },
+  rotatePrivateChannel: async (topic, channelId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.rotatePrivateChannel(topic, channelId);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('rotate_private_channel', {
+      request: {
+        topic,
+        channel_id: channelId,
+      },
     });
   },
   listJoinedPrivateChannels: async (topic) => {

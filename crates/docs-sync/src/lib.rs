@@ -918,6 +918,10 @@ pub fn private_channel_replica_id(channel_id: &str) -> ReplicaId {
     ReplicaId::new(format!("channel::{channel_id}"))
 }
 
+pub fn private_channel_epoch_replica_id(channel_id: &str, epoch_id: &str) -> ReplicaId {
+    ReplicaId::new(format!("channel::{channel_id}::epoch::{epoch_id}"))
+}
+
 pub fn private_channel_hint_topic(channel_id: &str) -> TopicId {
     TopicId::new(format!("private/{channel_id}"))
 }

@@ -7,6 +7,7 @@ import {
   AuthorSocialView,
   AttachmentView,
   BlobViewStatus,
+  ChannelAudienceKind,
   CommunityNodeConfig,
   CommunityNodeNodeStatus,
   CreateAttachmentInput,
@@ -56,6 +57,21 @@ function withGameRoomDefaults(room: GameRoomView): GameRoomView {
   };
 }
 
+function withJoinedChannelDefaults(channel: JoinedPrivateChannelView): JoinedPrivateChannelView {
+  return {
+    ...channel,
+    owner_pubkey: channel.owner_pubkey ?? channel.creator_pubkey,
+    audience_kind: channel.audience_kind ?? 'invite_only',
+    is_owner: channel.is_owner ?? true,
+    current_epoch_id: channel.current_epoch_id ?? 'legacy',
+    archived_epoch_ids: [...(channel.archived_epoch_ids ?? [])],
+    sharing_state: channel.sharing_state ?? 'open',
+    rotation_required: channel.rotation_required ?? false,
+    participant_count: channel.participant_count ?? 0,
+    stale_participant_count: channel.stale_participant_count ?? 0,
+  };
+}
+
 function createMockApi(options?: {
   globalLastError?: string | null;
   topicLastError?: string | null;
@@ -88,7 +104,7 @@ function createMockApi(options?: {
       rooms.map((room) => withGameRoomDefaults(room)),
     ])
   );
-  const joinedChannelsByTopic: Record<string, { topic_id: string; channel_id: string; label: string; creator_pubkey: string }[]> = {};
+  const joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]> = {};
   let sequence = 0;
   let discoveryConfig: DiscoveryConfig = {
     mode: 'seeded_dht',
@@ -487,20 +503,32 @@ function createMockApi(options?: {
       ];
       return roomId;
     },
-    async createPrivateChannel(topic, label) {
+    async createPrivateChannel(topic, label, audienceKind: ChannelAudienceKind = 'invite_only') {
       sequence += 1;
       const channelId = `channel-${sequence}`;
-      const channel = {
+      const channel = withJoinedChannelDefaults({
         topic_id: topic,
         channel_id: channelId,
         label,
         creator_pubkey: syncStatus.local_author_pubkey,
-      };
+        owner_pubkey: syncStatus.local_author_pubkey,
+        audience_kind: audienceKind,
+        is_owner: true,
+        current_epoch_id: audienceKind === 'friend_only' ? `epoch-${sequence}` : 'legacy',
+        archived_epoch_ids: [],
+        sharing_state: 'open',
+        rotation_required: false,
+        participant_count: audienceKind === 'friend_only' ? 1 : 0,
+        stale_participant_count: 0,
+      });
       joinedChannelsByTopic[topic] = [...(joinedChannelsByTopic[topic] ?? []), channel];
       return channel;
     },
     async exportPrivateChannelInvite(topic, channelId) {
       return `invite:${topic}:${channelId}`;
+    },
+    async exportFriendOnlyGrant(topic, channelId) {
+      return `grant:${topic}:${channelId}`;
     },
     async importPrivateChannelInvite() {
       const preview: PrivateChannelInvitePreview = options?.invitePreview ?? {
@@ -513,14 +541,69 @@ function createMockApi(options?: {
       };
       joinedChannelsByTopic[preview.topic_id] = [
         ...(joinedChannelsByTopic[preview.topic_id] ?? []),
-        {
+        withJoinedChannelDefaults({
           topic_id: preview.topic_id,
           channel_id: preview.channel_id,
           label: preview.channel_label,
           creator_pubkey: preview.inviter_pubkey,
-        },
+          owner_pubkey: preview.inviter_pubkey,
+          audience_kind: 'invite_only',
+          is_owner: false,
+          current_epoch_id: 'legacy',
+          archived_epoch_ids: [],
+          sharing_state: 'open',
+          rotation_required: false,
+          participant_count: 0,
+          stale_participant_count: 0,
+        }),
       ];
       return preview;
+    },
+    async importFriendOnlyGrant() {
+      const preview = {
+        channel_id: 'channel-friends',
+        topic_id: 'kukuri:topic:demo',
+        channel_label: 'Friends',
+        owner_pubkey: syncStatus.local_author_pubkey,
+        epoch_id: 'epoch-1',
+        expires_at: null,
+        namespace_secret_hex: 'b'.repeat(64),
+      };
+      joinedChannelsByTopic[preview.topic_id] = [
+        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
+        withJoinedChannelDefaults({
+          topic_id: preview.topic_id,
+          channel_id: preview.channel_id,
+          label: preview.channel_label,
+          creator_pubkey: preview.owner_pubkey,
+          owner_pubkey: preview.owner_pubkey,
+          audience_kind: 'friend_only',
+          is_owner: false,
+          current_epoch_id: preview.epoch_id,
+          archived_epoch_ids: [],
+          sharing_state: 'open',
+          rotation_required: false,
+          participant_count: 1,
+          stale_participant_count: 0,
+        }),
+      ];
+      return preview;
+    },
+    async rotatePrivateChannel(topic, channelId) {
+      const channels = joinedChannelsByTopic[topic] ?? [];
+      const next = channels.map((channel) =>
+        channel.channel_id === channelId
+          ? withJoinedChannelDefaults({
+              ...channel,
+              current_epoch_id: `${channel.current_epoch_id}-rotated`,
+              archived_epoch_ids: [...channel.archived_epoch_ids, channel.current_epoch_id],
+              rotation_required: false,
+              stale_participant_count: 0,
+            })
+          : channel
+      );
+      joinedChannelsByTopic[topic] = next;
+      return next.find((channel) => channel.channel_id === channelId)!;
     },
     async listJoinedPrivateChannels(topic) {
       return joinedChannelsByTopic[topic] ?? [];
@@ -1109,7 +1192,7 @@ test('desktop shell can create a private channel and export an invite', async ()
   const user = userEvent.setup();
   render(<App api={createMockApi()} />);
 
-  expect(screen.getByRole('button', { name: 'Create Invite' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Create Invite' })).not.toBeInTheDocument();
 
   await user.type(screen.getByPlaceholderText('core contributors'), 'core');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
@@ -1144,7 +1227,10 @@ test('desktop shell joins an imported private channel and selects its topic scop
     />
   );
 
-  await user.type(screen.getByPlaceholderText('paste private channel invite'), 'invite-token');
+  await user.type(
+    screen.getByPlaceholderText('paste private channel invite or friend grant'),
+    'invite-token'
+  );
   await user.click(screen.getByRole('button', { name: 'Join Invite' }));
 
   await waitFor(() => {
@@ -1155,6 +1241,28 @@ test('desktop shell joins an imported private channel and selects its topic scop
     expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-imported');
     expect(screen.getByText(/Viewing: Imported/i)).toBeInTheDocument();
     expect(screen.getByText(/Posting to: Imported/i)).toBeInTheDocument();
+  });
+});
+
+test('desktop shell shows friend-only controls and can create a grant', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('core contributors'), 'friends');
+  await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_only');
+  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(screen.getByText(/Policy: Friends: only mutual followers can join/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Grant' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Create Grant' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Latest grant')).toBeInTheDocument();
+    expect(screen.getByText(/grant:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
   });
 });
 

@@ -351,7 +351,7 @@ impl Store for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        envelope_page_from_rows(rows)
+        envelope_page_from_rows(rows, limit)
     }
 
     async fn list_thread(
@@ -388,7 +388,7 @@ impl Store for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        envelope_page_from_rows(rows)
+        envelope_page_from_rows(rows, limit)
     }
 
     async fn upsert_profile(&self, profile: Profile) -> Result<()> {
@@ -838,7 +838,7 @@ impl ProjectionStore for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        object_projection_page_from_rows(rows)
+        object_projection_page_from_rows(rows, limit)
     }
 
     async fn list_thread(
@@ -878,7 +878,7 @@ impl ProjectionStore for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        object_projection_page_from_rows(rows)
+        object_projection_page_from_rows(rows, limit)
     }
 
     async fn upsert_profile_cache(&self, profile: Profile) -> Result<()> {
@@ -961,13 +961,16 @@ impl ProjectionStore for SqliteStore {
                    lsc.channel_id, lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at,
                    lsc.source_replica_id, lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at,
                    lsc.projection_version,
-                   COALESCE((
-                     SELECT COUNT(*)
-                     FROM live_presence_cache lpc
-                     WHERE lpc.topic_id = lsc.topic_id
-                       AND lpc.channel_id = lsc.channel_id
-                       AND lpc.session_id = lsc.session_id
-                   ), 0) AS viewer_count
+                   CASE
+                     WHEN lsc.status = 'ended' THEN 0
+                     ELSE COALESCE((
+                       SELECT COUNT(*)
+                       FROM live_presence_cache lpc
+                       WHERE lpc.topic_id = lsc.topic_id
+                         AND lpc.channel_id = lsc.channel_id
+                         AND lpc.session_id = lsc.session_id
+                     ), 0)
+                   END AS viewer_count
             FROM live_session_cache lsc
             WHERE lsc.topic_id = ?1
             ORDER BY lsc.started_at DESC, lsc.session_id DESC
@@ -1087,7 +1090,7 @@ impl ProjectionStore for SqliteStore {
             let via_json = serde_json::to_string(&row.friend_of_friend_via_pubkeys)?;
             sqlx::query(
                 r#"
-                INSERT INTO author_relationship_cache (
+                INSERT OR REPLACE INTO author_relationship_cache (
                   local_author_pubkey, author_pubkey, following, followed_by, mutual,
                   friend_of_friend, friend_of_friend_via_pubkeys_json, derived_at
                 )
@@ -1313,16 +1316,20 @@ impl ProjectionStore for MemoryStore {
             .cloned()
             .collect::<Vec<_>>();
         for row in &mut items {
-            row.viewer_count = presence
-                .iter()
-                .filter(
-                    |((presence_channel, session_id, _), (presence_topic, _, _, _))| {
-                        presence_channel == &row.channel_id
-                            && session_id == &row.session_id
-                            && presence_topic == topic_id
-                    },
-                )
-                .count();
+            row.viewer_count = if row.status == LiveSessionStatus::Ended {
+                0
+            } else {
+                presence
+                    .iter()
+                    .filter(
+                        |((presence_channel, session_id, _), (presence_topic, _, _, _))| {
+                            presence_channel == &row.channel_id
+                                && session_id == &row.session_id
+                                && presence_topic == topic_id
+                        },
+                    )
+                    .count()
+            };
         }
         items.sort_by(|left, right| {
             right
@@ -1617,29 +1624,41 @@ fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
     }
 }
 
-fn envelope_page_from_rows(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Page<KukuriEnvelope>> {
+fn envelope_page_from_rows(
+    rows: Vec<sqlx::sqlite::SqliteRow>,
+    limit: usize,
+) -> Result<Page<KukuriEnvelope>> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         items.push(row_to_envelope(row)?);
     }
-    let next_cursor = items.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if items.len() == limit {
+        items.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Ok(Page { items, next_cursor })
 }
 
 fn object_projection_page_from_rows(
     rows: Vec<sqlx::sqlite::SqliteRow>,
+    limit: usize,
 ) -> Result<Page<ObjectProjectionRow>> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         items.push(row_to_object_projection(row)?);
     }
-    let next_cursor = items.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if items.len() == limit {
+        items.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Ok(Page { items, next_cursor })
 }
 
@@ -1658,10 +1677,14 @@ fn apply_desc_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1683,10 +1706,14 @@ fn apply_asc_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1708,10 +1735,14 @@ fn apply_desc_projection_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1733,10 +1764,14 @@ fn apply_asc_projection_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,

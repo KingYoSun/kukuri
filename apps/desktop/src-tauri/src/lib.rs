@@ -4,12 +4,13 @@ use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
     CommunityNodeTargetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreatePostRequest, CreatePrivateChannelRequest, DesktopRuntime, DiscoveryConfig,
-    ExportPrivateChannelInviteRequest, GetBlobMediaRequest, GetBlobPreviewRequest,
-    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
-    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListThreadRequest,
-    ListTimelineRequest, LiveSessionCommandRequest, SetCommunityNodeConfigRequest,
-    SetDiscoverySeedsRequest, SetMyProfileRequest, UnsubscribeTopicRequest,
-    UpdateGameRoomRequest, AuthorRequest, resolve_db_path_from_env,
+    ExportFriendOnlyGrantRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
+    GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportPeerTicketRequest,
+    ImportPrivateChannelInviteRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
+    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
+    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
+    resolve_db_path_from_env,
 };
 use tauri::Manager;
 use tracing::{info, warn};
@@ -123,6 +124,42 @@ async fn import_private_channel_invite(
     state
         .runtime
         .import_private_channel_invite(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn export_friend_only_grant(
+    state: tauri::State<'_, DesktopState>,
+    request: ExportFriendOnlyGrantRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .export_friend_only_grant(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn import_friend_only_grant(
+    state: tauri::State<'_, DesktopState>,
+    request: ImportFriendOnlyGrantRequest,
+) -> Result<kukuri_core::FriendOnlyGrantPreview, String> {
+    state
+        .runtime
+        .import_friend_only_grant(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn rotate_private_channel(
+    state: tauri::State<'_, DesktopState>,
+    request: RotatePrivateChannelRequest,
+) -> Result<kukuri_app_api::JoinedPrivateChannelView, String> {
+    state
+        .runtime
+        .rotate_private_channel(request)
         .await
         .map_err(map_error)
 }
@@ -527,6 +564,9 @@ pub fn run() {
             create_private_channel,
             export_private_channel_invite,
             import_private_channel_invite,
+            export_friend_only_grant,
+            import_friend_only_grant,
+            rotate_private_channel,
             list_joined_private_channels,
             list_timeline,
             list_thread,

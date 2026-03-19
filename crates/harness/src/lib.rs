@@ -1091,6 +1091,7 @@ async fn run_private_channel_invite_connectivity(
             .create_private_channel(CreatePrivateChannelRequest {
                 topic: topic.to_string(),
                 label: "core".to_string(),
+                audience_kind: kukuri_core::ChannelAudienceKind::InviteOnly,
             })
             .await
             .context("failed to create private channel")?;
@@ -1980,9 +1981,23 @@ pub fn summarize_metrics(result: &HarnessResult) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kukuri_core::ChannelAudienceKind;
+    use kukuri_desktop_runtime::{
+        AuthorRequest, ExportFriendOnlyGrantRequest, ImportFriendOnlyGrantRequest,
+        RotatePrivateChannelRequest,
+    };
+    use std::sync::Once;
+
+    fn disable_keyring_for_tests() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| unsafe {
+            std::env::set_var("KUKURI_DISABLE_KEYRING", "1");
+        });
+    }
 
     #[tokio::test]
     async fn desktop_smoke_post_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -2001,6 +2016,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_smoke_live_session_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -2019,6 +2035,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_smoke_game_room_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -2037,6 +2054,7 @@ mod tests {
 
     #[tokio::test]
     async fn private_channel_invite_connectivity() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -2051,5 +2069,334 @@ mod tests {
 
         assert_eq!(result.status, HarnessStatus::Pass);
         assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn friend_only_rotate_requires_fresh_grant() {
+        disable_keyring_for_tests();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("friend-only-rotate-connectivity");
+        std::fs::create_dir_all(&artifacts).expect("create artifacts dir");
+
+        let db_a = artifacts.join("friend-only-a.db");
+        let db_b = artifacts.join("friend-only-b.db");
+        let db_c = artifacts.join("friend-only-c.db");
+        cleanup_runtime_artifacts(&db_a).expect("cleanup a");
+        cleanup_runtime_artifacts(&db_b).expect("cleanup b");
+        cleanup_runtime_artifacts(&db_c).expect("cleanup c");
+
+        let runtime_a =
+            DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+                .await
+                .expect("runtime a");
+        let runtime_b =
+            DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+                .await
+                .expect("runtime b");
+        let runtime_c =
+            DesktopRuntime::new_with_config(&db_c, TransportNetworkConfig::loopback())
+                .await
+                .expect("runtime c");
+
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let ticket_c = runtime_c
+            .local_peer_ticket()
+            .await
+            .expect("ticket c")
+            .expect("ticket c value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("a imports b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("b imports a");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("a imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("c imports a");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        let c_pubkey = runtime_c
+            .get_sync_status()
+            .await
+            .expect("status c")
+            .local_author_pubkey;
+
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: c_pubkey.clone(),
+            })
+            .await
+            .expect("a follows c");
+        runtime_c
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("c follows a");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b loads a");
+                let c_view = runtime_c
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("c loads a");
+                if b_view.mutual && c_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("mutual propagation timeout");
+
+        let topic = "kukuri:topic:harness-friend-only";
+        let public_scope = TimelineScope::Public;
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+        let _ = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe c");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.to_string(),
+                label: "friends".to_string(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create friend-only channel");
+        let old_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export old grant");
+
+        runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest {
+                token: old_grant.clone(),
+            })
+            .await
+            .expect("b imports old grant");
+
+        let private_scope = TimelineScope::Channel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "friend-only history".to_string(),
+                reply_to: None,
+                channel_ref: private_ref,
+                attachments: Vec::new(),
+            })
+            .await
+            .expect("create friend-only post");
+        wait_for_timeline_object_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("desktop b did not receive friend-only post");
+        assert_timeline_scope_excludes_object(
+            &runtime_c,
+            topic,
+            public_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .expect("desktop c public scope leaked friend-only post");
+
+        runtime_a
+            .unfollow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a unfollows b");
+        let joined_a = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = runtime_a
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.to_string(),
+                    })
+                    .await
+                    .expect("list joined channels on a");
+                if joined.iter().any(|entry| {
+                    entry.channel_id == channel.channel_id
+                        && entry.rotation_required
+                        && entry.stale_participant_count == 1
+                }) {
+                    return joined;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("rotation required timeout");
+        assert!(joined_a.iter().any(|entry| {
+            entry.channel_id == channel.channel_id
+                && entry.rotation_required
+                && entry.stale_participant_count == 1
+        }));
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-only channel");
+
+        let stale_error = runtime_c
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest {
+                token: old_grant,
+            })
+            .await
+            .expect_err("old grant should fail after rotate");
+        assert!(stale_error.to_string().contains("no longer open"));
+
+        let fresh_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh grant");
+        let fresh_preview = runtime_c
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: fresh_grant })
+            .await
+            .expect("c imports fresh grant");
+        assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
+
+        let joined_c = runtime_c
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.to_string(),
+            })
+            .await
+            .expect("list joined channels on c");
+        let channel_c = joined_c
+            .iter()
+            .find(|entry| entry.channel_id == channel.channel_id)
+            .expect("friend-only channel on c");
+        assert_eq!(channel_c.current_epoch_id, rotated.current_epoch_id);
+        assert!(channel_c.archived_epoch_ids.is_empty());
+
+        let c_private_timeline = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("list c private timeline");
+        assert!(
+            c_private_timeline
+                .items
+                .iter()
+                .all(|item| item.object_id != private_post_id)
+        );
+
+        shutdown_runtime(runtime_a, "friend-only harness runtime a")
+            .await
+            .expect("shutdown runtime a");
+        shutdown_runtime(runtime_b, "friend-only harness runtime b")
+            .await
+            .expect("shutdown runtime b");
+        shutdown_runtime(runtime_c, "friend-only harness runtime c")
+            .await
+            .expect("shutdown runtime c");
     }
 }
