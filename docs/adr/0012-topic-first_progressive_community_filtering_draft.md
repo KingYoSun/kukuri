@@ -18,339 +18,345 @@ Draft
 
 ## Feature Data Classification
 
-| 対象 | Canonical Source | Local Cache / Projection | Phase 1 での扱い |
-|---|---|---|---|
-| public post / thread / live / game | `public docs replica + blobs + topic hint` | SQLite projection | 現状維持。`ReplicaId` から決定的導出する |
-| invite-only private channel data | `private docs replica + blobs + opaque private hint` | SQLite projection | capability を持つ client だけが open / subscribe できる |
-| joined private channel capability | local secure capability storage | なし | DB path ごとに保持し、restart 後の復元正本にする |
-| joined private channel metadata | private channel metadata doc | SQLite projection | label / creator / channel_id は private replica から再取得できる |
-| sync diagnostics | runtime subscription 状態 | SQLite projection は補助のみ | private hint topic を UI に露出せず、親 topic 配下へ集約する |
-| community-node auth / relay assist | community-node config + token cache | local file / secure storage | control plane のみ。membership / invite registry にはしない |
-
-Phase 1 の membership 判定は social graph ではなく capability で行う。`friend_only` / `friend_plus` は social graph v1 を将来利用しうるが、この段階では gating に使わない。
+| 対象 | Canonical Source | Local Cache / Projection | 2026-03-19 時点 | 次フェーズでの扱い |
+|---|---|---|---|---|
+| public post / thread / live / game | `public docs replica + blobs + topic hint` | SQLite projection | 実装済み | 現状維持 |
+| invite-only private channel data | `private docs replica + blobs + private hint` | SQLite projection | Phase 1 実装済み | hard-private baseline として継続利用 |
+| joined private channel capability | local secure capability storage | なし | Phase 1 実装済み | `friend_only` / `friend_plus` でも同期 gate に使う |
+| social graph profile / follow edge | public author docs replica (`author::<pubkey>`) | SQLite projection | `0013` 実装済み | friend 系 audience の relationship 判定入力に使う |
+| derived relationship (`mutual`, `friend_of_friend`) | author replica + signed follow edge からの local projection | rebuildable local cache | `0013` 実装済み | `friend_only` 判定と `friend_plus` sponsor 検証に使う |
+| channel audience policy | channel metadata + owner-signed policy doc | SQLite projection | `invite_only` 相当のみ実装済み | `friend_only` / `friend_plus` policy を追加する |
+| join grant / epoch control | current epoch capability + share token / grant metadata | local secure capability storage | `invite_only` の owner-origin grant のみ実装済み | `friend_only` は owner-controlled, `friend_plus` は participant-mediated chain を追加する |
+| community-node auth / relay assist | community-node config + token cache | local file / secure storage | 実装済み | control plane のまま据え置く |
 
 ## 1. Context
 
-2026-03-19 時点の `main` を確認した結果、現行 kukuri はすでに strong な topic-first 構成を持っている。
+旧版の `0012` は、`friend_only` / `friend_plus` を検討する前提として social graph が未実装であり、Phase 1 の `invite_only` も未実装だった時点の文脈を引きずっていた。
 
-- desktop UI は `trackedTopics + activeTopic + timelinesByTopic` を中心に動く
-- `crates/app-api` は topic ごとに 1 本の購読タスクを持ち、docs replica と hint topic を同時に監視する
-- 実データは `iroh-docs` / `iroh-blobs`、通知は `iroh-gossip`、接続補助は static-peer / seeded DHT / community-node を使う
-- community-node は auth / consent / bootstrap / relay assist の control plane であり、topic ごとの ACL サービスではない
-- `0013` の social graph foundation により、public profile / follow / mutual / friend-of-friend は実装済みだが、Phase 1 の invite-only gating にはまだ使わない
+しかし 2026-03-19 時点の `main` はすでに次の状態にある。
 
-この前提の上で、「topic-first を維持したままコミュニティ範囲を段階的に絞り込めるか」を再評価する。
+- Phase 1 の invite-only private channel は実装済み
+- `docs/adr/0013-social-graph-foundation-draft.md` の social graph v1 も実装済み
+- desktop には `Create Channel`, `Create Invite`, `Join via Invite`, `View Scope`, `Compose Target` が入っている
+- app/runtime/docs-sync/harness/frontend に private channel と social graph の contract がある
+
+加えて `friend_plus` は、既存プロダクト文脈では owner の `friend_of_friend` snapshot ではなく、「参加者の mutual を順次たどって join 可能になる mutual の連鎖」として理解されやすい。この期待から外れると UX 上の誤解を招く。
+
+また、プロダクト上の `friend_plus` は hard-private ではなく `public` と `private` の中間に置く audience として意図されている。したがって `friend_plus` は、`invite_only` や `friend_only` と同じ漏洩耐性を目標にしない。
+
+そのため `0012` は、次の 2 系統を明示する文書へ更新する。
+
+- hard-boundary audience: `invite_only`, `friend_only`
+- soft-boundary audience: `friend_plus`
 
 ## 2. Current Main Snapshot
 
-### 2.1 topic-first の実装状態
+### 2.1 Phase 1 invite-only は出荷済み
 
-- `crates/app-api/src/lib.rs` の `ensure_topic_subscription` / `spawn_topic_subscription` は topic 単位で 1 replica と 1 hint stream を購読する
-- 投稿作成は `create_post_with_attachments` から始まり、topic をキーに docs と hints へ流れる
-- desktop UI でも topic は `Add Topic -> Tracked Topics -> active topic -> Timeline` の一直線な導線になっている
+現行実装の private channel baseline はすでに成立している。
 
-結論として、topic-first 自体はすでに成立している。新機能はこの軸を壊さず、topic の下に絞り込み単位を増やすべきである。
+- `crates/docs-sync` は `channel::<channel_id>` replica を public deterministic secret から除外し、registered capability がなければ open できない
+- `crates/app-api` は `create_private_channel`, `export_private_channel_invite`, `import_private_channel_invite`, `list_joined_private_channels` を持つ
+- `crates/desktop-runtime` は private channel capability を local secure storage に保存し、restart 後に復元する
+- `apps/desktop` は topic-first UI のまま `View Scope` / `Compose Target` / `Create Channel` / `Create Invite` / `Join via Invite` を提供する
 
-### 2.2 現時点で access control になっていないもの
+Phase 1 の回帰は少なくとも次で固定されている。
 
-- `crates/core/src/lib.rs` には `ObjectVisibility` がある
-- ただし現行の投稿作成は `ObjectVisibility::Public` 固定で、visibility は metadata に留まる
-- `crates/docs-sync/src/lib.rs` の `replica_secret` は `ReplicaId` から決定的に導出される
+- `private_replica_requires_registered_capability`
+- `private_channel_invite_scopes_posts_and_replies`
+- `private_channel_invite_restores_after_restart_without_reimport`
+- `private_channel_invite_connectivity`
 
-したがって現行 main では、
+### 2.2 social graph v1 も出荷済み
 
-- visibility を `community` や `private` に変えても同期先は変わらない
-- replica_id が分かれば同じ namespace secret を再現できる
-- 実効的な access control はまだ存在しない
+`0013` で定義した social graph foundation も、もはや前提条件ではなく current baseline である。
 
-### 2.3 community-node の最新状態
+- canonical source は public author replica (`author::<pubkey>`)
+- follow / unfollow は signed follow edge で表現される
+- local projection から `following`, `followed_by`, `mutual`, `friend_of_friend` を導出する
+- desktop は profile 表示、follow / unfollow、relationship badge、`friend of friend` 表示を持つ
 
-community-node まわりの最新 main 実装は、以前の「restart 前提の relay 補助」より進んでいる。
+回帰としては少なくとも次が存在する。
 
-- `crates/cn-user-api` は auth challenge / verify、consent、bootstrap node 配布、endpoint heartbeat を提供する
-- `crates/cn-core` の bootstrap peer registration は subscriber 単位ではなく endpoint 単位で TTL 管理される
-- `crates/desktop-runtime` は consent 後に runtime connectivity assist を current session に再適用できる
-- `apps/desktop/src/App.test.tsx` でも `Save Nodes -> Authenticate -> Accept` 後に `active on current session` になることを確認している
+- `social_graph_derives_friend_of_friend_and_clears_after_unfollow`
+- store migration / projection tests for follow edge and relationship cache
+- desktop follow/unfollow / relationship badge tests
 
-ただし community-node は今も topic 別 membership を持たない。返しているのは「認証済み subscriber に対する bootstrap node / relay URL / seed peers」であり、friend-only や invite-only の正本にはなっていない。
+### 2.3 未実装なのは audience semantics 側
 
-## 3. Gap Analysis
+まだ入っていないのは social graph そのものではなく、その graph を audience policy に接続する層である。
 
-| 項目 | current main | 段階的コミュニティ絞り込みに対する意味 |
-|---|---|---|
-| topic データ面 | topic ごとに 1 docs replica + 1 hint topic | 絞り込みには topic 配下の channel 抽象が必要 |
-| replica secret | `ReplicaId` から決定的導出 | private channel をそのままは作れない |
-| visibility | metadata のみ | access control の enforcement には使えない |
-| community-node | global な auth / consent / bootstrap | topic 別 ACL や invite registry には使えない |
-| social graph | public profile / follow / mutual / friend-of-friend までは実装済み | invite-only の gating には不要。friend semantics には membership / revocation / epoch rotation が別途必要 |
-| desktop UX | topic 切替と composer は単純 | 追加導線は topic-first を壊さない配置が必要 |
+- `friend_only` の strict policy
+- `friend_plus` の mutual-chain policy
+- sponsor / join reason を伴う capability share
+- hard-boundary revoke と soft-boundary frontier stop の違い
+- friend 系 audience を UI で説明するための理由表示
 
-## 4. Feasibility Review
+## 3. Problem Reframed
 
-### 4.1 invite-only は実現可能
+`friend_only` と `friend_plus` を同じ privacy model で扱うと、どちらかが壊れる。
 
-invite-only は、現行 main の延長で最も現実的に実装できる。
+- `friend_only` は owner 起点で閉じた hard-private audience として設計すべき
+- `friend_plus` は参加者から参加者へ広がる soft-private audience として設計すべき
 
-必要なのは social graph ではなく capability ベースの private channel である。
+両者とも topic-first / channel-first の枠内に置けるが、capability の配り方と revoke 期待値は分けて考える必要がある。
 
-- topic の下に opaque な private channel を追加する
-- private channel の replica secret は決定的導出ではなく、ランダム生成または import した capability から得る
-- hints も topic 名から推測できる公開文字列ではなく、channel 専用の opaque topic を使う
-- 参加は invite import で行い、desktop が secret を secure storage に保存する
+整理すると、今後の audience は次の 3 つになる。
 
-これは `docs-sync` / `app-api` / `desktop-runtime` の拡張で閉じる。community-node は relay assist と seed 配布だけでよい。
+1. `invite_only`: explicit invite による hard-private
+2. `friend_only`: owner-scoped mutual による hard-private
+3. `friend_plus`: participant-scoped mutual chain による soft-private
 
-### 4.2 friend-only は今の main では未成立
+## 4. Decision
 
-social graph v1 は入ったが、friend-only を access control として定義する前提はまだ足りない。
+### 4.1 topic-first は維持し、channel を audience 単位とする
 
-- public な contacts / follow graph はある
-- mutual / friend-of-friend 判定の projection もある
-- しかし private membership revocation / epoch rotation / approval flow がない
-- membership revocation / epoch rotation の仕組みがない
-- UI 上も「誰に見えるのか」を説明する根拠がない
+topic-first の UX と sync model は維持する。
 
-したがって current main に対して friend-only を入れる場合、実際には「相互フォロー限定」ではなく「明示メンバー限定」になる。これは friend-only という名前より member-list / approved-members の設計である。
+- topic は discovery / browsing / timeline の軸
+- channel は audience / capability / hint scope の軸
 
-### 4.3 friend-plus は今の main では非現実的
+`friend_only` / `friend_plus` を導入しても、topic を social graph 単位へ置き換えない。追加するのは topic 配下の channel policy だけである。
 
-friend-plus を friend-of-friends として扱うなら、少なくとも以下が必要になる。
+### 4.2 Phase 1 invite-only を private audience baseline とする
 
-- social graph の durable state
-- depth-2 展開の計算とキャッシュ
-- Sybil / spam 対策
-- join request / approval / revocation の UX
+`invite_only` は future plan ではなく、以後の audience feature が依存する baseline である。
 
-現行 main はそこまでの前提を持っていない。protocol draft (`docs/adr/0011-kukuri-protocol-v1-draft.md`) に community / membership object はあるが、実装本体にはまだ入っていない。
+今後の `friend_only` / `friend_plus` も、Phase 1 で入った次の構成を再利用する。
 
-結論として、friend-plus はこの ADR の immediate scope に置くべきではない。
+- private replica
+- private hint topic
+- secure capability persistence
+- restart restore
+- topic-first UI 上の scope 切り替え
 
-## 5. Updated Design Direction
+### 4.3 `friend_only` は owner-scoped `mutual` を policy 入力にする
 
-### 5.1 即時に狙うべき範囲
+`friend_only` は hard-private audience として定義する。
 
-この ADR では、段階的コミュニティ絞り込みの第一段階を次のように定義し直す。
+意味論:
 
-1. `public`
-2. `invite_only`
-3. `member_list` または `approval_only` を将来拡張として追加
-4. `friend_only` / `friend_plus` は social graph 導入後に再定義する
+- owner と recipient が相互 follow なら candidate member
+- one-way follow は含めない
+- 判定根拠は `0013` の author replica + local relationship projection
+- join grant は owner 起点または owner の current device 起点で行う
 
-つまり、最初に実装すべきなのは「friend 系 audience そのもの」ではなく、topic 配下に private channel を増設できる基盤である。
+ここでの `friend` は channel owner 視点の `mutual` を指す。参加者の連鎖で membership を広げない。
 
-### 5.2 channel を第一級概念にする
+### 4.4 `friend_plus` は participant-scoped `mutual` の連鎖を policy 入力にする
 
-topic-first を壊さないために、追加するのは topic の置き換えではなく topic の下位 channel である。
+`friend_plus` は hard-private ではなく soft-private audience として定義する。
 
-例:
+意味論:
+
+- current participant は、自分と `mutual` な相手を join させられる
+- join した participant は新しい sponsor になり、自分の `mutual` をさらに join させられる
+- この挙動は current epoch の間、参加者の連鎖として伝播してよい
+- one-way follow は含めない
+- owner と直接つながっていない participant でも、途中の participant との `mutual` が成立していれば join できる
+
+つまり `friend_plus` の定義は owner の `mutual ∪ friend_of_friend` snapshot ではない。正本は「現在の参加者集合から辿れる pairwise mutual の連鎖」である。
+
+`0013` の `friend_of_friend` projection は、UI 上の説明や join suggestion には使ってよいが、`friend_plus` の意味そのものにはしない。
+
+### 4.5 enforcement は audience 種別ごとに分ける
+
+`invite_only` と `friend_only` は hard-boundary として扱う。
+
+- private replica capability が同期 gate になる
+- owner-controlled な grant / invite を使う
+- revoke や relationship downgrade では epoch rotation を前提にする
+- rotation 後は旧 capability で新 epoch を open できないことを目標にする
+
+一方 `friend_plus` は soft-boundary として扱う。
+
+- private replica capability は引き続き同期 gate に使う
+- ただし capability の配布は owner 限定にしない
+- current participant が current epoch の share token を mutual に渡せる
+- 受信側は sponsor との `mutual` を満たす限り join できる
+- join 後は自分も sponsor になれる
+
+### 4.6 `friend_plus` の漏洩境界を明示する
+
+`friend_plus` は public と hard-private の中間であり、漏洩リスクを一定範囲で受け入れる。
+
+この ADR で許容するのは次までである。
+
+- current participant が、自分の `mutual` に current epoch を伝播できる
+- owner の直視範囲を超えて participant frontier が広がる
+- relationship 断絶や退出が起きても、epoch rotation までの間は current epoch が残りうる
+- 一度受信済みの content を完全に回収できない
+
+この ADR でまだ許容しないのは次である。
+
+- `mutual` でない相手への join
+- sponsor 不明の匿名 join
+- public listing や検索経由での discoverability
+- community-node を truth source にした membership 拡張
+- owner rotation 後も無期限に使える non-expiring grant
+
+実装時にこの漏洩境界を広げる変更が必要になった場合は、都度あらためて確認する。
+
+### 4.7 community-node の責務は広げない
+
+community-node は引き続き control plane に限定する。
+
+- auth / consent
+- relay assist
+- bootstrap node / seed peer registration
+
+やらないこと:
+
+- social graph の truth source 化
+- friend-only / friend-plus membership registry
+- private channel invite / grant registry
+
+friend 系 audience の判定も capability 配布も、docs-first の境界内で完結させる。
+
+## 5. Proposed Model For Future Phases
+
+### 5.1 channel policy を第一級概念にする
+
+少なくとも次の policy kind を持つ。
 
 ```text
-topic: kukuri:topic:contract
-  - public channel
-  - invite-only channel A
-  - invite-only channel B
+public
+invite_only
+friend_only
+friend_plus
 ```
 
-このとき、
+`public` は open、`invite_only` と `friend_only` は hard-private、`friend_plus` は soft-private として扱う。
 
-- topic は発見・一覧・ユーザー認知の軸
-- channel は同期範囲・通知範囲・secret 管理の軸
+### 5.2 hard-boundary path: `invite_only` / `friend_only`
 
-と分離する。
+この 2 つは owner-controlled grant model を維持する。
 
-### 5.3 enforcement は visibility ではなく capability で行う
+- owner が join 権限を決める
+- `friend_only` は owner-scoped `mutual` を使って candidate 判定する
+- actual sync は epoch capability で gate する
+- revoke / downgrade は epoch rotation を伴う
 
-実際の access control は以下で担保する。
+これは強い secrecy が必要な lane である。
 
-- private replica は決定的 secret を使わない
-- private hint topic は opaque identifier を使う
-- desktop は imported capability を secure storage へ保存する
-- channel 未参加の client は replica も hint も知らない
+### 5.3 soft-boundary path: `friend_plus`
 
-`ObjectVisibility` は「この投稿は public か invite-only か」を UI や object metadata に反映する補助情報としては使えるが、access control の正本にはしない。
+`friend_plus` は participant-mediated join model を採る。
 
-### 5.4 community-node の責務は広げない
+- current participant が sponsor になる
+- sponsor は自分と `mutual` な相手に share token を渡せる
+- token は current epoch capability か、その縮約表現を運ぶ
+- recipient は sponsor との `mutual` を確認できたら join する
+- join 後は participant frontier に入り、自分も sponsor になれる
 
-current main の方針どおり、community-node は control plane に留める。
+このモデルでは、participant frontier が social graph 上で連鎖的に広がる。
 
-- relay assist
-- bootstrap node 配布
-- consent / policy
-- authenticated seed peer registration
+### 5.4 `friend_plus` に必要な追加状態
 
-invite-only の membership や doc capability の正本を community-node に置かない。そうしないと `docs + blobs + hints` が正本という現行構造を崩す。
+少なくとも次が必要になる。
 
-### 5.5 Phase 1 の操作契約
+- sponsor を識別できる join metadata
+- `joined via <author>` を表示するための reason data
+- participant frontier を local で追跡する state
+- owner が future expansion を止めるための freeze / rotate 操作
 
-Phase 1 の UI / API / test は、次の順序を固定契約にする。
+`friend_of_friend` projection は suggestion や diagnostics には使ってよいが、frontier truth の代替にはしない。
 
-1. `Create Channel` で private channel を明示作成する
-2. 作成済み channel を選択した状態で `Create Invite` を実行する
-3. 受信側は `Join via Invite` で invite token を import する
-4. その後に private `post / reply-thread / live / game` を作成・利用する
-5. restart 後も invite 再入力なしで joined channel を復元する
+### 5.5 grant carrier は follow-up で確定する
 
-invite 作成を channel 作成と同一視しない。Phase 1 の実機確認、contract test、harness scenario はすべてこの順序を踏む。
+grant / share の carrier は follow-up ADR で確定してよい。候補は次のようなものがある。
 
-## 6. Required Implementation Work
+- direct share token
+- owner / participant authored docs object
+- device-targeted mailbox 的な docs path
 
-### 6.1 `crates/core`
+ただし前提は固定する。
 
-必要最小限の追加は以下。
+- community-node へは置かない
+- server-managed ACL にはしない
+- sponsor または owner を説明可能にする
 
-- `ChannelId` または `AudienceChannelId`
-- `PostAudience` または `ChannelRef`
-- post header に「どの channel に属するか」を表す field
-
-ここで friend-only / friend-plus を固定 enum にすると後で意味論がぶれる。最初は `public` と `private channel ref` を表現できれば十分。
-
-### 6.2 `crates/docs-sync`
-
-最重要変更点。
-
-- public replica は現在どおり deterministic secret を使ってよい
-- private replica は local secret store または imported capability から開く
-- `DocsSync` に private replica import/export の API が必要
-- current `ReplicaId -> NamespaceSecret` 一発導出モデルを public 専用へ限定する
-
-これがない限り invite-only は成立しない。
-
-### 6.3 `crates/app-api`
-
-現在の `topic -> subscription task 1本` を、`topic + channel` へ拡張する必要がある。
-
-- `spawn_topic_subscription` は public channel だけでなく joined private channels も扱う
-- hydration は channel ごとに docs を引き、topic projection に反映する
-- reply は親投稿の audience を継承する
-- sync diagnostics も topic 単位だけでなく channel 由来を内包できるようにする
-
-特に reply の audience 継承を最初から入れないと、private thread へ public reply を誤送信する UX 事故が起きやすい。
-
-### 6.4 `crates/desktop-runtime`
-
-- private channel capability の secure storage
-- invite import / export API
-- restart 後の private channel 復元
-
-current main は discovery seed や community-node relay assist を current session に再適用できるので、invite-only でも connectivity 補助は runtime rebuild で扱える。
-
-### 6.5 `apps/desktop`
-
-UI は topic-first のまま、audience の選択と参加導線だけを追加する。
-
-- topic header に audience switcher
-- composer に現在の audience 表示
-- invite import 導線
-- joined private channels の状態表示
-
-community-node panel の中に invite UX を混ぜない。あの panel は infra 設定であり、一般ユーザー向けの参加導線としては重すぎる。
-
-## 7. UX Review
-
-### 7.1 使いやすい導線にする条件
-
-current main の UX で強いのは「topic を選んで、すぐ見る / 書く」が一貫している点である。これを壊さないことが最優先になる。
-
-避けるべきもの:
-
-- composer の中央に常時 3 種類の scope radio を置く
-- community-node 設定と invite 参加を同じ panel に混ぜる
-- public / private の timeline を無差別に 1 本へ混ぜ、送信先が分かりにくくなる状態
-
-### 7.2 推奨導線
-
-推奨するのは次の流れ。
-
-1. ユーザーは従来どおり topic を追加・選択する
-2. topic header に `Audience` を置く
-3. 表示モードは `Public` / `Joined private channels` / `All joined` のいずれかを選べる
-4. composer は現在選択中の audience を明示する
-5. reply は親投稿の audience を継承し、明示的 override がない限り広げない
-
-これなら topic-first を保ったまま、誤投稿リスクも下げられる。
-
-### 7.3 invite join 導線
-
-invite-only の参加導線は別入口にする。
-
-推奨:
-
-1. `Join via Invite` を topic 追加導線の近くに置く
-2. invite import 後に `topic label / inviter / expires_at` を確認する
-3. 承認後に該当 topic を `Tracked Topics` へ自動追加する
-4. private channel がある topic であることを topic list に表示する
-
-これにより「招待を受けたのにどこへ行けばよいか分からない」状態を避けられる。
-
-### 7.4 terminology
-
-内部設計では `friend_plus` / `friend_only` を議論してよいが、UI ラベルとしては直ちに採用しない方がよい。
-
-理由:
-
-- 現在の実装には friend graph がない
-- ユーザーにとって「friend-only」と表示されても判定根拠が説明できない
-- 実際の first ship は invite / member list ベースになる可能性が高い
-
-UI ではまず `Public` / `Invite only` / `Approved members` のような説明可能なラベルを使うべきである。
-
-## 8. Recommended Rollout
+## 6. Rollout
 
 ### Phase 1
 
-invite-only private channel foundation
+invite-only private channel baseline
 
-- private replica capability
-- opaque hint topic
-- invite import / export
-- topic-first UI 上の audience switcher
+状態:
+
+- 実装済み
+- `Create Channel -> Create Invite -> Join via Invite`
+- post / reply-thread / live / game
+- restart 復元
+- fresh invite 再発行
 
 ### Phase 2
 
-member-list / approval-based channel
+`friend_only` policy integration
 
-- explicit membership docs
-- revocation
-- epoch rotation
+必要なもの:
+
+- channel policy doc に `friend_only` を追加
+- owner-scoped `mutual` から candidate member を導出
+- owner-controlled grant
+- relationship downgrade 時の epoch rotation
+- diagnostics / UI で `Friends` policy を説明可能にする
 
 ### Phase 3
 
-friend semantics の再評価
+`friend_plus` policy integration
 
-- contacts / follow graph
-- mutual 判定
-- friend-of-friends
-- spam / abuse controls
+必要なもの:
 
-## 9. Test Strategy
+- channel policy doc に `friend_plus` を追加
+- participant-sponsored share flow
+- pairwise mutual 検証による chain join
+- `joined via <author>` の reason 表示
+- owner による freeze / rotate
+- candidate expansion に対する abuse / spam guardrail
 
-この機能は必ず failing test 先行で入れる。
+### Out of Scope
 
-最低限必要なもの:
+この ADR ではまだ入れないもの:
 
-- docs-sync: private replica を import した peer だけが同期できる
-- app-api: invite-only channel では public hint を購読していない peer に投稿が見えない
-- app-api: private thread への reply が audience を継承する
-- desktop-runtime: `create channel -> create invite -> import invite -> private post/reply/live/game -> restart` が invite 再入力なしで成立する
-- desktop frontend: `Create Channel` 前は `Create Invite` を使えず、invite import 後に topic / audience が明示される
-- harness: `private_channel_invite_connectivity` scenario で `connect -> create channel -> create invite -> import invite -> private post -> private reply/thread -> private live create/join/end -> private game create/update -> restart -> rehydrate` を自動確認する
-- regression: current public topic sync、seeded DHT、community-node public connectivity が壊れない
+- explicit member list moderation
+- approval workflow
+- admin / moderator role
+- block / mute / local alias
+- community-node managed audience
 
-manual verification は `docs/runbooks/dev.md` の「Invite-only private channel manual verification」を正本にする。実機手順は harness scenario と同じ順序に合わせる。
+これらは separate ADR で扱う。
 
-## 10. Decision
+## 7. Test Strategy
 
-2026-03-19 時点の `main` を前提にすると、段階的コミュニティ絞り込みは次のように判断する。
+既存の Phase 1 regressions は維持したうえで、次フェーズでは少なくとも次を required にする。
 
-- invite-only は feasible
-- member-list / approval-only は private channel 基盤の上で feasible
-- friend-only は social graph 導入前は未成立
-- friend-plus は immediate scope から外す
+- store / app-api: `friend_only` は owner-scoped mutual を失ったら epoch rotate が必要になる
+- app-api / runtime: `friend_plus` で B が owner 経由で join した後、C は B と `mutual` なら join でき、owner と直接関係がなくても許可される
+- app-api / runtime: D が current participant の誰とも `mutual` でなければ `friend_plus` に join できない
+- docs-sync / runtime: `friend_only` は revoked peer が旧 capability のまま新 epoch を open できない
+- runtime / desktop: `friend_plus` では sponsor reason (`joined via ...`) を表示できる
+- harness: 4 client 以上で `owner -> friend join -> chained friend join -> freeze/rotate -> further join blocked` を自動確認する
 
-したがって本 ADR は、従来の「friend-plus -> friend-only -> invite-only をまとめて実装する計画」から、以下へ更新する。
+invite-only Phase 1 の既存回帰も引き続き required とする。
 
-- まず topic 配下の private channel 基盤を実装する
-- first ship は invite-only を狙う
-- friend 系 audience は protocol / membership foundation が入ってから別 ADR で再定義する
+## 8. Consequences
 
-これが current main に対して最も整合的で、かつユーザー導線も壊しにくい。
+- `invite_only` は shipping baseline になる
+- `friend_only` は hard-private として設計する
+- `friend_plus` は soft-private として設計する
+- `friend_plus` では participant mutual chain に沿った漏洩リスクを受け入れる
+- ただしその漏洩境界を超える変更は、実装時に別途確認が必要になる
+- community-node は引き続き membership truth にならない
+
+## 9. Decision Summary
+
+2026-03-19 時点の `main` を前提にした更新後の判断は次のとおり。
+
+- Phase 1 の `invite_only` はすでに実装済み
+- `0013` の social graph foundation もすでに実装済み
+- `friend_only` は owner-scoped `mutual` による hard-private として再設計する
+- `friend_plus` は owner snapshot ではなく、participant-scoped `mutual` の連鎖による soft-private として再設計する
+- access control の扱いは audience ごとに分け、`friend_plus` では中間 audience としての漏洩許容を明示する
+
+この方針なら、topic-first / docs-first / community-node control plane という現行境界を崩さずに、`friend_plus` を既存ユーザー期待とプロダクト意図に合わせて再定義できる。
