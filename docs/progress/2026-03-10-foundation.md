@@ -10,6 +10,8 @@
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
 - Phase6 community-node connectivity/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
 - Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract と Linux 実機 `post -> reply/thread -> blob sync` 検証まで完了
+- Phase6 social graph v1 の public profile / follow / mutual / friend-of-friend 導入まで完了
+- Phase6 community-node relay-only path の bootstrap metadata retry / topic replica sync self-heal / gossip topic resubscribe hardening と `0 -> 3クライアント同時起動` manual verification まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -65,6 +67,8 @@
 - discovery diagnostics を `configured seed / community bootstrap seed / manual ticket` に分離し、relay-only community-node path の接続元を UI と app-api status で判別できるようにした
 - community-node bootstrap peer registration を TTL 付き multi-endpoint table へ更新し、authenticated heartbeat で stale peer を prune/refresh できるようにした
 - desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
+- social graph v1 として `author::<pubkey>` replica を正本にした profile / follow-edge / local relationship projection を導入し、desktop で `profile editor`, `follow/unfollow`, `mutual`, `friend of friend` 表示まで通した
+- community-node relay-only path で `seed_peers` が空のまま固まる経路に bootstrap metadata retry を追加し、topic replica docs sync の self-heal と seed update 時の gossip topic 再購読を入れて `0 clients -> 3 clients simultaneous start` の固着を解消した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -120,6 +124,8 @@
 - `community_node_multi_device_connectivity` scenario を same-author multi-endpoint bootstrap regression として通した
 - Linux 実機 2 台で relay-only community-node に対し、一度も ticket import せずに peer 間接続、`reply/thread`、live/game 伝播まで成立することを確認
 - `community_node_public_connectivity` / `community_node_multi_device_connectivity` を no-restart consent path の regression として通した
+- Linux 実機 3 台で community-node 接続時の `0 connected clients -> 3 clients simultaneous start` 後も、3 クライアント全てで投稿伝播が成立することを確認
+- Linux 実機で social graph v1 の `nickname/profile 表示`, `follow`, `mutual`, `unfollow`, `friend of friend`, restart 後復元が成立することを確認
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
