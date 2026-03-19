@@ -2393,16 +2393,6 @@ impl AppService {
         }))
     }
 
-    async fn hydrate_topic_projection(&self, topic_id: &str) -> Result<usize> {
-        hydrate_topic_projection_with_services(
-            self.docs_sync.as_ref(),
-            self.blob_service.as_ref(),
-            self.projection_store.as_ref(),
-            topic_id,
-        )
-        .await
-    }
-
     async fn ensure_scope_subscriptions(
         &self,
         topic_id: &str,
@@ -2513,11 +2503,6 @@ impl AppService {
                 .await;
             }
         }
-    }
-
-    async fn maybe_restart_topic_replica_sync(&self, topic_id: &str) {
-        self.maybe_restart_replica_sync(topic_id, &topic_replica_id(topic_id))
-            .await;
     }
 
     async fn maybe_restart_replica_sync(&self, topic_id: &str, replica: &ReplicaId) {
@@ -3223,27 +3208,10 @@ fn projection_row_from_header(
     }
 }
 
-async fn hydrate_topic_projection_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-) -> Result<usize> {
-    hydrate_object_projection_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        &topic_replica_id(topic_id),
-    )
-    .await
-}
-
 async fn hydrate_object_projection_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
     projection_store: &dyn ProjectionStore,
-    topic_id: &str,
     replica: &ReplicaId,
 ) -> Result<usize> {
     let records = docs_sync
@@ -3315,14 +3283,9 @@ async fn hydrate_subscription_state_with_services(
     topic_id: &str,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let post_count = hydrate_object_projection_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-    )
-    .await?;
+    let post_count =
+        hydrate_object_projection_from_replica(docs_sync, blob_service, projection_store, replica)
+            .await?;
     let live_count = hydrate_live_sessions_from_replica(
         docs_sync,
         blob_service,
@@ -3340,22 +3303,6 @@ async fn hydrate_subscription_state_with_services(
     )
     .await?;
     Ok(post_count + live_count + game_count)
-}
-
-async fn hydrate_live_sessions_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-) -> Result<usize> {
-    hydrate_live_sessions_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        &topic_replica_id(topic_id),
-    )
-    .await
 }
 
 async fn hydrate_live_sessions_from_replica(
@@ -3393,22 +3340,6 @@ async fn hydrate_live_sessions_from_replica(
         hydrated += 1;
     }
     Ok(hydrated)
-}
-
-async fn hydrate_game_rooms_with_services(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-) -> Result<usize> {
-    hydrate_game_rooms_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        &topic_replica_id(topic_id),
-    )
-    .await
 }
 
 async fn hydrate_game_rooms_from_replica(
@@ -3760,18 +3691,6 @@ fn channel_id_from_storage(channel_id: &str) -> Option<ChannelId> {
 
 fn channel_id_for_view(channel_id: &str) -> Option<String> {
     channel_id_from_storage(channel_id).map(|value| value.as_str().to_string())
-}
-
-fn audience_label_from_storage(channel_id: &str, label: Option<&str>) -> String {
-    if channel_id == PUBLIC_CHANNEL_ID {
-        "Public".to_string()
-    } else {
-        label
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| "Private channel".to_string())
-    }
 }
 
 fn joined_private_channel_key(topic_id: &str, channel_id: &str) -> String {
