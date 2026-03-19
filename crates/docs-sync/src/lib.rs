@@ -84,6 +84,9 @@ pub trait DocsSync: Send + Sync {
     ) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.open_replica(replica_id).await
+    }
     async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
         Ok(())
     }
@@ -785,6 +788,23 @@ impl DocsSync for IrohDocsSync {
             .await
             .insert(endpoint_addr.id.to_string(), endpoint_addr.clone());
         self.reapply_sync_peers().await?;
+        Ok(())
+    }
+
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        let doc = self.ensure_replica(replica_id).await?;
+        let peers = self.sync_peers().await;
+        if peers.is_empty() {
+            return Ok(());
+        }
+        let peer_ids = peers
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+        doc_start_sync(&doc, peers).await?;
+        if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
+            handle.sync_peer_ids = peer_ids;
+        }
         Ok(())
     }
 

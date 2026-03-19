@@ -10,14 +10,13 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, AuthorProfileDocV1, CanonicalPostHeader, EnvelopeId, FollowEdge, FollowEdgeDocV1,
     FollowEdgeStatus, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
-    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef,
-    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
-    LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
-    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem,
-    ObjectVisibility, PayloadRef, Profile, Pubkey, ReplicaId, TopicId, build_follow_edge_envelope,
-    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
-    build_post_envelope_with_payload, build_profile_envelope, generate_keys, parse_follow_edge,
-    parse_profile, timeline_sort_key,
+    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope,
+    KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME,
+    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
+    MediaManifestItem, ObjectVisibility, PayloadRef, Profile, Pubkey, ReplicaId, TopicId,
+    build_follow_edge_envelope, build_game_session_envelope, build_live_session_envelope,
+    build_media_manifest_envelope, build_post_envelope_with_payload, build_profile_envelope,
+    generate_keys, parse_follow_edge, parse_profile, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
@@ -34,6 +33,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
+
+const REPLICA_SYNC_RESTART_RETRY_SECONDS: i64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
@@ -220,6 +221,7 @@ pub struct AppService {
     author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
+    replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
 }
 
 impl AppService {
@@ -262,12 +264,14 @@ impl AppService {
             author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
+            replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     pub async fn warm_social_graph(&self) -> Result<()> {
         let local_author = self.current_author_pubkey();
-        self.ensure_author_subscription(local_author.as_str()).await?;
+        self.ensure_author_subscription(local_author.as_str())
+            .await?;
         self.rebuild_author_relationships().await?;
         for edge in self
             .store
@@ -284,7 +288,8 @@ impl AppService {
 
     pub async fn get_my_profile(&self) -> Result<Profile> {
         let local_author = self.current_author_pubkey();
-        self.ensure_author_subscription(local_author.as_str()).await?;
+        self.ensure_author_subscription(local_author.as_str())
+            .await?;
         Ok(self
             .store
             .get_profile(local_author.as_str())
@@ -321,13 +326,17 @@ impl AppService {
 
     pub async fn follow_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
         let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
-        let envelope =
-            build_follow_edge_envelope(self.keys.as_ref(), &target_pubkey, FollowEdgeStatus::Active)?;
+        let envelope = build_follow_edge_envelope(
+            self.keys.as_ref(),
+            &target_pubkey,
+            FollowEdgeStatus::Active,
+        )?;
         let edge = parse_follow_edge(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
         self.store.put_envelope(envelope.clone()).await?;
         persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
-        self.ensure_author_subscription(target_pubkey.as_str()).await?;
+        self.ensure_author_subscription(target_pubkey.as_str())
+            .await?;
         self.rebuild_author_relationships().await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         self.build_author_social_view(target_pubkey.as_str()).await
@@ -344,7 +353,8 @@ impl AppService {
             .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
         self.store.put_envelope(envelope.clone()).await?;
         persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
-        self.ensure_author_subscription(target_pubkey.as_str()).await?;
+        self.ensure_author_subscription(target_pubkey.as_str())
+            .await?;
         self.rebuild_author_relationships().await?;
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         self.build_author_social_view(target_pubkey.as_str()).await
@@ -352,7 +362,8 @@ impl AppService {
 
     pub async fn get_author_social_view(&self, pubkey: &str) -> Result<AuthorSocialView> {
         let author_pubkey = normalize_author_pubkey(pubkey)?;
-        self.ensure_author_subscription(author_pubkey.as_str()).await?;
+        self.ensure_author_subscription(author_pubkey.as_str())
+            .await?;
         self.rebuild_author_relationships().await?;
         self.build_author_social_view(author_pubkey.as_str()).await
     }
@@ -487,6 +498,7 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
+            self.maybe_restart_topic_replica_sync(topic_id).await;
             if self.hydrate_topic_projection(topic_id).await? > 0 {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
@@ -498,7 +510,8 @@ impl AppService {
             )
             .await?;
         }
-        self.ensure_author_subscriptions_for_rows(&page.items).await?;
+        self.ensure_author_subscriptions_for_rows(&page.items)
+            .await?;
         let view = self.page_to_view(page).await?;
         let mut last_sync = self.last_sync_ts.lock().await;
         if !view.items.is_empty() && last_sync.is_none() {
@@ -524,6 +537,7 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
+            self.maybe_restart_topic_replica_sync(topic_id).await;
             if self.hydrate_topic_projection(topic_id).await? > 0 {
                 *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
             }
@@ -536,7 +550,8 @@ impl AppService {
             )
             .await?;
         }
-        self.ensure_author_subscriptions_for_rows(&page.items).await?;
+        self.ensure_author_subscriptions_for_rows(&page.items)
+            .await?;
         let view = self.page_to_view(page).await?;
         let mut last_sync = self.last_sync_ts.lock().await;
         if !view.items.is_empty() && last_sync.is_none() {
@@ -1423,7 +1438,10 @@ impl AppService {
         .await
     }
 
-    async fn ensure_author_subscriptions_for_rows(&self, rows: &[ObjectProjectionRow]) -> Result<()> {
+    async fn ensure_author_subscriptions_for_rows(
+        &self,
+        rows: &[ObjectProjectionRow],
+    ) -> Result<()> {
         for author_pubkey in rows.iter().map(|row| row.author_pubkey.as_str()) {
             self.ensure_author_subscription(author_pubkey).await?;
         }
@@ -1721,6 +1739,27 @@ impl AppService {
         .await
     }
 
+    async fn maybe_restart_topic_replica_sync(&self, topic_id: &str) {
+        let replica = topic_replica_id(topic_id);
+        let key = replica.as_str().to_string();
+        let now = Utc::now().timestamp();
+        {
+            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
+            if next_due_at > now {
+                return;
+            }
+            deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
+        }
+        if let Err(error) = self.docs_sync.restart_replica_sync(&replica).await {
+            warn!(
+                topic = %topic_id,
+                error = %error,
+                "failed to restart topic replica sync"
+            );
+        }
+    }
+
     async fn page_to_view(&self, page: Page<ObjectProjectionRow>) -> Result<TimelineView> {
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
@@ -1850,7 +1889,10 @@ async fn rebuild_author_relationships_with_services(
 
     let mut friend_of_friend_via = BTreeMap::<String, BTreeSet<String>>::new();
     for via_author in &following {
-        for edge in store.list_follow_edges_by_subject(via_author.as_str()).await? {
+        for edge in store
+            .list_follow_edges_by_subject(via_author.as_str())
+            .await?
+        {
             if edge.status != FollowEdgeStatus::Active {
                 continue;
             }
@@ -2046,7 +2088,8 @@ async fn hydrate_author_state_with_services(
         }
     }
 
-    rebuild_author_relationships_with_services(store, projection_store, local_author_pubkey).await?;
+    rebuild_author_relationships_with_services(store, projection_store, local_author_pubkey)
+        .await?;
     Ok(count)
 }
 
@@ -2056,7 +2099,10 @@ async fn fetch_author_envelope_by_id(
     envelope_id: &EnvelopeId,
 ) -> Result<Option<KukuriEnvelope>> {
     let Some(record) = docs_sync
-        .query_replica(replica, DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())))
+        .query_replica(
+            replica,
+            DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())),
+        )
         .await?
         .into_iter()
         .next()
@@ -2891,6 +2937,52 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
+    struct TrackingDocsSync {
+        restarted_replicas: Arc<TokioMutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl DocsSync for TrackingDocsSync {
+        async fn open_replica(&self, _replica_id: &ReplicaId) -> Result<()> {
+            Ok(())
+        }
+
+        async fn apply_doc_op(&self, _replica_id: &ReplicaId, _op: DocOp) -> Result<()> {
+            Ok(())
+        }
+
+        async fn query_replica(
+            &self,
+            _replica_id: &ReplicaId,
+            _query: DocQuery,
+        ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
+            Ok(Vec::new())
+        }
+
+        async fn subscribe_replica(
+            &self,
+            _replica_id: &ReplicaId,
+        ) -> Result<kukuri_docs_sync::DocEventStream> {
+            let (sender, _) = broadcast::channel::<kukuri_docs_sync::DocEvent>(1);
+            let stream = BroadcastStream::new(sender.subscribe())
+                .filter_map(|item| async move { item.ok().map(Ok) });
+            Ok(Box::pin(stream))
+        }
+
+        async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+            self.restarted_replicas
+                .lock()
+                .await
+                .push(replica_id.as_str().to_string());
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Default)]
     struct AssistedBlobService {
         peer_ids: Vec<String>,
     }
@@ -3568,6 +3660,45 @@ mod tests {
         assert_eq!(
             status.topic_diagnostics[0].status_detail,
             "relay-assisted sync available via 3 peer(s)"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_timeline_restarts_topic_replica_sync_with_cooldown_when_projection_is_empty() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(TrackingDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            transport,
+            docs_sync.clone(),
+            blob_service,
+            generate_keys(),
+        );
+
+        let timeline = app
+            .list_timeline("kukuri:topic:replica-restart", None, 20)
+            .await
+            .expect("timeline");
+        assert!(timeline.items.is_empty());
+
+        let second_timeline = app
+            .list_timeline("kukuri:topic:replica-restart", None, 20)
+            .await
+            .expect("second timeline");
+        assert!(second_timeline.items.is_empty());
+
+        let restarted = docs_sync.restarted_replicas.lock().await.clone();
+        assert_eq!(
+            restarted,
+            vec![
+                topic_replica_id("kukuri:topic:replica-restart")
+                    .as_str()
+                    .to_string()
+            ]
         );
     }
 
@@ -5419,8 +5550,14 @@ mod tests {
             stack_b.blob_service.clone(),
             keys_b.clone(),
         );
-        app_a.warm_social_graph().await.expect("warm social graph a");
-        app_b.warm_social_graph().await.expect("warm social graph b");
+        app_a
+            .warm_social_graph()
+            .await
+            .expect("warm social graph a");
+        app_b
+            .warm_social_graph()
+            .await
+            .expect("warm social graph b");
 
         let ticket_a = stack_a
             .transport
@@ -5455,7 +5592,10 @@ mod tests {
                     .await
                     .expect("load c social view");
                 if social_view.friend_of_friend {
-                    assert_eq!(social_view.friend_of_friend_via_pubkeys, vec![b_pubkey.clone()]);
+                    assert_eq!(
+                        social_view.friend_of_friend_via_pubkeys,
+                        vec![b_pubkey.clone()]
+                    );
                     break;
                 }
                 sleep(Duration::from_millis(100)).await;
