@@ -3283,6 +3283,7 @@ name = "kukuri-desktop-tauri"
 version = "0.1.0"
 dependencies = [
  "kukuri-app-api",
+ "kukuri-core",
  "kukuri-desktop-runtime",
  "serde",
  "tauri",
