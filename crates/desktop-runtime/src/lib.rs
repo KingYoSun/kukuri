@@ -50,7 +50,6 @@ const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
-const IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -305,9 +304,6 @@ pub struct DesktopRuntime {
 }
 
 struct SharedIrohStack {
-    root: PathBuf,
-    network_config: TransportNetworkConfig,
-    dht_options: DhtDiscoveryOptions,
     current: Mutex<BoundIrohStack>,
     transport: Arc<ReloadableTransport>,
     docs_sync: Arc<ReloadableDocsSync>,
@@ -323,10 +319,6 @@ impl ReloadableTransport {
 
     async fn current(&self) -> Arc<IrohGossipTransport> {
         self.inner.read().await.clone()
-    }
-
-    async fn swap(&self, inner: Arc<IrohGossipTransport>) {
-        *self.inner.write().await = inner;
     }
 }
 
@@ -392,10 +384,6 @@ impl ReloadableDocsSync {
     async fn current(&self) -> Arc<IrohDocsSync> {
         self.inner.read().await.clone()
     }
-
-    async fn swap(&self, inner: Arc<IrohDocsSync>) {
-        *self.inner.write().await = inner;
-    }
 }
 
 #[async_trait]
@@ -442,10 +430,6 @@ impl ReloadableBlobService {
 
     async fn current(&self) -> Arc<IrohBlobService> {
         self.inner.read().await.clone()
-    }
-
-    async fn swap(&self, inner: Arc<IrohBlobService>) {
-        *self.inner.write().await = inner;
     }
 }
 
@@ -1223,7 +1207,7 @@ impl DesktopRuntime {
         let bootstrap_seed_peers =
             community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
         self.iroh_stack
-            .rebuild(
+            .apply_runtime_connectivity(
                 &discovery_config,
                 &bootstrap_seed_peers,
                 relay_config.clone(),
@@ -1592,9 +1576,6 @@ impl SharedIrohStack {
         let docs_sync = Arc::new(ReloadableDocsSync::new(current.docs_sync.clone()));
         let blob_service = Arc::new(ReloadableBlobService::new(current.blob_service.clone()));
         Ok(Self {
-            root: root.to_path_buf(),
-            network_config,
-            dht_options,
             current: Mutex::new(current),
             transport,
             docs_sync,
@@ -1602,31 +1583,30 @@ impl SharedIrohStack {
         })
     }
 
-    async fn rebuild(
+    async fn apply_runtime_connectivity(
         &self,
         discovery_config: &DiscoveryConfig,
         bootstrap_seed_peers: &[SeedPeer],
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
-        let mut current = self.current.lock().await;
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS),
-            current.shutdown(),
-        )
-        .await;
-        let next = BoundIrohStack::new(
-            &self.root,
-            self.network_config.clone(),
-            discovery_config,
-            bootstrap_seed_peers,
-            self.dht_options.clone(),
-            relay_config,
-        )
-        .await?;
-        self.transport.swap(next.transport.clone()).await;
-        self.docs_sync.swap(next.docs_sync.clone()).await;
-        self.blob_service.swap(next.blob_service.clone()).await;
-        *current = next;
+        let current = self.current.lock().await;
+        current.node.apply_relay_config(relay_config.clone()).await?;
+        current.transport.update_relay_config(relay_config).await?;
+        current
+            .transport
+            .configure_discovery(
+                discovery_config.mode.clone(),
+                discovery_config.env_locked,
+                discovery_config.seed_peers.clone(),
+                bootstrap_seed_peers.to_vec(),
+            )
+            .await?;
+        let effective_seed_peers = effective_seed_peers(discovery_config, bootstrap_seed_peers);
+        current
+            .docs_sync
+            .set_seed_peers(effective_seed_peers.clone())
+            .await?;
+        current.blob_service.set_seed_peers(effective_seed_peers).await?;
         Ok(())
     }
 
@@ -3200,5 +3180,81 @@ mod tests {
         timeout(test_timeout, runtime.shutdown())
             .await
             .expect("runtime shutdown timeout");
+    }
+
+    #[tokio::test]
+    async fn community_node_connectivity_assist_preserves_manual_ticket_peers() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("assist-a.db");
+        let db_b = dir.path().join("assist-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+
+        let manual_ticket_peer_ids = runtime_a
+            .get_sync_status()
+            .await
+            .expect("sync status before assist")
+            .discovery
+            .manual_ticket_peer_ids;
+        assert!(!manual_ticket_peer_ids.is_empty());
+
+        let seed_peer = CommunityNodeSeedPeer::new(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .expect("seed peer");
+        *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://community.example.com".into(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        "https://community.example.com",
+                        Vec::new(),
+                        vec![seed_peer],
+                    )
+                    .expect("resolved urls"),
+                ),
+            }],
+        };
+
+        runtime_a
+            .apply_runtime_connectivity_assist()
+            .await
+            .expect("apply runtime connectivity assist");
+
+        assert_eq!(
+            runtime_a
+                .get_sync_status()
+                .await
+                .expect("sync status after assist")
+                .discovery
+                .manual_ticket_peer_ids,
+            manual_ticket_peer_ids
+        );
+
+        runtime_a.shutdown().await;
+        runtime_b.shutdown().await;
     }
 }
