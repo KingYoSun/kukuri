@@ -11,9 +11,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use kukuri_app_api::{
-    AppService, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput, GameRoomView,
-    GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
-    UpdateGameRoomInput,
+    AppService, AuthorSocialView, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput,
+    GameRoomView, GameScoreView, LiveSessionView, PendingAttachment, ProfileInput, SyncStatus,
+    TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -22,7 +22,7 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, ReplicaId, TopicId,
+    AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, Profile, ReplicaId, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -105,6 +105,19 @@ pub struct GetBlobPreviewRequest {
 pub struct GetBlobMediaRequest {
     pub hash: String,
     pub mime: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorRequest {
+    pub pubkey: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetMyProfileRequest {
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -548,6 +561,7 @@ impl DesktopRuntime {
             iroh_stack.blob_service.clone(),
             keys,
         );
+        app_service.warm_social_graph().await?;
 
         Ok(Self {
             app_service,
@@ -618,6 +632,39 @@ impl DesktopRuntime {
                 request.cursor,
                 request.limit.unwrap_or(50),
             )
+            .await
+    }
+
+    pub async fn get_my_profile(&self) -> Result<Profile> {
+        self.app_service.get_my_profile().await
+    }
+
+    pub async fn set_my_profile(&self, request: SetMyProfileRequest) -> Result<Profile> {
+        self.app_service
+            .set_my_profile(ProfileInput {
+                name: request.name,
+                display_name: request.display_name,
+                about: request.about,
+                picture: request.picture,
+            })
+            .await
+    }
+
+    pub async fn follow_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .follow_author(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn unfollow_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .unfollow_author(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn get_author_social_view(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .get_author_social_view(request.pubkey.as_str())
             .await
     }
 

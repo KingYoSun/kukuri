@@ -9,6 +9,12 @@ export type PostView = {
   object_id: string;
   envelope_id: string;
   author_pubkey: string;
+  author_name?: string | null;
+  author_display_name?: string | null;
+  following: boolean;
+  followed_by: boolean;
+  mutual: boolean;
+  friend_of_friend: boolean;
   object_kind: string;
   content: string;
   content_status: BlobViewStatus;
@@ -16,6 +22,36 @@ export type PostView = {
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+};
+
+export type Profile = {
+  pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+  updated_at: number;
+};
+
+export type ProfileInput = {
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+};
+
+export type AuthorSocialView = {
+  author_pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+  updated_at?: number | null;
+  following: boolean;
+  followed_by: boolean;
+  mutual: boolean;
+  friend_of_friend: boolean;
+  friend_of_friend_via_pubkeys: string[];
 };
 
 export type BlobViewStatus = 'Missing' | 'Available' | 'Pinned';
@@ -191,6 +227,11 @@ export interface DesktopApi {
     cursor?: TimelineCursor | null,
     limit?: number
   ): Promise<TimelineView>;
+  getMyProfile(): Promise<Profile>;
+  setMyProfile(input: ProfileInput): Promise<Profile>;
+  followAuthor(pubkey: string): Promise<AuthorSocialView>;
+  unfollowAuthor(pubkey: string): Promise<AuthorSocialView>;
+  getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
   listLiveSessions(topic: string): Promise<LiveSessionView[]>;
   createLiveSession(topic: string, title: string, description: string): Promise<string>;
   endLiveSession(topic: string, sessionId: string): Promise<void>;
@@ -309,6 +350,44 @@ export const runtimeApi: DesktopApi = {
         cursor,
         limit,
       },
+    });
+  },
+  getMyProfile: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getMyProfile();
+    }
+    return invokeDesktop<Profile>('get_my_profile');
+  },
+  setMyProfile: async (input) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setMyProfile(input);
+    }
+    return invokeDesktop<Profile>('set_my_profile', {
+      request: input,
+    });
+  },
+  followAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.followAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('follow_author', {
+      request: { pubkey },
+    });
+  },
+  unfollowAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.unfollowAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('unfollow_author', {
+      request: { pubkey },
+    });
+  },
+  getAuthorSocialView: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getAuthorSocialView(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('get_author_social_view', {
+      request: { pubkey },
     });
   },
   listLiveSessions: async (topic) => {

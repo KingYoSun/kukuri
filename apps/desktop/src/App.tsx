@@ -11,6 +11,7 @@ import {
 } from 'react';
 
 import {
+  AuthorSocialView,
   AttachmentView,
   BlobMediaPayload,
   CommunityNodeConfig,
@@ -23,6 +24,8 @@ import {
   GameScoreView,
   LiveSessionView,
   PostView,
+  Profile,
+  ProfileInput,
   SyncStatus,
   TopicSyncStatus,
   runtimeApi,
@@ -111,6 +114,61 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${bytes} B`;
+}
+
+function shortPubkey(pubkey: string): string {
+  return pubkey.slice(0, 12);
+}
+
+function profileInputFromProfile(profile: Profile): ProfileInput {
+  return {
+    name: profile.name ?? '',
+    display_name: profile.display_name ?? '',
+    about: profile.about ?? '',
+    picture: profile.picture ?? '',
+  };
+}
+
+function authorDisplayLabel(
+  authorPubkey: string,
+  displayName?: string | null,
+  name?: string | null
+): string {
+  return displayName?.trim() || name?.trim() || shortPubkey(authorPubkey);
+}
+
+function strongestRelationshipLabel(relationship: {
+  mutual: boolean;
+  following: boolean;
+  followed_by: boolean;
+  friend_of_friend: boolean;
+}): string | null {
+  if (relationship.mutual) {
+    return 'mutual';
+  }
+  if (relationship.following) {
+    return 'following';
+  }
+  if (relationship.followed_by) {
+    return 'follows you';
+  }
+  if (relationship.friend_of_friend) {
+    return 'friend of friend';
+  }
+  return null;
+}
+
+function relationshipBadgeClassName(label: string | null): string {
+  if (label === 'mutual') {
+    return 'relationship-badge relationship-badge-mutual';
+  }
+  if (label === 'friend of friend') {
+    return 'relationship-badge relationship-badge-fof';
+  }
+  if (label === 'following' || label === 'follows you') {
+    return 'relationship-badge relationship-badge-direct';
+  }
+  return 'relationship-badge';
 }
 
 function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
@@ -600,6 +658,13 @@ export function App({ api = runtimeApi }: AppProps) {
     Record<string, true>
   >({});
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(DEFAULT_SYNC_STATUS);
+  const [localProfile, setLocalProfile] = useState<Profile | null>(null);
+  const [profileDraft, setProfileDraft] = useState<ProfileInput>({});
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [selectedAuthorPubkey, setSelectedAuthorPubkey] = useState<string | null>(null);
+  const [selectedAuthor, setSelectedAuthor] = useState<AuthorSocialView | null>(null);
+  const [authorError, setAuthorError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [liveTitle, setLiveTitle] = useState('');
   const [liveDescription, setLiveDescription] = useState('');
@@ -704,12 +769,17 @@ export function App({ api = runtimeApi }: AppProps) {
             ? api.listThread(currentActiveTopic, currentThread, null, 50)
             : Promise.resolve(null),
         ]);
-        const [status, discovery, communityConfig, communityStatuses, ticket] = await Promise.all([
+        const [status, discovery, communityConfig, communityStatuses, ticket, profile, authorView] =
+          await Promise.all([
           api.getSyncStatus(),
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
           api.getCommunityNodeStatuses(),
           api.getLocalPeerTicket(),
+          api.getMyProfile(),
+          selectedAuthorPubkey
+            ? api.getAuthorSocialView(selectedAuthorPubkey)
+            : Promise.resolve(null),
         ]);
         startTransition(() => {
           setTimelinesByTopic(
@@ -732,6 +802,11 @@ export function App({ api = runtimeApi }: AppProps) {
             setCommunityNodeInput(communityNodesToEditorValue(communityConfig));
           }
           setLocalPeerTicket(ticket);
+          setLocalProfile(profile);
+          if (!profileDirty) {
+            setProfileDraft(profileInputFromProfile(profile));
+          }
+          setSelectedAuthor(authorView);
           if (threadView) {
             setThread(threadView.items);
           } else if (!currentThread) {
@@ -743,7 +818,7 @@ export function App({ api = runtimeApi }: AppProps) {
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
-    [api, communityNodeEditorDirty, discoveryEditorDirty]
+    [api, communityNodeEditorDirty, discoveryEditorDirty, profileDirty, selectedAuthorPubkey]
   );
 
   useEffect(() => {
@@ -934,6 +1009,20 @@ export function App({ api = runtimeApi }: AppProps) {
     setReplyTarget(null);
   }
 
+  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const profile = await api.setMyProfile(profileDraft);
+      setLocalProfile(profile);
+      setProfileDraft(profileInputFromProfile(profile));
+      setProfileDirty(false);
+      setProfileError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (saveError) {
+      setProfileError(saveError instanceof Error ? saveError.message : 'failed to save profile');
+    }
+  }
+
   async function handleAddTopic() {
     const nextTopic = topicInput.trim();
     if (!nextTopic) {
@@ -1064,6 +1153,35 @@ export function App({ api = runtimeApi }: AppProps) {
 
   function clearReply() {
     setReplyTarget(null);
+  }
+
+  async function openAuthorDetail(authorPubkey: string) {
+    try {
+      const socialView = await api.getAuthorSocialView(authorPubkey);
+      setSelectedAuthorPubkey(authorPubkey);
+      setSelectedAuthor(socialView);
+      setAuthorError(null);
+    } catch (detailError) {
+      setAuthorError(detailError instanceof Error ? detailError.message : 'failed to load author');
+    }
+  }
+
+  async function handleRelationshipAction(authorPubkey: string, following: boolean) {
+    try {
+      const nextView = following
+        ? await api.unfollowAuthor(authorPubkey)
+        : await api.followAuthor(authorPubkey);
+      setSelectedAuthorPubkey(authorPubkey);
+      setSelectedAuthor(nextView);
+      setAuthorError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (relationshipError) {
+      setAuthorError(
+        relationshipError instanceof Error
+          ? relationshipError.message
+          : 'failed to update follow state'
+      );
+    }
   }
 
   async function handleSaveDiscoverySeeds() {
@@ -1344,6 +1462,12 @@ export function App({ api = runtimeApi }: AppProps) {
     const primaryImage = selectPrimaryImage(post);
     const videoPoster = selectVideoPoster(post);
     const videoManifest = selectVideoManifest(post);
+    const authorLabel = authorDisplayLabel(
+      post.author_pubkey,
+      post.author_display_name,
+      post.author_name
+    );
+    const relationshipLabel = strongestRelationshipLabel(post);
     const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
     const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
     const reservedHashes = new Set<string>();
@@ -1417,12 +1541,23 @@ export function App({ api = runtimeApi }: AppProps) {
 
     return (
       <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
-        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
-          <div className='post-meta'>
-            <span>{post.author_pubkey.slice(0, 12)}</span>
+        <div className='post-meta'>
+          <button
+            className='author-link'
+            type='button'
+            onClick={() => void openAuthorDetail(post.author_pubkey)}
+          >
+            {authorLabel}
+          </button>
+          <div className='post-meta-trailing'>
+            {relationshipLabel ? (
+              <span className={relationshipBadgeClassName(relationshipLabel)}>{relationshipLabel}</span>
+            ) : null}
             <span>{post.object_kind}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
+        </div>
+        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
           {mediaKind ? (
             <>
               <div
@@ -1576,6 +1711,92 @@ export function App({ api = runtimeApi }: AppProps) {
               {syncStatus.last_error ?? 'none'}
             </p>
           </div>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>My Profile</h3>
+              <small>{authorDisplayLabel(syncStatus.local_author_pubkey, localProfile?.display_name, localProfile?.name)}</small>
+            </div>
+            <form className='composer composer-compact' onSubmit={handleSaveProfile}>
+              <label className='field'>
+                <span>Display Name</span>
+                <input
+                  value={profileDraft.display_name ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      display_name: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='Visible label'
+                />
+              </label>
+              <label className='field'>
+                <span>Name</span>
+                <input
+                  value={profileDraft.name ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='Canonical name'
+                />
+              </label>
+              <label className='field'>
+                <span>About</span>
+                <textarea
+                  value={profileDraft.about ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      about: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  className='ticket-output'
+                  placeholder='Short bio'
+                />
+              </label>
+              <label className='field'>
+                <span>Picture URL</span>
+                <input
+                  value={profileDraft.picture ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      picture: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='https://...'
+                />
+              </label>
+              {profileError ? <p className='error error-inline'>{profileError}</p> : null}
+              <div className='discovery-actions'>
+                <button className='button button-secondary' type='submit' disabled={!profileDirty}>
+                  Save Profile
+                </button>
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  disabled={!profileDirty}
+                  onClick={() => {
+                    if (!localProfile) {
+                      return;
+                    }
+                    setProfileDraft(profileInputFromProfile(localProfile));
+                    setProfileDirty(false);
+                    setProfileError(null);
+                  }}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+          </section>
           <section className='panel panel-subsection discovery-panel'>
             <div className='panel-header'>
               <h3>Discovery</h3>
@@ -2169,20 +2390,102 @@ export function App({ api = runtimeApi }: AppProps) {
         <section className='panel'>
           <div className='panel-header'>
             <h2>Thread</h2>
-            {selectedThread ? (
-              <button
-                className='button button-secondary'
-                type='button'
-                onClick={() => {
-                  setSelectedThread(null);
-                  setThread([]);
-                  clearReply();
-                }}
-              >
-                Close
-              </button>
-            ) : null}
+            <div className='post-actions-inline'>
+              {selectedAuthor ? (
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  onClick={() => {
+                    setSelectedAuthorPubkey(null);
+                    setSelectedAuthor(null);
+                    setAuthorError(null);
+                  }}
+                >
+                  Clear Author
+                </button>
+              ) : null}
+              {selectedThread ? (
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  onClick={() => {
+                    setSelectedThread(null);
+                    setThread([]);
+                    clearReply();
+                  }}
+                >
+                  Close
+                </button>
+              ) : null}
+            </div>
           </div>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>Author Detail</h3>
+              <small>{selectedAuthor ? selectedAuthor.author_pubkey.slice(0, 12) : 'none'}</small>
+            </div>
+            {selectedAuthor ? (
+              <div className='author-detail'>
+                <div className='author-detail-header'>
+                  <strong>
+                    {authorDisplayLabel(
+                      selectedAuthor.author_pubkey,
+                      selectedAuthor.display_name,
+                      selectedAuthor.name
+                    )}
+                  </strong>
+                  {strongestRelationshipLabel(selectedAuthor) ? (
+                    <span
+                      className={relationshipBadgeClassName(
+                        strongestRelationshipLabel(selectedAuthor)
+                      )}
+                    >
+                      {strongestRelationshipLabel(selectedAuthor)}
+                    </span>
+                  ) : null}
+                </div>
+                <small>{selectedAuthor.author_pubkey}</small>
+                <p className='author-detail-copy'>
+                  {selectedAuthor.about?.trim() || 'No profile bio published yet.'}
+                </p>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>following: {selectedAuthor.following ? 'yes' : 'no'}</span>
+                  <span>followed by: {selectedAuthor.followed_by ? 'yes' : 'no'}</span>
+                </div>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>mutual: {selectedAuthor.mutual ? 'yes' : 'no'}</span>
+                  <span>
+                    friend of friend: {selectedAuthor.friend_of_friend ? 'yes' : 'no'}
+                  </span>
+                </div>
+                {selectedAuthor.friend_of_friend_via_pubkeys.length > 0 ? (
+                  <div className='diagnostic-block'>
+                    <strong>Via</strong>
+                    <p>{selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey).join(', ')}</p>
+                  </div>
+                ) : null}
+                {authorError ? <p className='error error-inline'>{authorError}</p> : null}
+                {selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey ? (
+                  <div className='post-actions'>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() =>
+                        void handleRelationshipAction(
+                          selectedAuthor.author_pubkey,
+                          selectedAuthor.following
+                        )
+                      }
+                    >
+                      {selectedAuthor.following ? 'Unfollow' : 'Follow'}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className='empty'>Select an author to inspect profile and relationship.</p>
+            )}
+          </section>
           {selectedThread ? (
             <ul className='thread-list'>
               {thread.map((post) => (

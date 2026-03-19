@@ -7,7 +7,7 @@ use kukuri_desktop_runtime::{
     GetBlobPreviewRequest, ImportPeerTicketRequest, ListGameRoomsRequest,
     ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest,
     LiveSessionCommandRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    UnsubscribeTopicRequest, UpdateGameRoomRequest,
+    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -108,6 +108,49 @@ async fn list_thread(
     request: ListThreadRequest,
 ) -> Result<kukuri_app_api::TimelineView, String> {
     state.runtime.list_thread(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_my_profile(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<kukuri_core::Profile, String> {
+    state.runtime.get_my_profile().await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn set_my_profile(
+    state: tauri::State<'_, DesktopState>,
+    request: SetMyProfileRequest,
+) -> Result<kukuri_core::Profile, String> {
+    state.runtime.set_my_profile(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn follow_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, String> {
+    state.runtime.follow_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn unfollow_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, String> {
+    state.runtime.unfollow_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_author_social_view(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, String> {
+    state
+        .runtime
+        .get_author_social_view(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -434,6 +477,11 @@ pub fn run() {
             create_post,
             list_timeline,
             list_thread,
+            get_my_profile,
+            set_my_profile,
+            follow_author,
+            unfollow_author,
+            get_author_social_view,
             get_sync_status,
             get_discovery_config,
             list_live_sessions,

@@ -8,18 +8,23 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, CanonicalPostHeader, EnvelopeId, GAME_MANIFEST_MIME, GameParticipant,
-    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, LIVE_MANIFEST_MIME,
-    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
-    MediaManifestItem, ObjectVisibility, PayloadRef, Pubkey, ReplicaId, TopicId,
+    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, EnvelopeId, FollowEdge, FollowEdgeDocV1,
+    FollowEdgeStatus, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
+    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef,
+    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
+    LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem,
+    ObjectVisibility, PayloadRef, Profile, Pubkey, ReplicaId, TopicId, build_follow_edge_envelope,
     build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
-    build_post_envelope_with_payload, generate_keys, timeline_sort_key,
+    build_post_envelope_with_payload, build_profile_envelope, generate_keys, parse_follow_edge,
+    parse_profile, timeline_sort_key,
 };
-use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
+use kukuri_docs_sync::{
+    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, stable_key, topic_replica_id,
+};
 use kukuri_store::{
-    BlobCacheStatus, GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page,
-    ProjectionStore, Store, TimelineCursor,
+    AuthorRelationshipProjectionRow, BlobCacheStatus, GameRoomProjectionRow,
+    LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -35,6 +40,12 @@ pub struct PostView {
     pub object_id: String,
     pub envelope_id: String,
     pub author_pubkey: String,
+    pub author_name: Option<String>,
+    pub author_display_name: Option<String>,
+    pub following: bool,
+    pub followed_by: bool,
+    pub mutual: bool,
+    pub friend_of_friend: bool,
     pub content: String,
     pub content_status: BlobViewStatus,
     pub attachments: Vec<AttachmentView>,
@@ -64,6 +75,29 @@ pub struct AttachmentView {
 pub struct BlobMediaPayload {
     pub bytes_base64: String,
     pub mime: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileInput {
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorSocialView {
+    pub author_pubkey: String,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+    pub updated_at: Option<i64>,
+    pub following: bool,
+    pub followed_by: bool,
+    pub mutual: bool,
+    pub friend_of_friend: bool,
+    pub friend_of_friend_via_pubkeys: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -183,6 +217,7 @@ pub struct AppService {
     blob_service: Arc<dyn BlobService>,
     keys: Arc<KukuriKeys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     last_sync_ts: Arc<Mutex<Option<i64>>>,
 }
@@ -224,9 +259,102 @@ impl AppService {
             blob_service,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub async fn warm_social_graph(&self) -> Result<()> {
+        let local_author = self.current_author_pubkey();
+        self.ensure_author_subscription(local_author.as_str()).await?;
+        self.rebuild_author_relationships().await?;
+        for edge in self
+            .store
+            .list_follow_edges_by_subject(local_author.as_str())
+            .await?
+        {
+            if edge.status == FollowEdgeStatus::Active {
+                self.ensure_author_subscription(edge.target_pubkey.as_str())
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn get_my_profile(&self) -> Result<Profile> {
+        let local_author = self.current_author_pubkey();
+        self.ensure_author_subscription(local_author.as_str()).await?;
+        Ok(self
+            .store
+            .get_profile(local_author.as_str())
+            .await?
+            .unwrap_or(Profile {
+                pubkey: Pubkey::from(local_author),
+                ..Profile::default()
+            }))
+    }
+
+    pub async fn set_my_profile(&self, input: ProfileInput) -> Result<Profile> {
+        let author_pubkey = Pubkey::from(self.current_author_pubkey());
+        let envelope = build_profile_envelope(
+            self.keys.as_ref(),
+            &KukuriProfileEnvelopeContentV1 {
+                author_pubkey: author_pubkey.clone(),
+                name: normalize_optional_text(input.name),
+                display_name: normalize_optional_text(input.display_name),
+                about: normalize_optional_text(input.about),
+                picture: normalize_optional_text(input.picture),
+            },
+        )?;
+        let profile = parse_profile(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse profile envelope"))?;
+        self.store.put_envelope(envelope.clone()).await?;
+        self.projection_store
+            .upsert_profile_cache(profile.clone())
+            .await?;
+        persist_profile_doc(self.docs_sync.as_ref(), &profile, &envelope).await?;
+        self.rebuild_author_relationships().await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        Ok(profile)
+    }
+
+    pub async fn follow_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
+        let envelope =
+            build_follow_edge_envelope(self.keys.as_ref(), &target_pubkey, FollowEdgeStatus::Active)?;
+        let edge = parse_follow_edge(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
+        self.store.put_envelope(envelope.clone()).await?;
+        persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
+        self.ensure_author_subscription(target_pubkey.as_str()).await?;
+        self.rebuild_author_relationships().await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        self.build_author_social_view(target_pubkey.as_str()).await
+    }
+
+    pub async fn unfollow_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        let target_pubkey = Pubkey::from(normalize_author_pubkey(pubkey)?);
+        let envelope = build_follow_edge_envelope(
+            self.keys.as_ref(),
+            &target_pubkey,
+            FollowEdgeStatus::Revoked,
+        )?;
+        let edge = parse_follow_edge(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse follow edge"))?;
+        self.store.put_envelope(envelope.clone()).await?;
+        persist_follow_edge_doc(self.docs_sync.as_ref(), &edge, &envelope).await?;
+        self.ensure_author_subscription(target_pubkey.as_str()).await?;
+        self.rebuild_author_relationships().await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        self.build_author_social_view(target_pubkey.as_str()).await
+    }
+
+    pub async fn get_author_social_view(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        let author_pubkey = normalize_author_pubkey(pubkey)?;
+        self.ensure_author_subscription(author_pubkey.as_str()).await?;
+        self.rebuild_author_relationships().await?;
+        self.build_author_social_view(author_pubkey.as_str()).await
     }
 
     pub async fn create_post(
@@ -370,6 +498,7 @@ impl AppService {
             )
             .await?;
         }
+        self.ensure_author_subscriptions_for_rows(&page.items).await?;
         let view = self.page_to_view(page).await?;
         let mut last_sync = self.last_sync_ts.lock().await;
         if !view.items.is_empty() && last_sync.is_none() {
@@ -407,6 +536,7 @@ impl AppService {
             )
             .await?;
         }
+        self.ensure_author_subscriptions_for_rows(&page.items).await?;
         let view = self.page_to_view(page).await?;
         let mut last_sync = self.last_sync_ts.lock().await;
         if !view.items.is_empty() && last_sync.is_none() {
@@ -941,6 +1071,16 @@ impl AppService {
         for topic in existing_topics {
             self.restart_topic_subscription(topic.as_str()).await?;
         }
+        let existing_authors = self
+            .author_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for author in existing_authors {
+            self.restart_author_subscription(author.as_str()).await?;
+        }
         Ok(())
     }
 
@@ -976,6 +1116,16 @@ impl AppService {
             .collect::<Vec<_>>();
         for topic in existing_topics {
             self.restart_topic_subscription(topic.as_str()).await?;
+        }
+        let existing_authors = self
+            .author_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for author in existing_authors {
+            self.restart_author_subscription(author.as_str()).await?;
         }
         Ok(())
     }
@@ -1068,6 +1218,17 @@ impl AppService {
                 .collect::<Vec<_>>()
         };
         for handle in handles {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
+        let author_handles = {
+            let mut subscriptions = self.author_subscriptions.lock().await;
+            subscriptions
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
+        };
+        for handle in author_handles {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
         }
@@ -1238,6 +1399,114 @@ impl AppService {
             return Ok(None);
         };
         Ok(Some((state, manifest)))
+    }
+
+    async fn build_author_social_view(&self, author_pubkey: &str) -> Result<AuthorSocialView> {
+        let profile = self.store.get_profile(author_pubkey).await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(self.current_author_pubkey().as_str(), author_pubkey)
+            .await?;
+        Ok(author_social_view_from_parts(
+            author_pubkey,
+            profile.as_ref(),
+            relationship.as_ref(),
+        ))
+    }
+
+    async fn rebuild_author_relationships(&self) -> Result<()> {
+        rebuild_author_relationships_with_services(
+            self.store.as_ref(),
+            self.projection_store.as_ref(),
+            self.current_author_pubkey().as_str(),
+        )
+        .await
+    }
+
+    async fn ensure_author_subscriptions_for_rows(&self, rows: &[ObjectProjectionRow]) -> Result<()> {
+        for author_pubkey in rows.iter().map(|row| row.author_pubkey.as_str()) {
+            self.ensure_author_subscription(author_pubkey).await?;
+        }
+        Ok(())
+    }
+
+    async fn ensure_author_subscription(&self, author_pubkey: &str) -> Result<()> {
+        let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+        if self
+            .author_subscriptions
+            .lock()
+            .await
+            .contains_key(author_pubkey.as_str())
+        {
+            return Ok(());
+        }
+
+        self.spawn_author_subscription(author_pubkey.as_str()).await
+    }
+
+    async fn restart_author_subscription(&self, author_pubkey: &str) -> Result<()> {
+        let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+        if let Some(handle) = self
+            .author_subscriptions
+            .lock()
+            .await
+            .remove(author_pubkey.as_str())
+        {
+            handle.abort();
+        }
+        self.spawn_author_subscription(author_pubkey.as_str()).await
+    }
+
+    async fn spawn_author_subscription(&self, author_pubkey: &str) -> Result<()> {
+        let store = Arc::clone(&self.store);
+        let projection_store = Arc::clone(&self.projection_store);
+        let docs_sync = Arc::clone(&self.docs_sync);
+        let last_sync = Arc::clone(&self.last_sync_ts);
+        let author_key = normalize_author_pubkey(author_pubkey)?;
+        let local_author_pubkey = self.current_author_pubkey();
+        let replica = author_replica_id(author_key.as_str());
+        docs_sync.open_replica(&replica).await?;
+        let initial_count = hydrate_author_state_with_services(
+            docs_sync.as_ref(),
+            store.as_ref(),
+            projection_store.as_ref(),
+            local_author_pubkey.as_str(),
+            author_key.as_str(),
+        )
+        .await?;
+        if initial_count > 0 {
+            *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        }
+        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
+        let author_key_for_task = author_key.clone();
+        let handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Some(event) = doc_stream.next() => {
+                        if event.is_err() {
+                            continue;
+                        }
+                        if let Ok(count) = hydrate_author_state_with_services(
+                            docs_sync.as_ref(),
+                            store.as_ref(),
+                            projection_store.as_ref(),
+                            local_author_pubkey.as_str(),
+                            author_key_for_task.as_str(),
+                        ).await
+                        && count > 0
+                        {
+                            *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                        }
+                    }
+                    else => break,
+                }
+            }
+        });
+        self.author_subscriptions
+            .lock()
+            .await
+            .insert(author_key, handle);
+        Ok(())
     }
 
     async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
@@ -1470,6 +1739,14 @@ impl AppService {
             row.source_key.as_str(),
         )
         .await?;
+        let profile = self.store.get_profile(row.author_pubkey.as_str()).await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(
+                self.current_author_pubkey().as_str(),
+                row.author_pubkey.as_str(),
+            )
+            .await?;
         let content_status =
             blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
         let attachments = if let Some(post_object) = post_object {
@@ -1482,6 +1759,16 @@ impl AppService {
             object_id: row.object_id.0.clone(),
             envelope_id: row.source_envelope_id.0.clone(),
             author_pubkey: row.author_pubkey.clone(),
+            author_name: profile.as_ref().and_then(|profile| profile.name.clone()),
+            author_display_name: profile
+                .as_ref()
+                .and_then(|profile| profile.display_name.clone()),
+            following: relationship.as_ref().is_some_and(|value| value.following),
+            followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
+            mutual: relationship.as_ref().is_some_and(|value| value.mutual),
+            friend_of_friend: relationship
+                .as_ref()
+                .is_some_and(|value| value.friend_of_friend),
             content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
             content_status,
             attachments,
@@ -1495,6 +1782,290 @@ impl AppService {
             },
         })
     }
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn normalize_author_pubkey(pubkey: &str) -> Result<String> {
+    let trimmed = pubkey.trim();
+    if trimmed.len() != 64 || !trimmed.chars().all(|value| value.is_ascii_hexdigit()) {
+        return Err(anyhow::anyhow!("invalid author pubkey"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn author_social_view_from_parts(
+    author_pubkey: &str,
+    profile: Option<&Profile>,
+    relationship: Option<&AuthorRelationshipProjectionRow>,
+) -> AuthorSocialView {
+    AuthorSocialView {
+        author_pubkey: author_pubkey.to_string(),
+        name: profile.and_then(|profile| profile.name.clone()),
+        display_name: profile.and_then(|profile| profile.display_name.clone()),
+        about: profile.and_then(|profile| profile.about.clone()),
+        picture: profile.and_then(|profile| profile.picture.clone()),
+        updated_at: profile.map(|profile| profile.updated_at),
+        following: relationship.is_some_and(|relationship| relationship.following),
+        followed_by: relationship.is_some_and(|relationship| relationship.followed_by),
+        mutual: relationship.is_some_and(|relationship| relationship.mutual),
+        friend_of_friend: relationship.is_some_and(|relationship| relationship.friend_of_friend),
+        friend_of_friend_via_pubkeys: relationship
+            .map(|relationship| relationship.friend_of_friend_via_pubkeys.clone())
+            .unwrap_or_default(),
+    }
+}
+
+async fn rebuild_author_relationships_with_services(
+    store: &dyn Store,
+    projection_store: &dyn ProjectionStore,
+    local_author_pubkey: &str,
+) -> Result<()> {
+    let following_edges = store
+        .list_follow_edges_by_subject(local_author_pubkey)
+        .await?
+        .into_iter()
+        .filter(|edge| edge.status == FollowEdgeStatus::Active)
+        .collect::<Vec<_>>();
+    let followed_by_edges = store
+        .list_follow_edges_by_target(local_author_pubkey)
+        .await?
+        .into_iter()
+        .filter(|edge| edge.status == FollowEdgeStatus::Active)
+        .collect::<Vec<_>>();
+
+    let following = following_edges
+        .iter()
+        .map(|edge| edge.target_pubkey.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    let followed_by = followed_by_edges
+        .iter()
+        .map(|edge| edge.subject_pubkey.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+
+    let mut friend_of_friend_via = BTreeMap::<String, BTreeSet<String>>::new();
+    for via_author in &following {
+        for edge in store.list_follow_edges_by_subject(via_author.as_str()).await? {
+            if edge.status != FollowEdgeStatus::Active {
+                continue;
+            }
+            let target = edge.target_pubkey.as_str();
+            if target == local_author_pubkey || following.contains(target) {
+                continue;
+            }
+            friend_of_friend_via
+                .entry(target.to_string())
+                .or_default()
+                .insert(via_author.clone());
+        }
+    }
+
+    let derived_at = Utc::now().timestamp_millis();
+    let mut author_pubkeys = BTreeSet::new();
+    author_pubkeys.extend(following.iter().cloned());
+    author_pubkeys.extend(followed_by.iter().cloned());
+    author_pubkeys.extend(friend_of_friend_via.keys().cloned());
+    author_pubkeys.remove(local_author_pubkey);
+
+    let rows = author_pubkeys
+        .into_iter()
+        .map(|author_pubkey| {
+            let following_flag = following.contains(author_pubkey.as_str());
+            let followed_by_flag = followed_by.contains(author_pubkey.as_str());
+            let via_pubkeys = friend_of_friend_via
+                .get(author_pubkey.as_str())
+                .map(|values| values.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            AuthorRelationshipProjectionRow {
+                local_author_pubkey: local_author_pubkey.to_string(),
+                author_pubkey: author_pubkey.clone(),
+                following: following_flag,
+                followed_by: followed_by_flag,
+                mutual: following_flag && followed_by_flag,
+                friend_of_friend: !following_flag && !via_pubkeys.is_empty(),
+                friend_of_friend_via_pubkeys: via_pubkeys,
+                derived_at,
+            }
+        })
+        .collect::<Vec<_>>();
+    projection_store
+        .rebuild_author_relationships(local_author_pubkey, rows)
+        .await
+}
+
+async fn persist_profile_doc(
+    docs_sync: &dyn DocsSync,
+    profile: &Profile,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile.pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile", "latest"),
+                value: serde_json::to_value(AuthorProfileDocV1 {
+                    author_pubkey: profile.pubkey.clone(),
+                    name: profile.name.clone(),
+                    display_name: profile.display_name.clone(),
+                    about: profile.about.clone(),
+                    picture: profile.picture.clone(),
+                    updated_at: profile.updated_at,
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+async fn persist_follow_edge_doc(
+    docs_sync: &dyn DocsSync,
+    edge: &FollowEdge,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(edge.subject_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("graph/follows", edge.target_pubkey.as_str()),
+                value: serde_json::to_value(FollowEdgeDocV1 {
+                    subject_pubkey: edge.subject_pubkey.clone(),
+                    target_pubkey: edge.target_pubkey.clone(),
+                    status: edge.status.clone(),
+                    updated_at: edge.updated_at,
+                    envelope_id: edge.envelope_id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+async fn hydrate_author_state_with_services(
+    docs_sync: &dyn DocsSync,
+    store: &dyn Store,
+    projection_store: &dyn ProjectionStore,
+    local_author_pubkey: &str,
+    author_pubkey: &str,
+) -> Result<usize> {
+    let replica = author_replica_id(author_pubkey);
+    let mut count = 0usize;
+    if let Some(record) = docs_sync
+        .query_replica(&replica, DocQuery::Exact(stable_key("profile", "latest")))
+        .await?
+        .into_iter()
+        .next()
+    {
+        match serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice()) {
+            Ok(doc) if doc.author_pubkey.as_str() == author_pubkey => {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    store.put_envelope(envelope.clone()).await?;
+                    if let Some(profile) = parse_profile(&envelope)? {
+                        projection_store.upsert_profile_cache(profile).await?;
+                    }
+                    count += 1;
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile doc with mismatched author"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode author profile doc"
+                );
+            }
+        }
+    }
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("graph/follows/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<FollowEdgeDocV1>(record.value.as_slice()) {
+            Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    if let Some(edge) = parse_follow_edge(&envelope)? {
+                        if edge.target_pubkey == doc.target_pubkey && edge.status == doc.status {
+                            store.put_envelope(envelope).await?;
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring follow doc with mismatched subject"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode follow edge doc"
+                );
+            }
+        }
+    }
+
+    rebuild_author_relationships_with_services(store, projection_store, local_author_pubkey).await?;
+    Ok(count)
+}
+
+async fn fetch_author_envelope_by_id(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    envelope_id: &EnvelopeId,
+) -> Result<Option<KukuriEnvelope>> {
+    let Some(record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
+    envelope.verify()?;
+    Ok(Some(envelope))
 }
 
 fn merge_seed_peers(
@@ -2207,6 +2778,11 @@ fn effective_topic_status_detail(
 impl Drop for AppService {
     fn drop(&mut self) {
         if let Ok(mut subscriptions) = self.subscriptions.try_lock() {
+            for (_, handle) in subscriptions.drain() {
+                handle.abort();
+            }
+        }
+        if let Ok(mut subscriptions) = self.author_subscriptions.try_lock() {
             for (_, handle) in subscriptions.drain() {
                 handle.abort();
             }
@@ -4813,5 +5389,98 @@ mod tests {
             .await
             .expect_err("ended room update should fail");
         assert!(error.to_string().contains("ended game room"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("author-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("author-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let keys_c = generate_keys();
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            stack_a.transport.clone(),
+            stack_a.transport.clone(),
+            stack_a.docs_sync.clone(),
+            stack_a.blob_service.clone(),
+            keys_a.clone(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b.clone(),
+            stack_b.transport.clone(),
+            stack_b.transport.clone(),
+            stack_b.docs_sync.clone(),
+            stack_b.blob_service.clone(),
+            keys_b.clone(),
+        );
+        app_a.warm_social_graph().await.expect("warm social graph a");
+        app_b.warm_social_graph().await.expect("warm social graph b");
+
+        let ticket_a = stack_a
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = stack_b
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a.import_peer_ticket(&ticket_b).await.expect("import b");
+        app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+
+        let b_pubkey = keys_b.public_key_hex();
+        let c_pubkey = keys_c.public_key_hex();
+        app_a
+            .follow_author(b_pubkey.as_str())
+            .await
+            .expect("a follows b");
+        app_b
+            .follow_author(c_pubkey.as_str())
+            .await
+            .expect("b follows c");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let social_view = app_a
+                    .get_author_social_view(c_pubkey.as_str())
+                    .await
+                    .expect("load c social view");
+                if social_view.friend_of_friend {
+                    assert_eq!(social_view.friend_of_friend_via_pubkeys, vec![b_pubkey.clone()]);
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("derive friend of friend");
+
+        let b_view = app_a
+            .get_author_social_view(b_pubkey.as_str())
+            .await
+            .expect("load b social view");
+        assert!(b_view.following);
+        assert!(!b_view.friend_of_friend);
+
+        app_a
+            .unfollow_author(b_pubkey.as_str())
+            .await
+            .expect("a unfollows b");
+
+        let c_view = app_a
+            .get_author_social_view(c_pubkey.as_str())
+            .await
+            .expect("load c social view after unfollow");
+        assert!(!c_view.friend_of_friend);
+        assert!(c_view.friend_of_friend_via_pubkeys.is_empty());
     }
 }

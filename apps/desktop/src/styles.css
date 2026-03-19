@@ -555,10 +555,70 @@ textarea {
 .post-meta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 0.55rem;
   font-size: 0.8rem;
   color: rgba(246, 241, 232, 0.68);
+}
+
+.post-meta-trailing,
+.post-actions-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.author-link {
+  padding: 0;
+  border: 0;
+  color: #f6f1e8;
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.relationship-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  color: rgba(246, 241, 232, 0.9);
+  background: rgba(246, 241, 232, 0.08);
+}
+
+.relationship-badge-direct {
+  background: rgba(0, 179, 164, 0.2);
+  color: #b9f2ea;
+}
+
+.relationship-badge-mutual {
+  background: rgba(245, 157, 98, 0.22);
+  color: #ffd6b9;
+}
+
+.relationship-badge-fof {
+  background: rgba(110, 180, 255, 0.18);
+  color: #c9e1ff;
+}
+
+.author-detail {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.author-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.author-detail-copy {
+  margin: 0;
+  color: rgba(246, 241, 232, 0.78);
 }
 
 .post-card small,

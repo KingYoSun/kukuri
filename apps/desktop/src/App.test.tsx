@@ -4,6 +4,7 @@ import { expect, test, vi } from 'vitest';
 
 import { App } from './App';
 import {
+  AuthorSocialView,
   AttachmentView,
   BlobViewStatus,
   CommunityNodeConfig,
@@ -15,9 +16,23 @@ import {
   GameScoreView,
   LiveSessionView,
   PostView,
+  Profile,
   SyncStatus,
   TimelineView,
 } from './lib/api';
+
+function withSocialPostDefaults(post: PostView): PostView {
+  return {
+    author_name: null,
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    ...post,
+    attachments: [...post.attachments],
+  };
+}
 
 function createMockApi(options?: {
   globalLastError?: string | null;
@@ -26,16 +41,15 @@ function createMockApi(options?: {
   seedPosts?: Record<string, TimelineView['items']>;
   seedLiveSessions?: Record<string, LiveSessionView[]>;
   seedGameRooms?: Record<string, GameRoomView[]>;
+  myProfile?: Partial<Profile>;
+  authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
 }) {
   const assistPeerIds = options?.assistPeerIds ?? [];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
     Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
       topic,
-      posts.map((post) => ({
-        ...post,
-        attachments: [...post.attachments],
-      })),
+      posts.map((post) => withSocialPostDefaults(post)),
     ])
   );
   const liveSessionsByTopic: Record<string, LiveSessionView[]> = Object.fromEntries(
@@ -98,6 +112,34 @@ function createMockApi(options?: {
       last_discovery_error: null,
     },
   };
+  let myProfile: Profile = {
+    pubkey: syncStatus.local_author_pubkey,
+    name: null,
+    display_name: null,
+    about: null,
+    picture: null,
+    updated_at: 0,
+    ...options?.myProfile,
+  };
+  const authorSocialViews: Record<string, AuthorSocialView> = Object.fromEntries(
+    Object.entries(options?.authorSocialViews ?? {}).map(([pubkey, view]) => [
+      pubkey,
+      {
+        author_pubkey: pubkey,
+        name: null,
+        display_name: null,
+        about: null,
+        picture: null,
+        updated_at: null,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        friend_of_friend_via_pubkeys: [],
+        ...view,
+      },
+    ])
+  );
 
   const api: DesktopApi = {
     async createPost(topic, content, replyTo, attachments) {
@@ -115,7 +157,7 @@ function createMockApi(options?: {
         status: 'Available',
       }));
       postsByTopic[topic] = [
-        {
+        withSocialPostDefaults({
           object_id: objectId,
           envelope_id: `envelope-${sequence}`,
           author_pubkey: 'f'.repeat(64),
@@ -126,7 +168,7 @@ function createMockApi(options?: {
           created_at: sequence,
           reply_to: replyTo ?? null,
           root_id: rootId,
-        },
+        }),
         ...posts,
       ];
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
@@ -173,6 +215,129 @@ function createMockApi(options?: {
         items: posts.filter((post) => post.root_id === threadId || post.object_id === threadId),
         next_cursor: null,
       };
+    },
+    async getMyProfile() {
+      return myProfile;
+    },
+    async setMyProfile(input) {
+      myProfile = {
+        ...myProfile,
+        ...input,
+        updated_at: myProfile.updated_at + 1,
+      };
+      authorSocialViews[myProfile.pubkey] = {
+        author_pubkey: myProfile.pubkey,
+        name: myProfile.name ?? null,
+        display_name: myProfile.display_name ?? null,
+        about: myProfile.about ?? null,
+        picture: myProfile.picture ?? null,
+        updated_at: myProfile.updated_at,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        friend_of_friend_via_pubkeys: [],
+      };
+      return myProfile;
+    },
+    async followAuthor(pubkey) {
+      const existing = authorSocialViews[pubkey] ?? {
+        author_pubkey: pubkey,
+        name: null,
+        display_name: null,
+        about: null,
+        picture: null,
+        updated_at: null,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        friend_of_friend_via_pubkeys: [],
+      };
+      const next = {
+        ...existing,
+        following: true,
+        mutual: existing.followed_by,
+      };
+      authorSocialViews[pubkey] = next;
+      for (const topic of Object.keys(postsByTopic)) {
+        postsByTopic[topic] = postsByTopic[topic].map((post) =>
+          post.author_pubkey === pubkey
+            ? {
+                ...post,
+                following: true,
+                mutual: next.mutual,
+                friend_of_friend: false,
+              }
+            : post
+        );
+      }
+      return next;
+    },
+    async unfollowAuthor(pubkey) {
+      const existing = authorSocialViews[pubkey] ?? {
+        author_pubkey: pubkey,
+        name: null,
+        display_name: null,
+        about: null,
+        picture: null,
+        updated_at: null,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        friend_of_friend_via_pubkeys: [],
+      };
+      const next = {
+        ...existing,
+        following: false,
+        mutual: false,
+      };
+      authorSocialViews[pubkey] = next;
+      for (const topic of Object.keys(postsByTopic)) {
+        postsByTopic[topic] = postsByTopic[topic].map((post) =>
+          post.author_pubkey === pubkey
+            ? {
+                ...post,
+                following: false,
+                mutual: false,
+              }
+            : post
+        );
+      }
+      return next;
+    },
+    async getAuthorSocialView(pubkey) {
+      if (pubkey === myProfile.pubkey) {
+        return {
+          author_pubkey: myProfile.pubkey,
+          name: myProfile.name ?? null,
+          display_name: myProfile.display_name ?? null,
+          about: myProfile.about ?? null,
+          picture: myProfile.picture ?? null,
+          updated_at: myProfile.updated_at,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          friend_of_friend_via_pubkeys: [],
+        };
+      }
+      return (
+        authorSocialViews[pubkey] ?? {
+          author_pubkey: pubkey,
+          name: null,
+          display_name: null,
+          about: null,
+          picture: null,
+          updated_at: null,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          friend_of_friend_via_pubkeys: [],
+        }
+      );
     },
     async listLiveSessions(topic) {
       return liveSessionsByTopic[topic] ?? [];
@@ -1483,5 +1648,107 @@ test('community node panel activates relay connectivity on the current session a
     expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
       'connectivity urls active on current session'
     );
+  });
+});
+
+test('post card shows friend of friend badge and author name fallback', async () => {
+  render(
+    <App
+      api={createMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-fof',
+              envelope_id: 'envelope-fof',
+              author_pubkey: 'a'.repeat(64),
+              author_name: 'alice',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: true,
+              object_kind: 'post',
+              content: 'hello network',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-fof',
+            },
+          ],
+        },
+      })}
+    />
+  );
+
+  expect(await screen.findByRole('button', { name: 'alice' })).toBeInTheDocument();
+  expect(screen.getByText('friend of friend')).toBeInTheDocument();
+});
+
+test('author detail shows via authors and follow action updates relationship', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const viaA = 'c'.repeat(64);
+  const viaB = 'd'.repeat(64);
+  const api = createMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        {
+          object_id: 'post-author',
+          envelope_id: 'envelope-author',
+          author_pubkey: authorPubkey,
+          author_name: 'bob',
+          author_display_name: null,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: true,
+          object_kind: 'post',
+          content: 'author detail',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 1,
+          reply_to: null,
+          root_id: 'post-author',
+        },
+      ],
+    },
+    authorSocialViews: {
+      [authorPubkey]: {
+        name: 'bob',
+        friend_of_friend: true,
+        friend_of_friend_via_pubkeys: [viaA, viaB],
+      },
+    },
+  });
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+
+  expect(await screen.findByText('Author Detail')).toBeInTheDocument();
+  expect(screen.getByText(`${viaA.slice(0, 12)}, ${viaB.slice(0, 12)}`)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Follow' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Follow' }));
+
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
+  });
+  expect(screen.getAllByText('following').length).toBeGreaterThan(0);
+});
+
+test('local profile editor saves profile draft', async () => {
+  const api = createMockApi();
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+
+  const displayNameInput = await screen.findByPlaceholderText('Visible label');
+  await user.type(displayNameInput, 'Local Author');
+  await user.click(screen.getByRole('button', { name: 'Save Profile' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Local Author')).toBeInTheDocument();
   });
 });

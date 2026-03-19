@@ -435,6 +435,58 @@ pub struct Profile {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriProfileEnvelopeContentV1 {
+    pub author_pubkey: Pubkey,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorProfileDocV1 {
+    pub author_pubkey: Pubkey,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FollowEdgeStatus {
+    Active,
+    Revoked,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriFollowEdgeEnvelopeContentV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowEdge {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowEdgeDocV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadRef {
     pub root: EnvelopeId,
@@ -662,6 +714,57 @@ pub fn build_media_manifest_envelope(
     )
 }
 
+pub fn build_profile_envelope(
+    keys: &KukuriKeys,
+    content: &KukuriProfileEnvelopeContentV1,
+) -> Result<KukuriEnvelope> {
+    let author_pubkey = keys.public_key();
+    if content.author_pubkey != author_pubkey {
+        bail!("profile author pubkey must match signer");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(content).context("failed to encode envelope content")?;
+    sign_envelope_at(
+        keys,
+        "identity-profile",
+        vec![
+            vec!["author".into(), content.author_pubkey.as_str().to_string()],
+            vec!["object".into(), "identity-profile".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn build_follow_edge_envelope(
+    keys: &KukuriKeys,
+    target_pubkey: &Pubkey,
+    status: FollowEdgeStatus,
+) -> Result<KukuriEnvelope> {
+    let subject_pubkey = keys.public_key();
+    if subject_pubkey == *target_pubkey {
+        bail!("self follow is not allowed");
+    }
+    let content = KukuriFollowEdgeEnvelopeContentV1 {
+        subject_pubkey: subject_pubkey.clone(),
+        target_pubkey: target_pubkey.clone(),
+        status,
+    };
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(&content).context("failed to encode envelope content")?;
+    sign_envelope_at(
+        keys,
+        "follow-edge",
+        vec![
+            vec!["subject".into(), subject_pubkey.as_str().to_string()],
+            vec!["target".into(), target_pubkey.as_str().to_string()],
+            vec!["object".into(), "follow-edge".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
 pub fn build_live_session_envelope<T: Serialize>(
     keys: &KukuriKeys,
     topic: &TopicId,
@@ -703,28 +806,45 @@ pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
         return Ok(None);
     }
 
-    let metadata: serde_json::Value =
+    let metadata: KukuriProfileEnvelopeContentV1 =
         serde_json::from_str(&envelope.content).context("failed to parse profile envelope")?;
+    validate_pubkey(metadata.author_pubkey.as_str()).context("invalid profile author pubkey")?;
+    if metadata.author_pubkey != envelope.pubkey {
+        bail!("profile author pubkey must match envelope signer");
+    }
 
     Ok(Some(Profile {
         pubkey: envelope.pubkey.clone(),
-        name: metadata
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        display_name: metadata
-            .get("display_name")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        about: metadata
-            .get("about")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        picture: metadata
-            .get("picture")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
+        name: metadata.name,
+        display_name: metadata.display_name,
+        about: metadata.about,
+        picture: metadata.picture,
         updated_at: envelope.created_at,
+    }))
+}
+
+pub fn parse_follow_edge(envelope: &KukuriEnvelope) -> Result<Option<FollowEdge>> {
+    if envelope.kind != "follow-edge" {
+        return Ok(None);
+    }
+
+    let content: KukuriFollowEdgeEnvelopeContentV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse follow edge envelope")?;
+    validate_pubkey(content.subject_pubkey.as_str()).context("invalid follow subject pubkey")?;
+    validate_pubkey(content.target_pubkey.as_str()).context("invalid follow target pubkey")?;
+    if content.subject_pubkey != envelope.pubkey {
+        bail!("follow subject pubkey must match envelope signer");
+    }
+    if content.subject_pubkey == content.target_pubkey {
+        bail!("self follow is not allowed");
+    }
+
+    Ok(Some(FollowEdge {
+        subject_pubkey: content.subject_pubkey,
+        target_pubkey: content.target_pubkey,
+        status: content.status,
+        updated_at: envelope.created_at,
+        envelope_id: envelope.id.clone(),
     }))
 }
 
@@ -793,6 +913,18 @@ fn canonical_envelope_payload(
         0, pubkey, created_at, kind, tags, content
     ]))
     .context("failed to encode canonical envelope payload")
+}
+
+fn validate_pubkey(value: &str) -> Result<()> {
+    XOnlyPublicKey::from_str(value).context("invalid x-only public key")?;
+    Ok(())
+}
+
+fn now_timestamp_millis() -> Result<i64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before unix epoch")?
+        .as_millis() as i64)
 }
 
 #[cfg(test)]
@@ -871,5 +1003,74 @@ mod tests {
 
         envelope.verify().expect("signature verification");
         assert_eq!(envelope.kind, "media-manifest");
+    }
+
+    #[test]
+    fn profile_envelope_roundtrip() {
+        let keys = generate_keys();
+        let envelope = build_profile_envelope(
+            &keys,
+            &KukuriProfileEnvelopeContentV1 {
+                author_pubkey: keys.public_key(),
+                name: Some("alice".into()),
+                display_name: Some("Alice".into()),
+                about: Some("hello".into()),
+                picture: Some("https://example.com/alice.png".into()),
+            },
+        )
+        .expect("profile envelope");
+
+        envelope.verify().expect("signature verification");
+        let profile = parse_profile(&envelope)
+            .expect("parse profile")
+            .expect("profile");
+        assert_eq!(profile.pubkey, keys.public_key());
+        assert_eq!(profile.display_name.as_deref(), Some("Alice"));
+        assert_eq!(profile.about.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn follow_edge_roundtrip_and_self_follow_rejected() {
+        let keys = generate_keys();
+        let target = generate_keys().public_key();
+        let envelope = build_follow_edge_envelope(&keys, &target, FollowEdgeStatus::Active)
+            .expect("follow edge envelope");
+
+        envelope.verify().expect("signature verification");
+        let edge = parse_follow_edge(&envelope)
+            .expect("parse follow edge")
+            .expect("follow edge");
+        assert_eq!(edge.subject_pubkey, keys.public_key());
+        assert_eq!(edge.target_pubkey, target);
+        assert_eq!(edge.status, FollowEdgeStatus::Active);
+
+        let self_follow_error = build_follow_edge_envelope(
+            &keys,
+            &keys.public_key(),
+            FollowEdgeStatus::Active,
+        )
+        .expect_err("self follow should be rejected");
+        assert!(self_follow_error.to_string().contains("self follow"));
+    }
+
+    #[test]
+    fn follow_edge_parser_rejects_subject_mismatch() {
+        let signer = generate_keys();
+        let subject = generate_keys().public_key();
+        let target = generate_keys().public_key();
+        let envelope = sign_envelope_json(
+            &signer,
+            "follow-edge",
+            vec![vec!["object".into(), "follow-edge".into()]],
+            &KukuriFollowEdgeEnvelopeContentV1 {
+                subject_pubkey: subject,
+                target_pubkey: target,
+                status: FollowEdgeStatus::Active,
+            },
+        )
+        .expect("envelope");
+
+        let error = parse_follow_edge(&envelope).expect_err("subject mismatch must fail");
+        assert!(error.to_string().contains("subject pubkey must match"));
     }
 }
