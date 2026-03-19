@@ -4,7 +4,7 @@
 Draft
 
 ## Date
-2026-03-19
+2026-03-20
 
 ## Base Branch
 `main`
@@ -18,7 +18,7 @@ Draft
 
 ## Feature Data Classification
 
-| 対象 | Canonical Source | Local Cache / Projection | 2026-03-19 時点 | 次フェーズでの扱い |
+| 対象 | Canonical Source | Local Cache / Projection | 2026-03-20 時点 | 次フェーズでの扱い |
 |---|---|---|---|---|
 | public post / thread / live / game | `public docs replica + blobs + topic hint` | SQLite projection | 実装済み | 現状維持 |
 | invite-only private channel data | `private docs replica + blobs + private hint` | SQLite projection | Phase 1 実装済み | hard-private baseline として継続利用 |
@@ -26,14 +26,14 @@ Draft
 | social graph profile / follow edge | public author docs replica (`author::<pubkey>`) | SQLite projection | `0013` 実装済み | friend 系 audience の relationship 判定入力に使う |
 | derived relationship (`mutual`, `friend_of_friend`) | author replica + signed follow edge からの local projection | rebuildable local cache | `0013` 実装済み | `friend_only` 判定と `friend_plus` sponsor 検証に使う |
 | channel audience policy | channel metadata + owner-signed policy doc | SQLite projection | `invite_only` 相当のみ実装済み | `friend_only` / `friend_plus` policy を追加する |
-| join grant / epoch control | current epoch capability + share token / grant metadata | local secure capability storage | `invite_only` の owner-origin grant のみ実装済み | `friend_only` は owner-controlled, `friend_plus` は participant-mediated chain を追加する |
+| join grant / epoch control | current epoch capability + signed share token + encrypted rotation grant | local secure capability storage | `invite_only` の owner-origin grant のみ実装済み | `friend_only` は owner-controlled, `friend_plus` は participant-mediated chain + encrypted rotate fanout を追加する |
 | community-node auth / relay assist | community-node config + token cache | local file / secure storage | 実装済み | control plane のまま据え置く |
 
 ## 1. Context
 
 旧版の `0012` は、`friend_only` / `friend_plus` を検討する前提として social graph が未実装であり、Phase 1 の `invite_only` も未実装だった時点の文脈を引きずっていた。
 
-しかし 2026-03-19 時点の `main` はすでに次の状態にある。
+しかし 2026-03-20 時点の `main` はすでに次の状態にある。
 
 - Phase 1 の invite-only private channel は実装済み
 - `docs/adr/0013-social-graph-foundation-draft.md` の social graph v1 も実装済み
@@ -213,68 +213,124 @@ community-node は引き続き control plane に限定する。
 
 friend 系 audience の判定も capability 配布も、docs-first の境界内で完結させる。
 
-## 5. Proposed Model For Future Phases
+## 5. Implementation Contract
 
-### 5.1 channel policy を第一級概念にする
+### 5.1 logical channel と epoch を分離する
 
-少なくとも次の policy kind を持つ。
+`friend_plus` は logical channel を維持したまま、同期 secret だけを epoch 単位で切り替える。
 
-```text
-public
-invite_only
-friend_only
-friend_plus
-```
+- `channel_id` は user-facing な stable ID とする
+- `epoch_id` は replica secret の切り替え単位とする
+- 新規 private replica は `channel::<channel_id>::epoch::<epoch_id>` を使う
+- 既存 invite-only channel は migration 上 `legacy` epoch として読めるようにする
 
-`public` は open、`invite_only` と `friend_only` は hard-private、`friend_plus` は soft-private として扱う。
+logical channel の timeline / thread / live / game は、local が保持している同一 `channel_id` の全 epoch を束ねて読む。新規 write は current epoch のみへ流す。
 
-### 5.2 hard-boundary path: `invite_only` / `friend_only`
+### 5.2 channel policy と participant state を signed object にする
 
-この 2 つは owner-controlled grant model を維持する。
+`friend_plus` 実装で正本にする signed object は次で固定する。
 
-- owner が join 権限を決める
-- `friend_only` は owner-scoped `mutual` を使って candidate 判定する
-- actual sync は epoch capability で gate する
-- revoke / downgrade は epoch rotation を伴う
+- `channel-policy`
+  - owner 署名
+  - `audience_kind`, `epoch_id`, `sharing_state(open|frozen)`, `owner_pubkey`, `rotated_at`, `previous_epoch_id?`
+- `channel-participant`
+  - participant 署名
+  - `participant_pubkey`, `epoch_id`, `joined_at`, `join_mode`, `sponsor_pubkey?`, `share_token_id?`
+- `channel-share`
+  - sponsor 署名の direct token
+  - `channel_id`, `topic_id`, `channel_label`, `owner_pubkey`, `epoch_id`, `namespace_secret_hex`, `expires_at`
+- `channel-rotation-grant`
+  - owner 署名の encrypted grant
+  - `channel_id`, `new_epoch_id`, `new_namespace_secret_hex`
 
-これは強い secrecy が必要な lane である。
+`friend_of_friend` projection は UI / diagnostics 用に使ってよいが、join 可否の正本にはしない。
 
-### 5.3 soft-boundary path: `friend_plus`
+### 5.3 `friend_plus` share / import の契約
 
-`friend_plus` は participant-mediated join model を採る。
+carrier は v1 では direct signed token で固定する。
 
-- current participant が sponsor になる
-- sponsor は自分と `mutual` な相手に share token を渡せる
-- token は current epoch capability か、その縮約表現を運ぶ
-- recipient は sponsor との `mutual` を確認できたら join する
-- join 後は participant frontier に入り、自分も sponsor になれる
+share:
 
-このモデルでは、participant frontier が social graph 上で連鎖的に広がる。
+- current epoch の active participant なら誰でも sponsor になれる
+- sponsor は自分と `mutual` な相手へ multi-use token を渡せる
+- `expires_at` 未指定時の既定値は `now + 24h`
+- `freeze` または `rotate` 済み epoch の token は import で reject する
 
-### 5.4 `friend_plus` に必要な追加状態
+import:
 
-少なくとも次が必要になる。
+- token の署名と expiry を先に検証する
+- sponsor author replica を warm し、social projection を更新する
+- import 時点で `mutual(sponsor, local_author)` を必須にする
+- token の epoch replica を暫定 open する
+- replica 内の `channel-policy` から `audience_kind=friend_plus`, `sharing_state=open`, `token.epoch_id == current epoch` を確認する
+- `channel-participant` から sponsor が current epoch の active participant であることを確認する
+- recipient は immediate sponsor metadata 付きで自分の `channel-participant` を書く
+- capability を current epoch として保存し、必要なら旧 epoch は archived へ落とす
 
-- sponsor を識別できる join metadata
-- `joined via <author>` を表示するための reason data
-- participant frontier を local で追跡する state
-- owner が future expansion を止めるための freeze / rotate 操作
+### 5.4 `freeze` / `rotate` の契約
 
-`friend_of_friend` projection は suggestion や diagnostics には使ってよいが、frontier truth の代替にはしない。
+`freeze` と `rotate` は別操作だが、`rotate` は old current epoch を先に freeze してから進む。
 
-### 5.5 grant carrier は follow-up で確定する
+`freeze`:
 
-grant / share の carrier は follow-up ADR で確定してよい。候補は次のようなものがある。
+- owner-only
+- old current epoch の `channel-policy.sharing_state` を `frozen` へ更新する
+- その epoch での新規 share export を禁止する
+- その epoch の未使用 token import を reject する
 
-- direct share token
-- owner / participant authored docs object
-- device-targeted mailbox 的な docs path
+`rotate`:
 
-ただし前提は固定する。
+- owner-only
+- old current epoch を `frozen` にする
+- 新しい `epoch_id` と `namespace_secret_hex` を生成する
+- new epoch replica に metadata と `channel-policy(open)` を書く
+- rotate 時点の active participant を new epoch の participant として複製する
+- old frozen epoch に participant ごとの encrypted `channel-rotation-grant` を書く
+- participant は old epoch を監視して自分向け grant を復号し、新 epoch を current として保存する
+- old epoch は archived history として保持する
 
-- community-node へは置かない
-- server-managed ACL にはしない
-- sponsor または owner を説明可能にする
+`rotate` は participant 集合を維持し、sharing frontier だけをリセットする。new epoch は `open` で始める。
+
+### 5.5 rotation grant の暗号化方式
+
+rotation grant は author pubkey 単位で暗号化する。
+
+- `secp256k1` の `ecdh` を使う
+- author key から BIP340 互換の shared secret を導出する
+- HKDF-SHA256 で content key を導出する
+- XChaCha20-Poly1305 で grant payload を暗号化する
+- same-author multi-device でも decrypt できるよう、recipient は device ではなく author pubkey とする
+
+old epoch に new epoch secret を平文で置く設計は stale token へ漏れるため採用しない。
+
+### 5.6 Desktop / API 契約
+
+API / UI では次を追加・拡張する。
+
+- channel 作成 API は `audience_kind` を受け付ける
+  - 既存 `create_private_channel` は未指定時 `invite_only` を既定にして後方互換を保つ
+- invite-only API は維持し、`friend_plus` 用に以下を追加する
+  - `export_friend_plus_share`
+  - `import_friend_plus_share`
+  - `freeze_private_channel`
+  - `rotate_private_channel`
+- joined channel view / capability には少なくとも以下を持たせる
+  - `audience_kind`
+  - `sharing_state`
+  - `joined_via_pubkey`
+  - `current_epoch_id`
+  - `current_epoch_secret`
+  - `archived_epoch_capabilities`
+  - `creator_pubkey` / `owner_pubkey`
+  - `is_owner`
+
+UI:
+
+- `friend_plus` channel では `Share`, `Freeze`, `Rotate` を表示する
+- `Share` は current epoch の active participant にだけ表示する
+- `Freeze` / `Rotate` は owner にだけ表示する
+- channel detail に `joined via <short pubkey>` を表示する
+- `invite_only` の既存 UI は維持する
 
 ## 6. Rollout
 
@@ -308,11 +364,13 @@ invite-only private channel baseline
 
 必要なもの:
 
-- channel policy doc に `friend_plus` を追加
-- participant-sponsored share flow
-- pairwise mutual 検証による chain join
-- `joined via <author>` の reason 表示
-- owner による freeze / rotate
+- epoch-aware channel capability
+- direct signed `channel-share`
+- import 時点の pairwise mutual 検証
+- immediate sponsor metadata と `joined via ...` 表示
+- owner-only `freeze`
+- encrypted `channel-rotation-grant` による `rotate`
+- archived/current epoch を束ねる logical channel read path
 - candidate expansion に対する abuse / spam guardrail
 
 ### Out of Scope
@@ -324,6 +382,9 @@ invite-only private channel baseline
 - admin / moderator role
 - block / mute / local alias
 - community-node managed audience
+- one-time-use share registry
+- full sponsor chain persistence
+- epoch 間 history copy
 
 これらは separate ADR で扱う。
 
@@ -331,32 +392,68 @@ invite-only private channel baseline
 
 既存の Phase 1 regressions は維持したうえで、次フェーズでは少なくとも次を required にする。
 
-- store / app-api: `friend_only` は owner-scoped mutual を失ったら epoch rotate が必要になる
-- app-api / runtime: `friend_plus` で B が owner 経由で join した後、C は B と `mutual` なら join でき、owner と直接関係がなくても許可される
-- app-api / runtime: D が current participant の誰とも `mutual` でなければ `friend_plus` に join できない
-- docs-sync / runtime: `friend_only` は revoked peer が旧 capability のまま新 epoch を open できない
-- runtime / desktop: `friend_plus` では sponsor reason (`joined via ...`) を表示できる
-- harness: 4 client 以上で `owner -> friend join -> chained friend join -> freeze/rotate -> further join blocked` を自動確認する
+Core:
+
+- `channel-share` の roundtrip
+- expiry reject
+- 署名者不一致 reject
+- `channel-rotation-grant` の encrypt/decrypt roundtrip
+- 誤 recipient での decrypt failure
+
+App / API:
+
+- owner -> B join -> B -> C share で、`mutual(B,C)=true` なら C が join できる
+- D が sponsor と `mutual` でなければ forwarded token では join できない
+- `freeze` 後に old token import が失敗する
+- `rotate` 後に old epoch token では new epoch secret を取得できない
+- sponsor は import 時点で current epoch participant でなければならない
+- logical channel scope が archived/current epoch を束ねて読める
+- rotate 後の newcomer は new epoch の content だけ見える
+
+Runtime:
+
+- 既存 invite-only capability が epoch-aware 形式へ migrate される
+- encrypted rotation grant を restart 後にも redeem できる
+- current / archived epoch state が restart 後も復元される
+
+Frontend / Harness:
+
+- `friend_plus` の control が owner / participant 状態に応じて正しく出る
+- `joined via ...` が表示される
+- `freeze` 後は old epoch の share が無効になる
+- 4 client scenario: owner -> B join -> B -> C join -> freeze で stale token block -> rotate -> B/C が grant で新 epoch へ移行 -> D の old token は失敗
 
 invite-only Phase 1 の既存回帰も引き続き required とする。
 
-## 8. Consequences
+## 8. Assumptions
+
+- `friend_plus` token は v1 では multi-use bearer であり、one-time-use registry は持たない
+- sponsor metadata は immediate sponsor のみ保持し、full sponsor chain は持たない
+- `rotate` 後の new epoch は `open` で始まる
+- rotation grant は author pubkey 単位で暗号化するため、same-author multi-device でも redeem できる
+- rotate は current participant 集合を維持し、sharing frontier だけをリセットする
+- `friend_of_friend` projection は suggestion / diagnostics 用であり、`friend_plus` の policy truth には使わない
+
+## 9. Consequences
 
 - `invite_only` は shipping baseline になる
 - `friend_only` は hard-private として設計する
 - `friend_plus` は soft-private として設計する
 - `friend_plus` では participant mutual chain に沿った漏洩リスクを受け入れる
-- ただしその漏洩境界を超える変更は、実装時に別途確認が必要になる
+- `friend_plus` の rotate には encrypted fanout が必要になる
+- ただしこの漏洩境界を超える変更は、実装時に別途確認が必要になる
 - community-node は引き続き membership truth にならない
 
-## 9. Decision Summary
+## 10. Decision Summary
 
-2026-03-19 時点の `main` を前提にした更新後の判断は次のとおり。
+2026-03-20 時点の `main` を前提にした更新後の判断は次のとおり。
 
 - Phase 1 の `invite_only` はすでに実装済み
 - `0013` の social graph foundation もすでに実装済み
 - `friend_only` は owner-scoped `mutual` による hard-private として再設計する
 - `friend_plus` は owner snapshot ではなく、participant-scoped `mutual` の連鎖による soft-private として再設計する
-- access control の扱いは audience ごとに分け、`friend_plus` では中間 audience としての漏洩許容を明示する
+- `friend_plus` の v1 carrier は direct signed token、join 判定は import 時点、default TTL は 24h とする
+- `friend_plus` の frontier stop は owner-only `freeze` と encrypted grant fanout を伴う `rotate` で扱う
+- logical channel は stable に維持し、epoch は replica secret の切り替え単位として扱う
 
-この方針なら、topic-first / docs-first / community-node control plane という現行境界を崩さずに、`friend_plus` を既存ユーザー期待とプロダクト意図に合わせて再定義できる。
+この方針なら、topic-first / docs-first / community-node control plane という現行境界を崩さずに、`friend_plus` を既存ユーザー期待とプロダクト意図に合わせて実装可能な設計へ落とし込める。
