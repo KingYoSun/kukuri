@@ -746,7 +746,7 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, threadView] = await Promise.all([
+        const [timelineViews, liveViews, gameViews, threadView, status] = await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
@@ -768,10 +768,16 @@ export function App({ api = runtimeApi }: AppProps) {
           currentThread
             ? api.listThread(currentActiveTopic, currentThread, null, 50)
             : Promise.resolve(null),
-        ]);
-        const [status, discovery, communityConfig, communityStatuses, ticket, profile, authorView] =
-          await Promise.all([
           api.getSyncStatus(),
+        ]);
+        const [
+          discoveryResult,
+          communityConfigResult,
+          communityStatusesResult,
+          ticketResult,
+          profileResult,
+          authorViewResult,
+        ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
           api.getCommunityNodeStatuses(),
@@ -792,21 +798,52 @@ export function App({ api = runtimeApi }: AppProps) {
             Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
           );
           setSyncStatus(status);
-          setDiscoveryConfig(discovery);
-          if (!discoveryEditorDirty) {
-            setDiscoverySeedInput(seedPeersToEditorValue(discovery));
+          if (discoveryResult.status === 'fulfilled') {
+            setDiscoveryConfig(discoveryResult.value);
+            if (!discoveryEditorDirty) {
+              setDiscoverySeedInput(seedPeersToEditorValue(discoveryResult.value));
+            }
           }
-          setCommunityNodeConfig(communityConfig);
-          setCommunityNodeStatuses((current) => mergeCommunityNodeStatuses(current, communityStatuses));
-          if (!communityNodeEditorDirty) {
-            setCommunityNodeInput(communityNodesToEditorValue(communityConfig));
+          if (communityConfigResult.status === 'fulfilled') {
+            setCommunityNodeConfig(communityConfigResult.value);
+            if (!communityNodeEditorDirty) {
+              setCommunityNodeInput(communityNodesToEditorValue(communityConfigResult.value));
+            }
           }
-          setLocalPeerTicket(ticket);
-          setLocalProfile(profile);
-          if (!profileDirty) {
-            setProfileDraft(profileInputFromProfile(profile));
+          if (communityStatusesResult.status === 'fulfilled') {
+            setCommunityNodeStatuses((current) =>
+              mergeCommunityNodeStatuses(current, communityStatusesResult.value)
+            );
           }
-          setSelectedAuthor(authorView);
+          if (ticketResult.status === 'fulfilled') {
+            setLocalPeerTicket(ticketResult.value);
+          }
+          if (profileResult.status === 'fulfilled') {
+            setLocalProfile(profileResult.value);
+            if (!profileDirty) {
+              setProfileDraft(profileInputFromProfile(profileResult.value));
+            }
+            setProfileError(null);
+          } else {
+            setProfileError(
+              profileResult.reason instanceof Error
+                ? profileResult.reason.message
+                : 'failed to load profile'
+            );
+          }
+          if (!selectedAuthorPubkey) {
+            setSelectedAuthor(null);
+            setAuthorError(null);
+          } else if (authorViewResult.status === 'fulfilled') {
+            setSelectedAuthor(authorViewResult.value);
+            setAuthorError(null);
+          } else {
+            setAuthorError(
+              authorViewResult.reason instanceof Error
+                ? authorViewResult.reason.message
+                : 'failed to load author'
+            );
+          }
           if (threadView) {
             setThread(threadView.items);
           } else if (!currentThread) {

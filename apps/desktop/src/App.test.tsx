@@ -43,6 +43,7 @@ function createMockApi(options?: {
   seedGameRooms?: Record<string, GameRoomView[]>;
   myProfile?: Partial<Profile>;
   authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
+  myProfileError?: string | null;
 }) {
   const assistPeerIds = options?.assistPeerIds ?? [];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
@@ -217,6 +218,9 @@ function createMockApi(options?: {
       };
     },
     async getMyProfile() {
+      if (options?.myProfileError) {
+        throw new Error(options.myProfileError);
+      }
       return myProfile;
     },
     async setMyProfile(input) {
@@ -1750,5 +1754,13 @@ test('local profile editor saves profile draft', async () => {
 
   await waitFor(() => {
     expect(screen.getByText('Local Author')).toBeInTheDocument();
+  });
+});
+
+test('keeps local peer ticket visible when profile loading fails', async () => {
+  render(<App api={createMockApi({ myProfileError: 'profile load failed' })} />);
+
+  await waitFor(() => {
+    expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
   });
 });
