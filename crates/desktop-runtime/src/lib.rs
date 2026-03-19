@@ -50,6 +50,7 @@ const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
+const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
@@ -305,6 +306,7 @@ pub struct DesktopRuntime {
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
     community_node_config: Arc<Mutex<CommunityNodeConfig>>,
     community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+    community_node_metadata_refresh_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     active_connectivity_urls: Arc<Mutex<Vec<String>>>,
 }
 
@@ -562,6 +564,7 @@ impl DesktopRuntime {
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
+            community_node_metadata_refresh_deadlines: Arc::new(Mutex::new(HashMap::new())),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
         })
     }
@@ -837,6 +840,10 @@ impl DesktopRuntime {
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(next_config)
@@ -853,6 +860,10 @@ impl DesktopRuntime {
         remove_community_node_config(&self.db_path)?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
         self.community_node_heartbeat_deadlines.lock().await.clear();
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(())
@@ -964,6 +975,10 @@ impl DesktopRuntime {
             .lock()
             .await
             .remove(base_url.as_str());
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .remove(base_url.as_str());
         let node = self
             .community_node_config
             .lock()
@@ -1072,7 +1087,11 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeConfig> {
         let base_url = normalize_http_url(base_url)?;
         let config = self.community_node_config.lock().await.clone();
-        let Some(index) = config.nodes.iter().position(|node| node.base_url == base_url) else {
+        let Some(index) = config
+            .nodes
+            .iter()
+            .position(|node| node.base_url == base_url)
+        else {
             bail!("community node `{base_url}` is not configured");
         };
         let client = community_node_http_client()?;
@@ -1109,6 +1128,50 @@ impl DesktopRuntime {
             .ok_or_else(|| anyhow!("community node `{base_url}` disappeared after normalization"))
     }
 
+    async fn community_node_bootstrap_metadata_retry_due(&self, base_url: &str, now: i64) -> bool {
+        let seed_peers_empty = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .and_then(|node| node.resolved_urls.as_ref())
+            .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty());
+        if !seed_peers_empty {
+            self.community_node_metadata_refresh_deadlines
+                .lock()
+                .await
+                .remove(base_url);
+            return false;
+        }
+        let next_due_at = self
+            .community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .get(base_url)
+            .copied()
+            .unwrap_or_default();
+        next_due_at <= now
+    }
+
+    async fn record_community_node_bootstrap_metadata_refresh(
+        &self,
+        base_url: &str,
+        seed_peers_empty: bool,
+        now: i64,
+    ) {
+        let mut deadlines = self.community_node_metadata_refresh_deadlines.lock().await;
+        if seed_peers_empty {
+            deadlines.insert(
+                base_url.to_string(),
+                now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS),
+            );
+        } else {
+            deadlines.remove(base_url);
+        }
+    }
+
     async fn refresh_community_node_registration_if_due(&self, base_url: &str) -> Result<()> {
         let base_url = normalize_http_url(base_url)?;
         let token =
@@ -1128,7 +1191,40 @@ impl DesktopRuntime {
             .copied()
             .unwrap_or_default();
         if next_due_at > now {
-            return Ok(());
+            if !self
+                .community_node_bootstrap_metadata_retry_due(base_url.as_str(), now)
+                .await
+            {
+                return Ok(());
+            }
+            return match self
+                .sync_community_node_bootstrap_metadata(
+                    base_url.as_str(),
+                    token.access_token.as_str(),
+                )
+                .await
+            {
+                Ok(node) => {
+                    self.record_community_node_bootstrap_metadata_refresh(
+                        base_url.as_str(),
+                        node.resolved_urls
+                            .as_ref()
+                            .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty()),
+                        now,
+                    )
+                    .await;
+                    Ok(())
+                }
+                Err(error) => {
+                    self.record_community_node_bootstrap_metadata_refresh(
+                        base_url.as_str(),
+                        true,
+                        now,
+                    )
+                    .await;
+                    Err(error)
+                }
+            };
         }
         let endpoint_id = self
             .iroh_stack
@@ -1159,12 +1255,34 @@ impl DesktopRuntime {
                         .expires_at
                         .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
                 );
-                self.sync_community_node_bootstrap_metadata(
-                    base_url.as_str(),
-                    token.access_token.as_str(),
-                )
-                .await?;
-                Ok(())
+                match self
+                    .sync_community_node_bootstrap_metadata(
+                        base_url.as_str(),
+                        token.access_token.as_str(),
+                    )
+                    .await
+                {
+                    Ok(node) => {
+                        self.record_community_node_bootstrap_metadata_refresh(
+                            base_url.as_str(),
+                            node.resolved_urls
+                                .as_ref()
+                                .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty()),
+                            now,
+                        )
+                        .await;
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.record_community_node_bootstrap_metadata_refresh(
+                            base_url.as_str(),
+                            true,
+                            now,
+                        )
+                        .await;
+                        Err(error)
+                    }
+                }
             }
             Err(error) => {
                 self.community_node_heartbeat_deadlines.lock().await.insert(
@@ -1611,7 +1729,10 @@ impl SharedIrohStack {
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
         let current = self.current.lock().await;
-        current.node.apply_relay_config(relay_config.clone()).await?;
+        current
+            .node
+            .apply_relay_config(relay_config.clone())
+            .await?;
         current.transport.update_relay_config(relay_config).await?;
         current
             .transport
@@ -1627,7 +1748,10 @@ impl SharedIrohStack {
             .docs_sync
             .set_seed_peers(effective_seed_peers.clone())
             .await?;
-        current.blob_service.set_seed_peers(effective_seed_peers).await?;
+        current
+            .blob_service
+            .set_seed_peers(effective_seed_peers)
+            .await?;
         Ok(())
     }
 
@@ -1696,13 +1820,17 @@ impl BoundIrohStack {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{Json, Router, extract::State, routing::{get, post}};
+    use axum::{
+        Json, Router,
+        extract::State,
+        routing::{get, post},
+    };
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use iroh::address_lookup::EndpointInfo;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::tempdir;
     use tokio::net::TcpListener;
     use tokio::time::{Duration, sleep, timeout};
@@ -1822,7 +1950,7 @@ mod tests {
     #[derive(Clone)]
     struct MockCommunityNodeState {
         base_url: String,
-        seed_peer: CommunityNodeSeedPeer,
+        seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
         heartbeat_hits: Arc<AtomicUsize>,
         bootstrap_hits: Arc<AtomicUsize>,
     }
@@ -1841,13 +1969,14 @@ mod tests {
         State(state): State<Arc<MockCommunityNodeState>>,
     ) -> Json<BootstrapNodesResponse> {
         state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+        let seed_peers = state.seed_peers.lock().await.clone();
         Json(BootstrapNodesResponse {
             nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
                 base_url: state.base_url.clone(),
                 resolved_urls: CommunityNodeResolvedUrls::new(
                     state.base_url.clone(),
                     Vec::new(),
-                    vec![state.seed_peer.clone()],
+                    seed_peers,
                 )
                 .expect("resolved urls"),
             }],
@@ -3335,11 +3464,13 @@ mod tests {
         let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
         let state = Arc::new(MockCommunityNodeState {
             base_url: base_url.clone(),
-            seed_peer: CommunityNodeSeedPeer::new(
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                None,
-            )
-            .expect("seed peer"),
+            seed_peers: Arc::new(Mutex::new(vec![
+                CommunityNodeSeedPeer::new(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    None,
+                )
+                .expect("seed peer"),
+            ])),
             heartbeat_hits: Arc::new(AtomicUsize::new(0)),
             bootstrap_hits: Arc::new(AtomicUsize::new(0)),
         });
@@ -3384,19 +3515,119 @@ mod tests {
                 .as_ref()
                 .expect("resolved urls")
                 .seed_peers,
-            vec![state.seed_peer.clone()]
+            state.seed_peers.lock().await.clone()
         );
         assert_eq!(
-            runtime
-                .community_node_config
-                .lock()
-                .await
-                .nodes[0]
+            runtime.community_node_config.lock().await.nodes[0]
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls")
                 .seed_peers,
-            vec![state.seed_peer.clone()]
+            state.seed_peers.lock().await.clone()
+        );
+
+        runtime.shutdown().await;
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_empty() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("community-metadata-retry.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+        let seed_peer = CommunityNodeSeedPeer::new(
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            None,
+        )
+        .expect("seed peer");
+        let state = Arc::new(MockCommunityNodeState {
+            base_url: base_url.clone(),
+            seed_peers: Arc::new(Mutex::new(Vec::new())),
+            heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+            bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        });
+        let app = Router::new()
+            .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+            .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+            .with_state(state.clone());
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        persist_community_node_token(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            base_url.as_str(),
+            &StoredCommunityNodeToken {
+                access_token: "fake-token".to_string(),
+                expires_at: Utc::now().timestamp() + 3600,
+            },
+        )
+        .expect("persist community-node token");
+        *runtime.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.clone(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                        .expect("resolved urls"),
+                ),
+            }],
+        };
+
+        let initial_statuses = runtime
+            .get_community_node_statuses()
+            .await
+            .expect("initial community node statuses");
+        assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            initial_statuses[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            Vec::<CommunityNodeSeedPeer>::new()
+        );
+        assert!(
+            runtime
+                .community_node_metadata_refresh_deadlines
+                .lock()
+                .await
+                .contains_key(base_url.as_str()),
+            "empty bootstrap metadata should schedule a retry"
+        );
+
+        *state.seed_peers.lock().await = vec![seed_peer.clone()];
+        runtime
+            .community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .insert(base_url.clone(), Utc::now().timestamp() - 1);
+
+        let refreshed_statuses = runtime
+            .get_community_node_statuses()
+            .await
+            .expect("refreshed community node statuses");
+        assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            refreshed_statuses[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            vec![seed_peer]
         );
 
         runtime.shutdown().await;
