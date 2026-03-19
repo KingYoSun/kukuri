@@ -1539,6 +1539,9 @@ impl AppService {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
         }
+        self.hint_transport
+            .unsubscribe_hints(&TopicId::new(topic_id))
+            .await?;
         self.spawn_topic_subscription(topic_id).await
     }
 
@@ -3294,6 +3297,50 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct TrackingHintTransport {
+        hints: Arc<TokioMutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
+        unsubscribed_topics: Arc<TokioMutex<Vec<String>>>,
+    }
+
+    impl TrackingHintTransport {
+        async fn hint_sender(&self, topic: &TopicId) -> broadcast::Sender<HintEnvelope> {
+            let mut guard = self.hints.lock().await;
+            guard
+                .entry(topic.as_str().to_string())
+                .or_insert_with(|| broadcast::channel(64).0)
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl HintTransport for TrackingHintTransport {
+        async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+            let sender = self.hint_sender(topic).await;
+            let stream = BroadcastStream::new(sender.subscribe())
+                .filter_map(|item| async move { item.ok() });
+            Ok(Box::pin(stream))
+        }
+
+        async fn unsubscribe_hints(&self, topic: &TopicId) -> Result<()> {
+            self.unsubscribed_topics
+                .lock()
+                .await
+                .push(topic.as_str().to_string());
+            Ok(())
+        }
+
+        async fn publish_hint(&self, topic: &TopicId, hint: GossipHint) -> Result<()> {
+            let sender = self.hint_sender(topic).await;
+            let _ = sender.send(HintEnvelope {
+                hint,
+                received_at: Utc::now().timestamp_millis(),
+                source_peer: "tracking".into(),
+            });
+            Ok(())
+        }
+    }
+
     async fn assert_docs_sync_recovers_post_without_hints(topic: &str, content: &str) {
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("a")).await;
@@ -3699,6 +3746,45 @@ mod tests {
                     .as_str()
                     .to_string()
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn set_discovery_seeds_restarts_topic_hint_subscription() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            hint_transport.clone(),
+            Arc::new(MemoryDocsSync::default()),
+            Arc::new(MemoryBlobService::default()),
+            generate_keys(),
+        );
+        let topic = "kukuri:topic:hint-restart";
+
+        let _ = app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe timeline");
+
+        app.set_discovery_seeds(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![SeedPeer {
+                endpoint_id: "peer-a".into(),
+                addr_hint: None,
+            }],
+            Vec::new(),
+        )
+        .await
+        .expect("set discovery seeds");
+
+        assert_eq!(
+            hint_transport.unsubscribed_topics.lock().await.clone(),
+            vec![topic.to_string()]
         );
     }
 

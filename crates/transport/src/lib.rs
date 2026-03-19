@@ -2212,6 +2212,147 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn topic_hint_late_subscriber_eventually_clears_missing_peer_ids_over_relay() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let network_config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_options(
+            network_config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_with_options(
+            network_config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport b");
+        let transport_c = IrohGossipTransport::bind_with_options(
+            network_config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("transport c");
+
+        let discovery_a = transport_a.discovery().await.expect("discovery a");
+        let discovery_b = transport_b.discovery().await.expect("discovery b");
+        let discovery_c = transport_c.discovery().await.expect("discovery c");
+
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                Vec::new(),
+                vec![
+                    SeedPeer {
+                        endpoint_id: discovery_b.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                    SeedPeer {
+                        endpoint_id: discovery_c.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                ],
+            )
+            .await
+            .expect("configure a");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                Vec::new(),
+                vec![
+                    SeedPeer {
+                        endpoint_id: discovery_a.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                    SeedPeer {
+                        endpoint_id: discovery_c.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                ],
+            )
+            .await
+            .expect("configure b");
+        transport_c
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                Vec::new(),
+                vec![
+                    SeedPeer {
+                        endpoint_id: discovery_a.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                    SeedPeer {
+                        endpoint_id: discovery_b.local_endpoint_id.clone(),
+                        addr_hint: None,
+                    },
+                ],
+            )
+            .await
+            .expect("configure c");
+
+        let topic = TopicId::new("kukuri:topic:late-peer");
+        let _stream_a = transport_a
+            .subscribe_hints(&topic)
+            .await
+            .expect("subscribe a");
+        let _stream_c = transport_c
+            .subscribe_hints(&topic)
+            .await
+            .expect("subscribe c");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_c = transport_c.peers().await.expect("peers c before b");
+                let diag_c = peers_c
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:late-peer")
+                    .expect("diag c before b");
+                if diag_c.missing_peer_ids.len() == 1 {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("initial partial join timeout");
+
+        let _stream_b = transport_b
+            .subscribe_hints(&topic)
+            .await
+            .expect("subscribe b");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let peers_c = transport_c.peers().await.expect("peers c after b");
+                let diag_c = peers_c
+                    .topic_diagnostics
+                    .iter()
+                    .find(|topic| topic.topic == "hint/kukuri:topic:late-peer")
+                    .expect("diag c after b");
+                if diag_c.missing_peer_ids.is_empty() {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("late subscriber should clear missing peer ids");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn gossip_low_level_roundtrip_baseline() {
         let endpoint_a = Endpoint::empty_builder(RelayMode::Disabled)
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
