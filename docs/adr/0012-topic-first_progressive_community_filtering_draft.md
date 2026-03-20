@@ -1,7 +1,7 @@
-# ADR 0012: topic-first 段階的コミュニティ絞り込みドラフト
+# ADR 0012: topic-first 段階的コミュニティ絞り込み
 
 ## Status
-Draft
+Accepted
 
 ## Date
 2026-03-20
@@ -25,8 +25,8 @@ Draft
 | joined private channel capability | local secure capability storage | なし | Phase 1 実装済み | `friend_only` / `friend_plus` でも同期 gate に使う |
 | social graph profile / follow edge | public author docs replica (`author::<pubkey>`) | SQLite projection | `0013` 実装済み | friend 系 audience の relationship 判定入力に使う |
 | derived relationship (`mutual`, `friend_of_friend`) | author replica + signed follow edge からの local projection | rebuildable local cache | `0013` 実装済み | `friend_only` 判定と `friend_plus` sponsor 検証に使う |
-| channel audience policy | channel metadata + owner-signed policy doc | SQLite projection | `invite_only` 相当のみ実装済み | `friend_only` / `friend_plus` policy を追加する |
-| join grant / epoch control | current epoch capability + signed share token + encrypted rotation grant | local secure capability storage | `invite_only` の owner-origin grant のみ実装済み | `friend_only` は owner-controlled, `friend_plus` は participant-mediated chain + encrypted rotate fanout を追加する |
+| channel audience policy | channel metadata + owner-signed policy doc | SQLite projection | `invite_only` / `friend_only` / `friend_plus` 実装済み | member moderation / approval は separate ADR で扱う |
+| join grant / epoch control | current epoch capability + signed share token + encrypted rotation grant | local secure capability storage | owner-origin invite、friend-only grant、friend-plus share / rotation grant 実装済み | candidate expansion の guardrail は separate task で扱う |
 | community-node auth / relay assist | community-node config + token cache | local file / secure storage | 実装済み | control plane のまま据え置く |
 
 ## 1. Context
@@ -37,7 +37,7 @@ Draft
 
 - Phase 1 の invite-only private channel は実装済み
 - `docs/adr/0013-social-graph-foundation-draft.md` の social graph v1 も実装済み
-- desktop には `Create Channel`, `Create Invite`, `Join via Invite`, `View Scope`, `Compose Target` が入っている
+- `friend_only` / `friend_plus` audience と `Create Grant` / `Create Share` / `Freeze` / `Rotate` も current `main` に入っている
 - app/runtime/docs-sync/harness/frontend に private channel と social graph の contract がある
 
 加えて `friend_plus` は、既存プロダクト文脈では owner の `friend_of_friend` snapshot ではなく、「参加者の mutual を順次たどって join 可能になる mutual の連鎖」として理解されやすい。この期待から外れると UX 上の誤解を招く。
@@ -82,15 +82,13 @@ Phase 1 の回帰は少なくとも次で固定されている。
 - store migration / projection tests for follow edge and relationship cache
 - desktop follow/unfollow / relationship badge tests
 
-### 2.3 未実装なのは audience semantics 側
+### 2.3 残っているのは guardrail / moderation 側
 
-まだ入っていないのは social graph そのものではなく、その graph を audience policy に接続する層である。
+social graph と audience policy の接続そのものは current `main` に入っている。残っているのは hardening と周辺運用ルールである。
 
-- `friend_only` の strict policy
-- `friend_plus` の mutual-chain policy
-- sponsor / join reason を伴う capability share
-- hard-boundary revoke と soft-boundary frontier stop の違い
-- friend 系 audience を UI で説明するための理由表示
+- `friend_plus` の candidate expansion に対する abuse / spam guardrail
+- explicit member list / approval workflow / moderator role
+- friend 系 audience の理由表示や explainability の追加磨き込み
 
 ## 3. Problem Reframed
 
@@ -350,20 +348,22 @@ invite-only private channel baseline
 
 `friend_only` policy integration
 
-必要なもの:
+状態:
 
+- 実装済み
 - channel policy doc に `friend_only` を追加
 - owner-scoped `mutual` から candidate member を導出
 - owner-controlled grant
-- relationship downgrade 時の epoch rotation
-- diagnostics / UI で `Friends` policy を説明可能にする
+- relationship downgrade 時に `rotation_required` を立て、owner rotate を要求する
+- diagnostics / UI で `Friends` policy を説明できる
 
 ### Phase 3
 
 `friend_plus` policy integration
 
-必要なもの:
+状態:
 
+- 実装済み
 - epoch-aware channel capability
 - direct signed `channel-share`
 - import 時点の pairwise mutual 検証
@@ -371,7 +371,8 @@ invite-only private channel baseline
 - owner-only `freeze`
 - encrypted `channel-rotation-grant` による `rotate`
 - archived/current epoch を束ねる logical channel read path
-- candidate expansion に対する abuse / spam guardrail
+- rotate 後 newcomer は新 epoch content のみ読める
+- candidate expansion に対する abuse / spam guardrail は未着手
 
 ### Out of Scope
 
