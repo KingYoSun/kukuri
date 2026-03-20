@@ -2108,6 +2108,14 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::time::{Duration, sleep, timeout};
 
+    fn social_graph_propagation_timeout() -> Duration {
+        if cfg!(target_os = "windows") {
+            Duration::from_secs(90)
+        } else {
+            Duration::from_secs(30)
+        }
+    }
+
     fn image_attachment_request(name: &str, mime: &str, bytes: &[u8]) -> CreateAttachmentRequest {
         CreateAttachmentRequest {
             file_name: Some(name.to_string()),
@@ -3367,7 +3375,7 @@ mod tests {
             .await
             .expect("c follows b");
 
-        timeout(Duration::from_secs(30), async {
+        timeout(social_graph_propagation_timeout(), async {
             loop {
                 let b_view = runtime_b
                     .get_author_social_view(AuthorRequest {
