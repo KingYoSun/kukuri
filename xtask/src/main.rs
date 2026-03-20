@@ -94,7 +94,12 @@ fn check() -> Result<()> {
         ],
         &root_dir(),
     )?;
-    run("cargo", ["test", "--workspace", "--lib"], &root_dir())?;
+    run_with_env(
+        "cargo",
+        ["test", "--workspace", "--lib"],
+        &root_dir(),
+        &[("RUST_TEST_THREADS", "1")],
+    )?;
     run_pnpm(["lint"], &desktop_dir())?;
     run_pnpm(["typecheck"], &desktop_dir())?;
     run_pnpm(["test"], &desktop_dir())?;
@@ -102,7 +107,12 @@ fn check() -> Result<()> {
 }
 
 fn test() -> Result<()> {
-    run("cargo", ["test", "--workspace"], &root_dir())?;
+    run_with_env(
+        "cargo",
+        ["test", "--workspace"],
+        &root_dir(),
+        &[("RUST_TEST_THREADS", "1")],
+    )?;
     run_pnpm(["test"], &desktop_dir())?;
     Ok(())
 }

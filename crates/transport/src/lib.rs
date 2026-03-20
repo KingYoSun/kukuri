@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
@@ -37,6 +37,14 @@ const DHT_PUBLISH_TTL_SECONDS: u32 = 30;
 const DHT_PUBLISH_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 const DHT_PUBLISH_REPUBLISH_INTERVAL: Duration = Duration::from_secs(30);
 const DHT_PUBLISH_STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
+
+fn initial_topic_join_timeout() -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        Duration::from_secs(60)
+    } else {
+        Duration::from_secs(15)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HintEnvelope {
@@ -544,11 +552,11 @@ struct HintTopicState {
 
 #[derive(Clone, Debug)]
 struct RelayFallbackLookup {
-    relay_urls: Vec<RelayUrl>,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
 }
 
 impl RelayFallbackLookup {
-    fn new(relay_urls: Vec<RelayUrl>) -> Self {
+    fn new(relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>) -> Self {
         Self { relay_urls }
     }
 }
@@ -563,11 +571,15 @@ impl AddressLookup for RelayFallbackLookup {
             Result<AddressLookupItem, iroh::address_lookup::Error>,
         >,
     > {
-        if self.relay_urls.is_empty() {
+        let relay_urls = self
+            .relay_urls
+            .read()
+            .expect("relay fallback lookup poisoned")
+            .clone();
+        if relay_urls.is_empty() {
             return None;
         }
-        let endpoint_info =
-            EndpointInfo::from(endpoint_addr_with_relays(endpoint_id, &self.relay_urls));
+        let endpoint_info = EndpointInfo::from(endpoint_addr_with_relays(endpoint_id, &relay_urls));
         Some(Box::pin(futures_util::stream::once(async move {
             Ok(AddressLookupItem::new(
                 endpoint_info,
@@ -593,7 +605,7 @@ pub struct IrohGossipTransport {
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
     connect_mode: Arc<Mutex<ConnectMode>>,
-    relay_urls: Mutex<Vec<RelayUrl>>,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
     env_locked: Arc<Mutex<bool>>,
 }
 
@@ -613,10 +625,15 @@ impl IrohGossipTransport {
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
-        let relay_urls = relay_config.parsed_relay_urls()?;
-        let (endpoint, discovery, publish_task) =
-            bind_endpoint_with_options(network_config.bind_addr, &dht_options, &relay_config, None)
-                .await?;
+        let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
+        let (endpoint, discovery, publish_task) = bind_endpoint_with_options(
+            network_config.bind_addr,
+            &dht_options,
+            &relay_config,
+            Arc::clone(&relay_urls),
+            None,
+        )
+        .await?;
 
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
@@ -638,7 +655,7 @@ impl IrohGossipTransport {
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
-            relay_urls: Mutex::new(relay_urls),
+            relay_urls,
             env_locked: Arc::new(Mutex::new(false)),
         })
     }
@@ -658,7 +675,7 @@ impl IrohGossipTransport {
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
-        let relay_urls = relay_config.parsed_relay_urls()?;
+        let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
         discovery.add_endpoint_info(endpoint.addr());
         Ok(Self {
             endpoint,
@@ -675,7 +692,7 @@ impl IrohGossipTransport {
             last_error: Arc::new(Mutex::new(None)),
             discovery_mode: Arc::new(Mutex::new(DiscoveryMode::StaticPeer)),
             connect_mode: Arc::new(Mutex::new(relay_config.connect_mode())),
-            relay_urls: Mutex::new(relay_urls),
+            relay_urls,
             env_locked: Arc::new(Mutex::new(false)),
         })
     }
@@ -700,7 +717,10 @@ impl IrohGossipTransport {
         let relay_config = relay_config.normalized();
         let relay_urls = relay_config.parsed_relay_urls()?;
         *self.connect_mode.lock().await = relay_config.connect_mode();
-        *self.relay_urls.lock().await = relay_urls;
+        *self
+            .relay_urls
+            .write()
+            .expect("transport relay urls poisoned") = relay_urls;
         *self.last_error.lock().await = None;
         Ok(())
     }
@@ -820,13 +840,35 @@ impl IrohGossipTransport {
         let last_error_task = Arc::clone(&last_error);
         let transport_last_error = Arc::clone(&self.last_error);
         let imported_count = bootstrap_peers.len();
+        let warm_endpoint = self.endpoint.clone();
+        let warm_bootstrap_peers = bootstrap_peers.clone();
 
         let task = tokio::spawn(async move {
             if imported_count > 0 {
-                if timeout(Duration::from_secs(15), receiver.joined())
+                let join_timeout = initial_topic_join_timeout();
+                let warmup_task = tokio::spawn(async move {
+                    let join_deadline = tokio::time::Instant::now() + join_timeout;
+                    loop {
+                        for peer in &warm_bootstrap_peers {
+                            if warm_endpoint
+                                .connect(peer.clone(), GOSSIP_ALPN)
+                                .await
+                                .is_ok()
+                            {
+                                return;
+                            }
+                        }
+                        if tokio::time::Instant::now() >= join_deadline {
+                            return;
+                        }
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                });
+                let joined = timeout(join_timeout, receiver.joined())
                     .await
-                    .is_ok_and(|result| result.is_ok())
-                {
+                    .is_ok_and(|result| result.is_ok());
+                warmup_task.abort();
+                if joined {
                     joined_task_state.store(true, Ordering::SeqCst);
                     joined_task_notify.notify_waiters();
                     *last_error_task.lock().await = None;
@@ -846,6 +888,8 @@ impl IrohGossipTransport {
             while let Some(event) = receiver.next().await {
                 match event {
                     Ok(GossipEvent::Received(message)) => {
+                        joined_task_state.store(true, Ordering::SeqCst);
+                        joined_task_notify.notify_waiters();
                         let current_neighbors = receiver
                             .neighbors()
                             .map(|peer| peer.to_string())
@@ -866,6 +910,8 @@ impl IrohGossipTransport {
                         }
                     }
                     Ok(GossipEvent::NeighborUp(peer_id)) => {
+                        joined_task_state.store(true, Ordering::SeqCst);
+                        joined_task_notify.notify_waiters();
                         let mut guard = neighbors_task.write().await;
                         guard.insert(peer_id.to_string());
                         *last_error_task.lock().await = None;
@@ -914,6 +960,7 @@ async fn bind_endpoint_with_options(
     bind_addr: SocketAddr,
     dht_options: &DhtDiscoveryOptions,
     relay_config: &TransportRelayConfig,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
     secret_key: Option<SecretKey>,
 ) -> Result<(Endpoint, Arc<MemoryLookup>, Option<JoinHandle<()>>)> {
     let discovery = Arc::new(MemoryLookup::new());
@@ -921,7 +968,7 @@ async fn bind_endpoint_with_options(
         Endpoint::empty_builder(relay_config.relay_mode()?),
         &discovery,
         Some(dht_options),
-        relay_config,
+        relay_urls,
     )?;
     if let Some(secret_key) = secret_key {
         builder = builder.secret_key(secret_key);
@@ -1197,7 +1244,11 @@ impl Transport for IrohGossipTransport {
         configured_seed_peers: Vec<SeedPeer>,
         bootstrap_seed_peers: Vec<SeedPeer>,
     ) -> Result<()> {
-        let relay_urls = self.relay_urls.lock().await.clone();
+        let relay_urls = self
+            .relay_urls
+            .read()
+            .expect("transport relay urls poisoned")
+            .clone();
         let mut configured = BTreeMap::new();
         for seed in configured_seed_peers {
             let endpoint_addr = seed.to_endpoint_addr_with_relays(&relay_urls)?;
@@ -1305,13 +1356,10 @@ pub fn build_endpoint_builder(
     builder: EndpointBuilder,
     discovery: &Arc<MemoryLookup>,
     dht_options: Option<&DhtDiscoveryOptions>,
-    relay_config: &TransportRelayConfig,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
 ) -> Result<EndpointBuilder> {
     let mut builder = builder.address_lookup(discovery.clone());
-    let relay_urls = relay_config.parsed_relay_urls()?;
-    if !relay_urls.is_empty() {
-        builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
-    }
+    builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
         let mut dht_builder = DhtAddressLookup::builder()
             .include_direct_addresses(true)
@@ -1860,10 +1908,14 @@ mod tests {
             .await
             .expect("publish stale packet");
 
+        let relay_urls = Arc::new(StdRwLock::new(
+            relay_config.parsed_relay_urls().expect("relay urls"),
+        ));
         let (endpoint, _discovery, _publish_task) = bind_endpoint_with_options(
             SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
             &DhtDiscoveryOptions::with_client(client.clone()),
             &relay_config,
+            relay_urls,
             Some(secret_key.clone()),
         )
         .await

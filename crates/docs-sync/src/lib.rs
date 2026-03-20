@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -114,7 +114,7 @@ pub struct IrohDocsNode {
     endpoint: Endpoint,
     gossip: Gossip,
     discovery: Arc<MemoryLookup>,
-    relay_urls: Mutex<Vec<RelayUrl>>,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
@@ -195,12 +195,12 @@ impl IrohDocsNode {
             .transpose()?
             .flatten();
         let relay_config = relay_config.normalized();
-        let relay_urls = relay_config.parsed_relay_urls()?;
+        let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
         let mut endpoint_builder = build_endpoint_builder(
             Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
-            &relay_config,
+            Arc::clone(&relay_urls),
         )?;
         #[cfg(test)]
         {
@@ -245,7 +245,7 @@ impl IrohDocsNode {
             endpoint,
             gossip,
             discovery,
-            relay_urls: Mutex::new(relay_urls),
+            relay_urls,
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
@@ -267,13 +267,20 @@ impl IrohDocsNode {
     }
 
     pub async fn relay_urls(&self) -> Vec<RelayUrl> {
-        self.relay_urls.lock().await.clone()
+        self.relay_urls
+            .read()
+            .expect("docs sync relay urls poisoned")
+            .clone()
     }
 
     pub async fn apply_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
         let relay_config = relay_config.normalized();
         let next_relay_urls = relay_config.parsed_relay_urls()?;
-        let current_relay_urls = self.relay_urls.lock().await.clone();
+        let current_relay_urls = self
+            .relay_urls
+            .read()
+            .expect("docs sync relay urls poisoned")
+            .clone();
         sync_endpoint_relay_config(&self.endpoint, &current_relay_urls, &next_relay_urls).await?;
         if !next_relay_urls.is_empty() {
             if current_relay_urls.is_empty() {
@@ -318,7 +325,10 @@ impl IrohDocsNode {
                 }
             }
         }
-        *self.relay_urls.lock().await = next_relay_urls;
+        *self
+            .relay_urls
+            .write()
+            .expect("docs sync relay urls poisoned") = next_relay_urls;
         self.discovery.add_endpoint_info(self.endpoint.addr());
         Ok(())
     }
@@ -913,19 +923,10 @@ impl DocsSync for IrohDocsSync {
     }
 
     async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
-        let doc = self.ensure_replica(replica_id).await?;
-        let peers = self.sync_peers().await;
-        if peers.is_empty() {
-            return Ok(());
+        if let Some(handle) = self.replicas.lock().await.remove(replica_id.as_str()) {
+            handle._live_task.abort();
         }
-        let peer_ids = peers
-            .iter()
-            .map(|peer| peer.id.to_string())
-            .collect::<BTreeSet<_>>();
-        doc_start_sync(&doc, peers).await?;
-        if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
-            handle.sync_peer_ids = peer_ids;
-        }
+        let _ = self.ensure_replica(replica_id).await?;
         Ok(())
     }
 

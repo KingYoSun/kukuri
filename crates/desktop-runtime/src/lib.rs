@@ -388,10 +388,13 @@ pub struct DesktopRuntime {
 }
 
 struct SharedIrohStack {
-    current: Mutex<BoundIrohStack>,
+    current: Mutex<Option<BoundIrohStack>>,
     transport: Arc<ReloadableTransport>,
     docs_sync: Arc<ReloadableDocsSync>,
     blob_service: Arc<ReloadableBlobService>,
+    root: PathBuf,
+    network_config: TransportNetworkConfig,
+    dht_options: DhtDiscoveryOptions,
 }
 
 impl ReloadableTransport {
@@ -403,6 +406,10 @@ impl ReloadableTransport {
 
     async fn current(&self) -> Arc<IrohGossipTransport> {
         self.inner.read().await.clone()
+    }
+
+    async fn replace(&self, inner: Arc<IrohGossipTransport>) {
+        *self.inner.write().await = inner;
     }
 }
 
@@ -468,6 +475,10 @@ impl ReloadableDocsSync {
     async fn current(&self) -> Arc<IrohDocsSync> {
         self.inner.read().await.clone()
     }
+
+    async fn replace(&self, inner: Arc<IrohDocsSync>) {
+        *self.inner.write().await = inner;
+    }
 }
 
 #[async_trait]
@@ -532,6 +543,10 @@ impl ReloadableBlobService {
 
     async fn current(&self) -> Arc<IrohBlobService> {
         self.inner.read().await.clone()
+    }
+
+    async fn replace(&self, inner: Arc<IrohBlobService>) {
+        *self.inner.write().await = inner;
     }
 }
 
@@ -1794,6 +1809,19 @@ fn effective_seed_peers(
     )
 }
 
+fn effective_dht_options(
+    dht_options: &DhtDiscoveryOptions,
+    bootstrap_seed_peers: &[SeedPeer],
+    relay_config: &TransportRelayConfig,
+) -> DhtDiscoveryOptions {
+    if relay_config.connect_mode() == ConnectMode::DirectOrRelay && !bootstrap_seed_peers.is_empty()
+    {
+        DhtDiscoveryOptions::disabled()
+    } else {
+        dht_options.clone()
+    }
+}
+
 fn community_node_seed_peers(config: &CommunityNodeConfig) -> impl Iterator<Item = SeedPeer> + '_ {
     config
         .nodes
@@ -1973,6 +2001,7 @@ impl SharedIrohStack {
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
+        let dht_options = effective_dht_options(&dht_options, bootstrap_seed_peers, &relay_config);
         let current = BoundIrohStack::new(
             root,
             network_config.clone(),
@@ -1986,11 +2015,45 @@ impl SharedIrohStack {
         let docs_sync = Arc::new(ReloadableDocsSync::new(current.docs_sync.clone()));
         let blob_service = Arc::new(ReloadableBlobService::new(current.blob_service.clone()));
         Ok(Self {
-            current: Mutex::new(current),
+            current: Mutex::new(Some(current)),
             transport,
             docs_sync,
             blob_service,
+            root: root.to_path_buf(),
+            network_config,
+            dht_options,
         })
+    }
+
+    async fn rebuild(
+        &self,
+        discovery_config: &DiscoveryConfig,
+        bootstrap_seed_peers: &[SeedPeer],
+        relay_config: TransportRelayConfig,
+    ) -> Result<()> {
+        let dht_options =
+            effective_dht_options(&self.dht_options, bootstrap_seed_peers, &relay_config);
+        let previous = self
+            .current
+            .lock()
+            .await
+            .take()
+            .context("missing active iroh stack during rebuild")?;
+        previous.shutdown().await;
+        let next = BoundIrohStack::new(
+            &self.root,
+            self.network_config.clone(),
+            discovery_config,
+            bootstrap_seed_peers,
+            dht_options,
+            relay_config,
+        )
+        .await?;
+        self.transport.replace(next.transport.clone()).await;
+        self.docs_sync.replace(next.docs_sync.clone()).await;
+        self.blob_service.replace(next.blob_service.clone()).await;
+        *self.current.lock().await = Some(next);
+        Ok(())
     }
 
     async fn apply_runtime_connectivity(
@@ -1999,7 +2062,26 @@ impl SharedIrohStack {
         bootstrap_seed_peers: &[SeedPeer],
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
+        let relay_config = relay_config.normalized();
+        let next_relay_urls = relay_config.parsed_relay_urls()?;
+        let current_relay_urls = {
+            let current = self.current.lock().await;
+            current
+                .as_ref()
+                .context("missing active iroh stack while reading relay urls")?
+                .node
+                .relay_urls()
+                .await
+        };
+        if current_relay_urls != next_relay_urls {
+            return self
+                .rebuild(discovery_config, bootstrap_seed_peers, relay_config)
+                .await;
+        }
         let current = self.current.lock().await;
+        let current = current
+            .as_ref()
+            .context("missing active iroh stack while applying runtime connectivity")?;
         current
             .node
             .apply_relay_config(relay_config.clone())
@@ -2027,13 +2109,22 @@ impl SharedIrohStack {
     }
 
     async fn shutdown(&self) {
-        let current = self.current.lock().await;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+        if let Some(current) = self.current.lock().await.take() {
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+        }
     }
 
     #[cfg(test)]
     async fn endpoint(&self) -> iroh::Endpoint {
-        self.current.lock().await.node.endpoint().clone()
+        self.current
+            .lock()
+            .await
+            .as_ref()
+            .expect("missing active iroh stack")
+            .node
+            .endpoint()
+            .clone()
     }
 }
 
@@ -2113,6 +2204,22 @@ mod tests {
             Duration::from_secs(180)
         } else {
             Duration::from_secs(30)
+        }
+    }
+
+    fn seeded_dht_runtime_ready_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_secs(20)
+        }
+    }
+
+    fn seeded_dht_runtime_sync_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(90)
+        } else {
+            Duration::from_secs(20)
         }
     }
 
@@ -3741,7 +3848,8 @@ mod tests {
             })
             .await
             .expect("subscribe b");
-        timeout(Duration::from_secs(20), async {
+        timeout(seeded_dht_runtime_ready_timeout(), async {
+            let mut stable_ready_polls = 0usize;
             loop {
                 let status_a = runtime_a.get_sync_status().await.expect("status a");
                 let status_b = runtime_b.get_sync_status().await.expect("status b");
@@ -3754,9 +3862,14 @@ mod tests {
                     .iter()
                     .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
                 if ready_a && ready_b {
-                    return;
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return;
+                    }
+                } else {
+                    stable_ready_polls = 0;
                 }
-                sleep(Duration::from_millis(50)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         })
         .await
@@ -3773,7 +3886,7 @@ mod tests {
             .await
             .expect("create post");
 
-        let received = timeout(Duration::from_secs(20), async {
+        let received = timeout(seeded_dht_runtime_sync_timeout(), async {
             loop {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
@@ -3901,7 +4014,7 @@ mod tests {
             .await
             .expect("create post");
 
-        let received = timeout(Duration::from_secs(20), async {
+        let received = timeout(seeded_dht_runtime_sync_timeout(), async {
             loop {
                 let timeline = restarted_b
                     .list_timeline(ListTimelineRequest {

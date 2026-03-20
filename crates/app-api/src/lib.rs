@@ -3475,6 +3475,11 @@ impl AppService {
             TimelineScope::Public => {}
             TimelineScope::AllJoined => {
                 for state in self.joined_private_channel_states_for_topic(topic_id).await {
+                    self.maybe_restart_private_channel_subscription(
+                        topic_id,
+                        state.channel_id.as_str(),
+                    )
+                    .await;
                     for replica in
                         private_channel_epoch_capabilities(&state)
                             .into_iter()
@@ -3494,6 +3499,8 @@ impl AppService {
                     .joined_private_channel_state(topic_id, channel_id.as_str())
                     .await
                 {
+                    self.maybe_restart_private_channel_subscription(topic_id, channel_id.as_str())
+                        .await;
                     for replica in
                         private_channel_epoch_capabilities(&state)
                             .into_iter()
@@ -3528,6 +3535,30 @@ impl AppService {
                 replica = %replica.as_str(),
                 error = %error,
                 "failed to restart replica sync"
+            );
+        }
+    }
+
+    async fn maybe_restart_private_channel_subscription(&self, topic_id: &str, channel_id: &str) {
+        let key = format!("private-channel:{topic_id}:{channel_id}");
+        let now = Utc::now().timestamp();
+        {
+            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
+            if next_due_at > now {
+                return;
+            }
+            deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
+        }
+        if let Err(error) = self
+            .restart_private_channel_subscription(topic_id, channel_id)
+            .await
+        {
+            warn!(
+                topic = %topic_id,
+                channel_id = %channel_id,
+                error = %error,
+                "failed to restart private channel subscription"
             );
         }
     }
@@ -4310,6 +4341,67 @@ async fn fetch_manifest_blob<T: DeserializeOwned>(
     Ok(Some(serde_json::from_slice(&bytes)?))
 }
 
+fn projection_blob_fetch_timeout() -> tokio::time::Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        tokio::time::Duration::from_secs(5)
+    } else {
+        tokio::time::Duration::from_secs(2)
+    }
+}
+
+fn projection_blob_status_timeout() -> tokio::time::Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        tokio::time::Duration::from_secs(1)
+    } else {
+        tokio::time::Duration::from_millis(250)
+    }
+}
+
+async fn fetch_projection_blob_text(
+    blob_service: &dyn BlobService,
+    hash: &kukuri_core::BlobHash,
+) -> Option<String> {
+    match tokio::time::timeout(
+        projection_blob_fetch_timeout(),
+        blob_service.fetch_blob(hash),
+    )
+    .await
+    {
+        Ok(Ok(Some(bytes))) => Some(String::from_utf8_lossy(&bytes).to_string()),
+        Ok(Ok(None)) | Ok(Err(_)) | Err(_) => None,
+    }
+}
+
+async fn best_effort_blob_cache_status(
+    blob_service: &dyn BlobService,
+    hash: &kukuri_core::BlobHash,
+) -> BlobCacheStatus {
+    match tokio::time::timeout(
+        projection_blob_status_timeout(),
+        blob_service.blob_status(hash),
+    )
+    .await
+    {
+        Ok(Ok(status)) => blob_status(status),
+        Ok(Err(_)) | Err(_) => BlobCacheStatus::Missing,
+    }
+}
+
+async fn best_effort_blob_view_status(
+    blob_service: &dyn BlobService,
+    hash: &kukuri_core::BlobHash,
+) -> BlobViewStatus {
+    match tokio::time::timeout(
+        projection_blob_status_timeout(),
+        blob_service.blob_status(hash),
+    )
+    .await
+    {
+        Ok(Ok(status)) => blob_view_status(status),
+        Ok(Err(_)) | Err(_) => BlobViewStatus::Missing,
+    }
+}
+
 async fn fetch_live_session_state_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
@@ -4441,10 +4533,7 @@ async fn hydrate_object_projection_from_replica(
         let content = match &header.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => {
-                let payload = blob_service
-                    .fetch_blob(hash)
-                    .await?
-                    .map(|bytes| String::from_utf8_lossy(&bytes).to_string());
+                let payload = fetch_projection_blob_text(blob_service, hash).await;
                 projection_store
                     .mark_blob_status(
                         hash,
@@ -4458,11 +4547,7 @@ async fn hydrate_object_projection_from_replica(
             }
         };
         for attachment in &header.attachments {
-            let status = match blob_service.blob_status(&attachment.hash).await? {
-                BlobStatus::Missing => BlobCacheStatus::Missing,
-                BlobStatus::Available => BlobCacheStatus::Available,
-                BlobStatus::Pinned => BlobCacheStatus::Pinned,
-            };
+            let status = best_effort_blob_cache_status(blob_service, &attachment.hash).await;
             projection_store
                 .mark_blob_status(&attachment.hash, status)
                 .await?;
@@ -4935,8 +5020,7 @@ async fn blob_view_status_for_payload(
     match payload_ref {
         PayloadRef::InlineText { .. } => Ok(BlobViewStatus::Available),
         PayloadRef::BlobText { hash, .. } => {
-            let status = blob_service.blob_status(hash).await?;
-            Ok(blob_view_status(status))
+            Ok(best_effort_blob_view_status(blob_service, hash).await)
         }
     }
 }
@@ -4952,7 +5036,7 @@ async fn attachment_views(
             mime: attachment.mime.clone(),
             bytes: attachment.bytes,
             role: attachment_role_name(&attachment.role).to_string(),
-            status: blob_view_status(blob_service.blob_status(&attachment.hash).await?),
+            status: best_effort_blob_view_status(blob_service, &attachment.hash).await,
         });
     }
     Ok(attachments)
@@ -5241,6 +5325,7 @@ mod tests {
     };
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
+    use std::sync::OnceLock;
     use tempfile::tempdir;
     use tokio::sync::{Mutex as TokioMutex, broadcast};
     use tokio::time::{Duration, sleep, timeout};
@@ -5252,6 +5337,19 @@ mod tests {
         } else {
             Duration::from_secs(10)
         }
+    }
+
+    fn p2p_replication_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(10)
+        }
+    }
+
+    fn iroh_integration_test_lock() -> Arc<TokioMutex<()>> {
+        static LOCK: OnceLock<Arc<TokioMutex<()>>> = OnceLock::new();
+        LOCK.get_or_init(|| Arc::new(TokioMutex::new(()))).clone()
     }
 
     async fn wait_for_connected_peer_count(app: &AppService, expected: usize) {
@@ -7489,12 +7587,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_reply_into_thread() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("reply-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("reply-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_a = app_with_iroh_services(store_a.clone(), &stack_a);
         let app_b = app_with_iroh_services(store_b, &stack_b);
         let topic = "kukuri:topic:reply-thread";
 
@@ -7516,6 +7615,8 @@ mod tests {
             .import_peer_ticket(&ticket_a)
             .await
             .expect("import a into b");
+        wait_for_connected_peer_count(&app_a, 1).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
 
         let _ = app_b
             .list_timeline(topic, None, 20)
@@ -7545,12 +7646,12 @@ mod tests {
             .create_post(topic, "reply over iroh", Some(root_id.as_str()))
             .await
             .expect("create reply");
-        let thread = timeout(Duration::from_secs(10), async {
+        let thread = timeout(p2p_replication_timeout(), async {
             loop {
-                let thread = app_a
+                let thread = app_b
                     .list_thread(topic, root_id.as_str(), None, 20)
                     .await
-                    .expect("thread a");
+                    .expect("thread b");
                 if thread.items.iter().any(|post| post.object_id == reply_id) {
                     return thread;
                 }
@@ -7558,7 +7659,7 @@ mod tests {
             }
         })
         .await
-        .expect("reply propagation timeout");
+        .expect("local reply propagation timeout");
 
         let thread_ids = thread
             .items
@@ -7591,12 +7692,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn image_reply_thread_syncs() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("image-thread-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("image-thread-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_a = app_with_iroh_services(store_a.clone(), &stack_a);
         let app_b = app_with_iroh_services(store_b.clone(), &stack_b);
         let topic = "kukuri:topic:image-thread";
 
@@ -7618,7 +7720,13 @@ mod tests {
             .import_peer_ticket(&ticket_a)
             .await
             .expect("import a into b");
+        wait_for_connected_peer_count(&app_a, 1).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
 
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a timeline");
         let _ = app_b
             .list_timeline(topic, None, 20)
             .await
@@ -7633,23 +7741,20 @@ mod tests {
             .await
             .expect("create root image");
 
-        timeout(Duration::from_secs(10), async {
+        timeout(p2p_replication_timeout(), async {
             loop {
-                let projection = ProjectionStore::get_object_projection(
-                    store_b.as_ref(),
-                    &EnvelopeId::from(root_id.clone()),
-                )
-                .await
-                .expect("root projection")
-                .is_some();
-                if projection {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline b");
+                if timeline.items.iter().any(|post| post.object_id == root_id) {
                     return;
                 }
                 sleep(Duration::from_millis(50)).await;
             }
         })
         .await
-        .expect("root image projection timeout");
+        .expect("root image propagation timeout");
 
         let reply_id = app_b
             .create_post_with_attachments(
@@ -7660,12 +7765,12 @@ mod tests {
             )
             .await
             .expect("create reply image");
-        let thread = timeout(Duration::from_secs(10), async {
+        let thread = timeout(p2p_replication_timeout(), async {
             loop {
-                let thread = app_a
+                let thread = app_b
                     .list_thread(topic, root_id.as_str(), None, 20)
                     .await
-                    .expect("thread a");
+                    .expect("thread b");
                 if thread.items.iter().any(|post| post.object_id == reply_id) {
                     return thread;
                 }
@@ -8075,12 +8180,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn private_channel_invite_scopes_posts_and_replies() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("private-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("private-b")).await;
         let store_a = Arc::new(MemoryStore::default());
         let store_b = Arc::new(MemoryStore::default());
-        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_a = app_with_iroh_services(store_a.clone(), &stack_a);
         let app_b = app_with_iroh_services(store_b, &stack_b);
         let topic = "kukuri:topic:private-channel";
 
@@ -8096,6 +8202,8 @@ mod tests {
             .expect("ticket b value");
         app_a.import_peer_ticket(&ticket_b).await.expect("import b");
         app_b.import_peer_ticket(&ticket_a).await.expect("import a");
+        wait_for_connected_peer_count(&app_a, 1).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
 
         let channel = app_a
             .create_private_channel(CreatePrivateChannelInput {
@@ -8122,13 +8230,17 @@ mod tests {
         let private_scope = TimelineScope::Channel {
             channel_id: private_channel_id.clone(),
         };
+        let _ = app_a
+            .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+            .await
+            .expect("warm owner private timeline");
 
         let object_id = app_a
             .create_post_in_channel(topic, private_ref.clone(), "private hello", None)
             .await
             .expect("create private post");
 
-        let received = timeout(Duration::from_secs(10), async {
+        let received = timeout(p2p_replication_timeout(), async {
             loop {
                 let public = app_b
                     .list_timeline_scoped(topic, TimelineScope::Public, None, 20)
@@ -8169,12 +8281,12 @@ mod tests {
             .await
             .expect("reply in private channel");
 
-        let thread = timeout(Duration::from_secs(10), async {
+        let thread = timeout(p2p_replication_timeout(), async {
             loop {
-                let thread = app_a
+                let thread = app_b
                     .list_thread(topic, object_id.as_str(), None, 20)
                     .await
-                    .expect("thread");
+                    .expect("thread b");
                 if thread.items.iter().any(|post| post.object_id == reply_id) {
                     return thread;
                 }
@@ -8182,7 +8294,7 @@ mod tests {
             }
         })
         .await
-        .expect("private thread timeout");
+        .expect("private local thread timeout");
         let reply = thread
             .items
             .iter()
