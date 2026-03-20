@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::MemoryLookup;
@@ -17,7 +18,7 @@ use iroh_docs::api::{Doc, DocsApi};
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use iroh_gossip::net::Gossip;
-use kukuri_core::{ReplicaId, blob_hash};
+use kukuri_core::{ReplicaId, TopicId, blob_hash};
 use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
     build_endpoint_builder, parse_endpoint_ticket, prepare_endpoint_for_discovery,
@@ -76,6 +77,16 @@ pub struct DocEvent {
 #[async_trait]
 pub trait DocsSync: Send + Sync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()>;
+    async fn register_private_replica_secret(
+        &self,
+        _replica_id: &ReplicaId,
+        _namespace_secret_hex: &str,
+    ) -> Result<()> {
+        Ok(())
+    }
+    async fn remove_private_replica_secret(&self, _replica_id: &ReplicaId) -> Result<()> {
+        Ok(())
+    }
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()>;
     async fn query_replica(
         &self,
@@ -84,6 +95,9 @@ pub trait DocsSync: Send + Sync {
     ) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.open_replica(replica_id).await
+    }
     async fn set_seed_peers(&self, _peers: Vec<SeedPeer>) -> Result<()> {
         Ok(())
     }
@@ -101,6 +115,7 @@ pub struct IrohDocsNode {
     docs: DocsApi,
     blobs: BlobStore,
     endpoint_publish_task: Option<JoinHandle<()>>,
+    shutdown_started: AtomicBool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -231,6 +246,7 @@ impl IrohDocsNode {
             docs: docs.api().clone(),
             blobs,
             endpoint_publish_task,
+            shutdown_started: AtomicBool::new(false),
         }))
     }
 
@@ -290,6 +306,9 @@ impl IrohDocsNode {
     }
 
     pub async fn shutdown(self: Arc<Self>) -> Result<()> {
+        if self.shutdown_started.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
         if let Some(task) = &self.endpoint_publish_task {
             task.abort();
         }
@@ -304,6 +323,9 @@ impl Drop for IrohDocsNode {
     fn drop(&mut self) {
         if let Some(task) = self.endpoint_publish_task.take() {
             task.abort();
+        }
+        if self.shutdown_started.swap(true, Ordering::AcqRel) {
+            return;
         }
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let router = Arc::clone(&self.router);
@@ -358,12 +380,14 @@ pub struct IrohDocsSync {
     replicas: Arc<Mutex<HashMap<String, ReplicaHandle>>>,
     seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
+    private_replica_secrets: Arc<Mutex<HashMap<String, NamespaceSecret>>>,
 }
 
 #[derive(Clone, Default)]
 pub struct MemoryDocsSync {
     records: Arc<Mutex<MemoryReplicaMap>>,
     events: Arc<Mutex<HashMap<String, broadcast::Sender<DocEvent>>>>,
+    private_replica_secrets: Arc<Mutex<HashMap<String, NamespaceSecret>>>,
 }
 
 impl IrohDocsSync {
@@ -373,6 +397,20 @@ impl IrohDocsSync {
             replicas: Arc::new(Mutex::new(HashMap::new())),
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
+            private_replica_secrets: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let handles = {
+            let mut replicas = self.replicas.lock().await;
+            replicas
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
+        };
+        for handle in handles {
+            handle._live_task.abort();
         }
     }
 
@@ -417,6 +455,20 @@ impl IrohDocsSync {
         Ok(())
     }
 
+    async fn replica_secret(&self, replica_id: &ReplicaId) -> Result<NamespaceSecret> {
+        if let Some(secret) = self
+            .private_replica_secrets
+            .lock()
+            .await
+            .get(replica_id.as_str())
+            .cloned()
+        {
+            return Ok(secret);
+        }
+        public_replica_secret(replica_id)
+            .ok_or_else(|| anyhow!("private replica capability is not registered"))
+    }
+
     async fn ensure_replica(&self, replica_id: &ReplicaId) -> Result<Doc> {
         let imported = self.sync_peers().await;
         let imported_ids = imported
@@ -432,7 +484,7 @@ impl IrohDocsSync {
             return Ok(handle.doc.clone());
         }
 
-        let secret = replica_secret(replica_id);
+        let secret = self.replica_secret(replica_id).await?;
         let doc = if imported.is_empty() {
             self.node
                 .docs()
@@ -587,6 +639,7 @@ impl IrohDocsSync {
 #[async_trait]
 impl DocsSync for MemoryDocsSync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
+        ensure_private_replica_access(replica_id, &self.private_replica_secrets).await?;
         self.records
             .lock()
             .await
@@ -689,6 +742,27 @@ impl DocsSync for MemoryDocsSync {
         Ok(Box::pin(stream))
     }
 
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        let secret = parse_namespace_secret_hex(namespace_secret_hex)?;
+        self.private_replica_secrets
+            .lock()
+            .await
+            .insert(replica_id.as_str().to_string(), secret);
+        Ok(())
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.private_replica_secrets
+            .lock()
+            .await
+            .remove(replica_id.as_str());
+        Ok(())
+    }
+
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
         Ok(())
     }
@@ -698,6 +772,30 @@ impl DocsSync for MemoryDocsSync {
 impl DocsSync for IrohDocsSync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
         let _ = self.ensure_replica(replica_id).await?;
+        Ok(())
+    }
+
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        let secret = parse_namespace_secret_hex(namespace_secret_hex)?;
+        self.private_replica_secrets
+            .lock()
+            .await
+            .insert(replica_id.as_str().to_string(), secret);
+        Ok(())
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.private_replica_secrets
+            .lock()
+            .await
+            .remove(replica_id.as_str());
+        if let Some(handle) = self.replicas.lock().await.remove(replica_id.as_str()) {
+            handle._live_task.abort();
+        }
         Ok(())
     }
 
@@ -788,6 +886,23 @@ impl DocsSync for IrohDocsSync {
         Ok(())
     }
 
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        let doc = self.ensure_replica(replica_id).await?;
+        let peers = self.sync_peers().await;
+        if peers.is_empty() {
+            return Ok(());
+        }
+        let peer_ids = peers
+            .iter()
+            .map(|peer| peer.id.to_string())
+            .collect::<BTreeSet<_>>();
+        doc_start_sync(&doc, peers).await?;
+        if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
+            handle.sync_peer_ids = peer_ids;
+        }
+        Ok(())
+    }
+
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         let relay_urls = self.node.relay_urls().await;
         let mut parsed = BTreeMap::new();
@@ -809,13 +924,28 @@ impl DocsSync for IrohDocsSync {
     }
 }
 
-fn replica_secret(replica_id: &ReplicaId) -> NamespaceSecret {
+fn public_replica_secret(replica_id: &ReplicaId) -> Option<NamespaceSecret> {
+    if replica_id.as_str().starts_with("channel::") {
+        return None;
+    }
     let digest = blake3::hash(format!("kukuri-docs:{}", replica_id.as_str()).as_bytes());
-    NamespaceSecret::from_bytes(digest.as_bytes())
+    Some(NamespaceSecret::from_bytes(digest.as_bytes()))
 }
 
 pub fn topic_replica_id(topic_id: &str) -> ReplicaId {
     ReplicaId::new(format!("topic::{topic_id}"))
+}
+
+pub fn private_channel_replica_id(channel_id: &str) -> ReplicaId {
+    ReplicaId::new(format!("channel::{channel_id}"))
+}
+
+pub fn private_channel_epoch_replica_id(channel_id: &str, epoch_id: &str) -> ReplicaId {
+    ReplicaId::new(format!("channel::{channel_id}::epoch::{epoch_id}"))
+}
+
+pub fn private_channel_hint_topic(channel_id: &str) -> TopicId {
+    TopicId::new(format!("private/{channel_id}"))
 }
 
 pub fn author_replica_id(author_pubkey: &str) -> ReplicaId {
@@ -832,6 +962,31 @@ pub fn stable_key(prefix: &str, key: &str) -> String {
 
 pub fn value_hash(value: impl AsRef<[u8]>) -> String {
     blob_hash(value).0
+}
+
+fn parse_namespace_secret_hex(value: &str) -> Result<NamespaceSecret> {
+    let decoded = hex::decode(value.trim()).context("invalid namespace secret hex")?;
+    let bytes: [u8; 32] = decoded
+        .try_into()
+        .map_err(|_| anyhow!("namespace secret must be 32 bytes"))?;
+    Ok(NamespaceSecret::from_bytes(&bytes))
+}
+
+async fn ensure_private_replica_access(
+    replica_id: &ReplicaId,
+    private_replica_secrets: &Arc<Mutex<HashMap<String, NamespaceSecret>>>,
+) -> Result<()> {
+    if public_replica_secret(replica_id).is_some() {
+        return Ok(());
+    }
+    if private_replica_secrets
+        .lock()
+        .await
+        .contains_key(replica_id.as_str())
+    {
+        return Ok(());
+    }
+    bail!("private replica capability is not registered");
 }
 
 async fn doc_start_sync(doc: &Doc, peers: Vec<EndpointAddr>) -> Result<()> {
@@ -874,6 +1029,26 @@ mod tests {
                 .expect("utf8")
                 .contains("event-1")
         );
+    }
+
+    #[tokio::test]
+    async fn private_replica_requires_registered_capability() {
+        let docs = MemoryDocsSync::default();
+        let replica = private_channel_replica_id("private-a");
+
+        let error = docs
+            .open_replica(&replica)
+            .await
+            .expect_err("private replica should require capability");
+        assert!(error.to_string().contains("capability"));
+
+        let secret = kukuri_core::KukuriKeys::generate().export_secret_hex();
+        docs.register_private_replica_secret(&replica, secret.as_str())
+            .await
+            .expect("register secret");
+        docs.open_replica(&replica)
+            .await
+            .expect("open replica after registration");
     }
 
     #[tokio::test]

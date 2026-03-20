@@ -13,6 +13,7 @@ tauri-build = { version = "2.5.5", features = [] }
 
 [dependencies]
 kukuri-app-api = { path = "../../../crates/app-api" }
+kukuri-core = { path = "../../../crates/core" }
 kukuri-desktop-runtime = { path = "../../../crates/desktop-runtime" }
 serde = { version = "1.0.228", features = ["derive"] }
 tauri = { version = "2.10.2", features = [] }

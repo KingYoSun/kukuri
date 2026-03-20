@@ -5,10 +5,28 @@ export type TimelineCursor = {
   object_id: string;
 };
 
+export type ChannelRef =
+  | { kind: 'public' }
+  | { kind: 'private_channel'; channel_id: string };
+
+export type TimelineScope =
+  | { kind: 'public' }
+  | { kind: 'all_joined' }
+  | { kind: 'channel'; channel_id: string };
+
+export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
+export type ChannelSharingState = 'open' | 'frozen';
+
 export type PostView = {
   object_id: string;
   envelope_id: string;
   author_pubkey: string;
+  author_name?: string | null;
+  author_display_name?: string | null;
+  following: boolean;
+  followed_by: boolean;
+  mutual: boolean;
+  friend_of_friend: boolean;
   object_kind: string;
   content: string;
   content_status: BlobViewStatus;
@@ -16,6 +34,38 @@ export type PostView = {
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+  channel_id?: string | null;
+  audience_label: string;
+};
+
+export type Profile = {
+  pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+  updated_at: number;
+};
+
+export type ProfileInput = {
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+};
+
+export type AuthorSocialView = {
+  author_pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+  updated_at?: number | null;
+  following: boolean;
+  followed_by: boolean;
+  mutual: boolean;
+  friend_of_friend: boolean;
+  friend_of_friend_via_pubkeys: string[];
 };
 
 export type BlobViewStatus = 'Missing' | 'Available' | 'Pinned';
@@ -156,6 +206,8 @@ export type LiveSessionView = {
   ended_at?: number | null;
   viewer_count: number;
   joined_by_me: boolean;
+  channel_id?: string | null;
+  audience_label: string;
 };
 
 export type GameRoomStatus = 'Waiting' | 'Running' | 'Paused' | 'Ended';
@@ -175,6 +227,56 @@ export type GameRoomView = {
   phase_label?: string | null;
   scores: GameScoreView[];
   updated_at: number;
+  channel_id?: string | null;
+  audience_label: string;
+};
+
+export type JoinedPrivateChannelView = {
+  topic_id: string;
+  channel_id: string;
+  label: string;
+  creator_pubkey: string;
+  owner_pubkey: string;
+  joined_via_pubkey?: string | null;
+  audience_kind: ChannelAudienceKind;
+  is_owner: boolean;
+  current_epoch_id: string;
+  archived_epoch_ids: string[];
+  sharing_state: ChannelSharingState;
+  rotation_required: boolean;
+  participant_count: number;
+  stale_participant_count: number;
+};
+
+export type PrivateChannelInvitePreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  inviter_pubkey: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
+};
+
+export type FriendOnlyGrantPreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  owner_pubkey: string;
+  epoch_id: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
+};
+
+export type FriendPlusSharePreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  owner_pubkey: string;
+  sponsor_pubkey: string;
+  epoch_id: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
+  share_token_id: string;
 };
 
 export interface DesktopApi {
@@ -182,27 +284,70 @@ export interface DesktopApi {
     topic: string,
     content: string,
     replyTo?: string | null,
-    attachments?: CreateAttachmentInput[]
+    attachments?: CreateAttachmentInput[],
+    channelRef?: ChannelRef
   ): Promise<string>;
-  listTimeline(topic: string, cursor?: TimelineCursor | null, limit?: number): Promise<TimelineView>;
+  listTimeline(
+    topic: string,
+    cursor?: TimelineCursor | null,
+    limit?: number,
+    scope?: TimelineScope
+  ): Promise<TimelineView>;
   listThread(
     topic: string,
     threadId: string,
     cursor?: TimelineCursor | null,
     limit?: number
   ): Promise<TimelineView>;
-  listLiveSessions(topic: string): Promise<LiveSessionView[]>;
-  createLiveSession(topic: string, title: string, description: string): Promise<string>;
+  getMyProfile(): Promise<Profile>;
+  setMyProfile(input: ProfileInput): Promise<Profile>;
+  followAuthor(pubkey: string): Promise<AuthorSocialView>;
+  unfollowAuthor(pubkey: string): Promise<AuthorSocialView>;
+  getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
+  listLiveSessions(topic: string, scope?: TimelineScope): Promise<LiveSessionView[]>;
+  createLiveSession(
+    topic: string,
+    title: string,
+    description: string,
+    channelRef?: ChannelRef
+  ): Promise<string>;
   endLiveSession(topic: string, sessionId: string): Promise<void>;
   joinLiveSession(topic: string, sessionId: string): Promise<void>;
   leaveLiveSession(topic: string, sessionId: string): Promise<void>;
-  listGameRooms(topic: string): Promise<GameRoomView[]>;
+  listGameRooms(topic: string, scope?: TimelineScope): Promise<GameRoomView[]>;
   createGameRoom(
     topic: string,
     title: string,
     description: string,
-    participants: string[]
+    participants: string[],
+    channelRef?: ChannelRef
   ): Promise<string>;
+  createPrivateChannel(
+    topic: string,
+    label: string,
+    audienceKind?: ChannelAudienceKind
+  ): Promise<JoinedPrivateChannelView>;
+  exportPrivateChannelInvite(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importPrivateChannelInvite(token: string): Promise<PrivateChannelInvitePreview>;
+  exportFriendOnlyGrant(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importFriendOnlyGrant(token: string): Promise<FriendOnlyGrantPreview>;
+  exportFriendPlusShare(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importFriendPlusShare(token: string): Promise<FriendPlusSharePreview>;
+  freezePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
+  rotatePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
+  listJoinedPrivateChannels(topic: string): Promise<JoinedPrivateChannelView[]>;
   updateGameRoom(
     topic: string,
     roomId: string,
@@ -273,26 +418,28 @@ async function invokeDesktop<T>(command: string, args?: Record<string, unknown>)
 }
 
 export const runtimeApi: DesktopApi = {
-  createPost: async (topic, content, replyTo, attachments = []) => {
+  createPost: async (topic, content, replyTo, attachments = [], channelRef = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments);
+      return window.__KUKURI_DESKTOP__.createPost(topic, content, replyTo, attachments, channelRef);
     }
     return invokeDesktop<string>('create_post', {
       request: {
         topic,
         content,
         reply_to: replyTo,
+        channel_ref: channelRef,
         attachments,
       },
     });
   },
-  listTimeline: async (topic, cursor, limit) => {
+  listTimeline: async (topic, cursor, limit, scope = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit);
+      return window.__KUKURI_DESKTOP__.listTimeline(topic, cursor, limit, scope);
     }
     return invokeDesktop<TimelineView>('list_timeline', {
       request: {
         topic,
+        scope,
         cursor,
         limit,
       },
@@ -311,23 +458,63 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
-  listLiveSessions: async (topic) => {
+  getMyProfile: async () => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listLiveSessions(topic);
+      return window.__KUKURI_DESKTOP__.getMyProfile();
+    }
+    return invokeDesktop<Profile>('get_my_profile');
+  },
+  setMyProfile: async (input) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setMyProfile(input);
+    }
+    return invokeDesktop<Profile>('set_my_profile', {
+      request: input,
+    });
+  },
+  followAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.followAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('follow_author', {
+      request: { pubkey },
+    });
+  },
+  unfollowAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.unfollowAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('unfollow_author', {
+      request: { pubkey },
+    });
+  },
+  getAuthorSocialView: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getAuthorSocialView(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('get_author_social_view', {
+      request: { pubkey },
+    });
+  },
+  listLiveSessions: async (topic, scope = { kind: 'public' }) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listLiveSessions(topic, scope);
     }
     return invokeDesktop<LiveSessionView[]>('list_live_sessions', {
       request: {
         topic,
+        scope,
       },
     });
   },
-  createLiveSession: async (topic, title, description) => {
+  createLiveSession: async (topic, title, description, channelRef = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description);
+      return window.__KUKURI_DESKTOP__.createLiveSession(topic, title, description, channelRef);
     }
     return invokeDesktop<string>('create_live_session', {
       request: {
         topic,
+        channel_ref: channelRef,
         title,
         description,
       },
@@ -366,27 +553,139 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
-  listGameRooms: async (topic) => {
+  listGameRooms: async (topic, scope = { kind: 'public' }) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.listGameRooms(topic);
+      return window.__KUKURI_DESKTOP__.listGameRooms(topic, scope);
     }
     return invokeDesktop<GameRoomView[]>('list_game_rooms', {
       request: {
         topic,
+        scope,
       },
     });
   },
-  createGameRoom: async (topic, title, description, participants) => {
+  createGameRoom: async (
+    topic,
+    title,
+    description,
+    participants,
+    channelRef = { kind: 'public' }
+  ) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createGameRoom(topic, title, description, participants);
-    }
-    return invokeDesktop<string>('create_game_room', {
-      request: {
+      return window.__KUKURI_DESKTOP__.createGameRoom(
         topic,
         title,
         description,
         participants,
+        channelRef
+      );
+    }
+    return invokeDesktop<string>('create_game_room', {
+      request: {
+        topic,
+        channel_ref: channelRef,
+        title,
+        description,
+        participants,
       },
+    });
+  },
+  createPrivateChannel: async (topic, label, audienceKind = 'invite_only') => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label, audienceKind);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('create_private_channel', {
+      request: { topic, label, audience_kind: audienceKind },
+    });
+  },
+  exportPrivateChannelInvite: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportPrivateChannelInvite(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_private_channel_invite', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importPrivateChannelInvite: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importPrivateChannelInvite(token);
+    }
+    return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
+      request: { token },
+    });
+  },
+  exportFriendOnlyGrant: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportFriendOnlyGrant(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_friend_only_grant', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importFriendOnlyGrant: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importFriendOnlyGrant(token);
+    }
+    return invokeDesktop<FriendOnlyGrantPreview>('import_friend_only_grant', {
+      request: { token },
+    });
+  },
+  exportFriendPlusShare: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportFriendPlusShare(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_friend_plus_share', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importFriendPlusShare: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importFriendPlusShare(token);
+    }
+    return invokeDesktop<FriendPlusSharePreview>('import_friend_plus_share', {
+      request: { token },
+    });
+  },
+  freezePrivateChannel: async (topic, channelId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.freezePrivateChannel(topic, channelId);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('freeze_private_channel', {
+      request: {
+        topic,
+        channel_id: channelId,
+      },
+    });
+  },
+  rotatePrivateChannel: async (topic, channelId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.rotatePrivateChannel(topic, channelId);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('rotate_private_channel', {
+      request: {
+        topic,
+        channel_id: channelId,
+      },
+    });
+  },
+  listJoinedPrivateChannels: async (topic) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listJoinedPrivateChannels(topic);
+    }
+    return invokeDesktop<JoinedPrivateChannelView[]>('list_joined_private_channels', {
+      request: { topic },
     });
   },
   updateGameRoom: async (topic, roomId, status, phaseLabel, scores) => {

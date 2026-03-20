@@ -223,6 +223,108 @@ $env:KUKURI_INSTANCE="desktop-a"
 15. live session を `create -> join -> end` し、viewer count と ended state が相手側に反映されることを確認する。
 16. game room を `create -> update score/status` し、相手側に score card が反映されることを確認する。
 
+## Social graph manual verification
+
+`friend of friend` まで見る場合は 3 author 構成を使う。`mutual` と restart 復元だけなら 2 desktop でもよい。
+
+事前に流す自動テスト:
+
+```bash
+cargo test -p kukuri-store store_profile_upsert_latest_wins -- --nocapture
+cargo test -p kukuri-store author_relationship_projection_rebuild_roundtrip -- --nocapture
+cargo test -p kukuri-app-api social_graph_derives_friend_of_friend_and_clears_after_unfollow -- --nocapture
+cargo test -p kukuri-desktop-runtime friend_only_channel_restore_keeps_archived_epoch_history -- --nocapture
+cd apps/desktop && npx pnpm@10.16.1 test
+```
+
+操作手順:
+
+1. 2-3 desktop を起動する。最小 lane は static-peer ticket import で、`friend of friend` まで見るなら A/B/C の 3 author を使う。
+2. 同じ public topic を開き、author detail が開ける状態まで接続させる。
+3. A で profile を更新し、A の表示名や profile 情報が B 側へ hydrate されることを確認する。
+4. A -> B と B -> A で follow し、両端末の author detail に `mutual` が出ることを確認する。
+5. `friend of friend` を見る場合は B -> C だけを follow し、A から見た C に `friend of friend` が出ることを確認する。
+6. A で B を unfollow するか、`friend of friend` lane では A と B の link を外し、対応する relationship 表示が消えることを確認する。
+7. 両端末を再起動し、profile 表示、follow 状態、必要なら `mutual` / `friend of friend` の表示が復元されることを確認する。
+
+## Private channel manual verification
+
+最小 lane は static-peer ticket import。manual verification は `invite_only`, `friend_only`, `friend_plus` の audience ごとに流す。
+
+事前に流す自動テスト:
+
+```bash
+cargo test -p kukuri-docs-sync private_replica_requires_registered_capability -- --nocapture
+cargo test -p kukuri-app-api private_channel_invite_scopes_posts_and_replies -- --nocapture
+cargo test -p kukuri-app-api friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant -- --nocapture
+cargo test -p kukuri-app-api friend_plus_share_freeze_rotate_and_new_epoch_visibility -- --nocapture
+cargo test -p kukuri-desktop-runtime private_channel_invite_restores_after_restart_without_reimport -- --nocapture
+cargo test -p kukuri-desktop-runtime friend_only_channel_restore_keeps_archived_epoch_history -- --nocapture
+cargo test -p kukuri-desktop-runtime friend_plus_channel_restore_redeems_rotation_after_restart -- --nocapture
+cargo test -p kukuri-harness private_channel_invite_connectivity -- --nocapture
+cargo test -p kukuri-harness friend_only_rotate_requires_fresh_grant -- --nocapture
+cargo test -p kukuri-harness friend_plus_share_freeze_rotate_connectivity -- --nocapture
+cd apps/desktop && npx pnpm@10.16.1 test
+```
+
+### `invite_only` lane
+
+必ず `Create Channel -> Create Invite -> Join via Invite` の順で行う。
+
+操作手順:
+
+1. 2 desktop を起動する。最小構成は `Peer Ticket` の相互 import。可能なら 3 台目の未招待端末 C も起動する。
+2. 両端末で同じ topic を開き、public timeline が同期することを確認する。
+3. 端末 A で `Create Channel` を押し、label を入力して private channel を明示的に作成する。
+4. 端末 A で `View Scope` と `Compose Target` が新しい channel に切り替わったことを確認する。
+5. 端末 A で `Create Invite` を押し、invite token が表示されることを確認する。
+6. 端末 B で `Join via Invite` に token を貼り付けて import し、topic が tracked state に入り、対象 channel が選択されることを確認する。
+7. 端末 A でその private channel に post し、端末 B の `All joined` または当該 channel view にだけ表示され、`Public` には出ないことを確認する。
+8. 端末 B でその private post に reply し、thread が同じ private channel 内でのみ見えることを確認する。
+9. 端末 A でその private channel 上に live session を作成し、端末 B が `join -> leave -> end` を追従できることを確認する。
+10. 端末 A でその private channel 上に game room を作成し、score / status 更新が端末 B に反映されることを確認する。
+11. 両端末を再起動し、invite 再入力なしで joined private channel が復元され、private post / thread / live / game が再表示されることを確認する。
+12. 端末 B でも `Create Invite` が可能で、fresh invite を再発行できることを確認する。
+13. 3 台目の未招待端末 C を使う場合は、同じ topic の `Public` / `All joined` から private channel content が見えないことを確認する。
+
+### `friend_only` lane
+
+1. 最低 3 desktop を起動する。A を owner、B を joiner、D を fresh grant 確認用に使う。非 mutual reject を見るなら C も用意する。
+2. A と B、および A と D で相互 follow を成立させる。C を使う場合は A と mutual にしない。
+3. A で `Audience: Friends` を選んで `Create Channel` し、`Create Grant` で token を発行する。
+4. B で `Join Grant` を行い、private channel が選択され、`Policy: Friends` が表示されることを確認する。
+5. A で private post を作り、B にだけ表示され、`Public` に漏れないことを確認する。
+6. A または B の follow を外して mutual を崩し、owner 側に `rotation required` が出ることを確認する。
+7. rotate 前に発行した古い grant を保持したまま、A で `Rotate` を実行する。
+8. 古い grant での join が失敗し、新しく発行した grant では join できることを確認する。
+9. rotate 後に join した newcomer は old epoch の content を読めず、新 epoch の content だけ読めることを確認する。
+
+### `friend_plus` lane
+
+1. 4 desktop を起動する。A を owner、B/C を既存 participant、D を stale share / fresh share 確認用に使う。
+2. A-B、B-C、B-D の pairwise mutual を成立させる。
+3. A で `Audience: Friends+` を選んで `Create Channel` し、A -> B share、B -> C share の順で join させる。
+4. C 側に `joined via <B>` が表示され、A/B/C 間で private post が同期し、`Public` に漏れないことを確認する。
+5. B -> D の share を発行したまま未 import にしておき、A で `Freeze` を実行する。
+6. freeze 後も既存 participant は write を継続できる一方、D の stale share import は失敗することを確認する。
+7. A で `Rotate` を実行し、B/C が restart なしまたは restart 後復元で新 epoch へ移行することを確認する。
+8. old share は rotate 後も失敗し、B が発行した fresh share では D が join できることを確認する。
+9. rotate 後に join した D は old epoch content を読めず、新 epoch content だけ読めることを確認する。
+
+自動テスト対応:
+
+- `private_replica_requires_registered_capability`: capability 未登録では private replica を開けない
+- `private_channel_invite_scopes_posts_and_replies`: invite import 後の private post / reply 継承を確認する
+- `friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant`: mutual 条件、rotation required、fresh grant 必須を確認する
+- `friend_plus_share_freeze_rotate_and_new_epoch_visibility`: mutual-chain share、freeze、rotate、new epoch visibility を確認する
+- `private_channel_invite_restores_after_restart_without_reimport`: desktop-runtime で restart 後の capability 復元を確認する
+- `friend_only_channel_restore_keeps_archived_epoch_history`: friend-only の archived/current epoch 復元を確認する
+- `friend_plus_channel_restore_redeems_rotation_after_restart`: friend-plus の encrypted rotation grant redeem を確認する
+- `private_channel_invite_connectivity`: 3 client static-peer scenario で invite-only の private post / reply / live / game / restart を通す
+- `friend_only_rotate_requires_fresh_grant`: static-peer runtime で friend-only rotate と stale grant block を通す
+- `friend_plus_share_freeze_rotate_connectivity`: 4 client static-peer runtime で share chain / freeze / rotate / stale share block を通す
+- `apps/desktop/src/App.test.tsx`: `Audience`, `Create Grant`, `Create Share`, `Freeze`, `Rotate`, invite/grant/share 導線の表示を確認する
+
 ## Seeded DHT 手動確認
 1. 2 instance とも `KUKURI_DISCOVERY_MODE=seeded_dht` を使うか、desktop の discovery panel で seed を保存できる状態にする。
 2. 両方を起動し、`Local Endpoint ID` を相互に `Seed Peers` へ登録する。`node_id` だけで通ることを確認する。

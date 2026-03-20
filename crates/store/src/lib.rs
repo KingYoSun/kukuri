@@ -6,8 +6,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, EnvelopeId, GameRoomStatus, GameScoreEntry, KukuriEnvelope, LiveSessionStatus,
-    PayloadRef, Profile, ReplicaId, ThreadRef, parse_profile,
+    BlobHash, EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry,
+    KukuriEnvelope, LiveSessionStatus, PayloadRef, Profile, ReplicaId, ThreadRef,
+    parse_follow_edge, parse_profile,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -37,6 +38,7 @@ pub enum BlobCacheStatus {
 pub struct ObjectProjectionRow {
     pub object_id: EnvelopeId,
     pub topic_id: String,
+    pub channel_id: String,
     pub author_pubkey: String,
     pub created_at: i64,
     pub root_object_id: Option<EnvelopeId>,
@@ -55,6 +57,7 @@ pub struct ObjectProjectionRow {
 pub struct LiveSessionProjectionRow {
     pub session_id: String,
     pub topic_id: String,
+    pub channel_id: String,
     pub host_pubkey: String,
     pub title: String,
     pub description: String,
@@ -74,6 +77,7 @@ pub struct LiveSessionProjectionRow {
 pub struct GameRoomProjectionRow {
     pub room_id: String,
     pub topic_id: String,
+    pub channel_id: String,
     pub host_pubkey: String,
     pub title: String,
     pub description: String,
@@ -88,8 +92,20 @@ pub struct GameRoomProjectionRow {
     pub projection_version: i64,
 }
 
-type LivePresenceKey = (String, String);
-type LivePresenceValue = (String, i64, i64);
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorRelationshipProjectionRow {
+    pub local_author_pubkey: String,
+    pub author_pubkey: String,
+    pub following: bool,
+    pub followed_by: bool,
+    pub mutual: bool,
+    pub friend_of_friend: bool,
+    pub friend_of_friend_via_pubkeys: Vec<String>,
+    pub derived_at: i64,
+}
+
+type LivePresenceKey = (String, String, String);
+type LivePresenceValue = (String, String, i64, i64);
 
 #[async_trait]
 pub trait Store: Send + Sync {
@@ -110,6 +126,9 @@ pub trait Store: Send + Sync {
     ) -> Result<Page<KukuriEnvelope>>;
     async fn upsert_profile(&self, profile: Profile) -> Result<()>;
     async fn get_profile(&self, pubkey: &str) -> Result<Option<Profile>>;
+    async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()>;
+    async fn list_follow_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<FollowEdge>>;
+    async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>>;
 }
 
 #[async_trait]
@@ -140,9 +159,20 @@ pub trait ProjectionStore: Send + Sync {
     ) -> Result<Vec<LiveSessionProjectionRow>>;
     async fn upsert_game_room_cache(&self, row: GameRoomProjectionRow) -> Result<()>;
     async fn list_topic_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomProjectionRow>>;
+    async fn get_author_relationship(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkey: &str,
+    ) -> Result<Option<AuthorRelationshipProjectionRow>>;
+    async fn rebuild_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        rows: Vec<AuthorRelationshipProjectionRow>,
+    ) -> Result<()>;
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
@@ -271,6 +301,9 @@ impl Store for SqliteStore {
         if let Some(profile) = parse_profile(&envelope)? {
             self.upsert_profile(profile).await?;
         }
+        if let Some(edge) = parse_follow_edge(&envelope)? {
+            self.upsert_follow_edge(edge).await?;
+        }
 
         Ok(())
     }
@@ -318,7 +351,7 @@ impl Store for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        envelope_page_from_rows(rows)
+        envelope_page_from_rows(rows, limit)
     }
 
     async fn list_thread(
@@ -355,7 +388,7 @@ impl Store for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        envelope_page_from_rows(rows)
+        envelope_page_from_rows(rows, limit)
     }
 
     async fn upsert_profile(&self, profile: Profile) -> Result<()> {
@@ -411,6 +444,80 @@ impl Store for SqliteStore {
             updated_at: row.get("updated_at"),
         }))
     }
+
+    async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()> {
+        let existing_updated_at = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT updated_at
+            FROM follow_edges
+            WHERE subject_pubkey = ?1 AND target_pubkey = ?2
+            "#,
+        )
+        .bind(edge.subject_pubkey.as_str())
+        .bind(edge.target_pubkey.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(updated_at) = existing_updated_at
+            && updated_at > edge.updated_at
+        {
+            return Ok(());
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO follow_edges (
+              subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(subject_pubkey, target_pubkey) DO UPDATE SET
+              status = excluded.status,
+              updated_at = excluded.updated_at,
+              source_envelope_id = excluded.source_envelope_id
+            "#,
+        )
+        .bind(edge.subject_pubkey.as_str())
+        .bind(edge.target_pubkey.as_str())
+        .bind(follow_edge_status_name(&edge.status))
+        .bind(edge.updated_at)
+        .bind(edge.envelope_id.as_str())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn list_follow_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<FollowEdge>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            FROM follow_edges
+            WHERE subject_pubkey = ?1
+            ORDER BY updated_at DESC, target_pubkey ASC
+            "#,
+        )
+        .bind(subject_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_follow_edge).collect()
+    }
+
+    async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT subject_pubkey, target_pubkey, status, updated_at, source_envelope_id
+            FROM follow_edges
+            WHERE target_pubkey = ?1
+            ORDER BY updated_at DESC, subject_pubkey ASC
+            "#,
+        )
+        .bind(target_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_follow_edge).collect()
+    }
 }
 
 #[derive(Clone, Default)]
@@ -419,9 +526,12 @@ pub struct MemoryStore {
     topic_objects: Arc<RwLock<HashMap<String, Vec<EnvelopeId>>>>,
     object_threads: Arc<RwLock<HashMap<String, BTreeMap<String, EnvelopeId>>>>,
     profiles: Arc<RwLock<HashMap<String, Profile>>>,
+    follow_edges: Arc<RwLock<HashMap<(String, String), FollowEdge>>>,
     object_projection_rows: Arc<RwLock<HashMap<EnvelopeId, ObjectProjectionRow>>>,
     live_session_rows: Arc<RwLock<HashMap<String, LiveSessionProjectionRow>>>,
     game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
+    author_relationship_rows:
+        Arc<RwLock<HashMap<(String, String), AuthorRelationshipProjectionRow>>>,
     live_presence: Arc<RwLock<HashMap<LivePresenceKey, LivePresenceValue>>>,
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
 }
@@ -458,6 +568,9 @@ impl Store for MemoryStore {
 
         if let Some(profile) = parse_profile(&envelope)? {
             self.upsert_profile(profile).await?;
+        }
+        if let Some(edge) = parse_follow_edge(&envelope)? {
+            self.upsert_follow_edge(edge).await?;
         }
 
         Ok(())
@@ -547,6 +660,57 @@ impl Store for MemoryStore {
     async fn get_profile(&self, pubkey: &str) -> Result<Option<Profile>> {
         Ok(self.profiles.read().await.get(pubkey).cloned())
     }
+
+    async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()> {
+        let key = (
+            edge.subject_pubkey.as_str().to_string(),
+            edge.target_pubkey.as_str().to_string(),
+        );
+        let mut follow_edges = self.follow_edges.write().await;
+        match follow_edges.get(&key) {
+            Some(existing) if existing.updated_at > edge.updated_at => {}
+            _ => {
+                follow_edges.insert(key, edge);
+            }
+        }
+        Ok(())
+    }
+
+    async fn list_follow_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<FollowEdge>> {
+        let mut items = self
+            .follow_edges
+            .read()
+            .await
+            .values()
+            .filter(|edge| edge.subject_pubkey.as_str() == subject_pubkey)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.target_pubkey.cmp(&right.target_pubkey))
+        });
+        Ok(items)
+    }
+
+    async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>> {
+        let mut items = self
+            .follow_edges
+            .read()
+            .await
+            .values()
+            .filter(|edge| edge.target_pubkey.as_str() == target_pubkey)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.subject_pubkey.cmp(&right.subject_pubkey))
+        });
+        Ok(items)
+    }
 }
 
 #[async_trait]
@@ -556,13 +720,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO object_index_cache (
-              object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-              payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-              source_blob_hash, derived_at, projection_version
+              object_id, topic_id, channel_id, author_pubkey, created_at, root_object_id,
+              reply_to_object_id, payload_ref_json, content, source_replica_id, source_key,
+              source_envelope_id, source_blob_hash, derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(object_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               author_pubkey = excluded.author_pubkey,
               created_at = excluded.created_at,
               root_object_id = excluded.root_object_id,
@@ -579,6 +744,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.object_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.author_pubkey.as_str())
         .bind(row.created_at)
         .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
@@ -597,17 +763,19 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO object_thread_cache (
-              object_id, topic_id, root_object_id, created_at
+              object_id, topic_id, channel_id, root_object_id, created_at
             )
-            VALUES (?1, ?2, ?3, ?4)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             ON CONFLICT(object_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               root_object_id = excluded.root_object_id,
               created_at = excluded.created_at
             "#,
         )
         .bind(row.object_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(
             row.root_object_id
                 .as_ref()
@@ -628,8 +796,8 @@ impl ProjectionStore for SqliteStore {
         let row = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   channel_id, payload_ref_json, content, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE object_id = ?1
             "#,
@@ -650,8 +818,8 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   payload_ref_json, content, source_replica_id, source_key, source_envelope_id,
-                   source_blob_hash, derived_at, projection_version
+                   channel_id, payload_ref_json, content, source_replica_id, source_key,
+                   source_envelope_id, source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE topic_id = ?1
               AND (
@@ -670,7 +838,7 @@ impl ProjectionStore for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        object_projection_page_from_rows(rows)
+        object_projection_page_from_rows(rows, limit)
     }
 
     async fn list_thread(
@@ -683,9 +851,9 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.root_object_id,
-                   oic.reply_to_object_id, oic.payload_ref_json, oic.content, oic.source_replica_id,
-                   oic.source_key, oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
-                   oic.projection_version
+                   oic.reply_to_object_id, oic.channel_id, oic.payload_ref_json, oic.content,
+                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
+                   oic.source_blob_hash, oic.derived_at, oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -710,7 +878,7 @@ impl ProjectionStore for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
 
-        object_projection_page_from_rows(rows)
+        object_projection_page_from_rows(rows, limit)
     }
 
     async fn upsert_profile_cache(&self, profile: Profile) -> Result<()> {
@@ -741,13 +909,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO live_session_cache (
-              session_id, topic_id, host_pubkey, title, description, status, started_at, ended_at,
-              updated_at, source_replica_id, source_key, manifest_blob_hash, derived_at,
-              projection_version
+              session_id, topic_id, channel_id, host_pubkey, title, description, status,
+              started_at, ended_at, updated_at, source_replica_id, source_key, manifest_blob_hash,
+              derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(session_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               host_pubkey = excluded.host_pubkey,
               title = excluded.title,
               description = excluded.description,
@@ -764,6 +933,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.session_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.host_pubkey.as_str())
         .bind(row.title.as_str())
         .bind(row.description.as_str())
@@ -788,14 +958,19 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT lsc.session_id, lsc.topic_id, lsc.host_pubkey, lsc.title, lsc.description,
-                   lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at, lsc.source_replica_id,
-                   lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at, lsc.projection_version,
-                   COALESCE((
-                     SELECT COUNT(*)
-                     FROM live_presence_cache lpc
-                     WHERE lpc.topic_id = lsc.topic_id
-                       AND lpc.session_id = lsc.session_id
-                   ), 0) AS viewer_count
+                   lsc.channel_id, lsc.status, lsc.started_at, lsc.ended_at, lsc.updated_at,
+                   lsc.source_replica_id, lsc.source_key, lsc.manifest_blob_hash, lsc.derived_at,
+                   lsc.projection_version,
+                   CASE
+                     WHEN lsc.status = 'ended' THEN 0
+                     ELSE COALESCE((
+                       SELECT COUNT(*)
+                       FROM live_presence_cache lpc
+                       WHERE lpc.topic_id = lsc.topic_id
+                         AND lpc.channel_id = lsc.channel_id
+                         AND lpc.session_id = lsc.session_id
+                     ), 0)
+                   END AS viewer_count
             FROM live_session_cache lsc
             WHERE lsc.topic_id = ?1
             ORDER BY lsc.started_at DESC, lsc.session_id DESC
@@ -815,13 +990,14 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO game_room_cache (
-              room_id, topic_id, host_pubkey, title, description, status, phase_label,
+              room_id, topic_id, channel_id, host_pubkey, title, description, status, phase_label,
               scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
               derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(room_id) DO UPDATE SET
               topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
               host_pubkey = excluded.host_pubkey,
               title = excluded.title,
               description = excluded.description,
@@ -838,6 +1014,7 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(row.room_id.as_str())
         .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
         .bind(row.host_pubkey.as_str())
         .bind(row.title.as_str())
         .bind(row.description.as_str())
@@ -859,8 +1036,8 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT room_id, topic_id, host_pubkey, title, description, status, phase_label,
-                   scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
-                   derived_at, projection_version
+                   channel_id, scores_json, updated_at, source_replica_id, source_key,
+                   manifest_blob_hash, derived_at, projection_version
             FROM game_room_cache
             WHERE topic_id = ?1
             ORDER BY updated_at DESC, room_id DESC
@@ -873,9 +1050,72 @@ impl ProjectionStore for SqliteStore {
         rows.into_iter().map(row_to_game_room_projection).collect()
     }
 
+    async fn get_author_relationship(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkey: &str,
+    ) -> Result<Option<AuthorRelationshipProjectionRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT local_author_pubkey, author_pubkey, following, followed_by, mutual,
+                   friend_of_friend, friend_of_friend_via_pubkeys_json, derived_at
+            FROM author_relationship_cache
+            WHERE local_author_pubkey = ?1 AND author_pubkey = ?2
+            "#,
+        )
+        .bind(local_author_pubkey)
+        .bind(author_pubkey)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_author_relationship_projection).transpose()
+    }
+
+    async fn rebuild_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        rows: Vec<AuthorRelationshipProjectionRow>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM author_relationship_cache
+            WHERE local_author_pubkey = ?1
+            "#,
+        )
+        .bind(local_author_pubkey)
+        .execute(&self.pool)
+        .await?;
+
+        for row in rows {
+            let via_json = serde_json::to_string(&row.friend_of_friend_via_pubkeys)?;
+            sqlx::query(
+                r#"
+                INSERT OR REPLACE INTO author_relationship_cache (
+                  local_author_pubkey, author_pubkey, following, followed_by, mutual,
+                  friend_of_friend, friend_of_friend_via_pubkeys_json, derived_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                "#,
+            )
+            .bind(row.local_author_pubkey.as_str())
+            .bind(row.author_pubkey.as_str())
+            .bind(row.following)
+            .bind(row.followed_by)
+            .bind(row.mutual)
+            .bind(row.friend_of_friend)
+            .bind(via_json)
+            .bind(row.derived_at)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
@@ -884,15 +1124,16 @@ impl ProjectionStore for SqliteStore {
         sqlx::query(
             r#"
             INSERT INTO live_presence_cache (
-              topic_id, session_id, author_pubkey, expires_at, updated_at
+              topic_id, channel_id, session_id, author_pubkey, expires_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            ON CONFLICT(topic_id, session_id, author_pubkey) DO UPDATE SET
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(topic_id, channel_id, session_id, author_pubkey) DO UPDATE SET
               expires_at = excluded.expires_at,
               updated_at = excluded.updated_at
             "#,
         )
         .bind(topic_id)
+        .bind(channel_id)
         .bind(session_id)
         .bind(author_pubkey)
         .bind(expires_at)
@@ -1075,12 +1316,20 @@ impl ProjectionStore for MemoryStore {
             .cloned()
             .collect::<Vec<_>>();
         for row in &mut items {
-            row.viewer_count = presence
-                .iter()
-                .filter(|((session_id, _), (presence_topic, _, _))| {
-                    session_id == &row.session_id && presence_topic == topic_id
-                })
-                .count();
+            row.viewer_count = if row.status == LiveSessionStatus::Ended {
+                0
+            } else {
+                presence
+                    .iter()
+                    .filter(
+                        |((presence_channel, session_id, _), (presence_topic, _, _, _))| {
+                            presence_channel == &row.channel_id
+                                && session_id == &row.session_id
+                                && presence_topic == topic_id
+                        },
+                    )
+                    .count()
+            };
         }
         items.sort_by(|left, right| {
             right
@@ -1117,17 +1366,56 @@ impl ProjectionStore for MemoryStore {
         Ok(items)
     }
 
+    async fn get_author_relationship(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkey: &str,
+    ) -> Result<Option<AuthorRelationshipProjectionRow>> {
+        Ok(self
+            .author_relationship_rows
+            .read()
+            .await
+            .get(&(local_author_pubkey.to_string(), author_pubkey.to_string()))
+            .cloned())
+    }
+
+    async fn rebuild_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        rows: Vec<AuthorRelationshipProjectionRow>,
+    ) -> Result<()> {
+        let mut guard = self.author_relationship_rows.write().await;
+        guard.retain(|(local_author, _), _| local_author != local_author_pubkey);
+        for row in rows {
+            guard.insert(
+                (row.local_author_pubkey.clone(), row.author_pubkey.clone()),
+                row,
+            );
+        }
+        Ok(())
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
+        channel_id: &str,
         session_id: &str,
         author_pubkey: &str,
         expires_at: i64,
         updated_at: i64,
     ) -> Result<()> {
         self.live_presence.write().await.insert(
-            (session_id.to_string(), author_pubkey.to_string()),
-            (topic_id.to_string(), expires_at, updated_at),
+            (
+                channel_id.to_string(),
+                session_id.to_string(),
+                author_pubkey.to_string(),
+            ),
+            (
+                topic_id.to_string(),
+                channel_id.to_string(),
+                expires_at,
+                updated_at,
+            ),
         );
         Ok(())
     }
@@ -1136,7 +1424,7 @@ impl ProjectionStore for MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (_, expires_at, _)| *expires_at > now_ms);
+            .retain(|_, (_, _, expires_at, _)| *expires_at > now_ms);
         Ok(())
     }
 
@@ -1144,7 +1432,7 @@ impl ProjectionStore for MemoryStore {
         self.live_presence
             .write()
             .await
-            .retain(|_, (presence_topic, _, _)| presence_topic != topic_id);
+            .retain(|_, (presence_topic, _, _, _)| presence_topic != topic_id);
         Ok(())
     }
 
@@ -1185,6 +1473,7 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
     Ok(ObjectProjectionRow {
         object_id: row.get::<String, _>("object_id").into(),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         author_pubkey: row.get("author_pubkey"),
         created_at: row.get("created_at"),
         root_object_id: row
@@ -1211,12 +1500,23 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
     })
 }
 
+fn row_to_follow_edge(row: sqlx::sqlite::SqliteRow) -> Result<FollowEdge> {
+    Ok(FollowEdge {
+        subject_pubkey: row.get::<String, _>("subject_pubkey").into(),
+        target_pubkey: row.get::<String, _>("target_pubkey").into(),
+        status: parse_follow_edge_status(row.get::<String, _>("status").as_str())?,
+        updated_at: row.get("updated_at"),
+        envelope_id: row.get::<String, _>("source_envelope_id").into(),
+    })
+}
+
 fn row_to_live_session_projection(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<LiveSessionProjectionRow> {
     Ok(LiveSessionProjectionRow {
         session_id: row.get("session_id"),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         host_pubkey: row.get("host_pubkey"),
         title: row.get("title"),
         description: row.get("description"),
@@ -1237,6 +1537,7 @@ fn row_to_game_room_projection(row: sqlx::sqlite::SqliteRow) -> Result<GameRoomP
     Ok(GameRoomProjectionRow {
         room_id: row.get("room_id"),
         topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
         host_pubkey: row.get("host_pubkey"),
         title: row.get("title"),
         description: row.get("description"),
@@ -1250,6 +1551,39 @@ fn row_to_game_room_projection(row: sqlx::sqlite::SqliteRow) -> Result<GameRoomP
         derived_at: row.get("derived_at"),
         projection_version: row.get("projection_version"),
     })
+}
+
+fn row_to_author_relationship_projection(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<AuthorRelationshipProjectionRow> {
+    Ok(AuthorRelationshipProjectionRow {
+        local_author_pubkey: row.get("local_author_pubkey"),
+        author_pubkey: row.get("author_pubkey"),
+        following: row.get("following"),
+        followed_by: row.get("followed_by"),
+        mutual: row.get("mutual"),
+        friend_of_friend: row.get("friend_of_friend"),
+        friend_of_friend_via_pubkeys: serde_json::from_str(
+            row.get::<String, _>("friend_of_friend_via_pubkeys_json")
+                .as_str(),
+        )?,
+        derived_at: row.get("derived_at"),
+    })
+}
+
+fn follow_edge_status_name(status: &FollowEdgeStatus) -> &'static str {
+    match status {
+        FollowEdgeStatus::Active => "active",
+        FollowEdgeStatus::Revoked => "revoked",
+    }
+}
+
+fn parse_follow_edge_status(value: &str) -> Result<FollowEdgeStatus> {
+    match value {
+        "active" => Ok(FollowEdgeStatus::Active),
+        "revoked" => Ok(FollowEdgeStatus::Revoked),
+        _ => anyhow::bail!("unknown follow edge status: {value}"),
+    }
 }
 
 fn live_status_name(status: &LiveSessionStatus) -> &'static str {
@@ -1290,29 +1624,41 @@ fn parse_game_status(value: &str) -> Result<GameRoomStatus> {
     }
 }
 
-fn envelope_page_from_rows(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Page<KukuriEnvelope>> {
+fn envelope_page_from_rows(
+    rows: Vec<sqlx::sqlite::SqliteRow>,
+    limit: usize,
+) -> Result<Page<KukuriEnvelope>> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         items.push(row_to_envelope(row)?);
     }
-    let next_cursor = items.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if items.len() == limit {
+        items.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Ok(Page { items, next_cursor })
 }
 
 fn object_projection_page_from_rows(
     rows: Vec<sqlx::sqlite::SqliteRow>,
+    limit: usize,
 ) -> Result<Page<ObjectProjectionRow>> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         items.push(row_to_object_projection(row)?);
     }
-    let next_cursor = items.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if items.len() == limit {
+        items.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Ok(Page { items, next_cursor })
 }
 
@@ -1331,10 +1677,14 @@ fn apply_desc_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1356,10 +1706,14 @@ fn apply_asc_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|envelope| TimelineCursor {
-        created_at: envelope.created_at,
-        object_id: envelope.id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|envelope| TimelineCursor {
+            created_at: envelope.created_at,
+            object_id: envelope.id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1381,10 +1735,14 @@ fn apply_desc_projection_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1406,10 +1764,14 @@ fn apply_asc_projection_cursor(
         })
         .take(limit)
         .collect::<Vec<_>>();
-    let next_cursor = filtered.last().map(|row| TimelineCursor {
-        created_at: row.created_at,
-        object_id: row.object_id.clone(),
-    });
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
     Page {
         items: std::mem::take(&mut filtered),
         next_cursor,
@@ -1420,7 +1782,8 @@ fn apply_asc_projection_cursor(
 mod tests {
     use super::*;
     use kukuri_core::{
-        BlobHash, PayloadRef, ReplicaId, TopicId, build_post_envelope, generate_keys,
+        BlobHash, FollowEdgeStatus, PayloadRef, ReplicaId, TopicId, build_follow_edge_envelope,
+        build_post_envelope, generate_keys,
     };
 
     #[tokio::test]
@@ -1534,6 +1897,7 @@ mod tests {
             ObjectProjectionRow {
                 object_id: root_id.clone(),
                 topic_id: topic.to_string(),
+                channel_id: "public".into(),
                 author_pubkey: "a".repeat(64),
                 created_at: 10,
                 root_object_id: None,
@@ -1554,6 +1918,7 @@ mod tests {
             ObjectProjectionRow {
                 object_id: reply_id.clone(),
                 topic_id: topic.to_string(),
+                channel_id: "public".into(),
                 author_pubkey: "b".repeat(64),
                 created_at: 11,
                 root_object_id: Some(root_id.clone()),
@@ -1588,5 +1953,84 @@ mod tests {
         assert_eq!(timeline.items[0].object_id, reply_id);
         assert_eq!(thread.items.len(), 2);
         assert_eq!(thread.items[0].object_id, root_id);
+    }
+
+    #[tokio::test]
+    async fn store_follow_edge_latest_wins() {
+        let store = SqliteStore::connect_memory().await.expect("sqlite store");
+        let subject_keys = generate_keys();
+        let target_keys = generate_keys();
+        let active = build_follow_edge_envelope(
+            &subject_keys,
+            &target_keys.public_key(),
+            FollowEdgeStatus::Active,
+        )
+        .expect("active edge");
+        let mut revoked = build_follow_edge_envelope(
+            &subject_keys,
+            &target_keys.public_key(),
+            FollowEdgeStatus::Revoked,
+        )
+        .expect("revoked edge");
+        revoked.created_at = active.created_at + 1;
+
+        store
+            .put_envelope(active.clone())
+            .await
+            .expect("insert active edge");
+        store
+            .put_envelope(revoked.clone())
+            .await
+            .expect("insert revoked edge");
+        store
+            .put_envelope(active)
+            .await
+            .expect("reinsert older edge");
+
+        let edges = store
+            .list_follow_edges_by_subject(subject_keys.public_key_hex().as_str())
+            .await
+            .expect("list edges");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].status, FollowEdgeStatus::Revoked);
+    }
+
+    #[tokio::test]
+    async fn author_relationship_projection_rebuild_roundtrip() {
+        let store = SqliteStore::connect_memory().await.expect("sqlite store");
+        let local_author = "a".repeat(64);
+        let target_author = "b".repeat(64);
+
+        ProjectionStore::rebuild_author_relationships(
+            &store,
+            local_author.as_str(),
+            vec![AuthorRelationshipProjectionRow {
+                local_author_pubkey: local_author.clone(),
+                author_pubkey: target_author.clone(),
+                following: false,
+                followed_by: true,
+                mutual: false,
+                friend_of_friend: true,
+                friend_of_friend_via_pubkeys: vec!["c".repeat(64)],
+                derived_at: 12,
+            }],
+        )
+        .await
+        .expect("rebuild relationships");
+
+        let relationship = ProjectionStore::get_author_relationship(
+            &store,
+            local_author.as_str(),
+            target_author.as_str(),
+        )
+        .await
+        .expect("get relationship")
+        .expect("relationship");
+        assert!(relationship.friend_of_friend);
+        assert_eq!(
+            relationship.friend_of_friend_via_pubkeys,
+            vec!["c".repeat(64)]
+        );
+        assert!(relationship.followed_by);
     }
 }

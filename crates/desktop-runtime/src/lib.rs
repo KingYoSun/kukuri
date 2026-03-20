@@ -11,9 +11,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use kukuri_app_api::{
-    AppService, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput, GameRoomView,
-    GameScoreView, LiveSessionView, PendingAttachment, SyncStatus, TimelineView,
-    UpdateGameRoomInput,
+    AppService, AuthorSocialView, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput,
+    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
+    PrivateChannelCapability, ProfileInput, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -22,7 +22,9 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, BlobHash, GameRoomStatus, GossipHint, KukuriKeys, ReplicaId, TopicId,
+    AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
+    FriendOnlyGrantPreview, FriendPlusSharePreview, GameRoomStatus, GossipHint, KukuriKeys,
+    PrivateChannelInvitePreview, Profile, ReplicaId, TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -48,15 +50,19 @@ const COMMUNITY_NODE_CONFIG_FILE_EXTENSION: &str = "community-node.json";
 const DISCOVERY_MODE_ENV: &str = "KUKURI_DISCOVERY_MODE";
 const DISCOVERY_SEEDS_ENV: &str = "KUKURI_DISCOVERY_SEEDS";
 const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
+const PRIVATE_CHANNEL_CAPABILITIES_PURPOSE: &str = "private-channel-capabilities";
+const PRIVATE_CHANNEL_CAPABILITIES_KEY: &str = "registry";
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
-const IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
+const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePostRequest {
     pub topic: String,
     pub content: String,
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     #[serde(default)]
     pub attachments: Vec<CreateAttachmentRequest>,
 }
@@ -73,6 +79,8 @@ pub struct CreateAttachmentRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListTimelineRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
     pub cursor: Option<TimelineCursor>,
     pub limit: Option<usize>,
 }
@@ -108,13 +116,30 @@ pub struct GetBlobMediaRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorRequest {
+    pub pubkey: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetMyProfileRequest {
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListLiveSessionsRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateLiveSessionRequest {
     pub topic: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     pub title: String,
     pub description: String,
 }
@@ -128,14 +153,79 @@ pub struct LiveSessionCommandRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListGameRoomsRequest {
     pub topic: String,
+    #[serde(default)]
+    pub scope: TimelineScope,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateGameRoomRequest {
     pub topic: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
     pub title: String,
     pub description: String,
     pub participants: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreatePrivateChannelRequest {
+    pub topic: String,
+    pub label: String,
+    #[serde(default)]
+    pub audience_kind: ChannelAudienceKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportPrivateChannelInviteRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportPrivateChannelInviteRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportFriendOnlyGrantRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportFriendOnlyGrantRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportFriendPlusShareRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportFriendPlusShareRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FreezePrivateChannelRequest {
+    pub topic: String,
+    pub channel_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RotatePrivateChannelRequest {
+    pub topic: String,
+    pub channel_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListJoinedPrivateChannelsRequest {
+    pub topic: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +308,11 @@ pub struct CommunityNodeConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct BootstrapNodesResponse {
+    nodes: Vec<kukuri_cn_core::CommunityNodeBootstrapNode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetCommunityNodeConfigRequest {
     pub base_urls: Vec<String>,
 }
@@ -288,13 +383,11 @@ pub struct DesktopRuntime {
     discovery_config: Arc<Mutex<DiscoveryConfig>>,
     community_node_config: Arc<Mutex<CommunityNodeConfig>>,
     community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+    community_node_metadata_refresh_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     active_connectivity_urls: Arc<Mutex<Vec<String>>>,
 }
 
 struct SharedIrohStack {
-    root: PathBuf,
-    network_config: TransportNetworkConfig,
-    dht_options: DhtDiscoveryOptions,
     current: Mutex<BoundIrohStack>,
     transport: Arc<ReloadableTransport>,
     docs_sync: Arc<ReloadableDocsSync>,
@@ -310,10 +403,6 @@ impl ReloadableTransport {
 
     async fn current(&self) -> Arc<IrohGossipTransport> {
         self.inner.read().await.clone()
-    }
-
-    async fn swap(&self, inner: Arc<IrohGossipTransport>) {
-        *self.inner.write().await = inner;
     }
 }
 
@@ -379,16 +468,30 @@ impl ReloadableDocsSync {
     async fn current(&self) -> Arc<IrohDocsSync> {
         self.inner.read().await.clone()
     }
-
-    async fn swap(&self, inner: Arc<IrohDocsSync>) {
-        *self.inner.write().await = inner;
-    }
 }
 
 #[async_trait]
 impl DocsSync for ReloadableDocsSync {
     async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
         self.current().await.open_replica(replica_id).await
+    }
+
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.current()
+            .await
+            .register_private_replica_secret(replica_id, namespace_secret_hex)
+            .await
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.current()
+            .await
+            .remove_private_replica_secret(replica_id)
+            .await
     }
 
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
@@ -429,10 +532,6 @@ impl ReloadableBlobService {
 
     async fn current(&self) -> Arc<IrohBlobService> {
         self.inner.read().await.clone()
-    }
-
-    async fn swap(&self, inner: Arc<IrohBlobService>) {
-        *self.inner.write().await = inner;
     }
 }
 
@@ -548,6 +647,12 @@ impl DesktopRuntime {
             iroh_stack.blob_service.clone(),
             keys,
         );
+        for capability in load_private_channel_capabilities(&db_path, identity_mode)? {
+            app_service
+                .restore_private_channel_capability(capability)
+                .await?;
+        }
+        app_service.warm_social_graph().await?;
 
         Ok(Self {
             app_service,
@@ -559,6 +664,7 @@ impl DesktopRuntime {
             discovery_config: Arc::new(Mutex::new(discovery_config)),
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
+            community_node_metadata_refresh_deadlines: Arc::new(Mutex::new(HashMap::new())),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
         })
     }
@@ -584,6 +690,14 @@ impl DesktopRuntime {
         &self.db_path
     }
 
+    async fn persist_private_channel_capabilities_from_app(&self) -> Result<()> {
+        persist_private_channel_capabilities(
+            &self.db_path,
+            self.identity_mode,
+            &self.app_service.list_private_channel_capabilities().await?,
+        )
+    }
+
     pub async fn create_post(&self, request: CreatePostRequest) -> Result<String> {
         let attachments = request
             .attachments
@@ -591,8 +705,9 @@ impl DesktopRuntime {
             .map(pending_attachment_from_request)
             .collect::<Result<Vec<_>>>()?;
         self.app_service
-            .create_post_with_attachments(
+            .create_post_with_attachments_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 request.content.as_str(),
                 request.reply_to.as_deref(),
                 attachments,
@@ -602,8 +717,9 @@ impl DesktopRuntime {
 
     pub async fn list_timeline(&self, request: ListTimelineRequest) -> Result<TimelineView> {
         self.app_service
-            .list_timeline(
+            .list_timeline_scoped(
                 request.topic.as_str(),
+                request.scope,
                 request.cursor,
                 request.limit.unwrap_or(50),
             )
@@ -621,6 +737,39 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn get_my_profile(&self) -> Result<Profile> {
+        self.app_service.get_my_profile().await
+    }
+
+    pub async fn set_my_profile(&self, request: SetMyProfileRequest) -> Result<Profile> {
+        self.app_service
+            .set_my_profile(ProfileInput {
+                name: request.name,
+                display_name: request.display_name,
+                about: request.about,
+                picture: request.picture,
+            })
+            .await
+    }
+
+    pub async fn follow_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .follow_author(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn unfollow_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .unfollow_author(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn get_author_social_view(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .get_author_social_view(request.pubkey.as_str())
+            .await
+    }
+
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
         self.app_service.get_sync_status().await
     }
@@ -634,14 +783,15 @@ impl DesktopRuntime {
         request: ListLiveSessionsRequest,
     ) -> Result<Vec<LiveSessionView>> {
         self.app_service
-            .list_live_sessions(request.topic.as_str())
+            .list_live_sessions_scoped(request.topic.as_str(), request.scope)
             .await
     }
 
     pub async fn create_live_session(&self, request: CreateLiveSessionRequest) -> Result<String> {
         self.app_service
-            .create_live_session(
+            .create_live_session_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 CreateLiveSessionInput {
                     title: request.title,
                     description: request.description,
@@ -673,14 +823,15 @@ impl DesktopRuntime {
         request: ListGameRoomsRequest,
     ) -> Result<Vec<GameRoomView>> {
         self.app_service
-            .list_game_rooms(request.topic.as_str())
+            .list_game_rooms_scoped(request.topic.as_str(), request.scope)
             .await
     }
 
     pub async fn create_game_room(&self, request: CreateGameRoomRequest) -> Result<String> {
         self.app_service
-            .create_game_room(
+            .create_game_room_in_channel(
                 request.topic.as_str(),
+                request.channel_ref,
                 CreateGameRoomInput {
                     title: request.title,
                     description: request.description,
@@ -688,6 +839,133 @@ impl DesktopRuntime {
                 },
             )
             .await
+    }
+
+    pub async fn create_private_channel(
+        &self,
+        request: CreatePrivateChannelRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        let channel = self
+            .app_service
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(request.topic),
+                label: request.label,
+                audience_kind: request.audience_kind,
+            })
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(channel)
+    }
+
+    pub async fn export_private_channel_invite(
+        &self,
+        request: ExportPrivateChannelInviteRequest,
+    ) -> Result<String> {
+        self.app_service
+            .export_private_channel_invite(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_private_channel_invite(
+        &self,
+        request: ImportPrivateChannelInviteRequest,
+    ) -> Result<PrivateChannelInvitePreview> {
+        let preview = self
+            .app_service
+            .import_private_channel_invite(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn export_friend_only_grant(
+        &self,
+        request: ExportFriendOnlyGrantRequest,
+    ) -> Result<String> {
+        self.app_service
+            .export_friend_only_grant(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_friend_only_grant(
+        &self,
+        request: ImportFriendOnlyGrantRequest,
+    ) -> Result<FriendOnlyGrantPreview> {
+        let preview = self
+            .app_service
+            .import_friend_only_grant(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn export_friend_plus_share(
+        &self,
+        request: ExportFriendPlusShareRequest,
+    ) -> Result<String> {
+        self.app_service
+            .export_friend_plus_share(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_friend_plus_share(
+        &self,
+        request: ImportFriendPlusShareRequest,
+    ) -> Result<FriendPlusSharePreview> {
+        let preview = self
+            .app_service
+            .import_friend_plus_share(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn freeze_private_channel(
+        &self,
+        request: FreezePrivateChannelRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        let view = self
+            .app_service
+            .freeze_private_channel(request.topic.as_str(), request.channel_id.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(view)
+    }
+
+    pub async fn rotate_private_channel(
+        &self,
+        request: RotatePrivateChannelRequest,
+    ) -> Result<JoinedPrivateChannelView> {
+        let view = self
+            .app_service
+            .rotate_private_channel(request.topic.as_str(), request.channel_id.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(view)
+    }
+
+    pub async fn list_joined_private_channels(
+        &self,
+        request: ListJoinedPrivateChannelsRequest,
+    ) -> Result<Vec<JoinedPrivateChannelView>> {
+        let items = self
+            .app_service
+            .list_joined_private_channels(request.topic.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(items)
     }
 
     pub async fn update_game_room(&self, request: UpdateGameRoomRequest) -> Result<()> {
@@ -761,13 +1039,23 @@ impl DesktopRuntime {
         let config = self.community_node_config.lock().await.clone();
         let mut statuses = Vec::with_capacity(config.nodes.len());
         for node in config.nodes {
+            let base_url = node.base_url.clone();
             let heartbeat_error = self
-                .refresh_community_node_registration_if_due(node.base_url.as_str())
+                .refresh_community_node_registration_if_due(base_url.as_str())
                 .await
                 .err()
                 .map(|error| error.to_string());
+            let current_node = self
+                .community_node_config
+                .lock()
+                .await
+                .nodes
+                .iter()
+                .find(|candidate| candidate.base_url == base_url)
+                .cloned()
+                .unwrap_or(node);
             statuses.push(
-                self.community_node_status(node, None, heartbeat_error)
+                self.community_node_status(current_node, None, heartbeat_error)
                     .await?,
             );
         }
@@ -791,6 +1079,10 @@ impl DesktopRuntime {
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(next_config)
@@ -807,6 +1099,10 @@ impl DesktopRuntime {
         remove_community_node_config(&self.db_path)?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
         self.community_node_heartbeat_deadlines.lock().await.clear();
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(())
@@ -918,6 +1214,10 @@ impl DesktopRuntime {
             .lock()
             .await
             .remove(base_url.as_str());
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .remove(base_url.as_str());
         let node = self
             .community_node_config
             .lock()
@@ -998,55 +1298,12 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        let mut config = self.community_node_config.lock().await.clone();
-        let Some(index) = config
-            .nodes
-            .iter()
-            .position(|node| node.base_url == base_url)
-        else {
-            bail!("community node `{base_url}` is not configured");
-        };
-        let client = community_node_http_client()?;
         let token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        let bootstrap_url = format!("{}/v1/bootstrap/nodes", base_url);
-        let response = client
-            .get(bootstrap_url)
-            .bearer_auth(token.access_token.as_str())
-            .send()
-            .await
-            .context("failed to refresh community node metadata")?;
-        let bootstrap = response
-            .error_for_status()
-            .context("community node bootstrap request failed")?
-            .json::<serde_json::Value>()
-            .await
-            .context("failed to decode community node bootstrap response")?;
-        let nodes = bootstrap
-            .get("nodes")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| anyhow!("community node bootstrap response is missing nodes"))?;
-        let resolved_urls = nodes
-            .iter()
-            .filter_map(|node| {
-                let candidate_base_url = node.get("base_url")?.as_str()?;
-                if candidate_base_url != base_url {
-                    return None;
-                }
-                serde_json::from_value::<CommunityNodeNodeConfig>(node.clone())
-                    .ok()
-                    .and_then(|node| node.resolved_urls)
-            })
-            .next()
-            .ok_or_else(|| anyhow!("community node bootstrap response is missing self metadata"))?;
-        config.nodes[index].resolved_urls = Some(resolved_urls);
-        let normalized = normalize_community_node_config(config)?;
-        save_community_node_config(&self.db_path, &normalized)?;
-        *self.community_node_config.lock().await = normalized.clone();
-        self.apply_runtime_connectivity_assist().await?;
-        self.apply_effective_seed_peers().await?;
-        let node = normalized.nodes[index].clone();
+        let node = self
+            .sync_community_node_bootstrap_metadata(base_url.as_str(), token.access_token.as_str())
+            .await?;
         self.community_node_status(node, None, None).await
     }
 
@@ -1062,6 +1319,98 @@ impl DesktopRuntime {
 }
 
 impl DesktopRuntime {
+    async fn sync_community_node_bootstrap_metadata(
+        &self,
+        base_url: &str,
+        access_token: &str,
+    ) -> Result<CommunityNodeNodeConfig> {
+        let base_url = normalize_http_url(base_url)?;
+        let config = self.community_node_config.lock().await.clone();
+        let Some(index) = config
+            .nodes
+            .iter()
+            .position(|node| node.base_url == base_url)
+        else {
+            bail!("community node `{base_url}` is not configured");
+        };
+        let client = community_node_http_client()?;
+        let response = client
+            .get(format!("{}/v1/bootstrap/nodes", base_url))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .context("failed to refresh community node metadata")?;
+        let bootstrap = response
+            .error_for_status()
+            .context("community node bootstrap request failed")?
+            .json::<BootstrapNodesResponse>()
+            .await
+            .context("failed to decode community node bootstrap response")?;
+        let resolved_urls = bootstrap
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .map(|node| node.resolved_urls.clone())
+            .ok_or_else(|| anyhow!("community node bootstrap response is missing self metadata"))?;
+        let mut next_config = config;
+        next_config.nodes[index].resolved_urls = Some(resolved_urls);
+        let normalized = normalize_community_node_config(next_config)?;
+        save_community_node_config(&self.db_path, &normalized)?;
+        *self.community_node_config.lock().await = normalized.clone();
+        self.apply_runtime_connectivity_assist().await?;
+        self.apply_effective_seed_peers().await?;
+        normalized
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .cloned()
+            .ok_or_else(|| anyhow!("community node `{base_url}` disappeared after normalization"))
+    }
+
+    async fn community_node_bootstrap_metadata_retry_due(&self, base_url: &str, now: i64) -> bool {
+        let seed_peers_empty = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .and_then(|node| node.resolved_urls.as_ref())
+            .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty());
+        if !seed_peers_empty {
+            self.community_node_metadata_refresh_deadlines
+                .lock()
+                .await
+                .remove(base_url);
+            return false;
+        }
+        let next_due_at = self
+            .community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .get(base_url)
+            .copied()
+            .unwrap_or_default();
+        next_due_at <= now
+    }
+
+    async fn record_community_node_bootstrap_metadata_refresh(
+        &self,
+        base_url: &str,
+        seed_peers_empty: bool,
+        now: i64,
+    ) {
+        let mut deadlines = self.community_node_metadata_refresh_deadlines.lock().await;
+        if seed_peers_empty {
+            deadlines.insert(
+                base_url.to_string(),
+                now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS),
+            );
+        } else {
+            deadlines.remove(base_url);
+        }
+    }
+
     async fn refresh_community_node_registration_if_due(&self, base_url: &str) -> Result<()> {
         let base_url = normalize_http_url(base_url)?;
         let token =
@@ -1081,7 +1430,40 @@ impl DesktopRuntime {
             .copied()
             .unwrap_or_default();
         if next_due_at > now {
-            return Ok(());
+            if !self
+                .community_node_bootstrap_metadata_retry_due(base_url.as_str(), now)
+                .await
+            {
+                return Ok(());
+            }
+            return match self
+                .sync_community_node_bootstrap_metadata(
+                    base_url.as_str(),
+                    token.access_token.as_str(),
+                )
+                .await
+            {
+                Ok(node) => {
+                    self.record_community_node_bootstrap_metadata_refresh(
+                        base_url.as_str(),
+                        node.resolved_urls
+                            .as_ref()
+                            .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty()),
+                        now,
+                    )
+                    .await;
+                    Ok(())
+                }
+                Err(error) => {
+                    self.record_community_node_bootstrap_metadata_refresh(
+                        base_url.as_str(),
+                        true,
+                        now,
+                    )
+                    .await;
+                    Err(error)
+                }
+            };
         }
         let endpoint_id = self
             .iroh_stack
@@ -1107,12 +1489,39 @@ impl DesktopRuntime {
                     .await
                     .context("failed to decode community node bootstrap heartbeat response")?;
                 self.community_node_heartbeat_deadlines.lock().await.insert(
-                    base_url,
+                    base_url.clone(),
                     heartbeat
                         .expires_at
                         .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
                 );
-                Ok(())
+                match self
+                    .sync_community_node_bootstrap_metadata(
+                        base_url.as_str(),
+                        token.access_token.as_str(),
+                    )
+                    .await
+                {
+                    Ok(node) => {
+                        self.record_community_node_bootstrap_metadata_refresh(
+                            base_url.as_str(),
+                            node.resolved_urls
+                                .as_ref()
+                                .is_none_or(|resolved_urls| resolved_urls.seed_peers.is_empty()),
+                            now,
+                        )
+                        .await;
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.record_community_node_bootstrap_metadata_refresh(
+                            base_url.as_str(),
+                            true,
+                            now,
+                        )
+                        .await;
+                        Err(error)
+                    }
+                }
             }
             Err(error) => {
                 self.community_node_heartbeat_deadlines.lock().await.insert(
@@ -1176,7 +1585,7 @@ impl DesktopRuntime {
         let bootstrap_seed_peers =
             community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
         self.iroh_stack
-            .rebuild(
+            .apply_runtime_connectivity(
                 &discovery_config,
                 &bootstrap_seed_peers,
                 relay_config.clone(),
@@ -1419,6 +1828,38 @@ fn relay_config_from_community_node_config(config: &CommunityNodeConfig) -> Tran
     }
 }
 
+fn load_private_channel_capabilities(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+) -> Result<Vec<PrivateChannelCapability>> {
+    let Some(raw) = load_optional_secret(
+        db_path,
+        mode,
+        PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+        PRIVATE_CHANNEL_CAPABILITIES_KEY,
+    )?
+    else {
+        return Ok(Vec::new());
+    };
+    serde_json::from_str(&raw).context("failed to decode private channel capabilities")
+}
+
+fn persist_private_channel_capabilities(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    capabilities: &[PrivateChannelCapability],
+) -> Result<()> {
+    let encoded = serde_json::to_string(capabilities)
+        .context("failed to encode private channel capabilities")?;
+    persist_optional_secret(
+        db_path,
+        mode,
+        PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
+        PRIVATE_CHANNEL_CAPABILITIES_KEY,
+        encoded.as_str(),
+    )
+}
+
 fn load_community_node_token(
     db_path: &Path,
     mode: IdentityStorageMode,
@@ -1545,9 +1986,6 @@ impl SharedIrohStack {
         let docs_sync = Arc::new(ReloadableDocsSync::new(current.docs_sync.clone()));
         let blob_service = Arc::new(ReloadableBlobService::new(current.blob_service.clone()));
         Ok(Self {
-            root: root.to_path_buf(),
-            network_config,
-            dht_options,
             current: Mutex::new(current),
             transport,
             docs_sync,
@@ -1555,31 +1993,36 @@ impl SharedIrohStack {
         })
     }
 
-    async fn rebuild(
+    async fn apply_runtime_connectivity(
         &self,
         discovery_config: &DiscoveryConfig,
         bootstrap_seed_peers: &[SeedPeer],
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
-        let mut current = self.current.lock().await;
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(IROH_STACK_REBUILD_SHUTDOWN_TIMEOUT_SECONDS),
-            current.shutdown(),
-        )
-        .await;
-        let next = BoundIrohStack::new(
-            &self.root,
-            self.network_config.clone(),
-            discovery_config,
-            bootstrap_seed_peers,
-            self.dht_options.clone(),
-            relay_config,
-        )
-        .await?;
-        self.transport.swap(next.transport.clone()).await;
-        self.docs_sync.swap(next.docs_sync.clone()).await;
-        self.blob_service.swap(next.blob_service.clone()).await;
-        *current = next;
+        let current = self.current.lock().await;
+        current
+            .node
+            .apply_relay_config(relay_config.clone())
+            .await?;
+        current.transport.update_relay_config(relay_config).await?;
+        current
+            .transport
+            .configure_discovery(
+                discovery_config.mode.clone(),
+                discovery_config.env_locked,
+                discovery_config.seed_peers.clone(),
+                bootstrap_seed_peers.to_vec(),
+            )
+            .await?;
+        let effective_seed_peers = effective_seed_peers(discovery_config, bootstrap_seed_peers);
+        current
+            .docs_sync
+            .set_seed_peers(effective_seed_peers.clone())
+            .await?;
+        current
+            .blob_service
+            .set_seed_peers(effective_seed_peers)
+            .await?;
         Ok(())
     }
 
@@ -1641,6 +2084,8 @@ impl BoundIrohStack {
     }
 
     async fn shutdown(&self) {
+        self.transport.shutdown().await;
+        self.docs_sync.shutdown().await;
         let _ = self.node.clone().shutdown().await;
     }
 }
@@ -1648,12 +2093,19 @@ impl BoundIrohStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        Json, Router,
+        extract::State,
+        routing::{get, post},
+    };
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use iroh::address_lookup::EndpointInfo;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::tempdir;
+    use tokio::net::TcpListener;
     use tokio::time::{Duration, sleep, timeout};
 
     fn image_attachment_request(name: &str, mime: &str, bytes: &[u8]) -> CreateAttachmentRequest {
@@ -1768,6 +2220,42 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct MockCommunityNodeState {
+        base_url: String,
+        seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
+        heartbeat_hits: Arc<AtomicUsize>,
+        bootstrap_hits: Arc<AtomicUsize>,
+    }
+
+    async fn mock_bootstrap_heartbeat(
+        State(state): State<Arc<MockCommunityNodeState>>,
+        Json(_request): Json<serde_json::Value>,
+    ) -> Json<BootstrapHeartbeatResponse> {
+        state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+        Json(BootstrapHeartbeatResponse {
+            expires_at: Utc::now().timestamp() + 300,
+        })
+    }
+
+    async fn mock_bootstrap_nodes(
+        State(state): State<Arc<MockCommunityNodeState>>,
+    ) -> Json<BootstrapNodesResponse> {
+        state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+        let seed_peers = state.seed_peers.lock().await.clone();
+        Json(BootstrapNodesResponse {
+            nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+                base_url: state.base_url.clone(),
+                resolved_urls: CommunityNodeResolvedUrls::new(
+                    state.base_url.clone(),
+                    Vec::new(),
+                    seed_peers,
+                )
+                .expect("resolved urls"),
+            }],
+        })
+    }
+
     async fn new_seeded_dht_runtime_with_config(
         db_path: &Path,
         testnet: &Testnet,
@@ -1828,6 +2316,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -1853,6 +2342,7 @@ mod tests {
                 topic: "kukuri:topic:runtime".into(),
                 content: "persist me again".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -1860,6 +2350,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: "kukuri:topic:runtime".into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -1938,6 +2429,7 @@ mod tests {
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -1948,6 +2440,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello desktop runtime".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -1958,6 +2451,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -1979,6 +2473,1201 @@ mod tests {
         assert_eq!(received.content, "hello desktop runtime");
         let status = runtime_b.get_sync_status().await.expect("sync status");
         assert!(status.last_sync_ts.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn private_channel_invite_restores_after_restart_without_reimport() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("private-runtime-a.db");
+        let db_b = dir.path().join("private-runtime-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a");
+
+        let topic = "kukuri:topic:desktop-private-channel";
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "core".into(),
+                audience_kind: ChannelAudienceKind::InviteOnly,
+            })
+            .await
+            .expect("create private channel");
+        let invite = runtime_a
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export invite");
+        let preview = runtime_b
+            .import_private_channel_invite(ImportPrivateChannelInviteRequest { token: invite })
+            .await
+            .expect("import invite");
+        assert_eq!(preview.topic_id.as_str(), topic);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+        let private_channel_id = kukuri_core::ChannelId::new(channel.channel_id.clone());
+        let private_channel_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "private hello".into(),
+                reply_to: None,
+                channel_ref: private_channel_ref.clone(),
+                attachments: vec![],
+            })
+            .await
+            .expect("create private post");
+
+        let private_post = timeout(Duration::from_secs(10), async {
+            loop {
+                let public_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("public timeline");
+                assert!(
+                    public_timeline
+                        .items
+                        .iter()
+                        .all(|post| post.object_id != private_post_id),
+                    "private post leaked into public timeline"
+                );
+                let private_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline");
+                if let Some(post) = private_timeline
+                    .items
+                    .iter()
+                    .find(|post| post.object_id == private_post_id)
+                {
+                    return post.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private post timeout");
+        assert_eq!(
+            private_post.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+        assert_eq!(private_post.audience_label, "core");
+
+        let private_reply_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "private reply".into(),
+                reply_to: Some(private_post_id.clone()),
+                channel_ref: ChannelRef::Public,
+                attachments: vec![],
+            })
+            .await
+            .expect("create private reply");
+        let private_thread = timeout(Duration::from_secs(10), async {
+            loop {
+                let thread = runtime_a
+                    .list_thread(ListThreadRequest {
+                        topic: topic.into(),
+                        thread_id: private_post_id.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("thread");
+                if thread
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == private_reply_id)
+                {
+                    return thread;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private thread timeout");
+        let reply = private_thread
+            .items
+            .iter()
+            .find(|post| post.object_id == private_reply_id)
+            .expect("reply");
+        assert_eq!(
+            reply.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+
+        let session_id = runtime_a
+            .create_live_session(CreateLiveSessionRequest {
+                topic: topic.into(),
+                channel_ref: private_channel_ref.clone(),
+                title: "core live".into(),
+                description: "private stream".into(),
+            })
+            .await
+            .expect("create private live session");
+        let _private_session = timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_b
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list private live sessions");
+                if let Some(session) = sessions
+                    .iter()
+                    .find(|session| session.session_id == session_id)
+                {
+                    return session.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private live timeout");
+        runtime_b
+            .join_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("join live session");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_a
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list live sessions a");
+                if sessions.iter().any(|session| {
+                    session.session_id == session_id
+                        && session.viewer_count == 1
+                        && !session.joined_by_me
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("live join timeout");
+        runtime_a
+            .end_live_session(LiveSessionCommandRequest {
+                topic: topic.into(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .expect("end live session");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let sessions = runtime_b
+                    .list_live_sessions(ListLiveSessionsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list live sessions b");
+                if sessions.iter().any(|session| {
+                    session.session_id == session_id
+                        && session.status == kukuri_core::LiveSessionStatus::Ended
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("live end timeout");
+
+        let room_id = runtime_a
+            .create_game_room(CreateGameRoomRequest {
+                topic: topic.into(),
+                channel_ref: private_channel_ref.clone(),
+                title: "core room".into(),
+                description: "private set".into(),
+                participants: vec!["Alice".into(), "Bob".into()],
+            })
+            .await
+            .expect("create private game room");
+        let room_before_update = timeout(Duration::from_secs(10), async {
+            loop {
+                let rooms = runtime_b
+                    .list_game_rooms(ListGameRoomsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list private game rooms");
+                if let Some(room) = rooms.iter().find(|room| room.room_id == room_id) {
+                    return room.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("private game timeout");
+        runtime_a
+            .update_game_room(UpdateGameRoomRequest {
+                topic: topic.into(),
+                room_id: room_id.clone(),
+                status: GameRoomStatus::Running,
+                phase_label: Some("Round 2".into()),
+                scores: room_before_update
+                    .scores
+                    .iter()
+                    .map(|score| GameScoreView {
+                        participant_id: score.participant_id.clone(),
+                        label: score.label.clone(),
+                        score: if score.label == "Alice" { 2 } else { 1 },
+                    })
+                    .collect(),
+            })
+            .await
+            .expect("update private game room");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let rooms = runtime_b
+                    .list_game_rooms(ListGameRoomsRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                    })
+                    .await
+                    .expect("list updated game rooms");
+                if rooms.iter().any(|room| {
+                    room.room_id == room_id
+                        && room.phase_label.as_deref() == Some("Round 2")
+                        && room
+                            .scores
+                            .iter()
+                            .any(|score| score.label == "Alice" && score.score == 2)
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("game update timeout");
+
+        let joined_before_restart = runtime_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels before restart");
+        assert_eq!(joined_before_restart.len(), 1);
+        assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
+
+        timeout(Duration::from_secs(30), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(Duration::from_secs(30), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+        drop(runtime_a);
+        drop(runtime_b);
+        std::fs::remove_file(&db_b).expect("delete sqlite b");
+
+        let restarted_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart runtime b");
+
+        let joined_after_restart = restarted_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels after restart");
+        assert_eq!(joined_after_restart.len(), 1);
+        assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+        assert_eq!(joined_after_restart[0].label, "core");
+
+        let public_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("public timeline after restart");
+        assert!(
+            public_timeline_after_restart
+                .items
+                .iter()
+                .all(|post| post.object_id != private_post_id)
+        );
+        let private_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private timeline after restart");
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_post_id)
+        );
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_reply_id)
+        );
+
+        let private_thread_after_restart = restarted_b
+            .list_thread(ListThreadRequest {
+                topic: topic.into(),
+                thread_id: private_post_id.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private thread after restart");
+        assert!(
+            private_thread_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_reply_id)
+        );
+
+        let sessions_after_restart = restarted_b
+            .list_live_sessions(ListLiveSessionsRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+            })
+            .await
+            .expect("live sessions after restart");
+        assert!(sessions_after_restart.iter().any(|session| {
+            session.session_id == session_id
+                && session.status == kukuri_core::LiveSessionStatus::Ended
+        }));
+
+        let rooms_after_restart = restarted_b
+            .list_game_rooms(ListGameRoomsRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+            })
+            .await
+            .expect("game rooms after restart");
+        assert!(rooms_after_restart.iter().any(|room| {
+            room.room_id == room_id
+                && room.phase_label.as_deref() == Some("Round 2")
+                && room
+                    .scores
+                    .iter()
+                    .any(|score| score.label == "Alice" && score.score == 2)
+        }));
+
+        let fresh_invite = restarted_b
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh invite");
+        assert!(fresh_invite.contains(topic));
+        assert!(fresh_invite.contains(channel.channel_id.as_str()));
+
+        timeout(Duration::from_secs(30), restarted_b.shutdown())
+            .await
+            .expect("restarted runtime shutdown timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn friend_only_channel_restore_keeps_archived_epoch_history() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("friend-only-runtime-a.db");
+        let db_b = dir.path().join("friend-only-runtime-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let a_view = runtime_a
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: b_pubkey.clone(),
+                    })
+                    .await
+                    .expect("a loads b");
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b loads a");
+                if a_view.mutual && b_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("mutual propagation timeout");
+
+        let topic = "kukuri:topic:desktop-friend-only-restart";
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "friends".into(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create friend-only channel");
+        let grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export friend-only grant");
+        let preview = runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: grant })
+            .await
+            .expect("import friend-only grant");
+        let original_epoch_id = preview.epoch_id.clone();
+        assert_eq!(preview.topic_id.as_str(), topic);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+        let private_channel_id = kukuri_core::ChannelId::new(channel.channel_id.clone());
+        let private_channel_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "friends hello".into(),
+                reply_to: None,
+                channel_ref: private_channel_ref,
+                attachments: vec![],
+            })
+            .await
+            .expect("create friend-only post");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let public_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("public timeline");
+                assert!(
+                    public_timeline
+                        .items
+                        .iter()
+                        .all(|post| post.object_id != private_post_id),
+                    "friend-only post leaked into public timeline"
+                );
+                let private_timeline = runtime_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline");
+                if private_timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == private_post_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("friend-only post timeout");
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-only channel");
+        assert_ne!(rotated.current_epoch_id, original_epoch_id);
+        assert_eq!(rotated.archived_epoch_ids, vec![original_epoch_id.clone()]);
+
+        let fresh_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh friend-only grant");
+        let fresh_preview = runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: fresh_grant })
+            .await
+            .expect("import fresh friend-only grant");
+        assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
+
+        let joined_before_restart = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = runtime_b
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.into(),
+                    })
+                    .await
+                    .expect("list joined channels before restart");
+                if joined.iter().any(|entry| {
+                    entry.channel_id == channel.channel_id
+                        && entry.current_epoch_id == rotated.current_epoch_id
+                        && entry.archived_epoch_ids == vec![original_epoch_id.clone()]
+                }) {
+                    return joined;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("joined channel update timeout");
+        assert_eq!(joined_before_restart.len(), 1);
+
+        timeout(Duration::from_secs(30), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(Duration::from_secs(30), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+        drop(runtime_a);
+        drop(runtime_b);
+        std::fs::remove_file(&db_b).expect("delete sqlite b");
+
+        let restarted_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart runtime b");
+
+        let joined_after_restart = restarted_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("list joined channels after restart");
+        assert_eq!(joined_after_restart.len(), 1);
+        assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+        assert_eq!(
+            joined_after_restart[0].audience_kind,
+            ChannelAudienceKind::FriendOnly
+        );
+        assert_eq!(
+            joined_after_restart[0].current_epoch_id,
+            rotated.current_epoch_id
+        );
+        assert_eq!(
+            joined_after_restart[0].archived_epoch_ids,
+            vec![original_epoch_id.clone()]
+        );
+
+        let private_timeline_after_restart = restarted_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private timeline after restart");
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_post_id)
+        );
+
+        timeout(Duration::from_secs(30), restarted_b.shutdown())
+            .await
+            .expect("restarted runtime shutdown timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn friend_plus_channel_restore_redeems_rotation_after_restart() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("friend-plus-runtime-a.db");
+        let db_b = dir.path().join("friend-plus-runtime-b.db");
+        let db_c = dir.path().join("friend-plus-runtime-c.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let runtime_c = DesktopRuntime::new_with_config_and_identity(
+            &db_c,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime c");
+
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let ticket_c = runtime_c
+            .local_peer_ticket()
+            .await
+            .expect("ticket c")
+            .expect("ticket c value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("a imports b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("b imports a");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("a imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("c imports a");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("b imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("c imports b");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        let c_pubkey = runtime_c
+            .get_sync_status()
+            .await
+            .expect("status c")
+            .local_author_pubkey;
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: c_pubkey.clone(),
+            })
+            .await
+            .expect("b follows c");
+        runtime_c
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("c follows b");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b sees a");
+                let c_view = runtime_c
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: b_pubkey.clone(),
+                    })
+                    .await
+                    .expect("c sees b");
+                if b_view.mutual && c_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus mutual propagation timeout");
+
+        let topic = "kukuri:topic:desktop-friend-plus-restart";
+        for runtime in [&runtime_a, &runtime_b, &runtime_c] {
+            let _ = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.into(),
+                    scope: TimelineScope::Public,
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .expect("subscribe runtime");
+        }
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "friends+".into(),
+                audience_kind: ChannelAudienceKind::FriendPlus,
+            })
+            .await
+            .expect("create friend-plus channel");
+        let share_ab = runtime_a
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export a->b share");
+        runtime_b
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_ab })
+            .await
+            .expect("b imports friend-plus share");
+        let share_bc = runtime_b
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export b->c share");
+        let preview_c = runtime_c
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_bc })
+            .await
+            .expect("c imports friend-plus share");
+        let original_epoch_id = preview_c.epoch_id.clone();
+        assert_eq!(preview_c.sponsor_pubkey.as_str(), b_pubkey.as_str());
+
+        let private_scope = TimelineScope::Channel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let old_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "friend-plus history".into(),
+                reply_to: None,
+                channel_ref: private_ref.clone(),
+                attachments: vec![],
+            })
+            .await
+            .expect("create friend-plus history post");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let public_timeline = runtime_c
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("public timeline c");
+                assert!(
+                    public_timeline
+                        .items
+                        .iter()
+                        .all(|post| post.object_id != old_post_id),
+                    "friend-plus post leaked into public timeline"
+                );
+                let private_timeline = runtime_c
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline c");
+                if private_timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == old_post_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("friend-plus history propagation timeout");
+
+        let joined_before_restart = runtime_c
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("joined channels before restart");
+        assert_eq!(joined_before_restart.len(), 1);
+        assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
+        assert_eq!(
+            joined_before_restart[0].joined_via_pubkey.as_deref(),
+            Some(b_pubkey.as_str())
+        );
+
+        timeout(Duration::from_secs(30), runtime_c.shutdown())
+            .await
+            .expect("runtime c shutdown timeout");
+        drop(runtime_c);
+        std::fs::remove_file(&db_c).expect("delete sqlite c");
+
+        let restarted_c = DesktopRuntime::new_with_config_and_identity(
+            &db_c,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("restart runtime c");
+        restarted_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("restarted c imports a");
+        restarted_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("restarted c imports b");
+        let restarted_ticket_c = restarted_c
+            .local_peer_ticket()
+            .await
+            .expect("restarted ticket c")
+            .expect("restarted ticket c value");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: restarted_ticket_c.clone(),
+            })
+            .await
+            .expect("a imports restarted c");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: restarted_ticket_c,
+            })
+            .await
+            .expect("b imports restarted c");
+
+        let joined_after_restart = restarted_c
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.into(),
+            })
+            .await
+            .expect("joined channels after restart");
+        assert_eq!(joined_after_restart.len(), 1);
+        assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+        assert_eq!(
+            joined_after_restart[0].current_epoch_id,
+            original_epoch_id.clone()
+        );
+        assert_eq!(
+            joined_after_restart[0].joined_via_pubkey.as_deref(),
+            Some(b_pubkey.as_str())
+        );
+
+        let private_timeline_after_restart = restarted_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("private timeline after restart");
+        assert!(
+            private_timeline_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == old_post_id)
+        );
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-plus channel");
+        assert_ne!(rotated.current_epoch_id, original_epoch_id);
+
+        let joined_after_rotate = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = restarted_c
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.into(),
+                    })
+                    .await
+                    .expect("joined channels after rotate");
+                let Some(entry) = joined
+                    .iter()
+                    .find(|item| item.channel_id == channel.channel_id)
+                else {
+                    sleep(Duration::from_millis(50)).await;
+                    continue;
+                };
+                if entry.current_epoch_id == rotated.current_epoch_id {
+                    break entry.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("friend-plus rotation redeem timeout");
+        assert_eq!(
+            joined_after_rotate.joined_via_pubkey.as_deref(),
+            Some(b_pubkey.as_str())
+        );
+        assert_eq!(
+            joined_after_rotate.archived_epoch_ids,
+            vec![original_epoch_id.clone()]
+        );
+
+        let new_post_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.into(),
+                content: "friend-plus after rotate".into(),
+                reply_to: None,
+                channel_ref: private_ref,
+                attachments: vec![],
+            })
+            .await
+            .expect("create friend-plus rotated post");
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let private_timeline = restarted_c
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: private_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline after rotate");
+                if private_timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == new_post_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("friend-plus rotated post propagation timeout");
+
+        timeout(Duration::from_secs(30), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(Duration::from_secs(30), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+        timeout(Duration::from_secs(30), restarted_c.shutdown())
+            .await
+            .expect("restarted runtime c shutdown timeout");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2029,6 +3718,7 @@ mod tests {
         let _ = runtime_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2037,6 +3727,7 @@ mod tests {
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2068,6 +3759,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello seeded runtime".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2078,6 +3770,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2173,6 +3866,7 @@ mod tests {
         let _ = restarted_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2181,6 +3875,7 @@ mod tests {
         let _ = restarted_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2192,6 +3887,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello after restart".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2202,6 +3898,7 @@ mod tests {
                 let timeline = restarted_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2264,6 +3961,7 @@ mod tests {
                 topic: topic.into(),
                 content: "hello from before join".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2291,6 +3989,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2330,6 +4029,7 @@ mod tests {
                 topic: topic.into(),
                 content: "late image".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "late.png",
                     "image/png",
@@ -2361,6 +4061,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2408,6 +4109,7 @@ mod tests {
                 topic: topic.into(),
                 content: "late video".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![
                     video_attachment_request(
                         "late-video.mp4",
@@ -2448,6 +4150,7 @@ mod tests {
                 let timeline = runtime_b
                     .list_timeline(ListTimelineRequest {
                         topic: topic.into(),
+                        scope: TimelineScope::Public,
                         cursor: None,
                         limit: Some(20),
                     })
@@ -2511,6 +4214,7 @@ mod tests {
                 topic: topic.into(),
                 content: "roundtrip".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "roundtrip.png",
                     "image/png",
@@ -2522,6 +4226,7 @@ mod tests {
         let timeline = runtime
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2566,6 +4271,7 @@ mod tests {
                 topic: topic.into(),
                 content: "root".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2575,6 +4281,7 @@ mod tests {
                 topic: topic.into(),
                 content: "reply".into(),
                 reply_to: Some(root_id.clone()),
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2593,6 +4300,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2631,6 +4339,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored from docs".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![],
             })
             .await
@@ -2649,6 +4358,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2680,6 +4390,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored image".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![image_attachment_request(
                     "restored.png",
                     "image/png",
@@ -2702,6 +4413,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2741,6 +4453,7 @@ mod tests {
                 topic: topic.into(),
                 content: "restored video".into(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: vec![
                     video_attachment_request(
                         "clip.mp4",
@@ -2772,6 +4485,7 @@ mod tests {
         let timeline = restarted
             .list_timeline(ListTimelineRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -2826,6 +4540,7 @@ mod tests {
         let session_id = runtime
             .create_live_session(CreateLiveSessionRequest {
                 topic: topic.into(),
+                channel_ref: ChannelRef::Public,
                 title: "restart live".into(),
                 description: "session".into(),
             })
@@ -2859,6 +4574,7 @@ mod tests {
         let sessions = restarted
             .list_live_sessions(ListLiveSessionsRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
             })
             .await
             .expect("list live sessions");
@@ -2886,6 +4602,7 @@ mod tests {
         let room_id = runtime
             .create_game_room(CreateGameRoomRequest {
                 topic: topic.into(),
+                channel_ref: ChannelRef::Public,
                 title: "restart finals".into(),
                 description: "set".into(),
                 participants: vec!["Alice".into(), "Bob".into()],
@@ -2927,6 +4644,7 @@ mod tests {
         let rooms = restarted
             .list_game_rooms(ListGameRoomsRequest {
                 topic: topic.into(),
+                scope: TimelineScope::Public,
             })
             .await
             .expect("list game rooms");
@@ -3153,5 +4871,269 @@ mod tests {
         timeout(test_timeout, runtime.shutdown())
             .await
             .expect("runtime shutdown timeout");
+    }
+
+    #[tokio::test]
+    async fn community_node_connectivity_assist_preserves_manual_ticket_peers() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("assist-a.db");
+        let db_b = dir.path().join("assist-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+
+        let manual_ticket_peer_ids = runtime_a
+            .get_sync_status()
+            .await
+            .expect("sync status before assist")
+            .discovery
+            .manual_ticket_peer_ids;
+        assert!(!manual_ticket_peer_ids.is_empty());
+
+        let seed_peer = CommunityNodeSeedPeer::new(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .expect("seed peer");
+        *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: "https://community.example.com".into(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        "https://community.example.com",
+                        Vec::new(),
+                        vec![seed_peer],
+                    )
+                    .expect("resolved urls"),
+                ),
+            }],
+        };
+
+        runtime_a
+            .apply_runtime_connectivity_assist()
+            .await
+            .expect("apply runtime connectivity assist");
+
+        assert_eq!(
+            runtime_a
+                .get_sync_status()
+                .await
+                .expect("sync status after assist")
+                .discovery
+                .manual_ticket_peer_ids,
+            manual_ticket_peer_ids
+        );
+
+        runtime_a.shutdown().await;
+        runtime_b.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("community-heartbeat-refresh.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+        let state = Arc::new(MockCommunityNodeState {
+            base_url: base_url.clone(),
+            seed_peers: Arc::new(Mutex::new(vec![
+                CommunityNodeSeedPeer::new(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    None,
+                )
+                .expect("seed peer"),
+            ])),
+            heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+            bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        });
+        let app = Router::new()
+            .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+            .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+            .with_state(state.clone());
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        persist_community_node_token(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            base_url.as_str(),
+            &StoredCommunityNodeToken {
+                access_token: "fake-token".to_string(),
+                expires_at: Utc::now().timestamp() + 3600,
+            },
+        )
+        .expect("persist community-node token");
+        *runtime.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.clone(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                        .expect("resolved urls"),
+                ),
+            }],
+        };
+
+        let statuses = runtime
+            .get_community_node_statuses()
+            .await
+            .expect("community node statuses");
+        assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(
+            statuses[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            state.seed_peers.lock().await.clone()
+        );
+        assert_eq!(
+            runtime.community_node_config.lock().await.nodes[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            state.seed_peers.lock().await.clone()
+        );
+
+        runtime.shutdown().await;
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_empty() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("community-metadata-retry.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+        let seed_peer = CommunityNodeSeedPeer::new(
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            None,
+        )
+        .expect("seed peer");
+        let state = Arc::new(MockCommunityNodeState {
+            base_url: base_url.clone(),
+            seed_peers: Arc::new(Mutex::new(Vec::new())),
+            heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+            bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+        });
+        let app = Router::new()
+            .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+            .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+            .with_state(state.clone());
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        persist_community_node_token(
+            &db_path,
+            IdentityStorageMode::FileOnly,
+            base_url.as_str(),
+            &StoredCommunityNodeToken {
+                access_token: "fake-token".to_string(),
+                expires_at: Utc::now().timestamp() + 3600,
+            },
+        )
+        .expect("persist community-node token");
+        *runtime.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.clone(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                        .expect("resolved urls"),
+                ),
+            }],
+        };
+
+        let initial_statuses = runtime
+            .get_community_node_statuses()
+            .await
+            .expect("initial community node statuses");
+        assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            initial_statuses[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            Vec::<CommunityNodeSeedPeer>::new()
+        );
+        assert!(
+            runtime
+                .community_node_metadata_refresh_deadlines
+                .lock()
+                .await
+                .contains_key(base_url.as_str()),
+            "empty bootstrap metadata should schedule a retry"
+        );
+
+        *state.seed_peers.lock().await = vec![seed_peer.clone()];
+        runtime
+            .community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .insert(base_url.clone(), Utc::now().timestamp() - 1);
+
+        let refreshed_statuses = runtime
+            .get_community_node_statuses()
+            .await
+            .expect("refreshed community node statuses");
+        assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            refreshed_statuses[0]
+                .resolved_urls
+                .as_ref()
+                .expect("resolved urls")
+                .seed_peers,
+            vec![seed_peer]
+        );
+
+        runtime.shutdown().await;
+        server.abort();
     }
 }

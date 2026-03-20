@@ -11,8 +11,12 @@ import {
 } from 'react';
 
 import {
+  AuthorSocialView,
   AttachmentView,
   BlobMediaPayload,
+  ChannelAudienceKind,
+  ChannelRef,
+  ChannelSharingState,
   CommunityNodeConfig,
   CommunityNodeNodeStatus,
   CreateAttachmentInput,
@@ -21,9 +25,14 @@ import {
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
+  JoinedPrivateChannelView,
   LiveSessionView,
   PostView,
+  PrivateChannelInvitePreview,
+  Profile,
+  ProfileInput,
   SyncStatus,
+  TimelineScope,
   TopicSyncStatus,
   runtimeApi,
 } from './lib/api';
@@ -50,6 +59,8 @@ type MediaDebugValue = boolean | number | string | null | undefined;
 type MediaDebugFields = Record<string, MediaDebugValue>;
 
 const DEFAULT_TOPIC = 'kukuri:topic:demo';
+const PUBLIC_CHANNEL_REF: ChannelRef = { kind: 'public' };
+const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };
 const REFRESH_INTERVAL_MS = 2000;
 const VIDEO_POSTER_TIMEOUT_MS = 5000;
 const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
@@ -111,6 +122,124 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${bytes} B`;
+}
+
+function shortPubkey(pubkey: string): string {
+  return pubkey.slice(0, 12);
+}
+
+function profileInputFromProfile(profile: Profile): ProfileInput {
+  return {
+    name: profile.name ?? '',
+    display_name: profile.display_name ?? '',
+    about: profile.about ?? '',
+    picture: profile.picture ?? '',
+  };
+}
+
+function authorDisplayLabel(
+  authorPubkey: string,
+  displayName?: string | null,
+  name?: string | null
+): string {
+  return displayName?.trim() || name?.trim() || shortPubkey(authorPubkey);
+}
+
+function strongestRelationshipLabel(relationship: {
+  mutual: boolean;
+  following: boolean;
+  followed_by: boolean;
+  friend_of_friend: boolean;
+}): string | null {
+  if (relationship.mutual) {
+    return 'mutual';
+  }
+  if (relationship.following) {
+    return 'following';
+  }
+  if (relationship.followed_by) {
+    return 'follows you';
+  }
+  if (relationship.friend_of_friend) {
+    return 'friend of friend';
+  }
+  return null;
+}
+
+function relationshipBadgeClassName(label: string | null): string {
+  if (label === 'mutual') {
+    return 'relationship-badge relationship-badge-mutual';
+  }
+  if (label === 'friend of friend') {
+    return 'relationship-badge relationship-badge-fof';
+  }
+  if (label === 'following' || label === 'follows you') {
+    return 'relationship-badge relationship-badge-direct';
+  }
+  return 'relationship-badge';
+}
+
+function channelRefValue(channelRef: ChannelRef): string {
+  return channelRef.kind === 'public' ? 'public' : `channel:${channelRef.channel_id}`;
+}
+
+function channelRefFromValue(value: string): ChannelRef {
+  if (value.startsWith('channel:')) {
+    return {
+      kind: 'private_channel',
+      channel_id: value.slice('channel:'.length),
+    };
+  }
+  return PUBLIC_CHANNEL_REF;
+}
+
+function timelineScopeValue(scope: TimelineScope): string {
+  if (scope.kind === 'channel') {
+    return `channel:${scope.channel_id}`;
+  }
+  return scope.kind;
+}
+
+function timelineScopeFromValue(value: string): TimelineScope {
+  if (value.startsWith('channel:')) {
+    return {
+      kind: 'channel',
+      channel_id: value.slice('channel:'.length),
+    };
+  }
+  if (value === 'all_joined') {
+    return { kind: 'all_joined' };
+  }
+  return PUBLIC_TIMELINE_SCOPE;
+}
+
+function audienceLabelForChannelRef(
+  channelRef: ChannelRef,
+  joinedChannels: JoinedPrivateChannelView[]
+): string {
+  if (channelRef.kind === 'public') {
+    return 'Public';
+  }
+  return (
+    joinedChannels.find((channel) => channel.channel_id === channelRef.channel_id)?.label ??
+    'Private channel'
+  );
+}
+
+function audienceLabelForTimelineScope(
+  scope: TimelineScope,
+  joinedChannels: JoinedPrivateChannelView[]
+): string {
+  if (scope.kind === 'all_joined') {
+    return 'All joined';
+  }
+  if (scope.kind === 'channel') {
+    return (
+      joinedChannels.find((channel) => channel.channel_id === scope.channel_id)?.label ??
+      'Private channel'
+    );
+  }
+  return 'Public';
 }
 
 function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
@@ -579,6 +708,17 @@ export function App({ api = runtimeApi }: AppProps) {
   const [gameRoomsByTopic, setGameRoomsByTopic] = useState<Record<string, GameRoomView[]>>({
     [DEFAULT_TOPIC]: [],
   });
+  const [joinedChannelsByTopic, setJoinedChannelsByTopic] = useState<
+    Record<string, JoinedPrivateChannelView[]>
+  >({
+    [DEFAULT_TOPIC]: [],
+  });
+  const [timelineScopeByTopic, setTimelineScopeByTopic] = useState<Record<string, TimelineScope>>({
+    [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
+  });
+  const [composeChannelByTopic, setComposeChannelByTopic] = useState<Record<string, ChannelRef>>({
+    [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
+  });
   const [thread, setThread] = useState<PostView[]>([]);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
@@ -600,10 +740,26 @@ export function App({ api = runtimeApi }: AppProps) {
     Record<string, true>
   >({});
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(DEFAULT_SYNC_STATUS);
+  const [localProfile, setLocalProfile] = useState<Profile | null>(null);
+  const [profileDraft, setProfileDraft] = useState<ProfileInput>({});
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [selectedAuthorPubkey, setSelectedAuthorPubkey] = useState<string | null>(null);
+  const [selectedAuthor, setSelectedAuthor] = useState<AuthorSocialView | null>(null);
+  const [authorError, setAuthorError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [liveTitle, setLiveTitle] = useState('');
   const [liveDescription, setLiveDescription] = useState('');
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [channelLabelInput, setChannelLabelInput] = useState('');
+  const [channelAudienceInput, setChannelAudienceInput] =
+    useState<ChannelAudienceKind>('invite_only');
+  const [inviteTokenInput, setInviteTokenInput] = useState('');
+  const [inviteOutput, setInviteOutput] = useState<string | null>(null);
+  const [inviteOutputLabel, setInviteOutputLabel] = useState<'invite' | 'grant' | 'share'>(
+    'invite'
+  );
+  const [channelError, setChannelError] = useState<string | null>(null);
   const [gameTitle, setGameTitle] = useState('');
   const [gameDescription, setGameDescription] = useState('');
   const [gameParticipantsInput, setGameParticipantsInput] = useState('');
@@ -636,6 +792,37 @@ export function App({ api = runtimeApi }: AppProps) {
   const activeGameRooms = useMemo(
     () => gameRoomsByTopic[activeTopic] ?? [],
     [activeTopic, gameRoomsByTopic]
+  );
+  const activeJoinedChannels = useMemo(
+    () => joinedChannelsByTopic[activeTopic] ?? [],
+    [activeTopic, joinedChannelsByTopic]
+  );
+  const activeTimelineScope = useMemo(
+    () => timelineScopeByTopic[activeTopic] ?? PUBLIC_TIMELINE_SCOPE,
+    [activeTopic, timelineScopeByTopic]
+  );
+  const activeComposeChannel = useMemo(() => {
+    if (replyTarget?.channel_id) {
+      return {
+        kind: 'private_channel',
+        channel_id: replyTarget.channel_id,
+      } as ChannelRef;
+    }
+    return composeChannelByTopic[activeTopic] ?? PUBLIC_CHANNEL_REF;
+  }, [activeTopic, composeChannelByTopic, replyTarget]);
+  const activeComposeAudienceLabel = useMemo(() => {
+    if (replyTarget) {
+      return replyTarget.audience_label;
+    }
+    return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
+  }, [activeComposeChannel, activeJoinedChannels, replyTarget]);
+  const activePrivateChannel = useMemo(
+    () =>
+      activeComposeChannel.kind === 'private_channel'
+        ? activeJoinedChannels.find((channel) => channel.channel_id === activeComposeChannel.channel_id) ??
+          null
+        : null,
+    [activeComposeChannel, activeJoinedChannels]
   );
   const communityNodeStatusByBaseUrl = useMemo(
     () =>
@@ -681,35 +868,64 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, threadView] = await Promise.all([
+        const [timelineViews, liveViews, gameViews, joinedChannelViews, threadView, status] =
+          await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              timeline: await api.listTimeline(topic, null, 50),
+              timeline: await api.listTimeline(
+                topic,
+                null,
+                50,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
             }))
           ),
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              sessions: await api.listLiveSessions(topic),
+              sessions: await api.listLiveSessions(
+                topic,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
             }))
           ),
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
-              rooms: await api.listGameRooms(topic),
+              rooms: await api.listGameRooms(
+                topic,
+                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+              ),
+            }))
+          ),
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              channels: await api.listJoinedPrivateChannels(topic),
             }))
           ),
           currentThread
             ? api.listThread(currentActiveTopic, currentThread, null, 50)
             : Promise.resolve(null),
-        ]);
-        const [status, discovery, communityConfig, communityStatuses, ticket] = await Promise.all([
           api.getSyncStatus(),
+        ]);
+        const [
+          discoveryResult,
+          communityConfigResult,
+          communityStatusesResult,
+          ticketResult,
+          profileResult,
+          authorViewResult,
+        ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
           api.getCommunityNodeStatuses(),
           api.getLocalPeerTicket(),
+          api.getMyProfile(),
+          selectedAuthorPubkey
+            ? api.getAuthorSocialView(selectedAuthorPubkey)
+            : Promise.resolve(null),
         ]);
         startTransition(() => {
           setTimelinesByTopic(
@@ -721,17 +937,56 @@ export function App({ api = runtimeApi }: AppProps) {
           setGameRoomsByTopic(
             Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
           );
+          setJoinedChannelsByTopic(
+            Object.fromEntries(joinedChannelViews.map(({ topic, channels }) => [topic, channels]))
+          );
           setSyncStatus(status);
-          setDiscoveryConfig(discovery);
-          if (!discoveryEditorDirty) {
-            setDiscoverySeedInput(seedPeersToEditorValue(discovery));
+          if (discoveryResult.status === 'fulfilled') {
+            setDiscoveryConfig(discoveryResult.value);
+            if (!discoveryEditorDirty) {
+              setDiscoverySeedInput(seedPeersToEditorValue(discoveryResult.value));
+            }
           }
-          setCommunityNodeConfig(communityConfig);
-          setCommunityNodeStatuses((current) => mergeCommunityNodeStatuses(current, communityStatuses));
-          if (!communityNodeEditorDirty) {
-            setCommunityNodeInput(communityNodesToEditorValue(communityConfig));
+          if (communityConfigResult.status === 'fulfilled') {
+            setCommunityNodeConfig(communityConfigResult.value);
+            if (!communityNodeEditorDirty) {
+              setCommunityNodeInput(communityNodesToEditorValue(communityConfigResult.value));
+            }
           }
-          setLocalPeerTicket(ticket);
+          if (communityStatusesResult.status === 'fulfilled') {
+            setCommunityNodeStatuses((current) =>
+              mergeCommunityNodeStatuses(current, communityStatusesResult.value)
+            );
+          }
+          if (ticketResult.status === 'fulfilled') {
+            setLocalPeerTicket(ticketResult.value);
+          }
+          if (profileResult.status === 'fulfilled') {
+            setLocalProfile(profileResult.value);
+            if (!profileDirty) {
+              setProfileDraft(profileInputFromProfile(profileResult.value));
+            }
+            setProfileError(null);
+          } else {
+            setProfileError(
+              profileResult.reason instanceof Error
+                ? profileResult.reason.message
+                : 'failed to load profile'
+            );
+          }
+          if (!selectedAuthorPubkey) {
+            setSelectedAuthor(null);
+            setAuthorError(null);
+          } else if (authorViewResult.status === 'fulfilled') {
+            setSelectedAuthor(authorViewResult.value);
+            setAuthorError(null);
+          } else {
+            setAuthorError(
+              authorViewResult.reason instanceof Error
+                ? authorViewResult.reason.message
+                : 'failed to load author'
+            );
+          }
           if (threadView) {
             setThread(threadView.items);
           } else if (!currentThread) {
@@ -743,7 +998,14 @@ export function App({ api = runtimeApi }: AppProps) {
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
-    [api, communityNodeEditorDirty, discoveryEditorDirty]
+    [
+      api,
+      communityNodeEditorDirty,
+      discoveryEditorDirty,
+      profileDirty,
+      selectedAuthorPubkey,
+      timelineScopeByTopic,
+    ]
   );
 
   useEffect(() => {
@@ -934,6 +1196,20 @@ export function App({ api = runtimeApi }: AppProps) {
     setReplyTarget(null);
   }
 
+  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const profile = await api.setMyProfile(profileDraft);
+      setLocalProfile(profile);
+      setProfileDraft(profileInputFromProfile(profile));
+      setProfileDirty(false);
+      setProfileError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (saveError) {
+      setProfileError(saveError instanceof Error ? saveError.message : 'failed to save profile');
+    }
+  }
+
   async function handleAddTopic() {
     const nextTopic = topicInput.trim();
     if (!nextTopic) {
@@ -968,6 +1244,229 @@ export function App({ api = runtimeApi }: AppProps) {
     await loadTopics(nextTopics, nextActiveTopic, null);
   }
 
+  async function handleTimelineScopeChange(value: string) {
+    const nextScope = timelineScopeFromValue(value);
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [activeTopic]: nextScope,
+    }));
+    await loadTopics(trackedTopics, activeTopic, selectedThread);
+  }
+
+  function handleComposeChannelChange(value: string) {
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [activeTopic]: channelRefFromValue(value),
+    }));
+  }
+
+  async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!channelLabelInput.trim()) {
+      setChannelError('channel label is required');
+      return;
+    }
+    try {
+      const channel = await api.createPrivateChannel(
+        activeTopic,
+        channelLabelInput.trim(),
+        channelAudienceInput
+      );
+      setChannelLabelInput('');
+      setChannelAudienceInput('invite_only');
+      setChannelError(null);
+      setTimelineScopeByTopic((current) => ({
+        ...current,
+        [activeTopic]: {
+          kind: 'channel',
+          channel_id: channel.channel_id,
+        },
+      }));
+      setComposeChannelByTopic((current) => ({
+        ...current,
+        [activeTopic]: {
+          kind: 'private_channel',
+          channel_id: channel.channel_id,
+        },
+      }));
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (channelCreateError) {
+      setChannelError(
+        channelCreateError instanceof Error
+          ? channelCreateError.message
+          : 'failed to create channel'
+      );
+    }
+  }
+
+  async function handleCreateInvite() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before creating an invite');
+      return;
+    }
+    try {
+      const token = await api.exportPrivateChannelInvite(
+        activeTopic,
+        activeComposeChannel.channel_id,
+        null
+      );
+      setInviteOutput(token);
+      setInviteOutputLabel('invite');
+      setChannelError(null);
+    } catch (inviteError) {
+      setChannelError(
+        inviteError instanceof Error ? inviteError.message : 'failed to create invite'
+      );
+    }
+  }
+
+  async function handleCreateGrant() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before creating a grant');
+      return;
+    }
+    try {
+      const token = await api.exportFriendOnlyGrant(
+        activeTopic,
+        activeComposeChannel.channel_id,
+        null
+      );
+      setInviteOutput(token);
+      setInviteOutputLabel('grant');
+      setChannelError(null);
+    } catch (grantError) {
+      setChannelError(
+        grantError instanceof Error ? grantError.message : 'failed to create friend grant'
+      );
+    }
+  }
+
+  async function handleCreateShare() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before creating a share');
+      return;
+    }
+    try {
+      const token = await api.exportFriendPlusShare(
+        activeTopic,
+        activeComposeChannel.channel_id,
+        null
+      );
+      setInviteOutput(token);
+      setInviteOutputLabel('share');
+      setChannelError(null);
+    } catch (shareError) {
+      setChannelError(
+        shareError instanceof Error ? shareError.message : 'failed to create friends+ share'
+      );
+    }
+  }
+
+  async function activateImportedPrivateChannel(topicId: string, channelId: string) {
+    const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
+    setTrackedTopics(nextTopics);
+    setActiveTopic(topicId);
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [topicId]: {
+        kind: 'channel',
+        channel_id: channelId,
+      },
+    }));
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [topicId]: {
+        kind: 'private_channel',
+        channel_id: channelId,
+      },
+    }));
+    setInviteTokenInput('');
+    setInviteOutput(null);
+    setChannelError(null);
+    clearThreadContext();
+    await loadTopics(nextTopics, topicId, null);
+  }
+
+  async function handleJoinInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!inviteTokenInput.trim()) {
+      setChannelError('invite token is required');
+      return;
+    }
+    try {
+      const preview = await api.importPrivateChannelInvite(inviteTokenInput.trim());
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
+    } catch (inviteError) {
+      setChannelError(
+        inviteError instanceof Error ? inviteError.message : 'failed to join private channel'
+      );
+    }
+  }
+
+  async function handleJoinGrant() {
+    if (!inviteTokenInput.trim()) {
+      setChannelError('grant token is required');
+      return;
+    }
+    try {
+      const preview = await api.importFriendOnlyGrant(inviteTokenInput.trim());
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
+    } catch (grantError) {
+      setChannelError(
+        grantError instanceof Error ? grantError.message : 'failed to join friends channel'
+      );
+    }
+  }
+
+  async function handleJoinShare() {
+    if (!inviteTokenInput.trim()) {
+      setChannelError('share token is required');
+      return;
+    }
+    try {
+      const preview = await api.importFriendPlusShare(inviteTokenInput.trim());
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
+    } catch (shareError) {
+      setChannelError(
+        shareError instanceof Error ? shareError.message : 'failed to join friends+ channel'
+      );
+    }
+  }
+
+  async function handleFreezePrivateChannel() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before freezing it');
+      return;
+    }
+    try {
+      await api.freezePrivateChannel(activeTopic, activeComposeChannel.channel_id);
+      setInviteOutput(null);
+      setChannelError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (freezeError) {
+      setChannelError(
+        freezeError instanceof Error ? freezeError.message : 'failed to freeze private channel'
+      );
+    }
+  }
+
+  async function handleRotatePrivateChannel() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before rotating it');
+      return;
+    }
+    try {
+      await api.rotatePrivateChannel(activeTopic, activeComposeChannel.channel_id);
+      setInviteOutput(null);
+      setChannelError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (rotateError) {
+      setChannelError(
+        rotateError instanceof Error ? rotateError.message : 'failed to rotate private channel'
+      );
+    }
+  }
+
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const attachments = draftMediaItems.flatMap((item) => item.attachments);
@@ -980,7 +1479,8 @@ export function App({ api = runtimeApi }: AppProps) {
         activeTopic,
         composer.trim(),
         replyTarget?.object_id ?? null,
-        attachments
+        attachments,
+        activeComposeChannel
       );
       releaseAllDraftPreviews();
       setComposer('');
@@ -1064,6 +1564,35 @@ export function App({ api = runtimeApi }: AppProps) {
 
   function clearReply() {
     setReplyTarget(null);
+  }
+
+  async function openAuthorDetail(authorPubkey: string) {
+    try {
+      const socialView = await api.getAuthorSocialView(authorPubkey);
+      setSelectedAuthorPubkey(authorPubkey);
+      setSelectedAuthor(socialView);
+      setAuthorError(null);
+    } catch (detailError) {
+      setAuthorError(detailError instanceof Error ? detailError.message : 'failed to load author');
+    }
+  }
+
+  async function handleRelationshipAction(authorPubkey: string, following: boolean) {
+    try {
+      const nextView = following
+        ? await api.unfollowAuthor(authorPubkey)
+        : await api.followAuthor(authorPubkey);
+      setSelectedAuthorPubkey(authorPubkey);
+      setSelectedAuthor(nextView);
+      setAuthorError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (relationshipError) {
+      setAuthorError(
+        relationshipError instanceof Error
+          ? relationshipError.message
+          : 'failed to update follow state'
+      );
+    }
   }
 
   async function handleSaveDiscoverySeeds() {
@@ -1210,7 +1739,12 @@ export function App({ api = runtimeApi }: AppProps) {
       return;
     }
     try {
-      await api.createLiveSession(activeTopic, liveTitle.trim(), liveDescription.trim());
+      await api.createLiveSession(
+        activeTopic,
+        liveTitle.trim(),
+        liveDescription.trim(),
+        activeComposeChannel
+      );
       setLiveTitle('');
       setLiveDescription('');
       setLiveError(null);
@@ -1275,7 +1809,8 @@ export function App({ api = runtimeApi }: AppProps) {
         activeTopic,
         gameTitle.trim(),
         gameDescription.trim(),
-        participants
+        participants,
+        activeComposeChannel
       );
       setGameTitle('');
       setGameDescription('');
@@ -1344,6 +1879,12 @@ export function App({ api = runtimeApi }: AppProps) {
     const primaryImage = selectPrimaryImage(post);
     const videoPoster = selectVideoPoster(post);
     const videoManifest = selectVideoManifest(post);
+    const authorLabel = authorDisplayLabel(
+      post.author_pubkey,
+      post.author_display_name,
+      post.author_name
+    );
+    const relationshipLabel = strongestRelationshipLabel(post);
     const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
     const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
     const reservedHashes = new Set<string>();
@@ -1417,12 +1958,24 @@ export function App({ api = runtimeApi }: AppProps) {
 
     return (
       <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
-        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
-          <div className='post-meta'>
-            <span>{post.author_pubkey.slice(0, 12)}</span>
+        <div className='post-meta'>
+          <button
+            className='author-link'
+            type='button'
+            onClick={() => void openAuthorDetail(post.author_pubkey)}
+          >
+            {authorLabel}
+          </button>
+          <div className='post-meta-trailing'>
+            {relationshipLabel ? (
+              <span className={relationshipBadgeClassName(relationshipLabel)}>{relationshipLabel}</span>
+            ) : null}
             <span>{post.object_kind}</span>
+            <span className='reply-chip'>{post.audience_label}</span>
             <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
           </div>
+        </div>
+        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
           {mediaKind ? (
             <>
               <div
@@ -1576,6 +2129,92 @@ export function App({ api = runtimeApi }: AppProps) {
               {syncStatus.last_error ?? 'none'}
             </p>
           </div>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>My Profile</h3>
+              <small>{authorDisplayLabel(syncStatus.local_author_pubkey, localProfile?.display_name, localProfile?.name)}</small>
+            </div>
+            <form className='composer composer-compact' onSubmit={handleSaveProfile}>
+              <label className='field'>
+                <span>Display Name</span>
+                <input
+                  value={profileDraft.display_name ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      display_name: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='Visible label'
+                />
+              </label>
+              <label className='field'>
+                <span>Name</span>
+                <input
+                  value={profileDraft.name ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='Canonical name'
+                />
+              </label>
+              <label className='field'>
+                <span>About</span>
+                <textarea
+                  value={profileDraft.about ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      about: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  className='ticket-output'
+                  placeholder='Short bio'
+                />
+              </label>
+              <label className='field'>
+                <span>Picture URL</span>
+                <input
+                  value={profileDraft.picture ?? ''}
+                  onChange={(event) => {
+                    setProfileDraft((current) => ({
+                      ...current,
+                      picture: event.target.value,
+                    }));
+                    setProfileDirty(true);
+                  }}
+                  placeholder='https://...'
+                />
+              </label>
+              {profileError ? <p className='error error-inline'>{profileError}</p> : null}
+              <div className='discovery-actions'>
+                <button className='button button-secondary' type='submit' disabled={!profileDirty}>
+                  Save Profile
+                </button>
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  disabled={!profileDirty}
+                  onClick={() => {
+                    if (!localProfile) {
+                      return;
+                    }
+                    setProfileDraft(profileInputFromProfile(localProfile));
+                    setProfileDirty(false);
+                    setProfileError(null);
+                  }}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+          </section>
           <section className='panel panel-subsection discovery-panel'>
             <div className='panel-header'>
               <h3>Discovery</h3>
@@ -1870,12 +2509,204 @@ export function App({ api = runtimeApi }: AppProps) {
               Refresh
             </button>
           </div>
+          <div className='topic-diagnostic'>
+            <label className='field'>
+              <span>View Scope</span>
+              <select
+                aria-label='View Scope'
+                value={timelineScopeValue(activeTimelineScope)}
+                onChange={(event) => {
+                  void handleTimelineScopeChange(event.target.value);
+                }}
+              >
+                <option value='public'>Public</option>
+                <option value='all_joined'>All joined</option>
+                {activeJoinedChannels.map((channel) => (
+                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                    {channel.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className='field'>
+              <span>Compose Target</span>
+              <select
+                aria-label='Compose Target'
+                value={channelRefValue(activeComposeChannel)}
+                disabled={Boolean(replyTarget)}
+                onChange={(event) => handleComposeChannelChange(event.target.value)}
+              >
+                <option value='public'>Public</option>
+                {activeJoinedChannels.map((channel) => (
+                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                    {channel.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>Viewing: {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}</span>
+            <span>Posting to: {activeComposeAudienceLabel}</span>
+          </div>
+          <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
+            <label className='field'>
+              <span>Create Channel</span>
+              <input
+                value={channelLabelInput}
+                onChange={(event) => setChannelLabelInput(event.target.value)}
+                placeholder='core contributors'
+              />
+            </label>
+            <label className='field'>
+              <span>Audience</span>
+              <select
+                aria-label='Channel Audience'
+                value={channelAudienceInput}
+                onChange={(event) =>
+                  setChannelAudienceInput(event.target.value as ChannelAudienceKind)
+                }
+              >
+                <option value='invite_only'>Invite only</option>
+                <option value='friend_only'>Friends</option>
+                <option value='friend_plus'>Friends+</option>
+              </select>
+            </label>
+            <button className='button button-secondary' type='submit'>
+              Create Channel
+            </button>
+            {activePrivateChannel?.audience_kind === 'invite_only' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={activeComposeChannel.kind !== 'private_channel'}
+                onClick={() => void handleCreateInvite()}
+              >
+                Create Invite
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_only' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleCreateGrant()}
+              >
+                Create Grant
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={activeComposeChannel.kind !== 'private_channel'}
+                onClick={() => void handleCreateShare()}
+              >
+                Create Share
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleFreezePrivateChannel()}
+              >
+                Freeze
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_only' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleRotatePrivateChannel()}
+              >
+                Rotate
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleRotatePrivateChannel()}
+              >
+                Rotate
+              </button>
+            ) : null}
+          </form>
+          <form className='composer composer-compact' onSubmit={handleJoinInvite}>
+            <label className='field'>
+              <span>Join via Invite</span>
+              <textarea
+                value={inviteTokenInput}
+                onChange={(event) => setInviteTokenInput(event.target.value)}
+                placeholder='paste private channel invite, friend grant, or friends+ share'
+              />
+            </label>
+            <button className='button button-secondary' type='submit'>
+              Join Invite
+            </button>
+            <button className='button button-secondary' type='button' onClick={() => void handleJoinGrant()}>
+              Join Grant
+            </button>
+            <button className='button button-secondary' type='button' onClick={() => void handleJoinShare()}>
+              Join Share
+            </button>
+          </form>
+          {inviteOutput ? (
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>
+                {inviteOutputLabel === 'grant'
+                  ? 'Latest grant'
+                  : inviteOutputLabel === 'share'
+                    ? 'Latest share'
+                    : 'Latest invite'}
+              </span>
+              <code>{inviteOutput}</code>
+            </div>
+          ) : null}
+          {activePrivateChannel ? (
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>
+                Policy:{' '}
+                {activePrivateChannel.audience_kind === 'friend_only'
+                  ? 'Friends: only mutual followers can join'
+                  : activePrivateChannel.audience_kind === 'friend_plus'
+                    ? 'Friends+: participants can share to their mutuals'
+                    : 'Invite only'}
+              </span>
+              <span>epoch: {activePrivateChannel.current_epoch_id}</span>
+              <span>sharing: {activePrivateChannel.sharing_state}</span>
+              {activePrivateChannel.joined_via_pubkey ? (
+                <span>joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}</span>
+              ) : null}
+            </div>
+          ) : null}
+          {activePrivateChannel &&
+          (activePrivateChannel.audience_kind === 'friend_only' ||
+            activePrivateChannel.audience_kind === 'friend_plus') ? (
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>participants: {activePrivateChannel.participant_count}</span>
+              <span>stale: {activePrivateChannel.stale_participant_count}</span>
+              <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
+            </div>
+          ) : null}
+          {activePrivateChannel?.audience_kind === 'friend_only' &&
+          activePrivateChannel.rotation_required ? (
+            <div className='topic-diagnostic topic-diagnostic-error'>
+              <span>rotation required: current participants include non-mutual followers</span>
+            </div>
+          ) : null}
+          {channelError ? <p className='error error-inline'>{channelError}</p> : null}
           <form className='composer' onSubmit={handlePublish}>
             {replyTarget ? (
               <div className='reply-banner'>
                 <div>
                   <strong>Replying</strong>
                   <p>{replyTarget.content}</p>
+                  <small>Audience: {replyTarget.audience_label}</small>
                 </div>
                 <button className='button button-secondary' type='button' onClick={clearReply}>
                   Clear
@@ -1934,6 +2765,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 ))}
               </ul>
             ) : null}
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>Audience: {activeComposeAudienceLabel}</span>
+            </div>
             <button className='button' type='submit'>
               {replyTarget ? 'Reply' : 'Publish'}
             </button>
@@ -1961,6 +2795,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 />
               </label>
               {liveError ? <p className='error error-inline'>{liveError}</p> : null}
+              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>Audience: {activeComposeAudienceLabel}</span>
+              </div>
               <button className='button' type='submit'>
                 Start Live
               </button>
@@ -1975,6 +2812,7 @@ export function App({ api = runtimeApi }: AppProps) {
                       <div className='post-meta'>
                         <span>{session.title}</span>
                         <span>{session.status}</span>
+                        <span className='reply-chip'>{session.audience_label}</span>
                       </div>
                       <div className='post-body'>
                         <strong className='post-title'>{session.description || 'no description'}</strong>
@@ -2059,6 +2897,9 @@ export function App({ api = runtimeApi }: AppProps) {
                 />
               </label>
               {gameError ? <p className='error error-inline'>{gameError}</p> : null}
+              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>Audience: {activeComposeAudienceLabel}</span>
+              </div>
               <button className='button' type='submit'>
                 Create Room
               </button>
@@ -2074,6 +2915,7 @@ export function App({ api = runtimeApi }: AppProps) {
                       <div className='post-meta'>
                         <span>{room.title}</span>
                         <span>{room.status}</span>
+                        <span className='reply-chip'>{room.audience_label}</span>
                       </div>
                       <div className='post-body'>
                         <strong className='post-title'>{room.description || 'no description'}</strong>
@@ -2169,20 +3011,102 @@ export function App({ api = runtimeApi }: AppProps) {
         <section className='panel'>
           <div className='panel-header'>
             <h2>Thread</h2>
-            {selectedThread ? (
-              <button
-                className='button button-secondary'
-                type='button'
-                onClick={() => {
-                  setSelectedThread(null);
-                  setThread([]);
-                  clearReply();
-                }}
-              >
-                Close
-              </button>
-            ) : null}
+            <div className='post-actions-inline'>
+              {selectedAuthor ? (
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  onClick={() => {
+                    setSelectedAuthorPubkey(null);
+                    setSelectedAuthor(null);
+                    setAuthorError(null);
+                  }}
+                >
+                  Clear Author
+                </button>
+              ) : null}
+              {selectedThread ? (
+                <button
+                  className='button button-secondary'
+                  type='button'
+                  onClick={() => {
+                    setSelectedThread(null);
+                    setThread([]);
+                    clearReply();
+                  }}
+                >
+                  Close
+                </button>
+              ) : null}
+            </div>
           </div>
+          <section className='panel panel-subsection'>
+            <div className='panel-header'>
+              <h3>Author Detail</h3>
+              <small>{selectedAuthor ? selectedAuthor.author_pubkey.slice(0, 12) : 'none'}</small>
+            </div>
+            {selectedAuthor ? (
+              <div className='author-detail'>
+                <div className='author-detail-header'>
+                  <strong>
+                    {authorDisplayLabel(
+                      selectedAuthor.author_pubkey,
+                      selectedAuthor.display_name,
+                      selectedAuthor.name
+                    )}
+                  </strong>
+                  {strongestRelationshipLabel(selectedAuthor) ? (
+                    <span
+                      className={relationshipBadgeClassName(
+                        strongestRelationshipLabel(selectedAuthor)
+                      )}
+                    >
+                      {strongestRelationshipLabel(selectedAuthor)}
+                    </span>
+                  ) : null}
+                </div>
+                <small>{selectedAuthor.author_pubkey}</small>
+                <p className='author-detail-copy'>
+                  {selectedAuthor.about?.trim() || 'No profile bio published yet.'}
+                </p>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>following: {selectedAuthor.following ? 'yes' : 'no'}</span>
+                  <span>followed by: {selectedAuthor.followed_by ? 'yes' : 'no'}</span>
+                </div>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>mutual: {selectedAuthor.mutual ? 'yes' : 'no'}</span>
+                  <span>
+                    friend of friend: {selectedAuthor.friend_of_friend ? 'yes' : 'no'}
+                  </span>
+                </div>
+                {selectedAuthor.friend_of_friend_via_pubkeys.length > 0 ? (
+                  <div className='diagnostic-block'>
+                    <strong>Via</strong>
+                    <p>{selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey).join(', ')}</p>
+                  </div>
+                ) : null}
+                {authorError ? <p className='error error-inline'>{authorError}</p> : null}
+                {selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey ? (
+                  <div className='post-actions'>
+                    <button
+                      className='button button-secondary'
+                      type='button'
+                      onClick={() =>
+                        void handleRelationshipAction(
+                          selectedAuthor.author_pubkey,
+                          selectedAuthor.following
+                        )
+                      }
+                    >
+                      {selectedAuthor.following ? 'Unfollow' : 'Follow'}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className='empty'>Select an author to inspect profile and relationship.</p>
+            )}
+          </section>
           {selectedThread ? (
             <ul className='thread-list'>
               {thread.map((post) => (

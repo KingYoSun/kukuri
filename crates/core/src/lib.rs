@@ -3,9 +3,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use bech32::{Bech32, Hrp};
-use secp256k1::rand::thread_rng;
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use hkdf::Hkdf;
+use secp256k1::ecdh::SharedSecret;
+use secp256k1::rand::{RngCore, thread_rng};
 use secp256k1::schnorr::Signature;
-use secp256k1::{Keypair, Message, SECP256K1, SecretKey, XOnlyPublicKey};
+use secp256k1::{Keypair, Message, Parity, PublicKey, SECP256K1, SecretKey, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -145,6 +149,20 @@ impl TopicId {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
+pub struct ChannelId(pub String);
+
+impl ChannelId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ReplicaId(pub String);
 
 impl ReplicaId {
@@ -261,6 +279,49 @@ impl Default for ObjectStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChannelRef {
+    Public,
+    PrivateChannel { channel_id: ChannelId },
+}
+
+impl Default for ChannelRef {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
+impl ChannelRef {
+    pub fn channel_id(&self) -> Option<&ChannelId> {
+        match self {
+            Self::Public => None,
+            Self::PrivateChannel { channel_id } => Some(channel_id),
+        }
+    }
+
+    pub fn visibility(&self) -> ObjectVisibility {
+        match self {
+            Self::Public => ObjectVisibility::Public,
+            Self::PrivateChannel { .. } => ObjectVisibility::Private,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TimelineScope {
+    Public,
+    AllJoined,
+    Channel { channel_id: ChannelId },
+}
+
+impl Default for TimelineScope {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaManifestItem {
     pub blob_hash: BlobHash,
     pub mime: String,
@@ -284,6 +345,8 @@ pub struct KukuriMediaManifestV1 {
 pub struct LiveSessionManifestBlobV1 {
     pub session_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub title: String,
     pub description: String,
@@ -296,6 +359,8 @@ pub struct LiveSessionManifestBlobV1 {
 pub struct LiveSessionStateDocV1 {
     pub session_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -321,6 +386,8 @@ pub struct GameScoreEntry {
 pub struct GameRoomManifestBlobV1 {
     pub room_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub title: String,
     pub description: String,
@@ -335,6 +402,8 @@ pub struct GameRoomManifestBlobV1 {
 pub struct GameRoomStateDocV1 {
     pub room_id: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub owner_pubkey: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -390,6 +459,8 @@ pub enum GossipHint {
 pub struct KukuriPostEnvelopeContentV1 {
     pub object_kind: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub payload_ref: PayloadRef,
     #[serde(default)]
     pub attachments: Vec<AssetRef>,
@@ -407,6 +478,8 @@ pub struct KukuriPostObjectV1 {
     pub envelope_id: EnvelopeId,
     pub object_kind: String,
     pub topic_id: TopicId,
+    #[serde(default)]
+    pub channel_id: Option<ChannelId>,
     pub author: Pubkey,
     pub created_at: i64,
     pub updated_at: i64,
@@ -435,10 +508,252 @@ pub struct Profile {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriProfileEnvelopeContentV1 {
+    pub author_pubkey: Pubkey,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorProfileDocV1 {
+    pub author_pubkey: Pubkey,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub about: Option<String>,
+    pub picture: Option<String>,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FollowEdgeStatus {
+    Active,
+    Revoked,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriFollowEdgeEnvelopeContentV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowEdge {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowEdgeDocV1 {
+    pub subject_pubkey: Pubkey,
+    pub target_pubkey: Pubkey,
+    pub status: FollowEdgeStatus,
+    pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadRef {
     pub root: EnvelopeId,
     pub reply_to: Option<EnvelopeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChannelAudienceKind {
+    InviteOnly,
+    FriendOnly,
+    FriendPlus,
+}
+
+impl Default for ChannelAudienceKind {
+    fn default() -> Self {
+        Self::InviteOnly
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChannelSharingState {
+    Open,
+    Frozen,
+}
+
+impl Default for ChannelSharingState {
+    fn default() -> Self {
+        Self::Open
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreatePrivateChannelInput {
+    pub topic_id: TopicId,
+    pub label: String,
+    #[serde(default)]
+    pub audience_kind: ChannelAudienceKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrivateChannelJoinMode {
+    OwnerSeed,
+    FriendOnlyGrant,
+    FriendPlusShare,
+    RotationRedeem,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelMetadataDocV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub label: String,
+    pub creator_pubkey: Pubkey,
+    pub created_at: i64,
+    #[serde(default)]
+    pub audience_kind: ChannelAudienceKind,
+    #[serde(default)]
+    pub owner_pubkey: Pubkey,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelPolicyDocV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub audience_kind: ChannelAudienceKind,
+    pub owner_pubkey: Pubkey,
+    pub epoch_id: String,
+    pub sharing_state: ChannelSharingState,
+    pub rotated_at: Option<i64>,
+    #[serde(default)]
+    pub previous_epoch_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelParticipantDocV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub epoch_id: String,
+    pub participant_pubkey: Pubkey,
+    pub joined_at: i64,
+    pub is_owner: bool,
+    #[serde(default)]
+    pub join_mode: Option<PrivateChannelJoinMode>,
+    #[serde(default)]
+    pub sponsor_pubkey: Option<Pubkey>,
+    #[serde(default)]
+    pub share_token_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriPrivateChannelInviteEnvelopeContentV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub namespace_secret_hex: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelInviteTokenV1 {
+    pub envelope: KukuriEnvelope,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelInvitePreview {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub inviter_pubkey: Pubkey,
+    pub expires_at: Option<i64>,
+    pub namespace_secret_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriFriendOnlyGrantEnvelopeContentV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub owner_pubkey: Pubkey,
+    pub epoch_id: String,
+    pub namespace_secret_hex: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FriendOnlyGrantTokenV1 {
+    pub envelope: KukuriEnvelope,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FriendOnlyGrantPreview {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub owner_pubkey: Pubkey,
+    pub epoch_id: String,
+    pub expires_at: Option<i64>,
+    pub namespace_secret_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriFriendPlusShareEnvelopeContentV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub owner_pubkey: Pubkey,
+    pub sponsor_pubkey: Pubkey,
+    pub epoch_id: String,
+    pub namespace_secret_hex: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FriendPlusShareTokenV1 {
+    pub envelope: KukuriEnvelope,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FriendPlusSharePreview {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub channel_label: String,
+    pub owner_pubkey: Pubkey,
+    pub sponsor_pubkey: Pubkey,
+    pub epoch_id: String,
+    pub expires_at: Option<i64>,
+    pub namespace_secret_hex: String,
+    pub share_token_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelRotationGrantPayloadV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub recipient_pubkey: Pubkey,
+    pub old_epoch_id: String,
+    pub new_epoch_id: String,
+    pub new_namespace_secret_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivateChannelRotationGrantDocV1 {
+    pub channel_id: ChannelId,
+    pub topic_id: TopicId,
+    pub owner_pubkey: Pubkey,
+    pub recipient_pubkey: Pubkey,
+    pub old_epoch_id: String,
+    pub new_epoch_id: String,
+    pub nonce_hex: String,
+    pub ciphertext_hex: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -544,6 +859,7 @@ impl KukuriEnvelope {
             envelope_id: self.id.clone(),
             object_kind: content.object_kind,
             topic_id: content.topic_id,
+            channel_id: content.channel_id,
             author: self.pubkey.clone(),
             created_at: self.created_at,
             updated_at: self.created_at,
@@ -602,6 +918,28 @@ pub fn build_post_envelope_with_payload(
     reply_to: Option<&KukuriEnvelope>,
     visibility: ObjectVisibility,
 ) -> Result<KukuriEnvelope> {
+    build_post_envelope_with_payload_in_channel(
+        keys,
+        topic,
+        payload_ref,
+        attachments,
+        media_manifest_refs,
+        reply_to,
+        visibility,
+        None,
+    )
+}
+
+pub fn build_post_envelope_with_payload_in_channel(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    payload_ref: PayloadRef,
+    attachments: Vec<AssetRef>,
+    media_manifest_refs: Vec<String>,
+    reply_to: Option<&KukuriEnvelope>,
+    visibility: ObjectVisibility,
+    channel_id: Option<&ChannelId>,
+) -> Result<KukuriEnvelope> {
     let thread = reply_to
         .and_then(KukuriEnvelope::thread_ref)
         .unwrap_or_else(|| {
@@ -625,6 +963,7 @@ pub fn build_post_envelope_with_payload(
     let content = KukuriPostEnvelopeContentV1 {
         object_kind: kind.to_string(),
         topic_id: topic.clone(),
+        channel_id: channel_id.cloned(),
         payload_ref,
         attachments,
         media_manifest_refs,
@@ -641,6 +980,9 @@ pub fn build_post_envelope_with_payload(
     }
     if let Some(reply_id) = reply_id {
         tags.push(vec!["reply_to".into(), reply_id.0]);
+    }
+    if let Some(channel_id) = channel_id {
+        tags.push(vec!["channel".into(), channel_id.as_str().to_string()]);
     }
     sign_envelope_json(keys, kind, tags, &content)
 }
@@ -659,6 +1001,57 @@ pub fn build_media_manifest_envelope(
             vec!["manifest_id".into(), manifest.manifest_id.clone()],
         ],
         manifest,
+    )
+}
+
+pub fn build_profile_envelope(
+    keys: &KukuriKeys,
+    content: &KukuriProfileEnvelopeContentV1,
+) -> Result<KukuriEnvelope> {
+    let author_pubkey = keys.public_key();
+    if content.author_pubkey != author_pubkey {
+        bail!("profile author pubkey must match signer");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(content).context("failed to encode envelope content")?;
+    sign_envelope_at(
+        keys,
+        "identity-profile",
+        vec![
+            vec!["author".into(), content.author_pubkey.as_str().to_string()],
+            vec!["object".into(), "identity-profile".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn build_follow_edge_envelope(
+    keys: &KukuriKeys,
+    target_pubkey: &Pubkey,
+    status: FollowEdgeStatus,
+) -> Result<KukuriEnvelope> {
+    let subject_pubkey = keys.public_key();
+    if subject_pubkey == *target_pubkey {
+        bail!("self follow is not allowed");
+    }
+    let content = KukuriFollowEdgeEnvelopeContentV1 {
+        subject_pubkey: subject_pubkey.clone(),
+        target_pubkey: target_pubkey.clone(),
+        status,
+    };
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(&content).context("failed to encode envelope content")?;
+    sign_envelope_at(
+        keys,
+        "follow-edge",
+        vec![
+            vec!["subject".into(), subject_pubkey.as_str().to_string()],
+            vec!["target".into(), target_pubkey.as_str().to_string()],
+            vec!["object".into(), "follow-edge".into()],
+        ],
+        encoded,
+        created_at,
     )
 }
 
@@ -698,34 +1091,583 @@ pub fn build_game_session_envelope<T: Serialize>(
     )
 }
 
+pub fn build_private_channel_invite_token(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    channel_id: &ChannelId,
+    channel_label: &str,
+    namespace_secret_hex: &str,
+    expires_at: Option<i64>,
+) -> Result<String> {
+    let token = PrivateChannelInviteTokenV1 {
+        envelope: sign_envelope_json(
+            keys,
+            "channel-invite",
+            vec![
+                vec!["topic".into(), topic.as_str().to_string()],
+                vec!["object".into(), "channel-invite".into()],
+                vec!["channel".into(), channel_id.as_str().to_string()],
+            ],
+            &KukuriPrivateChannelInviteEnvelopeContentV1 {
+                channel_id: channel_id.clone(),
+                topic_id: topic.clone(),
+                channel_label: channel_label.trim().to_string(),
+                namespace_secret_hex: namespace_secret_hex.trim().to_string(),
+                expires_at,
+            },
+        )?,
+    };
+    serde_json::to_string(&token).context("failed to encode private channel invite token")
+}
+
+pub fn build_friend_only_grant_token(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    channel_id: &ChannelId,
+    channel_label: &str,
+    epoch_id: &str,
+    namespace_secret_hex: &str,
+    expires_at: Option<i64>,
+) -> Result<String> {
+    let owner_pubkey = keys.public_key();
+    let token = FriendOnlyGrantTokenV1 {
+        envelope: sign_envelope_json(
+            keys,
+            "channel-friend-grant",
+            vec![
+                vec!["topic".into(), topic.as_str().to_string()],
+                vec!["object".into(), "channel-friend-grant".into()],
+                vec!["channel".into(), channel_id.as_str().to_string()],
+                vec!["epoch".into(), epoch_id.trim().to_string()],
+            ],
+            &KukuriFriendOnlyGrantEnvelopeContentV1 {
+                channel_id: channel_id.clone(),
+                topic_id: topic.clone(),
+                channel_label: channel_label.trim().to_string(),
+                owner_pubkey,
+                epoch_id: epoch_id.trim().to_string(),
+                namespace_secret_hex: namespace_secret_hex.trim().to_string(),
+                expires_at,
+            },
+        )?,
+    };
+    serde_json::to_string(&token).context("failed to encode friend-only grant token")
+}
+
+pub fn build_friend_plus_share_token(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    channel_id: &ChannelId,
+    channel_label: &str,
+    owner_pubkey: &Pubkey,
+    epoch_id: &str,
+    namespace_secret_hex: &str,
+    expires_at: Option<i64>,
+) -> Result<String> {
+    let sponsor_pubkey = keys.public_key();
+    let token = FriendPlusShareTokenV1 {
+        envelope: sign_envelope_json(
+            keys,
+            "channel-share",
+            vec![
+                vec!["topic".into(), topic.as_str().to_string()],
+                vec!["object".into(), "channel-share".into()],
+                vec!["channel".into(), channel_id.as_str().to_string()],
+                vec!["epoch".into(), epoch_id.trim().to_string()],
+                vec!["owner".into(), owner_pubkey.as_str().to_string()],
+            ],
+            &KukuriFriendPlusShareEnvelopeContentV1 {
+                channel_id: channel_id.clone(),
+                topic_id: topic.clone(),
+                channel_label: channel_label.trim().to_string(),
+                owner_pubkey: owner_pubkey.clone(),
+                sponsor_pubkey,
+                epoch_id: epoch_id.trim().to_string(),
+                namespace_secret_hex: namespace_secret_hex.trim().to_string(),
+                expires_at,
+            },
+        )?,
+    };
+    serde_json::to_string(&token).context("failed to encode friend-plus share token")
+}
+
+pub fn parse_private_channel_invite_token(token: &str) -> Result<PrivateChannelInvitePreview> {
+    let token: PrivateChannelInviteTokenV1 =
+        serde_json::from_str(token).context("failed to parse private channel invite token")?;
+    token.envelope.verify()?;
+    if token.envelope.kind != "channel-invite" {
+        bail!("invite envelope kind must be channel-invite");
+    }
+    let content: KukuriPrivateChannelInviteEnvelopeContentV1 =
+        serde_json::from_str(token.envelope.content.as_str())
+            .context("failed to decode private channel invite content")?;
+    if content.channel_label.trim().is_empty() {
+        bail!("channel invite label is required");
+    }
+    let secret_bytes =
+        hex::decode(content.namespace_secret_hex.trim()).context("invalid invite secret hex")?;
+    if secret_bytes.len() != 32 {
+        bail!("invite secret must be 32 bytes");
+    }
+    if let Some(expires_at) = content.expires_at
+        && expires_at < now_timestamp_millis()?
+    {
+        bail!("invite has expired");
+    }
+    Ok(PrivateChannelInvitePreview {
+        channel_id: content.channel_id,
+        topic_id: content.topic_id,
+        channel_label: content.channel_label,
+        inviter_pubkey: token.envelope.pubkey,
+        expires_at: content.expires_at,
+        namespace_secret_hex: content.namespace_secret_hex,
+    })
+}
+
+pub fn build_private_channel_policy_envelope(
+    keys: &KukuriKeys,
+    doc: &PrivateChannelPolicyDocV1,
+) -> Result<KukuriEnvelope> {
+    if keys.public_key() != doc.owner_pubkey {
+        bail!("channel policy owner pubkey must match signer");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(doc).context("failed to encode channel policy doc")?;
+    sign_envelope_at(
+        keys,
+        "channel-policy",
+        vec![
+            vec!["topic".into(), doc.topic_id.as_str().to_string()],
+            vec!["channel".into(), doc.channel_id.as_str().to_string()],
+            vec!["epoch".into(), doc.epoch_id.clone()],
+            vec!["object".into(), "channel-policy".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn parse_private_channel_policy(
+    envelope: &KukuriEnvelope,
+) -> Result<Option<PrivateChannelPolicyDocV1>> {
+    if envelope.kind != "channel-policy" {
+        return Ok(None);
+    }
+    let doc: PrivateChannelPolicyDocV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse channel policy")?;
+    validate_pubkey(doc.owner_pubkey.as_str()).context("invalid channel policy owner pubkey")?;
+    if envelope.pubkey != doc.owner_pubkey {
+        bail!("channel policy owner pubkey must match envelope signer");
+    }
+    if doc.epoch_id.trim().is_empty() {
+        bail!("channel policy epoch id is required");
+    }
+    if doc
+        .previous_epoch_id
+        .as_ref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        bail!("channel policy previous epoch id must not be empty");
+    }
+    Ok(Some(doc))
+}
+
+pub fn build_private_channel_participant_envelope(
+    keys: &KukuriKeys,
+    doc: &PrivateChannelParticipantDocV1,
+) -> Result<KukuriEnvelope> {
+    if keys.public_key() != doc.participant_pubkey {
+        bail!("channel participant pubkey must match signer");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(doc).context("failed to encode channel participant doc")?;
+    sign_envelope_at(
+        keys,
+        "channel-participant",
+        vec![
+            vec!["topic".into(), doc.topic_id.as_str().to_string()],
+            vec!["channel".into(), doc.channel_id.as_str().to_string()],
+            vec!["epoch".into(), doc.epoch_id.clone()],
+            vec![
+                "participant".into(),
+                doc.participant_pubkey.as_str().to_string(),
+            ],
+            vec!["object".into(), "channel-participant".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn parse_private_channel_participant(
+    envelope: &KukuriEnvelope,
+) -> Result<Option<PrivateChannelParticipantDocV1>> {
+    if envelope.kind != "channel-participant" {
+        return Ok(None);
+    }
+    let doc: PrivateChannelParticipantDocV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse channel participant")?;
+    validate_pubkey(doc.participant_pubkey.as_str())
+        .context("invalid channel participant pubkey")?;
+    if envelope.pubkey != doc.participant_pubkey {
+        bail!("channel participant pubkey must match envelope signer");
+    }
+    if doc.epoch_id.trim().is_empty() {
+        bail!("channel participant epoch id is required");
+    }
+    if let Some(sponsor_pubkey) = doc.sponsor_pubkey.as_ref() {
+        validate_pubkey(sponsor_pubkey.as_str())
+            .context("invalid channel participant sponsor pubkey")?;
+    }
+    if doc
+        .share_token_id
+        .as_ref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        bail!("channel participant share token id must not be empty");
+    }
+    Ok(Some(doc))
+}
+
+pub fn parse_friend_only_grant_token(token: &str) -> Result<FriendOnlyGrantPreview> {
+    let token: FriendOnlyGrantTokenV1 =
+        serde_json::from_str(token).context("failed to parse friend-only grant token")?;
+    token.envelope.verify()?;
+    if token.envelope.kind != "channel-friend-grant" {
+        bail!("grant envelope kind must be channel-friend-grant");
+    }
+    let content: KukuriFriendOnlyGrantEnvelopeContentV1 =
+        serde_json::from_str(token.envelope.content.as_str())
+            .context("failed to decode friend-only grant content")?;
+    validate_pubkey(content.owner_pubkey.as_str()).context("invalid friend-only grant owner")?;
+    if token.envelope.pubkey != content.owner_pubkey {
+        bail!("friend-only grant owner pubkey must match envelope signer");
+    }
+    if content.channel_label.trim().is_empty() {
+        bail!("friend-only grant label is required");
+    }
+    if content.epoch_id.trim().is_empty() {
+        bail!("friend-only grant epoch id is required");
+    }
+    let secret_bytes =
+        hex::decode(content.namespace_secret_hex.trim()).context("invalid grant secret hex")?;
+    if secret_bytes.len() != 32 {
+        bail!("grant secret must be 32 bytes");
+    }
+    if let Some(expires_at) = content.expires_at
+        && expires_at < now_timestamp_millis()?
+    {
+        bail!("friend-only grant has expired");
+    }
+    Ok(FriendOnlyGrantPreview {
+        channel_id: content.channel_id,
+        topic_id: content.topic_id,
+        channel_label: content.channel_label,
+        owner_pubkey: content.owner_pubkey,
+        epoch_id: content.epoch_id,
+        expires_at: content.expires_at,
+        namespace_secret_hex: content.namespace_secret_hex,
+    })
+}
+
+pub fn parse_friend_plus_share_token(token: &str) -> Result<FriendPlusSharePreview> {
+    let token: FriendPlusShareTokenV1 =
+        serde_json::from_str(token).context("failed to parse friend-plus share token")?;
+    token.envelope.verify()?;
+    if token.envelope.kind != "channel-share" {
+        bail!("share envelope kind must be channel-share");
+    }
+    let content: KukuriFriendPlusShareEnvelopeContentV1 =
+        serde_json::from_str(token.envelope.content.as_str())
+            .context("failed to decode friend-plus share content")?;
+    validate_pubkey(content.owner_pubkey.as_str()).context("invalid friend-plus share owner")?;
+    validate_pubkey(content.sponsor_pubkey.as_str())
+        .context("invalid friend-plus share sponsor")?;
+    if token.envelope.pubkey != content.sponsor_pubkey {
+        bail!("friend-plus share sponsor pubkey must match envelope signer");
+    }
+    if content.channel_label.trim().is_empty() {
+        bail!("friend-plus share label is required");
+    }
+    if content.epoch_id.trim().is_empty() {
+        bail!("friend-plus share epoch id is required");
+    }
+    validate_private_channel_secret_hex(
+        content.namespace_secret_hex.as_str(),
+        "friend-plus share secret",
+    )?;
+    if let Some(expires_at) = content.expires_at
+        && expires_at < now_timestamp_millis()?
+    {
+        bail!("friend-plus share has expired");
+    }
+    Ok(FriendPlusSharePreview {
+        channel_id: content.channel_id,
+        topic_id: content.topic_id,
+        channel_label: content.channel_label,
+        owner_pubkey: content.owner_pubkey,
+        sponsor_pubkey: content.sponsor_pubkey,
+        epoch_id: content.epoch_id,
+        expires_at: content.expires_at,
+        namespace_secret_hex: content.namespace_secret_hex,
+        share_token_id: token.envelope.id.as_str().to_string(),
+    })
+}
+
+pub fn encrypt_private_channel_rotation_grant(
+    owner_keys: &KukuriKeys,
+    payload: &PrivateChannelRotationGrantPayloadV1,
+) -> Result<PrivateChannelRotationGrantDocV1> {
+    if owner_keys.public_key() != payload.owner_pubkey {
+        bail!("channel rotation grant owner pubkey must match signer");
+    }
+    validate_pubkey(payload.recipient_pubkey.as_str())
+        .context("invalid channel rotation grant recipient pubkey")?;
+    if payload.old_epoch_id.trim().is_empty() {
+        bail!("channel rotation grant old epoch id is required");
+    }
+    if payload.new_epoch_id.trim().is_empty() {
+        bail!("channel rotation grant new epoch id is required");
+    }
+    validate_private_channel_secret_hex(
+        payload.new_namespace_secret_hex.as_str(),
+        "channel rotation grant secret",
+    )?;
+    let plaintext =
+        serde_json::to_vec(payload).context("failed to encode channel rotation grant payload")?;
+    let mut nonce = [0u8; 24];
+    thread_rng().fill_bytes(&mut nonce);
+    let cipher = XChaCha20Poly1305::new_from_slice(
+        derive_rotation_grant_key(owner_keys, &payload.recipient_pubkey, payload)?.as_slice(),
+    )
+    .context("failed to initialize rotation grant cipher")?;
+    let ciphertext = cipher
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext.as_slice(),
+                aad: rotation_grant_aad(payload).as_bytes(),
+            },
+        )
+        .map_err(|_| anyhow::anyhow!("failed to encrypt channel rotation grant"))?;
+    Ok(PrivateChannelRotationGrantDocV1 {
+        channel_id: payload.channel_id.clone(),
+        topic_id: payload.topic_id.clone(),
+        owner_pubkey: payload.owner_pubkey.clone(),
+        recipient_pubkey: payload.recipient_pubkey.clone(),
+        old_epoch_id: payload.old_epoch_id.clone(),
+        new_epoch_id: payload.new_epoch_id.clone(),
+        nonce_hex: hex::encode(nonce),
+        ciphertext_hex: hex::encode(ciphertext),
+    })
+}
+
+pub fn decrypt_private_channel_rotation_grant(
+    local_keys: &KukuriKeys,
+    doc: &PrivateChannelRotationGrantDocV1,
+) -> Result<PrivateChannelRotationGrantPayloadV1> {
+    if local_keys.public_key() != doc.recipient_pubkey {
+        bail!("channel rotation grant recipient pubkey must match decrypting author");
+    }
+    let nonce =
+        hex::decode(doc.nonce_hex.trim()).context("invalid channel rotation grant nonce")?;
+    if nonce.len() != 24 {
+        bail!("channel rotation grant nonce must be 24 bytes");
+    }
+    let ciphertext = hex::decode(doc.ciphertext_hex.trim())
+        .context("invalid channel rotation grant ciphertext")?;
+    let payload_stub = PrivateChannelRotationGrantPayloadV1 {
+        channel_id: doc.channel_id.clone(),
+        topic_id: doc.topic_id.clone(),
+        owner_pubkey: doc.owner_pubkey.clone(),
+        recipient_pubkey: doc.recipient_pubkey.clone(),
+        old_epoch_id: doc.old_epoch_id.clone(),
+        new_epoch_id: doc.new_epoch_id.clone(),
+        new_namespace_secret_hex: String::new(),
+    };
+    let cipher = XChaCha20Poly1305::new_from_slice(
+        derive_rotation_grant_key(local_keys, &doc.owner_pubkey, &payload_stub)?.as_slice(),
+    )
+    .context("failed to initialize rotation grant cipher")?;
+    let plaintext = cipher
+        .decrypt(
+            XNonce::from_slice(nonce.as_slice()),
+            Payload {
+                msg: ciphertext.as_slice(),
+                aad: rotation_grant_aad(&payload_stub).as_bytes(),
+            },
+        )
+        .map_err(|_| anyhow::anyhow!("failed to decrypt channel rotation grant"))?;
+    let payload: PrivateChannelRotationGrantPayloadV1 = serde_json::from_slice(&plaintext)
+        .context("failed to decode channel rotation grant payload")?;
+    if payload.channel_id != doc.channel_id || payload.topic_id != doc.topic_id {
+        bail!("channel rotation grant payload does not match doc identity");
+    }
+    if payload.owner_pubkey != doc.owner_pubkey || payload.recipient_pubkey != doc.recipient_pubkey
+    {
+        bail!("channel rotation grant payload does not match doc recipients");
+    }
+    if payload.old_epoch_id != doc.old_epoch_id || payload.new_epoch_id != doc.new_epoch_id {
+        bail!("channel rotation grant payload does not match doc epochs");
+    }
+    validate_private_channel_secret_hex(
+        payload.new_namespace_secret_hex.as_str(),
+        "channel rotation grant secret",
+    )?;
+    Ok(payload)
+}
+
+pub fn build_private_channel_rotation_grant_envelope(
+    owner_keys: &KukuriKeys,
+    doc: &PrivateChannelRotationGrantDocV1,
+) -> Result<KukuriEnvelope> {
+    if owner_keys.public_key() != doc.owner_pubkey {
+        bail!("channel rotation grant owner pubkey must match signer");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded =
+        serde_json::to_string(doc).context("failed to encode channel rotation grant doc")?;
+    sign_envelope_at(
+        owner_keys,
+        "channel-rotation-grant",
+        vec![
+            vec!["topic".into(), doc.topic_id.as_str().to_string()],
+            vec!["channel".into(), doc.channel_id.as_str().to_string()],
+            vec!["epoch".into(), doc.old_epoch_id.clone()],
+            vec![
+                "recipient".into(),
+                doc.recipient_pubkey.as_str().to_string(),
+            ],
+            vec!["object".into(), "channel-rotation-grant".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn parse_private_channel_rotation_grant(
+    envelope: &KukuriEnvelope,
+) -> Result<Option<PrivateChannelRotationGrantDocV1>> {
+    if envelope.kind != "channel-rotation-grant" {
+        return Ok(None);
+    }
+    let doc: PrivateChannelRotationGrantDocV1 = serde_json::from_str(&envelope.content)
+        .context("failed to parse channel rotation grant")?;
+    validate_pubkey(doc.owner_pubkey.as_str()).context("invalid channel rotation grant owner")?;
+    validate_pubkey(doc.recipient_pubkey.as_str())
+        .context("invalid channel rotation grant recipient")?;
+    if envelope.pubkey != doc.owner_pubkey {
+        bail!("channel rotation grant owner pubkey must match envelope signer");
+    }
+    if doc.old_epoch_id.trim().is_empty() {
+        bail!("channel rotation grant old epoch id is required");
+    }
+    if doc.new_epoch_id.trim().is_empty() {
+        bail!("channel rotation grant new epoch id is required");
+    }
+    if doc.old_epoch_id == doc.new_epoch_id {
+        bail!("channel rotation grant must rotate to a new epoch");
+    }
+    let nonce =
+        hex::decode(doc.nonce_hex.trim()).context("invalid channel rotation grant nonce")?;
+    if nonce.len() != 24 {
+        bail!("channel rotation grant nonce must be 24 bytes");
+    }
+    let _ = hex::decode(doc.ciphertext_hex.trim())
+        .context("invalid channel rotation grant ciphertext")?;
+    Ok(Some(doc))
+}
+
 pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
     if envelope.kind != "identity-profile" {
         return Ok(None);
     }
 
-    let metadata: serde_json::Value =
+    let metadata: KukuriProfileEnvelopeContentV1 =
         serde_json::from_str(&envelope.content).context("failed to parse profile envelope")?;
+    validate_pubkey(metadata.author_pubkey.as_str()).context("invalid profile author pubkey")?;
+    if metadata.author_pubkey != envelope.pubkey {
+        bail!("profile author pubkey must match envelope signer");
+    }
 
     Ok(Some(Profile {
         pubkey: envelope.pubkey.clone(),
-        name: metadata
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        display_name: metadata
-            .get("display_name")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        about: metadata
-            .get("about")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
-        picture: metadata
-            .get("picture")
-            .and_then(serde_json::Value::as_str)
-            .map(ToOwned::to_owned),
+        name: metadata.name,
+        display_name: metadata.display_name,
+        about: metadata.about,
+        picture: metadata.picture,
         updated_at: envelope.created_at,
     }))
+}
+
+pub fn parse_follow_edge(envelope: &KukuriEnvelope) -> Result<Option<FollowEdge>> {
+    if envelope.kind != "follow-edge" {
+        return Ok(None);
+    }
+
+    let content: KukuriFollowEdgeEnvelopeContentV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse follow edge envelope")?;
+    validate_pubkey(content.subject_pubkey.as_str()).context("invalid follow subject pubkey")?;
+    validate_pubkey(content.target_pubkey.as_str()).context("invalid follow target pubkey")?;
+    if content.subject_pubkey != envelope.pubkey {
+        bail!("follow subject pubkey must match envelope signer");
+    }
+    if content.subject_pubkey == content.target_pubkey {
+        bail!("self follow is not allowed");
+    }
+
+    Ok(Some(FollowEdge {
+        subject_pubkey: content.subject_pubkey,
+        target_pubkey: content.target_pubkey,
+        status: content.status,
+        updated_at: envelope.created_at,
+        envelope_id: envelope.id.clone(),
+    }))
+}
+
+fn validate_private_channel_secret_hex(value: &str, label: &str) -> Result<()> {
+    let secret_bytes = hex::decode(value.trim()).with_context(|| format!("invalid {label} hex"))?;
+    if secret_bytes.len() != 32 {
+        bail!("{label} must be 32 bytes");
+    }
+    Ok(())
+}
+
+fn rotation_grant_aad(payload: &PrivateChannelRotationGrantPayloadV1) -> String {
+    format!(
+        "kukuri:rotation-grant:{}:{}:{}:{}:{}",
+        payload.channel_id.as_str(),
+        payload.topic_id.as_str(),
+        payload.owner_pubkey.as_str(),
+        payload.recipient_pubkey.as_str(),
+        payload.new_epoch_id
+    )
+}
+
+fn derive_rotation_grant_key(
+    local_keys: &KukuriKeys,
+    remote_pubkey: &Pubkey,
+    payload: &PrivateChannelRotationGrantPayloadV1,
+) -> Result<[u8; 32]> {
+    let remote_xonly = XOnlyPublicKey::from_str(remote_pubkey.as_str())
+        .context("invalid remote x-only public key")?;
+    let remote_public = PublicKey::from_x_only_public_key(remote_xonly, Parity::Even);
+    let keypair = Keypair::from_secret_key(SECP256K1, &local_keys.secret_key);
+    let (_, parity) = keypair.x_only_public_key();
+    let local_secret = if parity == Parity::Odd {
+        local_keys.secret_key.clone().negate()
+    } else {
+        local_keys.secret_key.clone()
+    };
+    let shared = SharedSecret::new(&remote_public, &local_secret);
+    let hkdf = Hkdf::<Sha256>::new(
+        Some(b"kukuri/private-channel/rotation-grant"),
+        shared.secret_bytes().as_slice(),
+    );
+    let mut key = [0u8; 32];
+    hkdf.expand(rotation_grant_aad(payload).as_bytes(), &mut key)
+        .map_err(|_| anyhow::anyhow!("failed to derive channel rotation grant key"))?;
+    Ok(key)
 }
 
 pub fn sign_envelope_json<T: Serialize>(
@@ -793,6 +1735,18 @@ fn canonical_envelope_payload(
         0, pubkey, created_at, kind, tags, content
     ]))
     .context("failed to encode canonical envelope payload")
+}
+
+fn validate_pubkey(value: &str) -> Result<()> {
+    XOnlyPublicKey::from_str(value).context("invalid x-only public key")?;
+    Ok(())
+}
+
+fn now_timestamp_millis() -> Result<i64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before unix epoch")?
+        .as_millis() as i64)
 }
 
 #[cfg(test)]
@@ -871,5 +1825,273 @@ mod tests {
 
         envelope.verify().expect("signature verification");
         assert_eq!(envelope.kind, "media-manifest");
+    }
+
+    #[test]
+    fn profile_envelope_roundtrip() {
+        let keys = generate_keys();
+        let envelope = build_profile_envelope(
+            &keys,
+            &KukuriProfileEnvelopeContentV1 {
+                author_pubkey: keys.public_key(),
+                name: Some("alice".into()),
+                display_name: Some("Alice".into()),
+                about: Some("hello".into()),
+                picture: Some("https://example.com/alice.png".into()),
+            },
+        )
+        .expect("profile envelope");
+
+        envelope.verify().expect("signature verification");
+        let profile = parse_profile(&envelope)
+            .expect("parse profile")
+            .expect("profile");
+        assert_eq!(profile.pubkey, keys.public_key());
+        assert_eq!(profile.display_name.as_deref(), Some("Alice"));
+        assert_eq!(profile.about.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn follow_edge_roundtrip_and_self_follow_rejected() {
+        let keys = generate_keys();
+        let target = generate_keys().public_key();
+        let envelope = build_follow_edge_envelope(&keys, &target, FollowEdgeStatus::Active)
+            .expect("follow edge envelope");
+
+        envelope.verify().expect("signature verification");
+        let edge = parse_follow_edge(&envelope)
+            .expect("parse follow edge")
+            .expect("follow edge");
+        assert_eq!(edge.subject_pubkey, keys.public_key());
+        assert_eq!(edge.target_pubkey, target);
+        assert_eq!(edge.status, FollowEdgeStatus::Active);
+
+        let self_follow_error =
+            build_follow_edge_envelope(&keys, &keys.public_key(), FollowEdgeStatus::Active)
+                .expect_err("self follow should be rejected");
+        assert!(self_follow_error.to_string().contains("self follow"));
+    }
+
+    #[test]
+    fn follow_edge_parser_rejects_subject_mismatch() {
+        let signer = generate_keys();
+        let subject = generate_keys().public_key();
+        let target = generate_keys().public_key();
+        let envelope = sign_envelope_json(
+            &signer,
+            "follow-edge",
+            vec![vec!["object".into(), "follow-edge".into()]],
+            &KukuriFollowEdgeEnvelopeContentV1 {
+                subject_pubkey: subject,
+                target_pubkey: target,
+                status: FollowEdgeStatus::Active,
+            },
+        )
+        .expect("envelope");
+
+        let error = parse_follow_edge(&envelope).expect_err("subject mismatch must fail");
+        assert!(error.to_string().contains("subject pubkey must match"));
+    }
+
+    #[test]
+    fn friend_only_grant_roundtrip_and_expiry_reject() {
+        let keys = generate_keys();
+        let token = build_friend_only_grant_token(
+            &keys,
+            &TopicId::new("kukuri:topic:friends"),
+            &ChannelId::new("channel-1"),
+            "friends",
+            "epoch-1",
+            &generate_keys().export_secret_hex(),
+            None,
+        )
+        .expect("friend-only grant");
+
+        let preview =
+            parse_friend_only_grant_token(token.as_str()).expect("parse friend-only grant");
+        assert_eq!(preview.owner_pubkey, keys.public_key());
+        assert_eq!(preview.epoch_id, "epoch-1");
+
+        let expired = build_friend_only_grant_token(
+            &keys,
+            &TopicId::new("kukuri:topic:friends"),
+            &ChannelId::new("channel-1"),
+            "friends",
+            "epoch-1",
+            &generate_keys().export_secret_hex(),
+            Some(1),
+        )
+        .expect("expired grant");
+        let error = parse_friend_only_grant_token(expired.as_str()).expect_err("expired grant");
+        assert!(error.to_string().contains("expired"));
+    }
+
+    #[test]
+    fn friend_only_grant_parser_rejects_signer_mismatch() {
+        let signer = generate_keys();
+        let other = generate_keys();
+        let token = FriendOnlyGrantTokenV1 {
+            envelope: sign_envelope_json(
+                &signer,
+                "channel-friend-grant",
+                vec![vec!["object".into(), "channel-friend-grant".into()]],
+                &KukuriFriendOnlyGrantEnvelopeContentV1 {
+                    channel_id: ChannelId::new("channel-1"),
+                    topic_id: TopicId::new("kukuri:topic:friends"),
+                    channel_label: "friends".into(),
+                    owner_pubkey: other.public_key(),
+                    epoch_id: "epoch-1".into(),
+                    namespace_secret_hex: generate_keys().export_secret_hex(),
+                    expires_at: None,
+                },
+            )
+            .expect("grant envelope"),
+        };
+        let encoded = serde_json::to_string(&token).expect("encode token");
+        let error =
+            parse_friend_only_grant_token(encoded.as_str()).expect_err("owner mismatch must fail");
+        assert!(error.to_string().contains("owner pubkey must match"));
+    }
+
+    #[test]
+    fn channel_policy_and_participant_roundtrip() {
+        let owner = generate_keys();
+        let participant = generate_keys();
+        let policy = PrivateChannelPolicyDocV1 {
+            channel_id: ChannelId::new("channel-1"),
+            topic_id: TopicId::new("kukuri:topic:friends"),
+            audience_kind: ChannelAudienceKind::FriendOnly,
+            owner_pubkey: owner.public_key(),
+            epoch_id: "epoch-1".into(),
+            sharing_state: ChannelSharingState::Open,
+            rotated_at: None,
+            previous_epoch_id: None,
+        };
+        let policy_envelope =
+            build_private_channel_policy_envelope(&owner, &policy).expect("policy envelope");
+        let parsed_policy = parse_private_channel_policy(&policy_envelope)
+            .expect("parse policy")
+            .expect("policy");
+        assert_eq!(parsed_policy.audience_kind, ChannelAudienceKind::FriendOnly);
+
+        let participant_doc = PrivateChannelParticipantDocV1 {
+            channel_id: ChannelId::new("channel-1"),
+            topic_id: TopicId::new("kukuri:topic:friends"),
+            epoch_id: "epoch-1".into(),
+            participant_pubkey: participant.public_key(),
+            joined_at: 10,
+            is_owner: false,
+            join_mode: Some(PrivateChannelJoinMode::FriendOnlyGrant),
+            sponsor_pubkey: Some(owner.public_key()),
+            share_token_id: None,
+        };
+        let participant_envelope =
+            build_private_channel_participant_envelope(&participant, &participant_doc)
+                .expect("participant envelope");
+        let parsed_participant = parse_private_channel_participant(&participant_envelope)
+            .expect("parse participant")
+            .expect("participant");
+        assert_eq!(
+            parsed_participant.participant_pubkey,
+            participant.public_key()
+        );
+    }
+
+    #[test]
+    fn friend_plus_share_roundtrip_and_expiry_reject() {
+        let owner = generate_keys();
+        let sponsor = generate_keys();
+        let token = build_friend_plus_share_token(
+            &sponsor,
+            &TopicId::new("kukuri:topic:friends-plus"),
+            &ChannelId::new("channel-1"),
+            "friends+",
+            &owner.public_key(),
+            "epoch-1",
+            &generate_keys().export_secret_hex(),
+            None,
+        )
+        .expect("friend-plus share");
+
+        let preview =
+            parse_friend_plus_share_token(token.as_str()).expect("parse friend-plus share");
+        assert_eq!(preview.owner_pubkey, owner.public_key());
+        assert_eq!(preview.sponsor_pubkey, sponsor.public_key());
+        assert_eq!(preview.epoch_id, "epoch-1");
+        assert_eq!(preview.share_token_id.len(), 64);
+
+        let expired = build_friend_plus_share_token(
+            &sponsor,
+            &TopicId::new("kukuri:topic:friends-plus"),
+            &ChannelId::new("channel-1"),
+            "friends+",
+            &owner.public_key(),
+            "epoch-1",
+            &generate_keys().export_secret_hex(),
+            Some(1),
+        )
+        .expect("expired friend-plus share");
+        let error = parse_friend_plus_share_token(expired.as_str()).expect_err("expired share");
+        assert!(error.to_string().contains("expired"));
+    }
+
+    #[test]
+    fn friend_plus_share_parser_rejects_signer_mismatch() {
+        let owner = generate_keys();
+        let signer = generate_keys();
+        let sponsor = generate_keys();
+        let token = FriendPlusShareTokenV1 {
+            envelope: sign_envelope_json(
+                &signer,
+                "channel-share",
+                vec![vec!["object".into(), "channel-share".into()]],
+                &KukuriFriendPlusShareEnvelopeContentV1 {
+                    channel_id: ChannelId::new("channel-1"),
+                    topic_id: TopicId::new("kukuri:topic:friends-plus"),
+                    channel_label: "friends+".into(),
+                    owner_pubkey: owner.public_key(),
+                    sponsor_pubkey: sponsor.public_key(),
+                    epoch_id: "epoch-1".into(),
+                    namespace_secret_hex: generate_keys().export_secret_hex(),
+                    expires_at: None,
+                },
+            )
+            .expect("share envelope"),
+        };
+        let encoded = serde_json::to_string(&token).expect("encode share");
+        let error = parse_friend_plus_share_token(encoded.as_str())
+            .expect_err("sponsor mismatch must fail");
+        assert!(error.to_string().contains("sponsor pubkey must match"));
+    }
+
+    #[test]
+    fn channel_rotation_grant_encrypt_decrypt_roundtrip_and_wrong_recipient_fails() {
+        let owner = generate_keys();
+        let recipient = generate_keys();
+        let wrong_recipient = generate_keys();
+        let payload = PrivateChannelRotationGrantPayloadV1 {
+            channel_id: ChannelId::new("channel-1"),
+            topic_id: TopicId::new("kukuri:topic:friends-plus"),
+            owner_pubkey: owner.public_key(),
+            recipient_pubkey: recipient.public_key(),
+            old_epoch_id: "epoch-1".into(),
+            new_epoch_id: "epoch-2".into(),
+            new_namespace_secret_hex: generate_keys().export_secret_hex(),
+        };
+        let doc = encrypt_private_channel_rotation_grant(&owner, &payload)
+            .expect("encrypt rotation grant");
+        let envelope = build_private_channel_rotation_grant_envelope(&owner, &doc)
+            .expect("rotation grant envelope");
+        let parsed_doc = parse_private_channel_rotation_grant(&envelope)
+            .expect("parse rotation grant")
+            .expect("rotation grant");
+        let decrypted = decrypt_private_channel_rotation_grant(&recipient, &parsed_doc)
+            .expect("decrypt rotation grant");
+        assert_eq!(decrypted.new_epoch_id, "epoch-2");
+        assert_eq!(decrypted.recipient_pubkey, recipient.public_key());
+
+        let error = decrypt_private_channel_rotation_grant(&wrong_recipient, &parsed_doc)
+            .expect_err("wrong recipient must fail");
+        assert!(error.to_string().contains("recipient pubkey"));
     }
 }

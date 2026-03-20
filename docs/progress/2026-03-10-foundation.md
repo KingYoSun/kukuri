@@ -10,6 +10,9 @@
 - Phase6 seeded DHT discovery の実装、workspace validation、Linux 実機 manual verification まで完了
 - Phase6 community-node connectivity/auth foundation, Postgres contract test, connectivity scenario, CI wiring まで完了
 - Phase6 community-node public manual smoke 向けの `cn-iroh-relay` TLS/QUIC、compose host bind env、`kukuri.app` URL contract と Linux 実機 `post -> reply/thread -> blob sync` 検証まで完了
+- Phase6 social graph v1 の public profile / follow / mutual / friend-of-friend 導入まで完了
+- Phase6 community-node relay-only path の bootstrap metadata retry / topic replica sync self-heal / gossip topic resubscribe hardening と `0 -> 3クライアント同時起動` manual verification まで完了
+- Phase6 topic-first private channel audience v1 の `invite_only` / `friend_only` / `friend_plus`、epoch-aware rotate / freeze、restart 復元、contract/frontend/harness test、invite-only community-node + 3 client 実機 manual verification まで完了
 
 ## 実装済み
 - root Cargo workspace と `cargo xtask` alias
@@ -65,6 +68,12 @@
 - discovery diagnostics を `configured seed / community bootstrap seed / manual ticket` に分離し、relay-only community-node path の接続元を UI と app-api status で判別できるようにした
 - community-node bootstrap peer registration を TTL 付き multi-endpoint table へ更新し、authenticated heartbeat で stale peer を prune/refresh できるようにした
 - desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
+- social graph v1 として `author::<pubkey>` replica を正本にした profile / follow-edge / local relationship projection を導入し、desktop で `profile editor`, `follow/unfollow`, `mutual`, `friend of friend` 表示まで通した
+- community-node relay-only path で `seed_peers` が空のまま固まる経路に bootstrap metadata retry を追加し、topic replica docs sync の self-heal と seed update 時の gossip topic 再購読を入れて `0 clients -> 3 clients simultaneous start` の固着を解消した
+- `ADR 0012` を topic-first private channel audience v1 の現状仕様に更新し、`invite_only` / `friend_only` / `friend_plus`、epoch-aware rotate / freeze、`joined via` / `sharing_state` 契約を固定した
+- `kukuri-core` / `kukuri-docs-sync` / `kukuri-store` / `kukuri-app-api` / `kukuri-desktop-runtime` を `topic + channel + epoch` モデルへ拡張し、friend-only grant、friend-plus share、rotation grant、archived epoch restore まで通した
+- desktop UI に `Audience`, `Create Grant`, `Create Share`, `Freeze`, `Rotate`, policy / `joined via` diagnostics を追加し、private channel audience を topic-first UI のまま扱えるようにした
+- `private_channel_invite_connectivity`, `friend_only_rotate_requires_fresh_grant`, `friend_plus_share_freeze_rotate_connectivity` と desktop-runtime / docs-sync / frontend contract を追加し、manual verification 手順を `docs/runbooks/dev.md` に固定した
 
 ## 検証済み
 - `cargo xtask doctor`
@@ -120,12 +129,31 @@
 - `community_node_multi_device_connectivity` scenario を same-author multi-endpoint bootstrap regression として通した
 - Linux 実機 2 台で relay-only community-node に対し、一度も ticket import せずに peer 間接続、`reply/thread`、live/game 伝播まで成立することを確認
 - `community_node_public_connectivity` / `community_node_multi_device_connectivity` を no-restart consent path の regression として通した
+- Linux 実機 3 台で community-node 接続時の `0 connected clients -> 3 clients simultaneous start` 後も、3 クライアント全てで投稿伝播が成立することを確認
+- Linux 実機で social graph v1 の `nickname/profile 表示`, `follow`, `mutual`, `unfollow`, `friend of friend`, restart 後復元が成立することを確認
+- `cargo test -p kukuri-docs-sync private_replica_requires_registered_capability -- --nocapture`
+- `cargo test -p kukuri-app-api private_channel_invite_scopes_posts_and_replies -- --nocapture`
+- `cargo test -p kukuri-app-api friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant -- --nocapture`
+- `cargo test -p kukuri-app-api friend_plus_share_freeze_rotate_and_new_epoch_visibility -- --nocapture`
+- `cargo test -p kukuri-desktop-runtime private_channel_invite_restores_after_restart_without_reimport -- --nocapture`
+- `cargo test -p kukuri-desktop-runtime friend_only_channel_restore_keeps_archived_epoch_history -- --nocapture`
+- `cargo test -p kukuri-desktop-runtime friend_plus_channel_restore_redeems_rotation_after_restart -- --nocapture`
+- `cargo test -p kukuri-harness private_channel_invite_connectivity -- --nocapture`
+- `cargo test -p kukuri-harness friend_only_rotate_requires_fresh_grant -- --nocapture`
+- `cargo test -p kukuri-harness friend_plus_share_freeze_rotate_connectivity -- --nocapture`
+- `cd apps/desktop && npx pnpm@10.16.1 test`
+- community-node + 3 client の実機で `Create Channel -> Create Invite -> Join` が成功
+- community-node + 3 client の実機で private channel の `post / live / game` 伝播が成功
+- community-node + 3 client の実機で private channel の `post / live / game` が `public / all joined` に漏れないことを確認
+- community-node + 3 client の実機で client restart 後の private channel 復元が成功
+- community-node + 3 client の実機で後参加 client の fresh invite 再発行と 3 台目 join が成功
 
 ## 既知の制約
 - `kukuri-transport` は ticket からの direct connect と 2-process gossip roundtrip を required に昇格済み
 - Tauri backend binding と鍵永続化は導入済み。Phase4 の残作業はない。
 - Windows native smoke は `tauri:dev` / keyring / multi-instance static-peer / 別 host static-peer / NSIS installer まで確認済み
 - same-author multi-device の自動 scenario は bootstrap/connectivity と `post -> reply/thread -> reconnect` に絞っており、live/game は distinct-author path でのみ自動確認している
+- private channel audience v1 は `invite_only` / `friend_only` / `friend_plus` と epoch rotation まで current `main` に入っている一方、candidate expansion の abuse / spam guardrail、member-list、approval、moderator role は未着手
 
 ## Phase5 Cutover
 - `SQLite` を削除しても docs/blobs から shared durable state が復元できることを確認済み

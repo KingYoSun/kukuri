@@ -30,6 +30,7 @@ keyring = { workspace = true, features = ["sync-secret-service"] }
 keyring = { workspace = true, features = ["windows-native"] }
 
 [dev-dependencies]
+axum.workspace = true
 tempfile.workspace = true
 pkarr.workspace = true
 iroh.workspace = true

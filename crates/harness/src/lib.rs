@@ -14,11 +14,14 @@ use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
 use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
-use kukuri_core::{GameRoomStatus, KukuriKeys};
+use kukuri_core::{ChannelRef, GameRoomStatus, KukuriKeys, TimelineScope};
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreatePostRequest,
-    DesktopRuntime, ListGameRoomsRequest, ListLiveSessionsRequest, ListThreadRequest,
-    ListTimelineRequest, SetCommunityNodeConfigRequest,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreateGameRoomRequest,
+    CreateLiveSessionRequest, CreatePostRequest, CreatePrivateChannelRequest, DesktopRuntime,
+    ExportPrivateChannelInviteRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
+    ListGameRoomsRequest, ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    SetCommunityNodeConfigRequest, UpdateGameRoomRequest,
 };
 use kukuri_store::SqliteStore;
 use kukuri_transport::{ConnectMode, FakeNetwork, FakeTransport, TransportNetworkConfig};
@@ -34,6 +37,7 @@ pub enum ScenarioKind {
     DesktopSmoke,
     CommunityNodePublicConnectivity,
     CommunityNodeMultiDeviceConnectivity,
+    PrivateChannelInviteConnectivity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,6 +286,9 @@ pub async fn run_scenario(
                 CommunityNodeIdentityMode::SharedIdentity,
             )
             .await
+        }
+        ScenarioKind::PrivateChannelInviteConnectivity => {
+            run_private_channel_invite_connectivity(scenario, artifacts_dir).await
         }
     }
 }
@@ -745,6 +752,7 @@ async fn run_community_node_connectivity(
         let _ = runtime_a
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -753,6 +761,7 @@ async fn run_community_node_connectivity(
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -772,6 +781,7 @@ async fn run_community_node_connectivity(
                 topic: topic.to_string(),
                 content: "community node scenario post".to_string(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: Vec::new(),
             })
             .await
@@ -787,6 +797,7 @@ async fn run_community_node_connectivity(
                 topic: topic.to_string(),
                 content: "community node scenario reply".to_string(),
                 reply_to: Some(post_id.clone()),
+                channel_ref: ChannelRef::Public,
                 attachments: Vec::new(),
             })
             .await
@@ -806,6 +817,7 @@ async fn run_community_node_connectivity(
             let session_id = runtime_a
                 .create_live_session(kukuri_desktop_runtime::CreateLiveSessionRequest {
                     topic: topic.to_string(),
+                    channel_ref: ChannelRef::Public,
                     title: "community live".to_string(),
                     description: "live session".to_string(),
                 })
@@ -835,6 +847,7 @@ async fn run_community_node_connectivity(
             let room_id = runtime_a
                 .create_game_room(kukuri_desktop_runtime::CreateGameRoomRequest {
                     topic: topic.to_string(),
+                    channel_ref: ChannelRef::Public,
                     title: "community finals".to_string(),
                     description: "set".to_string(),
                     participants: vec!["Alice".to_string(), "Bob".to_string()],
@@ -893,6 +906,7 @@ async fn run_community_node_connectivity(
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
+                scope: TimelineScope::Public,
                 cursor: None,
                 limit: Some(20),
             })
@@ -903,6 +917,7 @@ async fn run_community_node_connectivity(
                 topic: topic.to_string(),
                 content: "community node reconnect".to_string(),
                 reply_to: None,
+                channel_ref: ChannelRef::Public,
                 attachments: Vec::new(),
             })
             .await
@@ -953,8 +968,502 @@ async fn run_community_node_connectivity(
     }
 }
 
+async fn run_private_channel_invite_connectivity(
+    scenario: &ScenarioSpec,
+    artifacts_dir: &Path,
+) -> Result<HarnessResult> {
+    unsafe { std::env::set_var("KUKURI_DISABLE_KEYRING", "1") };
+
+    let db_a = artifacts_dir.join("private-channel-a.db");
+    let db_b = artifacts_dir.join("private-channel-b.db");
+    let db_c = artifacts_dir.join("private-channel-c.db");
+    cleanup_runtime_artifacts(&db_a)?;
+    cleanup_runtime_artifacts(&db_b)?;
+    cleanup_runtime_artifacts(&db_c)?;
+
+    let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+        .await
+        .context("failed to launch desktop a for private-channel scenario")?;
+    let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+        .await
+        .context("failed to launch desktop b for private-channel scenario")?;
+    let runtime_c = DesktopRuntime::new_with_config(&db_c, TransportNetworkConfig::loopback())
+        .await
+        .context("failed to launch desktop c for private-channel scenario")?;
+    let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
+    let step_timeout = Duration::from_millis(scenario.timeouts.step_ms);
+
+    timeout(overall_timeout, async move {
+        let mut steps = Vec::new();
+        let topic = scenario.fixtures.topic.as_str();
+        let mut runtime_b = runtime_b;
+
+        let started_at = Instant::now();
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .context("failed to export ticket for desktop a")?
+            .context("missing ticket for desktop a")?;
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .context("failed to export ticket for desktop b")?
+            .context("missing ticket for desktop b")?;
+        let ticket_c = runtime_c
+            .local_peer_ticket()
+            .await
+            .context("failed to export ticket for desktop c")?
+            .context("missing ticket for desktop c")?;
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .context("failed to import desktop b ticket into desktop a")?;
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .context("failed to import desktop a ticket into desktop b")?;
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .context("failed to import desktop c ticket into desktop a")?;
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .context("failed to import desktop a ticket into desktop c")?;
+        push_named_step(&mut steps, "connect", started_at);
+
+        let started_at = Instant::now();
+        let public_scope = TimelineScope::Public;
+        let all_joined_scope = TimelineScope::AllJoined;
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to subscribe desktop a to public topic")?;
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to subscribe desktop b to public topic")?;
+        let _ = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to subscribe desktop c to public topic")?;
+        let public_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "public baseline".to_string(),
+                reply_to: None,
+                channel_ref: ChannelRef::Public,
+                attachments: Vec::new(),
+            })
+            .await
+            .context("failed to create public baseline post")?;
+        wait_for_timeline_object(&runtime_b, topic, public_post_id.as_str(), step_timeout)
+            .await
+            .context("desktop b did not receive public baseline post")?;
+        wait_for_timeline_object(&runtime_c, topic, public_post_id.as_str(), step_timeout)
+            .await
+            .context("desktop c did not receive public baseline post")?;
+        push_named_step(&mut steps, "public_sync", started_at);
+
+        let started_at = Instant::now();
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.to_string(),
+                label: "core".to_string(),
+                audience_kind: kukuri_core::ChannelAudienceKind::InviteOnly,
+            })
+            .await
+            .context("failed to create private channel")?;
+        push_named_step(&mut steps, "create_channel", started_at);
+
+        let started_at = Instant::now();
+        let invite = runtime_a
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .context("failed to export private channel invite")?;
+        push_named_step(&mut steps, "create_invite", started_at);
+
+        let started_at = Instant::now();
+        let preview = runtime_b
+            .import_private_channel_invite(ImportPrivateChannelInviteRequest { token: invite })
+            .await
+            .context("failed to import private channel invite")?;
+        assert_eq!(preview.topic_id.as_str(), topic);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+        let joined_channels = runtime_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.to_string(),
+            })
+            .await
+            .context("failed to list joined private channels after invite import")?;
+        assert!(
+            joined_channels
+                .iter()
+                .any(|entry| entry.channel_id == channel.channel_id && entry.label == "core")
+        );
+        push_named_step(&mut steps, "import_invite", started_at);
+
+        let private_channel_id = kukuri_core::ChannelId::new(channel.channel_id.clone());
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+
+        let started_at = Instant::now();
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "private post".to_string(),
+                reply_to: None,
+                channel_ref: private_ref.clone(),
+                attachments: Vec::new(),
+            })
+            .await
+            .context("failed to create private post")?;
+        wait_for_timeline_object_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            private_post_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive private post")?;
+        assert_timeline_scope_excludes_object(
+            &runtime_b,
+            topic,
+            public_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop b public scope leaked private post")?;
+        assert_timeline_scope_excludes_object(
+            &runtime_c,
+            topic,
+            public_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop c public scope leaked private post")?;
+        assert_timeline_scope_excludes_object(
+            &runtime_c,
+            topic,
+            all_joined_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop c all-joined scope leaked private post")?;
+        push_named_step(&mut steps, "private_post", started_at);
+
+        let started_at = Instant::now();
+        let private_reply_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "private reply".to_string(),
+                reply_to: Some(private_post_id.clone()),
+                channel_ref: ChannelRef::Public,
+                attachments: Vec::new(),
+            })
+            .await
+            .context("failed to create private reply")?;
+        wait_for_thread_object(
+            &runtime_a,
+            topic,
+            private_post_id.as_str(),
+            private_reply_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop a did not receive private reply in thread")?;
+        let private_thread = runtime_a
+            .list_thread(ListThreadRequest {
+                topic: topic.to_string(),
+                thread_id: private_post_id.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to read private thread on desktop a")?;
+        assert!(private_thread.items.iter().any(|post| {
+            post.object_id == private_reply_id
+                && post.channel_id.as_deref() == Some(channel.channel_id.as_str())
+        }));
+        assert_timeline_scope_excludes_object(
+            &runtime_c,
+            topic,
+            all_joined_scope.clone(),
+            private_reply_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop c all-joined scope leaked private reply")?;
+        push_named_step(&mut steps, "private_reply_thread", started_at);
+
+        let started_at = Instant::now();
+        let session_id = runtime_a
+            .create_live_session(CreateLiveSessionRequest {
+                topic: topic.to_string(),
+                channel_ref: private_ref.clone(),
+                title: "private live".to_string(),
+                description: "core stream".to_string(),
+            })
+            .await
+            .context("failed to create private live session")?;
+        wait_for_live_session_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            session_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive private live session")?;
+        assert_live_session_absent_in_scope(
+            &runtime_c,
+            topic,
+            all_joined_scope.clone(),
+            session_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop c leaked private live session")?;
+        runtime_b
+            .join_live_session(LiveSessionCommandRequest {
+                topic: topic.to_string(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .context("failed to join private live session on desktop b")?;
+        wait_for_live_viewer_count_in_scope(
+            &runtime_a,
+            topic,
+            private_scope.clone(),
+            session_id.as_str(),
+            1,
+            step_timeout,
+        )
+        .await
+        .context("desktop a did not observe live viewer count")?;
+        runtime_a
+            .end_live_session(LiveSessionCommandRequest {
+                topic: topic.to_string(),
+                session_id: session_id.clone(),
+            })
+            .await
+            .context("failed to end private live session on desktop a")?;
+        wait_for_live_ended_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            session_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not observe ended private live session")?;
+        push_named_step(&mut steps, "private_live", started_at);
+
+        let started_at = Instant::now();
+        let room_id = runtime_a
+            .create_game_room(CreateGameRoomRequest {
+                topic: topic.to_string(),
+                channel_ref: private_ref.clone(),
+                title: "private finals".to_string(),
+                description: "core bracket".to_string(),
+                participants: vec!["Alice".to_string(), "Bob".to_string()],
+            })
+            .await
+            .context("failed to create private game room")?;
+        let room_b = wait_for_game_room_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            room_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive private game room")?;
+        assert_game_room_absent_in_scope(
+            &runtime_c,
+            topic,
+            all_joined_scope.clone(),
+            room_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .context("desktop c leaked private game room")?;
+        runtime_a
+            .update_game_room(UpdateGameRoomRequest {
+                topic: topic.to_string(),
+                room_id: room_id.clone(),
+                status: GameRoomStatus::Running,
+                phase_label: Some("Round 2".to_string()),
+                scores: room_b
+                    .scores
+                    .iter()
+                    .map(|score| GameScoreView {
+                        participant_id: score.participant_id.clone(),
+                        label: score.label.clone(),
+                        score: if score.label == "Alice" { 2 } else { 1 },
+                    })
+                    .collect(),
+            })
+            .await
+            .context("failed to update private game room")?;
+        wait_for_game_score_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            room_id.as_str(),
+            "Alice",
+            2,
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not observe private game room score update")?;
+        push_named_step(&mut steps, "private_game", started_at);
+
+        let started_at = Instant::now();
+        shutdown_runtime(runtime_b, "desktop b private-channel restart pre-shutdown")
+            .await
+            .context("failed to shut down desktop b before restart")?;
+        std::fs::remove_file(&db_b)
+            .with_context(|| format!("failed to remove {} before restart", db_b.display()))?;
+        runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+            .await
+            .context("failed to restart desktop b for private-channel scenario")?;
+        let joined_after_restart = runtime_b
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.to_string(),
+            })
+            .await
+            .context("failed to list joined private channels after restart")?;
+        assert!(
+            joined_after_restart
+                .iter()
+                .any(|entry| entry.channel_id == channel.channel_id && entry.label == "core")
+        );
+        wait_for_timeline_object_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            private_post_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not restore private post after restart")?;
+        let private_thread_after_restart = runtime_b
+            .list_thread(ListThreadRequest {
+                topic: topic.to_string(),
+                thread_id: private_post_id.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to read private thread after restart")?;
+        assert!(
+            private_thread_after_restart
+                .items
+                .iter()
+                .any(|post| post.object_id == private_reply_id)
+        );
+        wait_for_live_ended_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            session_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not restore private live session after restart")?;
+        wait_for_game_score_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            room_id.as_str(),
+            "Alice",
+            2,
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not restore private game room after restart")?;
+        let fresh_invite = runtime_b
+            .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .context("failed to re-export private invite after restart")?;
+        assert!(fresh_invite.contains(topic));
+        assert!(fresh_invite.contains(channel.channel_id.as_str()));
+        push_named_step(&mut steps, "restart_rehydrate", started_at);
+
+        let metrics_snapshot = if scenario.artifacts.metrics_snapshot {
+            Some(
+                runtime_b
+                    .get_sync_status()
+                    .await
+                    .context("failed to collect final private-channel sync status")?,
+            )
+        } else {
+            None
+        };
+        shutdown_runtime(runtime_a, "desktop a final shutdown")
+            .await
+            .context("desktop a final shutdown timed out")?;
+        shutdown_runtime(runtime_b, "desktop b final shutdown")
+            .await
+            .context("desktop b final shutdown timed out")?;
+        shutdown_runtime(runtime_c, "desktop c final shutdown")
+            .await
+            .context("desktop c final shutdown timed out")?;
+
+        let result = HarnessResult {
+            status: HarnessStatus::Pass,
+            scenario: scenario.name.clone(),
+            steps,
+            artifacts: vec![artifacts_dir.join("result.json").display().to_string()],
+            metrics_snapshot,
+        };
+        write_result_artifact(Path::new("."), artifacts_dir, &result)?;
+        Ok::<HarnessResult, anyhow::Error>(result)
+    })
+    .await
+    .context("scenario exceeded overall timeout")?
+}
+
 async fn shutdown_runtime(runtime: DesktopRuntime, label: &str) -> Result<()> {
-    timeout(Duration::from_secs(15), runtime.shutdown())
+    timeout(Duration::from_secs(30), runtime.shutdown())
         .await
         .with_context(|| format!("timed out waiting for {label}"))?;
     Ok(())
@@ -1019,11 +1528,61 @@ async fn wait_for_timeline_object(
     object_id: &str,
     step_timeout: Duration,
 ) -> Result<()> {
+    let _ = wait_for_timeline_object_in_scope(
+        runtime,
+        topic,
+        TimelineScope::Public,
+        object_id,
+        step_timeout,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn wait_for_timeline_object_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    object_id: &str,
+    step_timeout: Duration,
+) -> Result<kukuri_app_api::PostView> {
     timeout(step_timeout, async {
         loop {
             let timeline = runtime
                 .list_timeline(ListTimelineRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
+                    cursor: None,
+                    limit: Some(50),
+                })
+                .await?;
+            if let Some(item) = timeline
+                .items
+                .into_iter()
+                .find(|item| item.object_id == object_id)
+            {
+                return Ok::<kukuri_app_api::PostView, anyhow::Error>(item);
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .context("timeline assertion timeout")?
+}
+
+async fn assert_timeline_scope_excludes_object(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    object_id: &str,
+    duration: Duration,
+) -> Result<()> {
+    let result = timeout(duration, async {
+        loop {
+            let timeline = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: scope.clone(),
                     cursor: None,
                     limit: Some(50),
                 })
@@ -1033,13 +1592,16 @@ async fn wait_for_timeline_object(
                 .iter()
                 .any(|item| item.object_id == object_id)
             {
-                return Ok::<(), anyhow::Error>(());
+                anyhow::bail!("object leaked into filtered timeline scope");
             }
             sleep(Duration::from_millis(50)).await;
         }
     })
-    .await
-    .context("timeline assertion timeout")?
+    .await;
+    match result {
+        Err(_) => Ok(()),
+        Ok(inner) => inner,
+    }
 }
 
 async fn wait_for_thread_object(
@@ -1098,18 +1660,37 @@ async fn wait_for_live_session(
     session_id: &str,
     step_timeout: Duration,
 ) -> Result<()> {
+    let _ = wait_for_live_session_in_scope(
+        runtime,
+        topic,
+        TimelineScope::Public,
+        session_id,
+        step_timeout,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn wait_for_live_session_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    session_id: &str,
+    step_timeout: Duration,
+) -> Result<kukuri_app_api::LiveSessionView> {
     timeout(step_timeout, async {
         loop {
             let sessions = runtime
                 .list_live_sessions(ListLiveSessionsRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
                 })
                 .await?;
-            if sessions
-                .iter()
-                .any(|session| session.session_id == session_id)
+            if let Some(session) = sessions
+                .into_iter()
+                .find(|session| session.session_id == session_id)
             {
-                return Ok::<(), anyhow::Error>(());
+                return Ok::<kukuri_app_api::LiveSessionView, anyhow::Error>(session);
             }
             sleep(Duration::from_millis(50)).await;
         }
@@ -1125,11 +1706,31 @@ async fn wait_for_live_viewer_count(
     expected: usize,
     step_timeout: Duration,
 ) -> Result<()> {
+    wait_for_live_viewer_count_in_scope(
+        runtime,
+        topic,
+        TimelineScope::Public,
+        session_id,
+        expected,
+        step_timeout,
+    )
+    .await
+}
+
+async fn wait_for_live_viewer_count_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    session_id: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
     timeout(step_timeout, async {
         loop {
             let sessions = runtime
                 .list_live_sessions(ListLiveSessionsRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
                 })
                 .await?;
             if sessions
@@ -1151,11 +1752,29 @@ async fn wait_for_live_ended(
     session_id: &str,
     step_timeout: Duration,
 ) -> Result<()> {
+    wait_for_live_ended_in_scope(
+        runtime,
+        topic,
+        TimelineScope::Public,
+        session_id,
+        step_timeout,
+    )
+    .await
+}
+
+async fn wait_for_live_ended_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    session_id: &str,
+    step_timeout: Duration,
+) -> Result<()> {
     timeout(step_timeout, async {
         loop {
             let sessions = runtime
                 .list_live_sessions(ListLiveSessionsRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
                 })
                 .await?;
             if sessions.iter().any(|session| {
@@ -1171,9 +1790,50 @@ async fn wait_for_live_ended(
     .context("live-session ended assertion timeout")?
 }
 
+async fn assert_live_session_absent_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    session_id: &str,
+    duration: Duration,
+) -> Result<()> {
+    let result = timeout(duration, async {
+        loop {
+            let sessions = runtime
+                .list_live_sessions(ListLiveSessionsRequest {
+                    topic: topic.to_string(),
+                    scope: scope.clone(),
+                })
+                .await?;
+            if sessions
+                .iter()
+                .any(|session| session.session_id == session_id)
+            {
+                anyhow::bail!("live session leaked into filtered scope");
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    match result {
+        Err(_) => Ok(()),
+        Ok(inner) => inner,
+    }
+}
+
 async fn wait_for_game_room(
     runtime: &DesktopRuntime,
     topic: &str,
+    room_id: &str,
+    step_timeout: Duration,
+) -> Result<kukuri_app_api::GameRoomView> {
+    wait_for_game_room_in_scope(runtime, topic, TimelineScope::Public, room_id, step_timeout).await
+}
+
+async fn wait_for_game_room_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
     room_id: &str,
     step_timeout: Duration,
 ) -> Result<kukuri_app_api::GameRoomView> {
@@ -1182,6 +1842,7 @@ async fn wait_for_game_room(
             let rooms = runtime
                 .list_game_rooms(ListGameRoomsRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
                 })
                 .await?;
             if let Some(room) = rooms.into_iter().find(|room| room.room_id == room_id) {
@@ -1202,11 +1863,33 @@ async fn wait_for_game_score(
     expected: i64,
     step_timeout: Duration,
 ) -> Result<()> {
+    wait_for_game_score_in_scope(
+        runtime,
+        topic,
+        TimelineScope::Public,
+        room_id,
+        label,
+        expected,
+        step_timeout,
+    )
+    .await
+}
+
+async fn wait_for_game_score_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    room_id: &str,
+    label: &str,
+    expected: i64,
+    step_timeout: Duration,
+) -> Result<()> {
     timeout(step_timeout, async {
         loop {
             let rooms = runtime
                 .list_game_rooms(ListGameRoomsRequest {
                     topic: topic.to_string(),
+                    scope: scope.clone(),
                 })
                 .await?;
             if rooms.iter().any(|room| {
@@ -1223,6 +1906,34 @@ async fn wait_for_game_score(
     })
     .await
     .context("game-score assertion timeout")?
+}
+
+async fn assert_game_room_absent_in_scope(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    scope: TimelineScope,
+    room_id: &str,
+    duration: Duration,
+) -> Result<()> {
+    let result = timeout(duration, async {
+        loop {
+            let rooms = runtime
+                .list_game_rooms(ListGameRoomsRequest {
+                    topic: topic.to_string(),
+                    scope: scope.clone(),
+                })
+                .await?;
+            if rooms.iter().any(|room| room.room_id == room_id) {
+                anyhow::bail!("game room leaked into filtered scope");
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    match result {
+        Err(_) => Ok(()),
+        Ok(inner) => inner,
+    }
 }
 
 fn step_name(step: &ScenarioStep) -> &'static str {
@@ -1270,9 +1981,24 @@ pub fn summarize_metrics(result: &HarnessResult) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kukuri_core::ChannelAudienceKind;
+    use kukuri_desktop_runtime::{
+        AuthorRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
+        FreezePrivateChannelRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
+        RotatePrivateChannelRequest,
+    };
+    use std::sync::Once;
+
+    fn disable_keyring_for_tests() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| unsafe {
+            std::env::set_var("KUKURI_DISABLE_KEYRING", "1");
+        });
+    }
 
     #[tokio::test]
     async fn desktop_smoke_post_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -1291,6 +2017,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_smoke_live_session_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -1309,6 +2036,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_smoke_game_room_persist() {
+        disable_keyring_for_tests();
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -1323,5 +2051,770 @@ mod tests {
 
         assert_eq!(result.status, HarnessStatus::Pass);
         assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn private_channel_invite_connectivity() {
+        disable_keyring_for_tests();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("private-channel-invite-connectivity");
+        let result = run_named_scenario(root, "private_channel_invite_connectivity", &artifacts)
+            .await
+            .expect("scenario");
+
+        assert_eq!(result.status, HarnessStatus::Pass);
+        assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn friend_only_rotate_requires_fresh_grant() {
+        disable_keyring_for_tests();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("friend-only-rotate-connectivity");
+        std::fs::create_dir_all(&artifacts).expect("create artifacts dir");
+
+        let db_a = artifacts.join("friend-only-a.db");
+        let db_b = artifacts.join("friend-only-b.db");
+        let db_c = artifacts.join("friend-only-c.db");
+        cleanup_runtime_artifacts(&db_a).expect("cleanup a");
+        cleanup_runtime_artifacts(&db_b).expect("cleanup b");
+        cleanup_runtime_artifacts(&db_c).expect("cleanup c");
+
+        let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime b");
+        let runtime_c = DesktopRuntime::new_with_config(&db_c, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime c");
+
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let ticket_c = runtime_c
+            .local_peer_ticket()
+            .await
+            .expect("ticket c")
+            .expect("ticket c value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("a imports b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("b imports a");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("a imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("c imports a");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        let c_pubkey = runtime_c
+            .get_sync_status()
+            .await
+            .expect("status c")
+            .local_author_pubkey;
+
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: c_pubkey.clone(),
+            })
+            .await
+            .expect("a follows c");
+        runtime_c
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("c follows a");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b loads a");
+                let c_view = runtime_c
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("c loads a");
+                if b_view.mutual && c_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("mutual propagation timeout");
+
+        let topic = "kukuri:topic:harness-friend-only";
+        let public_scope = TimelineScope::Public;
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b");
+        let _ = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe c");
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.to_string(),
+                label: "friends".to_string(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create friend-only channel");
+        let old_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export old grant");
+
+        runtime_b
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest {
+                token: old_grant.clone(),
+            })
+            .await
+            .expect("b imports old grant");
+
+        let private_scope = TimelineScope::Channel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "friend-only history".to_string(),
+                reply_to: None,
+                channel_ref: private_ref,
+                attachments: Vec::new(),
+            })
+            .await
+            .expect("create friend-only post");
+        wait_for_timeline_object_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("desktop b did not receive friend-only post");
+        assert_timeline_scope_excludes_object(
+            &runtime_c,
+            topic,
+            public_scope.clone(),
+            private_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .expect("desktop c public scope leaked friend-only post");
+
+        runtime_a
+            .unfollow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a unfollows b");
+        let joined_a = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = runtime_a
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.to_string(),
+                    })
+                    .await
+                    .expect("list joined channels on a");
+                if joined.iter().any(|entry| {
+                    entry.channel_id == channel.channel_id
+                        && entry.rotation_required
+                        && entry.stale_participant_count == 1
+                }) {
+                    return joined;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("rotation required timeout");
+        assert!(joined_a.iter().any(|entry| {
+            entry.channel_id == channel.channel_id
+                && entry.rotation_required
+                && entry.stale_participant_count == 1
+        }));
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-only channel");
+
+        let stale_error = runtime_c
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: old_grant })
+            .await
+            .expect_err("old grant should fail after rotate");
+        assert!(stale_error.to_string().contains("no longer open"));
+
+        let fresh_grant = runtime_a
+            .export_friend_only_grant(ExportFriendOnlyGrantRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh grant");
+        let fresh_preview = runtime_c
+            .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: fresh_grant })
+            .await
+            .expect("c imports fresh grant");
+        assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
+
+        let joined_c = runtime_c
+            .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                topic: topic.to_string(),
+            })
+            .await
+            .expect("list joined channels on c");
+        let channel_c = joined_c
+            .iter()
+            .find(|entry| entry.channel_id == channel.channel_id)
+            .expect("friend-only channel on c");
+        assert_eq!(channel_c.current_epoch_id, rotated.current_epoch_id);
+        assert!(channel_c.archived_epoch_ids.is_empty());
+
+        let c_private_timeline = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: private_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("list c private timeline");
+        assert!(
+            c_private_timeline
+                .items
+                .iter()
+                .all(|item| item.object_id != private_post_id)
+        );
+
+        shutdown_runtime(runtime_a, "friend-only harness runtime a")
+            .await
+            .expect("shutdown runtime a");
+        shutdown_runtime(runtime_b, "friend-only harness runtime b")
+            .await
+            .expect("shutdown runtime b");
+        shutdown_runtime(runtime_c, "friend-only harness runtime c")
+            .await
+            .expect("shutdown runtime c");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn friend_plus_share_freeze_rotate_connectivity() {
+        disable_keyring_for_tests();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_a = dir.path().join("friend-plus-harness-a.db");
+        let db_b = dir.path().join("friend-plus-harness-b.db");
+        let db_c = dir.path().join("friend-plus-harness-c.db");
+        let db_d = dir.path().join("friend-plus-harness-d.db");
+        let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime b");
+        let runtime_c = DesktopRuntime::new_with_config(&db_c, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime c");
+        let runtime_d = DesktopRuntime::new_with_config(&db_d, TransportNetworkConfig::loopback())
+            .await
+            .expect("runtime d");
+
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let ticket_c = runtime_c
+            .local_peer_ticket()
+            .await
+            .expect("ticket c")
+            .expect("ticket c value");
+        let ticket_d = runtime_d
+            .local_peer_ticket()
+            .await
+            .expect("ticket d")
+            .expect("ticket d value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("a imports b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("b imports a");
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("a imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .expect("c imports a");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_c.clone(),
+            })
+            .await
+            .expect("b imports c");
+        runtime_c
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("c imports b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_d.clone(),
+            })
+            .await
+            .expect("b imports d");
+        runtime_d
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .expect("d imports b");
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        let c_pubkey = runtime_c
+            .get_sync_status()
+            .await
+            .expect("status c")
+            .local_author_pubkey;
+        let d_pubkey = runtime_d
+            .get_sync_status()
+            .await
+            .expect("status d")
+            .local_author_pubkey;
+
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: c_pubkey.clone(),
+            })
+            .await
+            .expect("b follows c");
+        runtime_c
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("c follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: d_pubkey.clone(),
+            })
+            .await
+            .expect("b follows d");
+        runtime_d
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("d follows b");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let b_view = runtime_b
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: a_pubkey.clone(),
+                    })
+                    .await
+                    .expect("b sees a");
+                let c_view = runtime_c
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: b_pubkey.clone(),
+                    })
+                    .await
+                    .expect("c sees b");
+                let d_view = runtime_d
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: b_pubkey.clone(),
+                    })
+                    .await
+                    .expect("d sees b");
+                if b_view.mutual && c_view.mutual && d_view.mutual {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus mutual propagation timeout");
+
+        let topic = "kukuri:topic:harness-friend-plus";
+        let public_scope = TimelineScope::Public;
+        for runtime in [&runtime_a, &runtime_b, &runtime_c, &runtime_d] {
+            let _ = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: public_scope.clone(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .expect("subscribe runtime");
+        }
+
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.to_string(),
+                label: "friends+".to_string(),
+                audience_kind: ChannelAudienceKind::FriendPlus,
+            })
+            .await
+            .expect("create friend-plus channel");
+        let share_ab = runtime_a
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export a->b share");
+        runtime_b
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_ab })
+            .await
+            .expect("b imports share");
+        let share_bc = runtime_b
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export b->c share");
+        runtime_c
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_bc })
+            .await
+            .expect("c imports share");
+        let stale_share_for_d = runtime_b
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export b->d share");
+
+        let private_scope = TimelineScope::Channel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
+        };
+        let old_post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "friend-plus history".to_string(),
+                reply_to: None,
+                channel_ref: private_ref.clone(),
+                attachments: Vec::new(),
+            })
+            .await
+            .expect("create friend-plus post");
+        wait_for_timeline_object_in_scope(
+            &runtime_b,
+            topic,
+            private_scope.clone(),
+            old_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("b receives old post");
+        wait_for_timeline_object_in_scope(
+            &runtime_c,
+            topic,
+            private_scope.clone(),
+            old_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("c receives old post");
+        assert_timeline_scope_excludes_object(
+            &runtime_d,
+            topic,
+            public_scope.clone(),
+            old_post_id.as_str(),
+            Duration::from_millis(500),
+        )
+        .await
+        .expect("public scope leaked friend-plus post");
+
+        let frozen = runtime_a
+            .freeze_private_channel(FreezePrivateChannelRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("freeze friend-plus channel");
+        assert_eq!(
+            frozen.sharing_state,
+            kukuri_core::ChannelSharingState::Frozen
+        );
+
+        let freeze_post_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "friend-plus frozen write".to_string(),
+                reply_to: None,
+                channel_ref: private_ref.clone(),
+                attachments: Vec::new(),
+            })
+            .await
+            .expect("write should continue after freeze");
+        wait_for_timeline_object_in_scope(
+            &runtime_c,
+            topic,
+            private_scope.clone(),
+            freeze_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("c receives frozen write");
+
+        let stale_error = runtime_d
+            .import_friend_plus_share(ImportFriendPlusShareRequest {
+                token: stale_share_for_d.clone(),
+            })
+            .await
+            .expect_err("frozen share should fail");
+        assert!(stale_error.to_string().contains("no longer open"));
+
+        let rotated = runtime_a
+            .rotate_private_channel(RotatePrivateChannelRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+            })
+            .await
+            .expect("rotate friend-plus channel");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = runtime_c
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.to_string(),
+                    })
+                    .await
+                    .expect("list joined channels on c");
+                if joined.iter().any(|entry| {
+                    entry.channel_id == channel.channel_id
+                        && entry.current_epoch_id == rotated.current_epoch_id
+                        && entry.joined_via_pubkey.as_deref() == Some(b_pubkey.as_str())
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("c rotation redeem timeout");
+
+        let old_share_error = runtime_d
+            .import_friend_plus_share(ImportFriendPlusShareRequest {
+                token: stale_share_for_d,
+            })
+            .await
+            .expect_err("old share should fail after rotate");
+        assert!(old_share_error.to_string().contains("no longer open"));
+
+        let new_post_id = runtime_b
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "friend-plus new".to_string(),
+                reply_to: None,
+                channel_ref: private_ref,
+                attachments: Vec::new(),
+            })
+            .await
+            .expect("create new epoch post");
+        wait_for_timeline_object_in_scope(
+            &runtime_c,
+            topic,
+            private_scope.clone(),
+            new_post_id.as_str(),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("c receives new epoch post");
+
+        let fresh_share = runtime_b
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.to_string(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export fresh share");
+        runtime_d
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: fresh_share })
+            .await
+            .expect("d imports fresh share");
+        let d_private_timeline = runtime_d
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: private_scope,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("list d private timeline");
+        assert!(
+            d_private_timeline
+                .items
+                .iter()
+                .all(|item| item.object_id != old_post_id)
+        );
+        assert!(
+            d_private_timeline
+                .items
+                .iter()
+                .any(|item| item.object_id == new_post_id)
+        );
+
+        shutdown_runtime(runtime_a, "friend-plus harness runtime a")
+            .await
+            .expect("shutdown runtime a");
+        shutdown_runtime(runtime_b, "friend-plus harness runtime b")
+            .await
+            .expect("shutdown runtime b");
+        shutdown_runtime(runtime_c, "friend-plus harness runtime c")
+            .await
+            .expect("shutdown runtime c");
+        shutdown_runtime(runtime_d, "friend-plus harness runtime d")
+            .await
+            .expect("shutdown runtime d");
     }
 }
