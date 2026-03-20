@@ -223,6 +223,30 @@ $env:KUKURI_INSTANCE="desktop-a"
 15. live session を `create -> join -> end` し、viewer count と ended state が相手側に反映されることを確認する。
 16. game room を `create -> update score/status` し、相手側に score card が反映されることを確認する。
 
+## Social graph manual verification
+
+`friend of friend` まで見る場合は 3 author 構成を使う。`mutual` と restart 復元だけなら 2 desktop でもよい。
+
+事前に流す自動テスト:
+
+```bash
+cargo test -p kukuri-store store_profile_upsert_latest_wins -- --nocapture
+cargo test -p kukuri-store author_relationship_projection_rebuild_roundtrip -- --nocapture
+cargo test -p kukuri-app-api social_graph_derives_friend_of_friend_and_clears_after_unfollow -- --nocapture
+cargo test -p kukuri-desktop-runtime friend_only_channel_restore_keeps_archived_epoch_history -- --nocapture
+cd apps/desktop && npx pnpm@10.16.1 test
+```
+
+操作手順:
+
+1. 2-3 desktop を起動する。最小 lane は static-peer ticket import で、`friend of friend` まで見るなら A/B/C の 3 author を使う。
+2. 同じ public topic を開き、author detail が開ける状態まで接続させる。
+3. A で profile を更新し、A の表示名や profile 情報が B 側へ hydrate されることを確認する。
+4. A -> B と B -> A で follow し、両端末の author detail に `mutual` が出ることを確認する。
+5. `friend of friend` を見る場合は B -> C だけを follow し、A から見た C に `friend of friend` が出ることを確認する。
+6. A で B を unfollow するか、`friend of friend` lane では A と B の link を外し、対応する relationship 表示が消えることを確認する。
+7. 両端末を再起動し、profile 表示、follow 状態、必要なら `mutual` / `friend of friend` の表示が復元されることを確認する。
+
 ## Private channel manual verification
 
 最小 lane は static-peer ticket import。manual verification は `invite_only`, `friend_only`, `friend_plus` の audience ごとに流す。

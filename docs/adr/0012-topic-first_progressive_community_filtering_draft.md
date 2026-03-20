@@ -36,7 +36,7 @@ Accepted
 しかし 2026-03-20 時点の `main` はすでに次の状態にある。
 
 - Phase 1 の invite-only private channel は実装済み
-- `docs/adr/0013-social-graph-foundation-draft.md` の social graph v1 も実装済み
+- `docs/adr/0013-social-graph-foundation-draft.md` の social graph v1 も accepted baseline として実装済み
 - `friend_only` / `friend_plus` audience と `Create Grant` / `Create Share` / `Freeze` / `Rotate` も current `main` に入っている
 - app/runtime/docs-sync/harness/frontend に private channel と social graph の contract がある
 
@@ -69,7 +69,7 @@ Phase 1 の回帰は少なくとも次で固定されている。
 
 ### 2.2 social graph v1 も出荷済み
 
-`0013` で定義した social graph foundation も、もはや前提条件ではなく current baseline である。
+`0013` で固定した social graph foundation も、もはや前提条件ではなく current baseline である。
 
 - canonical source は public author replica (`author::<pubkey>`)
 - follow / unfollow は signed follow edge で表現される
@@ -78,9 +78,12 @@ Phase 1 の回帰は少なくとも次で固定されている。
 
 回帰としては少なくとも次が存在する。
 
+- `store_profile_upsert_latest_wins`
+- `author_relationship_projection_rebuild_roundtrip`
 - `social_graph_derives_friend_of_friend_and_clears_after_unfollow`
-- store migration / projection tests for follow edge and relationship cache
-- desktop follow/unfollow / relationship badge tests
+- `post card shows friend of friend badge and author name fallback`
+- `author detail shows via authors and follow action updates relationship`
+- `local profile editor saves profile draft`
 
 ### 2.3 残っているのは guardrail / moderation 側
 
