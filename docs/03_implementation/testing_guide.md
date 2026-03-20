@@ -227,6 +227,16 @@ pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
    - Windows環境では`\`が使用されるが、テストでは`/`を期待する場合がある
    - 必要に応じてパスを正規化
 
+3. **`link.exe` / `CVT1100` / `LNK1123`（VERSION リソース重複）**
+   - 症状: `CVTRES : fatal error CVT1100`（`VERSION` 重複）、`LNK1123` など。
+   - 原因: `tauri-build` が既に `tauri_winres` で `resource.lib` を生成し `cargo:rustc-link-lib=dylib=resource` を出力しているのに、`build.rs` でさらに `winres::WindowsResource::compile()` を呼ぶと、同じ `VERSION` が二重にリンクされる。
+   - 対処: `build.rs` では二重の `winres` コンパイルを行わない（Common Controls v6 は `tauri-build` 既定の `windows-app-manifest.xml` に含まれる）。
+   - 詳細: [bugfix_windows_msvc_duplicate_version_resource.md](./bugfix_windows_msvc_duplicate_version_resource.md)
+
+4. **Rust テストを Windows ホストで直接実行したときの `STATUS_ENTRYPOINT_NOT_FOUND`**
+   - Tauri / WebView2 / ネイティブ依存を引き込むクレートでは、ホスト上の `cargo test` がリンクまでは通っても実行時に失敗することがある。
+   - 本リポジトリの方針どおり、Windows では `./scripts/test-docker.ps1 rust`（など）で Docker 経由の実行を推奨する。
+
 ## トラブルシューティング
 
 ### よくある問題
