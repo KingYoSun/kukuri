@@ -756,7 +756,9 @@ export function App({ api = runtimeApi }: AppProps) {
     useState<ChannelAudienceKind>('invite_only');
   const [inviteTokenInput, setInviteTokenInput] = useState('');
   const [inviteOutput, setInviteOutput] = useState<string | null>(null);
-  const [inviteOutputLabel, setInviteOutputLabel] = useState<'invite' | 'grant'>('invite');
+  const [inviteOutputLabel, setInviteOutputLabel] = useState<'invite' | 'grant' | 'share'>(
+    'invite'
+  );
   const [channelError, setChannelError] = useState<string | null>(null);
   const [gameTitle, setGameTitle] = useState('');
   const [gameDescription, setGameDescription] = useState('');
@@ -1339,6 +1341,52 @@ export function App({ api = runtimeApi }: AppProps) {
     }
   }
 
+  async function handleCreateShare() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before creating a share');
+      return;
+    }
+    try {
+      const token = await api.exportFriendPlusShare(
+        activeTopic,
+        activeComposeChannel.channel_id,
+        null
+      );
+      setInviteOutput(token);
+      setInviteOutputLabel('share');
+      setChannelError(null);
+    } catch (shareError) {
+      setChannelError(
+        shareError instanceof Error ? shareError.message : 'failed to create friends+ share'
+      );
+    }
+  }
+
+  async function activateImportedPrivateChannel(topicId: string, channelId: string) {
+    const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
+    setTrackedTopics(nextTopics);
+    setActiveTopic(topicId);
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [topicId]: {
+        kind: 'channel',
+        channel_id: channelId,
+      },
+    }));
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [topicId]: {
+        kind: 'private_channel',
+        channel_id: channelId,
+      },
+    }));
+    setInviteTokenInput('');
+    setInviteOutput(null);
+    setChannelError(null);
+    clearThreadContext();
+    await loadTopics(nextTopics, topicId, null);
+  }
+
   async function handleJoinInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!inviteTokenInput.trim()) {
@@ -1347,30 +1395,7 @@ export function App({ api = runtimeApi }: AppProps) {
     }
     try {
       const preview = await api.importPrivateChannelInvite(inviteTokenInput.trim());
-      const nextTopics = trackedTopics.includes(preview.topic_id)
-        ? trackedTopics
-        : [...trackedTopics, preview.topic_id];
-      setTrackedTopics(nextTopics);
-      setActiveTopic(preview.topic_id);
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [preview.topic_id]: {
-          kind: 'channel',
-          channel_id: preview.channel_id,
-        },
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [preview.topic_id]: {
-          kind: 'private_channel',
-          channel_id: preview.channel_id,
-        },
-      }));
-      setInviteTokenInput('');
-      setInviteOutput(null);
-      setChannelError(null);
-      clearThreadContext();
-      await loadTopics(nextTopics, preview.topic_id, null);
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
     } catch (inviteError) {
       setChannelError(
         inviteError instanceof Error ? inviteError.message : 'failed to join private channel'
@@ -1385,33 +1410,42 @@ export function App({ api = runtimeApi }: AppProps) {
     }
     try {
       const preview = await api.importFriendOnlyGrant(inviteTokenInput.trim());
-      const nextTopics = trackedTopics.includes(preview.topic_id)
-        ? trackedTopics
-        : [...trackedTopics, preview.topic_id];
-      setTrackedTopics(nextTopics);
-      setActiveTopic(preview.topic_id);
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [preview.topic_id]: {
-          kind: 'channel',
-          channel_id: preview.channel_id,
-        },
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [preview.topic_id]: {
-          kind: 'private_channel',
-          channel_id: preview.channel_id,
-        },
-      }));
-      setInviteTokenInput('');
-      setInviteOutput(null);
-      setChannelError(null);
-      clearThreadContext();
-      await loadTopics(nextTopics, preview.topic_id, null);
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
     } catch (grantError) {
       setChannelError(
         grantError instanceof Error ? grantError.message : 'failed to join friends channel'
+      );
+    }
+  }
+
+  async function handleJoinShare() {
+    if (!inviteTokenInput.trim()) {
+      setChannelError('share token is required');
+      return;
+    }
+    try {
+      const preview = await api.importFriendPlusShare(inviteTokenInput.trim());
+      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
+    } catch (shareError) {
+      setChannelError(
+        shareError instanceof Error ? shareError.message : 'failed to join friends+ channel'
+      );
+    }
+  }
+
+  async function handleFreezePrivateChannel() {
+    if (activeComposeChannel.kind !== 'private_channel') {
+      setChannelError('select a private channel before freezing it');
+      return;
+    }
+    try {
+      await api.freezePrivateChannel(activeTopic, activeComposeChannel.channel_id);
+      setInviteOutput(null);
+      setChannelError(null);
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (freezeError) {
+      setChannelError(
+        freezeError instanceof Error ? freezeError.message : 'failed to freeze private channel'
       );
     }
   }
@@ -2535,6 +2569,7 @@ export function App({ api = runtimeApi }: AppProps) {
               >
                 <option value='invite_only'>Invite only</option>
                 <option value='friend_only'>Friends</option>
+                <option value='friend_plus'>Friends+</option>
               </select>
             </label>
             <button className='button button-secondary' type='submit'>
@@ -2560,7 +2595,37 @@ export function App({ api = runtimeApi }: AppProps) {
                 Create Grant
               </button>
             ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={activeComposeChannel.kind !== 'private_channel'}
+                onClick={() => void handleCreateShare()}
+              >
+                Create Share
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleFreezePrivateChannel()}
+              >
+                Freeze
+              </button>
+            ) : null}
             {activePrivateChannel?.audience_kind === 'friend_only' ? (
+              <button
+                className='button button-secondary'
+                type='button'
+                disabled={!activePrivateChannel.is_owner}
+                onClick={() => void handleRotatePrivateChannel()}
+              >
+                Rotate
+              </button>
+            ) : null}
+            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
               <button
                 className='button button-secondary'
                 type='button'
@@ -2577,7 +2642,7 @@ export function App({ api = runtimeApi }: AppProps) {
               <textarea
                 value={inviteTokenInput}
                 onChange={(event) => setInviteTokenInput(event.target.value)}
-                placeholder='paste private channel invite or friend grant'
+                placeholder='paste private channel invite, friend grant, or friends+ share'
               />
             </label>
             <button className='button button-secondary' type='submit'>
@@ -2586,10 +2651,19 @@ export function App({ api = runtimeApi }: AppProps) {
             <button className='button button-secondary' type='button' onClick={() => void handleJoinGrant()}>
               Join Grant
             </button>
+            <button className='button button-secondary' type='button' onClick={() => void handleJoinShare()}>
+              Join Share
+            </button>
           </form>
           {inviteOutput ? (
             <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>{inviteOutputLabel === 'grant' ? 'Latest grant' : 'Latest invite'}</span>
+              <span>
+                {inviteOutputLabel === 'grant'
+                  ? 'Latest grant'
+                  : inviteOutputLabel === 'share'
+                    ? 'Latest share'
+                    : 'Latest invite'}
+              </span>
               <code>{inviteOutput}</code>
             </div>
           ) : null}
@@ -2599,13 +2673,20 @@ export function App({ api = runtimeApi }: AppProps) {
                 Policy:{' '}
                 {activePrivateChannel.audience_kind === 'friend_only'
                   ? 'Friends: only mutual followers can join'
-                  : 'Invite only'}
+                  : activePrivateChannel.audience_kind === 'friend_plus'
+                    ? 'Friends+: participants can share to their mutuals'
+                    : 'Invite only'}
               </span>
               <span>epoch: {activePrivateChannel.current_epoch_id}</span>
               <span>sharing: {activePrivateChannel.sharing_state}</span>
+              {activePrivateChannel.joined_via_pubkey ? (
+                <span>joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}</span>
+              ) : null}
             </div>
           ) : null}
-          {activePrivateChannel?.audience_kind === 'friend_only' ? (
+          {activePrivateChannel &&
+          (activePrivateChannel.audience_kind === 'friend_only' ||
+            activePrivateChannel.audience_kind === 'friend_plus') ? (
             <div className='topic-diagnostic topic-diagnostic-secondary'>
               <span>participants: {activePrivateChannel.participant_count}</span>
               <span>stale: {activePrivateChannel.stale_participant_count}</span>

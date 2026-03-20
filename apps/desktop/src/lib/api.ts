@@ -14,7 +14,7 @@ export type TimelineScope =
   | { kind: 'all_joined' }
   | { kind: 'channel'; channel_id: string };
 
-export type ChannelAudienceKind = 'invite_only' | 'friend_only';
+export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
 export type ChannelSharingState = 'open' | 'frozen';
 
 export type PostView = {
@@ -237,6 +237,7 @@ export type JoinedPrivateChannelView = {
   label: string;
   creator_pubkey: string;
   owner_pubkey: string;
+  joined_via_pubkey?: string | null;
   audience_kind: ChannelAudienceKind;
   is_owner: boolean;
   current_epoch_id: string;
@@ -264,6 +265,18 @@ export type FriendOnlyGrantPreview = {
   epoch_id: string;
   expires_at?: number | null;
   namespace_secret_hex: string;
+};
+
+export type FriendPlusSharePreview = {
+  channel_id: string;
+  topic_id: string;
+  channel_label: string;
+  owner_pubkey: string;
+  sponsor_pubkey: string;
+  epoch_id: string;
+  expires_at?: number | null;
+  namespace_secret_hex: string;
+  share_token_id: string;
 };
 
 export interface DesktopApi {
@@ -326,6 +339,13 @@ export interface DesktopApi {
     expiresAt?: number | null
   ): Promise<string>;
   importFriendOnlyGrant(token: string): Promise<FriendOnlyGrantPreview>;
+  exportFriendPlusShare(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<string>;
+  importFriendPlusShare(token: string): Promise<FriendPlusSharePreview>;
+  freezePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
   rotatePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
   listJoinedPrivateChannels(topic: string): Promise<JoinedPrivateChannelView[]>;
   updateGameRoom(
@@ -616,6 +636,37 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<FriendOnlyGrantPreview>('import_friend_only_grant', {
       request: { token },
+    });
+  },
+  exportFriendPlusShare: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportFriendPlusShare(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<string>('export_friend_plus_share', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importFriendPlusShare: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importFriendPlusShare(token);
+    }
+    return invokeDesktop<FriendPlusSharePreview>('import_friend_plus_share', {
+      request: { token },
+    });
+  },
+  freezePrivateChannel: async (topic, channelId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.freezePrivateChannel(topic, channelId);
+    }
+    return invokeDesktop<JoinedPrivateChannelView>('freeze_private_channel', {
+      request: {
+        topic,
+        channel_id: channelId,
+      },
     });
   },
   rotatePrivateChannel: async (topic, channelId) => {

@@ -8,27 +8,30 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, ChannelId, ChannelRef,
-    ChannelAudienceKind, ChannelSharingState, CreatePrivateChannelInput, EnvelopeId,
-    FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview,
-    GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1,
-    GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys,
-    KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME,
-    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
-    MediaManifestItem, ObjectVisibility, PayloadRef, PrivateChannelInvitePreview,
-    PrivateChannelMetadataDocV1, PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1,
-    Profile, Pubkey, ReplicaId, TimelineScope, TopicId, build_follow_edge_envelope,
-    build_friend_only_grant_token, build_game_session_envelope, build_live_session_envelope,
-    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
-    build_private_channel_invite_token, build_private_channel_participant_envelope,
-    build_private_channel_policy_envelope, build_profile_envelope, generate_keys,
-    parse_follow_edge, parse_friend_only_grant_token, parse_private_channel_invite_token,
-    parse_private_channel_participant, parse_private_channel_policy, parse_profile,
+    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef,
+    ChannelSharingState, CreatePrivateChannelInput, EnvelopeId, FollowEdge, FollowEdgeDocV1,
+    FollowEdgeStatus, FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME,
+    GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry,
+    GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
+    KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
+    PayloadRef, PrivateChannelInvitePreview, PrivateChannelJoinMode, PrivateChannelMetadataDocV1,
+    PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
+    PrivateChannelRotationGrantPayloadV1, Profile, Pubkey, ReplicaId, TimelineScope, TopicId,
+    build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
+    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
+    build_post_envelope_with_payload_in_channel, build_private_channel_invite_token,
+    build_private_channel_participant_envelope, build_private_channel_policy_envelope,
+    build_private_channel_rotation_grant_envelope, build_profile_envelope,
+    decrypt_private_channel_rotation_grant, encrypt_private_channel_rotation_grant, generate_keys,
+    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
+    parse_private_channel_invite_token, parse_private_channel_participant,
+    parse_private_channel_policy, parse_private_channel_rotation_grant, parse_profile,
     timeline_sort_key,
 };
 use kukuri_docs_sync::{
-    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_hint_topic,
-    private_channel_epoch_replica_id, private_channel_replica_id, stable_key, topic_replica_id,
+    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
+    private_channel_hint_topic, private_channel_replica_id, stable_key, topic_replica_id,
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, GameRoomProjectionRow,
@@ -189,6 +192,7 @@ pub struct JoinedPrivateChannelView {
     pub label: String,
     pub creator_pubkey: String,
     pub owner_pubkey: String,
+    pub joined_via_pubkey: Option<String>,
     pub audience_kind: ChannelAudienceKind,
     pub is_owner: bool,
     pub current_epoch_id: String,
@@ -213,6 +217,8 @@ pub struct PrivateChannelCapability {
     pub creator_pubkey: String,
     #[serde(default)]
     pub owner_pubkey: String,
+    #[serde(default)]
+    pub joined_via_pubkey: Option<String>,
     #[serde(default)]
     pub audience_kind: ChannelAudienceKind,
     #[serde(default)]
@@ -298,6 +304,7 @@ struct JoinedPrivateChannelState {
     label: String,
     creator_pubkey: String,
     owner_pubkey: String,
+    joined_via_pubkey: Option<String>,
     audience_kind: ChannelAudienceKind,
     current_epoch_id: String,
     current_epoch_secret_hex: String,
@@ -526,16 +533,20 @@ impl AppService {
                 anyhow::bail!("reply target topic does not match");
             }
             if let Some(channel_id) = content.channel_id.clone() {
-                Some(self.private_channel_write_state(topic_id, &channel_id).await?)
+                Some(
+                    self.private_channel_write_state(topic_id, &channel_id)
+                        .await?,
+                )
             } else {
                 None
             }
         } else {
             match channel_ref {
                 ChannelRef::Public => None,
-                ChannelRef::PrivateChannel { channel_id } => {
-                    Some(self.private_channel_write_state(topic_id, &channel_id).await?)
-                }
+                ChannelRef::PrivateChannel { channel_id } => Some(
+                    self.private_channel_write_state(topic_id, &channel_id)
+                        .await?,
+                ),
             }
         };
         let effective_channel_id = private_state.as_ref().map(|state| state.channel_id.clone());
@@ -838,9 +849,10 @@ impl AppService {
         }
         let private_state = match channel_ref {
             ChannelRef::Public => None,
-            ChannelRef::PrivateChannel { channel_id } => {
-                Some(self.private_channel_write_state(topic_id, &channel_id).await?)
-            }
+            ChannelRef::PrivateChannel { channel_id } => Some(
+                self.private_channel_write_state(topic_id, &channel_id)
+                    .await?,
+            ),
         };
         let channel_id = private_state.as_ref().map(|state| state.channel_id.clone());
         let source_replica_id = private_state
@@ -1128,9 +1140,10 @@ impl AppService {
         self.ensure_topic_subscription(topic_id).await?;
         let private_state = match channel_ref {
             ChannelRef::Public => None,
-            ChannelRef::PrivateChannel { channel_id } => {
-                Some(self.private_channel_write_state(topic_id, &channel_id).await?)
-            }
+            ChannelRef::PrivateChannel { channel_id } => Some(
+                self.private_channel_write_state(topic_id, &channel_id)
+                    .await?,
+            ),
         };
         let channel_id = private_state.as_ref().map(|state| state.channel_id.clone());
         let source_replica_id = private_state
@@ -1310,14 +1323,8 @@ impl AppService {
             now,
             short_id_suffix(owner_pubkey.as_str())
         ));
-        let current_epoch_id = match input.audience_kind {
-            ChannelAudienceKind::InviteOnly => legacy_epoch_id().to_string(),
-            ChannelAudienceKind::FriendOnly => format!(
-                "epoch-{}-{}",
-                now,
-                short_id_suffix(owner_pubkey.as_str())
-            ),
-        };
+        let current_epoch_id =
+            initial_private_channel_epoch_id(&input.audience_kind, now, owner_pubkey.as_str());
         let current_epoch_secret_hex = generate_keys().export_secret_hex();
         let state = JoinedPrivateChannelState {
             topic_id: input.topic_id.as_str().to_string(),
@@ -1325,6 +1332,7 @@ impl AppService {
             label: label.to_string(),
             creator_pubkey: owner_pubkey.clone(),
             owner_pubkey: owner_pubkey.clone(),
+            joined_via_pubkey: None,
             audience_kind: input.audience_kind.clone(),
             current_epoch_id: current_epoch_id.clone(),
             current_epoch_secret_hex: current_epoch_secret_hex.clone(),
@@ -1346,18 +1354,19 @@ impl AppService {
             &metadata,
         )
         .await?;
-        if input.audience_kind == ChannelAudienceKind::FriendOnly {
+        if private_channel_is_epoch_aware(&input.audience_kind) {
             persist_private_channel_policy(
                 self.docs_sync.as_ref(),
                 self.keys.as_ref(),
                 &PrivateChannelPolicyDocV1 {
                     channel_id: channel_id.clone(),
                     topic_id: input.topic_id.clone(),
-                    audience_kind: ChannelAudienceKind::FriendOnly,
+                    audience_kind: input.audience_kind.clone(),
                     owner_pubkey: Pubkey::from(owner_pubkey.clone()),
                     epoch_id: current_epoch_id,
                     sharing_state: ChannelSharingState::Open,
                     rotated_at: None,
+                    previous_epoch_id: None,
                 },
                 &current_private_channel_replica_id(&state),
             )
@@ -1372,6 +1381,9 @@ impl AppService {
                     participant_pubkey: Pubkey::from(owner_pubkey),
                     joined_at: now,
                     is_owner: true,
+                    join_mode: Some(PrivateChannelJoinMode::OwnerSeed),
+                    sponsor_pubkey: None,
+                    share_token_id: None,
                 },
                 &current_private_channel_replica_id(&state),
             )
@@ -1391,7 +1403,9 @@ impl AppService {
             .await
             .ok_or_else(|| anyhow::anyhow!("private channel is not joined"))?;
         if state.audience_kind != ChannelAudienceKind::InviteOnly {
-            anyhow::bail!("private channel invite export is only available for invite-only channels");
+            anyhow::bail!(
+                "private channel invite export is only available for invite-only channels"
+            );
         }
         build_private_channel_invite_token(
             self.keys.as_ref(),
@@ -1419,6 +1433,7 @@ impl AppService {
             label: preview.channel_label.clone(),
             creator_pubkey: preview.inviter_pubkey.as_str().to_string(),
             owner_pubkey: preview.inviter_pubkey.as_str().to_string(),
+            joined_via_pubkey: None,
             audience_kind: ChannelAudienceKind::InviteOnly,
             current_epoch_id: legacy_epoch_id().to_string(),
             current_epoch_secret_hex: preview.namespace_secret_hex.clone(),
@@ -1481,7 +1496,9 @@ impl AppService {
             )
             .await?;
         if !relationship.as_ref().is_some_and(|value| value.mutual) {
-            anyhow::bail!("friend-only grant import requires a mutual relationship with the channel owner");
+            anyhow::bail!(
+                "friend-only grant import requires a mutual relationship with the channel owner"
+            );
         }
 
         let replica = private_channel_epoch_replica_id(
@@ -1492,39 +1509,12 @@ impl AppService {
             .register_private_replica_secret(&replica, preview.namespace_secret_hex.as_str())
             .await?;
         let import_result = async {
-            let (metadata, policy, participants) = tokio::time::timeout(
-                std::time::Duration::from_secs(10),
-                async {
-                    loop {
-                        let metadata =
-                            fetch_private_channel_metadata_from_replica(self.docs_sync.as_ref(), &replica)
-                                .await?;
-                        let policy =
-                            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &replica)
-                                .await?;
-                        let participants = fetch_private_channel_participants_from_replica(
-                            self.docs_sync.as_ref(),
-                            &replica,
-                        )
-                        .await?;
-                        let owner_participant_visible = policy.as_ref().is_some_and(|policy| {
-                            participants.iter().any(|participant| {
-                                participant.participant_pubkey == policy.owner_pubkey
-                                    && participant.epoch_id == policy.epoch_id
-                                    && participant.is_owner
-                            })
-                        });
-                        if let (Some(metadata), Some(policy)) = (metadata, policy)
-                            && owner_participant_visible
-                        {
-                            return Ok::<_, anyhow::Error>((metadata, policy, participants));
-                        }
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                },
+            let (metadata, policy, participants) = wait_for_private_channel_epoch_snapshot(
+                self.docs_sync.as_ref(),
+                &replica,
+                "friend-only channel replica sync",
             )
-            .await
-            .map_err(|_| anyhow::anyhow!("timed out waiting for friend-only channel replica sync"))??;
+            .await?;
             if policy.audience_kind != ChannelAudienceKind::FriendOnly {
                 anyhow::bail!("friend-only grant replica audience must be friend_only");
             }
@@ -1552,18 +1542,28 @@ impl AppService {
                     participant_pubkey: Pubkey::from(self.current_author_pubkey()),
                     joined_at,
                     is_owner: false,
+                    join_mode: Some(PrivateChannelJoinMode::FriendOnlyGrant),
+                    sponsor_pubkey: Some(policy.owner_pubkey.clone()),
+                    share_token_id: None,
                 },
                 &replica,
             )
             .await?;
-            let next_state = merged_friend_only_state_from_preview(
+            let next_state = merged_private_channel_state_from_epoch_join(
                 self.joined_private_channel_state(
                     preview.topic_id.as_str(),
                     preview.channel_id.as_str(),
                 )
                 .await,
-                &preview,
+                preview.topic_id.as_str(),
+                preview.channel_id.clone(),
+                preview.channel_label.as_str(),
                 metadata.creator_pubkey.as_str(),
+                preview.owner_pubkey.as_str(),
+                Some(preview.owner_pubkey.as_str()),
+                ChannelAudienceKind::FriendOnly,
+                preview.epoch_id.as_str(),
+                preview.namespace_secret_hex.as_str(),
             );
             self.register_joined_private_channel(next_state).await?;
             Ok::<(), anyhow::Error>(())
@@ -1576,16 +1576,202 @@ impl AppService {
         Ok(preview)
     }
 
+    pub async fn export_friend_plus_share(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        expires_at: Option<i64>,
+    ) -> Result<String> {
+        let state = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+            .ok_or_else(|| anyhow::anyhow!("private channel is not joined"))?;
+        if state.audience_kind != ChannelAudienceKind::FriendPlus {
+            anyhow::bail!("friend-plus share export is only available for friends+ channels");
+        }
+        let replica = current_private_channel_replica_id(&state);
+        let Some(policy) =
+            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &replica).await?
+        else {
+            anyhow::bail!("friend-plus channel policy is missing");
+        };
+        if policy.sharing_state != ChannelSharingState::Open {
+            anyhow::bail!("friend-plus share export is disabled while sharing is frozen");
+        }
+        let participants =
+            fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
+                .await?;
+        let local_author = self.current_author_pubkey();
+        if !participants.iter().any(|participant| {
+            participant.epoch_id == state.current_epoch_id
+                && participant.participant_pubkey.as_str() == local_author
+        }) {
+            anyhow::bail!("only active participants can create friend-plus shares");
+        }
+        let effective_expires_at =
+            expires_at.or_else(|| Some(Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000));
+        build_friend_plus_share_token(
+            self.keys.as_ref(),
+            &TopicId::new(topic_id),
+            &state.channel_id,
+            state.label.as_str(),
+            &Pubkey::from(state.owner_pubkey.clone()),
+            state.current_epoch_id.as_str(),
+            state.current_epoch_secret_hex.as_str(),
+            effective_expires_at,
+        )
+    }
+
+    pub async fn import_friend_plus_share(&self, token: &str) -> Result<FriendPlusSharePreview> {
+        let preview = parse_friend_plus_share_token(token)?;
+        self.ensure_topic_subscription(preview.topic_id.as_str())
+            .await?;
+        self.ensure_author_subscription(preview.sponsor_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(
+                self.current_author_pubkey().as_str(),
+                preview.sponsor_pubkey.as_str(),
+            )
+            .await?;
+        if !relationship.as_ref().is_some_and(|value| value.mutual) {
+            anyhow::bail!(
+                "friend-plus share import requires a mutual relationship with the sponsor"
+            );
+        }
+
+        let replica = private_channel_epoch_replica_id(
+            preview.channel_id.as_str(),
+            preview.epoch_id.as_str(),
+        );
+        self.docs_sync
+            .register_private_replica_secret(&replica, preview.namespace_secret_hex.as_str())
+            .await?;
+        let import_result = async {
+            let (metadata, policy, participants) = wait_for_private_channel_epoch_snapshot(
+                self.docs_sync.as_ref(),
+                &replica,
+                "friend-plus channel replica sync",
+            )
+            .await?;
+            if policy.audience_kind != ChannelAudienceKind::FriendPlus {
+                anyhow::bail!("friend-plus share replica audience must be friend_plus");
+            }
+            if policy.sharing_state != ChannelSharingState::Open {
+                anyhow::bail!("friend-plus share is no longer open for import");
+            }
+            if policy.epoch_id != preview.epoch_id {
+                anyhow::bail!("friend-plus share epoch does not match the current policy");
+            }
+            if !participants.iter().any(|participant| {
+                participant.participant_pubkey == preview.sponsor_pubkey
+                    && participant.epoch_id == policy.epoch_id
+            }) {
+                anyhow::bail!("friend-plus share sponsor is not an active participant");
+            }
+            let local_author = self.current_author_pubkey();
+            if !participants.iter().any(|participant| {
+                participant.participant_pubkey.as_str() == local_author
+                    && participant.epoch_id == policy.epoch_id
+            }) {
+                persist_private_channel_participant(
+                    self.docs_sync.as_ref(),
+                    self.keys.as_ref(),
+                    &PrivateChannelParticipantDocV1 {
+                        channel_id: metadata.channel_id.clone(),
+                        topic_id: metadata.topic_id.clone(),
+                        epoch_id: policy.epoch_id.clone(),
+                        participant_pubkey: Pubkey::from(local_author),
+                        joined_at: Utc::now().timestamp_millis(),
+                        is_owner: false,
+                        join_mode: Some(PrivateChannelJoinMode::FriendPlusShare),
+                        sponsor_pubkey: Some(preview.sponsor_pubkey.clone()),
+                        share_token_id: Some(preview.share_token_id.clone()),
+                    },
+                    &replica,
+                )
+                .await?;
+            }
+            let next_state = merged_private_channel_state_from_epoch_join(
+                self.joined_private_channel_state(
+                    preview.topic_id.as_str(),
+                    preview.channel_id.as_str(),
+                )
+                .await,
+                preview.topic_id.as_str(),
+                preview.channel_id.clone(),
+                preview.channel_label.as_str(),
+                metadata.creator_pubkey.as_str(),
+                preview.owner_pubkey.as_str(),
+                Some(preview.sponsor_pubkey.as_str()),
+                ChannelAudienceKind::FriendPlus,
+                preview.epoch_id.as_str(),
+                preview.namespace_secret_hex.as_str(),
+            );
+            self.register_joined_private_channel(next_state).await?;
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+        if import_result.is_err() {
+            let _ = self.docs_sync.remove_private_replica_secret(&replica).await;
+        }
+        import_result?;
+        Ok(preview)
+    }
+
+    pub async fn freeze_private_channel(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<JoinedPrivateChannelView> {
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
+            anyhow::bail!("private channel is not joined");
+        };
+        if state.audience_kind != ChannelAudienceKind::FriendPlus {
+            anyhow::bail!("freeze is only available for friend-plus channels");
+        }
+        if state.owner_pubkey != self.current_author_pubkey() {
+            anyhow::bail!("only the channel owner can freeze the channel");
+        }
+        let current_replica = current_private_channel_replica_id(&state);
+        let Some(current_policy) =
+            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &current_replica)
+                .await?
+        else {
+            anyhow::bail!("friend-plus channel policy is missing");
+        };
+        persist_private_channel_policy(
+            self.docs_sync.as_ref(),
+            self.keys.as_ref(),
+            &PrivateChannelPolicyDocV1 {
+                sharing_state: ChannelSharingState::Frozen,
+                rotated_at: current_policy.rotated_at,
+                ..current_policy
+            },
+            &current_replica,
+        )
+        .await?;
+        self.joined_private_channel_view_for_state(&state).await
+    }
+
     pub async fn rotate_private_channel(
         &self,
         topic_id: &str,
         channel_id: &str,
     ) -> Result<JoinedPrivateChannelView> {
-        let Some(mut state) = self.joined_private_channel_state(topic_id, channel_id).await else {
+        let Some(mut state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
             anyhow::bail!("private channel is not joined");
         };
-        if state.audience_kind != ChannelAudienceKind::FriendOnly {
-            anyhow::bail!("rotate is only available for friend-only channels");
+        if !private_channel_is_epoch_aware(&state.audience_kind) {
+            anyhow::bail!("rotate is only available for epoch-aware private channels");
         }
         if state.owner_pubkey != self.current_author_pubkey() {
             anyhow::bail!("only the channel owner can rotate the channel");
@@ -1595,8 +1781,13 @@ impl AppService {
             fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &current_replica)
                 .await?
         else {
-            anyhow::bail!("friend-only channel policy is missing");
+            anyhow::bail!("private channel policy is missing");
         };
+        let current_participants = fetch_private_channel_participants_from_replica(
+            self.docs_sync.as_ref(),
+            &current_replica,
+        )
+        .await?;
         persist_private_channel_policy(
             self.docs_sync.as_ref(),
             self.keys.as_ref(),
@@ -1609,11 +1800,7 @@ impl AppService {
         )
         .await?;
 
-        let next_epoch_id = format!(
-            "epoch-{}-{}",
-            Utc::now().timestamp_millis(),
-            short_id_suffix(self.current_author_pubkey().as_str())
-        );
+        let next_epoch_id = next_private_channel_epoch_id(self.current_author_pubkey().as_str());
         let next_secret = generate_keys().export_secret_hex();
         let next_replica = private_channel_epoch_replica_id(channel_id, next_epoch_id.as_str());
         self.docs_sync
@@ -1625,7 +1812,7 @@ impl AppService {
             label: state.label.clone(),
             creator_pubkey: Pubkey::from(state.creator_pubkey.clone()),
             created_at: Utc::now().timestamp_millis(),
-            audience_kind: ChannelAudienceKind::FriendOnly,
+            audience_kind: state.audience_kind.clone(),
             owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
         };
         persist_private_channel_metadata(self.docs_sync.as_ref(), &next_replica, &metadata).await?;
@@ -1635,11 +1822,12 @@ impl AppService {
             &PrivateChannelPolicyDocV1 {
                 channel_id: state.channel_id.clone(),
                 topic_id: TopicId::new(topic_id),
-                audience_kind: ChannelAudienceKind::FriendOnly,
+                audience_kind: state.audience_kind.clone(),
                 owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
                 epoch_id: next_epoch_id.clone(),
                 sharing_state: ChannelSharingState::Open,
                 rotated_at: None,
+                previous_epoch_id: Some(state.current_epoch_id.clone()),
             },
             &next_replica,
         )
@@ -1654,22 +1842,50 @@ impl AppService {
                 participant_pubkey: Pubkey::from(state.owner_pubkey.clone()),
                 joined_at: Utc::now().timestamp_millis(),
                 is_owner: true,
+                join_mode: Some(PrivateChannelJoinMode::OwnerSeed),
+                sponsor_pubkey: None,
+                share_token_id: None,
             },
             &next_replica,
         )
         .await?;
-
-        let old_epoch = PrivateChannelEpochCapability {
-            epoch_id: state.current_epoch_id.clone(),
-            namespace_secret_hex: state.current_epoch_secret_hex.clone(),
-        };
-        if !state
-            .archived_epochs
-            .iter()
-            .any(|epoch| epoch.epoch_id == old_epoch.epoch_id)
-        {
-            state.archived_epochs.push(old_epoch);
+        if state.audience_kind == ChannelAudienceKind::FriendPlus {
+            for participant in active_private_channel_participants(
+                &current_participants,
+                state.current_epoch_id.as_str(),
+            ) {
+                if participant.is_owner {
+                    continue;
+                }
+                let grant_doc = encrypt_private_channel_rotation_grant(
+                    self.keys.as_ref(),
+                    &PrivateChannelRotationGrantPayloadV1 {
+                        channel_id: state.channel_id.clone(),
+                        topic_id: TopicId::new(topic_id),
+                        owner_pubkey: Pubkey::from(state.owner_pubkey.clone()),
+                        recipient_pubkey: participant.participant_pubkey.clone(),
+                        old_epoch_id: state.current_epoch_id.clone(),
+                        new_epoch_id: next_epoch_id.clone(),
+                        new_namespace_secret_hex: next_secret.clone(),
+                    },
+                )?;
+                persist_private_channel_rotation_grant(
+                    self.docs_sync.as_ref(),
+                    self.keys.as_ref(),
+                    &grant_doc,
+                    &current_replica,
+                )
+                .await?;
+            }
         }
+
+        let archived_epoch_id = state.current_epoch_id.clone();
+        let archived_secret = state.current_epoch_secret_hex.clone();
+        archive_private_channel_epoch(
+            &mut state,
+            archived_epoch_id.as_str(),
+            archived_secret.as_str(),
+        );
         state.current_epoch_id = next_epoch_id;
         state.current_epoch_secret_hex = next_secret;
         self.register_joined_private_channel(state.clone()).await?;
@@ -1681,7 +1897,8 @@ impl AppService {
         capability: PrivateChannelCapability,
     ) -> Result<()> {
         let state = joined_private_channel_state_from_capability(capability)?;
-        self.ensure_topic_subscription(state.topic_id.as_str()).await?;
+        self.ensure_topic_subscription(state.topic_id.as_str())
+            .await?;
         self.register_joined_private_channel(state).await
     }
 
@@ -1690,6 +1907,8 @@ impl AppService {
         topic_id: &str,
     ) -> Result<Vec<JoinedPrivateChannelView>> {
         self.ensure_topic_subscription(topic_id).await?;
+        self.maybe_redeem_rotation_grants_for_topic(topic_id)
+            .await?;
         let mut items = Vec::new();
         for state in self.joined_private_channel_states_for_topic(topic_id).await {
             items.push(self.joined_private_channel_view_for_state(&state).await?);
@@ -1702,10 +1921,17 @@ impl AppService {
         topic_id: &str,
         channel_id: &str,
     ) -> Result<Option<PrivateChannelCapability>> {
-        let Some(state) = self.joined_private_channel_state(topic_id, channel_id).await else {
+        self.maybe_redeem_rotation_grants_for_channel(topic_id, channel_id)
+            .await?;
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
             return Ok(None);
         };
-        Ok(Some(self.private_channel_capability_from_state(&state).await?))
+        Ok(Some(
+            self.private_channel_capability_from_state(&state).await?,
+        ))
     }
 
     pub async fn list_private_channel_capabilities(&self) -> Result<Vec<PrivateChannelCapability>> {
@@ -2080,11 +2306,172 @@ impl AppService {
         self.keys.public_key_hex()
     }
 
+    async fn maybe_redeem_rotation_grants_for_scope(
+        &self,
+        topic_id: &str,
+        scope: &TimelineScope,
+    ) -> Result<()> {
+        match scope {
+            TimelineScope::Public => Ok(()),
+            TimelineScope::AllJoined => self.maybe_redeem_rotation_grants_for_topic(topic_id).await,
+            TimelineScope::Channel { channel_id } => self
+                .maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
+                .await
+                .map(|_| ()),
+        }
+    }
+
+    async fn maybe_redeem_rotation_grants_for_topic(&self, topic_id: &str) -> Result<()> {
+        for state in self.joined_private_channel_states_for_topic(topic_id).await {
+            self.maybe_redeem_rotation_grants_for_channel(topic_id, state.channel_id.as_str())
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn maybe_redeem_rotation_grants_for_channel(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<bool> {
+        let mut redeemed_any = false;
+        loop {
+            let Some(state) = self
+                .joined_private_channel_state(topic_id, channel_id)
+                .await
+            else {
+                return Ok(redeemed_any);
+            };
+            if state.audience_kind != ChannelAudienceKind::FriendPlus {
+                return Ok(redeemed_any);
+            }
+            let mut redeemed_once = false;
+            let local_author = self.current_author_pubkey();
+            for epoch in private_channel_epoch_capabilities(&state) {
+                let replica = private_channel_replica_for_epoch(
+                    state.channel_id.as_str(),
+                    epoch.epoch_id.as_str(),
+                );
+                let Some(grant_doc) = fetch_private_channel_rotation_grant_from_replica(
+                    self.docs_sync.as_ref(),
+                    &replica,
+                    local_author.as_str(),
+                )
+                .await?
+                else {
+                    continue;
+                };
+                let payload =
+                    match decrypt_private_channel_rotation_grant(self.keys.as_ref(), &grant_doc) {
+                        Ok(payload) => payload,
+                        Err(error) => {
+                            warn!(
+                                topic = %topic_id,
+                                channel_id = %channel_id,
+                                epoch_id = %epoch.epoch_id,
+                                error = %error,
+                                "failed to decrypt friend-plus rotation grant"
+                            );
+                            continue;
+                        }
+                    };
+                if payload.new_epoch_id == state.current_epoch_id {
+                    continue;
+                }
+                let next_replica =
+                    private_channel_epoch_replica_id(channel_id, payload.new_epoch_id.as_str());
+                self.docs_sync
+                    .register_private_replica_secret(
+                        &next_replica,
+                        payload.new_namespace_secret_hex.as_str(),
+                    )
+                    .await?;
+                let (metadata, policy, participants) =
+                    match wait_for_private_channel_epoch_snapshot(
+                        self.docs_sync.as_ref(),
+                        &next_replica,
+                        "friend-plus rotation grant sync",
+                    )
+                    .await
+                    {
+                        Ok(snapshot) => snapshot,
+                        Err(error) => {
+                            warn!(
+                                topic = %topic_id,
+                                channel_id = %channel_id,
+                                epoch_id = %payload.new_epoch_id,
+                                error = %error,
+                                "failed to load rotated friend-plus replica"
+                            );
+                            continue;
+                        }
+                    };
+                if policy.audience_kind != ChannelAudienceKind::FriendPlus
+                    || policy.epoch_id != payload.new_epoch_id
+                    || policy.previous_epoch_id.as_deref() != Some(payload.old_epoch_id.as_str())
+                {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %channel_id,
+                        epoch_id = %payload.new_epoch_id,
+                        "friend-plus rotation grant payload does not match rotated policy"
+                    );
+                    continue;
+                }
+                let local_pubkey = Pubkey::from(local_author.clone());
+                if !participants.iter().any(|participant| {
+                    participant.participant_pubkey == local_pubkey
+                        && participant.epoch_id == policy.epoch_id
+                }) {
+                    persist_private_channel_participant(
+                        self.docs_sync.as_ref(),
+                        self.keys.as_ref(),
+                        &PrivateChannelParticipantDocV1 {
+                            channel_id: metadata.channel_id.clone(),
+                            topic_id: metadata.topic_id.clone(),
+                            epoch_id: policy.epoch_id.clone(),
+                            participant_pubkey: local_pubkey,
+                            joined_at: Utc::now().timestamp_millis(),
+                            is_owner: false,
+                            join_mode: Some(PrivateChannelJoinMode::RotationRedeem),
+                            sponsor_pubkey: state
+                                .joined_via_pubkey
+                                .as_ref()
+                                .map(|value| Pubkey::from(value.clone())),
+                            share_token_id: None,
+                        },
+                        &next_replica,
+                    )
+                    .await?;
+                }
+                let next_state = merged_private_channel_state_from_epoch_join(
+                    Some(state.clone()),
+                    metadata.topic_id.as_str(),
+                    metadata.channel_id.clone(),
+                    metadata.label.as_str(),
+                    metadata.creator_pubkey.as_str(),
+                    policy.owner_pubkey.as_str(),
+                    state.joined_via_pubkey.as_deref(),
+                    ChannelAudienceKind::FriendPlus,
+                    payload.new_epoch_id.as_str(),
+                    payload.new_namespace_secret_hex.as_str(),
+                );
+                self.register_joined_private_channel(next_state).await?;
+                redeemed_any = true;
+                redeemed_once = true;
+                break;
+            }
+            if !redeemed_once {
+                return Ok(redeemed_any);
+            }
+        }
+    }
+
     async fn private_channel_diagnostics(
         &self,
         state: &JoinedPrivateChannelState,
     ) -> Result<PrivateChannelDiagnostics> {
-        if state.audience_kind != ChannelAudienceKind::FriendOnly {
+        if state.audience_kind == ChannelAudienceKind::InviteOnly {
             return Ok(PrivateChannelDiagnostics {
                 sharing_state: ChannelSharingState::Open,
                 participant_count: 0,
@@ -2103,7 +2490,9 @@ impl AppService {
                 .await?;
         let participant_count = participants.len();
         let mut stale_participant_count = 0usize;
-        if state.owner_pubkey == self.current_author_pubkey() {
+        if state.audience_kind == ChannelAudienceKind::FriendOnly
+            && state.owner_pubkey == self.current_author_pubkey()
+        {
             for participant in &participants {
                 if participant.is_owner {
                     continue;
@@ -2126,7 +2515,8 @@ impl AppService {
             sharing_state,
             participant_count,
             stale_participant_count,
-            rotation_required: stale_participant_count > 0,
+            rotation_required: state.audience_kind == ChannelAudienceKind::FriendOnly
+                && stale_participant_count > 0,
         })
     }
 
@@ -2141,6 +2531,7 @@ impl AppService {
             label: state.label.clone(),
             creator_pubkey: state.creator_pubkey.clone(),
             owner_pubkey: state.owner_pubkey.clone(),
+            joined_via_pubkey: state.joined_via_pubkey.clone(),
             audience_kind: state.audience_kind.clone(),
             is_owner: state.owner_pubkey == self.current_author_pubkey(),
             current_epoch_id: state.current_epoch_id.clone(),
@@ -2167,6 +2558,7 @@ impl AppService {
             label: state.label.clone(),
             creator_pubkey: state.creator_pubkey.clone(),
             owner_pubkey: state.owner_pubkey.clone(),
+            joined_via_pubkey: state.joined_via_pubkey.clone(),
             audience_kind: state.audience_kind.clone(),
             current_epoch_id: state.current_epoch_id.clone(),
             current_epoch_secret_hex: state.current_epoch_secret_hex.clone(),
@@ -2239,7 +2631,10 @@ impl AppService {
         topic_id: &str,
         channel_id: &ChannelId,
     ) -> Result<JoinedPrivateChannelState> {
-        self.ensure_private_channel_access(topic_id, channel_id).await?;
+        self.maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
+            .await?;
+        self.ensure_private_channel_access(topic_id, channel_id)
+            .await?;
         self.ensure_private_channel_subscription(topic_id, channel_id.as_str())
             .await?;
         let state = self
@@ -2250,7 +2645,21 @@ impl AppService {
         if state.audience_kind == ChannelAudienceKind::FriendOnly
             && diagnostics.sharing_state != ChannelSharingState::Open
         {
-            anyhow::bail!("friend-only channel sharing is frozen; import a fresh grant before posting");
+            anyhow::bail!(
+                "friend-only channel sharing is frozen; import a fresh grant before posting"
+            );
+        }
+        if state.audience_kind == ChannelAudienceKind::FriendPlus
+            && private_channel_rotation_is_pending(
+                self.docs_sync.as_ref(),
+                self.keys.as_ref(),
+                &state,
+            )
+            .await?
+        {
+            anyhow::bail!(
+                "friend-plus channel has rotated; wait for grant redemption before posting"
+            );
         }
         Ok(state)
     }
@@ -2336,7 +2745,10 @@ impl AppService {
     ) -> Result<()> {
         let docs_sync = Arc::clone(&self.docs_sync);
         for epoch in private_channel_epoch_capabilities(&state) {
-            let replica = private_channel_replica_for_epoch(state.channel_id.as_str(), epoch.epoch_id.as_str());
+            let replica = private_channel_replica_for_epoch(
+                state.channel_id.as_str(),
+                epoch.epoch_id.as_str(),
+            );
             let key = joined_private_channel_subscription_key(
                 state.topic_id.as_str(),
                 state.channel_id.as_str(),
@@ -2828,8 +3240,13 @@ impl AppService {
                 .await?
                 .map(|bytes| String::from_utf8_lossy(&bytes).to_string()),
         };
-        persist_post_object(self.docs_sync.as_ref(), replica, object.clone(), envelope.clone())
-            .await?;
+        persist_post_object(
+            self.docs_sync.as_ref(),
+            replica,
+            object.clone(),
+            envelope.clone(),
+        )
+        .await?;
         ProjectionStore::put_object_projection(
             self.projection_store.as_ref(),
             projection_row_from_header(&object, content, replica),
@@ -2913,6 +3330,8 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<()> {
+        self.maybe_redeem_rotation_grants_for_scope(topic_id, scope)
+            .await?;
         self.ensure_topic_subscription(topic_id).await?;
         match scope {
             TimelineScope::Public => Ok(()),
@@ -2970,14 +3389,15 @@ impl AppService {
             TimelineScope::Public => {}
             TimelineScope::AllJoined => {
                 for state in self.joined_private_channel_states_for_topic(topic_id).await {
-                    for replica in private_channel_epoch_capabilities(&state)
-                        .into_iter()
-                        .map(|epoch| {
-                            private_channel_replica_for_epoch(
-                                state.channel_id.as_str(),
-                                epoch.epoch_id.as_str(),
-                            )
-                        })
+                    for replica in
+                        private_channel_epoch_capabilities(&state)
+                            .into_iter()
+                            .map(|epoch| {
+                                private_channel_replica_for_epoch(
+                                    state.channel_id.as_str(),
+                                    epoch.epoch_id.as_str(),
+                                )
+                            })
                     {
                         hydrated += hydrate_subscription_state_with_services(
                             self.docs_sync.as_ref(),
@@ -2997,14 +3417,15 @@ impl AppService {
                     .joined_private_channel_state(topic_id, channel_id.as_str())
                     .await
                 {
-                    for replica in private_channel_epoch_capabilities(&state)
-                        .into_iter()
-                        .map(|epoch| {
-                            private_channel_replica_for_epoch(
-                                state.channel_id.as_str(),
-                                epoch.epoch_id.as_str(),
-                            )
-                        })
+                    for replica in
+                        private_channel_epoch_capabilities(&state)
+                            .into_iter()
+                            .map(|epoch| {
+                                private_channel_replica_for_epoch(
+                                    state.channel_id.as_str(),
+                                    epoch.epoch_id.as_str(),
+                                )
+                            })
                     {
                         hydrated += hydrate_subscription_state_with_services(
                             self.docs_sync.as_ref(),
@@ -3028,14 +3449,15 @@ impl AppService {
             TimelineScope::Public => {}
             TimelineScope::AllJoined => {
                 for state in self.joined_private_channel_states_for_topic(topic_id).await {
-                    for replica in private_channel_epoch_capabilities(&state)
-                        .into_iter()
-                        .map(|epoch| {
-                            private_channel_replica_for_epoch(
-                                state.channel_id.as_str(),
-                                epoch.epoch_id.as_str(),
-                            )
-                        })
+                    for replica in
+                        private_channel_epoch_capabilities(&state)
+                            .into_iter()
+                            .map(|epoch| {
+                                private_channel_replica_for_epoch(
+                                    state.channel_id.as_str(),
+                                    epoch.epoch_id.as_str(),
+                                )
+                            })
                     {
                         self.maybe_restart_replica_sync(topic_id, &replica).await;
                     }
@@ -3046,14 +3468,15 @@ impl AppService {
                     .joined_private_channel_state(topic_id, channel_id.as_str())
                     .await
                 {
-                    for replica in private_channel_epoch_capabilities(&state)
-                        .into_iter()
-                        .map(|epoch| {
-                            private_channel_replica_for_epoch(
-                                state.channel_id.as_str(),
-                                epoch.epoch_id.as_str(),
-                            )
-                        })
+                    for replica in
+                        private_channel_epoch_capabilities(&state)
+                            .into_iter()
+                            .map(|epoch| {
+                                private_channel_replica_for_epoch(
+                                    state.channel_id.as_str(),
+                                    epoch.epoch_id.as_str(),
+                                )
+                            })
                     {
                         self.maybe_restart_replica_sync(topic_id, &replica).await;
                     }
@@ -3670,6 +4093,28 @@ async fn persist_private_channel_participant(
         .await
 }
 
+async fn persist_private_channel_rotation_grant(
+    docs_sync: &dyn DocsSync,
+    keys: &KukuriKeys,
+    grant: &PrivateChannelRotationGrantDocV1,
+    replica: &ReplicaId,
+) -> Result<()> {
+    let envelope = build_private_channel_rotation_grant_envelope(keys, grant)?;
+    docs_sync.open_replica(replica).await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "channels/rotation-grants",
+                    &format!("{}/envelope", grant.recipient_pubkey.as_str()),
+                ),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
 async fn fetch_private_channel_metadata_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
@@ -3732,6 +4177,93 @@ async fn fetch_private_channel_participants_from_replica(
     }
     items.sort_by(|left, right| left.participant_pubkey.cmp(&right.participant_pubkey));
     Ok(items)
+}
+
+async fn fetch_private_channel_rotation_grant_from_replica(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    recipient_pubkey: &str,
+) -> Result<Option<PrivateChannelRotationGrantDocV1>> {
+    let Some(record) = docs_sync
+        .query_replica(
+            replica,
+            DocQuery::Exact(stable_key(
+                "channels/rotation-grants",
+                &format!("{recipient_pubkey}/envelope"),
+            )),
+        )
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)?;
+    envelope.verify()?;
+    parse_private_channel_rotation_grant(&envelope)
+}
+
+async fn wait_for_private_channel_epoch_snapshot(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    timeout_label: &str,
+) -> Result<(
+    PrivateChannelMetadataDocV1,
+    PrivateChannelPolicyDocV1,
+    Vec<PrivateChannelParticipantDocV1>,
+)> {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let metadata = fetch_private_channel_metadata_from_replica(docs_sync, replica).await?;
+            let policy = fetch_private_channel_policy_from_replica(docs_sync, replica).await?;
+            let participants =
+                fetch_private_channel_participants_from_replica(docs_sync, replica).await?;
+            let owner_participant_visible = policy.as_ref().is_some_and(|policy| {
+                participants.iter().any(|participant| {
+                    participant.participant_pubkey == policy.owner_pubkey
+                        && participant.epoch_id == policy.epoch_id
+                        && participant.is_owner
+                })
+            });
+            if let (Some(metadata), Some(policy)) = (metadata, policy)
+                && owner_participant_visible
+            {
+                return Ok::<_, anyhow::Error>((metadata, policy, participants));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("timed out waiting for {timeout_label}"))?
+}
+
+async fn private_channel_rotation_is_pending(
+    docs_sync: &dyn DocsSync,
+    keys: &KukuriKeys,
+    state: &JoinedPrivateChannelState,
+) -> Result<bool> {
+    if state.audience_kind != ChannelAudienceKind::FriendPlus {
+        return Ok(false);
+    }
+    let replica = current_private_channel_replica_id(state);
+    let Some(policy) = fetch_private_channel_policy_from_replica(docs_sync, &replica).await? else {
+        return Ok(false);
+    };
+    if policy.sharing_state != ChannelSharingState::Frozen || policy.rotated_at.is_none() {
+        return Ok(false);
+    }
+    let local_author = keys.public_key_hex();
+    let Some(grant) = fetch_private_channel_rotation_grant_from_replica(
+        docs_sync,
+        &replica,
+        local_author.as_str(),
+    )
+    .await?
+    else {
+        return Ok(false);
+    };
+    let payload = decrypt_private_channel_rotation_grant(keys, &grant)?;
+    Ok(payload.new_epoch_id != state.current_epoch_id)
 }
 
 async fn store_manifest_blob<T: Serialize>(
@@ -3994,10 +4526,7 @@ async fn hydrate_live_sessions_from_replica(
         };
         projection_store
             .upsert_live_session_cache(live_projection_row_from_state(
-                &state,
-                &manifest,
-                topic_id,
-                replica,
+                &state, &manifest, topic_id, replica,
             ))
             .await?;
         hydrated += 1;
@@ -4036,10 +4565,7 @@ async fn hydrate_game_rooms_from_replica(
         };
         projection_store
             .upsert_game_room_cache(game_projection_row_from_state(
-                &state,
-                &manifest,
-                topic_id,
-                replica,
+                &state, &manifest, topic_id, replica,
             ))
             .await?;
         hydrated += 1;
@@ -4176,6 +4702,29 @@ fn legacy_epoch_id() -> &'static str {
     "legacy"
 }
 
+fn private_channel_is_epoch_aware(audience_kind: &ChannelAudienceKind) -> bool {
+    *audience_kind != ChannelAudienceKind::InviteOnly
+}
+
+fn initial_private_channel_epoch_id(
+    audience_kind: &ChannelAudienceKind,
+    now_ms: i64,
+    owner_pubkey: &str,
+) -> String {
+    if *audience_kind == ChannelAudienceKind::InviteOnly {
+        return legacy_epoch_id().to_string();
+    }
+    format!("epoch-{now_ms}-{}", short_id_suffix(owner_pubkey))
+}
+
+fn next_private_channel_epoch_id(owner_pubkey: &str) -> String {
+    format!(
+        "epoch-{}-{}",
+        Utc::now().timestamp_millis(),
+        short_id_suffix(owner_pubkey)
+    )
+}
+
 fn private_channel_replica_for_epoch(channel_id: &str, epoch_id: &str) -> ReplicaId {
     if epoch_id == legacy_epoch_id() {
         return private_channel_replica_id(channel_id);
@@ -4230,6 +4779,7 @@ fn joined_private_channel_state_from_capability(
         label: capability.label.trim().to_string(),
         creator_pubkey: capability.creator_pubkey,
         owner_pubkey,
+        joined_via_pubkey: capability.joined_via_pubkey,
         audience_kind: capability.audience_kind,
         current_epoch_id,
         current_epoch_secret_hex,
@@ -4237,18 +4787,25 @@ fn joined_private_channel_state_from_capability(
     })
 }
 
-fn merged_friend_only_state_from_preview(
+fn merged_private_channel_state_from_epoch_join(
     existing: Option<JoinedPrivateChannelState>,
-    preview: &FriendOnlyGrantPreview,
+    topic_id: &str,
+    channel_id: ChannelId,
+    label: &str,
     creator_pubkey: &str,
+    owner_pubkey: &str,
+    joined_via_pubkey: Option<&str>,
+    audience_kind: ChannelAudienceKind,
+    epoch_id: &str,
+    namespace_secret_hex: &str,
 ) -> JoinedPrivateChannelState {
     let mut archived_epochs = existing
         .as_ref()
         .map(|state| state.archived_epochs.clone())
         .unwrap_or_default();
-    archived_epochs.retain(|epoch| epoch.epoch_id != preview.epoch_id);
+    archived_epochs.retain(|epoch| epoch.epoch_id != epoch_id);
     if let Some(existing_state) = existing.as_ref()
-        && existing_state.current_epoch_id != preview.epoch_id
+        && existing_state.current_epoch_id != epoch_id
         && !archived_epochs
             .iter()
             .any(|epoch| epoch.epoch_id == existing_state.current_epoch_id)
@@ -4259,16 +4816,46 @@ fn merged_friend_only_state_from_preview(
         });
     }
     JoinedPrivateChannelState {
-        topic_id: preview.topic_id.as_str().to_string(),
-        channel_id: preview.channel_id.clone(),
-        label: preview.channel_label.clone(),
+        topic_id: topic_id.to_string(),
+        channel_id,
+        label: label.to_string(),
         creator_pubkey: creator_pubkey.to_string(),
-        owner_pubkey: preview.owner_pubkey.as_str().to_string(),
-        audience_kind: ChannelAudienceKind::FriendOnly,
-        current_epoch_id: preview.epoch_id.clone(),
-        current_epoch_secret_hex: preview.namespace_secret_hex.clone(),
+        owner_pubkey: owner_pubkey.to_string(),
+        joined_via_pubkey: joined_via_pubkey.map(str::to_string),
+        audience_kind,
+        current_epoch_id: epoch_id.to_string(),
+        current_epoch_secret_hex: namespace_secret_hex.to_string(),
         archived_epochs,
     }
+}
+
+fn archive_private_channel_epoch(
+    state: &mut JoinedPrivateChannelState,
+    epoch_id: &str,
+    namespace_secret_hex: &str,
+) {
+    if state
+        .archived_epochs
+        .iter()
+        .any(|epoch| epoch.epoch_id == epoch_id)
+    {
+        return;
+    }
+    state.archived_epochs.push(PrivateChannelEpochCapability {
+        epoch_id: epoch_id.to_string(),
+        namespace_secret_hex: namespace_secret_hex.to_string(),
+    });
+}
+
+fn active_private_channel_participants(
+    participants: &[PrivateChannelParticipantDocV1],
+    epoch_id: &str,
+) -> Vec<PrivateChannelParticipantDocV1> {
+    participants
+        .iter()
+        .filter(|participant| participant.epoch_id == epoch_id)
+        .cloned()
+        .collect()
 }
 
 async fn register_private_channel_replica_secrets(
@@ -4302,20 +4889,16 @@ fn subscription_replicas_for_topic(
     joined_channels: Vec<JoinedPrivateChannelState>,
 ) -> Vec<ReplicaId> {
     let mut replicas = vec![topic_replica_id(topic_id)];
-    replicas.extend(
-        joined_channels
+    replicas.extend(joined_channels.into_iter().flat_map(|state| {
+        private_channel_epoch_capabilities(&state)
             .into_iter()
-            .flat_map(|state| {
-                private_channel_epoch_capabilities(&state)
-                    .into_iter()
-                    .map(move |epoch| {
-                        private_channel_replica_for_epoch(
-                            state.channel_id.as_str(),
-                            epoch.epoch_id.as_str(),
-                        )
-                    })
-            }),
-    );
+            .map(move |epoch| {
+                private_channel_replica_for_epoch(
+                    state.channel_id.as_str(),
+                    epoch.epoch_id.as_str(),
+                )
+            })
+    }));
     replicas
 }
 
@@ -7615,20 +8198,50 @@ mod tests {
             .await
             .expect("ticket d")
             .expect("ticket d value");
-        app_a.import_peer_ticket(&ticket_b).await.expect("a imports b");
-        app_b.import_peer_ticket(&ticket_a).await.expect("b imports a");
-        app_a.import_peer_ticket(&ticket_c).await.expect("a imports c");
-        app_c.import_peer_ticket(&ticket_a).await.expect("c imports a");
-        app_a.import_peer_ticket(&ticket_d).await.expect("a imports d");
-        app_d.import_peer_ticket(&ticket_a).await.expect("d imports a");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("a imports b");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("b imports a");
+        app_a
+            .import_peer_ticket(&ticket_c)
+            .await
+            .expect("a imports c");
+        app_c
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("c imports a");
+        app_a
+            .import_peer_ticket(&ticket_d)
+            .await
+            .expect("a imports d");
+        app_d
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("d imports a");
 
         let a_pubkey = keys_a.public_key_hex();
         let b_pubkey = keys_b.public_key_hex();
         let d_pubkey = keys_d.public_key_hex();
-        app_a.follow_author(b_pubkey.as_str()).await.expect("a follows b");
-        app_b.follow_author(a_pubkey.as_str()).await.expect("b follows a");
-        app_a.follow_author(d_pubkey.as_str()).await.expect("a follows d");
-        app_d.follow_author(a_pubkey.as_str()).await.expect("d follows a");
+        app_a
+            .follow_author(b_pubkey.as_str())
+            .await
+            .expect("a follows b");
+        app_b
+            .follow_author(a_pubkey.as_str())
+            .await
+            .expect("b follows a");
+        app_a
+            .follow_author(d_pubkey.as_str())
+            .await
+            .expect("a follows d");
+        app_d
+            .follow_author(a_pubkey.as_str())
+            .await
+            .expect("d follows a");
 
         timeout(Duration::from_secs(10), async {
             loop {
@@ -7726,7 +8339,10 @@ mod tests {
             .await
             .expect("rotate friend-only channel");
         assert_ne!(rotated.current_epoch_id, channel_a.current_epoch_id);
-        assert_eq!(rotated.archived_epoch_ids, vec![channel_a.current_epoch_id.clone()]);
+        assert_eq!(
+            rotated.archived_epoch_ids,
+            vec![channel_a.current_epoch_id.clone()]
+        );
 
         let stale_error = app_d
             .import_friend_only_grant(grant.as_str())
@@ -7748,7 +8364,440 @@ mod tests {
             .list_timeline_scoped(topic, private_scope.clone(), None, 20)
             .await
             .expect("d private timeline after rotate");
-        assert!(d_private.items.iter().all(|post| post.object_id != object_id));
+        assert!(
+            d_private
+                .items
+                .iter()
+                .all(|post| post.object_id != object_id)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("friend-plus-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("friend-plus-b")).await;
+        let stack_c = TestIrohStack::new(&dir.path().join("friend-plus-c")).await;
+        let stack_d = TestIrohStack::new(&dir.path().join("friend-plus-d")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let store_c = Arc::new(MemoryStore::default());
+        let store_d = Arc::new(MemoryStore::default());
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let keys_c = generate_keys();
+        let keys_d = generate_keys();
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            stack_a.transport.clone(),
+            stack_a.transport.clone(),
+            stack_a.docs_sync.clone(),
+            stack_a.blob_service.clone(),
+            keys_a.clone(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b.clone(),
+            stack_b.transport.clone(),
+            stack_b.transport.clone(),
+            stack_b.docs_sync.clone(),
+            stack_b.blob_service.clone(),
+            keys_b.clone(),
+        );
+        let app_c = AppService::new_with_services(
+            store_c.clone(),
+            store_c.clone(),
+            stack_c.transport.clone(),
+            stack_c.transport.clone(),
+            stack_c.docs_sync.clone(),
+            stack_c.blob_service.clone(),
+            keys_c.clone(),
+        );
+        let app_d = AppService::new_with_services(
+            store_d.clone(),
+            store_d.clone(),
+            stack_d.transport.clone(),
+            stack_d.transport.clone(),
+            stack_d.docs_sync.clone(),
+            stack_d.blob_service.clone(),
+            keys_d.clone(),
+        );
+        app_a.warm_social_graph().await.expect("warm a");
+        app_b.warm_social_graph().await.expect("warm b");
+        app_c.warm_social_graph().await.expect("warm c");
+        app_d.warm_social_graph().await.expect("warm d");
+
+        let ticket_a = stack_a
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = stack_b
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let ticket_c = stack_c
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket c")
+            .expect("ticket c value");
+        let ticket_d = stack_d
+            .transport
+            .export_ticket()
+            .await
+            .expect("ticket d")
+            .expect("ticket d value");
+
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("a imports b");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("b imports a");
+        app_a
+            .import_peer_ticket(&ticket_c)
+            .await
+            .expect("a imports c");
+        app_c
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("c imports a");
+        app_a
+            .import_peer_ticket(&ticket_d)
+            .await
+            .expect("a imports d");
+        app_d
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("d imports a");
+        app_b
+            .import_peer_ticket(&ticket_c)
+            .await
+            .expect("b imports c");
+        app_c
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("c imports b");
+        app_b
+            .import_peer_ticket(&ticket_d)
+            .await
+            .expect("b imports d");
+        app_d
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("d imports b");
+
+        let a_pubkey = keys_a.public_key_hex();
+        let b_pubkey = keys_b.public_key_hex();
+        let c_pubkey = keys_c.public_key_hex();
+        let d_pubkey = keys_d.public_key_hex();
+        app_a
+            .follow_author(b_pubkey.as_str())
+            .await
+            .expect("a follows b");
+        app_b
+            .follow_author(a_pubkey.as_str())
+            .await
+            .expect("b follows a");
+        app_b
+            .follow_author(c_pubkey.as_str())
+            .await
+            .expect("b follows c");
+        app_c
+            .follow_author(b_pubkey.as_str())
+            .await
+            .expect("c follows b");
+        app_b
+            .follow_author(d_pubkey.as_str())
+            .await
+            .expect("b follows d");
+        app_d
+            .follow_author(b_pubkey.as_str())
+            .await
+            .expect("d follows b");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let b_from_a = app_b
+                    .get_author_social_view(a_pubkey.as_str())
+                    .await
+                    .expect("b sees a");
+                let c_from_b = app_c
+                    .get_author_social_view(b_pubkey.as_str())
+                    .await
+                    .expect("c sees b");
+                let d_from_b = app_d
+                    .get_author_social_view(b_pubkey.as_str())
+                    .await
+                    .expect("d sees b");
+                if b_from_a.mutual && c_from_b.mutual && d_from_b.mutual {
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus mutual propagation timeout");
+
+        let topic = "kukuri:topic:friend-plus";
+        let channel = app_a
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "friends+".into(),
+                audience_kind: ChannelAudienceKind::FriendPlus,
+            })
+            .await
+            .expect("create friend-plus channel");
+        let share_ab = app_a
+            .export_friend_plus_share(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export a->b share");
+        let preview_b = app_b
+            .import_friend_plus_share(share_ab.as_str())
+            .await
+            .expect("b imports share");
+        assert_eq!(preview_b.channel_id.as_str(), channel.channel_id);
+
+        let share_bc = app_b
+            .export_friend_plus_share(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export b->c share");
+        let preview_c = app_c
+            .import_friend_plus_share(share_bc.as_str())
+            .await
+            .expect("c imports share");
+        assert_eq!(preview_c.sponsor_pubkey.as_str(), b_pubkey);
+
+        let private_channel_id = ChannelId::new(channel.channel_id.clone());
+        let private_scope = TimelineScope::Channel {
+            channel_id: private_channel_id.clone(),
+        };
+        let private_ref = ChannelRef::PrivateChannel {
+            channel_id: private_channel_id.clone(),
+        };
+        let old_post_id = app_a
+            .create_post_in_channel(topic, private_ref.clone(), "friends+ old", None)
+            .await
+            .expect("create old friend-plus post");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let private_b = app_b
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline b");
+                let private_c = app_c
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline c");
+                if private_b
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == old_post_id)
+                    && private_c
+                        .items
+                        .iter()
+                        .any(|post| post.object_id == old_post_id)
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus old post propagation timeout");
+
+        let public_c = app_c
+            .list_timeline_scoped(topic, TimelineScope::Public, None, 20)
+            .await
+            .expect("public c");
+        assert!(
+            public_c
+                .items
+                .iter()
+                .all(|post| post.object_id != old_post_id)
+        );
+
+        let share_bd = app_b
+            .export_friend_plus_share(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export b->d share");
+
+        let frozen = app_a
+            .freeze_private_channel(topic, channel.channel_id.as_str())
+            .await
+            .expect("freeze friend-plus channel");
+        assert_eq!(frozen.sharing_state, ChannelSharingState::Frozen);
+
+        let freeze_post_id = app_b
+            .create_post_in_channel(topic, private_ref.clone(), "friends+ frozen write", None)
+            .await
+            .expect("write should continue after freeze");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let private_a = app_a
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline a");
+                let private_c = app_c
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline c after freeze");
+                if private_a
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == freeze_post_id)
+                    && private_c
+                        .items
+                        .iter()
+                        .any(|post| post.object_id == freeze_post_id)
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus frozen write propagation timeout");
+
+        let freeze_error = app_d
+            .import_friend_plus_share(share_bd.as_str())
+            .await
+            .expect_err("frozen share should fail");
+        assert!(freeze_error.to_string().contains("no longer open"));
+
+        let rotated = app_a
+            .rotate_private_channel(topic, channel.channel_id.as_str())
+            .await
+            .expect("rotate friend-plus channel");
+        assert_eq!(rotated.archived_epoch_ids.len(), 1);
+
+        let joined_b = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = app_b
+                    .list_joined_private_channels(topic)
+                    .await
+                    .expect("list joined on b");
+                let Some(item) = joined
+                    .iter()
+                    .find(|entry| entry.channel_id == channel.channel_id)
+                else {
+                    sleep(Duration::from_millis(50)).await;
+                    continue;
+                };
+                if item.current_epoch_id == rotated.current_epoch_id {
+                    break item.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("b rotation redeem timeout");
+        assert_eq!(
+            joined_b.joined_via_pubkey.as_deref(),
+            Some(a_pubkey.as_str())
+        );
+        assert_eq!(joined_b.archived_epoch_ids.len(), 1);
+
+        let joined_c = timeout(Duration::from_secs(10), async {
+            loop {
+                let joined = app_c
+                    .list_joined_private_channels(topic)
+                    .await
+                    .expect("list joined on c");
+                let Some(item) = joined
+                    .iter()
+                    .find(|entry| entry.channel_id == channel.channel_id)
+                else {
+                    sleep(Duration::from_millis(50)).await;
+                    continue;
+                };
+                if item.current_epoch_id == rotated.current_epoch_id {
+                    break item.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("c rotation redeem timeout");
+        assert_eq!(
+            joined_c.joined_via_pubkey.as_deref(),
+            Some(b_pubkey.as_str())
+        );
+        assert_eq!(joined_c.archived_epoch_ids.len(), 1);
+
+        let old_share_error = app_d
+            .import_friend_plus_share(share_bd.as_str())
+            .await
+            .expect_err("old share should still fail after rotate");
+        assert!(old_share_error.to_string().contains("no longer open"));
+
+        let new_post_id = app_b
+            .create_post_in_channel(topic, private_ref.clone(), "friends+ new", None)
+            .await
+            .expect("create new epoch post");
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let private_a = app_a
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline a after rotate");
+                let private_c = app_c
+                    .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                    .await
+                    .expect("private timeline c after rotate");
+                if private_a
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == new_post_id)
+                    && private_c
+                        .items
+                        .iter()
+                        .any(|post| post.object_id == new_post_id)
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("friend-plus new epoch propagation timeout");
+
+        let fresh_share = app_b
+            .export_friend_plus_share(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export fresh friend-plus share");
+        let preview_d = app_d
+            .import_friend_plus_share(fresh_share.as_str())
+            .await
+            .expect("d imports fresh share");
+        assert_eq!(preview_d.epoch_id, rotated.current_epoch_id);
+
+        let d_private = app_d
+            .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+            .await
+            .expect("d private timeline");
+        assert!(
+            d_private
+                .items
+                .iter()
+                .all(|post| post.object_id != old_post_id)
+        );
+        assert!(
+            d_private
+                .items
+                .iter()
+                .any(|post| post.object_id == new_post_id)
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

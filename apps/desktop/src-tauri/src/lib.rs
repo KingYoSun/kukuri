@@ -4,13 +4,14 @@ use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
     CommunityNodeTargetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreatePostRequest, CreatePrivateChannelRequest, DesktopRuntime, DiscoveryConfig,
-    ExportFriendOnlyGrantRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
-    GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportPeerTicketRequest,
-    ImportPrivateChannelInviteRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
-    ListLiveSessionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
-    resolve_db_path_from_env,
+    ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
+    ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest, GetBlobMediaRequest,
+    GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
+    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
+    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListThreadRequest,
+    ListTimelineRequest, LiveSessionCommandRequest, RotatePrivateChannelRequest,
+    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetMyProfileRequest,
+    UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest, resolve_db_path_from_env,
 };
 use tauri::Manager;
 use tracing::{info, warn};
@@ -148,6 +149,42 @@ async fn import_friend_only_grant(
     state
         .runtime
         .import_friend_only_grant(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn export_friend_plus_share(
+    state: tauri::State<'_, DesktopState>,
+    request: ExportFriendPlusShareRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .export_friend_plus_share(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn import_friend_plus_share(
+    state: tauri::State<'_, DesktopState>,
+    request: ImportFriendPlusShareRequest,
+) -> Result<kukuri_core::FriendPlusSharePreview, String> {
+    state
+        .runtime
+        .import_friend_plus_share(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn freeze_private_channel(
+    state: tauri::State<'_, DesktopState>,
+    request: FreezePrivateChannelRequest,
+) -> Result<kukuri_app_api::JoinedPrivateChannelView, String> {
+    state
+        .runtime
+        .freeze_private_channel(request)
         .await
         .map_err(map_error)
 }
@@ -566,6 +603,9 @@ pub fn run() {
             import_private_channel_invite,
             export_friend_only_grant,
             import_friend_only_grant,
+            export_friend_plus_share,
+            import_friend_plus_share,
+            freeze_private_channel,
             rotate_private_channel,
             list_joined_private_channels,
             list_timeline,

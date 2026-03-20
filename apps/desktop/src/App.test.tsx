@@ -61,6 +61,7 @@ function withJoinedChannelDefaults(channel: JoinedPrivateChannelView): JoinedPri
   return {
     ...channel,
     owner_pubkey: channel.owner_pubkey ?? channel.creator_pubkey,
+    joined_via_pubkey: channel.joined_via_pubkey ?? null,
     audience_kind: channel.audience_kind ?? 'invite_only',
     is_owner: channel.is_owner ?? true,
     current_epoch_id: channel.current_epoch_id ?? 'legacy',
@@ -514,11 +515,12 @@ function createMockApi(options?: {
         owner_pubkey: syncStatus.local_author_pubkey,
         audience_kind: audienceKind,
         is_owner: true,
-        current_epoch_id: audienceKind === 'friend_only' ? `epoch-${sequence}` : 'legacy',
+        current_epoch_id:
+          audienceKind === 'invite_only' ? 'legacy' : `epoch-${sequence}`,
         archived_epoch_ids: [],
         sharing_state: 'open',
         rotation_required: false,
-        participant_count: audienceKind === 'friend_only' ? 1 : 0,
+        participant_count: audienceKind === 'invite_only' ? 0 : 1,
         stale_participant_count: 0,
       });
       joinedChannelsByTopic[topic] = [...(joinedChannelsByTopic[topic] ?? []), channel];
@@ -588,6 +590,55 @@ function createMockApi(options?: {
         }),
       ];
       return preview;
+    },
+    async exportFriendPlusShare(topic, channelId) {
+      return `share:${topic}:${channelId}`;
+    },
+    async importFriendPlusShare() {
+      const preview = {
+        channel_id: 'channel-friends-plus',
+        topic_id: 'kukuri:topic:demo',
+        channel_label: 'Friends+',
+        owner_pubkey: syncStatus.local_author_pubkey,
+        sponsor_pubkey: 'sponsor-pubkey-1234',
+        epoch_id: 'epoch-plus-1',
+        expires_at: null,
+        namespace_secret_hex: 'c'.repeat(64),
+        share_token_id: 'share-token-1',
+      };
+      joinedChannelsByTopic[preview.topic_id] = [
+        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
+        withJoinedChannelDefaults({
+          topic_id: preview.topic_id,
+          channel_id: preview.channel_id,
+          label: preview.channel_label,
+          creator_pubkey: preview.owner_pubkey,
+          owner_pubkey: preview.owner_pubkey,
+          joined_via_pubkey: preview.sponsor_pubkey,
+          audience_kind: 'friend_plus',
+          is_owner: false,
+          current_epoch_id: preview.epoch_id,
+          archived_epoch_ids: [],
+          sharing_state: 'open',
+          rotation_required: false,
+          participant_count: 2,
+          stale_participant_count: 0,
+        }),
+      ];
+      return preview;
+    },
+    async freezePrivateChannel(topic, channelId) {
+      const channels = joinedChannelsByTopic[topic] ?? [];
+      const next = channels.map((channel) =>
+        channel.channel_id === channelId
+          ? withJoinedChannelDefaults({
+              ...channel,
+              sharing_state: 'frozen',
+            })
+          : channel
+      );
+      joinedChannelsByTopic[topic] = next;
+      return next.find((channel) => channel.channel_id === channelId)!;
     },
     async rotatePrivateChannel(topic, channelId) {
       const channels = joinedChannelsByTopic[topic] ?? [];
@@ -1228,7 +1279,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
   );
 
   await user.type(
-    screen.getByPlaceholderText('paste private channel invite or friend grant'),
+    screen.getByPlaceholderText(/paste private channel invite/i),
     'invite-token'
   );
   await user.click(screen.getByRole('button', { name: 'Join Invite' }));
@@ -1263,6 +1314,31 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await waitFor(() => {
     expect(screen.getByText('Latest grant')).toBeInTheDocument();
     expect(screen.getByText(/grant:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
+  });
+});
+
+test('desktop shell shows friend-plus controls and can create a share', async () => {
+  const user = userEvent.setup();
+  render(<App api={createMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('core contributors'), 'friends+');
+  await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_plus');
+  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(
+      screen.getByText(/Policy: Friends\+: participants can share to their mutuals/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Share' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Freeze' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Create Share' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Latest share')).toBeInTheDocument();
+    expect(screen.getByText(/share:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
   });
 });
 
