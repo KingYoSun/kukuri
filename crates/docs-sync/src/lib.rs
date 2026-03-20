@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -114,6 +115,7 @@ pub struct IrohDocsNode {
     docs: DocsApi,
     blobs: BlobStore,
     endpoint_publish_task: Option<JoinHandle<()>>,
+    shutdown_started: AtomicBool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -244,6 +246,7 @@ impl IrohDocsNode {
             docs: docs.api().clone(),
             blobs,
             endpoint_publish_task,
+            shutdown_started: AtomicBool::new(false),
         }))
     }
 
@@ -303,6 +306,9 @@ impl IrohDocsNode {
     }
 
     pub async fn shutdown(self: Arc<Self>) -> Result<()> {
+        if self.shutdown_started.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
         if let Some(task) = &self.endpoint_publish_task {
             task.abort();
         }
@@ -317,6 +323,9 @@ impl Drop for IrohDocsNode {
     fn drop(&mut self) {
         if let Some(task) = self.endpoint_publish_task.take() {
             task.abort();
+        }
+        if self.shutdown_started.swap(true, Ordering::AcqRel) {
+            return;
         }
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let router = Arc::clone(&self.router);
@@ -389,6 +398,19 @@ impl IrohDocsSync {
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             private_replica_secrets: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let handles = {
+            let mut replicas = self.replicas.lock().await;
+            replicas
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
+        };
+        for handle in handles {
+            handle._live_task.abort();
         }
     }
 

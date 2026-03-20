@@ -2084,6 +2084,8 @@ impl BoundIrohStack {
     }
 
     async fn shutdown(&self) {
+        self.transport.shutdown().await;
+        self.docs_sync.shutdown().await;
         let _ = self.node.clone().shutdown().await;
     }
 }

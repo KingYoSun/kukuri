@@ -2259,6 +2259,20 @@ impl AppService {
     }
 
     pub async fn shutdown(&self) {
+        let topics_to_unsubscribe = self
+            .subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let private_channels_to_unsubscribe = self
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .keys()
+            .filter_map(|key| key.splitn(3, "::").nth(1).map(str::to_owned))
+            .collect::<BTreeSet<_>>();
         let handles = {
             let mut subscriptions = self.subscriptions.lock().await;
             subscriptions
@@ -2280,6 +2294,18 @@ impl AppService {
         for handle in private_handles {
             handle.abort();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
+        for channel_id in private_channels_to_unsubscribe {
+            let _ = self
+                .hint_transport
+                .unsubscribe_hints(&private_channel_hint_topic(channel_id.as_str()))
+                .await;
+        }
+        for topic_id in topics_to_unsubscribe {
+            let _ = self
+                .hint_transport
+                .unsubscribe_hints(&TopicId::new(topic_id))
+                .await;
         }
         let author_handles = {
             let mut subscriptions = self.author_subscriptions.lock().await;
@@ -6138,6 +6164,35 @@ mod tests {
         )
         .await
         .expect("set discovery seeds");
+
+        assert_eq!(
+            hint_transport.unsubscribed_topics.lock().await.clone(),
+            vec![topic.to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_unsubscribes_active_hint_topics() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport,
+            hint_transport.clone(),
+            Arc::new(MemoryDocsSync::default()),
+            Arc::new(MemoryBlobService::default()),
+            generate_keys(),
+        );
+        let topic = "kukuri:topic:shutdown";
+
+        let _ = app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe timeline");
+
+        app.shutdown().await;
 
         assert_eq!(
             hint_transport.unsubscribed_topics.lock().await.clone(),

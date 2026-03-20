@@ -1071,6 +1071,14 @@ impl Drop for IrohGossipTransport {
         if let Some(task) = self._endpoint_publish_task.take() {
             task.abort();
         }
+        if let Ok(mut topics) = self.topic_states.try_lock() {
+            for (_, state) in topics.drain() {
+                state._receiver_task.abort();
+            }
+        }
+        if let Ok(mut subscribed_topics) = self.subscribed_topics.try_lock() {
+            subscribed_topics.clear();
+        }
     }
 }
 
@@ -1235,6 +1243,21 @@ impl Transport for IrohGossipTransport {
             local_endpoint_id: self.endpoint.id().to_string(),
             last_discovery_error: self.last_error.lock().await.clone(),
         })
+    }
+}
+
+impl IrohGossipTransport {
+    pub async fn shutdown(&self) {
+        let topics = self
+            .subscribed_topics
+            .lock()
+            .await
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        for topic in topics {
+            self.remove_topic_state(topic.as_str()).await;
+        }
     }
 }
 
