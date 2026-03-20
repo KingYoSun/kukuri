@@ -930,6 +930,7 @@ pub fn build_post_envelope_with_payload(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_post_envelope_with_payload_in_channel(
     keys: &KukuriKeys,
     topic: &TopicId,
@@ -1154,6 +1155,7 @@ pub fn build_friend_only_grant_token(
     serde_json::to_string(&token).context("failed to encode friend-only grant token")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_friend_plus_share_token(
     keys: &KukuriKeys,
     topic: &TopicId,
@@ -1655,9 +1657,9 @@ fn derive_rotation_grant_key(
     let keypair = Keypair::from_secret_key(SECP256K1, &local_keys.secret_key);
     let (_, parity) = keypair.x_only_public_key();
     let local_secret = if parity == Parity::Odd {
-        local_keys.secret_key.clone().negate()
+        local_keys.secret_key.negate()
     } else {
-        local_keys.secret_key.clone()
+        local_keys.secret_key
     };
     let shared = SharedSecret::new(&remote_public, &local_secret);
     let hkdf = Hkdf::<Sha256>::new(

@@ -2271,7 +2271,7 @@ impl AppService {
             .lock()
             .await
             .keys()
-            .filter_map(|key| key.splitn(3, "::").nth(1).map(str::to_owned))
+            .filter_map(|key| key.split("::").nth(1).map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let handles = {
             let mut subscriptions = self.subscriptions.lock().await;
@@ -3522,7 +3522,7 @@ impl AppService {
             }
             deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
         }
-        if let Err(error) = self.docs_sync.restart_replica_sync(&replica).await {
+        if let Err(error) = self.docs_sync.restart_replica_sync(replica).await {
             warn!(
                 topic = %topic_id,
                 replica = %replica.as_str(),
@@ -3838,13 +3838,12 @@ async fn hydrate_author_state_with_services(
             Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
                 if let Some(envelope) =
                     fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                    && let Some(edge) = parse_follow_edge(&envelope)?
+                    && edge.target_pubkey == doc.target_pubkey
+                    && edge.status == doc.status
                 {
-                    if let Some(edge) = parse_follow_edge(&envelope)? {
-                        if edge.target_pubkey == doc.target_pubkey && edge.status == doc.status {
-                            store.put_envelope(envelope).await?;
-                            count += 1;
-                        }
-                    }
+                    store.put_envelope(envelope).await?;
+                    count += 1;
                 }
             }
             Ok(_) => {
@@ -4813,6 +4812,7 @@ fn joined_private_channel_state_from_capability(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn merged_private_channel_state_from_epoch_join(
     existing: Option<JoinedPrivateChannelState>,
     topic_id: &str,
