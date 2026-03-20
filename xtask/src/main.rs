@@ -179,6 +179,66 @@ fn desktop_package() -> Result<()> {
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HostPlatform {
+    Unix,
+    Windows,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct CommandSpec {
+    program: String,
+    args: Vec<String>,
+}
+
+impl CommandSpec {
+    fn direct(binary: &str, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            program: binary.to_string(),
+            args: args.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+fn host_platform() -> HostPlatform {
+    if cfg!(windows) {
+        HostPlatform::Windows
+    } else {
+        HostPlatform::Unix
+    }
+}
+
+fn node_command_spec(
+    platform: HostPlatform,
+    binary: &str,
+    args: impl IntoIterator<Item = impl Into<String>>,
+) -> CommandSpec {
+    let args = args.into_iter().map(Into::into).collect::<Vec<_>>();
+    match platform {
+        HostPlatform::Unix => CommandSpec::direct(binary, args),
+        HostPlatform::Windows => {
+            let mut shell_args = vec!["/C".to_string(), binary.to_string()];
+            shell_args.extend(args);
+            CommandSpec::direct("cmd", shell_args)
+        }
+    }
+}
+
+fn pnpm_command_spec(
+    platform: HostPlatform,
+    pnpm_available: bool,
+    args: impl IntoIterator<Item = impl Into<String>>,
+) -> CommandSpec {
+    let args = args.into_iter().map(Into::into).collect::<Vec<_>>();
+    if pnpm_available {
+        node_command_spec(platform, "pnpm", args)
+    } else {
+        let mut fallback = vec!["--yes".to_string(), "pnpm@10.16.1".to_string()];
+        fallback.extend(args);
+        node_command_spec(platform, "npx", fallback)
+    }
+}
+
 fn run(binary: &str, args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<()> {
     run_with_env(binary, args, cwd, &[])
 }
@@ -189,14 +249,18 @@ fn run_with_env(
     cwd: &Path,
     envs: &[(&str, &str)],
 ) -> Result<()> {
-    let status = Command::new(binary)
-        .args(args)
+    run_spec_with_env(&CommandSpec::direct(binary, args), cwd, envs)
+}
+
+fn run_spec_with_env(spec: &CommandSpec, cwd: &Path, envs: &[(&str, &str)]) -> Result<()> {
+    let status = Command::new(spec.program.as_str())
+        .args(spec.args.iter())
         .current_dir(cwd)
         .envs(envs.iter().copied())
         .status()
-        .with_context(|| format!("failed to execute {binary}"))?;
+        .with_context(|| format!("failed to execute {}", spec.program))?;
     if !status.success() {
-        bail!("{binary} exited with status {status}");
+        bail!("{} exited with status {status}", spec.program);
     }
     Ok(())
 }
@@ -206,32 +270,26 @@ fn run_capture(
     args: impl IntoIterator<Item = &'static str>,
     cwd: &Path,
 ) -> Result<()> {
-    let output = Command::new(binary)
-        .args(args)
+    run_capture_spec(&CommandSpec::direct(binary, args), cwd)
+}
+
+fn run_capture_spec(spec: &CommandSpec, cwd: &Path) -> Result<()> {
+    let output = Command::new(spec.program.as_str())
+        .args(spec.args.iter())
         .current_dir(cwd)
         .output()
-        .with_context(|| format!("failed to execute {binary}"))?;
+        .with_context(|| format!("failed to execute {}", spec.program))?;
     if !output.status.success() {
-        bail!("{binary} exited with status {}", output.status);
+        bail!("{} exited with status {}", spec.program, output.status);
     }
     Ok(())
 }
 
 fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<()> {
-    let args = args.into_iter().collect::<Vec<_>>();
-    if Command::new("pnpm")
-        .arg("--version")
-        .current_dir(cwd)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-    {
-        run("pnpm", args.iter().copied(), cwd)
-    } else {
-        let mut fallback = vec!["--yes", "pnpm@10.16.1"];
-        fallback.extend(args);
-        run("npx", fallback, cwd)
-    }
+    let platform = host_platform();
+    let pnpm_available =
+        run_capture_spec(&node_command_spec(platform, "pnpm", ["--version"]), cwd).is_ok();
+    run_spec_with_env(&pnpm_command_spec(platform, pnpm_available, args), cwd, &[])
 }
 
 fn print_usage() {
@@ -302,4 +360,56 @@ fn scenario_requires_cn_postgres(name: &str) -> bool {
         name,
         "community_node_public_connectivity" | "community_node_multi_device_connectivity"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CommandSpec, HostPlatform, node_command_spec, pnpm_command_spec};
+
+    #[test]
+    fn node_command_uses_direct_exec_on_unix() {
+        let spec = node_command_spec(HostPlatform::Unix, "pnpm", ["test"]);
+        assert_eq!(
+            spec,
+            CommandSpec {
+                program: "pnpm".to_string(),
+                args: vec!["test".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn node_command_uses_cmd_shell_on_windows() {
+        let spec = node_command_spec(HostPlatform::Windows, "npx", ["--yes", "pnpm@10.16.1"]);
+        assert_eq!(
+            spec,
+            CommandSpec {
+                program: "cmd".to_string(),
+                args: vec![
+                    "/C".to_string(),
+                    "npx".to_string(),
+                    "--yes".to_string(),
+                    "pnpm@10.16.1".to_string(),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn pnpm_fallback_uses_npx_wrapper_when_pnpm_is_unavailable() {
+        let spec = pnpm_command_spec(HostPlatform::Windows, false, ["lint"]);
+        assert_eq!(
+            spec,
+            CommandSpec {
+                program: "cmd".to_string(),
+                args: vec![
+                    "/C".to_string(),
+                    "npx".to_string(),
+                    "--yes".to_string(),
+                    "pnpm@10.16.1".to_string(),
+                    "lint".to_string(),
+                ],
+            }
+        );
+    }
 }
