@@ -2039,6 +2039,28 @@ mod tests {
         });
     }
 
+    fn social_graph_propagation_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(180)
+        } else {
+            Duration::from_secs(30)
+        }
+    }
+
+    async fn wait_for_connected_peer_count(runtime: &DesktopRuntime, expected: usize) {
+        timeout(social_graph_propagation_timeout(), async {
+            loop {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                if status.connected && status.peer_count >= expected {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("peer connection timeout");
+    }
+
     #[tokio::test]
     async fn desktop_smoke_post_persist() {
         disable_keyring_for_tests();
@@ -2202,6 +2224,10 @@ mod tests {
             .expect("status c")
             .local_author_pubkey;
 
+        wait_for_connected_peer_count(&runtime_a, 1).await;
+        wait_for_connected_peer_count(&runtime_b, 1).await;
+        wait_for_connected_peer_count(&runtime_c, 1).await;
+
         runtime_a
             .follow_author(AuthorRequest {
                 pubkey: b_pubkey.clone(),
@@ -2227,7 +2253,7 @@ mod tests {
             .await
             .expect("c follows a");
 
-        timeout(Duration::from_secs(30), async {
+        timeout(social_graph_propagation_timeout(), async {
             loop {
                 let b_view = runtime_b
                     .get_author_social_view(AuthorRequest {
@@ -2551,6 +2577,11 @@ mod tests {
             .expect("status d")
             .local_author_pubkey;
 
+        wait_for_connected_peer_count(&runtime_a, 1).await;
+        wait_for_connected_peer_count(&runtime_b, 1).await;
+        wait_for_connected_peer_count(&runtime_c, 1).await;
+        wait_for_connected_peer_count(&runtime_d, 1).await;
+
         runtime_a
             .follow_author(AuthorRequest {
                 pubkey: b_pubkey.clone(),
@@ -2588,7 +2619,7 @@ mod tests {
             .await
             .expect("d follows b");
 
-        timeout(Duration::from_secs(30), async {
+        timeout(social_graph_propagation_timeout(), async {
             loop {
                 let b_view = runtime_b
                     .get_author_social_view(AuthorRequest {

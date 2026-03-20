@@ -5246,6 +5246,28 @@ mod tests {
     use tokio::time::{Duration, sleep, timeout};
     use tokio_stream::wrappers::BroadcastStream;
 
+    fn social_graph_propagation_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(180)
+        } else {
+            Duration::from_secs(10)
+        }
+    }
+
+    async fn wait_for_connected_peer_count(app: &AppService, expected: usize) {
+        timeout(social_graph_propagation_timeout(), async {
+            loop {
+                let status = app.get_sync_status().await.expect("sync status");
+                if status.connected && status.peer_count >= expected {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("peer connection timeout");
+    }
+
     #[derive(Clone)]
     struct StaticTransport {
         peers: Arc<TokioMutex<PeerSnapshot>>,
@@ -8281,6 +8303,12 @@ mod tests {
         let a_pubkey = keys_a.public_key_hex();
         let b_pubkey = keys_b.public_key_hex();
         let d_pubkey = keys_d.public_key_hex();
+
+        wait_for_connected_peer_count(&app_a, 1).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
+        wait_for_connected_peer_count(&app_c, 1).await;
+        wait_for_connected_peer_count(&app_d, 1).await;
+
         app_a
             .follow_author(b_pubkey.as_str())
             .await
@@ -8298,7 +8326,7 @@ mod tests {
             .await
             .expect("d follows a");
 
-        timeout(Duration::from_secs(10), async {
+        timeout(social_graph_propagation_timeout(), async {
             loop {
                 let b_view = app_b
                     .get_author_social_view(a_pubkey.as_str())
@@ -8553,6 +8581,12 @@ mod tests {
         let b_pubkey = keys_b.public_key_hex();
         let c_pubkey = keys_c.public_key_hex();
         let d_pubkey = keys_d.public_key_hex();
+
+        wait_for_connected_peer_count(&app_a, 1).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
+        wait_for_connected_peer_count(&app_c, 1).await;
+        wait_for_connected_peer_count(&app_d, 1).await;
+
         app_a
             .follow_author(b_pubkey.as_str())
             .await
@@ -8578,7 +8612,7 @@ mod tests {
             .await
             .expect("d follows b");
 
-        timeout(Duration::from_secs(10), async {
+        timeout(social_graph_propagation_timeout(), async {
             loop {
                 let b_from_a = app_b
                     .get_author_social_view(a_pubkey.as_str())
