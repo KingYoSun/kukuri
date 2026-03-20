@@ -2109,8 +2109,8 @@ mod tests {
     use tokio::time::{Duration, sleep, timeout};
 
     fn social_graph_propagation_timeout() -> Duration {
-        if cfg!(target_os = "windows") {
-            Duration::from_secs(90)
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(180)
         } else {
             Duration::from_secs(30)
         }

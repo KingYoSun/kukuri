@@ -786,9 +786,25 @@ async fn run_community_node_connectivity(
             })
             .await
             .context("failed to create scenario post on desktop a")?;
-        wait_for_timeline_object(&runtime_b, topic, post_id.as_str(), step_timeout)
-            .await
-            .context("desktop b did not receive the initial scenario post")?;
+        if let Err(error) =
+            wait_for_timeline_object(&runtime_b, topic, post_id.as_str(), step_timeout).await
+        {
+            let status_a = runtime_a
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop a sync status".to_string());
+            let status_b = runtime_b
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop b sync status".to_string());
+            return Err(error.context(format!(
+                "desktop b did not receive the initial scenario post; desktop_a=({status_a}); desktop_b=({status_b})"
+            )));
+        }
         push_named_step(&mut steps, "post", started_at);
 
         let started_at = Instant::now();
@@ -1522,6 +1538,33 @@ fn push_named_step(steps: &mut Vec<StepResult>, action: &str, started_at: Instan
     });
 }
 
+fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
+    let topic_status = status
+        .topic_diagnostics
+        .iter()
+        .find(|entry| entry.topic == topic)
+        .map(|entry| {
+            format!(
+                "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, status_detail={}",
+                entry.peer_count,
+                entry.connected_peers,
+                entry.assist_peer_ids,
+                entry.configured_peer_ids,
+                entry.status_detail
+            )
+        })
+        .unwrap_or_else(|| "topic_status=missing".to_string());
+    format!(
+        "connected={}, peer_count={}, status_detail={}, last_error={:?}, discovery_connected_peers={:?}, {}",
+        status.connected,
+        status.peer_count,
+        status.status_detail,
+        status.last_error,
+        status.discovery.connected_peer_ids,
+        topic_status
+    )
+}
+
 async fn wait_for_timeline_object(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -1651,7 +1694,7 @@ async fn wait_for_topic_peer_count(
         }
     })
     .await
-    .context("topic peer-count assertion timeout")?
+    .context("topic connected-peer assertion timeout")?
 }
 
 async fn wait_for_live_session(

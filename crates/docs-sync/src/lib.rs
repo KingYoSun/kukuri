@@ -36,6 +36,10 @@ type ReplicaRecords = HashMap<String, Vec<u8>>;
 type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
 const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
 
+fn relay_activation_timeout() -> Duration {
+    Duration::from_secs(10)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DocOp {
     SetJson {
@@ -272,6 +276,12 @@ impl IrohDocsNode {
         let current_relay_urls = self.relay_urls.lock().await.clone();
         sync_endpoint_relay_config(&self.endpoint, &current_relay_urls, &next_relay_urls).await?;
         if !next_relay_urls.is_empty() {
+            if current_relay_urls.is_empty() {
+                let endpoint = self.endpoint.clone();
+                tokio::spawn(async move {
+                    endpoint.online().await;
+                });
+            }
             let mut addr_watcher = self.endpoint.watch_addr();
             let expected_relays = next_relay_urls.iter().cloned().collect::<BTreeSet<_>>();
             let relay_ready = |addr: &EndpointAddr| {
@@ -279,7 +289,7 @@ impl IrohDocsNode {
                     .any(|relay_url| expected_relays.contains(relay_url))
             };
             if !relay_ready(&addr_watcher.get()) {
-                timeout(Duration::from_secs(10), async move {
+                match timeout(relay_activation_timeout(), async move {
                     let mut stream = addr_watcher.stream();
                     while let Some(addr) = stream.next().await {
                         if relay_ready(&addr) {
@@ -289,7 +299,23 @@ impl IrohDocsNode {
                     bail!("relay address watcher ended before any configured relay became active")
                 })
                 .await
-                .context("timed out waiting for live relay connectivity")??;
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        warn!(
+                            relay_urls = ?next_relay_urls,
+                            error = %error,
+                            "configured relay did not become active during initial wait"
+                        );
+                    }
+                    Err(error) => {
+                        warn!(
+                            relay_urls = ?next_relay_urls,
+                            error = %error,
+                            "timed out waiting for live relay connectivity; continuing with configured relay"
+                        );
+                    }
+                }
             }
         }
         *self.relay_urls.lock().await = next_relay_urls;
@@ -1096,5 +1122,19 @@ mod tests {
         assert!(author_rows.is_empty());
         assert_eq!(device_rows.len(), 1);
         assert_eq!(device_rows[0].key, "cursor/topic/kukuri:topic:docs");
+    }
+
+    #[tokio::test]
+    async fn apply_relay_config_tolerates_relay_activation_timeout() {
+        let node = IrohDocsNode::memory().await.expect("memory docs node");
+        let relay_url = "http://127.0.0.1:9".parse::<RelayUrl>().expect("relay url");
+
+        node.apply_relay_config(TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        })
+        .await
+        .expect("apply relay config");
+
+        assert_eq!(node.relay_urls().await, vec![relay_url]);
     }
 }
