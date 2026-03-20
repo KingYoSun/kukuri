@@ -2938,7 +2938,11 @@ mod community_node_handler_tests {
     use tokio::time::timeout;
 
     const MOCK_SERVER_RECV_TIMEOUT: Duration = Duration::from_secs(2);
-    const XDG_DATA_HOME_ENV: &str = "XDG_DATA_HOME";
+    // On Windows, dirs::data_dir() reads APPDATA (not XDG_DATA_HOME which is Linux-only).
+    #[cfg(target_os = "windows")]
+    const DATA_HOME_ENV: &str = "APPDATA";
+    #[cfg(not(target_os = "windows"))]
+    const DATA_HOME_ENV: &str = "XDG_DATA_HOME";
     const KUKURI_BOOTSTRAP_PEERS_ENV: &str = "KUKURI_BOOTSTRAP_PEERS";
     static BOOTSTRAP_ENV_GUARD: OnceLock<StdMutex<()>> = OnceLock::new();
 
@@ -3417,7 +3421,7 @@ mod community_node_handler_tests {
     async fn set_config_appends_resolved_bootstrap_nodes_on_add() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("add");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let existing =
@@ -3468,7 +3472,7 @@ mod community_node_handler_tests {
     async fn set_config_appends_resolved_bootstrap_nodes_on_update() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("update");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let resolved1 =
@@ -3533,7 +3537,7 @@ mod community_node_handler_tests {
     async fn set_config_deduplicates_bootstrap_nodes_with_existing_entries() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("dedup");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let existing =
@@ -3583,7 +3587,7 @@ mod community_node_handler_tests {
     async fn set_config_replaces_existing_bootstrap_nodes_for_same_node_id() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("replace-same-node-id");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let node_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -3637,7 +3641,7 @@ mod community_node_handler_tests {
     async fn set_config_uses_runtime_bootstrap_nodes_when_descriptor_has_no_p2p() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("runtime-fallback");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let descriptor = build_bootstrap_descriptor_event("https://node.example", &[]);
@@ -3698,7 +3702,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_prefers_matching_descriptor_ws_over_base_url_fallback() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let response = json!({
@@ -3752,7 +3756,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_refreshes_live_bootstrap_descriptors_before_fallback() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-live-refresh");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let (base_url, rx, handle) = spawn_json_sequence_server_with_builder(|base_url| {
@@ -3811,7 +3815,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_errors_when_live_bootstrap_refresh_fails() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-live-failure");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let bootstrap_without_descriptor = json!({
@@ -3856,7 +3860,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_returns_empty_when_bootstrap_descriptor_has_no_ws() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-fallback");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let response = json!({
@@ -3907,7 +3911,7 @@ mod community_node_handler_tests {
      {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-multi-node");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let (bootstrap_base_url, rx, handle) =
@@ -3980,7 +3984,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_uses_bootstrap_descriptor_ws_when_http_endpoint_differs() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-bootstrap-http-mismatch");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let descriptor_http_url = "https://relay.example.com".to_string();
@@ -4042,7 +4046,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_falls_back_to_base_url_for_single_non_bootstrap_node() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-single-node-fallback");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let base_url = "https://api.example.com".to_string();
@@ -4079,7 +4083,7 @@ mod community_node_handler_tests {
      {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-ignore-loopback");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let base_url = "https://api.example.com".to_string();
@@ -4128,7 +4132,7 @@ mod community_node_handler_tests {
     async fn resolve_nostr_relay_urls_keeps_loopback_descriptor_ws_for_loopback_base_url() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("nostr-relays-keep-loopback");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let descriptor_ws_url = "ws://localhost:8082/relay".to_string();
@@ -4177,7 +4181,7 @@ mod community_node_handler_tests {
     async fn set_config_treats_localhost_bootstrap_nodes_as_loopback() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("localhost");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let existing =
@@ -4236,7 +4240,7 @@ mod community_node_handler_tests {
     async fn authenticate_refreshes_bootstrap_nodes_with_new_token() {
         let _env_guard = lock_bootstrap_env();
         let data_dir = temp_bootstrap_data_dir("auth-refresh");
-        let _xdg_guard = ScopedEnvVar::set(XDG_DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
+        let _xdg_guard = ScopedEnvVar::set(DATA_HOME_ENV, data_dir.to_string_lossy().as_ref());
         let _bootstrap_peers_guard = ScopedEnvVar::unset(KUKURI_BOOTSTRAP_PEERS_ENV);
 
         let resolved =
