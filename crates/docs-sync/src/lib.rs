@@ -479,7 +479,7 @@ impl IrohDocsSync {
         let peers = self.sync_peers().await;
         let mut available = BTreeSet::new();
         for peer in peers {
-            if !peer.is_empty() || self.node.endpoint().remote_info(peer.id).await.is_some() {
+            if self.node.endpoint().remote_info(peer.id).await.is_some() {
                 available.insert(peer.id.to_string());
             }
         }
