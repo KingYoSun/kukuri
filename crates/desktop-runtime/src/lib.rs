@@ -4003,7 +4003,9 @@ mod tests {
             })
             .await
             .expect("c follows b");
+        wait_for_mutual_author_view(&runtime_a, b_pubkey.as_str(), topic).await;
         wait_for_mutual_author_view(&runtime_b, a_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&runtime_b, c_pubkey.as_str(), topic).await;
         wait_for_mutual_author_view(&runtime_c, b_pubkey.as_str(), topic).await;
         let channel = runtime_a
             .create_private_channel(CreatePrivateChannelRequest {
@@ -4121,45 +4123,30 @@ mod tests {
         )
         .await;
 
-        timeout(runtime_replication_timeout(), async {
-            loop {
-                let public_timeline = runtime_c
-                    .list_timeline(ListTimelineRequest {
-                        topic: topic.into(),
-                        scope: TimelineScope::Public,
-                        cursor: None,
-                        limit: Some(20),
-                    })
-                    .await
-                    .expect("public timeline c");
-                assert!(
-                    public_timeline
-                        .items
-                        .iter()
-                        .all(|post| post.object_id != old_post_id),
-                    "friend-plus post leaked into public timeline"
-                );
-                let private_timeline = runtime_c
-                    .list_timeline(ListTimelineRequest {
-                        topic: topic.into(),
-                        scope: private_scope.clone(),
-                        cursor: None,
-                        limit: Some(20),
-                    })
-                    .await
-                    .expect("private timeline c");
-                if private_timeline
-                    .items
-                    .iter()
-                    .any(|post| post.object_id == old_post_id)
-                {
-                    return;
-                }
-                sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await
-        .expect("friend-plus history propagation timeout");
+        let public_timeline_c = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("public timeline c");
+        assert!(
+            public_timeline_c
+                .items
+                .iter()
+                .all(|post| post.object_id != old_post_id),
+            "friend-plus post leaked into public timeline"
+        );
+        wait_for_timeline_post(
+            &runtime_c,
+            topic,
+            &private_scope,
+            old_post_id.as_str(),
+            "friend-plus history propagation timeout",
+        )
+        .await;
 
         let joined_before_restart = runtime_c
             .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
