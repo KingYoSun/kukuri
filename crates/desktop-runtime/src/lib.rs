@@ -2245,6 +2245,14 @@ mod tests {
         }
     }
 
+    fn runtime_shutdown_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(15)
+        }
+    }
+
     fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
         let topic_status = status
             .topic_diagnostics
@@ -2388,6 +2396,69 @@ mod tests {
                     "mutual author view timeout for {author_pubkey}; {social_view}; {}",
                     format_sync_snapshot(&status, topic)
                 );
+            }
+        }
+    }
+
+    async fn warm_author_social_view(
+        runtime: &DesktopRuntime,
+        author_pubkey: &str,
+        timeout_label: &str,
+    ) {
+        match timeout(social_graph_propagation_timeout(), async {
+            loop {
+                if runtime
+                    .get_author_social_view(AuthorRequest {
+                        pubkey: author_pubkey.to_string(),
+                    })
+                    .await
+                    .is_ok()
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                panic!("{timeout_label}: {}", format_sync_snapshot(&status, ""));
+            }
+        }
+    }
+
+    async fn wait_for_topic_doc_index_entry(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        object_id: &str,
+        timeout_label: &str,
+    ) {
+        let replica = kukuri_docs_sync::topic_replica_id(topic);
+        match timeout(runtime_replication_timeout(), async {
+            loop {
+                let rows = {
+                    let current = runtime.iroh_stack.current.lock().await;
+                    let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+                    drop(current);
+                    docs_sync
+                        .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
+                        .await
+                        .unwrap_or_default()
+                };
+                if rows.iter().any(|row| row.key.ends_with(object_id)) {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
             }
         }
     }
@@ -3375,7 +3446,7 @@ mod tests {
             .expect("restarted runtime shutdown timeout");
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn friend_only_channel_restore_keeps_archived_epoch_history() {
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("friend-only-runtime-a.db");
@@ -3432,6 +3503,18 @@ mod tests {
             .await
             .expect("status b")
             .local_author_pubkey;
+        warm_author_social_view(
+            &runtime_a,
+            b_pubkey.as_str(),
+            "friend-only owner author warm timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_b,
+            a_pubkey.as_str(),
+            "friend-only recipient author warm timeout",
+        )
+        .await;
         runtime_a
             .follow_author(AuthorRequest {
                 pubkey: b_pubkey.clone(),
@@ -3812,6 +3895,30 @@ mod tests {
             topic,
             2,
             "friend-plus recipient topic mesh timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_a,
+            b_pubkey.as_str(),
+            "friend-plus owner author warm timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_b,
+            a_pubkey.as_str(),
+            "friend-plus sponsor owner author warm timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_b,
+            c_pubkey.as_str(),
+            "friend-plus sponsor recipient author warm timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_c,
+            b_pubkey.as_str(),
+            "friend-plus recipient sponsor author warm timeout",
         )
         .await;
         runtime_a
@@ -5775,6 +5882,13 @@ mod tests {
         .await
         .expect("create post a timeout")
         .expect("create post a");
+        wait_for_topic_doc_index_entry(
+            &runtime_a,
+            topic,
+            object_id.as_str(),
+            "community-node assist local docs persistence timeout",
+        )
+        .await;
 
         let post_sync = timeout(runtime_replication_timeout(), async {
             loop {
@@ -5817,7 +5931,7 @@ mod tests {
                     .clone();
                 drop(current);
                 docs_sync
-                    .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+                    .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
                     .await
                     .unwrap_or_default()
                     .into_iter()
@@ -5833,7 +5947,7 @@ mod tests {
                     .clone();
                 drop(current);
                 docs_sync
-                    .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+                    .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
                     .await
                     .unwrap_or_default()
                     .into_iter()
@@ -5847,10 +5961,10 @@ mod tests {
             );
         }
 
-        timeout(Duration::from_secs(15), runtime_a.shutdown())
+        timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
             .await
             .expect("runtime a shutdown timeout");
-        timeout(Duration::from_secs(15), runtime_b.shutdown())
+        timeout(runtime_shutdown_timeout(), runtime_b.shutdown())
             .await
             .expect("runtime b shutdown timeout");
     }
