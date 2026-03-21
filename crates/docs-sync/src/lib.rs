@@ -479,7 +479,17 @@ impl IrohDocsSync {
         let peers = self.sync_peers().await;
         let mut available = BTreeSet::new();
         for peer in peers {
-            if self.node.endpoint().remote_info(peer.id).await.is_some() {
+            if self
+                .node
+                .endpoint()
+                .remote_info(peer.id)
+                .await
+                .is_some_and(|info| {
+                    info.addrs().any(|addr| {
+                        matches!(addr.usage(), iroh::endpoint::TransportAddrUsage::Active)
+                    })
+                })
+            {
                 available.insert(peer.id.to_string());
             }
         }

@@ -2463,7 +2463,7 @@ mod tests {
         }
     }
 
-    async fn wait_for_private_timeline_post(
+    async fn wait_for_timeline_post(
         runtime: &DesktopRuntime,
         topic: &str,
         scope: &TimelineScope,
@@ -2480,7 +2480,7 @@ mod tests {
                         limit: Some(20),
                     })
                     .await
-                    .expect("private timeline");
+                    .expect("timeline");
                 if timeline
                     .items
                     .iter()
@@ -4112,7 +4112,7 @@ mod tests {
             })
             .await
             .expect("create friend-plus history post");
-        wait_for_private_timeline_post(
+        wait_for_timeline_post(
             &runtime_b,
             topic,
             &private_scope,
@@ -5937,7 +5937,7 @@ mod tests {
 
         let object_id = timeout(
             Duration::from_secs(15),
-            runtime_a.create_post(CreatePostRequest {
+            runtime_b.create_post(CreatePostRequest {
                 topic: topic.to_string(),
                 content: "community relay hello".to_string(),
                 reply_to: None,
@@ -5946,10 +5946,10 @@ mod tests {
             }),
         )
         .await
-        .expect("create post a timeout")
-        .expect("create post a");
+        .expect("create post b timeout")
+        .expect("create post b");
         wait_for_topic_doc_index_entry(
-            &runtime_a,
+            &runtime_b,
             topic,
             object_id.as_str(),
             "community-node assist local docs persistence timeout",
@@ -5958,7 +5958,7 @@ mod tests {
 
         let post_sync = timeout(runtime_replication_timeout(), async {
             loop {
-                let timeline = runtime_b
+                let timeline = runtime_a
                     .list_timeline(ListTimelineRequest {
                         topic: topic.to_string(),
                         scope: scope.clone(),
@@ -5966,7 +5966,7 @@ mod tests {
                         limit: Some(20),
                     })
                     .await
-                    .expect("timeline b");
+                    .expect("timeline a");
                 if timeline
                     .items
                     .iter()
