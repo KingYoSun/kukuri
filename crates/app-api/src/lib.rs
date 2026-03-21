@@ -5411,7 +5411,7 @@ mod tests {
         DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
         IrohGossipTransport, SeedPeer,
     };
-    use pkarr::errors::{ConcurrencyError, PublishError};
+    use pkarr::errors::{ConcurrencyError, PublishError, QueryError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
     use std::sync::OnceLock;
     use tempfile::tempdir;
@@ -5432,6 +5432,22 @@ mod tests {
             Duration::from_secs(60)
         } else {
             Duration::from_secs(10)
+        }
+    }
+
+    fn seeded_dht_publish_attempts() -> usize {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            60
+        } else {
+            20
+        }
+    }
+
+    fn seeded_dht_publish_resolve_timeout() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(15)
+        } else {
+            Duration::from_secs(5)
         }
     }
 
@@ -5967,7 +5983,8 @@ mod tests {
         let public_key =
             pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
         let expected_info = EndpointInfo::from(endpoint.addr());
-        for _ in 0..20 {
+        let mut last_error = None;
+        for _ in 0..seeded_dht_publish_attempts() {
             let previous_timestamp = client
                 .resolve_most_recent(&public_key)
                 .await
@@ -5990,10 +6007,29 @@ mod tests {
                     | ConcurrencyError::NotMostRecent
                     | ConcurrencyError::CasFailed,
                 )) => sleep(Duration::from_millis(50)).await,
+                Err(
+                    error @ PublishError::Query(QueryError::Timeout | QueryError::NoClosestNodes),
+                ) => {
+                    last_error = Some(error);
+                    sleep(Duration::from_millis(100)).await;
+                }
                 Err(error) => panic!("publish endpoint info: {error}"),
             }
         }
-        timeout(Duration::from_secs(5), async {
+        if let Some(error) = last_error.take() {
+            if client
+                .resolve_most_recent(&public_key)
+                .await
+                .as_ref()
+                .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                .is_none_or(|packet_info| {
+                    packet_info.to_txt_strings() != expected_info.to_txt_strings()
+                })
+            {
+                panic!("publish endpoint info: {error}");
+            }
+        }
+        timeout(seeded_dht_publish_resolve_timeout(), async {
             loop {
                 if client
                     .resolve_most_recent(&public_key)
