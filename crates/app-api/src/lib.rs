@@ -7888,13 +7888,17 @@ mod tests {
             .import_peer_ticket(&ticket_a)
             .await
             .expect("import a into b");
-        wait_for_connected_peer_count(&app_a, 1).await;
-        wait_for_connected_peer_count(&app_b, 1).await;
-
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("subscribe a timeline");
         let _ = app_b
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe b timeline");
+        wait_for_topic_peer_count(&app_a, topic, 1).await;
+        wait_for_topic_peer_count(&app_b, topic, 1).await;
+
         let root_id = app_a
             .create_post(topic, "root over iroh", None)
             .await
@@ -7993,9 +7997,6 @@ mod tests {
             .import_peer_ticket(&ticket_a)
             .await
             .expect("import a into b");
-        wait_for_connected_peer_count(&app_a, 1).await;
-        wait_for_connected_peer_count(&app_b, 1).await;
-
         let _ = app_a
             .list_timeline(topic, None, 20)
             .await
@@ -8004,6 +8005,9 @@ mod tests {
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe b timeline");
+        wait_for_topic_peer_count(&app_a, topic, 1).await;
+        wait_for_topic_peer_count(&app_b, topic, 1).await;
+
         let root_id = app_a
             .create_post_with_attachments(
                 topic,
@@ -8475,8 +8479,16 @@ mod tests {
             .expect("ticket b value");
         app_a.import_peer_ticket(&ticket_b).await.expect("import b");
         app_b.import_peer_ticket(&ticket_a).await.expect("import a");
-        wait_for_connected_peer_count(&app_a, 1).await;
-        wait_for_connected_peer_count(&app_b, 1).await;
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("warm owner public timeline");
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("warm invitee public timeline");
+        wait_for_topic_peer_count(&app_a, topic, 1).await;
+        wait_for_topic_peer_count(&app_b, topic, 1).await;
 
         let channel = app_a
             .create_private_channel(CreatePrivateChannelInput {
