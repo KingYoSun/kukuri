@@ -332,11 +332,9 @@ impl BlobService for IrohBlobService {
         let mut parsed = BTreeMap::new();
         for peer in peers {
             let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
-            if !endpoint_addr.is_empty() {
-                self.node
-                    .discovery()
-                    .add_endpoint_info(endpoint_addr.clone());
-            }
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
             parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
         *self.seed_peers.lock().await = parsed;

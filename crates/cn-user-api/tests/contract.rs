@@ -77,6 +77,7 @@ async fn authenticate(
     base_url: &str,
     keys: &KukuriKeys,
     endpoint_id: &str,
+    addr_hint: Option<&str>,
 ) -> Result<(String, serde_json::Value)> {
     let pubkey = keys.public_key_hex();
     let challenge = client
@@ -94,6 +95,7 @@ async fn authenticate(
         .json(&serde_json::json!({
             "auth_envelope_json": auth_envelope_json.clone(),
             "endpoint_id": endpoint_id,
+            "addr_hint": addr_hint,
         }))
         .send()
         .await?
@@ -129,7 +131,7 @@ async fn bootstrap_requires_bearer_then_consents() -> Result<()> {
 
     let keys = generate_keys();
     let (access_token, auth_envelope_json) =
-        authenticate(&client, &server.base_url, &keys, "peer-a").await?;
+        authenticate(&client, &server.base_url, &keys, "peer-a", None).await?;
 
     let reused = client
         .post(format!("{}/v1/auth/verify", server.base_url))
@@ -208,8 +210,22 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
 
     let keys_a = generate_keys();
     let keys_b = generate_keys();
-    let (access_token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a").await?;
-    let (access_token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
+    let (access_token_a, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_a,
+        "peer-a",
+        Some("127.0.0.1:44001"),
+    )
+    .await?;
+    let (access_token_b, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_b,
+        "peer-b",
+        Some("127.0.0.1:44002"),
+    )
+    .await?;
 
     for access_token in [&access_token_a, &access_token_b] {
         let accepted = client
@@ -236,6 +252,10 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
         bootstrap_a["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
         "peer-b"
     );
+    assert_eq!(
+        bootstrap_a["nodes"][0]["resolved_urls"]["seed_peers"][0]["addr_hint"],
+        "127.0.0.1:44002"
+    );
 
     let bootstrap_b = client
         .get(format!("{}/v1/bootstrap/nodes", server.base_url))
@@ -248,6 +268,10 @@ async fn bootstrap_exposes_other_registered_seed_peers() -> Result<()> {
     assert_eq!(
         bootstrap_b["nodes"][0]["resolved_urls"]["seed_peers"][0]["endpoint_id"],
         "peer-a"
+    );
+    assert_eq!(
+        bootstrap_b["nodes"][0]["resolved_urls"]["seed_peers"][0]["addr_hint"],
+        "127.0.0.1:44001"
     );
 
     server.shutdown().await
@@ -264,8 +288,10 @@ async fn bootstrap_exposes_other_endpoints_for_same_subscriber() -> Result<()> {
     let client = Client::new();
 
     let keys = generate_keys();
-    let (access_token_a1, _) = authenticate(&client, &server.base_url, &keys, "peer-a-1").await?;
-    let (access_token_a2, _) = authenticate(&client, &server.base_url, &keys, "peer-a-2").await?;
+    let (access_token_a1, _) =
+        authenticate(&client, &server.base_url, &keys, "peer-a-1", None).await?;
+    let (access_token_a2, _) =
+        authenticate(&client, &server.base_url, &keys, "peer-a-2", None).await?;
 
     let accepted = client
         .post(format!("{}/v1/consents", server.base_url))
@@ -327,9 +353,30 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
 
     let keys_a = generate_keys();
     let keys_b = generate_keys();
-    let (token_a_initial, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-1").await?;
-    let (token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a-2").await?;
-    let (token_b, _) = authenticate(&client, &server.base_url, &keys_b, "peer-b").await?;
+    let (token_a_initial, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_a,
+        "peer-a-1",
+        Some("127.0.0.1:45001"),
+    )
+    .await?;
+    let (token_a, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_a,
+        "peer-a-2",
+        Some("127.0.0.1:45002"),
+    )
+    .await?;
+    let (token_b, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_b,
+        "peer-b",
+        Some("127.0.0.1:45003"),
+    )
+    .await?;
 
     for access_token in [&token_a, &token_b] {
         let accepted = client
@@ -372,7 +419,10 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
     client
         .post(format!("{}/v1/bootstrap/heartbeat", server.base_url))
         .bearer_auth(token_a_initial.as_str())
-        .json(&serde_json::json!({ "endpoint_id": "peer-a-1" }))
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-a-1",
+            "addr_hint": "127.0.0.1:45011",
+        }))
         .send()
         .await?
         .error_for_status()?;
@@ -396,6 +446,11 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
         .collect::<Vec<_>>();
     assert!(endpoint_ids.contains(&"peer-a-1"));
     assert!(endpoint_ids.contains(&"peer-a-2"));
+    let peer_a1 = seed_peers_after
+        .iter()
+        .find(|peer| peer["endpoint_id"] == "peer-a-1")
+        .context("peer-a-1 restored seed peer missing")?;
+    assert_eq!(peer_a1["addr_hint"], "127.0.0.1:45011");
 
     server.shutdown().await
 }

@@ -48,6 +48,8 @@ struct AuthVerifyRequest {
     auth_envelope_json: Value,
     #[serde(default)]
     endpoint_id: Option<String>,
+    #[serde(default)]
+    addr_hint: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -59,6 +61,8 @@ struct AcceptConsentsRequest {
 #[derive(Debug, Deserialize)]
 struct BootstrapHeartbeatRequest {
     endpoint_id: String,
+    #[serde(default)]
+    addr_hint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +194,7 @@ async fn auth_verify(
         state.self_node.resolved_urls.public_base_url.as_str(),
         &request.auth_envelope_json,
         request.endpoint_id.as_deref(),
+        request.addr_hint.as_deref(),
     )
     .await
     .map_err(|error| {
@@ -264,6 +269,7 @@ async fn bootstrap_heartbeat(
         &state.pool,
         identity.pubkey.as_str(),
         request.endpoint_id.as_str(),
+        request.addr_hint.as_deref(),
     )
     .await
     .map_err(internal_error)?;

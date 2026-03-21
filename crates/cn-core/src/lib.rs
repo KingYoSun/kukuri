@@ -500,6 +500,7 @@ pub async fn verify_auth_envelope_and_issue_token(
     public_base_url: &str,
     auth_envelope_json: &Value,
     endpoint_id: Option<&str>,
+    addr_hint: Option<&str>,
 ) -> Result<AuthVerifyResponse> {
     let public_base_url = normalize_http_url(public_base_url)?;
     let envelope = parse_auth_envelope(auth_envelope_json)?;
@@ -540,7 +541,7 @@ pub async fn verify_auth_envelope_and_issue_token(
         bail!("pubkey mismatch");
     }
     let registered_endpoint = endpoint_id
-        .map(|value| CommunityNodeSeedPeer::new(value, None))
+        .map(|value| CommunityNodeSeedPeer::new(value, addr_hint.map(str::to_string)))
         .transpose()?;
 
     let mut tx = pool.begin().await?;
@@ -579,13 +580,14 @@ pub async fn refresh_bootstrap_peer_registration(
     pool: &PgPool,
     pubkey: &str,
     endpoint_id: &str,
+    addr_hint: Option<&str>,
 ) -> Result<BootstrapHeartbeatResponse> {
     let pubkey = normalize_pubkey(pubkey)?;
     let mut tx = pool.begin().await?;
     prune_expired_bootstrap_peer_registrations(&mut *tx).await?;
     ensure_active_subscriber(&mut *tx, pubkey.as_str()).await?;
     let now = Utc::now();
-    let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, None)?;
+    let seed_peer = CommunityNodeSeedPeer::new(endpoint_id, addr_hint.map(str::to_string))?;
     let expires_at =
         upsert_bootstrap_peer_registration(&mut *tx, pubkey.as_str(), &seed_peer, now).await?;
     tx.commit().await?;
@@ -913,9 +915,18 @@ impl TestDatabase {
         let mut database_name = format!("{prefix}_{suffix}");
         database_name.truncate(63);
 
-        let admin_pool = connect_postgres(admin_database_url).await?;
+        let admin_pool = connect_postgres(admin_database_url)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to connect to admin Postgres while creating test database `{database_name}`"
+                )
+            })?;
         let create_sql = format!("CREATE DATABASE \"{}\"", database_name.replace('"', "\"\""));
-        admin_pool.execute(create_sql.as_str()).await?;
+        admin_pool
+            .execute(create_sql.as_str())
+            .await
+            .with_context(|| format!("failed to create test database `{database_name}`"))?;
 
         let mut parsed =
             Url::parse(admin_database_url).context("failed to parse admin database url")?;
@@ -928,7 +939,14 @@ impl TestDatabase {
     }
 
     pub async fn cleanup(&self) -> Result<()> {
-        let admin_pool = connect_postgres(self.admin_database_url.as_str()).await?;
+        let admin_pool = connect_postgres(self.admin_database_url.as_str())
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to connect to admin Postgres while cleaning up test database `{}`",
+                    self.database_name
+                )
+            })?;
         sqlx::query(
             "SELECT pg_terminate_backend(pid)
              FROM pg_stat_activity
@@ -937,12 +955,21 @@ impl TestDatabase {
         )
         .bind(&self.database_name)
         .execute(&admin_pool)
-        .await?;
+        .await
+        .with_context(|| {
+            format!(
+                "failed to terminate active connections for test database `{}`",
+                self.database_name
+            )
+        })?;
         let drop_sql = format!(
             "DROP DATABASE IF EXISTS \"{}\"",
             self.database_name.replace('"', "\"\"")
         );
-        admin_pool.execute(drop_sql.as_str()).await?;
+        admin_pool
+            .execute(drop_sql.as_str())
+            .await
+            .with_context(|| format!("failed to drop test database `{}`", self.database_name))?;
         Ok(())
     }
 }
