@@ -2463,6 +2463,64 @@ mod tests {
         }
     }
 
+    async fn wait_for_private_timeline_post(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        scope: &TimelineScope,
+        object_id: &str,
+        timeout_label: &str,
+    ) {
+        match timeout(runtime_replication_timeout(), async {
+            loop {
+                let timeline = runtime
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("private timeline");
+                if timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == object_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                let private_items = runtime
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .ok()
+                    .map(|timeline| {
+                        timeline
+                            .items
+                            .into_iter()
+                            .map(|post| post.object_id)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "{timeout_label}: {}; private_items={private_items:?}",
+                    format_sync_snapshot(&status, topic)
+                );
+            }
+        }
+    }
+
     async fn wait_for_joined_private_channel_epoch(
         runtime: &DesktopRuntime,
         topic: &str,
@@ -4054,6 +4112,14 @@ mod tests {
             })
             .await
             .expect("create friend-plus history post");
+        wait_for_private_timeline_post(
+            &runtime_b,
+            topic,
+            &private_scope,
+            old_post_id.as_str(),
+            "friend-plus sponsor history propagation timeout",
+        )
+        .await;
 
         timeout(runtime_replication_timeout(), async {
             loop {
