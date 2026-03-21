@@ -6016,8 +6016,8 @@ mod tests {
                 Err(error) => panic!("publish endpoint info: {error}"),
             }
         }
-        if let Some(error) = last_error.take() {
-            if client
+        if let Some(error) = last_error.take()
+            && client
                 .resolve_most_recent(&public_key)
                 .await
                 .as_ref()
@@ -6025,9 +6025,8 @@ mod tests {
                 .is_none_or(|packet_info| {
                     packet_info.to_txt_strings() != expected_info.to_txt_strings()
                 })
-            {
-                panic!("publish endpoint info: {error}");
-            }
+        {
+            panic!("publish endpoint info: {error}");
         }
         timeout(seeded_dht_publish_resolve_timeout(), async {
             loop {
