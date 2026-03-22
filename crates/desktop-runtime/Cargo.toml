@@ -33,4 +33,4 @@ keyring = { workspace = true, features = ["windows-native"] }
 axum.workspace = true
 tempfile.workspace = true
 pkarr.workspace = true
-iroh.workspace = true
+iroh = { workspace = true, features = ["test-utils"] }

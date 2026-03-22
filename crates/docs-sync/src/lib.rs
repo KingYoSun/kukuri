@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -35,6 +35,19 @@ pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
 type ReplicaRecords = HashMap<String, Vec<u8>>;
 type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
 const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
+
+fn relay_activation_timeout() -> Duration {
+    Duration::from_secs(10)
+}
+
+#[cfg(test)]
+fn relay_seeded_public_replication_timeout() -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        Duration::from_secs(60)
+    } else {
+        Duration::from_secs(20)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DocOp {
@@ -110,7 +123,7 @@ pub struct IrohDocsNode {
     endpoint: Endpoint,
     gossip: Gossip,
     discovery: Arc<MemoryLookup>,
-    relay_urls: Mutex<Vec<RelayUrl>>,
+    relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
     router: Arc<Router>,
     docs: DocsApi,
     blobs: BlobStore,
@@ -191,12 +204,12 @@ impl IrohDocsNode {
             .transpose()?
             .flatten();
         let relay_config = relay_config.normalized();
-        let relay_urls = relay_config.parsed_relay_urls()?;
+        let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
         let mut endpoint_builder = build_endpoint_builder(
             Endpoint::empty_builder(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
-            &relay_config,
+            Arc::clone(&relay_urls),
         )?;
         #[cfg(test)]
         {
@@ -241,7 +254,7 @@ impl IrohDocsNode {
             endpoint,
             gossip,
             discovery,
-            relay_urls: Mutex::new(relay_urls),
+            relay_urls,
             router: Arc::new(router),
             docs: docs.api().clone(),
             blobs,
@@ -263,15 +276,28 @@ impl IrohDocsNode {
     }
 
     pub async fn relay_urls(&self) -> Vec<RelayUrl> {
-        self.relay_urls.lock().await.clone()
+        self.relay_urls
+            .read()
+            .expect("docs sync relay urls poisoned")
+            .clone()
     }
 
     pub async fn apply_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
         let relay_config = relay_config.normalized();
         let next_relay_urls = relay_config.parsed_relay_urls()?;
-        let current_relay_urls = self.relay_urls.lock().await.clone();
+        let current_relay_urls = self
+            .relay_urls
+            .read()
+            .expect("docs sync relay urls poisoned")
+            .clone();
         sync_endpoint_relay_config(&self.endpoint, &current_relay_urls, &next_relay_urls).await?;
         if !next_relay_urls.is_empty() {
+            if current_relay_urls.is_empty() {
+                let endpoint = self.endpoint.clone();
+                tokio::spawn(async move {
+                    endpoint.online().await;
+                });
+            }
             let mut addr_watcher = self.endpoint.watch_addr();
             let expected_relays = next_relay_urls.iter().cloned().collect::<BTreeSet<_>>();
             let relay_ready = |addr: &EndpointAddr| {
@@ -279,7 +305,7 @@ impl IrohDocsNode {
                     .any(|relay_url| expected_relays.contains(relay_url))
             };
             if !relay_ready(&addr_watcher.get()) {
-                timeout(Duration::from_secs(10), async move {
+                match timeout(relay_activation_timeout(), async move {
                     let mut stream = addr_watcher.stream();
                     while let Some(addr) = stream.next().await {
                         if relay_ready(&addr) {
@@ -289,10 +315,29 @@ impl IrohDocsNode {
                     bail!("relay address watcher ended before any configured relay became active")
                 })
                 .await
-                .context("timed out waiting for live relay connectivity")??;
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        warn!(
+                            relay_urls = ?next_relay_urls,
+                            error = %error,
+                            "configured relay did not become active during initial wait"
+                        );
+                    }
+                    Err(error) => {
+                        warn!(
+                            relay_urls = ?next_relay_urls,
+                            error = %error,
+                            "timed out waiting for live relay connectivity; continuing with configured relay"
+                        );
+                    }
+                }
             }
         }
-        *self.relay_urls.lock().await = next_relay_urls;
+        *self
+            .relay_urls
+            .write()
+            .expect("docs sync relay urls poisoned") = next_relay_urls;
         self.discovery.add_endpoint_info(self.endpoint.addr());
         Ok(())
     }
@@ -434,7 +479,17 @@ impl IrohDocsSync {
         let peers = self.sync_peers().await;
         let mut available = BTreeSet::new();
         for peer in peers {
-            if !peer.is_empty() || self.node.endpoint().remote_info(peer.id).await.is_some() {
+            if self
+                .node
+                .endpoint()
+                .remote_info(peer.id)
+                .await
+                .is_some_and(|info| {
+                    info.addrs().any(|addr| {
+                        matches!(addr.usage(), iroh::endpoint::TransportAddrUsage::Active)
+                    })
+                })
+            {
                 available.insert(peer.id.to_string());
             }
         }
@@ -887,19 +942,29 @@ impl DocsSync for IrohDocsSync {
     }
 
     async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
-        let doc = self.ensure_replica(replica_id).await?;
         let peers = self.sync_peers().await;
-        if peers.is_empty() {
-            return Ok(());
-        }
         let peer_ids = peers
             .iter()
             .map(|peer| peer.id.to_string())
             .collect::<BTreeSet<_>>();
-        doc_start_sync(&doc, peers).await?;
-        if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
-            handle.sync_peer_ids = peer_ids;
+        let existing_doc = self
+            .replicas
+            .lock()
+            .await
+            .get(replica_id.as_str())
+            .map(|handle| handle.doc.clone());
+        if let Some(doc) = existing_doc
+            && doc_start_sync(&doc, peers.clone()).await.is_ok()
+        {
+            if let Some(handle) = self.replicas.lock().await.get_mut(replica_id.as_str()) {
+                handle.sync_peer_ids = peer_ids;
+            }
+            return Ok(());
         }
+        if let Some(handle) = self.replicas.lock().await.remove(replica_id.as_str()) {
+            handle._live_task.abort();
+        }
+        let _ = self.ensure_replica(replica_id).await?;
         Ok(())
     }
 
@@ -908,11 +973,9 @@ impl DocsSync for IrohDocsSync {
         let mut parsed = BTreeMap::new();
         for peer in peers {
             let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
-            if !endpoint_addr.is_empty() {
-                self.node
-                    .discovery()
-                    .add_endpoint_info(endpoint_addr.clone());
-            }
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
             parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
         *self.seed_peers.lock().await = parsed;
@@ -996,6 +1059,8 @@ async fn doc_start_sync(doc: &Doc, peers: Vec<EndpointAddr>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn docs_topic_index_roundtrip() {
@@ -1029,6 +1094,13 @@ mod tests {
                 .expect("utf8")
                 .contains("event-1")
         );
+
+        docs.shutdown().await;
+        docs.node
+            .clone()
+            .shutdown()
+            .await
+            .expect("shutdown docs node");
     }
 
     #[tokio::test]
@@ -1096,5 +1168,171 @@ mod tests {
         assert!(author_rows.is_empty());
         assert_eq!(device_rows.len(), 1);
         assert_eq!(device_rows[0].key, "cursor/topic/kukuri:topic:docs");
+
+        docs.shutdown().await;
+        docs.node
+            .clone()
+            .shutdown()
+            .await
+            .expect("shutdown docs node");
+    }
+
+    #[tokio::test]
+    async fn apply_relay_config_tolerates_relay_activation_timeout() {
+        let node = IrohDocsNode::memory().await.expect("memory docs node");
+        let relay_url = "http://127.0.0.1:9".parse::<RelayUrl>().expect("relay url");
+
+        node.apply_relay_config(TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        })
+        .await
+        .expect("apply relay config");
+
+        assert_eq!(node.relay_urls().await, vec![relay_url]);
+
+        let docs = IrohDocsSync::new(node);
+        docs.shutdown().await;
+        docs.node
+            .clone()
+            .shutdown()
+            .await
+            .expect("shutdown docs node");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn public_replica_syncs_over_custom_relay_seed_peers() {
+        if std::env::var_os("GITHUB_ACTIONS").is_some() {
+            // CI covers the relay-assisted public sync contract in desktop-runtime and harness.
+            return;
+        }
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let dir = tempdir().expect("tempdir");
+        let node_a = IrohDocsNode::persistent_with_discovery_config(
+            dir.path().join("docs-a"),
+            TransportNetworkConfig::loopback(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("node a");
+        let node_b = IrohDocsNode::persistent_with_discovery_config(
+            dir.path().join("docs-b"),
+            TransportNetworkConfig::loopback(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("node b");
+        let docs_a = IrohDocsSync::new(node_a.clone());
+        let docs_b = IrohDocsSync::new(node_b.clone());
+        let replica = topic_replica_id("kukuri:topic:relay-seeded-docs");
+
+        docs_a
+            .set_seed_peers(vec![SeedPeer {
+                endpoint_id: node_b.endpoint().id().to_string(),
+                addr_hint: None,
+            }])
+            .await
+            .expect("set peers a");
+        docs_b
+            .set_seed_peers(vec![SeedPeer {
+                endpoint_id: node_a.endpoint().id().to_string(),
+                addr_hint: None,
+            }])
+            .await
+            .expect("set peers b");
+        docs_a.open_replica(&replica).await.expect("open replica a");
+        docs_b.open_replica(&replica).await.expect("open replica b");
+        docs_a
+            .apply_doc_op(
+                &replica,
+                DocOp::SetJson {
+                    key: stable_key("timeline", "0001-relay-event"),
+                    value: serde_json::json!({
+                        "object_id": "relay-event-1",
+                        "topic_id": "kukuri:topic:relay-seeded-docs"
+                    }),
+                },
+            )
+            .await
+            .expect("apply relay event");
+
+        let sync_result = timeout(relay_seeded_public_replication_timeout(), async {
+            loop {
+                let rows = docs_b
+                    .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+                    .await
+                    .expect("query replica b");
+                if rows
+                    .iter()
+                    .any(|row| row.key == "timeline/0001-relay-event")
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await;
+
+        let timeout_diagnostics = if let Err(error) = sync_result {
+            let rows_a = docs_a
+                .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+                .await
+                .expect("query replica a after timeout")
+                .into_iter()
+                .map(|row| row.key)
+                .collect::<Vec<_>>();
+            let rows_b = docs_b
+                .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+                .await
+                .expect("query replica b after timeout")
+                .into_iter()
+                .map(|row| row.key)
+                .collect::<Vec<_>>();
+            let remote_info_a = node_a
+                .endpoint()
+                .remote_info(node_b.endpoint().id())
+                .await
+                .is_some();
+            let remote_info_b = node_b
+                .endpoint()
+                .remote_info(node_a.endpoint().id())
+                .await
+                .is_some();
+            let seed_peers_a = docs_a.available_sync_peer_ids().await;
+            let seed_peers_b = docs_b.available_sync_peer_ids().await;
+            Some((
+                error,
+                rows_a,
+                rows_b,
+                remote_info_a,
+                remote_info_b,
+                seed_peers_a,
+                seed_peers_b,
+            ))
+        } else {
+            None
+        };
+
+        if let Some((
+            error,
+            rows_a,
+            rows_b,
+            remote_info_a,
+            remote_info_b,
+            seed_peers_a,
+            seed_peers_b,
+        )) = timeout_diagnostics
+        {
+            panic!(
+                "relay-seeded public replica sync timeout: {error:?}; rows_a={rows_a:?}; rows_b={rows_b:?}; remote_info_a={remote_info_a}; remote_info_b={remote_info_b}; seed_peers_a={seed_peers_a:?}; seed_peers_b={seed_peers_b:?}"
+            );
+        }
     }
 }

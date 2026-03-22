@@ -122,7 +122,17 @@ impl IrohBlobService {
         let peers = self.fetch_peers().await;
         let mut available = std::collections::BTreeSet::new();
         for peer in peers {
-            if !peer.is_empty() || self.node.endpoint().remote_info(peer.id).await.is_some() {
+            if self
+                .node
+                .endpoint()
+                .remote_info(peer.id)
+                .await
+                .is_some_and(|info| {
+                    info.addrs().any(|addr| {
+                        matches!(addr.usage(), iroh::endpoint::TransportAddrUsage::Active)
+                    })
+                })
+            {
                 available.insert(peer.id.to_string());
             }
         }
@@ -332,11 +342,9 @@ impl BlobService for IrohBlobService {
         let mut parsed = BTreeMap::new();
         for peer in peers {
             let endpoint_addr = peer.to_endpoint_addr_with_relays(&relay_urls)?;
-            if !endpoint_addr.is_empty() {
-                self.node
-                    .discovery()
-                    .add_endpoint_info(endpoint_addr.clone());
-            }
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
             parsed.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
         *self.seed_peers.lock().await = parsed;

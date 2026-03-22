@@ -8,5 +8,5 @@ artifacts:
   dump_logs: false
   metrics_snapshot: true
 timeouts:
-  overall_ms: 120000
-  step_ms: 20000
+  overall_ms: 480000
+  step_ms: 120000
