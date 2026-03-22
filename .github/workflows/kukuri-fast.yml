@@ -93,6 +93,7 @@ jobs:
 
   windows-fast:
     runs-on: windows-latest
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,13 +116,26 @@ jobs:
       - name: Doctor
         run: cargo xtask doctor
 
-      - name: Fast checks
-        run: cargo xtask check
+      - name: Windows desktop compile
+        timeout-minutes: 20
+        run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: Windows desktop lint
+        timeout-minutes: 10
+        working-directory: apps/desktop
+        run: npx pnpm@10.16.1 lint
+
+      - name: Windows desktop typecheck
+        timeout-minutes: 10
+        working-directory: apps/desktop
+        run: npx pnpm@10.16.1 typecheck
 
       - name: E2E smoke
+        timeout-minutes: 15
         run: cargo xtask e2e-smoke
 
       - name: Windows package
+        timeout-minutes: 25
         run: cargo xtask desktop-package
 
       - name: Upload kukuri artifacts
