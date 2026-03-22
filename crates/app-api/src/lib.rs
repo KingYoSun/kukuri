@@ -5596,6 +5596,55 @@ mod tests {
         }
     }
 
+    async fn wait_for_friend_only_grant_import(
+        app: &AppService,
+        token: &str,
+        step_timeout: Duration,
+    ) -> kukuri_core::FriendOnlyGrantPreview {
+        match timeout(step_timeout, async {
+            loop {
+                match app.import_friend_only_grant(token).await {
+                    Ok(preview) => return preview,
+                    Err(error) if error.to_string().contains("mutual relationship") => {
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(error) => panic!("friend-only grant import failed: {error:#}"),
+                }
+            }
+        })
+        .await
+        {
+            Ok(preview) => preview,
+            Err(_) => {
+                let preview =
+                    kukuri_core::parse_friend_only_grant_token(token).expect("parse grant token");
+                let social_view = app
+                    .get_author_social_view(preview.owner_pubkey.as_str())
+                    .await
+                    .map(|value| {
+                        format!(
+                            "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                            value.following,
+                            value.followed_by,
+                            value.mutual,
+                            value.friend_of_friend,
+                            value.friend_of_friend_via_pubkeys
+                        )
+                    })
+                    .unwrap_or_else(|_| "social_view=unavailable".to_string());
+                let snapshot = app
+                    .get_sync_status()
+                    .await
+                    .map(|status| format_sync_snapshot(&status, preview.topic_id.as_str()))
+                    .unwrap_or_else(|_| "failed to read sync status".to_string());
+                panic!(
+                    "friend-only grant import timeout for {}; {social_view}, {snapshot}",
+                    preview.owner_pubkey.as_str()
+                );
+            }
+        }
+    }
+
     fn is_retryable_friend_plus_share_import_error(message: &str) -> bool {
         message.contains("mutual relationship")
             || message.contains("sponsor is not an active participant")
@@ -8735,6 +8784,21 @@ mod tests {
         let a_pubkey = keys_a.public_key_hex();
         let b_pubkey = keys_b.public_key_hex();
         let d_pubkey = keys_d.public_key_hex();
+        let topic = "kukuri:topic:friend-only";
+
+        wait_for_connected_peer_count(&app_a, 2).await;
+        wait_for_connected_peer_count(&app_b, 1).await;
+        wait_for_connected_peer_count(&app_d, 1).await;
+
+        for app in [&app_a, &app_b, &app_d] {
+            let _ = app
+                .list_timeline(topic, None, 20)
+                .await
+                .expect("subscribe public timeline");
+        }
+        wait_for_topic_peer_count(&app_a, topic, 2).await;
+        wait_for_topic_peer_count(&app_b, topic, 1).await;
+        wait_for_topic_peer_count(&app_d, topic, 1).await;
 
         app_a
             .follow_author(b_pubkey.as_str())
@@ -8752,27 +8816,11 @@ mod tests {
             .follow_author(a_pubkey.as_str())
             .await
             .expect("d follows a");
+        wait_for_mutual_author_view(&app_a, b_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&app_b, a_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&app_a, d_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&app_d, a_pubkey.as_str(), topic).await;
 
-        timeout(social_graph_propagation_timeout(), async {
-            loop {
-                let b_view = app_b
-                    .get_author_social_view(a_pubkey.as_str())
-                    .await
-                    .expect("b loads a");
-                let d_view = app_d
-                    .get_author_social_view(a_pubkey.as_str())
-                    .await
-                    .expect("d loads a");
-                if b_view.mutual && d_view.mutual {
-                    break;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        })
-        .await
-        .expect("mutual relationship propagation timeout");
-
-        let topic = "kukuri:topic:friend-only";
         let channel = app_a
             .create_private_channel(CreatePrivateChannelInput {
                 topic_id: TopicId::new(topic),
@@ -8785,10 +8833,12 @@ mod tests {
             .export_friend_only_grant(topic, channel.channel_id.as_str(), None)
             .await
             .expect("export friend-only grant");
-        let preview = app_b
-            .import_friend_only_grant(grant.as_str())
-            .await
-            .expect("b imports friend-only grant");
+        let preview = wait_for_friend_only_grant_import(
+            &app_b,
+            grant.as_str(),
+            social_graph_propagation_timeout(),
+        )
+        .await;
         assert_eq!(preview.channel_id.as_str(), channel.channel_id);
 
         let non_mutual_error = app_c
@@ -8864,10 +8914,12 @@ mod tests {
             .export_friend_only_grant(topic, channel.channel_id.as_str(), None)
             .await
             .expect("export fresh friend-only grant");
-        let fresh_preview = app_d
-            .import_friend_only_grant(fresh_grant.as_str())
-            .await
-            .expect("d imports fresh grant");
+        let fresh_preview = wait_for_friend_only_grant_import(
+            &app_d,
+            fresh_grant.as_str(),
+            social_graph_propagation_timeout(),
+        )
+        .await;
         assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
 
         let d_private = app_d
