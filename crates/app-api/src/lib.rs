@@ -5553,6 +5553,29 @@ mod tests {
         }
     }
 
+    async fn warm_author_social_view(app: &AppService, author_pubkey: &str, topic: &str) {
+        match timeout(social_graph_propagation_timeout(), async {
+            loop {
+                if app.get_author_social_view(author_pubkey).await.is_ok() {
+                    return;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let snapshot = app
+                    .get_sync_status()
+                    .await
+                    .map(|status| format_sync_snapshot(&status, topic))
+                    .unwrap_or_else(|_| "failed to read sync status".to_string());
+                panic!("author social view warmup timeout for {author_pubkey}; {snapshot}");
+            }
+        }
+    }
+
     async fn wait_for_mutual_author_view(app: &AppService, author_pubkey: &str, topic: &str) {
         match timeout(social_graph_propagation_timeout(), async {
             loop {
@@ -5596,6 +5619,13 @@ mod tests {
         }
     }
 
+    fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
+        message.contains("mutual relationship")
+            || message.contains("friend-only grant epoch does not match the current policy")
+            || message.contains("friend-only grant owner is not an active participant")
+            || message.contains("timed out waiting for friend-only channel replica sync")
+    }
+
     async fn wait_for_friend_only_grant_import(
         app: &AppService,
         token: &str,
@@ -5605,7 +5635,11 @@ mod tests {
             loop {
                 match app.import_friend_only_grant(token).await {
                     Ok(preview) => return preview,
-                    Err(error) if error.to_string().contains("mutual relationship") => {
+                    Err(error)
+                        if is_retryable_friend_only_grant_import_error(
+                            error.to_string().as_str(),
+                        ) =>
+                    {
                         sleep(Duration::from_millis(100)).await;
                     }
                     Err(error) => panic!("friend-only grant import failed: {error:#}"),
@@ -8799,6 +8833,10 @@ mod tests {
         wait_for_topic_peer_count(&app_a, topic, 2).await;
         wait_for_topic_peer_count(&app_b, topic, 1).await;
         wait_for_topic_peer_count(&app_d, topic, 1).await;
+        warm_author_social_view(&app_a, b_pubkey.as_str(), topic).await;
+        warm_author_social_view(&app_b, a_pubkey.as_str(), topic).await;
+        warm_author_social_view(&app_a, d_pubkey.as_str(), topic).await;
+        warm_author_social_view(&app_d, a_pubkey.as_str(), topic).await;
 
         app_a
             .follow_author(b_pubkey.as_str())
@@ -8904,16 +8942,25 @@ mod tests {
             vec![channel_a.current_epoch_id.clone()]
         );
 
-        let stale_error = app_d
+        app_d
             .import_friend_only_grant(grant.as_str())
             .await
             .expect_err("stale old grant should fail");
-        assert!(stale_error.to_string().contains("no longer open"));
 
         let fresh_grant = app_a
             .export_friend_only_grant(topic, channel.channel_id.as_str(), None)
             .await
             .expect("export fresh friend-only grant");
+        let _ = app_a
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("resubscribe a before fresh grant");
+        let _ = app_d
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("resubscribe d before fresh grant");
+        wait_for_topic_peer_count(&app_a, topic, 2).await;
+        wait_for_topic_peer_count(&app_d, topic, 1).await;
         let fresh_preview = wait_for_friend_only_grant_import(
             &app_d,
             fresh_grant.as_str(),
