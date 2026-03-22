@@ -912,6 +912,19 @@ async fn run_community_node_connectivity(
             })
             .await
             .context("failed to resubscribe desktop b to scenario topic after reconnect")?;
+        let _reconnect_probe_post = replicate_public_post_with_retry(
+            &runtime_b,
+            &runtime_a,
+            topic,
+            "community node reconnect probe",
+            step_timeout,
+            PublicReplicationLabels {
+                failure: "reconnect probe post after restart",
+                publisher: "desktop b",
+                subscriber: "desktop a",
+            },
+        )
+        .await?;
         let _reconnect_post = replicate_public_post_with_retry(
             &runtime_a,
             &runtime_b,
@@ -1948,6 +1961,28 @@ async fn wait_for_timeline_object_in_scope(
     .context("timeline assertion timeout")?
 }
 
+async fn wait_for_topic_doc_index_entry(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    object_id: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    timeout(step_timeout, async {
+        loop {
+            if runtime
+                .has_topic_timeline_doc_index_entry(topic, object_id)
+                .await
+                .context("failed to query topic docs index")?
+            {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .context("topic docs index assertion timeout")?
+}
+
 async fn assert_timeline_scope_excludes_object(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -2231,6 +2266,9 @@ async fn replicate_public_post_with_retry(
                 })
                 .await
                 .context("failed to create public post")?;
+            wait_for_topic_doc_index_entry(publisher, topic, post_id.as_str(), attempt_timeout)
+                .await
+                .context("publisher did not persist public post into docs index")?;
             wait_for_timeline_object(subscriber, topic, post_id.as_str(), attempt_timeout)
                 .await
                 .context("timeline assertion timeout")?;

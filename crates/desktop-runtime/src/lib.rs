@@ -789,6 +789,25 @@ impl DesktopRuntime {
         self.app_service.get_sync_status().await
     }
 
+    pub async fn has_topic_timeline_doc_index_entry(
+        &self,
+        topic: &str,
+        object_id: &str,
+    ) -> Result<bool> {
+        let replica = kukuri_docs_sync::topic_replica_id(topic);
+        let current = self.iroh_stack.current.lock().await;
+        let docs_sync = current
+            .as_ref()
+            .context("desktop runtime stack is not initialized")?
+            .docs_sync
+            .clone();
+        drop(current);
+        let rows = docs_sync
+            .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
+            .await?;
+        Ok(rows.iter().any(|row| row.key.ends_with(object_id)))
+    }
+
     pub async fn get_discovery_config(&self) -> Result<DiscoveryConfig> {
         Ok(self.discovery_config.lock().await.clone())
     }
