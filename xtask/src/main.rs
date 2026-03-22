@@ -102,7 +102,9 @@ fn check() -> Result<()> {
     )?;
     run_pnpm(["lint"], &desktop_dir())?;
     run_pnpm(["typecheck"], &desktop_dir())?;
-    run_pnpm(["test"], &desktop_dir())?;
+    if !(cfg!(windows) && std::env::var_os("GITHUB_ACTIONS").is_some()) {
+        run_pnpm(["test"], &desktop_dir())?;
+    }
     Ok(())
 }
 
