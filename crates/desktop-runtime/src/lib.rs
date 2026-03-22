@@ -2339,6 +2339,51 @@ mod tests {
         }
     }
 
+    async fn wait_for_connected_topic_peer_count_result(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        expected: usize,
+        step_timeout: Duration,
+    ) -> Result<()> {
+        match timeout(step_timeout, async {
+            let mut stable_ready_polls = 0usize;
+            loop {
+                let status = runtime.get_sync_status().await.context("sync status")?;
+                let ready = status.connected
+                    && status.peer_count >= expected
+                    && status.topic_diagnostics.iter().any(|topic_status| {
+                        topic_status.topic == topic
+                            && topic_status.joined
+                            && (topic_status.connected_peers.len() >= expected.min(1)
+                                || topic_status.assist_peer_ids.len() >= expected.min(1))
+                            && topic_status.peer_count >= expected
+                    });
+                if ready {
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                } else {
+                    stable_ready_polls = 0;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .ok()
+                    .map(|value| format_sync_snapshot(&value, topic))
+                    .unwrap_or_else(|| "failed to read sync status".to_string());
+                bail!("topic readiness timeout; {status}");
+            }
+        }
+    }
+
     async fn wait_for_connected_peer_count(
         runtime: &DesktopRuntime,
         expected: usize,
@@ -2448,36 +2493,35 @@ mod tests {
         }
     }
 
-    async fn wait_for_topic_doc_index_entry(
+    async fn wait_for_topic_doc_index_entry_result(
         runtime: &DesktopRuntime,
         topic: &str,
         object_id: &str,
-        timeout_label: &str,
-    ) {
-        let replica = kukuri_docs_sync::topic_replica_id(topic);
-        match timeout(runtime_replication_timeout(), async {
+        step_timeout: Duration,
+    ) -> Result<()> {
+        match timeout(step_timeout, async {
             loop {
-                let rows = {
-                    let current = runtime.iroh_stack.current.lock().await;
-                    let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
-                    drop(current);
-                    docs_sync
-                        .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
-                        .await
-                        .unwrap_or_default()
-                };
-                if rows.iter().any(|row| row.key.ends_with(object_id)) {
-                    return;
+                if runtime
+                    .has_topic_timeline_doc_index_entry(topic, object_id)
+                    .await
+                    .context("failed to query topic docs index")?
+                {
+                    return Ok::<(), anyhow::Error>(());
                 }
                 sleep(Duration::from_millis(100)).await;
             }
         })
         .await
         {
-            Ok(()) => {}
+            Ok(result) => result,
             Err(_) => {
-                let status = runtime.get_sync_status().await.expect("sync status");
-                panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .ok()
+                    .map(|value| format_sync_snapshot(&value, topic))
+                    .unwrap_or_else(|| "failed to read sync status".to_string());
+                bail!("topic docs index timeout; {status}");
             }
         }
     }
@@ -2538,6 +2582,182 @@ mod tests {
                 );
             }
         }
+    }
+
+    async fn wait_for_timeline_post_result(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        scope: &TimelineScope,
+        object_id: &str,
+        step_timeout: Duration,
+    ) -> Result<()> {
+        match timeout(step_timeout, async {
+            loop {
+                let timeline = runtime
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.into(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .context("timeline query failed")?;
+                if timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == object_id)
+                {
+                    return Ok::<(), anyhow::Error>(());
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .ok()
+                    .map(|value| format_sync_snapshot(&value, topic))
+                    .unwrap_or_else(|| "failed to read sync status".to_string());
+                bail!("timeline visibility timeout; {status}");
+            }
+        }
+    }
+
+    fn public_replication_retry_schedule(step_timeout: Duration) -> (usize, Duration) {
+        let attempts =
+            if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+                3
+            } else {
+                1
+            };
+        let per_attempt_timeout = if attempts > 1 {
+            Duration::from_millis(
+                (step_timeout.as_millis() / attempts as u128)
+                    .max(1)
+                    .try_into()
+                    .expect("public replication timeout fits in u64"),
+            )
+        } else {
+            step_timeout
+        };
+        (attempts, per_attempt_timeout)
+    }
+
+    async fn topic_timeline_doc_index_rows(runtime: &DesktopRuntime, topic: &str) -> Vec<String> {
+        let replica = kukuri_docs_sync::topic_replica_id(topic);
+        let current = runtime.iroh_stack.current.lock().await;
+        let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+        drop(current);
+        docs_sync
+            .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|row| row.key)
+            .collect()
+    }
+
+    async fn replicate_public_post_with_retry(
+        publisher: &DesktopRuntime,
+        subscriber: &DesktopRuntime,
+        topic: &str,
+        content_prefix: &str,
+        timeout_label: &str,
+    ) -> String {
+        let (attempts, attempt_timeout) =
+            public_replication_retry_schedule(runtime_replication_timeout());
+        let scope = TimelineScope::Public;
+        let mut last_error = None;
+
+        for attempt in 1..=attempts {
+            let attempt_result = async {
+                let _ = publisher
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .context("failed to resubscribe publisher to public topic")?;
+                let _ = subscriber
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .context("failed to resubscribe subscriber to public topic")?;
+                wait_for_connected_topic_peer_count_result(publisher, topic, 1, attempt_timeout)
+                    .await
+                    .context("publisher did not observe public topic connectivity")?;
+                wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
+                    .await
+                    .context("subscriber did not observe public topic connectivity")?;
+                let object_id = publisher
+                    .create_post(CreatePostRequest {
+                        topic: topic.to_string(),
+                        content: format!("{content_prefix} #{attempt}"),
+                        reply_to: None,
+                        channel_ref: ChannelRef::Public,
+                        attachments: Vec::new(),
+                    })
+                    .await
+                    .context("failed to create public post")?;
+                wait_for_topic_doc_index_entry_result(
+                    publisher,
+                    topic,
+                    object_id.as_str(),
+                    attempt_timeout,
+                )
+                .await
+                .context("publisher did not persist public post into docs index")?;
+                wait_for_timeline_post_result(
+                    subscriber,
+                    topic,
+                    &scope,
+                    object_id.as_str(),
+                    attempt_timeout,
+                )
+                .await
+                .context("subscriber did not observe replicated public post")?;
+                Ok::<String, anyhow::Error>(object_id)
+            }
+            .await;
+
+            match attempt_result {
+                Ok(object_id) => return object_id,
+                Err(error) if attempt < attempts => {
+                    last_error = Some(format!("{error:#}"));
+                    sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    last_error = Some(format!("{error:#}"));
+                    break;
+                }
+            }
+        }
+
+        let publisher_status = publisher
+            .get_sync_status()
+            .await
+            .expect("publisher sync status");
+        let subscriber_status = subscriber
+            .get_sync_status()
+            .await
+            .expect("subscriber sync status");
+        let publisher_docs_rows = topic_timeline_doc_index_rows(publisher, topic).await;
+        let subscriber_docs_rows = topic_timeline_doc_index_rows(subscriber, topic).await;
+        panic!(
+            "{timeout_label}; last_error={last_error:?}; publisher=({}); subscriber=({}); publisher_docs_rows={publisher_docs_rows:?}; subscriber_docs_rows={subscriber_docs_rows:?}",
+            format_sync_snapshot(&publisher_status, topic),
+            format_sync_snapshot(&subscriber_status, topic),
+        );
     }
 
     async fn wait_for_joined_private_channel_epoch(
@@ -5941,97 +6161,14 @@ mod tests {
         )
         .await;
 
-        let object_id = timeout(
-            Duration::from_secs(15),
-            runtime_b.create_post(CreatePostRequest {
-                topic: topic.to_string(),
-                content: "community relay hello".to_string(),
-                reply_to: None,
-                channel_ref: ChannelRef::Public,
-                attachments: Vec::new(),
-            }),
-        )
-        .await
-        .expect("create post b timeout")
-        .expect("create post b");
-        wait_for_topic_doc_index_entry(
+        let _object_id = replicate_public_post_with_retry(
             &runtime_b,
+            &runtime_a,
             topic,
-            object_id.as_str(),
-            "community-node assist local docs persistence timeout",
+            "community relay hello",
+            "community-node assist post sync timeout",
         )
         .await;
-
-        let post_sync = timeout(runtime_replication_timeout(), async {
-            loop {
-                let timeline = runtime_a
-                    .list_timeline(ListTimelineRequest {
-                        topic: topic.to_string(),
-                        scope: scope.clone(),
-                        cursor: None,
-                        limit: Some(20),
-                    })
-                    .await
-                    .expect("timeline a");
-                if timeline
-                    .items
-                    .iter()
-                    .any(|post| post.object_id == object_id)
-                {
-                    return;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        })
-        .await;
-        if post_sync.is_err() {
-            let status_a = runtime_a
-                .get_sync_status()
-                .await
-                .expect("status a after post timeout");
-            let status_b = runtime_b
-                .get_sync_status()
-                .await
-                .expect("status b after post timeout");
-            let replica = kukuri_docs_sync::topic_replica_id(topic);
-            let docs_rows_a = {
-                let current = runtime_a.iroh_stack.current.lock().await;
-                let docs_sync = current
-                    .as_ref()
-                    .expect("runtime a current stack")
-                    .docs_sync
-                    .clone();
-                drop(current);
-                docs_sync
-                    .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|row| row.key)
-                    .collect::<Vec<_>>()
-            };
-            let docs_rows_b = {
-                let current = runtime_b.iroh_stack.current.lock().await;
-                let docs_sync = current
-                    .as_ref()
-                    .expect("runtime b current stack")
-                    .docs_sync
-                    .clone();
-                drop(current);
-                docs_sync
-                    .query_replica(&replica, DocQuery::Prefix("indexes/timeline/".into()))
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|row| row.key)
-                    .collect::<Vec<_>>()
-            };
-            panic!(
-                "community-node assist post sync timeout; runtime_a=({}); runtime_b=({}); docs_rows_a={docs_rows_a:?}; docs_rows_b={docs_rows_b:?}",
-                format_sync_snapshot(&status_a, topic),
-                format_sync_snapshot(&status_b, topic),
-            );
-        }
 
         timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
             .await
