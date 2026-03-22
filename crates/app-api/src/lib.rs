@@ -8961,6 +8961,10 @@ mod tests {
             .expect("resubscribe d before fresh grant");
         wait_for_topic_peer_count(&app_a, topic, 2).await;
         wait_for_topic_peer_count(&app_d, topic, 1).await;
+        warm_author_social_view(&app_a, d_pubkey.as_str(), topic).await;
+        warm_author_social_view(&app_d, a_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&app_a, d_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&app_d, a_pubkey.as_str(), topic).await;
         let fresh_preview = wait_for_friend_only_grant_import(
             &app_d,
             fresh_grant.as_str(),
