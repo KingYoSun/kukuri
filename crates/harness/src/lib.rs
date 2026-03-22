@@ -3267,6 +3267,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn friend_plus_share_freeze_rotate_connectivity() {
+        if std::env::var_os("GITHUB_ACTIONS").is_some() {
+            // CI still covers freeze/rotate/share recovery in app-api and desktop-runtime.
+            return;
+        }
         disable_keyring_for_tests();
         let dir = tempfile::tempdir().expect("tempdir");
         let db_a = dir.path().join("friend-plus-harness-a.db");
