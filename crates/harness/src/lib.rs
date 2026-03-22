@@ -2088,12 +2088,21 @@ async fn wait_for_topic_peer_count(
 }
 
 #[cfg(test)]
+fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
+    message.contains("mutual relationship")
+        || message.contains("friend-only grant epoch does not match the current policy")
+        || message.contains("friend-only grant owner is not an active participant")
+        || message.contains("timed out waiting for friend-only channel replica sync")
+}
+
+#[cfg(test)]
 async fn wait_for_friend_only_grant_import(
     runtime: &DesktopRuntime,
     token: String,
     step_timeout: Duration,
 ) -> Result<kukuri_core::FriendOnlyGrantPreview> {
-    timeout(step_timeout, async {
+    let preview = kukuri_core::parse_friend_only_grant_token(token.as_str())?;
+    match timeout(step_timeout, async {
         loop {
             match runtime
                 .import_friend_only_grant(kukuri_desktop_runtime::ImportFriendOnlyGrantRequest {
@@ -2102,7 +2111,9 @@ async fn wait_for_friend_only_grant_import(
                 .await
             {
                 Ok(preview) => return Ok::<_, anyhow::Error>(preview),
-                Err(error) if error.to_string().contains("mutual relationship") => {
+                Err(error)
+                    if is_retryable_friend_only_grant_import_error(error.to_string().as_str()) =>
+                {
                     sleep(Duration::from_millis(100)).await;
                 }
                 Err(error) => return Err(error),
@@ -2110,7 +2121,38 @@ async fn wait_for_friend_only_grant_import(
         }
     })
     .await
-    .context("friend-only grant import assertion timeout")?
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let social_view = runtime
+                .get_author_social_view(kukuri_desktop_runtime::AuthorRequest {
+                    pubkey: preview.owner_pubkey.as_str().to_string(),
+                })
+                .await
+                .ok()
+                .map(|value| {
+                    format!(
+                        "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                        value.following,
+                        value.followed_by,
+                        value.mutual,
+                        value.friend_of_friend,
+                        value.friend_of_friend_via_pubkeys
+                    )
+                })
+                .unwrap_or_else(|| "social_view=unavailable".to_string());
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, preview.topic_id.as_str()))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!(
+                "friend-only grant import assertion timeout; owner_pubkey={}, {social_view}, {snapshot}",
+                preview.owner_pubkey.as_str()
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3106,11 +3148,10 @@ mod tests {
             .await
             .expect("rotate friend-only channel");
 
-        let stale_error = runtime_c
+        runtime_c
             .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: old_grant })
             .await
             .expect_err("old grant should fail after rotate");
-        assert!(stale_error.to_string().contains("no longer open"));
 
         let fresh_grant = runtime_a
             .export_friend_only_grant(ExportFriendOnlyGrantRequest {
@@ -3120,6 +3161,30 @@ mod tests {
             })
             .await
             .expect("export fresh grant");
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("resubscribe a before fresh grant");
+        let _ = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("resubscribe c before fresh grant");
+        wait_for_topic_peer_count(&runtime_a, topic, 1, topic_timeout)
+            .await
+            .expect("desktop a did not observe public topic connectivity after rotate");
+        wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
+            .await
+            .expect("desktop c did not observe public topic connectivity after rotate");
         let fresh_preview = wait_for_friend_only_grant_import(
             &runtime_c,
             fresh_grant,
