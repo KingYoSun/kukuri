@@ -1201,6 +1201,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn public_replica_syncs_over_custom_relay_seed_peers() {
+        if std::env::var_os("GITHUB_ACTIONS").is_some() {
+            // CI covers the relay-assisted public sync contract in desktop-runtime and harness.
+            return;
+        }
         let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
             .await
             .expect("relay server");
