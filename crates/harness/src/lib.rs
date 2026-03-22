@@ -903,6 +903,7 @@ async fn run_community_node_connectivity(
         let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
+        let reconnect_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(240));
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
@@ -912,12 +913,18 @@ async fn run_community_node_connectivity(
             })
             .await
             .context("failed to resubscribe desktop b to scenario topic after reconnect")?;
+        wait_for_topic_peer_count(&runtime_a, topic, 1, reconnect_timeout)
+            .await
+            .context("desktop a did not restore topic peer connectivity after desktop b restart")?;
+        wait_for_topic_peer_count(&runtime_b, topic, 1, reconnect_timeout)
+            .await
+            .context("desktop b did not restore topic peer connectivity after restart")?;
         let _reconnect_probe_post = replicate_public_post_with_retry(
             &runtime_b,
             &runtime_a,
             topic,
             "community node reconnect probe",
-            step_timeout,
+            reconnect_timeout,
             PublicReplicationLabels {
                 failure: "reconnect probe post after restart",
                 publisher: "desktop b",
@@ -925,12 +932,18 @@ async fn run_community_node_connectivity(
             },
         )
         .await?;
+        wait_for_topic_peer_count(&runtime_a, topic, 1, reconnect_timeout)
+            .await
+            .context("desktop a lost topic peer connectivity after reconnect probe")?;
+        wait_for_topic_peer_count(&runtime_b, topic, 1, reconnect_timeout)
+            .await
+            .context("desktop b lost topic peer connectivity after reconnect probe")?;
         let _reconnect_post = replicate_public_post_with_retry(
             &runtime_a,
             &runtime_b,
             topic,
             "community node reconnect",
-            step_timeout,
+            reconnect_timeout,
             PublicReplicationLabels {
                 failure: "reconnect post after restart",
                 publisher: "desktop a",
@@ -2084,6 +2097,14 @@ async fn wait_for_topic_peer_count(
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             anyhow::bail!("topic connected-peer assertion timeout; {snapshot}");
         }
+    }
+}
+
+fn ci_timeout_floor(step_timeout: Duration, floor: Duration) -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        step_timeout.max(floor)
+    } else {
+        step_timeout
     }
 }
 
