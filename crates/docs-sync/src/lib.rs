@@ -1316,11 +1316,6 @@ mod tests {
             None
         };
 
-        docs_a.shutdown().await;
-        docs_b.shutdown().await;
-        node_a.shutdown().await.expect("shutdown node a");
-        node_b.shutdown().await.expect("shutdown node b");
-
         if let Some((
             error,
             rows_a,
