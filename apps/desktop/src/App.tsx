@@ -10,6 +10,13 @@ import {
   useState,
 } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+
 import {
   AuthorSocialView,
   AttachmentView,
@@ -2054,9 +2061,9 @@ export function App({ api = runtimeApi }: AppProps) {
           {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
         </button>
         <div className='post-actions'>
-          <button className='button button-secondary' type='button' onClick={() => beginReply(post)}>
+          <Button variant='secondary' type='button' onClick={() => beginReply(post)}>
             Reply
-          </button>
+          </Button>
         </div>
       </article>
     );
@@ -2073,27 +2080,23 @@ export function App({ api = runtimeApi }: AppProps) {
             desktop shell
           </p>
         </div>
-        <label className='field'>
+        <Label>
           <span>Add Topic</span>
           <div className='topic-input-row'>
-            <input
+            <Input
               value={topicInput}
               onChange={(e) => setTopicInput(e.target.value)}
               placeholder='kukuri:topic:demo'
             />
-            <button
-              className='button button-secondary'
-              type='button'
-              onClick={() => void handleAddTopic()}
-            >
+            <Button variant='secondary' onClick={() => void handleAddTopic()}>
               Add
-            </button>
+            </Button>
           </div>
-        </label>
+        </Label>
       </section>
 
       <section className='grid'>
-        <aside className='panel panel-accent'>
+        <Card as='aside' tone='accent'>
           <h2>Sync Status</h2>
           <dl className='status-grid'>
             <div>
@@ -2127,15 +2130,15 @@ export function App({ api = runtimeApi }: AppProps) {
               {syncStatus.last_error ?? 'none'}
             </p>
           </div>
-          <section className='panel panel-subsection'>
-            <div className='panel-header'>
+          <Card className='panel-subsection'>
+            <CardHeader>
               <h3>My Profile</h3>
               <small>{authorDisplayLabel(syncStatus.local_author_pubkey, localProfile?.display_name, localProfile?.name)}</small>
-            </div>
+            </CardHeader>
             <form className='composer composer-compact' onSubmit={handleSaveProfile}>
-              <label className='field'>
+              <Label>
                 <span>Display Name</span>
-                <input
+                <Input
                   value={profileDraft.display_name ?? ''}
                   onChange={(event) => {
                     setProfileDraft((current) => ({
@@ -2146,10 +2149,10 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                   placeholder='Visible label'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>Name</span>
-                <input
+                <Input
                   value={profileDraft.name ?? ''}
                   onChange={(event) => {
                     setProfileDraft((current) => ({
@@ -2160,10 +2163,10 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                   placeholder='Canonical name'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>About</span>
-                <textarea
+                <Textarea
                   value={profileDraft.about ?? ''}
                   onChange={(event) => {
                     setProfileDraft((current) => ({
@@ -2175,10 +2178,10 @@ export function App({ api = runtimeApi }: AppProps) {
                   className='ticket-output'
                   placeholder='Short bio'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>Picture URL</span>
-                <input
+                <Input
                   value={profileDraft.picture ?? ''}
                   onChange={(event) => {
                     setProfileDraft((current) => ({
@@ -2189,14 +2192,14 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                   placeholder='https://...'
                 />
-              </label>
+              </Label>
               {profileError ? <p className='error error-inline'>{profileError}</p> : null}
               <div className='discovery-actions'>
-                <button className='button button-secondary' type='submit' disabled={!profileDirty}>
+                <Button variant='secondary' type='submit' disabled={!profileDirty}>
                   Save Profile
-                </button>
-                <button
-                  className='button button-secondary'
+                </Button>
+                <Button
+                  variant='secondary'
                   type='button'
                   disabled={!profileDirty}
                   onClick={() => {
@@ -2209,15 +2212,15 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                 >
                   Reset
-                </button>
+                </Button>
               </div>
             </form>
-          </section>
-          <section className='panel panel-subsection discovery-panel'>
-            <div className='panel-header'>
+          </Card>
+          <Card className='panel-subsection discovery-panel'>
+            <CardHeader>
               <h3>Discovery</h3>
               <small>{syncStatus.discovery.mode}</small>
-            </div>
+            </CardHeader>
             <dl className='status-grid status-grid-compact'>
               <div>
                 <dt>Mode</dt>
@@ -2256,9 +2259,9 @@ export function App({ api = runtimeApi }: AppProps) {
               <strong>Configured Seed IDs</strong>
               <p>{syncStatus.discovery.configured_seed_peer_ids.join(', ') || 'none'}</p>
             </div>
-            <label className='field'>
+            <Label>
               <span>Seed Peers</span>
-              <textarea
+              <Textarea
                 value={discoverySeedInput}
                 onChange={(event) => {
                   setDiscoverySeedInput(event.target.value);
@@ -2268,7 +2271,7 @@ export function App({ api = runtimeApi }: AppProps) {
                 className='ticket-output discovery-editor'
                 placeholder='node_id or node_id@host:port'
               />
-            </label>
+            </Label>
             <div className='diagnostic-block'>
               <strong>Discovery Error</strong>
               <p
@@ -2282,16 +2285,16 @@ export function App({ api = runtimeApi }: AppProps) {
               </p>
             </div>
             <div className='discovery-actions'>
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={discoveryConfig.env_locked || !discoveryEditorDirty}
                 onClick={() => void handleSaveDiscoverySeeds()}
               >
                 Save Seeds
-              </button>
-              <button
-                className='button button-secondary'
+              </Button>
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!discoveryEditorDirty}
                 onClick={() => {
@@ -2301,17 +2304,17 @@ export function App({ api = runtimeApi }: AppProps) {
                 }}
               >
                 Reset
-              </button>
+              </Button>
             </div>
-          </section>
-          <section className='panel panel-subsection discovery-panel'>
-            <div className='panel-header'>
+          </Card>
+          <Card className='panel-subsection discovery-panel'>
+            <CardHeader>
               <h3>Community Node</h3>
               <small>{communityNodeStatuses.length} configured</small>
-            </div>
-            <label className='field'>
+            </CardHeader>
+            <Label>
               <span>Base URLs</span>
-              <textarea
+              <Textarea
                 value={communityNodeInput}
                 onChange={(event) => {
                   setCommunityNodeInput(event.target.value);
@@ -2320,7 +2323,7 @@ export function App({ api = runtimeApi }: AppProps) {
                 className='ticket-output discovery-editor'
                 placeholder='https://community.example.com'
               />
-            </label>
+            </Label>
             <div className='diagnostic-block'>
               <strong>Community Node Error</strong>
               <p className={communityNodeError ? 'diagnostic-error' : undefined}>
@@ -2328,16 +2331,16 @@ export function App({ api = runtimeApi }: AppProps) {
               </p>
             </div>
             <div className='discovery-actions'>
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!communityNodeEditorDirty}
                 onClick={() => void handleSaveCommunityNodes()}
               >
                 Save Nodes
-              </button>
-              <button
-                className='button button-secondary'
+              </Button>
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!communityNodeEditorDirty}
                 onClick={() => {
@@ -2347,15 +2350,15 @@ export function App({ api = runtimeApi }: AppProps) {
                 }}
               >
                 Reset
-              </button>
-              <button
-                className='button button-secondary'
+              </Button>
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={communityNodeConfig.nodes.length === 0}
                 onClick={() => void handleClearCommunityNodes()}
               >
                 Clear
-              </button>
+              </Button>
             </div>
             {communityNodeConfig.nodes.map((node) => {
               const status = communityNodeStatusByBaseUrl[node.base_url];
@@ -2383,61 +2386,61 @@ export function App({ api = runtimeApi }: AppProps) {
                   <p>session activation: {communityNodeSessionActivationLabel(status)}</p>
                   <p>next step: {communityNodeNextStepLabel(status)}</p>
                   <div className='discovery-actions'>
-                    <button
-                      className='button button-secondary'
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() => void handleAuthenticateCommunityNode(node.base_url)}
                     >
                       Authenticate
-                    </button>
-                    <button
-                      className='button button-secondary'
+                    </Button>
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() => void handleFetchCommunityNodeConsents(node.base_url)}
                     >
                       Consents
-                    </button>
-                    <button
-                      className='button button-secondary'
+                    </Button>
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() => void handleAcceptCommunityNodeConsents(node.base_url)}
                     >
                       Accept
-                    </button>
-                    <button
-                      className='button button-secondary'
+                    </Button>
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() => void handleRefreshCommunityNode(node.base_url)}
                     >
                       Refresh
-                    </button>
-                    <button
-                      className='button button-secondary'
+                    </Button>
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() => void handleClearCommunityNodeToken(node.base_url)}
                     >
                       Clear Token
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );
             })}
-          </section>
-          <label className='field'>
+          </Card>
+          <Label>
             <span>Your Ticket</span>
-            <textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
-          </label>
-          <label className='field'>
+            <Textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
+          </Label>
+          <Label>
             <span>Peer Ticket</span>
-            <input
+            <Input
               value={peerTicket}
               onChange={(e) => setPeerTicket(e.target.value)}
               placeholder='nodeid@127.0.0.1:7777'
             />
-          </label>
-          <button className='button button-secondary' onClick={() => void handleImportPeer()}>
+          </Label>
+          <Button variant='secondary' onClick={() => void handleImportPeer()}>
             Import Peer
-          </button>
+          </Button>
           <section className='topic-list'>
             <div className='panel-header'>
               <h3>Tracked Topics</h3>
@@ -2491,26 +2494,26 @@ export function App({ api = runtimeApi }: AppProps) {
                     </div>
                   ) : null}
                 </li>
-              ))}
-            </ul>
-          </section>
-        </aside>
+                ))}
+              </ul>
+            </section>
+        </Card>
 
-        <section className='panel'>
-          <div className='panel-header'>
+        <Card>
+          <CardHeader>
             <h2>Timeline</h2>
             <span className='active-topic-label'>{activeTopic}</span>
-            <button
-              className='button button-secondary'
+            <Button
+              variant='secondary'
               onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
             >
               Refresh
-            </button>
-          </div>
+            </Button>
+          </CardHeader>
           <div className='topic-diagnostic'>
-            <label className='field'>
+            <Label>
               <span>View Scope</span>
-              <select
+              <Select
                 aria-label='View Scope'
                 value={timelineScopeValue(activeTimelineScope)}
                 onChange={(event) => {
@@ -2524,11 +2527,11 @@ export function App({ api = runtimeApi }: AppProps) {
                     {channel.label}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className='field'>
+              </Select>
+            </Label>
+            <Label>
               <span>Compose Target</span>
-              <select
+              <Select
                 aria-label='Compose Target'
                 value={channelRefValue(activeComposeChannel)}
                 disabled={Boolean(replyTarget)}
@@ -2540,25 +2543,25 @@ export function App({ api = runtimeApi }: AppProps) {
                     {channel.label}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Label>
           </div>
           <div className='topic-diagnostic topic-diagnostic-secondary'>
             <span>Viewing: {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}</span>
             <span>Posting to: {activeComposeAudienceLabel}</span>
           </div>
           <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
-            <label className='field'>
+            <Label>
               <span>Create Channel</span>
-              <input
+              <Input
                 value={channelLabelInput}
                 onChange={(event) => setChannelLabelInput(event.target.value)}
                 placeholder='core contributors'
               />
-            </label>
-            <label className='field'>
+            </Label>
+            <Label>
               <span>Audience</span>
-              <select
+              <Select
                 aria-label='Channel Audience'
                 value={channelAudienceInput}
                 onChange={(event) =>
@@ -2568,90 +2571,90 @@ export function App({ api = runtimeApi }: AppProps) {
                 <option value='invite_only'>Invite only</option>
                 <option value='friend_only'>Friends</option>
                 <option value='friend_plus'>Friends+</option>
-              </select>
-            </label>
-            <button className='button button-secondary' type='submit'>
+              </Select>
+            </Label>
+            <Button variant='secondary' type='submit'>
               Create Channel
-            </button>
+            </Button>
             {activePrivateChannel?.audience_kind === 'invite_only' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={activeComposeChannel.kind !== 'private_channel'}
                 onClick={() => void handleCreateInvite()}
               >
                 Create Invite
-              </button>
+              </Button>
             ) : null}
             {activePrivateChannel?.audience_kind === 'friend_only' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!activePrivateChannel.is_owner}
                 onClick={() => void handleCreateGrant()}
               >
                 Create Grant
-              </button>
+              </Button>
             ) : null}
             {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={activeComposeChannel.kind !== 'private_channel'}
                 onClick={() => void handleCreateShare()}
               >
                 Create Share
-              </button>
+              </Button>
             ) : null}
             {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!activePrivateChannel.is_owner}
                 onClick={() => void handleFreezePrivateChannel()}
               >
                 Freeze
-              </button>
+              </Button>
             ) : null}
             {activePrivateChannel?.audience_kind === 'friend_only' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!activePrivateChannel.is_owner}
                 onClick={() => void handleRotatePrivateChannel()}
               >
                 Rotate
-              </button>
+              </Button>
             ) : null}
             {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <button
-                className='button button-secondary'
+              <Button
+                variant='secondary'
                 type='button'
                 disabled={!activePrivateChannel.is_owner}
                 onClick={() => void handleRotatePrivateChannel()}
               >
                 Rotate
-              </button>
+              </Button>
             ) : null}
           </form>
           <form className='composer composer-compact' onSubmit={handleJoinInvite}>
-            <label className='field'>
+            <Label>
               <span>Join via Invite</span>
-              <textarea
+              <Textarea
                 value={inviteTokenInput}
                 onChange={(event) => setInviteTokenInput(event.target.value)}
                 placeholder='paste private channel invite, friend grant, or friends+ share'
               />
-            </label>
-            <button className='button button-secondary' type='submit'>
+            </Label>
+            <Button variant='secondary' type='submit'>
               Join Invite
-            </button>
-            <button className='button button-secondary' type='button' onClick={() => void handleJoinGrant()}>
+            </Button>
+            <Button variant='secondary' type='button' onClick={() => void handleJoinGrant()}>
               Join Grant
-            </button>
-            <button className='button button-secondary' type='button' onClick={() => void handleJoinShare()}>
+            </Button>
+            <Button variant='secondary' type='button' onClick={() => void handleJoinShare()}>
               Join Share
-            </button>
+            </Button>
           </form>
           {inviteOutput ? (
             <div className='topic-diagnostic topic-diagnostic-secondary'>
@@ -2706,19 +2709,19 @@ export function App({ api = runtimeApi }: AppProps) {
                   <p>{replyTarget.content}</p>
                   <small>Audience: {replyTarget.audience_label}</small>
                 </div>
-                <button className='button button-secondary' type='button' onClick={clearReply}>
+                <Button variant='secondary' type='button' onClick={clearReply}>
                   Clear
-                </button>
+                </Button>
               </div>
             ) : null}
-            <textarea
+            <Textarea
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
               placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
             />
-            <label className='field file-field'>
+            <Label className='file-field'>
               <span>Attach</span>
-              <input
+              <Input
                 key={attachmentInputKey}
                 aria-label='Attach'
                 type='file'
@@ -2728,7 +2731,7 @@ export function App({ api = runtimeApi }: AppProps) {
                   void handleAttachmentSelection(event);
                 }}
               />
-            </label>
+            </Label>
             {composerError ? <p className='error error-inline'>{composerError}</p> : null}
             {draftMediaItems.length > 0 ? (
               <ul className='draft-attachment-list'>
@@ -2752,13 +2755,9 @@ export function App({ api = runtimeApi }: AppProps) {
                         ))}
                       </div>
                     </div>
-                    <button
-                      className='button button-secondary'
-                      type='button'
-                      onClick={() => handleRemoveDraftAttachment(item.id)}
-                    >
+                    <Button variant='secondary' type='button' onClick={() => handleRemoveDraftAttachment(item.id)}>
                       Remove
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -2766,39 +2765,39 @@ export function App({ api = runtimeApi }: AppProps) {
             <div className='topic-diagnostic topic-diagnostic-secondary'>
               <span>Audience: {activeComposeAudienceLabel}</span>
             </div>
-            <button className='button' type='submit'>
+            <Button type='submit'>
               {replyTarget ? 'Reply' : 'Publish'}
-            </button>
+            </Button>
           </form>
-          <section className='panel panel-subsection'>
-            <div className='panel-header'>
+          <Card className='panel-subsection'>
+            <CardHeader>
               <h3>Live Sessions</h3>
               <small>{activeLiveSessions.length} active</small>
-            </div>
+            </CardHeader>
             <form className='composer composer-compact' onSubmit={handleCreateLiveSession}>
-              <label className='field'>
+              <Label>
                 <span>Live Title</span>
-                <input
+                <Input
                   value={liveTitle}
                   onChange={(event) => setLiveTitle(event.target.value)}
                   placeholder='Friday stream'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>Live Description</span>
-                <textarea
+                <Textarea
                   value={liveDescription}
                   onChange={(event) => setLiveDescription(event.target.value)}
                   placeholder='short session summary'
                 />
-              </label>
+              </Label>
               {liveError ? <p className='error error-inline'>{liveError}</p> : null}
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>Audience: {activeComposeAudienceLabel}</span>
               </div>
-              <button className='button' type='submit'>
+              <Button type='submit'>
                 Start Live
-              </button>
+              </Button>
             </form>
             {activeLiveSessions.length === 0 ? <p className='empty-state'>No live sessions</p> : null}
             <ul className='post-list'>
@@ -2830,32 +2829,32 @@ export function App({ api = runtimeApi }: AppProps) {
                       ) : null}
                       <div className='post-actions'>
                         {session.joined_by_me ? (
-                          <button
-                            className='button button-secondary'
+                          <Button
+                            variant='secondary'
                             type='button'
                             onClick={() => void handleLeaveLiveSession(session.session_id)}
                           >
                             Leave
-                          </button>
+                          </Button>
                         ) : (
-                          <button
-                            className='button button-secondary'
+                          <Button
+                            variant='secondary'
                             type='button'
                             disabled={session.status === 'Ended'}
                             onClick={() => void handleJoinLiveSession(session.session_id)}
                           >
                             Join
-                          </button>
+                          </Button>
                         )}
                         {isOwner ? (
-                          <button
-                            className='button button-secondary'
+                          <Button
+                            variant='secondary'
                             type='button'
                             disabled={session.status === 'Ended'}
                             onClick={() => void handleEndLiveSession(session.session_id)}
                           >
                             End
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
                     </article>
@@ -2863,44 +2862,44 @@ export function App({ api = runtimeApi }: AppProps) {
                 );
               })}
             </ul>
-          </section>
-          <section className='panel panel-subsection'>
-            <div className='panel-header'>
+          </Card>
+          <Card className='panel-subsection'>
+            <CardHeader>
               <h3>Game Rooms</h3>
               <small>{activeGameRooms.length} tracked</small>
-            </div>
+            </CardHeader>
             <form className='composer composer-compact' onSubmit={handleCreateGameRoom}>
-              <label className='field'>
+              <Label>
                 <span>Game Title</span>
-                <input
+                <Input
                   value={gameTitle}
                   onChange={(event) => setGameTitle(event.target.value)}
                   placeholder='Top 8 Finals'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>Game Description</span>
-                <textarea
+                <Textarea
                   value={gameDescription}
                   onChange={(event) => setGameDescription(event.target.value)}
                   placeholder='match summary'
                 />
-              </label>
-              <label className='field'>
+              </Label>
+              <Label>
                 <span>Participants</span>
-                <input
+                <Input
                   value={gameParticipantsInput}
                   onChange={(event) => setGameParticipantsInput(event.target.value)}
                   placeholder='Alice, Bob'
                 />
-              </label>
+              </Label>
               {gameError ? <p className='error error-inline'>{gameError}</p> : null}
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>Audience: {activeComposeAudienceLabel}</span>
               </div>
-              <button className='button' type='submit'>
+              <Button type='submit'>
                 Create Room
-              </button>
+              </Button>
             </form>
             {activeGameRooms.length === 0 ? <p className='empty-state'>No game rooms</p> : null}
             <ul className='post-list'>
@@ -2932,7 +2931,7 @@ export function App({ api = runtimeApi }: AppProps) {
                               <strong>{score.label}</strong>
                             </div>
                             {isOwner ? (
-                              <input
+                              <Input
                                 aria-label={`${room.room_id}-${score.label}-score`}
                                 value={draft.scores[score.participant_id] ?? String(score.score)}
                                 onChange={(event) =>
@@ -2953,9 +2952,9 @@ export function App({ api = runtimeApi }: AppProps) {
                       </ul>
                       {isOwner ? (
                         <div className='composer composer-compact'>
-                          <label className='field'>
+                          <Label>
                             <span>Status</span>
-                            <select
+                            <Select
                               aria-label={`${room.room_id}-status`}
                               value={draft.status}
                               onChange={(event) =>
@@ -2969,11 +2968,11 @@ export function App({ api = runtimeApi }: AppProps) {
                               <option value='Running'>Running</option>
                               <option value='Paused'>Paused</option>
                               <option value='Ended'>Ended</option>
-                            </select>
-                          </label>
-                          <label className='field'>
+                            </Select>
+                          </Label>
+                          <Label>
                             <span>Phase</span>
-                            <input
+                            <Input
                               aria-label={`${room.room_id}-phase`}
                               value={draft.phase_label}
                               onChange={(event) =>
@@ -2983,14 +2982,10 @@ export function App({ api = runtimeApi }: AppProps) {
                                 }))
                               }
                             />
-                          </label>
-                          <button
-                            className='button button-secondary'
-                            type='button'
-                            onClick={() => void handleUpdateGameRoom(room)}
-                          >
+                          </Label>
+                          <Button variant='secondary' type='button' onClick={() => void handleUpdateGameRoom(room)}>
                             Save Room
-                          </button>
+                          </Button>
                         </div>
                       ) : null}
                     </article>
@@ -2998,21 +2993,21 @@ export function App({ api = runtimeApi }: AppProps) {
                 );
               })}
             </ul>
-          </section>
+          </Card>
           <ul className='post-list'>
             {activeTimeline.map((post) => (
               <li key={post.object_id}>{renderPostCard(post, 'timeline')}</li>
             ))}
           </ul>
-        </section>
+        </Card>
 
-        <section className='panel'>
-          <div className='panel-header'>
+        <Card>
+          <CardHeader>
             <h2>Thread</h2>
             <div className='post-actions-inline'>
               {selectedAuthor ? (
-                <button
-                  className='button button-secondary'
+                <Button
+                  variant='secondary'
                   type='button'
                   onClick={() => {
                     setSelectedAuthorPubkey(null);
@@ -3021,11 +3016,11 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                 >
                   Clear Author
-                </button>
+                </Button>
               ) : null}
               {selectedThread ? (
-                <button
-                  className='button button-secondary'
+                <Button
+                  variant='secondary'
                   type='button'
                   onClick={() => {
                     setSelectedThread(null);
@@ -3034,15 +3029,15 @@ export function App({ api = runtimeApi }: AppProps) {
                   }}
                 >
                   Close
-                </button>
+                </Button>
               ) : null}
             </div>
-          </div>
-          <section className='panel panel-subsection'>
-            <div className='panel-header'>
+          </CardHeader>
+          <Card className='panel-subsection'>
+            <CardHeader>
               <h3>Author Detail</h3>
               <small>{selectedAuthor ? selectedAuthor.author_pubkey.slice(0, 12) : 'none'}</small>
-            </div>
+            </CardHeader>
             {selectedAuthor ? (
               <div className='author-detail'>
                 <div className='author-detail-header'>
@@ -3086,8 +3081,8 @@ export function App({ api = runtimeApi }: AppProps) {
                 {authorError ? <p className='error error-inline'>{authorError}</p> : null}
                 {selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey ? (
                   <div className='post-actions'>
-                    <button
-                      className='button button-secondary'
+                    <Button
+                      variant='secondary'
                       type='button'
                       onClick={() =>
                         void handleRelationshipAction(
@@ -3097,14 +3092,14 @@ export function App({ api = runtimeApi }: AppProps) {
                       }
                     >
                       {selectedAuthor.following ? 'Unfollow' : 'Follow'}
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
             ) : (
               <p className='empty'>Select an author to inspect profile and relationship.</p>
             )}
-          </section>
+          </Card>
           {selectedThread ? (
             <ul className='thread-list'>
               {thread.map((post) => (
@@ -3116,7 +3111,7 @@ export function App({ api = runtimeApi }: AppProps) {
           ) : (
             <p className='empty'>Select a post to inspect the thread.</p>
           )}
-        </section>
+        </Card>
       </section>
 
       {error ? <p className='error'>{error}</p> : null}

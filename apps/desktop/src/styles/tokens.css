@@ -1,0 +1,50 @@
+:root {
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --background: #101923;
+  --foreground: #f6f1e8;
+  --foreground-strong: #fff7ef;
+  --muted-foreground: rgba(246, 241, 232, 0.72);
+  --muted-foreground-soft: rgba(246, 241, 232, 0.58);
+  --surface-panel: rgba(6, 12, 18, 0.48);
+  --surface-panel-accent: linear-gradient(160deg, rgba(255, 132, 74, 0.14), rgba(8, 17, 26, 0.55));
+  --surface-input: rgba(10, 16, 24, 0.8);
+  --surface-raised: rgba(8, 15, 23, 0.72);
+  --surface-button-secondary: rgba(246, 241, 232, 0.08);
+  --surface-active: rgba(0, 179, 164, 0.16);
+  --border-subtle: rgba(246, 241, 232, 0.12);
+  --border-subtle-strong: rgba(246, 241, 232, 0.08);
+  --primary-start: #f59d62;
+  --primary-end: #ffd36e;
+  --primary-foreground: #0e1b26;
+  --accent: #00b3a4;
+  --accent-foreground: #eafffb;
+  --destructive: #ffb48a;
+  --ring: rgba(0, 179, 164, 0.48);
+  --shadow-panel: 0 18px 60px rgba(2, 7, 15, 0.22);
+  --shell-background:
+    radial-gradient(circle at top left, rgba(255, 132, 74, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(0, 179, 164, 0.18), transparent 22%),
+    linear-gradient(135deg, #101923 0%, #0f2231 48%, #132c3d 100%);
+  --radius: 1rem;
+  --radius-panel: 22px;
+  --radius-input: 14px;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--surface-panel);
+  --color-card-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border-subtle);
+  --color-input: var(--surface-input);
+  --color-primary: var(--primary-start);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 6px);
+}
