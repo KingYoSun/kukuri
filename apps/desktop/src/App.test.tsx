@@ -2,866 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
+import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+
 import { App } from './App';
 import {
-  AuthorSocialView,
   AttachmentView,
   BlobViewStatus,
-  ChannelAudienceKind,
-  CommunityNodeConfig,
-  CommunityNodeNodeStatus,
   CreateAttachmentInput,
-  DesktopApi,
-  DiscoveryConfig,
-  GameRoomView,
-  GameScoreView,
-  JoinedPrivateChannelView,
-  LiveSessionView,
   PostView,
-  Profile,
-  PrivateChannelInvitePreview,
-  SyncStatus,
-  TimelineScope,
-  TimelineView,
 } from './lib/api';
-
-function withSocialPostDefaults(post: PostView): PostView {
-  return {
-    ...post,
-    author_name: post.author_name ?? null,
-    author_display_name: post.author_display_name ?? null,
-    following: post.following ?? false,
-    followed_by: post.followed_by ?? false,
-    mutual: post.mutual ?? false,
-    friend_of_friend: post.friend_of_friend ?? false,
-    channel_id: post.channel_id ?? null,
-    audience_label: post.audience_label ?? (post.channel_id ? 'Private channel' : 'Public'),
-    attachments: [...post.attachments],
-  };
-}
-
-function withLiveSessionDefaults(session: LiveSessionView): LiveSessionView {
-  return {
-    ...session,
-    channel_id: session.channel_id ?? null,
-    audience_label: session.audience_label ?? (session.channel_id ? 'Private channel' : 'Public'),
-  };
-}
-
-function withGameRoomDefaults(room: GameRoomView): GameRoomView {
-  return {
-    ...room,
-    channel_id: room.channel_id ?? null,
-    audience_label: room.audience_label ?? (room.channel_id ? 'Private channel' : 'Public'),
-    scores: room.scores.map((score) => ({ ...score })),
-  };
-}
-
-function withJoinedChannelDefaults(channel: JoinedPrivateChannelView): JoinedPrivateChannelView {
-  return {
-    ...channel,
-    owner_pubkey: channel.owner_pubkey ?? channel.creator_pubkey,
-    joined_via_pubkey: channel.joined_via_pubkey ?? null,
-    audience_kind: channel.audience_kind ?? 'invite_only',
-    is_owner: channel.is_owner ?? true,
-    current_epoch_id: channel.current_epoch_id ?? 'legacy',
-    archived_epoch_ids: [...(channel.archived_epoch_ids ?? [])],
-    sharing_state: channel.sharing_state ?? 'open',
-    rotation_required: channel.rotation_required ?? false,
-    participant_count: channel.participant_count ?? 0,
-    stale_participant_count: channel.stale_participant_count ?? 0,
-  };
-}
-
-function createMockApi(options?: {
-  globalLastError?: string | null;
-  topicLastError?: string | null;
-  assistPeerIds?: string[];
-  seedPosts?: Record<string, TimelineView['items']>;
-  seedLiveSessions?: Record<string, LiveSessionView[]>;
-  seedGameRooms?: Record<string, GameRoomView[]>;
-  myProfile?: Partial<Profile>;
-  authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
-  myProfileError?: string | null;
-  invitePreview?: PrivateChannelInvitePreview;
-}) {
-  const assistPeerIds = options?.assistPeerIds ?? [];
-  const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
-  const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
-    Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
-      topic,
-      posts.map((post) => withSocialPostDefaults(post)),
-    ])
-  );
-  const liveSessionsByTopic: Record<string, LiveSessionView[]> = Object.fromEntries(
-    Object.entries(options?.seedLiveSessions ?? {}).map(([topic, sessions]) => [
-      topic,
-      sessions.map((session) => withLiveSessionDefaults(session)),
-    ])
-  );
-  const gameRoomsByTopic: Record<string, GameRoomView[]> = Object.fromEntries(
-    Object.entries(options?.seedGameRooms ?? {}).map(([topic, rooms]) => [
-      topic,
-      rooms.map((room) => withGameRoomDefaults(room)),
-    ])
-  );
-  const joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]> = {};
-  let sequence = 0;
-  let discoveryConfig: DiscoveryConfig = {
-    mode: 'seeded_dht',
-    connect_mode: 'direct_only',
-    env_locked: false,
-    seed_peers: [],
-  };
-  let communityNodeConfig: CommunityNodeConfig = {
-    nodes: [],
-  };
-  let communityNodeStatuses: CommunityNodeNodeStatus[] = [];
-  const syncStatus: SyncStatus = {
-    connected: true,
-    last_sync_ts: 1,
-    peer_count: effectivePeerIds.length,
-    pending_events: 0,
-    status_detail: 'Connected to all configured peers',
-    last_error: options?.globalLastError ?? null,
-    configured_peers: ['peer-a'],
-    subscribed_topics: ['kukuri:topic:demo'],
-    topic_diagnostics: [
-      {
-        topic: 'kukuri:topic:demo',
-        joined: true,
-        peer_count: effectivePeerIds.length,
-        connected_peers: ['peer-a'],
-        assist_peer_ids: assistPeerIds,
-        configured_peer_ids: ['peer-a'],
-        missing_peer_ids: [],
-        last_received_at: 1,
-        status_detail: 'Connected to all configured peers for this topic',
-        last_error: options?.topicLastError ?? null,
-      },
-    ],
-    local_author_pubkey: 'f'.repeat(64),
-    discovery: {
-      mode: 'seeded_dht',
-      connect_mode: 'direct_only',
-      env_locked: false,
-      configured_seed_peer_ids: [],
-      bootstrap_seed_peer_ids: [],
-      manual_ticket_peer_ids: [],
-      connected_peer_ids: ['peer-a'],
-      assist_peer_ids: assistPeerIds,
-      local_endpoint_id: 'local-endpoint-a',
-      last_discovery_error: null,
-    },
-  };
-  let myProfile: Profile = {
-    pubkey: syncStatus.local_author_pubkey,
-    name: null,
-    display_name: null,
-    about: null,
-    picture: null,
-    updated_at: 0,
-    ...options?.myProfile,
-  };
-  const authorSocialViews: Record<string, AuthorSocialView> = Object.fromEntries(
-    Object.entries(options?.authorSocialViews ?? {}).map(([pubkey, view]) => [
-      pubkey,
-      {
-        author_pubkey: pubkey,
-        name: null,
-        display_name: null,
-        about: null,
-        picture: null,
-        updated_at: null,
-        following: false,
-        followed_by: false,
-        mutual: false,
-        friend_of_friend: false,
-        friend_of_friend_via_pubkeys: [],
-        ...view,
-      },
-    ])
-  );
-
-  const api: DesktopApi = {
-    async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
-      sequence += 1;
-      const objectId = `${topic}-${sequence}`;
-      const posts = postsByTopic[topic] ?? [];
-      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
-      const rootId = replyTo
-        ? posts.find((post) => post.object_id === replyTo)?.root_id ?? replyTo
-        : objectId;
-      const postAttachments: AttachmentView[] = (attachments ?? []).map((attachment, index) => ({
-        hash: `${objectId}-attachment-${index}`,
-        mime: attachment.mime,
-        bytes: attachment.byte_size,
-        role: attachment.role ?? 'image_original',
-        status: 'Available',
-      }));
-      postsByTopic[topic] = [
-        withSocialPostDefaults({
-          object_id: objectId,
-          envelope_id: `envelope-${sequence}`,
-          author_pubkey: 'f'.repeat(64),
-          following: false,
-          followed_by: false,
-          mutual: false,
-          friend_of_friend: false,
-          object_kind: replyTo ? 'comment' : 'post',
-          content,
-          content_status: 'Available',
-          attachments: postAttachments,
-          created_at: sequence,
-          reply_to: replyTo ?? null,
-          root_id: rootId,
-          channel_id: channelId,
-          audience_label: channelId ? 'Private channel' : 'Public',
-        }),
-        ...posts,
-      ];
-      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
-      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
-        syncStatus.topic_diagnostics.push({
-          topic,
-          joined: true,
-          peer_count: 1,
-          connected_peers: ['peer-a'],
-          assist_peer_ids: assistPeerIds,
-          configured_peer_ids: ['peer-a'],
-          missing_peer_ids: [],
-          last_received_at: sequence,
-          status_detail: 'Connected to all configured peers for this topic',
-          last_error: null,
-        });
-      }
-      return objectId;
-    },
-    async listTimeline(
-      topic,
-      _cursor,
-      _limit,
-      scope: TimelineScope = { kind: 'public' }
-    ) {
-      syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
-      if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
-        syncStatus.topic_diagnostics.push({
-          topic,
-          joined: false,
-          peer_count: assistPeerIds.length,
-          connected_peers: [],
-          assist_peer_ids: assistPeerIds,
-          configured_peer_ids: [],
-          missing_peer_ids: [],
-          last_received_at: null,
-          status_detail:
-            assistPeerIds.length > 0
-              ? `relay-assisted sync available via ${assistPeerIds.length} peer(s)`
-              : 'No peers configured for this topic',
-          last_error: null,
-        });
-      }
-      const posts = postsByTopic[topic] ?? [];
-      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
-      const filtered =
-        scope.kind === 'channel'
-          ? posts.filter((post) => post.channel_id === scope.channel_id)
-          : scope.kind === 'all_joined'
-            ? posts.filter((post) => !post.channel_id || joinedIds.has(post.channel_id))
-            : posts.filter((post) => !post.channel_id);
-      return { items: filtered, next_cursor: null };
-    },
-    async listThread(topic, threadId) {
-      const posts = postsByTopic[topic] ?? [];
-      return {
-        items: posts.filter((post) => post.root_id === threadId || post.object_id === threadId),
-        next_cursor: null,
-      };
-    },
-    async getMyProfile() {
-      if (options?.myProfileError) {
-        throw new Error(options.myProfileError);
-      }
-      return myProfile;
-    },
-    async setMyProfile(input) {
-      myProfile = {
-        ...myProfile,
-        ...input,
-        updated_at: myProfile.updated_at + 1,
-      };
-      authorSocialViews[myProfile.pubkey] = {
-        author_pubkey: myProfile.pubkey,
-        name: myProfile.name ?? null,
-        display_name: myProfile.display_name ?? null,
-        about: myProfile.about ?? null,
-        picture: myProfile.picture ?? null,
-        updated_at: myProfile.updated_at,
-        following: false,
-        followed_by: false,
-        mutual: false,
-        friend_of_friend: false,
-        friend_of_friend_via_pubkeys: [],
-      };
-      return myProfile;
-    },
-    async followAuthor(pubkey) {
-      const existing = authorSocialViews[pubkey] ?? {
-        author_pubkey: pubkey,
-        name: null,
-        display_name: null,
-        about: null,
-        picture: null,
-        updated_at: null,
-        following: false,
-        followed_by: false,
-        mutual: false,
-        friend_of_friend: false,
-        friend_of_friend_via_pubkeys: [],
-      };
-      const next = {
-        ...existing,
-        following: true,
-        mutual: existing.followed_by,
-      };
-      authorSocialViews[pubkey] = next;
-      for (const topic of Object.keys(postsByTopic)) {
-        postsByTopic[topic] = postsByTopic[topic].map((post) =>
-          post.author_pubkey === pubkey
-            ? {
-                ...post,
-                following: true,
-                mutual: next.mutual,
-                friend_of_friend: false,
-              }
-            : post
-        );
-      }
-      return next;
-    },
-    async unfollowAuthor(pubkey) {
-      const existing = authorSocialViews[pubkey] ?? {
-        author_pubkey: pubkey,
-        name: null,
-        display_name: null,
-        about: null,
-        picture: null,
-        updated_at: null,
-        following: false,
-        followed_by: false,
-        mutual: false,
-        friend_of_friend: false,
-        friend_of_friend_via_pubkeys: [],
-      };
-      const next = {
-        ...existing,
-        following: false,
-        mutual: false,
-      };
-      authorSocialViews[pubkey] = next;
-      for (const topic of Object.keys(postsByTopic)) {
-        postsByTopic[topic] = postsByTopic[topic].map((post) =>
-          post.author_pubkey === pubkey
-            ? {
-                ...post,
-                following: false,
-                mutual: false,
-              }
-            : post
-        );
-      }
-      return next;
-    },
-    async getAuthorSocialView(pubkey) {
-      if (pubkey === myProfile.pubkey) {
-        return {
-          author_pubkey: myProfile.pubkey,
-          name: myProfile.name ?? null,
-          display_name: myProfile.display_name ?? null,
-          about: myProfile.about ?? null,
-          picture: myProfile.picture ?? null,
-          updated_at: myProfile.updated_at,
-          following: false,
-          followed_by: false,
-          mutual: false,
-          friend_of_friend: false,
-          friend_of_friend_via_pubkeys: [],
-        };
-      }
-      return (
-        authorSocialViews[pubkey] ?? {
-          author_pubkey: pubkey,
-          name: null,
-          display_name: null,
-          about: null,
-          picture: null,
-          updated_at: null,
-          following: false,
-          followed_by: false,
-          mutual: false,
-          friend_of_friend: false,
-          friend_of_friend_via_pubkeys: [],
-        }
-      );
-    },
-    async listLiveSessions(topic, scope: TimelineScope = { kind: 'public' }) {
-      const sessions = liveSessionsByTopic[topic] ?? [];
-      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
-      return scope.kind === 'channel'
-        ? sessions.filter((session) => session.channel_id === scope.channel_id)
-        : scope.kind === 'all_joined'
-          ? sessions.filter((session) => !session.channel_id || joinedIds.has(session.channel_id))
-          : sessions.filter((session) => !session.channel_id);
-    },
-    async createLiveSession(topic, title, description, channelRef = { kind: 'public' }) {
-      sequence += 1;
-      const sessionId = `live-${sequence}`;
-      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
-      liveSessionsByTopic[topic] = [
-        withLiveSessionDefaults({
-          session_id: sessionId,
-          host_pubkey: syncStatus.local_author_pubkey,
-          title,
-          description,
-          status: 'Live',
-          started_at: Date.now(),
-          ended_at: null,
-          viewer_count: 0,
-          joined_by_me: false,
-          channel_id: channelId,
-          audience_label: channelId ? 'Private channel' : 'Public',
-        }),
-        ...(liveSessionsByTopic[topic] ?? []),
-      ];
-      return sessionId;
-    },
-    async endLiveSession(topic, sessionId) {
-      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
-        session.session_id === sessionId
-          ? {
-              ...session,
-              status: 'Ended',
-              ended_at: Date.now(),
-              joined_by_me: false,
-            }
-          : session
-      );
-    },
-    async joinLiveSession(topic, sessionId) {
-      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
-        session.session_id === sessionId
-          ? {
-              ...session,
-              joined_by_me: true,
-              viewer_count: session.viewer_count + 1,
-            }
-          : session
-      );
-    },
-    async leaveLiveSession(topic, sessionId) {
-      liveSessionsByTopic[topic] = (liveSessionsByTopic[topic] ?? []).map((session) =>
-        session.session_id === sessionId
-          ? {
-              ...session,
-              joined_by_me: false,
-              viewer_count: Math.max(0, session.viewer_count - 1),
-            }
-          : session
-      );
-    },
-    async listGameRooms(topic, scope: TimelineScope = { kind: 'public' }) {
-      const rooms = gameRoomsByTopic[topic] ?? [];
-      const joinedIds = new Set((joinedChannelsByTopic[topic] ?? []).map((channel) => channel.channel_id));
-      return scope.kind === 'channel'
-        ? rooms.filter((room) => room.channel_id === scope.channel_id)
-        : scope.kind === 'all_joined'
-          ? rooms.filter((room) => !room.channel_id || joinedIds.has(room.channel_id))
-          : rooms.filter((room) => !room.channel_id);
-    },
-    async createGameRoom(topic, title, description, participants, channelRef = { kind: 'public' }) {
-      sequence += 1;
-      const roomId = `game-${sequence}`;
-      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
-      const scores: GameScoreView[] = participants.map((label, index) => ({
-        participant_id: `participant-${index + 1}`,
-        label,
-        score: 0,
-      }));
-      gameRoomsByTopic[topic] = [
-        withGameRoomDefaults({
-          room_id: roomId,
-          host_pubkey: syncStatus.local_author_pubkey,
-          title,
-          description,
-          status: 'Waiting',
-          phase_label: null,
-          scores,
-          updated_at: Date.now(),
-          channel_id: channelId,
-          audience_label: channelId ? 'Private channel' : 'Public',
-        }),
-        ...(gameRoomsByTopic[topic] ?? []),
-      ];
-      return roomId;
-    },
-    async createPrivateChannel(topic, label, audienceKind: ChannelAudienceKind = 'invite_only') {
-      sequence += 1;
-      const channelId = `channel-${sequence}`;
-      const channel = withJoinedChannelDefaults({
-        topic_id: topic,
-        channel_id: channelId,
-        label,
-        creator_pubkey: syncStatus.local_author_pubkey,
-        owner_pubkey: syncStatus.local_author_pubkey,
-        audience_kind: audienceKind,
-        is_owner: true,
-        current_epoch_id:
-          audienceKind === 'invite_only' ? 'legacy' : `epoch-${sequence}`,
-        archived_epoch_ids: [],
-        sharing_state: 'open',
-        rotation_required: false,
-        participant_count: audienceKind === 'invite_only' ? 0 : 1,
-        stale_participant_count: 0,
-      });
-      joinedChannelsByTopic[topic] = [...(joinedChannelsByTopic[topic] ?? []), channel];
-      return channel;
-    },
-    async exportPrivateChannelInvite(topic, channelId) {
-      return `invite:${topic}:${channelId}`;
-    },
-    async exportFriendOnlyGrant(topic, channelId) {
-      return `grant:${topic}:${channelId}`;
-    },
-    async importPrivateChannelInvite() {
-      const preview: PrivateChannelInvitePreview = options?.invitePreview ?? {
-        channel_id: 'channel-imported',
-        topic_id: 'kukuri:topic:demo',
-        channel_label: 'Imported',
-        inviter_pubkey: syncStatus.local_author_pubkey,
-        expires_at: null,
-        namespace_secret_hex: 'a'.repeat(64),
-      };
-      joinedChannelsByTopic[preview.topic_id] = [
-        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
-        withJoinedChannelDefaults({
-          topic_id: preview.topic_id,
-          channel_id: preview.channel_id,
-          label: preview.channel_label,
-          creator_pubkey: preview.inviter_pubkey,
-          owner_pubkey: preview.inviter_pubkey,
-          audience_kind: 'invite_only',
-          is_owner: false,
-          current_epoch_id: 'legacy',
-          archived_epoch_ids: [],
-          sharing_state: 'open',
-          rotation_required: false,
-          participant_count: 0,
-          stale_participant_count: 0,
-        }),
-      ];
-      return preview;
-    },
-    async importFriendOnlyGrant() {
-      const preview = {
-        channel_id: 'channel-friends',
-        topic_id: 'kukuri:topic:demo',
-        channel_label: 'Friends',
-        owner_pubkey: syncStatus.local_author_pubkey,
-        epoch_id: 'epoch-1',
-        expires_at: null,
-        namespace_secret_hex: 'b'.repeat(64),
-      };
-      joinedChannelsByTopic[preview.topic_id] = [
-        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
-        withJoinedChannelDefaults({
-          topic_id: preview.topic_id,
-          channel_id: preview.channel_id,
-          label: preview.channel_label,
-          creator_pubkey: preview.owner_pubkey,
-          owner_pubkey: preview.owner_pubkey,
-          audience_kind: 'friend_only',
-          is_owner: false,
-          current_epoch_id: preview.epoch_id,
-          archived_epoch_ids: [],
-          sharing_state: 'open',
-          rotation_required: false,
-          participant_count: 1,
-          stale_participant_count: 0,
-        }),
-      ];
-      return preview;
-    },
-    async exportFriendPlusShare(topic, channelId) {
-      return `share:${topic}:${channelId}`;
-    },
-    async importFriendPlusShare() {
-      const preview = {
-        channel_id: 'channel-friends-plus',
-        topic_id: 'kukuri:topic:demo',
-        channel_label: 'Friends+',
-        owner_pubkey: syncStatus.local_author_pubkey,
-        sponsor_pubkey: 'sponsor-pubkey-1234',
-        epoch_id: 'epoch-plus-1',
-        expires_at: null,
-        namespace_secret_hex: 'c'.repeat(64),
-        share_token_id: 'share-token-1',
-      };
-      joinedChannelsByTopic[preview.topic_id] = [
-        ...(joinedChannelsByTopic[preview.topic_id] ?? []),
-        withJoinedChannelDefaults({
-          topic_id: preview.topic_id,
-          channel_id: preview.channel_id,
-          label: preview.channel_label,
-          creator_pubkey: preview.owner_pubkey,
-          owner_pubkey: preview.owner_pubkey,
-          joined_via_pubkey: preview.sponsor_pubkey,
-          audience_kind: 'friend_plus',
-          is_owner: false,
-          current_epoch_id: preview.epoch_id,
-          archived_epoch_ids: [],
-          sharing_state: 'open',
-          rotation_required: false,
-          participant_count: 2,
-          stale_participant_count: 0,
-        }),
-      ];
-      return preview;
-    },
-    async freezePrivateChannel(topic, channelId) {
-      const channels = joinedChannelsByTopic[topic] ?? [];
-      const next = channels.map((channel) =>
-        channel.channel_id === channelId
-          ? withJoinedChannelDefaults({
-              ...channel,
-              sharing_state: 'frozen',
-            })
-          : channel
-      );
-      joinedChannelsByTopic[topic] = next;
-      return next.find((channel) => channel.channel_id === channelId)!;
-    },
-    async rotatePrivateChannel(topic, channelId) {
-      const channels = joinedChannelsByTopic[topic] ?? [];
-      const next = channels.map((channel) =>
-        channel.channel_id === channelId
-          ? withJoinedChannelDefaults({
-              ...channel,
-              current_epoch_id: `${channel.current_epoch_id}-rotated`,
-              archived_epoch_ids: [...channel.archived_epoch_ids, channel.current_epoch_id],
-              rotation_required: false,
-              stale_participant_count: 0,
-            })
-          : channel
-      );
-      joinedChannelsByTopic[topic] = next;
-      return next.find((channel) => channel.channel_id === channelId)!;
-    },
-    async listJoinedPrivateChannels(topic) {
-      return joinedChannelsByTopic[topic] ?? [];
-    },
-    async updateGameRoom(topic, roomId, status, phaseLabel, scores) {
-      gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
-        room.room_id === roomId
-          ? {
-              ...room,
-              status,
-              phase_label: phaseLabel,
-              scores: scores.map((score) => ({ ...score })),
-              updated_at: Date.now(),
-            }
-          : room
-      );
-    },
-    async getSyncStatus() {
-      return {
-        ...syncStatus,
-        configured_peers: [...syncStatus.configured_peers],
-        subscribed_topics: [...syncStatus.subscribed_topics],
-        topic_diagnostics: syncStatus.topic_diagnostics.map((diagnostic) => ({
-          ...diagnostic,
-          connected_peers: [...diagnostic.connected_peers],
-          assist_peer_ids: [...diagnostic.assist_peer_ids],
-          configured_peer_ids: [...diagnostic.configured_peer_ids],
-          missing_peer_ids: [...diagnostic.missing_peer_ids],
-        })),
-        discovery: {
-          ...syncStatus.discovery,
-          configured_seed_peer_ids: [...syncStatus.discovery.configured_seed_peer_ids],
-          bootstrap_seed_peer_ids: [...syncStatus.discovery.bootstrap_seed_peer_ids],
-          manual_ticket_peer_ids: [...syncStatus.discovery.manual_ticket_peer_ids],
-          connected_peer_ids: [...syncStatus.discovery.connected_peer_ids],
-          assist_peer_ids: [...syncStatus.discovery.assist_peer_ids],
-        },
-      };
-    },
-    async getDiscoveryConfig() {
-      return discoveryConfig;
-    },
-    async getCommunityNodeConfig() {
-      return communityNodeConfig;
-    },
-    async getCommunityNodeStatuses() {
-      return communityNodeStatuses;
-    },
-    async setCommunityNodeConfig(baseUrls) {
-      communityNodeConfig = {
-        nodes: baseUrls.map((baseUrl) => ({
-          base_url: baseUrl,
-          resolved_urls: null,
-        })),
-      };
-      communityNodeStatuses = baseUrls.map((baseUrl) => ({
-        base_url: baseUrl,
-        auth_state: {
-          authenticated: false,
-          expires_at: null,
-        },
-        consent_state: null,
-        resolved_urls: null,
-        last_error: null,
-        restart_required: false,
-      }));
-      return communityNodeConfig;
-    },
-    async clearCommunityNodeConfig() {
-      communityNodeConfig = { nodes: [] };
-      communityNodeStatuses = [];
-    },
-    async authenticateCommunityNode(baseUrl) {
-      communityNodeStatuses = communityNodeStatuses.map((status) =>
-        status.base_url === baseUrl
-          ? {
-              ...status,
-              auth_state: {
-                authenticated: true,
-                expires_at: Date.now(),
-              },
-              consent_state: {
-                all_required_accepted: false,
-                items: [],
-              },
-            }
-          : status
-      );
-      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async clearCommunityNodeToken(baseUrl) {
-      communityNodeStatuses = communityNodeStatuses.map((status) =>
-        status.base_url === baseUrl
-          ? {
-              ...status,
-              auth_state: {
-                authenticated: false,
-                expires_at: null,
-              },
-            }
-          : status
-      );
-      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async getCommunityNodeConsentStatus(baseUrl) {
-      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async acceptCommunityNodeConsents(baseUrl) {
-      const resolvedUrls = {
-        public_base_url: baseUrl,
-        connectivity_urls: [baseUrl],
-      };
-      syncStatus.discovery.connect_mode = 'direct_or_relay';
-      communityNodeStatuses = communityNodeStatuses.map((status) =>
-        status.base_url === baseUrl
-          ? {
-              ...status,
-              consent_state: {
-                all_required_accepted: true,
-                items: [],
-              },
-              resolved_urls: resolvedUrls,
-              restart_required: false,
-            }
-          : status
-      );
-      communityNodeConfig = {
-        nodes: communityNodeConfig.nodes.map((node) =>
-          node.base_url === baseUrl
-            ? {
-                ...node,
-                resolved_urls: resolvedUrls,
-              }
-            : node
-        ),
-      };
-      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async refreshCommunityNodeMetadata(baseUrl) {
-      syncStatus.discovery.connect_mode = 'direct_or_relay';
-      communityNodeStatuses = communityNodeStatuses.map((status) =>
-        status.base_url === baseUrl
-          ? {
-              ...status,
-              resolved_urls: {
-                public_base_url: baseUrl,
-                connectivity_urls: [baseUrl],
-              },
-              restart_required: false,
-            }
-          : status
-      );
-      communityNodeConfig = {
-        nodes: communityNodeConfig.nodes.map((node) =>
-          node.base_url === baseUrl
-            ? {
-                ...node,
-                resolved_urls: {
-                  public_base_url: baseUrl,
-                  connectivity_urls: [baseUrl],
-                },
-              }
-            : node
-        ),
-      };
-      return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
-    },
-    async importPeerTicket() {},
-    async setDiscoverySeeds(seedEntries) {
-      discoveryConfig = {
-        ...discoveryConfig,
-        seed_peers: seedEntries.map((entry) => {
-          const [endpointId, addrHint] = entry.split('@', 2);
-          return {
-            endpoint_id: endpointId,
-            addr_hint: addrHint ?? null,
-          };
-        }),
-      };
-      syncStatus.discovery.configured_seed_peer_ids = discoveryConfig.seed_peers.map(
-        (peer) => peer.endpoint_id
-      );
-      return discoveryConfig;
-    },
-    async unsubscribeTopic(topic) {
-      delete postsByTopic[topic];
-      delete liveSessionsByTopic[topic];
-      delete gameRoomsByTopic[topic];
-      syncStatus.subscribed_topics = syncStatus.subscribed_topics.filter((value) => value !== topic);
-      syncStatus.topic_diagnostics = syncStatus.topic_diagnostics.filter((value) => value.topic !== topic);
-    },
-    async getLocalPeerTicket() {
-      return 'peer1@127.0.0.1:7777';
-    },
-    async getBlobMediaPayload(_hash, mime) {
-      return {
-        bytes_base64: mime.startsWith('video/') ? 'ZmFrZS12aWRlbw==' : 'ZmFrZS1pbWFnZQ==',
-        mime,
-      };
-    },
-    async getBlobPreviewUrl() {
-      return null;
-    },
-  };
-
-  return api;
-}
 
 function buildImagePost(overrides?: Partial<PostView>): PostView {
   const attachment: AttachmentView = {
@@ -1030,7 +179,7 @@ function installFailedPosterGenerationMocks() {
 
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('Write a post'), 'hello desktop');
   await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -1048,7 +197,7 @@ test('desktop shell can publish and render a post', async () => {
 
 test('desktop shell can update discovery seeds', async () => {
   const user = userEvent.setup();
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const setDiscoverySeeds = vi.fn(api.setDiscoverySeeds);
   api.setDiscoverySeeds = setDiscoverySeeds;
 
@@ -1066,7 +215,7 @@ test('desktop shell can update discovery seeds', async () => {
 
 test('desktop shell can enter reply mode and render reply state', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getAllByPlaceholderText('Write a post')[0], 'root post');
   await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -1098,7 +247,7 @@ test('desktop shell can enter reply mode and render reply state', async () => {
 
 test('reply publish reloads thread only once after a successful submit', async () => {
   const user = userEvent.setup();
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const originalListThread = api.listThread;
   const listThreadSpy = vi.fn((topic, threadId, cursor, limit) =>
     originalListThread(topic, threadId, cursor, limit)
@@ -1139,7 +288,7 @@ test('reply publish reloads thread only once after a successful submit', async (
 
 test('desktop shell can track multiple topics at once', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
   await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -1170,7 +319,7 @@ test('desktop shell can track multiple topics at once', async () => {
 
 test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi({ assistPeerIds: ['relay-peer'] })} />);
+  render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
 
   await waitFor(() => {
     expect(screen.getByText('Relay-assisted Peers')).toBeInTheDocument();
@@ -1191,7 +340,7 @@ test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', 
 test('desktop shell renders diagnostics error reasons', async () => {
   render(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         globalLastError: 'failed to import peer ticket: invalid endpoint id',
         topicLastError: 'timed out waiting for gossip topic join',
       })}
@@ -1211,7 +360,7 @@ test('desktop shell renders diagnostics error reasons', async () => {
 
 test('desktop shell can create, join, leave, and end a live session', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('Friday stream'), 'Launch Party');
   await user.type(screen.getByPlaceholderText('short session summary'), 'watch along');
@@ -1241,7 +390,7 @@ test('desktop shell can create, join, leave, and end a live session', async () =
 
 test('desktop shell can create a private channel and export an invite', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   expect(screen.queryByRole('button', { name: 'Create Invite' })).not.toBeInTheDocument();
 
@@ -1265,7 +414,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
   const user = userEvent.setup();
   render(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         invitePreview: {
           channel_id: 'channel-imported',
           topic_id: 'kukuri:topic:private-imported',
@@ -1297,7 +446,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
 
 test('desktop shell shows friend-only controls and can create a grant', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends');
   await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_only');
@@ -1319,7 +468,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
 
 test('desktop shell shows friend-plus controls and can create a share', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends+');
   await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_plus');
@@ -1344,7 +493,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
 
 test('desktop shell can create and update a game room', async () => {
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.type(screen.getByPlaceholderText('Top 8 Finals'), 'Grand Finals');
   await user.type(screen.getByPlaceholderText('match summary'), 'set one');
@@ -1375,7 +524,7 @@ test('single attach button classifies mixed image and video files', async () => 
   installObjectUrlMocks();
   installSuccessfulPosterGenerationMocks();
   let attachmentsSeen: CreateAttachmentInput[] = [];
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const originalCreatePost = api.createPost;
   api.createPost = async (topic, content, replyTo, attachments) => {
     attachmentsSeen = attachments ?? [];
@@ -1409,7 +558,7 @@ test('video upload generates poster attachment before publish', async () => {
   installObjectUrlMocks();
   installSuccessfulPosterGenerationMocks();
   let attachmentsSeen: CreateAttachmentInput[] = [];
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const originalCreatePost = api.createPost;
   api.createPost = async (topic, content, replyTo, attachments) => {
     attachmentsSeen = attachments ?? [];
@@ -1442,7 +591,7 @@ test('video upload generates poster attachment with metadata seek fallback', asy
   installObjectUrlMocks();
   installMetadataSeekPosterGenerationMocks();
   let attachmentsSeen: CreateAttachmentInput[] = [];
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const originalCreatePost = api.createPost;
   api.createPost = async (topic, content, replyTo, attachments) => {
     attachmentsSeen = attachments ?? [];
@@ -1467,7 +616,7 @@ test('video upload generates poster attachment with metadata seek fallback', asy
 test('video poster generation failure blocks publish', async () => {
   installObjectUrlMocks();
   installFailedPosterGenerationMocks();
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const createPostSpy = vi.fn(api.createPost);
   api.createPost = createPostSpy;
 
@@ -1491,7 +640,7 @@ test('video poster generation failure blocks publish', async () => {
 test('composer shows image draft preview before publish', async () => {
   installObjectUrlMocks();
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.upload(
     screen.getByLabelText('Attach'),
@@ -1508,7 +657,7 @@ test('composer shows video poster draft preview before publish', async () => {
   installObjectUrlMocks();
   installSuccessfulPosterGenerationMocks();
   const user = userEvent.setup();
-  render(<App api={createMockApi()} />);
+  render(<App api={createDesktopMockApi()} />);
 
   await user.upload(
     screen.getByLabelText('Attach'),
@@ -1522,7 +671,7 @@ test('composer shows video poster draft preview before publish', async () => {
 });
 
 test('timeline image post shows media skeleton when attachment is missing', async () => {
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [buildImagePost()],
     },
@@ -1542,7 +691,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   const missingPost = buildImagePost();
   const { rerender } = render(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         seedPosts: {
           'kukuri:topic:demo': [missingPost],
         },
@@ -1556,7 +705,7 @@ test('timeline image post switches to ready state when attachment becomes availa
 
   rerender(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         seedPosts: {
           'kukuri:topic:demo': [
             buildImagePost({
@@ -1583,7 +732,7 @@ test('timeline image post switches to ready state when attachment becomes availa
 
 test('timeline image post renders actual preview when object-url payload is available', async () => {
   installObjectUrlMocks();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildImagePost({
@@ -1616,7 +765,7 @@ test('timeline image post renders actual preview when object-url payload is avai
 
 test('thread pane reuses the same image placeholder renderer', async () => {
   const user = userEvent.setup();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildImagePost(),
@@ -1659,7 +808,7 @@ test('thread pane reuses the same image placeholder renderer', async () => {
 test('text body pending uses text skeleton without hiding image metadata', async () => {
   render(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         seedPosts: {
           'kukuri:topic:demo': [buildImagePost()],
         },
@@ -1675,7 +824,7 @@ test('text body pending uses text skeleton without hiding image metadata', async
 });
 
 test('timeline video post shows poster skeleton when poster is missing', async () => {
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [buildVideoPost()],
     },
@@ -1693,7 +842,7 @@ test('timeline video post shows poster skeleton when poster is missing', async (
 
 test('poster-only video card renders poster preview without video element', async () => {
   installObjectUrlMocks();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildVideoPost({
@@ -1735,7 +884,7 @@ test('poster-only video card renders poster preview without video element', asyn
 
 test('video card fetches manifest payload even when attachment status is missing', async () => {
   installObjectUrlMocks();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildVideoPost({
@@ -1808,7 +957,7 @@ test('video card retries after stalled manifest fetch after rerender', async () 
       }),
     ],
   };
-  const stalledApi = createMockApi({
+  const stalledApi = createDesktopMockApi({
     seedPosts,
   });
   stalledApi.getBlobMediaPayload = async (hash, mime) => {
@@ -1823,7 +972,7 @@ test('video card retries after stalled manifest fetch after rerender', async () 
     }
     return null;
   };
-  const recoveredApi = createMockApi({
+  const recoveredApi = createDesktopMockApi({
     seedPosts: {
       ...seedPosts,
     },
@@ -1859,7 +1008,7 @@ test('video card retries after stalled manifest fetch after rerender', async () 
 
 test('video card renders object-url playback source when manifest payload is available', async () => {
   installObjectUrlMocks();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildVideoPost({
@@ -1909,7 +1058,7 @@ test('video card renders object-url playback source when manifest payload is ava
 
 test('video card falls back to poster preview when playback is unsupported on this client', async () => {
   installObjectUrlMocks();
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         buildVideoPost({
@@ -1966,7 +1115,7 @@ test('video card falls back to poster preview when playback is unsupported on th
 });
 
 test('community node panel activates relay connectivity on the current session after consent', async () => {
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const user = userEvent.setup();
 
   render(<App api={api} />);
@@ -2011,7 +1160,7 @@ test('community node panel activates relay connectivity on the current session a
 test('post card shows friend of friend badge and author name fallback', async () => {
   render(
     <App
-      api={createMockApi({
+      api={createDesktopMockApi({
         seedPosts: {
           'kukuri:topic:demo': [
             {
@@ -2047,7 +1196,7 @@ test('author detail shows via authors and follow action updates relationship', a
   const authorPubkey = 'b'.repeat(64);
   const viaA = 'c'.repeat(64);
   const viaB = 'd'.repeat(64);
-  const api = createMockApi({
+  const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
         {
@@ -2098,7 +1247,7 @@ test('author detail shows via authors and follow action updates relationship', a
 });
 
 test('local profile editor saves profile draft', async () => {
-  const api = createMockApi();
+  const api = createDesktopMockApi();
   const user = userEvent.setup();
 
   render(<App api={api} />);
@@ -2113,7 +1262,7 @@ test('local profile editor saves profile draft', async () => {
 });
 
 test('keeps local peer ticket visible when profile loading fails', async () => {
-  render(<App api={createMockApi({ myProfileError: 'profile load failed' })} />);
+  render(<App api={createDesktopMockApi({ myProfileError: 'profile load failed' })} />);
 
   await waitFor(() => {
     expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
