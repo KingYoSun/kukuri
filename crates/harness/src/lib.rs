@@ -782,6 +782,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node scenario post",
             step_timeout,
+            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
             PublicReplicationLabels {
                 failure: "initial scenario post",
                 publisher: "desktop a",
@@ -925,6 +926,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node reconnect probe",
             reconnect_timeout,
+            PublicReplicationDirection::PreferOriginalPublisher,
             PublicReplicationLabels {
                 failure: "reconnect probe post after restart",
                 publisher: "desktop b",
@@ -944,6 +946,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node reconnect",
             reconnect_timeout,
+            PublicReplicationDirection::PreferOriginalPublisher,
             PublicReplicationLabels {
                 failure: "reconnect post after restart",
                 publisher: "desktop a",
@@ -2108,6 +2111,68 @@ fn ci_timeout_floor(step_timeout: Duration, floor: Duration) -> Duration {
     }
 }
 
+fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> bool {
+    status.connected
+        && status.peer_count >= expected
+        && status.topic_diagnostics.iter().any(|entry| {
+            entry.topic == topic
+                && entry.joined
+                && entry.peer_count >= expected
+                && entry.connected_peers.len() >= expected.min(1)
+        })
+}
+
+fn should_prewarm_public_replication_with_subscriber(
+    publisher_status: &SyncStatus,
+    subscriber_status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+    direction: PublicReplicationDirection,
+) -> bool {
+    matches!(
+        direction,
+        PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber
+    ) && !topic_has_direct_peer(publisher_status, topic, expected)
+        && topic_has_direct_peer(subscriber_status, topic, expected)
+}
+
+async fn wait_for_direct_topic_peer_count(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await?;
+            let ready = topic_has_direct_peer(&status, topic, expected);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!("direct topic connected-peer assertion timeout; {snapshot}");
+        }
+    }
+}
+
 #[cfg(test)]
 fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
     message.contains("mutual relationship")
@@ -2307,12 +2372,19 @@ struct PublicReplicationLabels<'a> {
     subscriber: &'a str,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PublicReplicationDirection {
+    PreferOriginalPublisher,
+    PrewarmWithDirectConnectedSubscriber,
+}
+
 async fn replicate_public_post_with_retry(
     publisher: &DesktopRuntime,
     subscriber: &DesktopRuntime,
     topic: &str,
     content_prefix: &str,
     step_timeout: Duration,
+    direction: PublicReplicationDirection,
     labels: PublicReplicationLabels<'_>,
 ) -> Result<String> {
     let same_author_shared_identity = publisher
@@ -2326,6 +2398,7 @@ async fn replicate_public_post_with_retry(
     let (attempts, attempt_timeout) =
         public_replication_retry_schedule(step_timeout, same_author_shared_identity);
     let mut last_error = None;
+    let mut last_direction = None;
 
     for attempt in 1..=attempts {
         let attempt_result = async {
@@ -2353,6 +2426,71 @@ async fn replicate_public_post_with_retry(
             wait_for_topic_peer_count(subscriber, topic, 1, attempt_timeout)
                 .await
                 .context("subscriber did not observe public topic connectivity")?;
+            let publisher_status = publisher
+                .get_sync_status()
+                .await
+                .context("publisher sync status")?;
+            let subscriber_status = subscriber
+                .get_sync_status()
+                .await
+                .context("subscriber sync status")?;
+            let prewarm_from_subscriber = should_prewarm_public_replication_with_subscriber(
+                &publisher_status,
+                &subscriber_status,
+                topic,
+                1,
+                direction,
+            );
+            if prewarm_from_subscriber {
+                wait_for_direct_topic_peer_count(subscriber, topic, 1, attempt_timeout)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "{} did not observe direct public topic connectivity",
+                            labels.subscriber
+                        )
+                    })?;
+                let bootstrap_post_id = subscriber
+                    .create_post(CreatePostRequest {
+                        topic: topic.to_string(),
+                        content: format!("{content_prefix} bootstrap #{attempt}"),
+                        reply_to: None,
+                        channel_ref: ChannelRef::Public,
+                        attachments: Vec::new(),
+                    })
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to create bootstrap public post on {}",
+                            labels.subscriber
+                        )
+                    })?;
+                wait_for_topic_doc_index_entry(
+                    subscriber,
+                    topic,
+                    bootstrap_post_id.as_str(),
+                    attempt_timeout,
+                )
+                .await
+                .context("subscriber did not persist bootstrap public post into docs index")?;
+                wait_for_timeline_object(
+                    publisher,
+                    topic,
+                    bootstrap_post_id.as_str(),
+                    attempt_timeout,
+                )
+                .await
+                .context("publisher did not observe bootstrap public post")?;
+                last_direction = Some(format!(
+                    "prewarm {}->{}, publish {}->{}",
+                    labels.subscriber, labels.publisher, labels.publisher, labels.subscriber
+                ));
+            } else {
+                last_direction = Some(format!(
+                    "publish {}->{}",
+                    labels.publisher, labels.subscriber
+                ));
+            }
             let post_id = publisher
                 .create_post(CreatePostRequest {
                     topic: topic.to_string(),
@@ -2362,7 +2500,7 @@ async fn replicate_public_post_with_retry(
                     attachments: Vec::new(),
                 })
                 .await
-                .context("failed to create public post")?;
+                .with_context(|| format!("failed to create public post on {}", labels.publisher))?;
             wait_for_topic_doc_index_entry(publisher, topic, post_id.as_str(), attempt_timeout)
                 .await
                 .context("publisher did not persist public post into docs index")?;
@@ -2404,8 +2542,12 @@ async fn replicate_public_post_with_retry(
             .unwrap_or_else(|| { format!("unknown replication failure for {}", labels.failure) })
     )
     .context(format!(
-        "{} did not receive the {}; {}=({publisher_status}); {}=({subscriber_status})",
-        labels.subscriber, labels.failure, labels.publisher, labels.subscriber
+        "{} did not receive the {}; direction={}; {}=({publisher_status}); {}=({subscriber_status})",
+        labels.subscriber,
+        labels.failure,
+        last_direction.unwrap_or_else(|| "unknown".to_string()),
+        labels.publisher,
+        labels.subscriber
     )))
 }
 
@@ -2796,6 +2938,43 @@ mod tests {
         }
     }
 
+    fn sync_status_with_topic(
+        topic: &str,
+        connected_peers: &[&str],
+        assist_peer_ids: &[&str],
+    ) -> SyncStatus {
+        SyncStatus {
+            connected: true,
+            last_sync_ts: None,
+            peer_count: connected_peers.len().max(assist_peer_ids.len()),
+            pending_events: 0,
+            status_detail: "test".to_string(),
+            last_error: None,
+            configured_peers: Vec::new(),
+            subscribed_topics: vec![topic.to_string()],
+            topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
+                topic: topic.to_string(),
+                joined: true,
+                peer_count: connected_peers.len().max(assist_peer_ids.len()),
+                connected_peers: connected_peers
+                    .iter()
+                    .map(|peer| peer.to_string())
+                    .collect(),
+                assist_peer_ids: assist_peer_ids
+                    .iter()
+                    .map(|peer| peer.to_string())
+                    .collect(),
+                configured_peer_ids: Vec::new(),
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: "test".to_string(),
+                last_error: None,
+            }],
+            local_author_pubkey: "author".to_string(),
+            discovery: Default::default(),
+        }
+    }
+
     async fn wait_for_connected_peer_count(runtime: &DesktopRuntime, expected: usize) {
         timeout(social_graph_propagation_timeout(), async {
             loop {
@@ -2880,6 +3059,36 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn public_replication_direction_prewarms_from_direct_connected_subscriber_when_requested() {
+        let topic = "kukuri:topic:test";
+        let publisher_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
+        let subscriber_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
+
+        assert!(should_prewarm_public_replication_with_subscriber(
+            &publisher_status,
+            &subscriber_status,
+            topic,
+            1,
+            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
+        ));
+    }
+
+    #[test]
+    fn public_replication_direction_keeps_original_publisher_by_default() {
+        let topic = "kukuri:topic:test";
+        let publisher_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
+        let subscriber_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
+
+        assert!(!should_prewarm_public_replication_with_subscriber(
+            &publisher_status,
+            &subscriber_status,
+            topic,
+            1,
+            PublicReplicationDirection::PreferOriginalPublisher,
+        ));
     }
 
     #[tokio::test]

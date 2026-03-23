@@ -2384,6 +2384,64 @@ mod tests {
         }
     }
 
+    fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> bool {
+        status.connected
+            && status.peer_count >= expected
+            && status.topic_diagnostics.iter().any(|topic_status| {
+                topic_status.topic == topic
+                    && topic_status.joined
+                    && topic_status.connected_peers.len() >= expected.min(1)
+                    && topic_status.peer_count >= expected
+            })
+    }
+
+    fn should_swap_shared_identity_public_replication_direction(
+        publisher_status: &SyncStatus,
+        subscriber_status: &SyncStatus,
+        topic: &str,
+        expected: usize,
+    ) -> bool {
+        !topic_has_direct_peer(publisher_status, topic, expected)
+            && topic_has_direct_peer(subscriber_status, topic, expected)
+    }
+
+    async fn wait_for_direct_topic_peer_count_result(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        expected: usize,
+        step_timeout: Duration,
+    ) -> Result<()> {
+        match timeout(step_timeout, async {
+            let mut stable_ready_polls = 0usize;
+            loop {
+                let status = runtime.get_sync_status().await.context("sync status")?;
+                let ready = topic_has_direct_peer(&status, topic, expected);
+                if ready {
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                } else {
+                    stable_ready_polls = 0;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .ok()
+                    .map(|value| format_sync_snapshot(&value, topic))
+                    .unwrap_or_else(|| "failed to read sync status".to_string());
+                bail!("direct topic readiness timeout; {status}");
+            }
+        }
+    }
+
     async fn wait_for_connected_peer_count(
         runtime: &DesktopRuntime,
         expected: usize,
@@ -2714,7 +2772,35 @@ mod tests {
                 wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
                     .await
                     .context("subscriber did not observe public topic connectivity")?;
-                let object_id = publisher
+                let publisher_status = publisher
+                    .get_sync_status()
+                    .await
+                    .context("publisher sync status")?;
+                let subscriber_status = subscriber
+                    .get_sync_status()
+                    .await
+                    .context("subscriber sync status")?;
+                let publish_from_subscriber = same_author_shared_identity
+                    && should_swap_shared_identity_public_replication_direction(
+                        &publisher_status,
+                        &subscriber_status,
+                        topic,
+                        1,
+                    );
+                let (active_publisher, active_subscriber) = if publish_from_subscriber {
+                    (subscriber, publisher)
+                } else {
+                    (publisher, subscriber)
+                };
+                wait_for_direct_topic_peer_count_result(
+                    active_publisher,
+                    topic,
+                    1,
+                    attempt_timeout,
+                )
+                .await
+                .context("publishing runtime did not observe direct public topic connectivity")?;
+                let object_id = active_publisher
                     .create_post(CreatePostRequest {
                         topic: topic.to_string(),
                         content: format!("{content_prefix} #{attempt}"),
@@ -2725,7 +2811,7 @@ mod tests {
                     .await
                     .context("failed to create public post")?;
                 wait_for_topic_doc_index_entry_result(
-                    publisher,
+                    active_publisher,
                     topic,
                     object_id.as_str(),
                     attempt_timeout,
@@ -2733,7 +2819,7 @@ mod tests {
                 .await
                 .context("publisher did not persist public post into docs index")?;
                 wait_for_timeline_post_result(
-                    subscriber,
+                    active_subscriber,
                     topic,
                     &scope,
                     object_id.as_str(),
@@ -2773,6 +2859,71 @@ mod tests {
             format_sync_snapshot(&publisher_status, topic),
             format_sync_snapshot(&subscriber_status, topic),
         );
+    }
+
+    fn sync_status_with_topic(
+        topic: &str,
+        connected_peers: &[&str],
+        assist_peer_ids: &[&str],
+    ) -> SyncStatus {
+        SyncStatus {
+            connected: true,
+            last_sync_ts: None,
+            peer_count: connected_peers.len().max(assist_peer_ids.len()),
+            pending_events: 0,
+            status_detail: "test".to_string(),
+            last_error: None,
+            configured_peers: Vec::new(),
+            subscribed_topics: vec![topic.to_string()],
+            topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
+                topic: topic.to_string(),
+                joined: true,
+                peer_count: connected_peers.len().max(assist_peer_ids.len()),
+                connected_peers: connected_peers
+                    .iter()
+                    .map(|peer| peer.to_string())
+                    .collect(),
+                assist_peer_ids: assist_peer_ids
+                    .iter()
+                    .map(|peer| peer.to_string())
+                    .collect(),
+                configured_peer_ids: Vec::new(),
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: "test".to_string(),
+                last_error: None,
+            }],
+            local_author_pubkey: "author".to_string(),
+            discovery: Default::default(),
+        }
+    }
+
+    #[test]
+    fn shared_identity_public_replication_prefers_direct_connected_runtime() {
+        let topic = "kukuri:topic:test";
+        let publisher_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
+        let subscriber_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
+
+        assert!(should_swap_shared_identity_public_replication_direction(
+            &publisher_status,
+            &subscriber_status,
+            topic,
+            1,
+        ));
+    }
+
+    #[test]
+    fn shared_identity_public_replication_keeps_original_publisher_when_it_is_direct() {
+        let topic = "kukuri:topic:test";
+        let publisher_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
+        let subscriber_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
+
+        assert!(!should_swap_shared_identity_public_replication_direction(
+            &publisher_status,
+            &subscriber_status,
+            topic,
+            1,
+        ));
     }
 
     async fn wait_for_joined_private_channel_epoch(

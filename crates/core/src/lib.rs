@@ -1,15 +1,15 @@
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bech32::{Bech32, Hrp};
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use hkdf::Hkdf;
 use secp256k1::ecdh::SharedSecret;
-use secp256k1::rand::{RngCore, thread_rng};
+use secp256k1::rand::{RngCore, rng};
 use secp256k1::schnorr::Signature;
-use secp256k1::{Keypair, Message, Parity, PublicKey, SECP256K1, SecretKey, XOnlyPublicKey};
+use secp256k1::{Keypair, Parity, PublicKey, SECP256K1, SecretKey, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -73,7 +73,7 @@ impl std::fmt::Debug for KukuriKeys {
 impl KukuriKeys {
     pub fn generate() -> Self {
         Self {
-            secret_key: SecretKey::new(&mut thread_rng()),
+            secret_key: SecretKey::new(&mut rng()),
         }
     }
 
@@ -96,7 +96,7 @@ impl KukuriKeys {
         hex::encode(self.secret_key.secret_bytes())
     }
 
-    pub fn sign_schnorr(&self, message: &Message) -> Signature {
+    pub fn sign_schnorr(&self, message: &[u8]) -> Signature {
         let keypair = Keypair::from_secret_key(SECP256K1, &self.secret_key);
         SECP256K1.sign_schnorr(message, &keypair)
     }
@@ -107,14 +107,20 @@ fn parse_secret_key(secret: &str) -> Result<SecretKey> {
     if let Ok(bytes) = hex::decode(trimmed)
         && bytes.len() == 32
     {
-        return SecretKey::from_slice(bytes.as_slice()).context("invalid hex secret key");
+        let bytes: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| anyhow!("invalid hex secret key length"))?;
+        return SecretKey::from_byte_array(bytes).context("invalid hex secret key");
     }
 
     let (hrp, bytes) = bech32::decode(trimmed).context("failed to decode secret key")?;
     if hrp.as_str() != LEGACY_SECRET_HRP {
         bail!("unsupported secret key hrp `{}`", hrp.as_str());
     }
-    SecretKey::from_slice(bytes.as_slice()).context("invalid bech32 secret key")
+    let bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| anyhow!("invalid bech32 secret key length"))?;
+    SecretKey::from_byte_array(bytes).context("invalid bech32 secret key")
 }
 
 pub fn encode_secret_key_bech32(secret_key_hex: &str, hrp: &str) -> Result<String> {
@@ -783,12 +789,11 @@ impl KukuriEnvelope {
         if computed_id != self.id.0 {
             bail!("envelope id mismatch");
         }
-        let message = Message::from_digest_slice(&digest).context("invalid envelope digest")?;
         let signature = Signature::from_str(self.sig.as_str()).context("invalid envelope sig")?;
         let public_key =
             XOnlyPublicKey::from_str(self.pubkey.as_str()).context("invalid envelope pubkey")?;
         SECP256K1
-            .verify_schnorr(&signature, &message, &public_key)
+            .verify_schnorr(&signature, &digest, &public_key)
             .context("envelope signature verification failed")?;
         Ok(())
     }
@@ -1438,7 +1443,7 @@ pub fn encrypt_private_channel_rotation_grant(
     let plaintext =
         serde_json::to_vec(payload).context("failed to encode channel rotation grant payload")?;
     let mut nonce = [0u8; 24];
-    thread_rng().fill_bytes(&mut nonce);
+    rng().fill_bytes(&mut nonce);
     let cipher = XChaCha20Poly1305::new_from_slice(
         derive_rotation_grant_key(owner_keys, &payload.recipient_pubkey, payload)?.as_slice(),
     )
@@ -1713,8 +1718,7 @@ pub fn sign_envelope_at(
     )?;
     let digest = sha256_digest(canonical.as_bytes());
     let id = hex::encode(digest);
-    let message = Message::from_digest_slice(&digest).context("invalid envelope digest")?;
-    let sig = keys.sign_schnorr(&message).to_string();
+    let sig = keys.sign_schnorr(&digest).to_string();
     Ok(KukuriEnvelope {
         id: EnvelopeId(id),
         pubkey: Pubkey(pubkey),
