@@ -6,6 +6,8 @@ npx pnpm@10.16.1 install --dir apps/desktop
 cargo xtask doctor
 ```
 
+- `apps/desktop` の frontend toolchain は Vite 8 に合わせて Node `^20.19.0 || >=22.12.0` を前提にする
+
 ## 日常コマンド
 ```bash
 cargo xtask check
