@@ -35,14 +35,17 @@ npx pnpm@10.16.1 dev
 
 - root workspace is the active implementation surface.
 - `legacy/` is reference-only.
-- Linux is the only required target during MVP.
-- Windows, DHT discovery, and community-node integration are deferred.
+- current desktop targets are Linux and Windows.
+- current networking scope includes static-peer, seeded DHT, and community-node connectivity/auth.
+- UI/UX work should follow `docs/adr/0014-uiux-dev-flow.md` and `docs/DESIGN.md`.
 - `AGENTS.md -> docs/*` is sufficient for new contributors.
 
 ## Docs
 
 - overview: `docs/README.md`
 - decision: `docs/adr/0001-linux-first-mvp.md`
+- ui/ux flow: `docs/adr/0014-uiux-dev-flow.md`
+- design rules: `docs/DESIGN.md`
 - runbook: `docs/runbooks/dev.md`
 - progress: `docs/progress/2026-03-10-foundation.md`
 
