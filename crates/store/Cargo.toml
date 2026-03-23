@@ -9,7 +9,11 @@ anyhow.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 kukuri-core = { path = "../core" }
+
+[dev-dependencies]
+tempfile.workspace = true
 
