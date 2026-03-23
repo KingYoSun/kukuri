@@ -13,8 +13,7 @@ use chrono::Utc;
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput,
     GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
-    PrivateChannelCapability, ProfileInput, SyncStatus, TimelineView, TopicSyncStatus,
-    UpdateGameRoomInput,
+    PrivateChannelCapability, ProfileInput, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -2876,7 +2875,7 @@ mod tests {
             last_error: None,
             configured_peers: Vec::new(),
             subscribed_topics: vec![topic.to_string()],
-            topic_diagnostics: vec![TopicSyncStatus {
+            topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
                 topic: topic.to_string(),
                 joined: true,
                 peer_count: connected_peers.len().max(assist_peer_ids.len()),
