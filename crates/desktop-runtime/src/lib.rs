@@ -2384,6 +2384,50 @@ mod tests {
         }
     }
 
+    async fn wait_for_direct_topic_peer_count_result(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        expected: usize,
+        step_timeout: Duration,
+    ) -> Result<()> {
+        match timeout(step_timeout, async {
+            let mut stable_ready_polls = 0usize;
+            loop {
+                let status = runtime.get_sync_status().await.context("sync status")?;
+                let ready = status.connected
+                    && status.peer_count >= expected
+                    && status.topic_diagnostics.iter().any(|topic_status| {
+                        topic_status.topic == topic
+                            && topic_status.joined
+                            && topic_status.connected_peers.len() >= expected.min(1)
+                            && topic_status.peer_count >= expected
+                    });
+                if ready {
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                } else {
+                    stable_ready_polls = 0;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                let status = runtime
+                    .get_sync_status()
+                    .await
+                    .ok()
+                    .map(|value| format_sync_snapshot(&value, topic))
+                    .unwrap_or_else(|| "failed to read sync status".to_string());
+                bail!("direct topic readiness timeout; {status}");
+            }
+        }
+    }
+
     async fn wait_for_connected_peer_count(
         runtime: &DesktopRuntime,
         expected: usize,
@@ -2714,6 +2758,12 @@ mod tests {
                 wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
                     .await
                     .context("subscriber did not observe public topic connectivity")?;
+                wait_for_direct_topic_peer_count_result(publisher, topic, 1, attempt_timeout)
+                    .await
+                    .context("publisher did not observe direct public topic connectivity")?;
+                wait_for_direct_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
+                    .await
+                    .context("subscriber did not observe direct public topic connectivity")?;
                 let object_id = publisher
                     .create_post(CreatePostRequest {
                         topic: topic.to_string(),
