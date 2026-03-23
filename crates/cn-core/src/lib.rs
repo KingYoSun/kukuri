@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
+use std::sync::Once;
 
 use anyhow::{Context, Result, anyhow, bail};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header::AUTHORIZATION};
@@ -25,6 +26,7 @@ pub const USER_API_BEARER_CHALLENGE: &str = r#"Bearer realm="cn-user-api""#;
 pub const COMMUNITY_NODE_DATABASE_INIT_MODE_ENV: &str = "COMMUNITY_NODE_DATABASE_INIT_MODE";
 const DATABASE_PREPARE_HINT: &str =
     "run `cn-cli --database-url <url> prepare` before starting cn-user-api";
+static JWT_CRYPTO_PROVIDER_INIT: Once = Once::new();
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeResolvedUrls {
@@ -1051,11 +1053,18 @@ pub fn auth_required_error(message: impl Into<String>) -> ApiError {
     )
 }
 
+fn ensure_jwt_crypto_provider() {
+    JWT_CRYPTO_PROVIDER_INIT.call_once(|| {
+        let _ = jsonwebtoken::crypto::aws_lc::DEFAULT_PROVIDER.install_default();
+    });
+}
+
 fn issue_access_token(
     jwt_config: &JwtConfig,
     pubkey: &str,
     endpoint_id: Option<&str>,
 ) -> Result<(String, i64)> {
+    ensure_jwt_crypto_provider();
     let issued_at = Utc::now().timestamp();
     let expires_at = issued_at + jwt_config.ttl_seconds;
     let claims = AccessTokenClaims {
@@ -1070,6 +1079,7 @@ fn issue_access_token(
 }
 
 fn verify_access_token(jwt_config: &JwtConfig, token: &str) -> Result<AccessTokenClaims> {
+    ensure_jwt_crypto_provider();
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_issuer(&[jwt_config.issuer.as_str()]);
     let decoded = decode::<AccessTokenClaims>(token, &jwt_config.decoding_key(), &validation)?;
