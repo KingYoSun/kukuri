@@ -31,6 +31,9 @@ use tokio::time::timeout;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 
+#[cfg(test)]
+use iroh::tls::CaRootsConfig;
+
 pub type DocEventStream = Pin<Box<dyn Stream<Item = Result<DocEvent>> + Send>>;
 type ReplicaRecords = HashMap<String, Vec<u8>>;
 type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
@@ -206,14 +209,15 @@ impl IrohDocsNode {
         let relay_config = relay_config.normalized();
         let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
         let mut endpoint_builder = build_endpoint_builder(
-            Endpoint::empty_builder(relay_config.relay_mode()?),
+            Endpoint::empty_builder().relay_mode(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
             Arc::clone(&relay_urls),
         )?;
         #[cfg(test)]
         {
-            endpoint_builder = endpoint_builder.insecure_skip_relay_cert_verify(true);
+            endpoint_builder =
+                endpoint_builder.ca_roots_config(CaRootsConfig::insecure_skip_verify());
         }
         if let Some(secret_key) = endpoint_secret {
             endpoint_builder = endpoint_builder.secret_key(secret_key);

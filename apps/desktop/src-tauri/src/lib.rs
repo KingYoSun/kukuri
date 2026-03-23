@@ -25,7 +25,7 @@ const DEFAULT_TRACING_DIRECTIVES: &str =
     "warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info";
 const DEFAULT_SUPPRESS_DIRECTIVES: &[&str] = &[
     "mainline::rpc::socket=error",
-    "iroh_quinn_proto::connection=error",
+    "noq_proto::connection=error",
     "iroh::socket::remote_map::remote_state=error",
     "iroh_docs::engine::live=error",
     "iroh_gossip::net=error",
@@ -671,7 +671,7 @@ mod tests {
             "expected explicit target override to be preserved"
         );
         assert!(!directives.contains("iroh_docs::engine::live=error"));
-        assert!(directives.contains("iroh_quinn_proto::connection=error"));
+        assert!(directives.contains("noq_proto::connection=error"));
         assert!(directives.contains("mainline::rpc::socket=error"));
     }
 }

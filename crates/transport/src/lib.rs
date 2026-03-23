@@ -11,7 +11,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use futures_util::{Stream, StreamExt};
 use iroh::address_lookup::{
-    AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem, MemoryLookup,
+    AddrFilter, AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem,
+    MemoryLookup,
 };
 use iroh::endpoint::Builder as EndpointBuilder;
 use iroh::protocol::Router;
@@ -29,6 +30,9 @@ use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, warn};
+
+#[cfg(test)]
+use iroh::tls::CaRootsConfig;
 
 pub type HintStream = Pin<Box<dyn Stream<Item = HintEnvelope> + Send>>;
 
@@ -1006,7 +1010,7 @@ async fn bind_endpoint_with_options(
 ) -> Result<(Endpoint, Arc<MemoryLookup>, Option<JoinHandle<()>>)> {
     let discovery = Arc::new(MemoryLookup::new());
     let mut builder = build_endpoint_builder(
-        Endpoint::empty_builder(relay_config.relay_mode()?),
+        Endpoint::empty_builder().relay_mode(relay_config.relay_mode()?),
         &discovery,
         Some(dht_options),
         relay_urls,
@@ -1016,7 +1020,7 @@ async fn bind_endpoint_with_options(
     }
     #[cfg(test)]
     {
-        builder = builder.insecure_skip_relay_cert_verify(true);
+        builder = builder.ca_roots_config(CaRootsConfig::insecure_skip_verify());
     }
     builder = apply_bind(builder, bind_addr)?;
     let endpoint = builder
@@ -1399,7 +1403,7 @@ pub fn build_endpoint_builder(
     builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
         let mut dht_builder = DhtAddressLookup::builder()
-            .include_direct_addresses(true)
+            .addr_filter(AddrFilter::unfiltered())
             .no_publish();
         if let Some(client) = dht_options.client.as_ref() {
             dht_builder = dht_builder.client(client.clone());
@@ -2721,7 +2725,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn gossip_low_level_roundtrip_baseline() {
-        let endpoint_a = Endpoint::empty_builder(RelayMode::Disabled)
+        let endpoint_a = Endpoint::empty_builder()
+            .relay_mode(RelayMode::Disabled)
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("bind addr a")
             .bind()
@@ -2732,7 +2737,8 @@ mod tests {
             .accept(GOSSIP_ALPN, gossip_a.clone())
             .spawn();
 
-        let endpoint_b = Endpoint::empty_builder(RelayMode::Disabled)
+        let endpoint_b = Endpoint::empty_builder()
+            .relay_mode(RelayMode::Disabled)
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("bind addr b")
             .bind()
@@ -2746,8 +2752,14 @@ mod tests {
         let discovery = MemoryLookup::new();
         discovery.add_endpoint_info(endpoint_a.addr());
         discovery.add_endpoint_info(endpoint_b.addr());
-        endpoint_a.address_lookup().add(discovery.clone());
-        endpoint_b.address_lookup().add(discovery);
+        endpoint_a
+            .address_lookup()
+            .expect("address lookup a")
+            .add(discovery.clone());
+        endpoint_b
+            .address_lookup()
+            .expect("address lookup b")
+            .add(discovery);
 
         let topic = topic_to_gossip_id(&TopicId::new("kukuri:topic:baseline"));
         let peer_a = endpoint_a.id();
@@ -2812,6 +2824,8 @@ mod tests {
                 text: "hello baseline".into(),
             }
         );
+        endpoint_a.close().await;
+        endpoint_b.close().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
