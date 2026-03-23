@@ -6178,6 +6178,199 @@ mod tests {
             .expect("runtime b shutdown timeout");
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_identity() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("community-relay-shared-a.db");
+        let db_b = dir.path().join("community-relay-shared-b.db");
+        let shared_keys = KukuriKeys::generate();
+        let shared_secret = shared_keys.export_secret_hex();
+        fs::write(
+            db_a.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key a");
+        fs::write(db_a.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend a");
+        fs::write(
+            db_b.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key b");
+        fs::write(db_b.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend b");
+
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+
+        let status_a = runtime_a.get_sync_status().await.expect("status a");
+        let status_b = runtime_b.get_sync_status().await.expect("status b");
+        assert_eq!(status_a.local_author_pubkey, status_b.local_author_pubkey);
+
+        let endpoint_a = status_a.discovery.local_endpoint_id;
+        let endpoint_b = status_b.discovery.local_endpoint_id;
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        let addr_hint_a = ticket_a
+            .split_once('@')
+            .map(|(_, addr)| addr.to_string())
+            .expect("addr hint a");
+        let addr_hint_b = ticket_b
+            .split_once('@')
+            .map(|(_, addr)| addr.to_string())
+            .expect("addr hint b");
+        let base_url = "https://community.example.com";
+
+        *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.to_string(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        base_url,
+                        vec![relay_url.to_string()],
+                        vec![
+                            CommunityNodeSeedPeer::new(
+                                endpoint_b.as_str(),
+                                Some(addr_hint_b.clone()),
+                            )
+                            .expect("seed peer b"),
+                        ],
+                    )
+                    .expect("resolved urls a"),
+                ),
+            }],
+        };
+        *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: base_url.to_string(),
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        base_url,
+                        vec![relay_url.to_string()],
+                        vec![
+                            CommunityNodeSeedPeer::new(
+                                endpoint_a.as_str(),
+                                Some(addr_hint_a.clone()),
+                            )
+                            .expect("seed peer a"),
+                        ],
+                    )
+                    .expect("resolved urls b"),
+                ),
+            }],
+        };
+
+        timeout(
+            Duration::from_secs(15),
+            runtime_a.apply_runtime_connectivity_assist(),
+        )
+        .await
+        .expect("apply assist a timeout")
+        .expect("apply assist a");
+        timeout(
+            Duration::from_secs(15),
+            runtime_a.apply_effective_seed_peers(),
+        )
+        .await
+        .expect("apply seed peers a timeout")
+        .expect("apply seed peers a");
+        timeout(
+            Duration::from_secs(15),
+            runtime_b.apply_runtime_connectivity_assist(),
+        )
+        .await
+        .expect("apply assist b timeout")
+        .expect("apply assist b");
+        timeout(
+            Duration::from_secs(15),
+            runtime_b.apply_effective_seed_peers(),
+        )
+        .await
+        .expect("apply seed peers b timeout")
+        .expect("apply seed peers b");
+
+        let topic = "kukuri:topic:community-node-relay-assist-shared";
+        let scope = TimelineScope::Public;
+        let _ = timeout(
+            Duration::from_secs(15),
+            runtime_a.list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            }),
+        )
+        .await
+        .expect("subscribe a timeout")
+        .expect("subscribe a");
+        let _ = timeout(
+            Duration::from_secs(15),
+            runtime_b.list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            }),
+        )
+        .await
+        .expect("subscribe b timeout")
+        .expect("subscribe b");
+
+        wait_for_connected_topic_peer_count(
+            &runtime_a,
+            topic,
+            1,
+            "community-node assist shared topic readiness timeout a",
+        )
+        .await;
+        wait_for_connected_topic_peer_count(
+            &runtime_b,
+            topic,
+            1,
+            "community-node assist shared topic readiness timeout b",
+        )
+        .await;
+
+        let _object_id = replicate_public_post_with_retry(
+            &runtime_a,
+            &runtime_b,
+            topic,
+            "community relay shared hello",
+            "community-node assist shared identity post sync timeout",
+        )
+        .await;
+
+        timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
+            .await
+            .expect("runtime a shutdown timeout");
+        timeout(runtime_shutdown_timeout(), runtime_b.shutdown())
+            .await
+            .expect("runtime b shutdown timeout");
+    }
+
     #[tokio::test]
     async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
         let dir = tempdir().expect("tempdir");

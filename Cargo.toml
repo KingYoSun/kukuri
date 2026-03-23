@@ -37,11 +37,11 @@ futures-util = "0.3.32"
 hex = "0.4.3"
 hkdf = "0.12.4"
 httpdate = "1.0.3"
-iroh = { version = "0.96.1", features = ["address-lookup-mdns", "address-lookup-pkarr-dht"] }
-iroh-docs = "0.96.0"
-iroh-blobs = "0.98.0"
-iroh-gossip = "0.96.0"
-iroh-relay = { version = "0.96.1", features = ["server"] }
+iroh = { version = "0.97.0", features = ["address-lookup-mdns", "address-lookup-pkarr-dht"] }
+iroh-docs = "0.97.0"
+iroh-blobs = "0.99.0"
+iroh-gossip = "0.97.0"
+iroh-relay = { version = "0.97.0", features = ["server"] }
 jsonwebtoken = "9.3.1"
 keyring = { version = "3.6.3", default-features = false }
 chacha20poly1305 = "0.10.1"

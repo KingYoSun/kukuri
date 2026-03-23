@@ -67,7 +67,7 @@
 - access token を endpoint-bound にし、community-node bootstrap が same-subscriber でも current endpoint だけ除外して他 endpoint を seed peer に返すようにした
 - discovery diagnostics を `configured seed / community bootstrap seed / manual ticket` に分離し、relay-only community-node path の接続元を UI と app-api status で判別できるようにした
 - community-node bootstrap peer registration を TTL 付き multi-endpoint table へ更新し、authenticated heartbeat で stale peer を prune/refresh できるようにした
-- desktop の Tauri backend で `mainline::rpc::socket`, `iroh_quinn_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
+- desktop の Tauri backend で `mainline::rpc::socket`, `noq_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落とし、community-node connectivity assist 検証時の iroh internal warning noise を抑制した
 - social graph v1 として `author::<pubkey>` replica を正本にした profile / follow-edge / local relationship projection を導入し、desktop で `profile editor`, `follow/unfollow`, `mutual`, `friend of friend` 表示まで通した
 - community-node relay-only path で `seed_peers` が空のまま固まる経路に bootstrap metadata retry を追加し、topic replica docs sync の self-heal と seed update 時の gossip topic 再購読を入れて `0 clients -> 3 clients simultaneous start` の固着を解消した
 - `ADR 0012` を topic-first private channel audience v1 の現状仕様に更新し、`invite_only` / `friend_only` / `friend_plus`、epoch-aware rotate / freeze、`joined via` / `sharing_state` 契約を固定した

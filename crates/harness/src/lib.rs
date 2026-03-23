@@ -2276,6 +2276,31 @@ fn private_replication_retry_schedule(step_timeout: Duration) -> (usize, Duratio
     (attempts, per_attempt_timeout)
 }
 
+fn public_replication_retry_schedule(
+    step_timeout: Duration,
+    same_author_shared_identity: bool,
+) -> (usize, Duration) {
+    let attempts = if cfg!(target_os = "windows")
+        || std::env::var_os("GITHUB_ACTIONS").is_some()
+        || same_author_shared_identity
+    {
+        3
+    } else {
+        1
+    };
+    let per_attempt_timeout = if attempts > 1 {
+        Duration::from_millis(
+            (step_timeout.as_millis() / attempts as u128)
+                .max(1)
+                .try_into()
+                .expect("public replication timeout fits in u64"),
+        )
+    } else {
+        step_timeout
+    };
+    (attempts, per_attempt_timeout)
+}
+
 struct PublicReplicationLabels<'a> {
     failure: &'a str,
     publisher: &'a str,
@@ -2290,7 +2315,16 @@ async fn replicate_public_post_with_retry(
     step_timeout: Duration,
     labels: PublicReplicationLabels<'_>,
 ) -> Result<String> {
-    let (attempts, attempt_timeout) = private_replication_retry_schedule(step_timeout);
+    let same_author_shared_identity = publisher
+        .get_sync_status()
+        .await
+        .ok()
+        .zip(subscriber.get_sync_status().await.ok())
+        .is_some_and(|(publisher_status, subscriber_status)| {
+            publisher_status.local_author_pubkey == subscriber_status.local_author_pubkey
+        });
+    let (attempts, attempt_timeout) =
+        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
     let mut last_error = None;
 
     for attempt in 1..=attempts {
