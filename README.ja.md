@@ -35,14 +35,17 @@ npx pnpm@10.16.1 dev
 
 - root workspace が実装対象です。
 - `legacy/` は参照専用です。
-- MVP 中は Linux だけを required target にします。
-- Windows、DHT、community-node 連携は後続フェーズです。
+- 現在の desktop target は Linux / Windows です。
+- 現在の network scope には static-peer、seeded DHT、community-node connectivity/auth が含まれます。
+- UI/UX 作業は `docs/adr/0014-uiux-dev-flow.md` と `docs/DESIGN.md` に従います。
 - 新規参加者は `AGENTS.md -> docs/*` だけで着手できます。
 
 ## ドキュメント
 
 - overview: `docs/README.md`
 - decision: `docs/adr/0001-linux-first-mvp.md`
+- ui/ux flow: `docs/adr/0014-uiux-dev-flow.md`
+- design rules: `docs/DESIGN.md`
 - runbook: `docs/runbooks/dev.md`
 - progress: `docs/progress/2026-03-10-foundation.md`
 

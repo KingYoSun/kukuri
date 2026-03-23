@@ -6,11 +6,13 @@
 - `docs/README.md`
 - `docs/runbooks/dev.md`
 - `docs/progress/2026-03-10-foundation.md`
+- `docs/DESIGN.md`（UI/UX 作業時）
 
 ## 作業対象
 - 新規実装・修正は原則 root workspace の現行実装のみ。
 - `legacy/` は参照専用。移植かユーザー明示依頼がない限り編集しない。
-- Phase6 着手前の現行スコープでは Windows 対応、DHT discovery、community-node 連携を追加しない。
+- 現行スコープの最新状態は `docs/progress/2026-03-10-foundation.md` を優先する。
+- Windows desktop support、seeded DHT discovery、community-node connectivity/auth、social graph v1、private channel audience v1 は current scope に含まれる。
 
 ## 実行入口
 - `cargo xtask doctor`
@@ -23,6 +25,8 @@
 - 仕様: `docs/adr/`
 - 実行手順: `docs/runbooks/`
 - 現状: `docs/progress/`
+- デザインルール: `docs/DESIGN.md`
+- UI review record: `docs/ui-reviews/`
 - 振る舞い: `crates/*` のテストと `harness/scenarios/`
 
 ## ガードレール
