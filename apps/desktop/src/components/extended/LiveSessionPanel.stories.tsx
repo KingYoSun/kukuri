@@ -13,6 +13,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+const STORY_TIMESTAMP = 1_742_860_800_000;
+
 const STORY_ARGS = {
   status: 'ready',
   error: null,
@@ -28,7 +30,7 @@ const STORY_ARGS = {
         title: 'Launch Party',
         description: 'Watch along',
         status: 'Live',
-        started_at: Date.now(),
+        started_at: STORY_TIMESTAMP,
         ended_at: null,
         viewer_count: 4,
         joined_by_me: true,
@@ -73,7 +75,7 @@ function LiveStory({
             title: 'Launch Party',
             description: 'Watch along',
             status: 'Live',
-            started_at: Date.now(),
+            started_at: STORY_TIMESTAMP,
             ended_at: null,
             viewer_count: 4,
             joined_by_me: true,

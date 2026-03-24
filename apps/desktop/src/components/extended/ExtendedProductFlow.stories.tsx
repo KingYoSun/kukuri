@@ -18,6 +18,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+const STORY_TIMESTAMP = 1_742_860_800_000;
+
 function ExtendedProductFlowStory({ width }: { width: number }) {
   const [profileFields, setProfileFields] = useState({
     displayName: 'Local Author',
@@ -117,7 +119,7 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
                 title: 'Launch Party',
                 description: 'watch party',
                 status: 'Live',
-                started_at: Date.now(),
+                started_at: STORY_TIMESTAMP,
                 ended_at: null,
                 viewer_count: 4,
                 joined_by_me: true,
@@ -156,7 +158,7 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
                 { participant_id: 'alice', label: 'Alice', score: 2 },
                 { participant_id: 'bob', label: 'Bob', score: 1 },
               ],
-              updated_at: Date.now(),
+              updated_at: STORY_TIMESTAMP,
               channel_id: 'channel-1',
               audience_label: 'Core Contributors',
             },
