@@ -10,10 +10,23 @@ import {
   useState,
 } from 'react';
 
+import { ContextPane } from '@/components/shell/ContextPane';
+import { ShellFrame } from '@/components/shell/ShellFrame';
+import { ShellNavRail } from '@/components/shell/ShellNavRail';
+import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
+import { ShellTopBar } from '@/components/shell/ShellTopBar';
+import {
+  type ContextPaneMode,
+  type PrimarySection,
+  type SettingsSection,
+  type ShellChromeState,
+} from '@/components/shell/types';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -69,6 +82,10 @@ const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };
 const REFRESH_INTERVAL_MS = 2000;
 const VIDEO_POSTER_TIMEOUT_MS = 5000;
 const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
+const SHELL_WORKSPACE_ID = 'shell-primary-workspace';
+const SHELL_NAV_ID = 'shell-nav-rail';
+const SHELL_CONTEXT_ID = 'shell-context-pane';
+const SHELL_SETTINGS_ID = 'shell-settings-drawer';
 const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
   mode: 'seeded_dht',
   connect_mode: 'direct_only',
@@ -101,6 +118,60 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
     last_discovery_error: null,
   },
 };
+
+const PRIMARY_SECTION_ITEMS: Array<{
+  id: PrimarySection;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'timeline',
+    label: 'Timeline',
+    description: 'Jump to the main feed, scope, and refresh controls.',
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    description: 'Private channel controls, invite import, and composer.',
+  },
+  {
+    id: 'live',
+    label: 'Live',
+    description: 'Live session creation and active session status.',
+  },
+  {
+    id: 'game',
+    label: 'Game',
+    description: 'Game room creation, score editing, and room status.',
+  },
+];
+
+const SETTINGS_SECTION_COPY: Array<{
+  id: SettingsSection;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'profile',
+    label: 'Profile',
+    description: 'Edit your local profile without leaving the workspace.',
+  },
+  {
+    id: 'connectivity',
+    label: 'Connectivity',
+    description: 'Sync summary, peer tickets, and global error visibility.',
+  },
+  {
+    id: 'discovery',
+    label: 'Discovery',
+    description: 'Seeded DHT configuration and discovery diagnostics.',
+  },
+  {
+    id: 'community-node',
+    label: 'Community Node',
+    description: 'Configured community nodes, auth, consent, and refresh actions.',
+  },
+];
 
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
@@ -257,6 +328,33 @@ function seedPeersToEditorValue(config: DiscoveryConfig): string {
 
 function communityNodesToEditorValue(config: CommunityNodeConfig): string {
   return config.nodes.map((node) => node.base_url).join('\n');
+}
+
+function syncStatusBadgeTone(syncStatus: SyncStatus): 'accent' | 'destructive' | 'warning' {
+  if (syncStatus.last_error) {
+    return 'destructive';
+  }
+  return syncStatus.connected ? 'accent' : 'warning';
+}
+
+function syncStatusBadgeLabel(syncStatus: SyncStatus): string {
+  if (syncStatus.last_error) {
+    return 'error';
+  }
+  return syncStatus.connected ? 'connected' : 'waiting';
+}
+
+function topicConnectionLabel(diagnostic?: TopicSyncStatus): string {
+  if (!diagnostic) {
+    return 'idle';
+  }
+  if (diagnostic.connected_peers.length > 0) {
+    return 'joined';
+  }
+  if (diagnostic.assist_peer_ids.length > 0) {
+    return 'relay-assisted';
+  }
+  return diagnostic.joined ? 'joined' : 'idle';
 }
 
 function communityNodeConnectivityUrlsLabel(status?: CommunityNodeNodeStatus): string {
@@ -771,10 +869,27 @@ export function App({ api = runtimeApi }: AppProps) {
   const [gameError, setGameError] = useState<string | null>(null);
   const [gameDrafts, setGameDrafts] = useState<Record<string, GameEditorDraft>>({});
   const [error, setError] = useState<string | null>(null);
+  const [shellChromeState, setShellChromeState] = useState<ShellChromeState>({
+    activePrimarySection: 'timeline',
+    activeContextPaneMode: 'thread',
+    activeSettingsSection: 'profile',
+    navOpen: false,
+    contextOpen: false,
+    settingsOpen: false,
+  });
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
+  const navTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
+    timeline: null,
+    channels: null,
+    live: null,
+    game: null,
+  });
 
   const headline = useMemo(
     () => {
@@ -1147,6 +1262,115 @@ export function App({ api = runtimeApi }: AppProps) {
     };
   }, [api, mediaObjectUrls, previewableMediaAttachments]);
 
+  useEffect(() => {
+    if (!selectedThread) {
+      return;
+    }
+    setShellChromeState((current) => ({
+      ...current,
+      activeContextPaneMode: 'thread',
+      contextOpen: true,
+    }));
+  }, [selectedThread]);
+
+  useEffect(() => {
+    if (!selectedAuthorPubkey) {
+      return;
+    }
+    setShellChromeState((current) => ({
+      ...current,
+      activeContextPaneMode: 'author',
+      contextOpen: true,
+    }));
+  }, [selectedAuthorPubkey]);
+
+  const setNavOpen = useCallback((open: boolean, restoreToTrigger = false) => {
+    setShellChromeState((current) => ({
+      ...current,
+      navOpen: open,
+    }));
+    if (!open && restoreToTrigger) {
+      window.requestAnimationFrame(() => {
+        navTriggerRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const setContextOpen = useCallback((open: boolean, restoreToTrigger = false) => {
+    setShellChromeState((current) => ({
+      ...current,
+      contextOpen: open,
+    }));
+    if (!open && restoreToTrigger) {
+      window.requestAnimationFrame(() => {
+        contextTriggerRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const setSettingsOpen = useCallback((open: boolean, restoreToTrigger = false) => {
+    setShellChromeState((current) => ({
+      ...current,
+      settingsOpen: open,
+    }));
+    if (!open && restoreToTrigger) {
+      window.requestAnimationFrame(() => {
+        settingsTriggerRef.current?.focus();
+      });
+    }
+  }, []);
+
+  function setPrimarySectionRef(section: PrimarySection) {
+    return (element: HTMLElement | null) => {
+      primarySectionRefs.current[section] = element;
+    };
+  }
+
+  function focusPrimarySection(section: PrimarySection) {
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: section,
+      navOpen: false,
+    }));
+    window.requestAnimationFrame(() => {
+      primarySectionRefs.current[section]?.focus();
+    });
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (shellChromeState.settingsOpen) {
+        event.preventDefault();
+        setSettingsOpen(false, true);
+        return;
+      }
+      if (shellChromeState.contextOpen) {
+        event.preventDefault();
+        setContextOpen(false, true);
+        return;
+      }
+      if (shellChromeState.navOpen) {
+        event.preventDefault();
+        setNavOpen(false, true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    setContextOpen,
+    setNavOpen,
+    setSettingsOpen,
+    shellChromeState.contextOpen,
+    shellChromeState.navOpen,
+    shellChromeState.settingsOpen,
+  ]);
+
   function nextDraftId(): string {
     draftSequenceRef.current += 1;
     return `draft-${draftSequenceRef.current}`;
@@ -1226,12 +1450,21 @@ export function App({ api = runtimeApi }: AppProps) {
     setTrackedTopics(nextTopics);
     setActiveTopic(nextTopic);
     setTopicInput('');
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+      navOpen: false,
+    }));
     clearThreadContext();
     await loadTopics(nextTopics, nextTopic, null);
   }
 
   async function handleSelectTopic(topic: string) {
     setActiveTopic(topic);
+    setShellChromeState((current) => ({
+      ...current,
+      navOpen: false,
+    }));
     clearThreadContext();
     await loadTopics(trackedTopics, topic, null);
   }
@@ -1245,6 +1478,10 @@ export function App({ api = runtimeApi }: AppProps) {
     await api.unsubscribeTopic(topic);
     setTrackedTopics(nextTopics);
     setActiveTopic(nextActiveTopic);
+    setShellChromeState((current) => ({
+      ...current,
+      navOpen: false,
+    }));
     clearThreadContext();
     await loadTopics(nextTopics, nextActiveTopic, null);
   }
@@ -1254,6 +1491,10 @@ export function App({ api = runtimeApi }: AppProps) {
     setTimelineScopeByTopic((current) => ({
       ...current,
       [activeTopic]: nextScope,
+    }));
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
     }));
     await loadTopics(trackedTopics, activeTopic, selectedThread);
   }
@@ -1293,6 +1534,10 @@ export function App({ api = runtimeApi }: AppProps) {
           kind: 'private_channel',
           channel_id: channel.channel_id,
         },
+      }));
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'channels',
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (channelCreateError) {
@@ -1388,6 +1633,10 @@ export function App({ api = runtimeApi }: AppProps) {
     setInviteTokenInput('');
     setInviteOutput(null);
     setChannelError(null);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'channels',
+    }));
     clearThreadContext();
     await loadTopics(nextTopics, topicId, null);
   }
@@ -1492,6 +1741,10 @@ export function App({ api = runtimeApi }: AppProps) {
       setDraftMediaItems([]);
       setAttachmentInputKey((value) => value + 1);
       setComposerError(null);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'channels',
+      }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       setReplyTarget(null);
     } catch (publishError) {
@@ -1550,6 +1803,11 @@ export function App({ api = runtimeApi }: AppProps) {
       startTransition(() => {
         setSelectedThread(threadId);
         setThread(threadView.items);
+        setShellChromeState((current) => ({
+          ...current,
+          activeContextPaneMode: 'thread',
+          contextOpen: true,
+        }));
       });
     } catch (threadError) {
       setError(threadError instanceof Error ? threadError.message : 'failed to load thread');
@@ -1577,6 +1835,11 @@ export function App({ api = runtimeApi }: AppProps) {
       setSelectedAuthorPubkey(authorPubkey);
       setSelectedAuthor(socialView);
       setAuthorError(null);
+      setShellChromeState((current) => ({
+        ...current,
+        activeContextPaneMode: 'author',
+        contextOpen: true,
+      }));
     } catch (detailError) {
       setAuthorError(detailError instanceof Error ? detailError.message : 'failed to load author');
     }
@@ -1753,6 +2016,10 @@ export function App({ api = runtimeApi }: AppProps) {
       setLiveTitle('');
       setLiveDescription('');
       setLiveError(null);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'live',
+      }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (liveCreateError) {
       setLiveError(
@@ -1821,6 +2088,10 @@ export function App({ api = runtimeApi }: AppProps) {
       setGameDescription('');
       setGameParticipantsInput('');
       setGameError(null);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'game',
+      }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (createError) {
       setGameError(createError instanceof Error ? createError.message : 'failed to create game room');
@@ -2069,974 +2340,536 @@ export function App({ api = runtimeApi }: AppProps) {
     );
   }
 
-  return (
-    <main className='shell'>
-      <section className='hero'>
-        <div>
-          <p className='eyebrow'>kukuri rebuild</p>
-          <h1>{headline}</h1>
-          <p className='lede'>
-            topic, timeline, composer, thread, sync status の5要素だけで Linux MVP を成立させる
-            desktop shell
-          </p>
-        </div>
-        <Label>
-          <span>Add Topic</span>
-          <div className='topic-input-row'>
-            <Input
-              value={topicInput}
-              onChange={(e) => setTopicInput(e.target.value)}
-              placeholder='kukuri:topic:demo'
-            />
-            <Button variant='secondary' onClick={() => void handleAddTopic()}>
-              Add
-            </Button>
-          </div>
-        </Label>
-      </section>
+  const statusBadges = (
+    <div className='shell-status-badges'>
+      <StatusBadge
+        label={syncStatusBadgeLabel(syncStatus)}
+        tone={syncStatusBadgeTone(syncStatus)}
+      />
+      <StatusBadge label={`${syncStatus.peer_count} peers`} />
+      <StatusBadge
+        label={syncStatus.discovery.mode === 'seeded_dht' ? 'seeded dht' : 'static peers'}
+      />
+      {syncStatus.pending_events > 0 ? (
+        <StatusBadge label={`${syncStatus.pending_events} pending`} tone='warning' />
+      ) : null}
+    </div>
+  );
 
-      <section className='grid'>
-        <Card as='aside' tone='accent'>
-          <h2>Sync Status</h2>
-          <dl className='status-grid'>
-            <div>
-              <dt>Connected</dt>
-              <dd>{syncStatus.connected ? 'yes' : 'no'}</dd>
+  const topicList = (
+    <ul>
+      {trackedTopics.map((topic) => (
+        <li
+          key={topic}
+          className={topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'}
+        >
+          <button className='topic-link' type='button' onClick={() => void handleSelectTopic(topic)}>
+            <span className='shell-topic-link-label' title={topic}>
+              {topic}
+            </span>
+          </button>
+          {trackedTopics.length > 1 ? (
+            <button
+              className='topic-remove'
+              type='button'
+              aria-label={`Remove ${topic}`}
+              onClick={() => void handleRemoveTopic(topic)}
+            >
+              x
+            </button>
+          ) : null}
+          <div className='topic-diagnostic'>
+            <span>
+              {topicConnectionLabel(topicDiagnostics[topic])} / peers:{' '}
+              {topicDiagnostics[topic]?.peer_count ?? 0}
+            </span>
+            <small>
+              {topicDiagnostics[topic]?.last_received_at
+                ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
+                : 'no events'}
+            </small>
+          </div>
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>expected: {topicDiagnostics[topic]?.configured_peer_ids.length ?? 0}</span>
+            <span>missing: {topicDiagnostics[topic]?.missing_peer_ids.length ?? 0}</span>
+          </div>
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>{topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}</span>
+          </div>
+          {topicDiagnostics[topic]?.last_error ? (
+            <div className='topic-diagnostic topic-diagnostic-error'>
+              <span>error: {topicDiagnostics[topic].last_error}</span>
             </div>
-            <div>
-              <dt>Peers</dt>
-              <dd>{syncStatus.peer_count}</dd>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+
+  const settingsSections = [
+    {
+      ...SETTINGS_SECTION_COPY[0],
+      content: (
+        <Card>
+          <CardHeader>
+            <h3>My Profile</h3>
+            <small>
+              {authorDisplayLabel(
+                syncStatus.local_author_pubkey,
+                localProfile?.display_name,
+                localProfile?.name
+              )}
+            </small>
+          </CardHeader>
+          <form className='composer composer-compact' onSubmit={handleSaveProfile}>
+            <Label>
+              <span>Display Name</span>
+              <Input
+                value={profileDraft.display_name ?? ''}
+                onChange={(event) => {
+                  setProfileDraft((current) => ({
+                    ...current,
+                    display_name: event.target.value,
+                  }));
+                  setProfileDirty(true);
+                }}
+                placeholder='Visible label'
+              />
+            </Label>
+            <Label>
+              <span>Name</span>
+              <Input
+                value={profileDraft.name ?? ''}
+                onChange={(event) => {
+                  setProfileDraft((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }));
+                  setProfileDirty(true);
+                }}
+                placeholder='Canonical name'
+              />
+            </Label>
+            <Label>
+              <span>About</span>
+              <Textarea
+                value={profileDraft.about ?? ''}
+                onChange={(event) => {
+                  setProfileDraft((current) => ({
+                    ...current,
+                    about: event.target.value,
+                  }));
+                  setProfileDirty(true);
+                }}
+                className='ticket-output'
+                placeholder='Short bio'
+              />
+            </Label>
+            <Label>
+              <span>Picture URL</span>
+              <Input
+                value={profileDraft.picture ?? ''}
+                onChange={(event) => {
+                  setProfileDraft((current) => ({
+                    ...current,
+                    picture: event.target.value,
+                  }));
+                  setProfileDirty(true);
+                }}
+                placeholder='https://...'
+              />
+            </Label>
+            {profileError ? <p className='error error-inline'>{profileError}</p> : null}
+            <div className='discovery-actions'>
+              <Button variant='secondary' type='submit' disabled={!profileDirty}>
+                Save Profile
+              </Button>
+              <Button
+                variant='secondary'
+                type='button'
+                disabled={!profileDirty}
+                onClick={() => {
+                  if (!localProfile) {
+                    return;
+                  }
+                  setProfileDraft(profileInputFromProfile(localProfile));
+                  setProfileDirty(false);
+                  setProfileError(null);
+                }}
+              >
+                Reset
+              </Button>
             </div>
-            <div>
-              <dt>Pending</dt>
-              <dd>{syncStatus.pending_events}</dd>
-            </div>
-          </dl>
-          <div className='diagnostic-block'>
-            <strong>Configured Peers</strong>
-            <p>{syncStatus.configured_peers.length > 0 ? syncStatus.configured_peers.join(', ') : 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Connection Detail</strong>
-            <p>{syncStatus.status_detail}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Effective Peers</strong>
-            <p>{effectivePeerIds.join(', ') || 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Last Error</strong>
-            <p className={syncStatus.last_error ? 'diagnostic-error' : undefined}>
-              {syncStatus.last_error ?? 'none'}
-            </p>
-          </div>
-          <Card className='panel-subsection'>
+          </form>
+        </Card>
+      ),
+    },
+    {
+      ...SETTINGS_SECTION_COPY[1],
+      content: (
+        <div className='shell-main-stack'>
+          <Card>
             <CardHeader>
-              <h3>My Profile</h3>
-              <small>{authorDisplayLabel(syncStatus.local_author_pubkey, localProfile?.display_name, localProfile?.name)}</small>
+              <h3>Sync Status</h3>
+              <small>{syncStatus.connected ? 'connected' : 'waiting'}</small>
             </CardHeader>
-            <form className='composer composer-compact' onSubmit={handleSaveProfile}>
-              <Label>
-                <span>Display Name</span>
-                <Input
-                  value={profileDraft.display_name ?? ''}
-                  onChange={(event) => {
-                    setProfileDraft((current) => ({
-                      ...current,
-                      display_name: event.target.value,
-                    }));
-                    setProfileDirty(true);
-                  }}
-                  placeholder='Visible label'
-                />
-              </Label>
-              <Label>
-                <span>Name</span>
-                <Input
-                  value={profileDraft.name ?? ''}
-                  onChange={(event) => {
-                    setProfileDraft((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }));
-                    setProfileDirty(true);
-                  }}
-                  placeholder='Canonical name'
-                />
-              </Label>
-              <Label>
-                <span>About</span>
-                <Textarea
-                  value={profileDraft.about ?? ''}
-                  onChange={(event) => {
-                    setProfileDraft((current) => ({
-                      ...current,
-                      about: event.target.value,
-                    }));
-                    setProfileDirty(true);
-                  }}
-                  className='ticket-output'
-                  placeholder='Short bio'
-                />
-              </Label>
-              <Label>
-                <span>Picture URL</span>
-                <Input
-                  value={profileDraft.picture ?? ''}
-                  onChange={(event) => {
-                    setProfileDraft((current) => ({
-                      ...current,
-                      picture: event.target.value,
-                    }));
-                    setProfileDirty(true);
-                  }}
-                  placeholder='https://...'
-                />
-              </Label>
-              {profileError ? <p className='error error-inline'>{profileError}</p> : null}
-              <div className='discovery-actions'>
-                <Button variant='secondary' type='submit' disabled={!profileDirty}>
-                  Save Profile
-                </Button>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  disabled={!profileDirty}
-                  onClick={() => {
-                    if (!localProfile) {
-                      return;
-                    }
-                    setProfileDraft(profileInputFromProfile(localProfile));
-                    setProfileDirty(false);
-                    setProfileError(null);
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
-            </form>
-          </Card>
-          <Card className='panel-subsection discovery-panel'>
-            <CardHeader>
-              <h3>Discovery</h3>
-              <small>{syncStatus.discovery.mode}</small>
-            </CardHeader>
-            <dl className='status-grid status-grid-compact'>
+            <dl className='status-grid'>
               <div>
-                <dt>Mode</dt>
-                <dd>{syncStatus.discovery.mode}</dd>
+                <dt>Connected</dt>
+                <dd>{syncStatus.connected ? 'yes' : 'no'}</dd>
               </div>
               <div>
-                <dt>Connect</dt>
-                <dd>{syncStatus.discovery.connect_mode}</dd>
+                <dt>Peers</dt>
+                <dd>{syncStatus.peer_count}</dd>
               </div>
               <div>
-                <dt>Env Lock</dt>
-                <dd>{discoveryConfig.env_locked ? 'yes' : 'no'}</dd>
+                <dt>Pending</dt>
+                <dd>{syncStatus.pending_events}</dd>
               </div>
             </dl>
             <div className='diagnostic-block'>
-              <strong>Local Endpoint ID</strong>
-              <p>{syncStatus.discovery.local_endpoint_id || 'unknown'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Connected Peers</strong>
-              <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Relay-assisted Peers</strong>
-              <p>{syncStatus.discovery.assist_peer_ids.join(', ') || 'none'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Manual Ticket Peers</strong>
-              <p>{syncStatus.discovery.manual_ticket_peer_ids.join(', ') || 'none'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Community Bootstrap Peers</strong>
-              <p>{syncStatus.discovery.bootstrap_seed_peer_ids.join(', ') || 'none'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Configured Seed IDs</strong>
-              <p>{syncStatus.discovery.configured_seed_peer_ids.join(', ') || 'none'}</p>
-            </div>
-            <Label>
-              <span>Seed Peers</span>
-              <Textarea
-                value={discoverySeedInput}
-                onChange={(event) => {
-                  setDiscoverySeedInput(event.target.value);
-                  setDiscoveryEditorDirty(true);
-                }}
-                readOnly={discoveryConfig.env_locked}
-                className='ticket-output discovery-editor'
-                placeholder='node_id or node_id@host:port'
-              />
-            </Label>
-            <div className='diagnostic-block'>
-              <strong>Discovery Error</strong>
-              <p
-                className={
-                  discoveryError || syncStatus.discovery.last_discovery_error
-                    ? 'diagnostic-error'
-                    : undefined
-                }
-              >
-                {discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none'}
+              <strong>Configured Peers</strong>
+              <p>
+                {syncStatus.configured_peers.length > 0
+                  ? syncStatus.configured_peers.join(', ')
+                  : 'none'}
               </p>
             </div>
-            <div className='discovery-actions'>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={discoveryConfig.env_locked || !discoveryEditorDirty}
-                onClick={() => void handleSaveDiscoverySeeds()}
-              >
-                Save Seeds
-              </Button>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!discoveryEditorDirty}
-                onClick={() => {
-                  setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
-                  setDiscoveryEditorDirty(false);
-                  setDiscoveryError(null);
-                }}
-              >
-                Reset
-              </Button>
+            <div className='diagnostic-block'>
+              <strong>Connection Detail</strong>
+              <p>{syncStatus.status_detail}</p>
             </div>
+            <div className='diagnostic-block'>
+              <strong>Effective Peers</strong>
+              <p>{effectivePeerIds.join(', ') || 'none'}</p>
+            </div>
+            <div className='diagnostic-block'>
+              <strong>Last Error</strong>
+              <p className={syncStatus.last_error ? 'diagnostic-error' : undefined}>
+                {syncStatus.last_error ?? 'none'}
+              </p>
+            </div>
+            {error ? (
+              <Notice tone='destructive' className='mt-4'>
+                {error}
+              </Notice>
+            ) : null}
           </Card>
-          <Card className='panel-subsection discovery-panel'>
+
+          <Card>
             <CardHeader>
-              <h3>Community Node</h3>
-              <small>{communityNodeStatuses.length} configured</small>
+              <h3>Peer Tickets</h3>
+              <small>manual connectivity</small>
             </CardHeader>
             <Label>
-              <span>Base URLs</span>
-              <Textarea
-                value={communityNodeInput}
-                onChange={(event) => {
-                  setCommunityNodeInput(event.target.value);
-                  setCommunityNodeEditorDirty(true);
-                }}
-                className='ticket-output discovery-editor'
-                placeholder='https://community.example.com'
+              <span>Your Ticket</span>
+              <Textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
+            </Label>
+            <Label>
+              <span>Peer Ticket</span>
+              <Input
+                value={peerTicket}
+                onChange={(event) => setPeerTicket(event.target.value)}
+                placeholder='nodeid@127.0.0.1:7777'
               />
             </Label>
-            <div className='diagnostic-block'>
-              <strong>Community Node Error</strong>
-              <p className={communityNodeError ? 'diagnostic-error' : undefined}>
-                {communityNodeError ?? 'none'}
-              </p>
-            </div>
-            <div className='discovery-actions'>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!communityNodeEditorDirty}
-                onClick={() => void handleSaveCommunityNodes()}
-              >
-                Save Nodes
-              </Button>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!communityNodeEditorDirty}
-                onClick={() => {
-                  setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
-                  setCommunityNodeEditorDirty(false);
-                  setCommunityNodeError(null);
-                }}
-              >
-                Reset
-              </Button>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={communityNodeConfig.nodes.length === 0}
-                onClick={() => void handleClearCommunityNodes()}
-              >
-                Clear
-              </Button>
-            </div>
-            {communityNodeConfig.nodes.map((node) => {
-              const status = communityNodeStatusByBaseUrl[node.base_url];
-              return (
-                <div key={node.base_url} className='diagnostic-block'>
-                  <strong>{node.base_url}</strong>
-                  <p>
-                    auth:{' '}
-                    {status?.auth_state.authenticated
-                      ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
-                      : 'no'}
-                  </p>
-                  <p>
-                    consent:{' '}
-                    {status?.consent_state
-                      ? status.consent_state.all_required_accepted
-                        ? 'accepted'
-                        : 'required'
-                      : 'unknown'}
-                  </p>
-                  <p>
-                    connectivity urls:{' '}
-                    {communityNodeConnectivityUrlsLabel(status)}
-                  </p>
-                  <p>session activation: {communityNodeSessionActivationLabel(status)}</p>
-                  <p>next step: {communityNodeNextStepLabel(status)}</p>
-                  <div className='discovery-actions'>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() => void handleAuthenticateCommunityNode(node.base_url)}
-                    >
-                      Authenticate
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() => void handleFetchCommunityNodeConsents(node.base_url)}
-                    >
-                      Consents
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() => void handleAcceptCommunityNodeConsents(node.base_url)}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() => void handleRefreshCommunityNode(node.base_url)}
-                    >
-                      Refresh
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() => void handleClearCommunityNodeToken(node.base_url)}
-                    >
-                      Clear Token
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+            <Button variant='secondary' onClick={() => void handleImportPeer()}>
+              Import Peer
+            </Button>
           </Card>
+        </div>
+      ),
+    },
+    {
+      ...SETTINGS_SECTION_COPY[2],
+      content: (
+        <Card className='discovery-panel'>
+          <CardHeader>
+            <h3>Discovery</h3>
+            <small>{syncStatus.discovery.mode}</small>
+          </CardHeader>
+          <dl className='status-grid status-grid-compact'>
+            <div>
+              <dt>Mode</dt>
+              <dd>{syncStatus.discovery.mode}</dd>
+            </div>
+            <div>
+              <dt>Connect</dt>
+              <dd>{syncStatus.discovery.connect_mode}</dd>
+            </div>
+            <div>
+              <dt>Env Lock</dt>
+              <dd>{discoveryConfig.env_locked ? 'yes' : 'no'}</dd>
+            </div>
+          </dl>
+          <div className='diagnostic-block'>
+            <strong>Local Endpoint ID</strong>
+            <p>{syncStatus.discovery.local_endpoint_id || 'unknown'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Connected Peers</strong>
+            <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Relay-assisted Peers</strong>
+            <p>{syncStatus.discovery.assist_peer_ids.join(', ') || 'none'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Manual Ticket Peers</strong>
+            <p>{syncStatus.discovery.manual_ticket_peer_ids.join(', ') || 'none'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Community Bootstrap Peers</strong>
+            <p>{syncStatus.discovery.bootstrap_seed_peer_ids.join(', ') || 'none'}</p>
+          </div>
+          <div className='diagnostic-block'>
+            <strong>Configured Seed IDs</strong>
+            <p>{syncStatus.discovery.configured_seed_peer_ids.join(', ') || 'none'}</p>
+          </div>
           <Label>
-            <span>Your Ticket</span>
-            <Textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
-          </Label>
-          <Label>
-            <span>Peer Ticket</span>
-            <Input
-              value={peerTicket}
-              onChange={(e) => setPeerTicket(e.target.value)}
-              placeholder='nodeid@127.0.0.1:7777'
+            <span>Seed Peers</span>
+            <Textarea
+              value={discoverySeedInput}
+              onChange={(event) => {
+                setDiscoverySeedInput(event.target.value);
+                setDiscoveryEditorDirty(true);
+              }}
+              readOnly={discoveryConfig.env_locked}
+              className='ticket-output discovery-editor'
+              placeholder='node_id or node_id@host:port'
             />
           </Label>
-          <Button variant='secondary' onClick={() => void handleImportPeer()}>
-            Import Peer
-          </Button>
-          <section className='topic-list'>
-            <div className='panel-header'>
-              <h3>Tracked Topics</h3>
-              <small>{syncStatus.subscribed_topics.length} active</small>
-            </div>
-            <ul>
-              {trackedTopics.map((topic) => (
-                <li
-                  key={topic}
-                  className={topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'}
-                >
-                  <button className='topic-link' type='button' onClick={() => void handleSelectTopic(topic)}>
-                    {topic}
-                  </button>
-                  {trackedTopics.length > 1 ? (
-                    <button
-                      className='topic-remove'
-                      type='button'
-                      onClick={() => void handleRemoveTopic(topic)}
-                    >
-                      x
-                    </button>
-                  ) : null}
-                  <div className='topic-diagnostic'>
-                    <span>
-                      {topicDiagnostics[topic]?.connected_peers.length
-                        ? 'joined'
-                        : topicDiagnostics[topic]?.assist_peer_ids.length
-                          ? 'relay-assisted'
-                          : topicDiagnostics[topic]?.joined
-                            ? 'joined'
-                            : 'idle'} / peers:{' '}
-                      {topicDiagnostics[topic]?.peer_count ?? 0}
-                    </span>
-                    <small>
-                      {topicDiagnostics[topic]?.last_received_at
-                        ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
-                        : 'no events'}
-                    </small>
-                  </div>
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>expected: {topicDiagnostics[topic]?.configured_peer_ids.length ?? 0}</span>
-                    <span>missing: {topicDiagnostics[topic]?.missing_peer_ids.length ?? 0}</span>
-                  </div>
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>{topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}</span>
-                  </div>
-                  {topicDiagnostics[topic]?.last_error ? (
-                    <div className='topic-diagnostic topic-diagnostic-error'>
-                      <span>error: {topicDiagnostics[topic].last_error}</span>
-                    </div>
-                  ) : null}
-                </li>
-                ))}
-              </ul>
-            </section>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2>Timeline</h2>
-            <span className='active-topic-label'>{activeTopic}</span>
+          <div className='diagnostic-block'>
+            <strong>Discovery Error</strong>
+            <p
+              className={
+                discoveryError || syncStatus.discovery.last_discovery_error
+                  ? 'diagnostic-error'
+                  : undefined
+              }
+            >
+              {discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none'}
+            </p>
+          </div>
+          <div className='discovery-actions'>
             <Button
               variant='secondary'
-              onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
+              type='button'
+              disabled={discoveryConfig.env_locked || !discoveryEditorDirty}
+              onClick={() => void handleSaveDiscoverySeeds()}
             >
-              Refresh
+              Save Seeds
             </Button>
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={!discoveryEditorDirty}
+              onClick={() => {
+                setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
+                setDiscoveryEditorDirty(false);
+                setDiscoveryError(null);
+              }}
+            >
+              Reset
+            </Button>
+          </div>
+        </Card>
+      ),
+    },
+    {
+      ...SETTINGS_SECTION_COPY[3],
+      content: (
+        <Card className='discovery-panel'>
+          <CardHeader>
+            <h3>Community Node</h3>
+            <small>{communityNodeStatuses.length} configured</small>
           </CardHeader>
-          <div className='topic-diagnostic'>
-            <Label>
-              <span>View Scope</span>
-              <Select
-                aria-label='View Scope'
-                value={timelineScopeValue(activeTimelineScope)}
-                onChange={(event) => {
-                  void handleTimelineScopeChange(event.target.value);
-                }}
-              >
-                <option value='public'>Public</option>
-                <option value='all_joined'>All joined</option>
-                {activeJoinedChannels.map((channel) => (
-                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
-                    {channel.label}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            <Label>
-              <span>Compose Target</span>
-              <Select
-                aria-label='Compose Target'
-                value={channelRefValue(activeComposeChannel)}
-                disabled={Boolean(replyTarget)}
-                onChange={(event) => handleComposeChannelChange(event.target.value)}
-              >
-                <option value='public'>Public</option>
-                {activeJoinedChannels.map((channel) => (
-                  <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
-                    {channel.label}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-          </div>
-          <div className='topic-diagnostic topic-diagnostic-secondary'>
-            <span>Viewing: {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}</span>
-            <span>Posting to: {activeComposeAudienceLabel}</span>
-          </div>
-          <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
-            <Label>
-              <span>Create Channel</span>
-              <Input
-                value={channelLabelInput}
-                onChange={(event) => setChannelLabelInput(event.target.value)}
-                placeholder='core contributors'
-              />
-            </Label>
-            <Label>
-              <span>Audience</span>
-              <Select
-                aria-label='Channel Audience'
-                value={channelAudienceInput}
-                onChange={(event) =>
-                  setChannelAudienceInput(event.target.value as ChannelAudienceKind)
-                }
-              >
-                <option value='invite_only'>Invite only</option>
-                <option value='friend_only'>Friends</option>
-                <option value='friend_plus'>Friends+</option>
-              </Select>
-            </Label>
-            <Button variant='secondary' type='submit'>
-              Create Channel
-            </Button>
-            {activePrivateChannel?.audience_kind === 'invite_only' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={activeComposeChannel.kind !== 'private_channel'}
-                onClick={() => void handleCreateInvite()}
-              >
-                Create Invite
-              </Button>
-            ) : null}
-            {activePrivateChannel?.audience_kind === 'friend_only' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!activePrivateChannel.is_owner}
-                onClick={() => void handleCreateGrant()}
-              >
-                Create Grant
-              </Button>
-            ) : null}
-            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={activeComposeChannel.kind !== 'private_channel'}
-                onClick={() => void handleCreateShare()}
-              >
-                Create Share
-              </Button>
-            ) : null}
-            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!activePrivateChannel.is_owner}
-                onClick={() => void handleFreezePrivateChannel()}
-              >
-                Freeze
-              </Button>
-            ) : null}
-            {activePrivateChannel?.audience_kind === 'friend_only' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!activePrivateChannel.is_owner}
-                onClick={() => void handleRotatePrivateChannel()}
-              >
-                Rotate
-              </Button>
-            ) : null}
-            {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!activePrivateChannel.is_owner}
-                onClick={() => void handleRotatePrivateChannel()}
-              >
-                Rotate
-              </Button>
-            ) : null}
-          </form>
-          <form className='composer composer-compact' onSubmit={handleJoinInvite}>
-            <Label>
-              <span>Join via Invite</span>
-              <Textarea
-                value={inviteTokenInput}
-                onChange={(event) => setInviteTokenInput(event.target.value)}
-                placeholder='paste private channel invite, friend grant, or friends+ share'
-              />
-            </Label>
-            <Button variant='secondary' type='submit'>
-              Join Invite
-            </Button>
-            <Button variant='secondary' type='button' onClick={() => void handleJoinGrant()}>
-              Join Grant
-            </Button>
-            <Button variant='secondary' type='button' onClick={() => void handleJoinShare()}>
-              Join Share
-            </Button>
-          </form>
-          {inviteOutput ? (
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>
-                {inviteOutputLabel === 'grant'
-                  ? 'Latest grant'
-                  : inviteOutputLabel === 'share'
-                    ? 'Latest share'
-                    : 'Latest invite'}
-              </span>
-              <code>{inviteOutput}</code>
-            </div>
-          ) : null}
-          {activePrivateChannel ? (
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>
-                Policy:{' '}
-                {activePrivateChannel.audience_kind === 'friend_only'
-                  ? 'Friends: only mutual followers can join'
-                  : activePrivateChannel.audience_kind === 'friend_plus'
-                    ? 'Friends+: participants can share to their mutuals'
-                    : 'Invite only'}
-              </span>
-              <span>epoch: {activePrivateChannel.current_epoch_id}</span>
-              <span>sharing: {activePrivateChannel.sharing_state}</span>
-              {activePrivateChannel.joined_via_pubkey ? (
-                <span>joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}</span>
-              ) : null}
-            </div>
-          ) : null}
-          {activePrivateChannel &&
-          (activePrivateChannel.audience_kind === 'friend_only' ||
-            activePrivateChannel.audience_kind === 'friend_plus') ? (
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>participants: {activePrivateChannel.participant_count}</span>
-              <span>stale: {activePrivateChannel.stale_participant_count}</span>
-              <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
-            </div>
-          ) : null}
-          {activePrivateChannel?.audience_kind === 'friend_only' &&
-          activePrivateChannel.rotation_required ? (
-            <div className='topic-diagnostic topic-diagnostic-error'>
-              <span>rotation required: current participants include non-mutual followers</span>
-            </div>
-          ) : null}
-          {channelError ? <p className='error error-inline'>{channelError}</p> : null}
-          <form className='composer' onSubmit={handlePublish}>
-            {replyTarget ? (
-              <div className='reply-banner'>
-                <div>
-                  <strong>Replying</strong>
-                  <p>{replyTarget.content}</p>
-                  <small>Audience: {replyTarget.audience_label}</small>
-                </div>
-                <Button variant='secondary' type='button' onClick={clearReply}>
-                  Clear
-                </Button>
-              </div>
-            ) : null}
+          <Label>
+            <span>Base URLs</span>
             <Textarea
-              value={composer}
-              onChange={(e) => setComposer(e.target.value)}
-              placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
+              value={communityNodeInput}
+              onChange={(event) => {
+                setCommunityNodeInput(event.target.value);
+                setCommunityNodeEditorDirty(true);
+              }}
+              className='ticket-output discovery-editor'
+              placeholder='https://community.example.com'
             />
-            <Label className='file-field'>
-              <span>Attach</span>
-              <Input
-                key={attachmentInputKey}
-                aria-label='Attach'
-                type='file'
-                accept='image/*,video/*'
-                multiple
-                onChange={(event) => {
-                  void handleAttachmentSelection(event);
-                }}
-              />
-            </Label>
-            {composerError ? <p className='error error-inline'>{composerError}</p> : null}
-            {draftMediaItems.length > 0 ? (
-              <ul className='draft-attachment-list'>
-                {draftMediaItems.map((item) => (
-                  <li key={item.id} className='draft-attachment-item'>
-                    <div className='draft-attachment-content'>
-                      <div className='draft-preview-frame'>
-                        <img
-                          className='draft-preview-image'
-                          src={item.preview_url}
-                          alt={`draft preview ${item.source_name}`}
-                        />
-                      </div>
-                      <div>
-                        <strong>{item.source_name}</strong>
-                        {item.attachments.map((attachment) => (
-                          <small key={`${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`}>
-                            {attachment.role ?? 'attachment'} · {attachment.mime} ·{' '}
-                            {formatBytes(attachment.byte_size)}
-                          </small>
-                        ))}
-                      </div>
-                    </div>
-                    <Button variant='secondary' type='button' onClick={() => handleRemoveDraftAttachment(item.id)}>
-                      Remove
-                    </Button>
+          </Label>
+          <div className='diagnostic-block'>
+            <strong>Community Node Error</strong>
+            <p className={communityNodeError ? 'diagnostic-error' : undefined}>
+              {communityNodeError ?? 'none'}
+            </p>
+          </div>
+          <div className='discovery-actions'>
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={!communityNodeEditorDirty}
+              onClick={() => void handleSaveCommunityNodes()}
+            >
+              Save Nodes
+            </Button>
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={!communityNodeEditorDirty}
+              onClick={() => {
+                setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
+                setCommunityNodeEditorDirty(false);
+                setCommunityNodeError(null);
+              }}
+            >
+              Reset
+            </Button>
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={communityNodeConfig.nodes.length === 0}
+              onClick={() => void handleClearCommunityNodes()}
+            >
+              Clear
+            </Button>
+          </div>
+          {communityNodeConfig.nodes.map((node) => {
+            const status = communityNodeStatusByBaseUrl[node.base_url];
+            return (
+              <div key={node.base_url} className='diagnostic-block'>
+                <strong>{node.base_url}</strong>
+                <p>
+                  auth:{' '}
+                  {status?.auth_state.authenticated
+                    ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
+                    : 'no'}
+                </p>
+                <p>
+                  consent:{' '}
+                  {status?.consent_state
+                    ? status.consent_state.all_required_accepted
+                      ? 'accepted'
+                      : 'required'
+                    : 'unknown'}
+                </p>
+                <p>connectivity urls: {communityNodeConnectivityUrlsLabel(status)}</p>
+                <p>session activation: {communityNodeSessionActivationLabel(status)}</p>
+                <p>next step: {communityNodeNextStepLabel(status)}</p>
+                <div className='discovery-actions'>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => void handleAuthenticateCommunityNode(node.base_url)}
+                  >
+                    Authenticate
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => void handleFetchCommunityNodeConsents(node.base_url)}
+                  >
+                    Consents
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => void handleAcceptCommunityNodeConsents(node.base_url)}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => void handleRefreshCommunityNode(node.base_url)}
+                  >
+                    Refresh
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => void handleClearCommunityNodeToken(node.base_url)}
+                  >
+                    Clear Token
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      ),
+    },
+  ];
+
+  const contextTabs = [
+    {
+      id: 'thread' as ContextPaneMode,
+      label: 'Thread',
+      summary: selectedThread ? `${thread.length} posts in thread` : 'Select a post to inspect the thread.',
+      content: (
+        <div className='shell-main-stack'>
+          <Card>
+            <CardHeader>
+              <h3>Thread</h3>
+              <div className='post-actions-inline'>
+                {selectedThread ? (
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => {
+                      setSelectedThread(null);
+                      setThread([]);
+                      clearReply();
+                    }}
+                  >
+                    Close
+                  </Button>
+                ) : null}
+              </div>
+            </CardHeader>
+            {selectedThread ? (
+              <ul className='thread-list'>
+                {thread.map((post) => (
+                  <li key={post.object_id} className='thread-item'>
+                    {renderPostCard(post, 'thread')}
                   </li>
                 ))}
               </ul>
-            ) : null}
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>Audience: {activeComposeAudienceLabel}</span>
-            </div>
-            <Button type='submit'>
-              {replyTarget ? 'Reply' : 'Publish'}
-            </Button>
-          </form>
-          <Card className='panel-subsection'>
-            <CardHeader>
-              <h3>Live Sessions</h3>
-              <small>{activeLiveSessions.length} active</small>
-            </CardHeader>
-            <form className='composer composer-compact' onSubmit={handleCreateLiveSession}>
-              <Label>
-                <span>Live Title</span>
-                <Input
-                  value={liveTitle}
-                  onChange={(event) => setLiveTitle(event.target.value)}
-                  placeholder='Friday stream'
-                />
-              </Label>
-              <Label>
-                <span>Live Description</span>
-                <Textarea
-                  value={liveDescription}
-                  onChange={(event) => setLiveDescription(event.target.value)}
-                  placeholder='short session summary'
-                />
-              </Label>
-              {liveError ? <p className='error error-inline'>{liveError}</p> : null}
-              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>Audience: {activeComposeAudienceLabel}</span>
-              </div>
-              <Button type='submit'>
-                Start Live
-              </Button>
-            </form>
-            {activeLiveSessions.length === 0 ? <p className='empty-state'>No live sessions</p> : null}
-            <ul className='post-list'>
-              {activeLiveSessions.map((session) => {
-                const isOwner = session.host_pubkey === syncStatus.local_author_pubkey;
-                return (
-                  <li key={session.session_id}>
-                    <article className='post-card'>
-                      <div className='post-meta'>
-                        <span>{session.title}</span>
-                        <span>{session.status}</span>
-                        <span className='reply-chip'>{session.audience_label}</span>
-                      </div>
-                      <div className='post-body'>
-                        <strong className='post-title'>{session.description || 'no description'}</strong>
-                      </div>
-                      <small>{session.session_id}</small>
-                      <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>viewers: {session.viewer_count}</span>
-                        <span>
-                          started:{' '}
-                          {new Date(session.started_at).toLocaleTimeString('ja-JP')}
-                        </span>
-                      </div>
-                      {session.ended_at ? (
-                        <div className='topic-diagnostic topic-diagnostic-secondary'>
-                          <span>ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}</span>
-                        </div>
-                      ) : null}
-                      <div className='post-actions'>
-                        {session.joined_by_me ? (
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            onClick={() => void handleLeaveLiveSession(session.session_id)}
-                          >
-                            Leave
-                          </Button>
-                        ) : (
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            disabled={session.status === 'Ended'}
-                            onClick={() => void handleJoinLiveSession(session.session_id)}
-                          >
-                            Join
-                          </Button>
-                        )}
-                        {isOwner ? (
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            disabled={session.status === 'Ended'}
-                            onClick={() => void handleEndLiveSession(session.session_id)}
-                          >
-                            End
-                          </Button>
-                        ) : null}
-                      </div>
-                    </article>
-                  </li>
-                );
-              })}
-            </ul>
+            ) : (
+              <p className='empty'>Select a post to inspect the thread.</p>
+            )}
           </Card>
-          <Card className='panel-subsection'>
-            <CardHeader>
-              <h3>Game Rooms</h3>
-              <small>{activeGameRooms.length} tracked</small>
-            </CardHeader>
-            <form className='composer composer-compact' onSubmit={handleCreateGameRoom}>
-              <Label>
-                <span>Game Title</span>
-                <Input
-                  value={gameTitle}
-                  onChange={(event) => setGameTitle(event.target.value)}
-                  placeholder='Top 8 Finals'
-                />
-              </Label>
-              <Label>
-                <span>Game Description</span>
-                <Textarea
-                  value={gameDescription}
-                  onChange={(event) => setGameDescription(event.target.value)}
-                  placeholder='match summary'
-                />
-              </Label>
-              <Label>
-                <span>Participants</span>
-                <Input
-                  value={gameParticipantsInput}
-                  onChange={(event) => setGameParticipantsInput(event.target.value)}
-                  placeholder='Alice, Bob'
-                />
-              </Label>
-              {gameError ? <p className='error error-inline'>{gameError}</p> : null}
-              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>Audience: {activeComposeAudienceLabel}</span>
-              </div>
-              <Button type='submit'>
-                Create Room
-              </Button>
-            </form>
-            {activeGameRooms.length === 0 ? <p className='empty-state'>No game rooms</p> : null}
-            <ul className='post-list'>
-              {activeGameRooms.map((room) => {
-                const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
-                const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
-                return (
-                  <li key={room.room_id}>
-                    <article className='post-card'>
-                      <div className='post-meta'>
-                        <span>{room.title}</span>
-                        <span>{room.status}</span>
-                        <span className='reply-chip'>{room.audience_label}</span>
-                      </div>
-                      <div className='post-body'>
-                        <strong className='post-title'>{room.description || 'no description'}</strong>
-                      </div>
-                      <small>{room.room_id}</small>
-                      <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>phase: {room.phase_label ?? 'none'}</span>
-                        <span>
-                          updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
-                        </span>
-                      </div>
-                      <ul className='draft-attachment-list'>
-                        {room.scores.map((score) => (
-                          <li key={score.participant_id} className='draft-attachment-item score-row'>
-                            <div className='draft-attachment-content'>
-                              <strong>{score.label}</strong>
-                            </div>
-                            {isOwner ? (
-                              <Input
-                                aria-label={`${room.room_id}-${score.label}-score`}
-                                value={draft.scores[score.participant_id] ?? String(score.score)}
-                                onChange={(event) =>
-                                  updateGameDraft(room.room_id, (current) => ({
-                                    ...current,
-                                    scores: {
-                                      ...current.scores,
-                                      [score.participant_id]: event.target.value,
-                                    },
-                                  }))
-                                }
-                              />
-                            ) : (
-                              <span>{score.score}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                      {isOwner ? (
-                        <div className='composer composer-compact'>
-                          <Label>
-                            <span>Status</span>
-                            <Select
-                              aria-label={`${room.room_id}-status`}
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateGameDraft(room.room_id, (current) => ({
-                                  ...current,
-                                  status: event.target.value as GameRoomStatus,
-                                }))
-                              }
-                            >
-                              <option value='Waiting'>Waiting</option>
-                              <option value='Running'>Running</option>
-                              <option value='Paused'>Paused</option>
-                              <option value='Ended'>Ended</option>
-                            </Select>
-                          </Label>
-                          <Label>
-                            <span>Phase</span>
-                            <Input
-                              aria-label={`${room.room_id}-phase`}
-                              value={draft.phase_label}
-                              onChange={(event) =>
-                                updateGameDraft(room.room_id, (current) => ({
-                                  ...current,
-                                  phase_label: event.target.value,
-                                }))
-                              }
-                            />
-                          </Label>
-                          <Button variant='secondary' type='button' onClick={() => void handleUpdateGameRoom(room)}>
-                            Save Room
-                          </Button>
-                        </div>
-                      ) : null}
-                    </article>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-          <ul className='post-list'>
-            {activeTimeline.map((post) => (
-              <li key={post.object_id}>{renderPostCard(post, 'timeline')}</li>
-            ))}
-          </ul>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2>Thread</h2>
-            <div className='post-actions-inline'>
-              {selectedAuthor ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => {
-                    setSelectedAuthorPubkey(null);
-                    setSelectedAuthor(null);
-                    setAuthorError(null);
-                  }}
-                >
-                  Clear Author
-                </Button>
-              ) : null}
-              {selectedThread ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => {
-                    setSelectedThread(null);
-                    setThread([]);
-                    clearReply();
-                  }}
-                >
-                  Close
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
-          <Card className='panel-subsection'>
+        </div>
+      ),
+    },
+    {
+      id: 'author' as ContextPaneMode,
+      label: 'Author',
+      summary: selectedAuthor
+        ? authorDisplayLabel(
+            selectedAuthor.author_pubkey,
+            selectedAuthor.display_name,
+            selectedAuthor.name
+          )
+        : 'Select an author to inspect profile and relationship.',
+      content: (
+        <div className='shell-main-stack'>
+          <Card>
             <CardHeader>
               <h3>Author Detail</h3>
-              <small>{selectedAuthor ? selectedAuthor.author_pubkey.slice(0, 12) : 'none'}</small>
+              <div className='post-actions-inline'>
+                {selectedAuthor ? (
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    onClick={() => {
+                      setSelectedAuthorPubkey(null);
+                      setSelectedAuthor(null);
+                      setAuthorError(null);
+                    }}
+                  >
+                    Clear Author
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
             {selectedAuthor ? (
               <div className='author-detail'>
@@ -3100,21 +2933,695 @@ export function App({ api = runtimeApi }: AppProps) {
               <p className='empty'>Select an author to inspect profile and relationship.</p>
             )}
           </Card>
-          {selectedThread ? (
-            <ul className='thread-list'>
-              {thread.map((post) => (
-                <li key={post.object_id} className='thread-item'>
-                  {renderPostCard(post, 'thread')}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className='empty'>Select a post to inspect the thread.</p>
-          )}
-        </Card>
-      </section>
+        </div>
+      ),
+    },
+  ];
 
-      {error ? <p className='error'>{error}</p> : null}
-    </main>
+  return (
+    <>
+      <ShellFrame
+        skipTargetId={SHELL_WORKSPACE_ID}
+        topBar={
+          <ShellTopBar
+            headline={headline}
+            activeTopic={activeTopic}
+            statusBadges={statusBadges}
+            navOpen={shellChromeState.navOpen}
+            settingsOpen={shellChromeState.settingsOpen}
+            navControlsId={SHELL_NAV_ID}
+            settingsControlsId={SHELL_SETTINGS_ID}
+            navButtonRef={navTriggerRef}
+            settingsButtonRef={settingsTriggerRef}
+            onToggleNav={() => setNavOpen(!shellChromeState.navOpen)}
+            onToggleSettings={() => setSettingsOpen(!shellChromeState.settingsOpen)}
+          />
+        }
+        navRail={
+          <ShellNavRail
+            railId={SHELL_NAV_ID}
+            open={shellChromeState.navOpen}
+            onOpenChange={(open) => setNavOpen(open, !open)}
+            primaryItems={PRIMARY_SECTION_ITEMS}
+            activePrimarySection={shellChromeState.activePrimarySection}
+            onSelectPrimarySection={focusPrimarySection}
+            addTopicControl={
+              <Label>
+                <span>Add Topic</span>
+                <div className='topic-input-row'>
+                  <Input
+                    value={topicInput}
+                    onChange={(event) => setTopicInput(event.target.value)}
+                    placeholder='kukuri:topic:demo'
+                  />
+                  <Button variant='secondary' onClick={() => void handleAddTopic()}>
+                    Add
+                  </Button>
+                </div>
+              </Label>
+            }
+            topicList={topicList}
+            topicCount={syncStatus.subscribed_topics.length}
+          />
+        }
+        workspace={
+          <div className='shell-main-stack'>
+            <Card className='shell-workspace-card'>
+              <div
+                className='shell-section'
+                ref={setPrimarySectionRef('timeline')}
+                tabIndex={-1}
+                onFocusCapture={() =>
+                  setShellChromeState((current) => ({
+                    ...current,
+                    activePrimarySection: 'timeline',
+                  }))
+                }
+              >
+                <div className='shell-workspace-header'>
+                  <div>
+                    <h2>Timeline</h2>
+                    <span className='active-topic-label'>{activeTopic}</span>
+                  </div>
+                  <div className='shell-inline-actions'>
+                    <div className='shell-workspace-summary'>
+                      <StatusBadge
+                        label={`viewing ${audienceLabelForTimelineScope(
+                          activeTimelineScope,
+                          activeJoinedChannels
+                        ).toLowerCase()}`}
+                      />
+                      <StatusBadge
+                        label={`posting ${activeComposeAudienceLabel.toLowerCase()}`}
+                      />
+                    </div>
+                    <Button
+                      ref={contextTriggerRef}
+                      className='shell-context-trigger'
+                      variant='ghost'
+                      type='button'
+                      aria-label='Open context pane'
+                      aria-controls={SHELL_CONTEXT_ID}
+                      aria-expanded={shellChromeState.contextOpen}
+                      data-testid='shell-context-trigger'
+                      onClick={() => setContextOpen(true)}
+                    >
+                      Open Context
+                    </Button>
+                    <Button
+                      variant='secondary'
+                      onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
+                    >
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+                <div className='topic-diagnostic'>
+                  <Label>
+                    <span>View Scope</span>
+                    <Select
+                      aria-label='View Scope'
+                      value={timelineScopeValue(activeTimelineScope)}
+                      onChange={(event) => {
+                        void handleTimelineScopeChange(event.target.value);
+                      }}
+                    >
+                      <option value='public'>Public</option>
+                      <option value='all_joined'>All joined</option>
+                      {activeJoinedChannels.map((channel) => (
+                        <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                          {channel.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Label>
+                  <Label>
+                    <span>Compose Target</span>
+                    <Select
+                      aria-label='Compose Target'
+                      value={channelRefValue(activeComposeChannel)}
+                      disabled={Boolean(replyTarget)}
+                      onChange={(event) => handleComposeChannelChange(event.target.value)}
+                    >
+                      <option value='public'>Public</option>
+                      {activeJoinedChannels.map((channel) => (
+                        <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
+                          {channel.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Label>
+                </div>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>
+                    Viewing:{' '}
+                    {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}
+                  </span>
+                  <span>Posting to: {activeComposeAudienceLabel}</span>
+                </div>
+              </div>
+
+              <section
+                className='shell-section'
+                ref={setPrimarySectionRef('channels')}
+                tabIndex={-1}
+                onFocusCapture={() =>
+                  setShellChromeState((current) => ({
+                    ...current,
+                    activePrimarySection: 'channels',
+                  }))
+                }
+              >
+                <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
+                  <Label>
+                    <span>Create Channel</span>
+                    <Input
+                      value={channelLabelInput}
+                      onChange={(event) => setChannelLabelInput(event.target.value)}
+                      placeholder='core contributors'
+                    />
+                  </Label>
+                  <Label>
+                    <span>Audience</span>
+                    <Select
+                      aria-label='Channel Audience'
+                      value={channelAudienceInput}
+                      onChange={(event) =>
+                        setChannelAudienceInput(event.target.value as ChannelAudienceKind)
+                      }
+                    >
+                      <option value='invite_only'>Invite only</option>
+                      <option value='friend_only'>Friends</option>
+                      <option value='friend_plus'>Friends+</option>
+                    </Select>
+                  </Label>
+                  <Button variant='secondary' type='submit'>
+                    Create Channel
+                  </Button>
+                  {activePrivateChannel?.audience_kind === 'invite_only' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={activeComposeChannel.kind !== 'private_channel'}
+                      onClick={() => void handleCreateInvite()}
+                    >
+                      Create Invite
+                    </Button>
+                  ) : null}
+                  {activePrivateChannel?.audience_kind === 'friend_only' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={!activePrivateChannel.is_owner}
+                      onClick={() => void handleCreateGrant()}
+                    >
+                      Create Grant
+                    </Button>
+                  ) : null}
+                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={activeComposeChannel.kind !== 'private_channel'}
+                      onClick={() => void handleCreateShare()}
+                    >
+                      Create Share
+                    </Button>
+                  ) : null}
+                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={!activePrivateChannel.is_owner}
+                      onClick={() => void handleFreezePrivateChannel()}
+                    >
+                      Freeze
+                    </Button>
+                  ) : null}
+                  {activePrivateChannel?.audience_kind === 'friend_only' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={!activePrivateChannel.is_owner}
+                      onClick={() => void handleRotatePrivateChannel()}
+                    >
+                      Rotate
+                    </Button>
+                  ) : null}
+                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={!activePrivateChannel.is_owner}
+                      onClick={() => void handleRotatePrivateChannel()}
+                    >
+                      Rotate
+                    </Button>
+                  ) : null}
+                </form>
+                <form className='composer composer-compact' onSubmit={handleJoinInvite}>
+                  <Label>
+                    <span>Join via Invite</span>
+                    <Textarea
+                      value={inviteTokenInput}
+                      onChange={(event) => setInviteTokenInput(event.target.value)}
+                      placeholder='paste private channel invite, friend grant, or friends+ share'
+                    />
+                  </Label>
+                  <Button variant='secondary' type='submit'>
+                    Join Invite
+                  </Button>
+                  <Button variant='secondary' type='button' onClick={() => void handleJoinGrant()}>
+                    Join Grant
+                  </Button>
+                  <Button variant='secondary' type='button' onClick={() => void handleJoinShare()}>
+                    Join Share
+                  </Button>
+                </form>
+                {inviteOutput ? (
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>
+                      {inviteOutputLabel === 'grant'
+                        ? 'Latest grant'
+                        : inviteOutputLabel === 'share'
+                          ? 'Latest share'
+                          : 'Latest invite'}
+                    </span>
+                    <code>{inviteOutput}</code>
+                  </div>
+                ) : null}
+                {activePrivateChannel ? (
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>
+                      Policy:{' '}
+                      {activePrivateChannel.audience_kind === 'friend_only'
+                        ? 'Friends: only mutual followers can join'
+                        : activePrivateChannel.audience_kind === 'friend_plus'
+                          ? 'Friends+: participants can share to their mutuals'
+                          : 'Invite only'}
+                    </span>
+                    <span>epoch: {activePrivateChannel.current_epoch_id}</span>
+                    <span>sharing: {activePrivateChannel.sharing_state}</span>
+                    {activePrivateChannel.joined_via_pubkey ? (
+                      <span>joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {activePrivateChannel &&
+                (activePrivateChannel.audience_kind === 'friend_only' ||
+                  activePrivateChannel.audience_kind === 'friend_plus') ? (
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>participants: {activePrivateChannel.participant_count}</span>
+                    <span>stale: {activePrivateChannel.stale_participant_count}</span>
+                    <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
+                  </div>
+                ) : null}
+                {activePrivateChannel?.audience_kind === 'friend_only' &&
+                activePrivateChannel.rotation_required ? (
+                  <div className='topic-diagnostic topic-diagnostic-error'>
+                    <span>rotation required: current participants include non-mutual followers</span>
+                  </div>
+                ) : null}
+                {channelError ? <p className='error error-inline'>{channelError}</p> : null}
+                <form className='composer' onSubmit={handlePublish}>
+                  {replyTarget ? (
+                    <div className='reply-banner'>
+                      <div>
+                        <strong>Replying</strong>
+                        <p>{replyTarget.content}</p>
+                        <small>Audience: {replyTarget.audience_label}</small>
+                      </div>
+                      <Button variant='secondary' type='button' onClick={clearReply}>
+                        Clear
+                      </Button>
+                    </div>
+                  ) : null}
+                  <Textarea
+                    value={composer}
+                    onChange={(event) => setComposer(event.target.value)}
+                    placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
+                  />
+                  <Label className='file-field'>
+                    <span>Attach</span>
+                    <Input
+                      key={attachmentInputKey}
+                      aria-label='Attach'
+                      type='file'
+                      accept='image/*,video/*'
+                      multiple
+                      onChange={(event) => {
+                        void handleAttachmentSelection(event);
+                      }}
+                    />
+                  </Label>
+                  {composerError ? <p className='error error-inline'>{composerError}</p> : null}
+                  {draftMediaItems.length > 0 ? (
+                    <ul className='draft-attachment-list'>
+                      {draftMediaItems.map((item) => (
+                        <li key={item.id} className='draft-attachment-item'>
+                          <div className='draft-attachment-content'>
+                            <div className='draft-preview-frame'>
+                              <img
+                                className='draft-preview-image'
+                                src={item.preview_url}
+                                alt={`draft preview ${item.source_name}`}
+                              />
+                            </div>
+                            <div>
+                              <strong>{item.source_name}</strong>
+                              {item.attachments.map((attachment) => (
+                                <small
+                                  key={`${
+                                    attachment.role ?? attachment.mime
+                                  }-${attachment.file_name ?? item.source_name}`}
+                                >
+                                  {attachment.role ?? 'attachment'} · {attachment.mime} ·{' '}
+                                  {formatBytes(attachment.byte_size)}
+                                </small>
+                              ))}
+                            </div>
+                          </div>
+                          <Button
+                            variant='secondary'
+                            type='button'
+                            onClick={() => handleRemoveDraftAttachment(item.id)}
+                          >
+                            Remove
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>Audience: {activeComposeAudienceLabel}</span>
+                  </div>
+                  <Button type='submit'>{replyTarget ? 'Reply' : 'Publish'}</Button>
+                </form>
+              </section>
+
+              <section
+                className='shell-section'
+                ref={setPrimarySectionRef('live')}
+                tabIndex={-1}
+                onFocusCapture={() =>
+                  setShellChromeState((current) => ({
+                    ...current,
+                    activePrimarySection: 'live',
+                  }))
+                }
+              >
+                <Card className='panel-subsection'>
+                  <CardHeader>
+                    <h3>Live Sessions</h3>
+                    <small>{activeLiveSessions.length} active</small>
+                  </CardHeader>
+                  <form className='composer composer-compact' onSubmit={handleCreateLiveSession}>
+                    <Label>
+                      <span>Live Title</span>
+                      <Input
+                        value={liveTitle}
+                        onChange={(event) => setLiveTitle(event.target.value)}
+                        placeholder='Friday stream'
+                      />
+                    </Label>
+                    <Label>
+                      <span>Live Description</span>
+                      <Textarea
+                        value={liveDescription}
+                        onChange={(event) => setLiveDescription(event.target.value)}
+                        placeholder='short session summary'
+                      />
+                    </Label>
+                    {liveError ? <p className='error error-inline'>{liveError}</p> : null}
+                    <div className='topic-diagnostic topic-diagnostic-secondary'>
+                      <span>Audience: {activeComposeAudienceLabel}</span>
+                    </div>
+                    <Button type='submit'>Start Live</Button>
+                  </form>
+                  {activeLiveSessions.length === 0 ? (
+                    <p className='empty-state'>No live sessions</p>
+                  ) : null}
+                  <ul className='post-list'>
+                    {activeLiveSessions.map((session) => {
+                      const isOwner = session.host_pubkey === syncStatus.local_author_pubkey;
+                      return (
+                        <li key={session.session_id}>
+                          <article className='post-card'>
+                            <div className='post-meta'>
+                              <span>{session.title}</span>
+                              <span>{session.status}</span>
+                              <span className='reply-chip'>{session.audience_label}</span>
+                            </div>
+                            <div className='post-body'>
+                              <strong className='post-title'>
+                                {session.description || 'no description'}
+                              </strong>
+                            </div>
+                            <small>{session.session_id}</small>
+                            <div className='topic-diagnostic topic-diagnostic-secondary'>
+                              <span>viewers: {session.viewer_count}</span>
+                              <span>
+                                started:{' '}
+                                {new Date(session.started_at).toLocaleTimeString('ja-JP')}
+                              </span>
+                            </div>
+                            {session.ended_at ? (
+                              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                <span>
+                                  ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}
+                                </span>
+                              </div>
+                            ) : null}
+                            <div className='post-actions'>
+                              {session.joined_by_me ? (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  onClick={() => void handleLeaveLiveSession(session.session_id)}
+                                >
+                                  Leave
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  disabled={session.status === 'Ended'}
+                                  onClick={() => void handleJoinLiveSession(session.session_id)}
+                                >
+                                  Join
+                                </Button>
+                              )}
+                              {isOwner ? (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  disabled={session.status === 'Ended'}
+                                  onClick={() => void handleEndLiveSession(session.session_id)}
+                                >
+                                  End
+                                </Button>
+                              ) : null}
+                            </div>
+                          </article>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              </section>
+
+              <section
+                className='shell-section'
+                ref={setPrimarySectionRef('game')}
+                tabIndex={-1}
+                onFocusCapture={() =>
+                  setShellChromeState((current) => ({
+                    ...current,
+                    activePrimarySection: 'game',
+                  }))
+                }
+              >
+                <Card className='panel-subsection'>
+                  <CardHeader>
+                    <h3>Game Rooms</h3>
+                    <small>{activeGameRooms.length} tracked</small>
+                  </CardHeader>
+                  <form className='composer composer-compact' onSubmit={handleCreateGameRoom}>
+                    <Label>
+                      <span>Game Title</span>
+                      <Input
+                        value={gameTitle}
+                        onChange={(event) => setGameTitle(event.target.value)}
+                        placeholder='Top 8 Finals'
+                      />
+                    </Label>
+                    <Label>
+                      <span>Game Description</span>
+                      <Textarea
+                        value={gameDescription}
+                        onChange={(event) => setGameDescription(event.target.value)}
+                        placeholder='match summary'
+                      />
+                    </Label>
+                    <Label>
+                      <span>Participants</span>
+                      <Input
+                        value={gameParticipantsInput}
+                        onChange={(event) => setGameParticipantsInput(event.target.value)}
+                        placeholder='Alice, Bob'
+                      />
+                    </Label>
+                    {gameError ? <p className='error error-inline'>{gameError}</p> : null}
+                    <div className='topic-diagnostic topic-diagnostic-secondary'>
+                      <span>Audience: {activeComposeAudienceLabel}</span>
+                    </div>
+                    <Button type='submit'>Create Room</Button>
+                  </form>
+                  {activeGameRooms.length === 0 ? <p className='empty-state'>No game rooms</p> : null}
+                  <ul className='post-list'>
+                    {activeGameRooms.map((room) => {
+                      const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
+                      const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
+                      return (
+                        <li key={room.room_id}>
+                          <article className='post-card'>
+                            <div className='post-meta'>
+                              <span>{room.title}</span>
+                              <span>{room.status}</span>
+                              <span className='reply-chip'>{room.audience_label}</span>
+                            </div>
+                            <div className='post-body'>
+                              <strong className='post-title'>
+                                {room.description || 'no description'}
+                              </strong>
+                            </div>
+                            <small>{room.room_id}</small>
+                            <div className='topic-diagnostic topic-diagnostic-secondary'>
+                              <span>phase: {room.phase_label ?? 'none'}</span>
+                              <span>
+                                updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
+                              </span>
+                            </div>
+                            <ul className='draft-attachment-list'>
+                              {room.scores.map((score) => (
+                                <li
+                                  key={score.participant_id}
+                                  className='draft-attachment-item score-row'
+                                >
+                                  <div className='draft-attachment-content'>
+                                    <strong>{score.label}</strong>
+                                  </div>
+                                  {isOwner ? (
+                                    <Input
+                                      aria-label={`${room.room_id}-${score.label}-score`}
+                                      value={
+                                        draft.scores[score.participant_id] ?? String(score.score)
+                                      }
+                                      onChange={(event) =>
+                                        updateGameDraft(room.room_id, (current) => ({
+                                          ...current,
+                                          scores: {
+                                            ...current.scores,
+                                            [score.participant_id]: event.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  ) : (
+                                    <span>{score.score}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                            {isOwner ? (
+                              <div className='composer composer-compact'>
+                                <Label>
+                                  <span>Status</span>
+                                  <Select
+                                    aria-label={`${room.room_id}-status`}
+                                    value={draft.status}
+                                    onChange={(event) =>
+                                      updateGameDraft(room.room_id, (current) => ({
+                                        ...current,
+                                        status: event.target.value as GameRoomStatus,
+                                      }))
+                                    }
+                                  >
+                                    <option value='Waiting'>Waiting</option>
+                                    <option value='Running'>Running</option>
+                                    <option value='Paused'>Paused</option>
+                                    <option value='Ended'>Ended</option>
+                                  </Select>
+                                </Label>
+                                <Label>
+                                  <span>Phase</span>
+                                  <Input
+                                    aria-label={`${room.room_id}-phase`}
+                                    value={draft.phase_label}
+                                    onChange={(event) =>
+                                      updateGameDraft(room.room_id, (current) => ({
+                                        ...current,
+                                        phase_label: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </Label>
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  onClick={() => void handleUpdateGameRoom(room)}
+                                >
+                                  Save Room
+                                </Button>
+                              </div>
+                            ) : null}
+                          </article>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              </section>
+
+              <ul className='post-list'>
+                {activeTimeline.map((post) => (
+                  <li key={post.object_id}>{renderPostCard(post, 'timeline')}</li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        }
+        contextPane={
+          <ContextPane
+            paneId={SHELL_CONTEXT_ID}
+            open={shellChromeState.contextOpen}
+            onOpenChange={(open) => setContextOpen(open, !open)}
+            activeMode={shellChromeState.activeContextPaneMode}
+            onModeChange={(mode) =>
+              setShellChromeState((current) => ({
+                ...current,
+                activeContextPaneMode: mode,
+                contextOpen: true,
+              }))
+            }
+            tabs={contextTabs}
+          />
+        }
+      />
+
+      <SettingsDrawer
+        drawerId={SHELL_SETTINGS_ID}
+        open={shellChromeState.settingsOpen}
+        onOpenChange={(open) => setSettingsOpen(open, !open)}
+        activeSection={shellChromeState.activeSettingsSection}
+        onSectionChange={(section) =>
+          setShellChromeState((current) => ({
+            ...current,
+            activeSettingsSection: section,
+          }))
+        }
+        sections={settingsSections}
+      />
+    </>
   );
 }

@@ -10,26 +10,30 @@
 - Codex が implementation patch と Figma review data を同時に生成する UI proposal
 
 ## Required Workflow
-1. Codex が UI を新規提案または大きく改修する場合、先に Figma で proposal を作る。
-2. 一次レビューは Figma で行う。
-3. code review に耐える方向性が固まってから実装する。
-4. 変更の大きさとリスクに応じて Storybook、Vitest、Playwright、`cargo xtask` で検証する。
-5. merge された変更が user-facing behavior または design rule を変える場合は、`docs/ui-reviews/` に記録を残す。
+1. Codex が UI を新規提案または大きく改修する場合、先に local HTML / React draft を作る。
+2. `generate_figma_design` の HTML capture で Figma design を生成または更新する。
+3. 一次レビューは、その HTML capture で作った Figma design を基準に行う。
+4. code review に耐える方向性が固まってから実装を詰める。
+5. 変更の大きさとリスクに応じて Storybook、Vitest、Playwright、`cargo xtask` で検証する。
+6. merge された変更が user-facing behavior または design rule を変える場合は、`docs/ui-reviews/` に記録を残す。
 
 ## Tooling Policy
 - Figma MCP は Codex-assisted UI proposal で required とする。Figma を primary review artifact にする。
+- Codex-assisted UI proposal の既定 artifact は HTML capture で生成した Figma design とする。自然言語だけで作った Figma draft を workflow の前提にしない。
 - 新規 UI と大きく触る既存 UI の標準 stack は Tailwind + shadcn/ui + Storybook にする。
 - Playwright は top-level user flow を変える変更、または複数 component をまたぐ回帰リスクが高い変更で required とする。
 - shadcn MCP は optional とする。対象 surface に標準 stack が入ってから使う。
 - shadcn MCP は implementation aid であり、review system でも Figma MCP の代替でもない。
 - Code Connect は optional とし、workflow の blocker にしない。
+- FigJam は IA 整理や flow 説明の補助 artifact として使ってよいが、primary review artifact の代替にはしない。
 
 ## Review Artifacts
-- すべての UI proposal PR は Figma link を含む。
+- すべての UI proposal PR は Figma link を含む。既定値は HTML capture で生成した Figma design URL とする。
 - すべての UI proposal PR は、PR 上で直接 review できる preview image または short video を含む。
 - すべての UI proposal PR は、変更する user flow の短い summary を含む。
 - すべての UI proposal PR は、Shneiderman checklist の結果または例外理由を含む。
 - public PR reader が Figma edit 権限なしでも proposal を理解できる状態を必須にする。
+- capture 用に一時挿入した script、query、hash parameter は review artifact 生成後に戻し、product code へ常駐させない。
 
 ## Design System Rules
 - token から始める。color、typography、spacing、radius、border、shadow、motion は one-off hard-code ではなく shared token layer から取る。
