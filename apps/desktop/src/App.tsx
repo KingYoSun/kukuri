@@ -10,6 +10,19 @@ import {
   useState,
 } from 'react';
 
+import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
+import { ComposerPanel } from '@/components/core/ComposerPanel';
+import { ThreadPanel } from '@/components/core/ThreadPanel';
+import { TimelineFeed } from '@/components/core/TimelineFeed';
+import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
+import { TopicNavList } from '@/components/core/TopicNavList';
+import {
+  type AuthorDetailView,
+  type ComposerDraftMediaView,
+  type PostCardView,
+  type ThreadPanelState,
+  type TopicDiagnosticSummary,
+} from '@/components/core/types';
 import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
@@ -132,7 +145,7 @@ const PRIMARY_SECTION_ITEMS: Array<{
   {
     id: 'channels',
     label: 'Channels',
-    description: 'Private channel controls, invite import, and composer.',
+    description: 'Private channel controls, invite import, and audience policy.',
   },
   {
     id: 'live',
@@ -240,19 +253,6 @@ function strongestRelationshipLabel(relationship: {
     return 'friend of friend';
   }
   return null;
-}
-
-function relationshipBadgeClassName(label: string | null): string {
-  if (label === 'mutual') {
-    return 'relationship-badge relationship-badge-mutual';
-  }
-  if (label === 'friend of friend') {
-    return 'relationship-badge relationship-badge-fof';
-  }
-  if (label === 'following' || label === 'follows you') {
-    return 'relationship-badge relationship-badge-direct';
-  }
-  return 'relationship-badge';
 }
 
 function channelRefValue(channelRef: ChannelRef): string {
@@ -2151,194 +2151,230 @@ export function App({ api = runtimeApi }: AppProps) {
     }
   }
 
-  function renderPostCard(post: PostView, context: 'timeline' | 'thread') {
-    const primaryImage = selectPrimaryImage(post);
-    const videoPoster = selectVideoPoster(post);
-    const videoManifest = selectVideoManifest(post);
-    const authorLabel = authorDisplayLabel(
-      post.author_pubkey,
-      post.author_display_name,
-      post.author_name
-    );
-    const relationshipLabel = strongestRelationshipLabel(post);
-    const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
-    const mediaMetaAttachment = mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
-    const reservedHashes = new Set<string>();
-    if (primaryImage) {
-      reservedHashes.add(primaryImage.hash);
-    }
-    if (videoPoster) {
-      reservedHashes.add(videoPoster.hash);
-    }
-    if (videoManifest) {
-      reservedHashes.add(videoManifest.hash);
-    }
-    const extraAttachmentCount = post.attachments.filter(
-      (attachment) => !reservedHashes.has(attachment.hash)
-    ).length;
-    const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
-    const imagePreviewSrc =
-      primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
-        ? mediaObjectUrls[primaryImage.hash]
-        : null;
-    const videoPosterPreviewSrc =
-      videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
-        ? mediaObjectUrls[videoPoster.hash]
-        : null;
-    const videoPlaybackSrc =
-      videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
-        ? mediaObjectUrls[videoManifest.hash]
-        : null;
-    const videoUnsupportedOnClient = Boolean(
-      videoManifest && unsupportedVideoManifests[videoManifest.hash]
-    );
-    const logPlaybackEvent = (eventName: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
-      const video = event.currentTarget;
-      logMediaDebug(eventName === 'error' ? 'warn' : 'info', `playback ${eventName}`, {
-        manifest_hash: videoManifest?.hash ?? null,
-        mime: videoManifest?.mime ?? null,
-        post_id: post.object_id,
-        poster_hash: videoPoster?.hash ?? null,
-        playback_src: videoPlaybackSrc,
-        ...mediaElementDebugFields(video),
-        video_height: video.videoHeight || null,
-        video_width: video.videoWidth || null,
-      });
-      if (eventName === 'error' && videoManifest) {
-        setUnsupportedVideoManifests((current) => {
-          if (current[videoManifest.hash]) {
-            return current;
-          }
-          return {
-            ...current,
-            [videoManifest.hash]: true,
-          };
-        });
+  const buildPostCardView = useCallback(
+    (post: PostView, context: 'timeline' | 'thread'): PostCardView => {
+      const primaryImage = selectPrimaryImage(post);
+      const videoPoster = selectVideoPoster(post);
+      const videoManifest = selectVideoManifest(post);
+      const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
+      const mediaMetaAttachment =
+        mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
+      const reservedHashes = new Set<string>();
+      if (primaryImage) {
+        reservedHashes.add(primaryImage.hash);
       }
-    };
-    const mediaStatusLabel =
-      mediaKind === 'video'
-        ? videoUnsupportedOnClient
-          ? 'unsupported on this client'
-          : videoPlaybackSrc
-          ? 'playable video'
-          : videoPosterPreviewSrc
-            ? 'poster ready'
-            : 'syncing poster'
-        : mediaKind === 'image'
-          ? imagePreviewSrc
-            ? 'image ready'
-            : 'syncing image'
+      if (videoPoster) {
+        reservedHashes.add(videoPoster.hash);
+      }
+      if (videoManifest) {
+        reservedHashes.add(videoManifest.hash);
+      }
+      const extraAttachmentCount = post.attachments.filter(
+        (attachment) => !reservedHashes.has(attachment.hash)
+      ).length;
+      const imagePreviewSrc =
+        primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
+          ? mediaObjectUrls[primaryImage.hash]
           : null;
-    const threadTargetId = post.root_id ?? post.object_id;
+      const videoPosterPreviewSrc =
+        videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
+          ? mediaObjectUrls[videoPoster.hash]
+          : null;
+      const videoPlaybackSrc =
+        videoManifest && typeof mediaObjectUrls[videoManifest.hash] === 'string'
+          ? mediaObjectUrls[videoManifest.hash]
+          : null;
+      const videoUnsupportedOnClient = Boolean(
+        videoManifest && unsupportedVideoManifests[videoManifest.hash]
+      );
+      const logPlaybackEvent =
+        (eventName: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
+          const video = event.currentTarget;
+          logMediaDebug(eventName === 'error' ? 'warn' : 'info', `playback ${eventName}`, {
+            manifest_hash: videoManifest?.hash ?? null,
+            mime: videoManifest?.mime ?? null,
+            post_id: post.object_id,
+            poster_hash: videoPoster?.hash ?? null,
+            playback_src: videoPlaybackSrc,
+            ...mediaElementDebugFields(video),
+            video_height: video.videoHeight || null,
+            video_width: video.videoWidth || null,
+          });
+          if (eventName === 'error' && videoManifest) {
+            setUnsupportedVideoManifests((current) => {
+              if (current[videoManifest.hash]) {
+                return current;
+              }
+              return {
+                ...current,
+                [videoManifest.hash]: true,
+              };
+            });
+          }
+        };
+      const mediaStatusLabel =
+        mediaKind === 'video'
+          ? videoUnsupportedOnClient
+            ? 'unsupported on this client'
+            : videoPlaybackSrc
+              ? 'playable video'
+              : videoPosterPreviewSrc
+                ? 'poster ready'
+                : 'syncing poster'
+          : mediaKind === 'image'
+            ? imagePreviewSrc
+              ? 'image ready'
+              : 'syncing image'
+            : null;
 
-    return (
-      <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
-        <div className='post-meta'>
-          <button
-            className='author-link'
-            type='button'
-            onClick={() => void openAuthorDetail(post.author_pubkey)}
-          >
-            {authorLabel}
-          </button>
-          <div className='post-meta-trailing'>
-            {relationshipLabel ? (
-              <span className={relationshipBadgeClassName(relationshipLabel)}>{relationshipLabel}</span>
-            ) : null}
-            <span>{post.object_kind}</span>
-            <span className='reply-chip'>{post.audience_label}</span>
-            <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
-          </div>
-        </div>
-        <button className='post-link' type='button' onClick={() => void openThread(threadTargetId)}>
-          {mediaKind ? (
-            <>
-              <div
-                className={
-                  mediaStatusLabel === 'syncing image' || mediaStatusLabel === 'syncing poster'
-                    ? 'media-frame media-frame-loading'
-                    : 'media-frame media-frame-ready'
+      return {
+        post,
+        context,
+        authorLabel: authorDisplayLabel(
+          post.author_pubkey,
+          post.author_display_name,
+          post.author_name
+        ),
+        relationshipLabel: strongestRelationshipLabel(post),
+        threadTargetId: post.root_id ?? post.object_id,
+        media: {
+          objectId: post.object_id,
+          kind: mediaKind,
+          statusLabel: mediaStatusLabel,
+          extraAttachmentCount,
+          state:
+            mediaKind === 'video'
+              ? videoPlaybackSrc || videoPosterPreviewSrc
+                ? 'ready'
+                : 'loading'
+              : mediaKind === 'image'
+                ? imagePreviewSrc
+                  ? 'ready'
+                  : 'loading'
+                : 'loading',
+          metaMime: mediaMetaAttachment?.mime ?? null,
+          metaBytesLabel: mediaMetaAttachment ? formatBytes(mediaMetaAttachment.bytes) : null,
+          imagePreviewSrc,
+          videoPosterPreviewSrc,
+          videoPlaybackSrc,
+          videoUnsupportedOnClient,
+          videoProps:
+            mediaKind === 'video' && videoPlaybackSrc && !videoUnsupportedOnClient
+              ? {
+                  onCanPlay: logPlaybackEvent('canplay'),
+                  onDurationChange: logPlaybackEvent('durationchange'),
+                  onError: logPlaybackEvent('error'),
+                  onLoadedData: logPlaybackEvent('loadeddata'),
+                  onLoadedMetadata: logPlaybackEvent('loadedmetadata'),
+                  onLoadStart: logPlaybackEvent('loadstart'),
+                  onPlaying: logPlaybackEvent('playing'),
                 }
-              >
-                <div className='media-badges'>
-                  {mediaStatusLabel ? <span className='media-status-badge'>{mediaStatusLabel}</span> : null}
-                  {mediaKind === 'video' ? <span className='media-type-badge'>video</span> : null}
-                  {extraAttachmentCount > 0 ? (
-                    <span className='media-count-badge'>+{extraAttachmentCount}</span>
-                  ) : null}
-                </div>
-                {mediaKind === 'video' && videoPlaybackSrc && !videoUnsupportedOnClient ? (
-                  <video
-                    className='media-video'
-                    controls
-                    src={videoPlaybackSrc}
-                    onCanPlay={logPlaybackEvent('canplay')}
-                    onDurationChange={logPlaybackEvent('durationchange')}
-                    onError={logPlaybackEvent('error')}
-                    onLoadedData={logPlaybackEvent('loadeddata')}
-                    onLoadedMetadata={logPlaybackEvent('loadedmetadata')}
-                    onLoadStart={logPlaybackEvent('loadstart')}
-                    onPlaying={logPlaybackEvent('playing')}
-                    preload='metadata'
-                    poster={videoPosterPreviewSrc ?? undefined}
-                    data-testid={`media-video-${post.object_id}`}
-                  />
-                ) : mediaKind === 'video' && videoPosterPreviewSrc ? (
-                  <img
-                    className='media-preview'
-                    src={videoPosterPreviewSrc}
-                    alt={videoPoster?.mime ?? 'video poster'}
-                    data-testid={`media-preview-${post.object_id}`}
-                  />
-                ) : mediaKind === 'image' && imagePreviewSrc ? (
-                  <img
-                    className='media-preview'
-                    src={imagePreviewSrc}
-                    alt={primaryImage?.mime ?? 'image attachment'}
-                    data-testid={`media-preview-${post.object_id}`}
-                  />
-                ) : (
-                  <div
-                    className='media-skeleton'
-                    data-testid={`media-skeleton-${post.object_id}`}
-                    aria-hidden='true'
-                  />
-                )}
-              </div>
-              {mediaMetaAttachment ? (
-                <div className='media-meta'>
-                  <span>{mediaMetaAttachment.mime}</span>
-                  <span>{formatBytes(mediaMetaAttachment.bytes)}</span>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-          <div className='post-body'>
-            {isPendingText ? (
-              <div
-                className='text-skeleton-group'
-                data-testid={`text-skeleton-${post.object_id}`}
-                aria-hidden='true'
-              >
-                <span className='text-skeleton text-skeleton-line' />
-                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
-              </div>
-            ) : (
-              <strong className='post-title'>{post.content}</strong>
-            )}
-          </div>
-          <small>{post.envelope_id}</small>
-          {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
-        </button>
-        <div className='post-actions'>
-          <Button variant='secondary' type='button' onClick={() => beginReply(post)}>
-            Reply
-          </Button>
-        </div>
-      </article>
-    );
-  }
+              : undefined,
+        },
+      };
+    },
+    [mediaObjectUrls, unsupportedVideoManifests]
+  );
+
+  const activeTimelinePostViews = useMemo(
+    () => activeTimeline.map((post) => buildPostCardView(post, 'timeline')),
+    [activeTimeline, buildPostCardView]
+  );
+  const threadPostViews = useMemo(
+    () => thread.map((post) => buildPostCardView(post, 'thread')),
+    [buildPostCardView, thread]
+  );
+  const topicNavItems = useMemo<TopicDiagnosticSummary[]>(
+    () =>
+      trackedTopics.map((topic) => ({
+        topic,
+        active: topic === activeTopic,
+        removable: trackedTopics.length > 1,
+        connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
+        peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
+        lastReceivedLabel: topicDiagnostics[topic]?.last_received_at
+          ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
+          : 'no events',
+        expectedPeerCount: topicDiagnostics[topic]?.configured_peer_ids.length ?? 0,
+        missingPeerCount: topicDiagnostics[topic]?.missing_peer_ids.length ?? 0,
+        statusDetail: topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet',
+        lastError: topicDiagnostics[topic]?.last_error ?? null,
+      })),
+    [activeTopic, topicDiagnostics, trackedTopics]
+  );
+  const composerDraftViews = useMemo<ComposerDraftMediaView[]>(
+    () =>
+      draftMediaItems.map((item) => ({
+        id: item.id,
+        sourceName: item.source_name,
+        previewUrl: item.preview_url,
+        attachments: item.attachments.map((attachment) => ({
+          key: `${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`,
+          label: attachment.role ?? 'attachment',
+          mime: attachment.mime,
+          byteSizeLabel: formatBytes(attachment.byte_size),
+        })),
+      })),
+    [draftMediaItems]
+  );
+  const threadPanelState = useMemo<ThreadPanelState>(
+    () => ({
+      selectedThreadId: selectedThread,
+      summary: selectedThread
+        ? `${thread.length} posts in thread`
+        : 'Select a post to inspect the thread.',
+      emptyCopy: 'Select a post to inspect the thread.',
+    }),
+    [selectedThread, thread.length]
+  );
+  const authorDetailView = useMemo<AuthorDetailView>(
+    () => ({
+      author: selectedAuthor,
+      displayLabel: selectedAuthor
+        ? authorDisplayLabel(
+            selectedAuthor.author_pubkey,
+            selectedAuthor.display_name,
+            selectedAuthor.name
+          )
+        : 'Author Detail',
+      summary: selectedAuthor
+        ? {
+            label: strongestRelationshipLabel(selectedAuthor),
+            following: selectedAuthor.following,
+            followedBy: selectedAuthor.followed_by,
+            mutual: selectedAuthor.mutual,
+            friendOfFriend: selectedAuthor.friend_of_friend,
+            viaPubkeys: selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
+            isSelf: selectedAuthor.author_pubkey === syncStatus.local_author_pubkey,
+            canFollow: selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey,
+            followActionLabel: selectedAuthor.following ? 'Unfollow' : 'Follow',
+          }
+        : null,
+      authorError,
+    }),
+    [authorError, selectedAuthor, syncStatus.local_author_pubkey]
+  );
+  const timelineViewScopeOptions = useMemo(
+    () => [
+      { value: 'public', label: 'Public' },
+      { value: 'all_joined', label: 'All joined' },
+      ...activeJoinedChannels.map((channel) => ({
+        value: `channel:${channel.channel_id}`,
+        label: channel.label,
+      })),
+    ],
+    [activeJoinedChannels]
+  );
+  const composeTargetOptions = useMemo(
+    () => [
+      { value: 'public', label: 'Public' },
+      ...activeJoinedChannels.map((channel) => ({
+        value: `channel:${channel.channel_id}`,
+        label: channel.label,
+      })),
+    ],
+    [activeJoinedChannels]
+  );
 
   const statusBadges = (
     <div className='shell-status-badges'>
@@ -2357,53 +2393,11 @@ export function App({ api = runtimeApi }: AppProps) {
   );
 
   const topicList = (
-    <ul>
-      {trackedTopics.map((topic) => (
-        <li
-          key={topic}
-          className={topic === activeTopic ? 'topic-item topic-item-active' : 'topic-item'}
-        >
-          <button className='topic-link' type='button' onClick={() => void handleSelectTopic(topic)}>
-            <span className='shell-topic-link-label' title={topic}>
-              {topic}
-            </span>
-          </button>
-          {trackedTopics.length > 1 ? (
-            <button
-              className='topic-remove'
-              type='button'
-              aria-label={`Remove ${topic}`}
-              onClick={() => void handleRemoveTopic(topic)}
-            >
-              x
-            </button>
-          ) : null}
-          <div className='topic-diagnostic'>
-            <span>
-              {topicConnectionLabel(topicDiagnostics[topic])} / peers:{' '}
-              {topicDiagnostics[topic]?.peer_count ?? 0}
-            </span>
-            <small>
-              {topicDiagnostics[topic]?.last_received_at
-                ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
-                : 'no events'}
-            </small>
-          </div>
-          <div className='topic-diagnostic topic-diagnostic-secondary'>
-            <span>expected: {topicDiagnostics[topic]?.configured_peer_ids.length ?? 0}</span>
-            <span>missing: {topicDiagnostics[topic]?.missing_peer_ids.length ?? 0}</span>
-          </div>
-          <div className='topic-diagnostic topic-diagnostic-secondary'>
-            <span>{topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet'}</span>
-          </div>
-          {topicDiagnostics[topic]?.last_error ? (
-            <div className='topic-diagnostic topic-diagnostic-error'>
-              <span>error: {topicDiagnostics[topic].last_error}</span>
-            </div>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+    <TopicNavList
+      items={topicNavItems}
+      onSelectTopic={(topic) => void handleSelectTopic(topic)}
+      onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
+    />
   );
 
   const settingsSections = [
@@ -2803,136 +2797,42 @@ export function App({ api = runtimeApi }: AppProps) {
     {
       id: 'thread' as ContextPaneMode,
       label: 'Thread',
-      summary: selectedThread ? `${thread.length} posts in thread` : 'Select a post to inspect the thread.',
+      summary: threadPanelState.summary,
       content: (
-        <div className='shell-main-stack'>
-          <Card>
-            <CardHeader>
-              <h3>Thread</h3>
-              <div className='post-actions-inline'>
-                {selectedThread ? (
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => {
-                      setSelectedThread(null);
-                      setThread([]);
-                      clearReply();
-                    }}
-                  >
-                    Close
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            {selectedThread ? (
-              <ul className='thread-list'>
-                {thread.map((post) => (
-                  <li key={post.object_id} className='thread-item'>
-                    {renderPostCard(post, 'thread')}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className='empty'>Select a post to inspect the thread.</p>
-            )}
-          </Card>
-        </div>
+        <ThreadPanel
+          state={threadPanelState}
+          posts={threadPostViews}
+          onClearThread={() => {
+            setSelectedThread(null);
+            setThread([]);
+            clearReply();
+          }}
+          onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+          onOpenThread={(threadId) => void openThread(threadId)}
+          onReply={beginReply}
+        />
       ),
     },
     {
       id: 'author' as ContextPaneMode,
       label: 'Author',
       summary: selectedAuthor
-        ? authorDisplayLabel(
-            selectedAuthor.author_pubkey,
-            selectedAuthor.display_name,
-            selectedAuthor.name
-          )
+        ? authorDetailView.displayLabel
         : 'Select an author to inspect profile and relationship.',
       content: (
         <div className='shell-main-stack'>
-          <Card>
-            <CardHeader>
-              <h3>Author Detail</h3>
-              <div className='post-actions-inline'>
-                {selectedAuthor ? (
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => {
-                      setSelectedAuthorPubkey(null);
-                      setSelectedAuthor(null);
-                      setAuthorError(null);
-                    }}
-                  >
-                    Clear Author
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            {selectedAuthor ? (
-              <div className='author-detail'>
-                <div className='author-detail-header'>
-                  <strong>
-                    {authorDisplayLabel(
-                      selectedAuthor.author_pubkey,
-                      selectedAuthor.display_name,
-                      selectedAuthor.name
-                    )}
-                  </strong>
-                  {strongestRelationshipLabel(selectedAuthor) ? (
-                    <span
-                      className={relationshipBadgeClassName(
-                        strongestRelationshipLabel(selectedAuthor)
-                      )}
-                    >
-                      {strongestRelationshipLabel(selectedAuthor)}
-                    </span>
-                  ) : null}
-                </div>
-                <small>{selectedAuthor.author_pubkey}</small>
-                <p className='author-detail-copy'>
-                  {selectedAuthor.about?.trim() || 'No profile bio published yet.'}
-                </p>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>following: {selectedAuthor.following ? 'yes' : 'no'}</span>
-                  <span>followed by: {selectedAuthor.followed_by ? 'yes' : 'no'}</span>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>mutual: {selectedAuthor.mutual ? 'yes' : 'no'}</span>
-                  <span>
-                    friend of friend: {selectedAuthor.friend_of_friend ? 'yes' : 'no'}
-                  </span>
-                </div>
-                {selectedAuthor.friend_of_friend_via_pubkeys.length > 0 ? (
-                  <div className='diagnostic-block'>
-                    <strong>Via</strong>
-                    <p>{selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey).join(', ')}</p>
-                  </div>
-                ) : null}
-                {authorError ? <p className='error error-inline'>{authorError}</p> : null}
-                {selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey ? (
-                  <div className='post-actions'>
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      onClick={() =>
-                        void handleRelationshipAction(
-                          selectedAuthor.author_pubkey,
-                          selectedAuthor.following
-                        )
-                      }
-                    >
-                      {selectedAuthor.following ? 'Unfollow' : 'Follow'}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className='empty'>Select an author to inspect profile and relationship.</p>
-            )}
-          </Card>
+          <AuthorDetailCard
+            view={authorDetailView}
+            localAuthorPubkey={syncStatus.local_author_pubkey}
+            onClearAuthor={() => {
+              setSelectedAuthorPubkey(null);
+              setSelectedAuthor(null);
+              setAuthorError(null);
+            }}
+            onToggleRelationship={(authorPubkey, following) =>
+              void handleRelationshipAction(authorPubkey, following)
+            }
+          />
         </div>
       ),
     },
@@ -2998,87 +2898,57 @@ export function App({ api = runtimeApi }: AppProps) {
                   }))
                 }
               >
-                <div className='shell-workspace-header'>
-                  <div>
-                    <h2>Timeline</h2>
-                    <span className='active-topic-label'>{activeTopic}</span>
-                  </div>
-                  <div className='shell-inline-actions'>
-                    <div className='shell-workspace-summary'>
-                      <StatusBadge
-                        label={`viewing ${audienceLabelForTimelineScope(
-                          activeTimelineScope,
-                          activeJoinedChannels
-                        ).toLowerCase()}`}
-                      />
-                      <StatusBadge
-                        label={`posting ${activeComposeAudienceLabel.toLowerCase()}`}
-                      />
-                    </div>
-                    <Button
-                      ref={contextTriggerRef}
-                      className='shell-context-trigger'
-                      variant='ghost'
-                      type='button'
-                      aria-label='Open context pane'
-                      aria-controls={SHELL_CONTEXT_ID}
-                      aria-expanded={shellChromeState.contextOpen}
-                      data-testid='shell-context-trigger'
-                      onClick={() => setContextOpen(true)}
-                    >
-                      Open Context
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
-                    >
-                      Refresh
-                    </Button>
-                  </div>
-                </div>
-                <div className='topic-diagnostic'>
-                  <Label>
-                    <span>View Scope</span>
-                    <Select
-                      aria-label='View Scope'
-                      value={timelineScopeValue(activeTimelineScope)}
-                      onChange={(event) => {
-                        void handleTimelineScopeChange(event.target.value);
-                      }}
-                    >
-                      <option value='public'>Public</option>
-                      <option value='all_joined'>All joined</option>
-                      {activeJoinedChannels.map((channel) => (
-                        <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
-                          {channel.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Label>
-                  <Label>
-                    <span>Compose Target</span>
-                    <Select
-                      aria-label='Compose Target'
-                      value={channelRefValue(activeComposeChannel)}
-                      disabled={Boolean(replyTarget)}
-                      onChange={(event) => handleComposeChannelChange(event.target.value)}
-                    >
-                      <option value='public'>Public</option>
-                      {activeJoinedChannels.map((channel) => (
-                        <option key={channel.channel_id} value={`channel:${channel.channel_id}`}>
-                          {channel.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Label>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>
-                    Viewing:{' '}
-                    {audienceLabelForTimelineScope(activeTimelineScope, activeJoinedChannels)}
-                  </span>
-                  <span>Posting to: {activeComposeAudienceLabel}</span>
-                </div>
+                <TimelineWorkspaceHeader
+                  activeTopic={activeTopic}
+                  viewingLabel={audienceLabelForTimelineScope(
+                    activeTimelineScope,
+                    activeJoinedChannels
+                  )}
+                  postingLabel={activeComposeAudienceLabel}
+                  viewScopeValue={timelineScopeValue(activeTimelineScope)}
+                  composeTargetValue={channelRefValue(activeComposeChannel)}
+                  viewScopeOptions={timelineViewScopeOptions}
+                  composeTargetOptions={composeTargetOptions}
+                  contextButtonRef={contextTriggerRef}
+                  contextOpen={shellChromeState.contextOpen}
+                  contextControlsId={SHELL_CONTEXT_ID}
+                  onOpenContext={() => setContextOpen(true)}
+                  onRefresh={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
+                  onViewScopeChange={(value) => {
+                    void handleTimelineScopeChange(value);
+                  }}
+                  onComposeTargetChange={handleComposeChannelChange}
+                  composeTargetDisabled={Boolean(replyTarget)}
+                />
+                <ComposerPanel
+                  value={composer}
+                  onChange={(event) => setComposer(event.target.value)}
+                  onSubmit={handlePublish}
+                  attachmentInputKey={attachmentInputKey}
+                  onAttachmentSelection={(event) => {
+                    void handleAttachmentSelection(event);
+                  }}
+                  draftMediaItems={composerDraftViews}
+                  onRemoveDraftAttachment={handleRemoveDraftAttachment}
+                  composerError={composerError}
+                  audienceLabel={activeComposeAudienceLabel}
+                  replyTarget={
+                    replyTarget
+                      ? {
+                          content: replyTarget.content,
+                          audienceLabel: replyTarget.audience_label,
+                        }
+                      : null
+                  }
+                  onClearReply={clearReply}
+                />
+                <TimelineFeed
+                  posts={activeTimelinePostViews}
+                  emptyCopy='No posts yet for this topic.'
+                  onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                  onOpenThread={(threadId) => void openThread(threadId)}
+                  onReply={beginReply}
+                />
               </div>
 
               <section
@@ -3243,80 +3113,6 @@ export function App({ api = runtimeApi }: AppProps) {
                   </div>
                 ) : null}
                 {channelError ? <p className='error error-inline'>{channelError}</p> : null}
-                <form className='composer' onSubmit={handlePublish}>
-                  {replyTarget ? (
-                    <div className='reply-banner'>
-                      <div>
-                        <strong>Replying</strong>
-                        <p>{replyTarget.content}</p>
-                        <small>Audience: {replyTarget.audience_label}</small>
-                      </div>
-                      <Button variant='secondary' type='button' onClick={clearReply}>
-                        Clear
-                      </Button>
-                    </div>
-                  ) : null}
-                  <Textarea
-                    value={composer}
-                    onChange={(event) => setComposer(event.target.value)}
-                    placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
-                  />
-                  <Label className='file-field'>
-                    <span>Attach</span>
-                    <Input
-                      key={attachmentInputKey}
-                      aria-label='Attach'
-                      type='file'
-                      accept='image/*,video/*'
-                      multiple
-                      onChange={(event) => {
-                        void handleAttachmentSelection(event);
-                      }}
-                    />
-                  </Label>
-                  {composerError ? <p className='error error-inline'>{composerError}</p> : null}
-                  {draftMediaItems.length > 0 ? (
-                    <ul className='draft-attachment-list'>
-                      {draftMediaItems.map((item) => (
-                        <li key={item.id} className='draft-attachment-item'>
-                          <div className='draft-attachment-content'>
-                            <div className='draft-preview-frame'>
-                              <img
-                                className='draft-preview-image'
-                                src={item.preview_url}
-                                alt={`draft preview ${item.source_name}`}
-                              />
-                            </div>
-                            <div>
-                              <strong>{item.source_name}</strong>
-                              {item.attachments.map((attachment) => (
-                                <small
-                                  key={`${
-                                    attachment.role ?? attachment.mime
-                                  }-${attachment.file_name ?? item.source_name}`}
-                                >
-                                  {attachment.role ?? 'attachment'} · {attachment.mime} ·{' '}
-                                  {formatBytes(attachment.byte_size)}
-                                </small>
-                              ))}
-                            </div>
-                          </div>
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            onClick={() => handleRemoveDraftAttachment(item.id)}
-                          >
-                            Remove
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>Audience: {activeComposeAudienceLabel}</span>
-                  </div>
-                  <Button type='submit'>{replyTarget ? 'Reply' : 'Publish'}</Button>
-                </form>
               </section>
 
               <section
@@ -3583,11 +3379,6 @@ export function App({ api = runtimeApi }: AppProps) {
                 </Card>
               </section>
 
-              <ul className='post-list'>
-                {activeTimeline.map((post) => (
-                  <li key={post.object_id}>{renderPostCard(post, 'timeline')}</li>
-                ))}
-              </ul>
             </Card>
           </div>
         }

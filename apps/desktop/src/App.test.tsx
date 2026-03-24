@@ -336,6 +336,88 @@ test('desktop shell can track multiple topics at once', async () => {
   ).toBeInTheDocument();
 });
 
+test('removing the active topic falls back to the remaining tracked topic', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Active topic: kukuri:topic:second')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Remove kukuri:topic:second' }));
+
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('button', { name: 'kukuri:topic:second' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Active topic: kukuri:topic:demo')).toBeInTheDocument();
+  });
+});
+
+test('clicking a timeline post opens thread and author detail flows in the context pane', async () => {
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-thread-open',
+              envelope_id: 'envelope-thread-open',
+              author_pubkey: 'b'.repeat(64),
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: true,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'open thread from timeline',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-thread-open',
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          ['b'.repeat(64)]: {
+            name: 'bob',
+            display_name: null,
+            about: 'author detail from timeline',
+            following: false,
+            followed_by: true,
+            mutual: false,
+            friend_of_friend: false,
+            friend_of_friend_via_pubkeys: [],
+          },
+        },
+      })}
+    />
+  );
+
+  await user.click(await screen.findByText('open thread from timeline'));
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  });
+  expect(screen.getByRole('tabpanel', { name: 'Thread' })).toBeInTheDocument();
+
+  await user.click(screen.getAllByRole('button', { name: 'bob' })[0]);
+
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  });
+  expect(screen.getByText('Author Detail')).toBeInTheDocument();
+  expect(screen.getByText('author detail from timeline')).toBeInTheDocument();
+});
+
 test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
