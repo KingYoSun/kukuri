@@ -635,6 +635,7 @@ test('desktop shell can create and update a game room', async () => {
 
   await waitFor(() => {
     expect(screen.getByText('Grand Finals')).toBeInTheDocument();
+    expect(screen.getByLabelText(/game-.*-status/)).toBeInTheDocument();
   });
   expect(screen.getByText('set one')).toBeInTheDocument();
   expect(screen.getByLabelText(/game-.*-Alice-score/)).toBeInTheDocument();

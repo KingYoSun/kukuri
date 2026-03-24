@@ -1098,16 +1098,19 @@ export function App({ api = runtimeApi }: AppProps) {
   const gameDraftViews = useMemo<Record<string, GameDraftView>>(
     () =>
       Object.fromEntries(
-        Object.entries(gameDrafts).map(([roomId, draft]) => [
-          roomId,
-          {
-            status: draft.status,
-            phaseLabel: draft.phase_label,
-            scores: draft.scores,
-          },
-        ])
+        activeGameRooms.map((room) => {
+          const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
+          return [
+            room.room_id,
+            {
+              status: draft.status,
+              phaseLabel: draft.phase_label,
+              scores: draft.scores,
+            },
+          ];
+        })
       ),
-    [gameDrafts]
+    [activeGameRooms, gameDrafts]
   );
   const profileEditorFields = useMemo(
     () => ({
