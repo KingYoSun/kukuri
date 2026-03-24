@@ -1,12 +1,17 @@
 import { expect, test } from '@playwright/test';
 
-test('browser mock shell can publish, open thread, and update discovery from settings', async ({
+test('browser mock shell can switch topics, publish, open thread, open author, and update discovery from settings', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: /Seeded DHT/i })).toBeVisible();
+
+  await page.getByPlaceholder('kukuri:topic:demo').fill('kukuri:topic:browser');
+  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: /^kukuri:topic:browser$/ }).click();
+  await expect(page.getByText('Active topic: kukuri:topic:browser')).toBeVisible();
 
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
   await page.getByRole('button', { name: 'Publish' }).click();
@@ -15,6 +20,12 @@ test('browser mock shell can publish, open thread, and update discovery from set
 
   await page.getByText('hello browser mock').click();
   await expect(page.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  await page
+    .getByRole('tabpanel', { name: 'Thread' })
+    .getByRole('button', { name: 'ffffffffffff' })
+    .first()
+    .click();
+  await expect(page.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
 
   await page.getByTestId('shell-settings-trigger').click();
   await expect(page.getByRole('dialog', { name: 'Settings & diagnostics' })).toBeVisible();
