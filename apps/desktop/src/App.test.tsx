@@ -184,12 +184,10 @@ async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
 
 async function openSettingsSection(
   user: ReturnType<typeof userEvent.setup>,
-  section: 'profile' | 'connectivity' | 'discovery' | 'community-node'
+  section: 'connectivity' | 'discovery' | 'community-node'
 ) {
   const drawer = await openSettingsDrawer(user);
-  if (section !== 'profile') {
-    await user.click(within(drawer).getByTestId(`settings-section-${section}`));
-  }
+  await user.click(within(drawer).getByTestId(`settings-section-${section}`));
   return drawer;
 }
 
@@ -637,6 +635,7 @@ test('desktop shell can create and update a game room', async () => {
 
   await waitFor(() => {
     expect(screen.getByText('Grand Finals')).toBeInTheDocument();
+    expect(screen.getByLabelText(/game-.*-status/)).toBeInTheDocument();
   });
   expect(screen.getByText('set one')).toBeInTheDocument();
   expect(screen.getByLabelText(/game-.*-Alice-score/)).toBeInTheDocument();
@@ -1442,20 +1441,29 @@ test('author detail shows via authors and follow action updates relationship', a
   expect(screen.getAllByText('following').length).toBeGreaterThan(0);
 });
 
-test('local profile editor saves profile draft', async () => {
+test('local profile editor saves profile draft from primary navigation and settings stays diagnostics-only', async () => {
   const api = createDesktopMockApi();
   const user = userEvent.setup();
 
   render(<App api={api} />);
 
-  const drawer = await openSettingsSection(user, 'profile');
-  const displayNameInput = within(drawer).getByPlaceholderText('Visible label');
+  const primaryNav = screen.getByRole('navigation', { name: 'Primary sections' });
+  await user.click(within(primaryNav).getByRole('button', { name: /Profile/i }));
+  const profileSection = screen.getByPlaceholderText('Visible label').closest('.shell-section');
+  if (!(profileSection instanceof HTMLElement)) {
+    throw new Error('profile section not found');
+  }
+
+  const displayNameInput = within(profileSection).getByPlaceholderText('Visible label');
   await user.type(displayNameInput, 'Local Author');
-  await user.click(within(drawer).getByRole('button', { name: 'Save Profile' }));
+  await user.click(within(profileSection).getByRole('button', { name: 'Save Profile' }));
 
   await waitFor(() => {
     expect(screen.getByText('Local Author')).toBeInTheDocument();
   });
+
+  const drawer = await openSettingsDrawer(user);
+  expect(within(drawer).queryByTestId('settings-section-profile')).not.toBeInTheDocument();
 });
 
 test('keeps local peer ticket visible when profile loading fails', async () => {
