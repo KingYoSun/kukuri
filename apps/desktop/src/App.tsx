@@ -23,6 +23,16 @@ import {
   type ThreadPanelState,
   type TopicDiagnosticSummary,
 } from '@/components/core/types';
+import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
+import { LiveSessionPanel } from '@/components/extended/LiveSessionPanel';
+import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
+import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
+import {
+  type ExtendedPanelStatus,
+  type GameDraftView,
+  type InviteOutputLabel,
+  type PrivateChannelPendingAction,
+} from '@/components/extended/types';
 import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
@@ -54,6 +64,8 @@ import {
   CreateAttachmentInput,
   DesktopApi,
   DiscoveryConfig,
+  FriendOnlyGrantPreview,
+  FriendPlusSharePreview,
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
@@ -62,6 +74,7 @@ import {
   PostView,
   Profile,
   ProfileInput,
+  PrivateChannelInvitePreview,
   SyncStatus,
   TimelineScope,
   TopicSyncStatus,
@@ -86,6 +99,11 @@ type GameEditorDraft = {
   scores: Record<string, string>;
 };
 
+type AsyncPanelState = {
+  status: ExtendedPanelStatus;
+  error: string | null;
+};
+
 type MediaDebugValue = boolean | number | string | null | undefined;
 type MediaDebugFields = Record<string, MediaDebugValue>;
 
@@ -99,6 +117,10 @@ const SHELL_WORKSPACE_ID = 'shell-primary-workspace';
 const SHELL_NAV_ID = 'shell-nav-rail';
 const SHELL_CONTEXT_ID = 'shell-context-pane';
 const SHELL_SETTINGS_ID = 'shell-settings-drawer';
+const DEFAULT_ASYNC_PANEL_STATE: AsyncPanelState = {
+  status: 'loading',
+  error: null,
+};
 const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
   mode: 'seeded_dht',
   connect_mode: 'direct_only',
@@ -157,6 +179,11 @@ const PRIMARY_SECTION_ITEMS: Array<{
     label: 'Game',
     description: 'Game room creation, score editing, and room status.',
   },
+  {
+    id: 'profile',
+    label: 'Profile',
+    description: 'Edit your local profile as a primary product flow.',
+  },
 ];
 
 const SETTINGS_SECTION_COPY: Array<{
@@ -164,11 +191,6 @@ const SETTINGS_SECTION_COPY: Array<{
   label: string;
   description: string;
 }> = [
-  {
-    id: 'profile',
-    label: 'Profile',
-    description: 'Edit your local profile without leaving the workspace.',
-  },
   {
     id: 'connectivity',
     label: 'Connectivity',
@@ -215,6 +237,10 @@ function formatBytes(bytes: number): string {
 
 function shortPubkey(pubkey: string): string {
   return pubkey.slice(0, 12);
+}
+
+function messageFromError(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function profileInputFromProfile(profile: Profile): ProfileInput {
@@ -795,6 +821,77 @@ function createGameEditorDraft(room: GameRoomView): GameEditorDraft {
   };
 }
 
+function upsertJoinedChannel(
+  channels: JoinedPrivateChannelView[],
+  nextChannel: JoinedPrivateChannelView
+): JoinedPrivateChannelView[] {
+  const remaining = channels.filter((channel) => channel.channel_id !== nextChannel.channel_id);
+  return [...remaining, nextChannel];
+}
+
+function joinedChannelFromInvitePreview(
+  preview: PrivateChannelInvitePreview
+): JoinedPrivateChannelView {
+  return {
+    topic_id: preview.topic_id,
+    channel_id: preview.channel_id,
+    label: preview.channel_label,
+    creator_pubkey: preview.inviter_pubkey,
+    owner_pubkey: preview.inviter_pubkey,
+    joined_via_pubkey: null,
+    audience_kind: 'invite_only',
+    is_owner: false,
+    current_epoch_id: 'legacy',
+    archived_epoch_ids: [],
+    sharing_state: 'open',
+    rotation_required: false,
+    participant_count: 0,
+    stale_participant_count: 0,
+  };
+}
+
+function joinedChannelFromFriendGrantPreview(
+  preview: FriendOnlyGrantPreview
+): JoinedPrivateChannelView {
+  return {
+    topic_id: preview.topic_id,
+    channel_id: preview.channel_id,
+    label: preview.channel_label,
+    creator_pubkey: preview.owner_pubkey,
+    owner_pubkey: preview.owner_pubkey,
+    joined_via_pubkey: null,
+    audience_kind: 'friend_only',
+    is_owner: false,
+    current_epoch_id: preview.epoch_id,
+    archived_epoch_ids: [],
+    sharing_state: 'open',
+    rotation_required: false,
+    participant_count: 1,
+    stale_participant_count: 0,
+  };
+}
+
+function joinedChannelFromFriendSharePreview(
+  preview: FriendPlusSharePreview
+): JoinedPrivateChannelView {
+  return {
+    topic_id: preview.topic_id,
+    channel_id: preview.channel_id,
+    label: preview.channel_label,
+    creator_pubkey: preview.owner_pubkey,
+    owner_pubkey: preview.owner_pubkey,
+    joined_via_pubkey: preview.sponsor_pubkey,
+    audience_kind: 'friend_plus',
+    is_owner: false,
+    current_epoch_id: preview.epoch_id,
+    archived_epoch_ids: [],
+    sharing_state: 'open',
+    rotation_required: false,
+    participant_count: 2,
+    stale_participant_count: 0,
+  };
+}
+
 export function App({ api = runtimeApi }: AppProps) {
   const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
   const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
@@ -815,6 +912,11 @@ export function App({ api = runtimeApi }: AppProps) {
     Record<string, JoinedPrivateChannelView[]>
   >({
     [DEFAULT_TOPIC]: [],
+  });
+  const [selectedChannelIdByTopic, setSelectedChannelIdByTopic] = useState<
+    Record<string, string | null>
+  >({
+    [DEFAULT_TOPIC]: null,
   });
   const [timelineScopeByTopic, setTimelineScopeByTopic] = useState<Record<string, TimelineScope>>({
     [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
@@ -847,6 +949,8 @@ export function App({ api = runtimeApi }: AppProps) {
   const [profileDraft, setProfileDraft] = useState<ProfileInput>({});
   const [profileDirty, setProfileDirty] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profilePanelState, setProfilePanelState] = useState<AsyncPanelState>(DEFAULT_ASYNC_PANEL_STATE);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [selectedAuthorPubkey, setSelectedAuthorPubkey] = useState<string | null>(null);
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorSocialView | null>(null);
   const [authorError, setAuthorError] = useState<string | null>(null);
@@ -854,25 +958,40 @@ export function App({ api = runtimeApi }: AppProps) {
   const [liveTitle, setLiveTitle] = useState('');
   const [liveDescription, setLiveDescription] = useState('');
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [livePanelStateByTopic, setLivePanelStateByTopic] = useState<Record<string, AsyncPanelState>>({
+    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+  });
+  const [liveCreatePending, setLiveCreatePending] = useState(false);
+  const [livePendingBySessionId, setLivePendingBySessionId] = useState<Record<string, true>>({});
   const [channelLabelInput, setChannelLabelInput] = useState('');
   const [channelAudienceInput, setChannelAudienceInput] =
     useState<ChannelAudienceKind>('invite_only');
   const [inviteTokenInput, setInviteTokenInput] = useState('');
   const [inviteOutput, setInviteOutput] = useState<string | null>(null);
-  const [inviteOutputLabel, setInviteOutputLabel] = useState<'invite' | 'grant' | 'share'>(
-    'invite'
-  );
+  const [inviteOutputLabel, setInviteOutputLabel] = useState<InviteOutputLabel>('invite');
   const [channelError, setChannelError] = useState<string | null>(null);
+  const [channelPanelStateByTopic, setChannelPanelStateByTopic] = useState<
+    Record<string, AsyncPanelState>
+  >({
+    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+  });
+  const [channelActionPending, setChannelActionPending] =
+    useState<PrivateChannelPendingAction>(null);
   const [gameTitle, setGameTitle] = useState('');
   const [gameDescription, setGameDescription] = useState('');
   const [gameParticipantsInput, setGameParticipantsInput] = useState('');
   const [gameError, setGameError] = useState<string | null>(null);
   const [gameDrafts, setGameDrafts] = useState<Record<string, GameEditorDraft>>({});
+  const [gamePanelStateByTopic, setGamePanelStateByTopic] = useState<Record<string, AsyncPanelState>>({
+    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+  });
+  const [gameCreatePending, setGameCreatePending] = useState(false);
+  const [gameSavingByRoomId, setGameSavingByRoomId] = useState<Record<string, true>>({});
   const [error, setError] = useState<string | null>(null);
   const [shellChromeState, setShellChromeState] = useState<ShellChromeState>({
     activePrimarySection: 'timeline',
     activeContextPaneMode: 'thread',
-    activeSettingsSection: 'profile',
+    activeSettingsSection: 'connectivity',
     navOpen: false,
     contextOpen: false,
     settingsOpen: false,
@@ -889,6 +1008,7 @@ export function App({ api = runtimeApi }: AppProps) {
     channels: null,
     live: null,
     game: null,
+    profile: null,
   });
 
   const headline = useMemo(
@@ -936,13 +1056,68 @@ export function App({ api = runtimeApi }: AppProps) {
     }
     return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
   }, [activeComposeChannel, activeJoinedChannels, replyTarget]);
+  const selectedPrivateChannelId = useMemo(
+    () => selectedChannelIdByTopic[activeTopic] ?? null,
+    [activeTopic, selectedChannelIdByTopic]
+  );
   const activePrivateChannel = useMemo(
     () =>
-      activeComposeChannel.kind === 'private_channel'
-        ? activeJoinedChannels.find((channel) => channel.channel_id === activeComposeChannel.channel_id) ??
-          null
+      selectedPrivateChannelId
+        ? activeJoinedChannels.find((channel) => channel.channel_id === selectedPrivateChannelId) ?? null
         : null,
-    [activeComposeChannel, activeJoinedChannels]
+    [activeJoinedChannels, selectedPrivateChannelId]
+  );
+  const activeChannelPanelState = useMemo(
+    () => channelPanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE,
+    [activeTopic, channelPanelStateByTopic]
+  );
+  const activeLivePanelState = useMemo(
+    () => livePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE,
+    [activeTopic, livePanelStateByTopic]
+  );
+  const activeGamePanelState = useMemo(
+    () => gamePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE,
+    [activeTopic, gamePanelStateByTopic]
+  );
+  const privateChannelListItems = useMemo(
+    () =>
+      activeJoinedChannels.map((channel) => ({
+        channel,
+        active: channel.channel_id === selectedPrivateChannelId,
+      })),
+    [activeJoinedChannels, selectedPrivateChannelId]
+  );
+  const liveSessionListItems = useMemo(
+    () =>
+      activeLiveSessions.map((session) => ({
+        session,
+        isOwner: session.host_pubkey === syncStatus.local_author_pubkey,
+        pending: Boolean(livePendingBySessionId[session.session_id]),
+      })),
+    [activeLiveSessions, livePendingBySessionId, syncStatus.local_author_pubkey]
+  );
+  const gameDraftViews = useMemo<Record<string, GameDraftView>>(
+    () =>
+      Object.fromEntries(
+        Object.entries(gameDrafts).map(([roomId, draft]) => [
+          roomId,
+          {
+            status: draft.status,
+            phaseLabel: draft.phase_label,
+            scores: draft.scores,
+          },
+        ])
+      ),
+    [gameDrafts]
+  );
+  const profileEditorFields = useMemo(
+    () => ({
+      displayName: profileDraft.display_name ?? '',
+      name: profileDraft.name ?? '',
+      about: profileDraft.about ?? '',
+      picture: profileDraft.picture ?? '',
+    }),
+    [profileDraft]
   );
   const communityNodeStatusByBaseUrl = useMemo(
     () =>
@@ -988,8 +1163,14 @@ export function App({ api = runtimeApi }: AppProps) {
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       try {
-        const [timelineViews, liveViews, gameViews, joinedChannelViews, threadView, status] =
-          await Promise.all([
+        const [
+          timelineViews,
+          liveViewsResult,
+          gameViewsResult,
+          joinedChannelViewsResult,
+          threadView,
+          status,
+        ] = await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
               topic,
@@ -1001,7 +1182,7 @@ export function App({ api = runtimeApi }: AppProps) {
               ),
             }))
           ),
-          Promise.all(
+          Promise.allSettled(
             currentTopics.map(async (topic) => ({
               topic,
               sessions: await api.listLiveSessions(
@@ -1010,7 +1191,7 @@ export function App({ api = runtimeApi }: AppProps) {
               ),
             }))
           ),
-          Promise.all(
+          Promise.allSettled(
             currentTopics.map(async (topic) => ({
               topic,
               rooms: await api.listGameRooms(
@@ -1019,7 +1200,7 @@ export function App({ api = runtimeApi }: AppProps) {
               ),
             }))
           ),
-          Promise.all(
+          Promise.allSettled(
             currentTopics.map(async (topic) => ({
               topic,
               channels: await api.listJoinedPrivateChannels(topic),
@@ -1051,15 +1232,84 @@ export function App({ api = runtimeApi }: AppProps) {
           setTimelinesByTopic(
             Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
           );
-          setLiveSessionsByTopic(
-            Object.fromEntries(liveViews.map(({ topic, sessions }) => [topic, sessions]))
-          );
-          setGameRoomsByTopic(
-            Object.fromEntries(gameViews.map(({ topic, rooms }) => [topic, rooms]))
-          );
-          setJoinedChannelsByTopic(
-            Object.fromEntries(joinedChannelViews.map(({ topic, channels }) => [topic, channels]))
-          );
+          setLiveSessionsByTopic((current) => {
+            const next = { ...current };
+            for (const result of liveViewsResult) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = result.value.sessions;
+              }
+            }
+            return next;
+          });
+          setGameRoomsByTopic((current) => {
+            const next = { ...current };
+            for (const result of gameViewsResult) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = result.value.rooms;
+              }
+            }
+            return next;
+          });
+          setJoinedChannelsByTopic((current) => {
+            const next = { ...current };
+            for (const result of joinedChannelViewsResult) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = result.value.channels;
+              }
+            }
+            return next;
+          });
+          setLivePanelStateByTopic((current) => {
+            const next = { ...current };
+            for (const [index, result] of liveViewsResult.entries()) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = {
+                  status: 'ready',
+                  error: null,
+                };
+              } else {
+                next[currentTopics[index]] = {
+                  status: 'error',
+                  error: messageFromError(result.reason, 'failed to load live sessions'),
+                };
+              }
+            }
+            return next;
+          });
+          setGamePanelStateByTopic((current) => {
+            const next = { ...current };
+            for (const [index, result] of gameViewsResult.entries()) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = {
+                  status: 'ready',
+                  error: null,
+                };
+              } else {
+                next[currentTopics[index]] = {
+                  status: 'error',
+                  error: messageFromError(result.reason, 'failed to load game rooms'),
+                };
+              }
+            }
+            return next;
+          });
+          setChannelPanelStateByTopic((current) => {
+            const next = { ...current };
+            for (const [index, result] of joinedChannelViewsResult.entries()) {
+              if (result.status === 'fulfilled') {
+                next[result.value.topic] = {
+                  status: 'ready',
+                  error: null,
+                };
+              } else {
+                next[currentTopics[index]] = {
+                  status: 'error',
+                  error: messageFromError(result.reason, 'failed to load private channels'),
+                };
+              }
+            }
+            return next;
+          });
           setSyncStatus(status);
           if (discoveryResult.status === 'fulfilled') {
             setDiscoveryConfig(discoveryResult.value);
@@ -1087,12 +1337,17 @@ export function App({ api = runtimeApi }: AppProps) {
               setProfileDraft(profileInputFromProfile(profileResult.value));
             }
             setProfileError(null);
+            setProfilePanelState({
+              status: 'ready',
+              error: null,
+            });
           } else {
-            setProfileError(
-              profileResult.reason instanceof Error
-                ? profileResult.reason.message
-                : 'failed to load profile'
-            );
+            const nextProfileError = messageFromError(profileResult.reason, 'failed to load profile');
+            setProfileError(nextProfileError);
+            setProfilePanelState({
+              status: 'error',
+              error: nextProfileError,
+            });
           }
           if (!selectedAuthorPubkey) {
             setSelectedAuthor(null);
@@ -1176,6 +1431,40 @@ export function App({ api = runtimeApi }: AppProps) {
       return next;
     });
   }, [activeGameRooms]);
+
+  useEffect(() => {
+    if (!selectedPrivateChannelId) {
+      return;
+    }
+    const selectedStillJoined = activeJoinedChannels.some(
+      (channel) => channel.channel_id === selectedPrivateChannelId
+    );
+    if (selectedStillJoined) {
+      return;
+    }
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [activeTopic]: null,
+    }));
+    setComposeChannelByTopic((current) =>
+      current[activeTopic]?.kind === 'private_channel' &&
+      current[activeTopic].channel_id === selectedPrivateChannelId
+        ? {
+            ...current,
+            [activeTopic]: PUBLIC_CHANNEL_REF,
+          }
+        : current
+    );
+    setTimelineScopeByTopic((current) =>
+      current[activeTopic]?.kind === 'channel' &&
+      current[activeTopic].channel_id === selectedPrivateChannelId
+        ? {
+            ...current,
+            [activeTopic]: PUBLIC_TIMELINE_SCOPE,
+          }
+        : current
+    );
+  }, [activeJoinedChannels, activeTopic, selectedPrivateChannelId]);
 
   useEffect(() => {
     let disposed = false;
@@ -1425,17 +1714,84 @@ export function App({ api = runtimeApi }: AppProps) {
     setReplyTarget(null);
   }
 
+  function handleProfileFieldChange(
+    field: 'displayName' | 'name' | 'about' | 'picture',
+    value: string
+  ) {
+    const nextField: keyof ProfileInput =
+      field === 'displayName'
+        ? 'display_name'
+        : field === 'picture'
+          ? 'picture'
+          : field;
+    setProfileDraft((current) => ({
+      ...current,
+      [nextField]: value,
+    }));
+    setProfileDirty(true);
+  }
+
+  function resetProfileDraft() {
+    if (!localProfile) {
+      return;
+    }
+    setProfileDraft(profileInputFromProfile(localProfile));
+    setProfileDirty(false);
+    setProfileError(null);
+    setProfilePanelState({
+      status: 'ready',
+      error: null,
+    });
+  }
+
+  function handleSelectPrivateChannel(channelId: string) {
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [activeTopic]: channelId,
+    }));
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [activeTopic]: {
+        kind: 'channel',
+        channel_id: channelId,
+      },
+    }));
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [activeTopic]: {
+        kind: 'private_channel',
+        channel_id: channelId,
+      },
+    }));
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'channels',
+    }));
+  }
+
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setProfileSaving(true);
     try {
       const profile = await api.setMyProfile(profileDraft);
       setLocalProfile(profile);
       setProfileDraft(profileInputFromProfile(profile));
       setProfileDirty(false);
       setProfileError(null);
+      setProfilePanelState({
+        status: 'ready',
+        error: null,
+      });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (saveError) {
-      setProfileError(saveError instanceof Error ? saveError.message : 'failed to save profile');
+      const nextProfileError = messageFromError(saveError, 'failed to save profile');
+      setProfileError(nextProfileError);
+      setProfilePanelState({
+        status: 'error',
+        error: nextProfileError,
+      });
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -1500,9 +1856,15 @@ export function App({ api = runtimeApi }: AppProps) {
   }
 
   function handleComposeChannelChange(value: string) {
+    const nextChannelRef = channelRefFromValue(value);
     setComposeChannelByTopic((current) => ({
       ...current,
-      [activeTopic]: channelRefFromValue(value),
+      [activeTopic]: nextChannelRef,
+    }));
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [activeTopic]:
+        nextChannelRef.kind === 'private_channel' ? nextChannelRef.channel_id : current[activeTopic] ?? null,
     }));
   }
 
@@ -1512,12 +1874,24 @@ export function App({ api = runtimeApi }: AppProps) {
       setChannelError('channel label is required');
       return;
     }
+    setChannelActionPending('create');
     try {
       const channel = await api.createPrivateChannel(
         activeTopic,
         channelLabelInput.trim(),
         channelAudienceInput
       );
+      setJoinedChannelsByTopic((current) => ({
+        ...current,
+        [activeTopic]: upsertJoinedChannel(current[activeTopic] ?? [], channel),
+      }));
+      setChannelPanelStateByTopic((current) => ({
+        ...current,
+        [activeTopic]: {
+          status: 'ready',
+          error: null,
+        },
+      }));
       setChannelLabelInput('');
       setChannelAudienceInput('invite_only');
       setChannelError(null);
@@ -1527,6 +1901,10 @@ export function App({ api = runtimeApi }: AppProps) {
           kind: 'channel',
           channel_id: channel.channel_id,
         },
+      }));
+      setSelectedChannelIdByTopic((current) => ({
+        ...current,
+        [activeTopic]: channel.channel_id,
       }));
       setComposeChannelByTopic((current) => ({
         ...current,
@@ -1541,81 +1919,91 @@ export function App({ api = runtimeApi }: AppProps) {
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (channelCreateError) {
-      setChannelError(
-        channelCreateError instanceof Error
-          ? channelCreateError.message
-          : 'failed to create channel'
-      );
+      setChannelError(messageFromError(channelCreateError, 'failed to create channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
   async function handleCreateInvite() {
-    if (activeComposeChannel.kind !== 'private_channel') {
+    if (!activePrivateChannel) {
       setChannelError('select a private channel before creating an invite');
       return;
     }
+    setChannelActionPending('invite');
     try {
-      const token = await api.exportPrivateChannelInvite(
-        activeTopic,
-        activeComposeChannel.channel_id,
-        null
-      );
+      const token = await api.exportPrivateChannelInvite(activeTopic, activePrivateChannel.channel_id, null);
       setInviteOutput(token);
       setInviteOutputLabel('invite');
       setChannelError(null);
     } catch (inviteError) {
-      setChannelError(
-        inviteError instanceof Error ? inviteError.message : 'failed to create invite'
-      );
+      setChannelError(messageFromError(inviteError, 'failed to create invite'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
   async function handleCreateGrant() {
-    if (activeComposeChannel.kind !== 'private_channel') {
+    if (!activePrivateChannel) {
       setChannelError('select a private channel before creating a grant');
       return;
     }
+    setChannelActionPending('grant');
     try {
-      const token = await api.exportFriendOnlyGrant(
-        activeTopic,
-        activeComposeChannel.channel_id,
-        null
-      );
+      const token = await api.exportFriendOnlyGrant(activeTopic, activePrivateChannel.channel_id, null);
       setInviteOutput(token);
       setInviteOutputLabel('grant');
       setChannelError(null);
     } catch (grantError) {
-      setChannelError(
-        grantError instanceof Error ? grantError.message : 'failed to create friend grant'
-      );
+      setChannelError(messageFromError(grantError, 'failed to create friend grant'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
   async function handleCreateShare() {
-    if (activeComposeChannel.kind !== 'private_channel') {
+    if (!activePrivateChannel) {
       setChannelError('select a private channel before creating a share');
       return;
     }
+    setChannelActionPending('share');
     try {
-      const token = await api.exportFriendPlusShare(
-        activeTopic,
-        activeComposeChannel.channel_id,
-        null
-      );
+      const token = await api.exportFriendPlusShare(activeTopic, activePrivateChannel.channel_id, null);
       setInviteOutput(token);
       setInviteOutputLabel('share');
       setChannelError(null);
     } catch (shareError) {
-      setChannelError(
-        shareError instanceof Error ? shareError.message : 'failed to create friends+ share'
-      );
+      setChannelError(messageFromError(shareError, 'failed to create friends+ share'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
-  async function activateImportedPrivateChannel(topicId: string, channelId: string) {
+  async function activateImportedPrivateChannel(
+    topicId: string,
+    channelId: string,
+    placeholderChannel?: JoinedPrivateChannelView
+  ) {
     const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
     setTrackedTopics(nextTopics);
     setActiveTopic(topicId);
+    if (placeholderChannel) {
+      setJoinedChannelsByTopic((current) => ({
+        ...current,
+        [topicId]: upsertJoinedChannel(current[topicId] ?? [], placeholderChannel),
+      }));
+      setChannelPanelStateByTopic((current) => ({
+        ...current,
+        [topicId]: {
+          status: 'ready',
+          error: null,
+        },
+      }));
+    }
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [topicId]: channelId,
+    }));
     setTimelineScopeByTopic((current) => ({
       ...current,
       [topicId]: {
@@ -1647,13 +2035,18 @@ export function App({ api = runtimeApi }: AppProps) {
       setChannelError('invite token is required');
       return;
     }
+    setChannelActionPending('join-invite');
     try {
       const preview = await api.importPrivateChannelInvite(inviteTokenInput.trim());
-      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
-    } catch (inviteError) {
-      setChannelError(
-        inviteError instanceof Error ? inviteError.message : 'failed to join private channel'
+      await activateImportedPrivateChannel(
+        preview.topic_id,
+        preview.channel_id,
+        joinedChannelFromInvitePreview(preview)
       );
+    } catch (inviteError) {
+      setChannelError(messageFromError(inviteError, 'failed to join private channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
@@ -1662,13 +2055,18 @@ export function App({ api = runtimeApi }: AppProps) {
       setChannelError('grant token is required');
       return;
     }
+    setChannelActionPending('join-grant');
     try {
       const preview = await api.importFriendOnlyGrant(inviteTokenInput.trim());
-      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
-    } catch (grantError) {
-      setChannelError(
-        grantError instanceof Error ? grantError.message : 'failed to join friends channel'
+      await activateImportedPrivateChannel(
+        preview.topic_id,
+        preview.channel_id,
+        joinedChannelFromFriendGrantPreview(preview)
       );
+    } catch (grantError) {
+      setChannelError(messageFromError(grantError, 'failed to join friends channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
@@ -1677,47 +2075,54 @@ export function App({ api = runtimeApi }: AppProps) {
       setChannelError('share token is required');
       return;
     }
+    setChannelActionPending('join-share');
     try {
       const preview = await api.importFriendPlusShare(inviteTokenInput.trim());
-      await activateImportedPrivateChannel(preview.topic_id, preview.channel_id);
-    } catch (shareError) {
-      setChannelError(
-        shareError instanceof Error ? shareError.message : 'failed to join friends+ channel'
+      await activateImportedPrivateChannel(
+        preview.topic_id,
+        preview.channel_id,
+        joinedChannelFromFriendSharePreview(preview)
       );
+    } catch (shareError) {
+      setChannelError(messageFromError(shareError, 'failed to join friends+ channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
   async function handleFreezePrivateChannel() {
-    if (activeComposeChannel.kind !== 'private_channel') {
+    if (!activePrivateChannel) {
       setChannelError('select a private channel before freezing it');
       return;
     }
+    setChannelActionPending('freeze');
     try {
-      await api.freezePrivateChannel(activeTopic, activeComposeChannel.channel_id);
+      await api.freezePrivateChannel(activeTopic, activePrivateChannel.channel_id);
       setInviteOutput(null);
       setChannelError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (freezeError) {
-      setChannelError(
-        freezeError instanceof Error ? freezeError.message : 'failed to freeze private channel'
-      );
+      setChannelError(messageFromError(freezeError, 'failed to freeze private channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
   async function handleRotatePrivateChannel() {
-    if (activeComposeChannel.kind !== 'private_channel') {
+    if (!activePrivateChannel) {
       setChannelError('select a private channel before rotating it');
       return;
     }
+    setChannelActionPending('rotate');
     try {
-      await api.rotatePrivateChannel(activeTopic, activeComposeChannel.channel_id);
+      await api.rotatePrivateChannel(activeTopic, activePrivateChannel.channel_id);
       setInviteOutput(null);
       setChannelError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (rotateError) {
-      setChannelError(
-        rotateError instanceof Error ? rotateError.message : 'failed to rotate private channel'
-      );
+      setChannelError(messageFromError(rotateError, 'failed to rotate private channel'));
+    } finally {
+      setChannelActionPending(null);
     }
   }
 
@@ -2006,6 +2411,7 @@ export function App({ api = runtimeApi }: AppProps) {
       setLiveError('live session title is required');
       return;
     }
+    setLiveCreatePending(true);
     try {
       await api.createLiveSession(
         activeTopic,
@@ -2022,39 +2428,69 @@ export function App({ api = runtimeApi }: AppProps) {
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (liveCreateError) {
-      setLiveError(
-        liveCreateError instanceof Error ? liveCreateError.message : 'failed to create live session'
-      );
+      setLiveError(messageFromError(liveCreateError, 'failed to create live session'));
+    } finally {
+      setLiveCreatePending(false);
     }
   }
 
   async function handleJoinLiveSession(sessionId: string) {
+    setLivePendingBySessionId((current) => ({
+      ...current,
+      [sessionId]: true,
+    }));
     try {
       await api.joinLiveSession(activeTopic, sessionId);
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (joinError) {
-      setLiveError(joinError instanceof Error ? joinError.message : 'failed to join live session');
+      setLiveError(messageFromError(joinError, 'failed to join live session'));
+    } finally {
+      setLivePendingBySessionId((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
     }
   }
 
   async function handleLeaveLiveSession(sessionId: string) {
+    setLivePendingBySessionId((current) => ({
+      ...current,
+      [sessionId]: true,
+    }));
     try {
       await api.leaveLiveSession(activeTopic, sessionId);
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (leaveError) {
-      setLiveError(leaveError instanceof Error ? leaveError.message : 'failed to leave live session');
+      setLiveError(messageFromError(leaveError, 'failed to leave live session'));
+    } finally {
+      setLivePendingBySessionId((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
     }
   }
 
   async function handleEndLiveSession(sessionId: string) {
+    setLivePendingBySessionId((current) => ({
+      ...current,
+      [sessionId]: true,
+    }));
     try {
       await api.endLiveSession(activeTopic, sessionId);
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (endError) {
-      setLiveError(endError instanceof Error ? endError.message : 'failed to end live session');
+      setLiveError(messageFromError(endError, 'failed to end live session'));
+    } finally {
+      setLivePendingBySessionId((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
     }
   }
 
@@ -2076,6 +2512,7 @@ export function App({ api = runtimeApi }: AppProps) {
       setGameError('game room requires at least two unique participants');
       return;
     }
+    setGameCreatePending(true);
     try {
       await api.createGameRoom(
         activeTopic,
@@ -2094,7 +2531,9 @@ export function App({ api = runtimeApi }: AppProps) {
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (createError) {
-      setGameError(createError instanceof Error ? createError.message : 'failed to create game room');
+      setGameError(messageFromError(createError, 'failed to create game room'));
+    } finally {
+      setGameCreatePending(false);
     }
   }
 
@@ -2115,7 +2554,11 @@ export function App({ api = runtimeApi }: AppProps) {
     });
   }
 
-  async function handleUpdateGameRoom(room: GameRoomView) {
+  async function handleUpdateGameRoom(roomId: string) {
+    const room = activeGameRooms.find((candidate) => candidate.room_id === roomId);
+    if (!room) {
+      return;
+    }
     const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
     const scores: GameScoreView[] = [];
     for (const score of room.scores) {
@@ -2131,6 +2574,10 @@ export function App({ api = runtimeApi }: AppProps) {
         score: parsed,
       });
     }
+    setGameSavingByRoomId((current) => ({
+      ...current,
+      [room.room_id]: true,
+    }));
     try {
       await api.updateGameRoom(
         activeTopic,
@@ -2147,7 +2594,13 @@ export function App({ api = runtimeApi }: AppProps) {
       });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (updateError) {
-      setGameError(updateError instanceof Error ? updateError.message : 'failed to update game room');
+      setGameError(messageFromError(updateError, 'failed to update game room'));
+    } finally {
+      setGameSavingByRoomId((current) => {
+        const next = { ...current };
+        delete next[room.room_id];
+        return next;
+      });
     }
   }
 
@@ -2404,103 +2857,6 @@ export function App({ api = runtimeApi }: AppProps) {
     {
       ...SETTINGS_SECTION_COPY[0],
       content: (
-        <Card>
-          <CardHeader>
-            <h3>My Profile</h3>
-            <small>
-              {authorDisplayLabel(
-                syncStatus.local_author_pubkey,
-                localProfile?.display_name,
-                localProfile?.name
-              )}
-            </small>
-          </CardHeader>
-          <form className='composer composer-compact' onSubmit={handleSaveProfile}>
-            <Label>
-              <span>Display Name</span>
-              <Input
-                value={profileDraft.display_name ?? ''}
-                onChange={(event) => {
-                  setProfileDraft((current) => ({
-                    ...current,
-                    display_name: event.target.value,
-                  }));
-                  setProfileDirty(true);
-                }}
-                placeholder='Visible label'
-              />
-            </Label>
-            <Label>
-              <span>Name</span>
-              <Input
-                value={profileDraft.name ?? ''}
-                onChange={(event) => {
-                  setProfileDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }));
-                  setProfileDirty(true);
-                }}
-                placeholder='Canonical name'
-              />
-            </Label>
-            <Label>
-              <span>About</span>
-              <Textarea
-                value={profileDraft.about ?? ''}
-                onChange={(event) => {
-                  setProfileDraft((current) => ({
-                    ...current,
-                    about: event.target.value,
-                  }));
-                  setProfileDirty(true);
-                }}
-                className='ticket-output'
-                placeholder='Short bio'
-              />
-            </Label>
-            <Label>
-              <span>Picture URL</span>
-              <Input
-                value={profileDraft.picture ?? ''}
-                onChange={(event) => {
-                  setProfileDraft((current) => ({
-                    ...current,
-                    picture: event.target.value,
-                  }));
-                  setProfileDirty(true);
-                }}
-                placeholder='https://...'
-              />
-            </Label>
-            {profileError ? <p className='error error-inline'>{profileError}</p> : null}
-            <div className='discovery-actions'>
-              <Button variant='secondary' type='submit' disabled={!profileDirty}>
-                Save Profile
-              </Button>
-              <Button
-                variant='secondary'
-                type='button'
-                disabled={!profileDirty}
-                onClick={() => {
-                  if (!localProfile) {
-                    return;
-                  }
-                  setProfileDraft(profileInputFromProfile(localProfile));
-                  setProfileDirty(false);
-                  setProfileError(null);
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </form>
-        </Card>
-      ),
-    },
-    {
-      ...SETTINGS_SECTION_COPY[1],
-      content: (
         <div className='shell-main-stack'>
           <Card>
             <CardHeader>
@@ -2575,7 +2931,7 @@ export function App({ api = runtimeApi }: AppProps) {
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[2],
+      ...SETTINGS_SECTION_COPY[1],
       content: (
         <Card className='discovery-panel'>
           <CardHeader>
@@ -2671,7 +3027,7 @@ export function App({ api = runtimeApi }: AppProps) {
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[3],
+      ...SETTINGS_SECTION_COPY[2],
       content: (
         <Card className='discovery-panel'>
           <CardHeader>
@@ -2962,157 +3318,36 @@ export function App({ api = runtimeApi }: AppProps) {
                   }))
                 }
               >
-                <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
-                  <Label>
-                    <span>Create Channel</span>
-                    <Input
-                      value={channelLabelInput}
-                      onChange={(event) => setChannelLabelInput(event.target.value)}
-                      placeholder='core contributors'
-                    />
-                  </Label>
-                  <Label>
-                    <span>Audience</span>
-                    <Select
-                      aria-label='Channel Audience'
-                      value={channelAudienceInput}
-                      onChange={(event) =>
-                        setChannelAudienceInput(event.target.value as ChannelAudienceKind)
-                      }
-                    >
-                      <option value='invite_only'>Invite only</option>
-                      <option value='friend_only'>Friends</option>
-                      <option value='friend_plus'>Friends+</option>
-                    </Select>
-                  </Label>
-                  <Button variant='secondary' type='submit'>
-                    Create Channel
-                  </Button>
-                  {activePrivateChannel?.audience_kind === 'invite_only' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={activeComposeChannel.kind !== 'private_channel'}
-                      onClick={() => void handleCreateInvite()}
-                    >
-                      Create Invite
-                    </Button>
-                  ) : null}
-                  {activePrivateChannel?.audience_kind === 'friend_only' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={!activePrivateChannel.is_owner}
-                      onClick={() => void handleCreateGrant()}
-                    >
-                      Create Grant
-                    </Button>
-                  ) : null}
-                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={activeComposeChannel.kind !== 'private_channel'}
-                      onClick={() => void handleCreateShare()}
-                    >
-                      Create Share
-                    </Button>
-                  ) : null}
-                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={!activePrivateChannel.is_owner}
-                      onClick={() => void handleFreezePrivateChannel()}
-                    >
-                      Freeze
-                    </Button>
-                  ) : null}
-                  {activePrivateChannel?.audience_kind === 'friend_only' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={!activePrivateChannel.is_owner}
-                      onClick={() => void handleRotatePrivateChannel()}
-                    >
-                      Rotate
-                    </Button>
-                  ) : null}
-                  {activePrivateChannel?.audience_kind === 'friend_plus' ? (
-                    <Button
-                      variant='secondary'
-                      type='button'
-                      disabled={!activePrivateChannel.is_owner}
-                      onClick={() => void handleRotatePrivateChannel()}
-                    >
-                      Rotate
-                    </Button>
-                  ) : null}
-                </form>
-                <form className='composer composer-compact' onSubmit={handleJoinInvite}>
-                  <Label>
-                    <span>Join via Invite</span>
-                    <Textarea
-                      value={inviteTokenInput}
-                      onChange={(event) => setInviteTokenInput(event.target.value)}
-                      placeholder='paste private channel invite, friend grant, or friends+ share'
-                    />
-                  </Label>
-                  <Button variant='secondary' type='submit'>
-                    Join Invite
-                  </Button>
-                  <Button variant='secondary' type='button' onClick={() => void handleJoinGrant()}>
-                    Join Grant
-                  </Button>
-                  <Button variant='secondary' type='button' onClick={() => void handleJoinShare()}>
-                    Join Share
-                  </Button>
-                </form>
-                {inviteOutput ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      {inviteOutputLabel === 'grant'
-                        ? 'Latest grant'
-                        : inviteOutputLabel === 'share'
-                          ? 'Latest share'
-                          : 'Latest invite'}
-                    </span>
-                    <code>{inviteOutput}</code>
-                  </div>
-                ) : null}
-                {activePrivateChannel ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      Policy:{' '}
-                      {activePrivateChannel.audience_kind === 'friend_only'
-                        ? 'Friends: only mutual followers can join'
-                        : activePrivateChannel.audience_kind === 'friend_plus'
-                          ? 'Friends+: participants can share to their mutuals'
-                          : 'Invite only'}
-                    </span>
-                    <span>epoch: {activePrivateChannel.current_epoch_id}</span>
-                    <span>sharing: {activePrivateChannel.sharing_state}</span>
-                    {activePrivateChannel.joined_via_pubkey ? (
-                      <span>joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}</span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activePrivateChannel &&
-                (activePrivateChannel.audience_kind === 'friend_only' ||
-                  activePrivateChannel.audience_kind === 'friend_plus') ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>participants: {activePrivateChannel.participant_count}</span>
-                    <span>stale: {activePrivateChannel.stale_participant_count}</span>
-                    <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
-                  </div>
-                ) : null}
-                {activePrivateChannel?.audience_kind === 'friend_only' &&
-                activePrivateChannel.rotation_required ? (
-                  <div className='topic-diagnostic topic-diagnostic-error'>
-                    <span>rotation required: current participants include non-mutual followers</span>
-                  </div>
-                ) : null}
-                {channelError ? <p className='error error-inline'>{channelError}</p> : null}
+                <PrivateChannelPanel
+                  status={activeChannelPanelState.status}
+                  error={channelError ?? activeChannelPanelState.error}
+                  pendingAction={channelActionPending}
+                  channelLabel={channelLabelInput}
+                  channelAudience={channelAudienceInput}
+                  channelAudienceOptions={[
+                    { value: 'invite_only', label: 'Invite only' },
+                    { value: 'friend_only', label: 'Friends' },
+                    { value: 'friend_plus', label: 'Friends+' },
+                  ]}
+                  inviteTokenInput={inviteTokenInput}
+                  inviteOutput={inviteOutput}
+                  inviteOutputLabel={inviteOutputLabel}
+                  channels={privateChannelListItems}
+                  selectedChannel={activePrivateChannel}
+                  onChannelLabelChange={setChannelLabelInput}
+                  onChannelAudienceChange={setChannelAudienceInput}
+                  onInviteTokenChange={setInviteTokenInput}
+                  onCreateChannel={handleCreatePrivateChannel}
+                  onJoinInvite={handleJoinInvite}
+                  onJoinGrant={() => void handleJoinGrant()}
+                  onJoinShare={() => void handleJoinShare()}
+                  onSelectChannel={handleSelectPrivateChannel}
+                  onCreateInvite={() => void handleCreateInvite()}
+                  onCreateGrant={() => void handleCreateGrant()}
+                  onCreateShare={() => void handleCreateShare()}
+                  onFreeze={() => void handleFreezePrivateChannel()}
+                  onRotate={() => void handleRotatePrivateChannel()}
+                />
               </section>
 
               <section
@@ -3126,104 +3361,21 @@ export function App({ api = runtimeApi }: AppProps) {
                   }))
                 }
               >
-                <Card className='panel-subsection'>
-                  <CardHeader>
-                    <h3>Live Sessions</h3>
-                    <small>{activeLiveSessions.length} active</small>
-                  </CardHeader>
-                  <form className='composer composer-compact' onSubmit={handleCreateLiveSession}>
-                    <Label>
-                      <span>Live Title</span>
-                      <Input
-                        value={liveTitle}
-                        onChange={(event) => setLiveTitle(event.target.value)}
-                        placeholder='Friday stream'
-                      />
-                    </Label>
-                    <Label>
-                      <span>Live Description</span>
-                      <Textarea
-                        value={liveDescription}
-                        onChange={(event) => setLiveDescription(event.target.value)}
-                        placeholder='short session summary'
-                      />
-                    </Label>
-                    {liveError ? <p className='error error-inline'>{liveError}</p> : null}
-                    <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>Audience: {activeComposeAudienceLabel}</span>
-                    </div>
-                    <Button type='submit'>Start Live</Button>
-                  </form>
-                  {activeLiveSessions.length === 0 ? (
-                    <p className='empty-state'>No live sessions</p>
-                  ) : null}
-                  <ul className='post-list'>
-                    {activeLiveSessions.map((session) => {
-                      const isOwner = session.host_pubkey === syncStatus.local_author_pubkey;
-                      return (
-                        <li key={session.session_id}>
-                          <article className='post-card'>
-                            <div className='post-meta'>
-                              <span>{session.title}</span>
-                              <span>{session.status}</span>
-                              <span className='reply-chip'>{session.audience_label}</span>
-                            </div>
-                            <div className='post-body'>
-                              <strong className='post-title'>
-                                {session.description || 'no description'}
-                              </strong>
-                            </div>
-                            <small>{session.session_id}</small>
-                            <div className='topic-diagnostic topic-diagnostic-secondary'>
-                              <span>viewers: {session.viewer_count}</span>
-                              <span>
-                                started:{' '}
-                                {new Date(session.started_at).toLocaleTimeString('ja-JP')}
-                              </span>
-                            </div>
-                            {session.ended_at ? (
-                              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                <span>
-                                  ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}
-                                </span>
-                              </div>
-                            ) : null}
-                            <div className='post-actions'>
-                              {session.joined_by_me ? (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  onClick={() => void handleLeaveLiveSession(session.session_id)}
-                                >
-                                  Leave
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  disabled={session.status === 'Ended'}
-                                  onClick={() => void handleJoinLiveSession(session.session_id)}
-                                >
-                                  Join
-                                </Button>
-                              )}
-                              {isOwner ? (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  disabled={session.status === 'Ended'}
-                                  onClick={() => void handleEndLiveSession(session.session_id)}
-                                >
-                                  End
-                                </Button>
-                              ) : null}
-                            </div>
-                          </article>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
+                <LiveSessionPanel
+                  status={activeLivePanelState.status}
+                  error={liveError ?? activeLivePanelState.error}
+                  audienceLabel={activeComposeAudienceLabel}
+                  title={liveTitle}
+                  description={liveDescription}
+                  createPending={liveCreatePending}
+                  sessions={liveSessionListItems}
+                  onTitleChange={setLiveTitle}
+                  onDescriptionChange={setLiveDescription}
+                  onSubmit={handleCreateLiveSession}
+                  onJoin={(sessionId) => void handleJoinLiveSession(sessionId)}
+                  onLeave={(sessionId) => void handleLeaveLiveSession(sessionId)}
+                  onEnd={(sessionId) => void handleEndLiveSession(sessionId)}
+                />
               </section>
 
               <section
@@ -3237,146 +3389,73 @@ export function App({ api = runtimeApi }: AppProps) {
                   }))
                 }
               >
-                <Card className='panel-subsection'>
-                  <CardHeader>
-                    <h3>Game Rooms</h3>
-                    <small>{activeGameRooms.length} tracked</small>
-                  </CardHeader>
-                  <form className='composer composer-compact' onSubmit={handleCreateGameRoom}>
-                    <Label>
-                      <span>Game Title</span>
-                      <Input
-                        value={gameTitle}
-                        onChange={(event) => setGameTitle(event.target.value)}
-                        placeholder='Top 8 Finals'
-                      />
-                    </Label>
-                    <Label>
-                      <span>Game Description</span>
-                      <Textarea
-                        value={gameDescription}
-                        onChange={(event) => setGameDescription(event.target.value)}
-                        placeholder='match summary'
-                      />
-                    </Label>
-                    <Label>
-                      <span>Participants</span>
-                      <Input
-                        value={gameParticipantsInput}
-                        onChange={(event) => setGameParticipantsInput(event.target.value)}
-                        placeholder='Alice, Bob'
-                      />
-                    </Label>
-                    {gameError ? <p className='error error-inline'>{gameError}</p> : null}
-                    <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>Audience: {activeComposeAudienceLabel}</span>
-                    </div>
-                    <Button type='submit'>Create Room</Button>
-                  </form>
-                  {activeGameRooms.length === 0 ? <p className='empty-state'>No game rooms</p> : null}
-                  <ul className='post-list'>
-                    {activeGameRooms.map((room) => {
-                      const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
-                      const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
-                      return (
-                        <li key={room.room_id}>
-                          <article className='post-card'>
-                            <div className='post-meta'>
-                              <span>{room.title}</span>
-                              <span>{room.status}</span>
-                              <span className='reply-chip'>{room.audience_label}</span>
-                            </div>
-                            <div className='post-body'>
-                              <strong className='post-title'>
-                                {room.description || 'no description'}
-                              </strong>
-                            </div>
-                            <small>{room.room_id}</small>
-                            <div className='topic-diagnostic topic-diagnostic-secondary'>
-                              <span>phase: {room.phase_label ?? 'none'}</span>
-                              <span>
-                                updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
-                              </span>
-                            </div>
-                            <ul className='draft-attachment-list'>
-                              {room.scores.map((score) => (
-                                <li
-                                  key={score.participant_id}
-                                  className='draft-attachment-item score-row'
-                                >
-                                  <div className='draft-attachment-content'>
-                                    <strong>{score.label}</strong>
-                                  </div>
-                                  {isOwner ? (
-                                    <Input
-                                      aria-label={`${room.room_id}-${score.label}-score`}
-                                      value={
-                                        draft.scores[score.participant_id] ?? String(score.score)
-                                      }
-                                      onChange={(event) =>
-                                        updateGameDraft(room.room_id, (current) => ({
-                                          ...current,
-                                          scores: {
-                                            ...current.scores,
-                                            [score.participant_id]: event.target.value,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  ) : (
-                                    <span>{score.score}</span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                            {isOwner ? (
-                              <div className='composer composer-compact'>
-                                <Label>
-                                  <span>Status</span>
-                                  <Select
-                                    aria-label={`${room.room_id}-status`}
-                                    value={draft.status}
-                                    onChange={(event) =>
-                                      updateGameDraft(room.room_id, (current) => ({
-                                        ...current,
-                                        status: event.target.value as GameRoomStatus,
-                                      }))
-                                    }
-                                  >
-                                    <option value='Waiting'>Waiting</option>
-                                    <option value='Running'>Running</option>
-                                    <option value='Paused'>Paused</option>
-                                    <option value='Ended'>Ended</option>
-                                  </Select>
-                                </Label>
-                                <Label>
-                                  <span>Phase</span>
-                                  <Input
-                                    aria-label={`${room.room_id}-phase`}
-                                    value={draft.phase_label}
-                                    onChange={(event) =>
-                                      updateGameDraft(room.room_id, (current) => ({
-                                        ...current,
-                                        phase_label: event.target.value,
-                                      }))
-                                    }
-                                  />
-                                </Label>
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  onClick={() => void handleUpdateGameRoom(room)}
-                                >
-                                  Save Room
-                                </Button>
-                              </div>
-                            ) : null}
-                          </article>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
+                <GameRoomPanel
+                  status={activeGamePanelState.status}
+                  error={gameError ?? activeGamePanelState.error}
+                  audienceLabel={activeComposeAudienceLabel}
+                  title={gameTitle}
+                  description={gameDescription}
+                  participantsInput={gameParticipantsInput}
+                  createPending={gameCreatePending}
+                  rooms={activeGameRooms}
+                  drafts={gameDraftViews}
+                  savingByRoomId={gameSavingByRoomId}
+                  localAuthorPubkey={syncStatus.local_author_pubkey}
+                  onTitleChange={setGameTitle}
+                  onDescriptionChange={setGameDescription}
+                  onParticipantsChange={setGameParticipantsInput}
+                  onSubmit={handleCreateGameRoom}
+                  onDraftStatusChange={(roomId, status) =>
+                    updateGameDraft(roomId, (current) => ({
+                      ...current,
+                      status,
+                    }))
+                  }
+                  onDraftPhaseChange={(roomId, value) =>
+                    updateGameDraft(roomId, (current) => ({
+                      ...current,
+                      phase_label: value,
+                    }))
+                  }
+                  onDraftScoreChange={(roomId, participantId, value) =>
+                    updateGameDraft(roomId, (current) => ({
+                      ...current,
+                      scores: {
+                        ...current.scores,
+                        [participantId]: value,
+                      },
+                    }))
+                  }
+                  onSaveRoom={(roomId) => void handleUpdateGameRoom(roomId)}
+                />
+              </section>
+
+              <section
+                className='shell-section'
+                ref={setPrimarySectionRef('profile')}
+                tabIndex={-1}
+                onFocusCapture={() =>
+                  setShellChromeState((current) => ({
+                    ...current,
+                    activePrimarySection: 'profile',
+                  }))
+                }
+              >
+                <ProfileEditorPanel
+                  authorLabel={authorDisplayLabel(
+                    syncStatus.local_author_pubkey,
+                    localProfile?.display_name,
+                    localProfile?.name
+                  )}
+                  status={profilePanelState.status}
+                  saving={profileSaving}
+                  dirty={profileDirty}
+                  error={profileError ?? profilePanelState.error}
+                  fields={profileEditorFields}
+                  onFieldChange={handleProfileFieldChange}
+                  onSave={handleSaveProfile}
+                  onReset={resetProfileDraft}
+                />
               </section>
 
             </Card>

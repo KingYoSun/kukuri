@@ -71,6 +71,14 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await page.getByRole('button', { name: 'Import Peer' }).click();
   await expect(page.getByPlaceholder('nodeid@127.0.0.1:7777')).toHaveValue('');
 
+  await page.keyboard.press('Escape');
+  await page.getByTestId('shell-nav-trigger').click();
+  await page
+    .getByRole('navigation', { name: 'Primary sections' })
+    .getByRole('button', { name: /Profile/i })
+    .click();
+  await expect(page.getByPlaceholder('Visible label')).toBeVisible();
+
   const noOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth
   );

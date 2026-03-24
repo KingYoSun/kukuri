@@ -244,6 +244,7 @@ function CoreProductFlowStory({ width }: { width: number }) {
       { id: 'channels' as const, label: 'Channels', description: 'Private channel controls' },
       { id: 'live' as const, label: 'Live', description: 'Session management' },
       { id: 'game' as const, label: 'Game', description: 'Room and scoreboards' },
+      { id: 'profile' as const, label: 'Profile', description: 'Author identity editor' },
     ],
     []
   );

@@ -1,8 +1,8 @@
-export type PrimarySection = 'timeline' | 'channels' | 'live' | 'game';
+export type PrimarySection = 'timeline' | 'channels' | 'live' | 'game' | 'profile';
 
 export type ContextPaneMode = 'thread' | 'author';
 
-export type SettingsSection = 'profile' | 'connectivity' | 'discovery' | 'community-node';
+export type SettingsSection = 'connectivity' | 'discovery' | 'community-node';
 
 export type ShellChromeState = {
   activePrimarySection: PrimarySection;

@@ -44,6 +44,7 @@ const PRIMARY_ITEMS: Array<{
   { id: 'channels', label: 'Channels', description: 'Private channel entry and composer' },
   { id: 'live', label: 'Live', description: 'Live sessions and status' },
   { id: 'game', label: 'Game', description: 'Scoreboards and room editing' },
+  { id: 'profile', label: 'Profile', description: 'Edit author identity' },
 ];
 
 const SETTINGS_ITEMS: Array<{
@@ -51,7 +52,6 @@ const SETTINGS_ITEMS: Array<{
   label: string;
   description: string;
 }> = [
-  { id: 'profile', label: 'Profile', description: 'Edit author identity' },
   { id: 'connectivity', label: 'Connectivity', description: 'Peer status and tickets' },
   { id: 'discovery', label: 'Discovery', description: 'Seed configuration and diagnostics' },
   {
@@ -65,7 +65,7 @@ function ShellStoryFixture({ width, initialChromeState }: ShellStoryFixtureProps
   const [chromeState, setChromeState] = useState<ShellChromeState>({
     activePrimarySection: 'timeline',
     activeContextPaneMode: 'thread',
-    activeSettingsSection: 'profile',
+    activeSettingsSection: 'connectivity',
     navOpen: false,
     contextOpen: false,
     settingsOpen: false,
@@ -265,6 +265,13 @@ function ShellStoryFixture({ width, initialChromeState }: ShellStoryFixtureProps
                 <Card className='panel-subsection'>
                   <h3>Game</h3>
                   <p className='lede'>Game room entry and score editing live below live sessions.</p>
+                </Card>
+              </section>
+
+              <section className='shell-section' tabIndex={-1}>
+                <Card className='panel-subsection'>
+                  <h3>Profile</h3>
+                  <p className='lede'>Profile editing is promoted into the primary workspace in Phase 3.</p>
                 </Card>
               </section>
 
