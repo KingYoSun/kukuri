@@ -177,6 +177,22 @@ function installFailedPosterGenerationMocks() {
   });
 }
 
+async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('shell-settings-trigger'));
+  return await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+}
+
+async function openSettingsSection(
+  user: ReturnType<typeof userEvent.setup>,
+  section: 'profile' | 'connectivity' | 'discovery' | 'community-node'
+) {
+  const drawer = await openSettingsDrawer(user);
+  if (section !== 'profile') {
+    await user.click(within(drawer).getByTestId(`settings-section-${section}`));
+  }
+  return drawer;
+}
+
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
@@ -188,11 +204,13 @@ test('desktop shell can publish and render a post', async () => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
   expect(screen.getByText('Seeded DHT + direct peers')).toBeInTheDocument();
-  expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
-  expect(screen.getByText('Configured Peers')).toBeInTheDocument();
-  expect(screen.getByText('Connected to all configured peers')).toBeInTheDocument();
-  expect(screen.getAllByText('peer-a').length).toBeGreaterThan(0);
   expect(screen.getByText('joined / peers: 1')).toBeInTheDocument();
+
+  const drawer = await openSettingsSection(user, 'connectivity');
+  expect(within(drawer).getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
+  expect(within(drawer).getByText('Configured Peers')).toBeInTheDocument();
+  expect(within(drawer).getByText('Connected to all configured peers')).toBeInTheDocument();
+  expect(within(drawer).getAllByText('peer-a').length).toBeGreaterThan(0);
 });
 
 test('desktop shell can update discovery seeds', async () => {
@@ -203,14 +221,15 @@ test('desktop shell can update discovery seeds', async () => {
 
   render(<App api={api} />);
 
-  const seedEditor = screen.getByPlaceholderText('node_id or node_id@host:port');
+  const drawer = await openSettingsSection(user, 'discovery');
+  const seedEditor = within(drawer).getByPlaceholderText('node_id or node_id@host:port');
   await user.type(seedEditor, 'seed-peer-1');
-  await user.click(screen.getByRole('button', { name: 'Save Seeds' }));
+  await user.click(within(drawer).getByRole('button', { name: 'Save Seeds' }));
 
   await waitFor(() => {
     expect(setDiscoverySeeds).toHaveBeenCalledWith(['seed-peer-1']);
   });
-  expect(screen.getAllByText('seed-peer-1').length).toBeGreaterThan(0);
+  expect(within(drawer).getAllByText('seed-peer-1').length).toBeGreaterThan(0);
 });
 
 test('desktop shell can enter reply mode and render reply state', async () => {
@@ -321,9 +340,10 @@ test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', 
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
 
+  const drawer = await openSettingsSection(user, 'discovery');
   await waitFor(() => {
-    expect(screen.getByText('Relay-assisted Peers')).toBeInTheDocument();
-    expect(screen.getByText('relay-peer')).toBeInTheDocument();
+    expect(within(drawer).getByText('Relay-assisted Peers')).toBeInTheDocument();
+    expect(within(drawer).getByText('relay-peer')).toBeInTheDocument();
   });
 
   await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:relay');
@@ -338,6 +358,7 @@ test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', 
 });
 
 test('desktop shell renders diagnostics error reasons', async () => {
+  const user = userEvent.setup();
   render(
     <App
       api={createDesktopMockApi({
@@ -347,15 +368,47 @@ test('desktop shell renders diagnostics error reasons', async () => {
     />
   );
 
+  const drawer = await openSettingsSection(user, 'connectivity');
   await waitFor(() => {
-    expect(screen.getByText('Last Error')).toBeInTheDocument();
+    expect(within(drawer).getByText('Last Error')).toBeInTheDocument();
     expect(
-      screen.getByText('failed to import peer ticket: invalid endpoint id')
+      within(drawer).getByText('failed to import peer ticket: invalid endpoint id')
     ).toBeInTheDocument();
     expect(
       screen.getByText('error: timed out waiting for gossip topic join')
     ).toBeInTheDocument();
   });
+});
+
+test('desktop shell primary nav jumps focus and settings drawer restores trigger focus on escape', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  const gameNav = screen.getByRole('button', { name: /Game/i });
+  await user.click(gameNav);
+
+  const gameSection = screen.getByPlaceholderText('Top 8 Finals').closest('.shell-section');
+  if (!(gameSection instanceof HTMLElement)) {
+    throw new Error('game section not found');
+  }
+
+  await waitFor(() => {
+    expect(gameNav).toHaveAttribute('aria-current', 'location');
+    expect(gameSection).toHaveFocus();
+  });
+
+  const settingsTrigger = screen.getByTestId('shell-settings-trigger');
+  await user.click(settingsTrigger);
+  await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
+    ).not.toBeInTheDocument();
+  });
+  expect(settingsTrigger).toHaveFocus();
 });
 
 test('desktop shell can create, join, leave, and end a live session', async () => {
@@ -794,10 +847,7 @@ test('thread pane reuses the same image placeholder renderer', async () => {
     expect(screen.getByText('envelope-image-post')).toBeInTheDocument();
   });
   await user.click(screen.getByText('envelope-image-post'));
-  const threadPanel = screen.getByRole('heading', { name: 'Thread' }).closest('section');
-  if (!threadPanel) {
-    throw new Error('thread panel not found');
-  }
+  const threadPanel = await screen.findByRole('tabpanel', { name: 'Thread' });
 
   await waitFor(() => {
     expect(within(threadPanel).getByText('syncing image')).toBeInTheDocument();
@@ -1120,10 +1170,14 @@ test('community node panel activates relay connectivity on the current session a
 
   render(<App api={api} />);
 
-  await user.type(screen.getByPlaceholderText('https://community.example.com'), 'https://api.kukuri.app');
-  await user.click(screen.getByRole('button', { name: 'Save Nodes' }));
+  const drawer = await openSettingsSection(user, 'community-node');
+  await user.type(
+    within(drawer).getByPlaceholderText('https://community.example.com'),
+    'https://api.kukuri.app'
+  );
+  await user.click(within(drawer).getByRole('button', { name: 'Save Nodes' }));
 
-  const nodeHeading = await screen.findByText(
+  const nodeHeading = await within(drawer).findByText(
     (_content, element) =>
       element?.tagName === 'STRONG' && element.textContent === 'https://api.kukuri.app'
   );
@@ -1155,6 +1209,66 @@ test('community node panel activates relay connectivity on the current session a
       'connectivity urls active on current session'
     );
   });
+});
+
+test('context pane auto-switches between author and thread and keeps manual tab selection', async () => {
+  const user = userEvent.setup();
+  const authorPubkey = 'a'.repeat(64);
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'context-post',
+              envelope_id: 'envelope-context-post',
+              author_pubkey: authorPubkey,
+              author_name: 'alice',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'context body',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'context-post',
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          [authorPubkey]: {
+            name: 'alice',
+          },
+        },
+      })}
+    />
+  );
+
+  await user.click(await screen.findByRole('button', { name: 'alice' }));
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  await user.click(screen.getByText('envelope-context-post'));
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  await user.click(screen.getByRole('tab', { name: 'Author' }));
+  expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+
+  await user.click(screen.getByRole('button', { name: 'Clear Author' }));
+  const authorPanel = screen.getByRole('tabpanel', { name: 'Author' });
+  expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  expect(
+    within(authorPanel).getByText('Select an author to inspect profile and relationship.')
+  ).toBeInTheDocument();
 });
 
 test('post card shows friend of friend badge and author name fallback', async () => {
@@ -1252,9 +1366,10 @@ test('local profile editor saves profile draft', async () => {
 
   render(<App api={api} />);
 
-  const displayNameInput = await screen.findByPlaceholderText('Visible label');
+  const drawer = await openSettingsSection(user, 'profile');
+  const displayNameInput = within(drawer).getByPlaceholderText('Visible label');
   await user.type(displayNameInput, 'Local Author');
-  await user.click(screen.getByRole('button', { name: 'Save Profile' }));
+  await user.click(within(drawer).getByRole('button', { name: 'Save Profile' }));
 
   await waitFor(() => {
     expect(screen.getByText('Local Author')).toBeInTheDocument();
@@ -1262,9 +1377,11 @@ test('local profile editor saves profile draft', async () => {
 });
 
 test('keeps local peer ticket visible when profile loading fails', async () => {
+  const user = userEvent.setup();
   render(<App api={createDesktopMockApi({ myProfileError: 'profile load failed' })} />);
 
+  const drawer = await openSettingsSection(user, 'connectivity');
   await waitFor(() => {
-    expect(screen.getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
+    expect(within(drawer).getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
   });
 });

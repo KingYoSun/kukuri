@@ -13,6 +13,8 @@
 ## 必須項目
 - PR link または identifier
 - 一次 review に使った Figma link
+  - 既定値は HTML capture で生成した Figma design URL
+  - FigJam link だけで済ませる場合は例外理由を record に書く
 - 採用された変更の short summary
 - review result
 - 承認された例外

@@ -14,7 +14,7 @@
 - product UI と diagnostics UI を分離し、`ADR 0014` と `docs/DESIGN.md` に整合する reviewable な移行パスを用意する。
 
 ### Non-goals
-- この文書自体で新しい visual spec、token 値、layout pixel、component API を確定しない。これらは各 phase の Figma proposal と implementation review で決める。
+- この文書自体で新しい visual spec、token 値、layout pixel、component API を確定しない。これらは各 phase の Figma design artifact と implementation review で決める。
 - backend、runtime、Tauri invoke surface、data contract、domain model の変更計画を持ち込まない。
 - `legacy/` からの wholesale 移植や、全面 rewrite を 1 PR で完了する前提を置かない。
 
@@ -29,6 +29,7 @@
 
 ## Applicable Rules
 - workflow の正本は `docs/adr/0014-uiux-dev-flow.md` とし、Codex-assisted UI proposal では Figma を primary review artifact にする。
+- Codex-assisted UI proposal の既定 path は `local HTML / React draft -> generate_figma_design による HTML capture -> human review in Figma` とする。
 - design-system / review / exception policy の正本は `docs/DESIGN.md` とする。
 - merge 済みで user-facing behavior または design rule を変えた UI 変更は `docs/ui-reviews/` に record を残す。
 - 新規 UI と大きく触る既存 UI の標準 stack は Tailwind + shadcn/ui + Storybook とし、Playwright は top-level flow 変更または component 境界をまたぐ高リスク変更で required にする。
@@ -224,6 +225,7 @@
 - diagnostics を後景へ移す際に observability を失うと、current scope の connectivity / auth / audience troubleshooting が困難になる。
 - Windows / Linux 両方で resize、focus、packaged app behavior を崩さない前提で進める必要がある。
 - UI proposal workflow では Figma link と PR-visible preview が required になるため、各 phase の PR は review artifact を先に揃える必要がある。
+- Figma link の既定値は HTML capture で生成した Figma design URL とし、FigJam は補助 artifact として扱う。
 
 ## Exit Criteria
 - 現行 shell の primary / secondary surface が新しい shell boundary に載り替わっている。
@@ -233,5 +235,5 @@
 - user-facing behavior または reusable design rule を変えた採用済み UI 変更について、必要な `docs/ui-reviews/` record が残っている。
 
 ## Notes
-- この planning-doc PR 自体では Figma proposal や UI review record を新規作成しない。これらは implementation phase の成果物として扱う。
+- この planning-doc PR 自体では Figma design artifact や UI review record を新規作成しない。これらは implementation phase の成果物として扱う。
 - 本文書は roadmap / sequencing の正本であり、実装時の具体的な token 値、component prop、layout detail は各 phase の proposal で確定する。
