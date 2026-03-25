@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -6,25 +6,35 @@ import { ConnectivityPanel } from './ConnectivityPanel';
 import { connectivityPanelFixture } from './fixtures';
 import { SettingsStoryFrame } from './SettingsStoryFrame';
 
+type ConnectivityStoryProps = {
+  args: ComponentProps<typeof ConnectivityPanel>;
+  width?: 'wide' | 'narrow';
+};
+
+function ConnectivityPanelStory({
+  args,
+  width = 'wide',
+}: ConnectivityStoryProps) {
+  const [peerTicketInput, setPeerTicketInput] = useState(args.view.peerTicketInput);
+
+  return (
+    <SettingsStoryFrame width={width}>
+      <div>
+        <ConnectivityPanel
+          {...args}
+          view={{ ...args.view, peerTicketInput }}
+          onPeerTicketInputChange={setPeerTicketInput}
+          onImportPeer={() => {}}
+        />
+      </div>
+    </SettingsStoryFrame>
+  );
+}
+
 const meta = {
   title: 'Settings/ConnectivityPanel',
   component: ConnectivityPanel,
-  render: (args) => {
-    const [peerTicketInput, setPeerTicketInput] = useState(args.view.peerTicketInput);
-
-    return (
-      <SettingsStoryFrame>
-        <div>
-          <ConnectivityPanel
-            {...args}
-            view={{ ...args.view, peerTicketInput }}
-            onPeerTicketInputChange={setPeerTicketInput}
-            onImportPeer={() => {}}
-          />
-        </div>
-      </SettingsStoryFrame>
-    );
-  },
+  render: (args) => <ConnectivityPanelStory args={args} />,
   args: {
     view: connectivityPanelFixture,
     onPeerTicketInputChange: () => {},
@@ -47,22 +57,7 @@ export const NarrowError: Story = {
       panelError: 'failed to import peer ticket: invalid endpoint id',
     },
   },
-  render: (args) => {
-    const [peerTicketInput, setPeerTicketInput] = useState(args.view.peerTicketInput);
-
-    return (
-      <SettingsStoryFrame width='narrow'>
-        <div>
-          <ConnectivityPanel
-            {...args}
-            view={{ ...args.view, peerTicketInput }}
-            onPeerTicketInputChange={setPeerTicketInput}
-            onImportPeer={() => {}}
-          />
-        </div>
-      </SettingsStoryFrame>
-    );
-  },
+  render: (args) => <ConnectivityPanelStory args={args} width='narrow' />,
 };
 
 export const Loading: Story = {

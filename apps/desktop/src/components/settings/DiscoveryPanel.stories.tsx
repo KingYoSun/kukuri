@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -6,26 +6,36 @@ import { DiscoveryPanel } from './DiscoveryPanel';
 import { discoveryPanelFixture } from './fixtures';
 import { SettingsStoryFrame } from './SettingsStoryFrame';
 
+type DiscoveryStoryProps = {
+  args: ComponentProps<typeof DiscoveryPanel>;
+  width?: 'wide' | 'narrow';
+};
+
+function DiscoveryPanelStory({
+  args,
+  width = 'wide',
+}: DiscoveryStoryProps) {
+  const [seedPeersInput, setSeedPeersInput] = useState(args.view.seedPeersInput);
+
+  return (
+    <SettingsStoryFrame width={width}>
+      <div>
+        <DiscoveryPanel
+          {...args}
+          view={{ ...args.view, seedPeersInput }}
+          onSeedPeersChange={setSeedPeersInput}
+          onSave={() => {}}
+          onReset={() => setSeedPeersInput(args.view.seedPeersInput)}
+        />
+      </div>
+    </SettingsStoryFrame>
+  );
+}
+
 const meta = {
   title: 'Settings/DiscoveryPanel',
   component: DiscoveryPanel,
-  render: (args) => {
-    const [seedPeersInput, setSeedPeersInput] = useState(args.view.seedPeersInput);
-
-    return (
-      <SettingsStoryFrame>
-        <div>
-          <DiscoveryPanel
-            {...args}
-            view={{ ...args.view, seedPeersInput }}
-            onSeedPeersChange={setSeedPeersInput}
-            onSave={() => {}}
-            onReset={() => setSeedPeersInput(args.view.seedPeersInput)}
-          />
-        </div>
-      </SettingsStoryFrame>
-    );
-  },
+  render: (args) => <DiscoveryPanelStory args={args} />,
   args: {
     view: discoveryPanelFixture,
     saveDisabled: false,
@@ -52,13 +62,7 @@ export const NarrowLocked: Story = {
     saveDisabled: true,
     resetDisabled: true,
   },
-  render: (args) => (
-    <SettingsStoryFrame width='narrow'>
-      <div>
-        <DiscoveryPanel {...args} onSeedPeersChange={() => {}} onSave={() => {}} onReset={() => {}} />
-      </div>
-    </SettingsStoryFrame>
-  ),
+  render: (args) => <DiscoveryPanelStory args={args} width='narrow' />,
 };
 
 export const Loading: Story = {
