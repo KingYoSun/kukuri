@@ -4273,6 +4273,98 @@ mod tests {
             })
             .await
             .expect("b imports a");
+        wait_for_connected_peer_count(&runtime_a, 1, "friend-plus owner peer readiness timeout")
+            .await;
+        wait_for_connected_peer_count(&runtime_b, 1, "friend-plus sponsor peer readiness timeout")
+            .await;
+
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b")
+            .local_author_pubkey;
+        let c_pubkey = runtime_c
+            .get_sync_status()
+            .await
+            .expect("status c")
+            .local_author_pubkey;
+        let topic = "kukuri:topic:desktop-friend-plus-restart";
+        for runtime in [&runtime_a, &runtime_b] {
+            let _ = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.into(),
+                    scope: TimelineScope::Public,
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .expect("subscribe runtime");
+        }
+        wait_for_connected_topic_peer_count(
+            &runtime_a,
+            topic,
+            1,
+            "friend-plus owner topic readiness timeout",
+        )
+        .await;
+        wait_for_connected_topic_peer_count(
+            &runtime_b,
+            topic,
+            1,
+            "friend-plus sponsor topic readiness timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_a,
+            b_pubkey.as_str(),
+            "friend-plus owner author warm timeout",
+        )
+        .await;
+        warm_author_social_view(
+            &runtime_b,
+            a_pubkey.as_str(),
+            "friend-plus sponsor owner author warm timeout",
+        )
+        .await;
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .expect("a follows b");
+        runtime_b
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("b follows a");
+        wait_for_mutual_author_view(&runtime_a, b_pubkey.as_str(), topic).await;
+        wait_for_mutual_author_view(&runtime_b, a_pubkey.as_str(), topic).await;
+        let channel = runtime_a
+            .create_private_channel(CreatePrivateChannelRequest {
+                topic: topic.into(),
+                label: "friends+".into(),
+                audience_kind: ChannelAudienceKind::FriendPlus,
+            })
+            .await
+            .expect("create friend-plus channel");
+        let share_ab = runtime_a
+            .export_friend_plus_share(ExportFriendPlusShareRequest {
+                topic: topic.into(),
+                channel_id: channel.channel_id.clone(),
+                expires_at: None,
+            })
+            .await
+            .expect("export a->b share");
+        runtime_b
+            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_ab })
+            .await
+            .expect("b imports friend-plus share");
         runtime_a
             .import_peer_ticket(ImportPeerTicketRequest {
                 ticket: ticket_c.clone(),
@@ -4297,48 +4389,19 @@ mod tests {
             })
             .await
             .expect("c imports b");
-        wait_for_connected_peer_count(&runtime_a, 1, "friend-plus owner peer readiness timeout")
-            .await;
-        wait_for_connected_peer_count(&runtime_b, 1, "friend-plus sponsor peer readiness timeout")
-            .await;
-        wait_for_connected_peer_count(
-            &runtime_c,
-            1,
-            "friend-plus recipient peer readiness timeout",
-        )
-        .await;
-
-        let a_pubkey = runtime_a
-            .get_sync_status()
-            .await
-            .expect("status a")
-            .local_author_pubkey;
-        let b_pubkey = runtime_b
-            .get_sync_status()
-            .await
-            .expect("status b")
-            .local_author_pubkey;
-        let c_pubkey = runtime_c
-            .get_sync_status()
-            .await
-            .expect("status c")
-            .local_author_pubkey;
-        let topic = "kukuri:topic:desktop-friend-plus-restart";
         wait_for_connected_peer_count(&runtime_a, 2, "friend-plus owner full-mesh timeout").await;
         wait_for_connected_peer_count(&runtime_b, 2, "friend-plus sponsor full-mesh timeout").await;
         wait_for_connected_peer_count(&runtime_c, 2, "friend-plus recipient full-mesh timeout")
             .await;
-        for runtime in [&runtime_a, &runtime_b, &runtime_c] {
-            let _ = runtime
-                .list_timeline(ListTimelineRequest {
-                    topic: topic.into(),
-                    scope: TimelineScope::Public,
-                    cursor: None,
-                    limit: Some(20),
-                })
-                .await
-                .expect("subscribe runtime");
-        }
+        let _ = runtime_c
+            .list_timeline(ListTimelineRequest {
+                topic: topic.into(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe runtime c");
         wait_for_connected_topic_peer_count(
             &runtime_a,
             topic,
@@ -4361,18 +4424,6 @@ mod tests {
         )
         .await;
         warm_author_social_view(
-            &runtime_a,
-            b_pubkey.as_str(),
-            "friend-plus owner author warm timeout",
-        )
-        .await;
-        warm_author_social_view(
-            &runtime_b,
-            a_pubkey.as_str(),
-            "friend-plus sponsor owner author warm timeout",
-        )
-        .await;
-        warm_author_social_view(
             &runtime_b,
             c_pubkey.as_str(),
             "friend-plus sponsor recipient author warm timeout",
@@ -4384,18 +4435,6 @@ mod tests {
             "friend-plus recipient sponsor author warm timeout",
         )
         .await;
-        runtime_a
-            .follow_author(AuthorRequest {
-                pubkey: b_pubkey.clone(),
-            })
-            .await
-            .expect("a follows b");
-        runtime_b
-            .follow_author(AuthorRequest {
-                pubkey: a_pubkey.clone(),
-            })
-            .await
-            .expect("b follows a");
         runtime_b
             .follow_author(AuthorRequest {
                 pubkey: c_pubkey.clone(),
@@ -4408,30 +4447,8 @@ mod tests {
             })
             .await
             .expect("c follows b");
-        wait_for_mutual_author_view(&runtime_a, b_pubkey.as_str(), topic).await;
-        wait_for_mutual_author_view(&runtime_b, a_pubkey.as_str(), topic).await;
         wait_for_mutual_author_view(&runtime_b, c_pubkey.as_str(), topic).await;
         wait_for_mutual_author_view(&runtime_c, b_pubkey.as_str(), topic).await;
-        let channel = runtime_a
-            .create_private_channel(CreatePrivateChannelRequest {
-                topic: topic.into(),
-                label: "friends+".into(),
-                audience_kind: ChannelAudienceKind::FriendPlus,
-            })
-            .await
-            .expect("create friend-plus channel");
-        let share_ab = runtime_a
-            .export_friend_plus_share(ExportFriendPlusShareRequest {
-                topic: topic.into(),
-                channel_id: channel.channel_id.clone(),
-                expires_at: None,
-            })
-            .await
-            .expect("export a->b share");
-        runtime_b
-            .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_ab })
-            .await
-            .expect("b imports friend-plus share");
         let share_bc = runtime_b
             .export_friend_plus_share(ExportFriendPlusShareRequest {
                 topic: topic.into(),
