@@ -17,6 +17,13 @@
 - local validation は `cargo xtask desktop-ui-check`, `cargo xtask check`, `cargo xtask e2e-smoke` が pass。`cargo xtask test` は `kukuri_docs_sync::tests::public_replica_syncs_over_custom_relay_seed_peers` が 1 回 timeout で flaky failure を返したが、単体 rerun (`cargo test -p kukuri-docs-sync public_replica_syncs_over_custom_relay_seed_peers -- --nocapture`) は pass した。manual smoke (`tauri:dev` on Linux, packaged Windows app) は未実施。
 - accepted UI review record は [`../ui-reviews/2026-03-25-desktop-phase5-shell-cutover-cleanup.md`](../ui-reviews/2026-03-25-desktop-phase5-shell-cutover-cleanup.md) を正本とする。
 
+## 2026-03-26 Validation Update
+- `cargo xtask desktop-ui-check`, `cargo xtask check`, `cargo xtask test`, `cargo xtask e2e-smoke` は 2026-03-26 の local rerun で pass。`cargo xtask check` で再現した `tests::friend_plus_channel_restore_accepts_fresh_share_after_restart` の mutual author timeout は、desktop-runtime regression test の set-up を `A <-> B mutual` 確立後に `C` を導入する順序へ揃えて修正した。
+- `cargo test -p kukuri-desktop-runtime friend_plus_channel_restore_accepts_fresh_share_after_restart -- --nocapture` は fix 後に 2 回連続 pass。`kukuri_docs_sync::tests::public_replica_syncs_over_custom_relay_seed_peers` の timeout は今回の rerun では再現しなかった。
+- Linux 側は `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` で `Vite` ready と Tauri `DevCommand` 起動までは確認したが、headless WSL session のため interactive manual smoke は未実施。
+- Windows 側は `cmd.exe /c "cd /d C:\\Users\\kgm11\\kukuri && cargo xtask desktop-package"` が pass し、`apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/kukuri_0.1.0_x64-setup.exe` を生成した。packaged app の install / interactive manual smoke は未実施。
+- 残件は `Windows packaged app の install/manual smoke` と `human review / PR attach / PR identifier` の review 事務のみ。
+
 ## Purpose / Non-goals
 
 ### Purpose
