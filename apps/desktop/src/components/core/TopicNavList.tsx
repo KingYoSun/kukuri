@@ -34,18 +34,6 @@ export function TopicNavList({ items, onSelectTopic, onRemoveTopic }: TopicNavLi
             </span>
             <small>{item.lastReceivedLabel}</small>
           </div>
-          <div className='topic-diagnostic topic-diagnostic-secondary'>
-            <span>expected: {item.expectedPeerCount}</span>
-            <span>missing: {item.missingPeerCount}</span>
-          </div>
-          <div className='topic-diagnostic topic-diagnostic-secondary'>
-            <span>{item.statusDetail}</span>
-          </div>
-          {item.lastError ? (
-            <div className='topic-diagnostic topic-diagnostic-error'>
-              <span>error: {item.lastError}</span>
-            </div>
-          ) : null}
         </li>
       ))}
     </ul>

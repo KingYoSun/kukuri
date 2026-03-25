@@ -43,10 +43,6 @@ const TOPIC_ITEMS: TopicDiagnosticSummary[] = [
     connectionLabel: 'joined',
     peerCount: 2,
     lastReceivedLabel: '12:45:11',
-    expectedPeerCount: 2,
-    missingPeerCount: 0,
-    statusDetail: 'Connected to all configured peers for this topic',
-    lastError: null,
   },
   {
     topic: 'kukuri:topic:relay',
@@ -55,10 +51,6 @@ const TOPIC_ITEMS: TopicDiagnosticSummary[] = [
     connectionLabel: 'relay-assisted',
     peerCount: 1,
     lastReceivedLabel: 'no events',
-    expectedPeerCount: 0,
-    missingPeerCount: 0,
-    statusDetail: 'relay-assisted sync available via 1 peer(s)',
-    lastError: null,
   },
 ];
 

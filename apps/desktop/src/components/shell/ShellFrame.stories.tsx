@@ -2,6 +2,14 @@ import { useMemo, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
+import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
+import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
+import {
+  communityNodePanelFixture,
+  connectivityPanelFixture,
+  discoveryPanelFixture,
+} from '@/components/settings/fixtures';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -71,6 +79,9 @@ function ShellStoryFixture({ width, initialChromeState }: ShellStoryFixtureProps
     settingsOpen: false,
     ...initialChromeState,
   });
+  const [peerTicketInput, setPeerTicketInput] = useState(connectivityPanelFixture.peerTicketInput);
+  const [seedPeersInput, setSeedPeersInput] = useState(discoveryPanelFixture.seedPeersInput);
+  const [baseUrlsInput, setBaseUrlsInput] = useState(communityNodePanelFixture.baseUrlsInput);
 
   const contextTabs = useMemo(
     () => [
@@ -105,22 +116,52 @@ function ShellStoryFixture({ width, initialChromeState }: ShellStoryFixtureProps
   );
 
   const settingsSections = useMemo(
-    () =>
-      SETTINGS_ITEMS.map((section) => ({
-        ...section,
+    () => [
+      {
+        ...SETTINGS_ITEMS[0],
         content: (
-          <div className='shell-main-stack'>
-            <Card>
-              <h3>{section.label}</h3>
-              <p className='lede'>{section.description}</p>
-              <Notice tone={section.id === 'connectivity' ? 'accent' : 'neutral'}>
-                Review surface for {section.label.toLowerCase()}.
-              </Notice>
-            </Card>
-          </div>
+          <ConnectivityPanel
+            view={{ ...connectivityPanelFixture, peerTicketInput }}
+            onPeerTicketInputChange={setPeerTicketInput}
+            onImportPeer={() => {}}
+          />
         ),
-      })),
-    []
+      },
+      {
+        ...SETTINGS_ITEMS[1],
+        content: (
+          <DiscoveryPanel
+            view={{ ...discoveryPanelFixture, seedPeersInput }}
+            saveDisabled={false}
+            resetDisabled={false}
+            onSeedPeersChange={setSeedPeersInput}
+            onSave={() => {}}
+            onReset={() => setSeedPeersInput(discoveryPanelFixture.seedPeersInput)}
+          />
+        ),
+      },
+      {
+        ...SETTINGS_ITEMS[2],
+        content: (
+          <CommunityNodePanel
+            view={{ ...communityNodePanelFixture, baseUrlsInput }}
+            saveDisabled={false}
+            resetDisabled={false}
+            clearDisabled={false}
+            onBaseUrlsChange={setBaseUrlsInput}
+            onSaveNodes={() => {}}
+            onReset={() => setBaseUrlsInput(communityNodePanelFixture.baseUrlsInput)}
+            onClearNodes={() => setBaseUrlsInput('')}
+            onAuthenticate={() => {}}
+            onFetchConsents={() => {}}
+            onAcceptConsents={() => {}}
+            onRefresh={() => {}}
+            onClearToken={() => {}}
+          />
+        ),
+      },
+    ],
+    [baseUrlsInput, peerTicketInput, seedPeersInput]
   );
 
   return (

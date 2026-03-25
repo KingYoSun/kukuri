@@ -27,6 +27,14 @@ import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
 import { LiveSessionPanel } from '@/components/extended/LiveSessionPanel';
 import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
+import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
+import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
+import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
+import {
+  type CommunityNodePanelView,
+  type ConnectivityPanelView,
+  type DiscoveryPanelView,
+} from '@/components/settings/types';
 import {
   type ExtendedPanelStatus,
   type GameDraftView,
@@ -46,11 +54,9 @@ import {
 } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Notice } from '@/components/ui/notice';
-import { Textarea } from '@/components/ui/textarea';
 
 import {
   AuthorSocialView,
@@ -259,6 +265,14 @@ function authorDisplayLabel(
   return displayName?.trim() || name?.trim() || shortPubkey(authorPubkey);
 }
 
+function formatListLabel(values: string[]): string {
+  return values.length > 0 ? values.join(', ') : 'none';
+}
+
+function formatLastReceivedLabel(timestamp?: number | null): string {
+  return timestamp ? new Date(timestamp).toLocaleTimeString('ja-JP') : 'no events';
+}
+
 function strongestRelationshipLabel(relationship: {
   mutual: boolean;
   following: boolean;
@@ -431,6 +445,19 @@ function communityNodeSessionActivationLabel(status?: CommunityNodeNodeStatus): 
     return 'awaiting connectivity metadata';
   }
   return 'not authenticated';
+}
+
+function communityNodeAuthLabel(status?: CommunityNodeNodeStatus): string {
+  return status?.auth_state.authenticated
+    ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
+    : 'no';
+}
+
+function communityNodeConsentLabel(status?: CommunityNodeNodeStatus): string {
+  if (!status?.consent_state) {
+    return 'unknown';
+  }
+  return status.consent_state.all_required_accepted ? 'accepted' : 'required';
 }
 
 function mergeCommunityNodeStatus(
@@ -2747,13 +2774,7 @@ export function App({ api = runtimeApi }: AppProps) {
         removable: trackedTopics.length > 1,
         connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
         peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
-        lastReceivedLabel: topicDiagnostics[topic]?.last_received_at
-          ? new Date(topicDiagnostics[topic].last_received_at!).toLocaleTimeString('ja-JP')
-          : 'no events',
-        expectedPeerCount: topicDiagnostics[topic]?.configured_peer_ids.length ?? 0,
-        missingPeerCount: topicDiagnostics[topic]?.missing_peer_ids.length ?? 0,
-        statusDetail: topicDiagnostics[topic]?.status_detail ?? 'No topic diagnostics yet',
-        lastError: topicDiagnostics[topic]?.last_error ?? null,
+        lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at),
       })),
     [activeTopic, topicDiagnostics, trackedTopics]
   );
@@ -2855,298 +2876,257 @@ export function App({ api = runtimeApi }: AppProps) {
     />
   );
 
+  const connectivityPanelView = useMemo<ConnectivityPanelView>(
+    () => ({
+      status: 'ready' as const,
+      summaryLabel: syncStatus.connected ? 'connected' : 'waiting',
+      panelError: error,
+      metrics: [
+        {
+          label: 'Connected',
+          value: syncStatus.connected ? 'yes' : 'no',
+          tone: syncStatus.connected ? 'accent' : 'warning',
+        },
+        { label: 'Peers', value: String(syncStatus.peer_count) },
+        {
+          label: 'Pending',
+          value: String(syncStatus.pending_events),
+          tone: syncStatus.pending_events > 0 ? 'warning' : 'default',
+        },
+      ],
+      diagnostics: [
+        {
+          label: 'Configured Peers',
+          value: formatListLabel(syncStatus.configured_peers),
+          monospace: true,
+        },
+        { label: 'Connection Detail', value: syncStatus.status_detail },
+        {
+          label: 'Effective Peers',
+          value: formatListLabel(effectivePeerIds),
+          monospace: true,
+        },
+        {
+          label: 'Last Error',
+          value: syncStatus.last_error ?? 'none',
+          tone: syncStatus.last_error ? 'danger' : 'default',
+        },
+      ],
+      localPeerTicket: localPeerTicket ?? '',
+      peerTicketInput: peerTicket,
+      topics: trackedTopics.map((topic) => {
+        const diagnostic = topicDiagnostics[topic];
+        return {
+          topic,
+          summary: `${topicConnectionLabel(diagnostic)} / peers: ${diagnostic?.peer_count ?? 0}`,
+          lastReceivedLabel: formatLastReceivedLabel(diagnostic?.last_received_at),
+          expectedPeerCount: diagnostic?.configured_peer_ids.length ?? 0,
+          missingPeerCount: diagnostic?.missing_peer_ids.length ?? 0,
+          statusDetail: diagnostic?.status_detail ?? 'No topic diagnostics yet',
+          connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
+          relayAssistedPeersLabel: formatListLabel(diagnostic?.assist_peer_ids ?? []),
+          configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
+          missingPeersLabel: formatListLabel(diagnostic?.missing_peer_ids ?? []),
+          lastError: diagnostic?.last_error ?? null,
+        };
+      }),
+    }),
+    [
+      effectivePeerIds,
+      error,
+      localPeerTicket,
+      peerTicket,
+      syncStatus.connected,
+      syncStatus.configured_peers,
+      syncStatus.last_error,
+      syncStatus.peer_count,
+      syncStatus.pending_events,
+      syncStatus.status_detail,
+      topicDiagnostics,
+      trackedTopics,
+    ]
+  );
+  const discoveryPanelView = useMemo<DiscoveryPanelView>(
+    () => ({
+      status: 'ready' as const,
+      summaryLabel: syncStatus.discovery.mode,
+      panelError: null,
+      metrics: [
+        { label: 'Mode', value: syncStatus.discovery.mode },
+        {
+          label: 'Connect',
+          value: syncStatus.discovery.connect_mode,
+          tone: syncStatus.discovery.connect_mode === 'direct_or_relay' ? 'accent' : 'default',
+        },
+        {
+          label: 'Env Lock',
+          value: discoveryConfig.env_locked ? 'yes' : 'no',
+          tone: discoveryConfig.env_locked ? 'warning' : 'default',
+        },
+      ],
+      diagnostics: [
+        {
+          label: 'Local Endpoint ID',
+          value: syncStatus.discovery.local_endpoint_id || 'unknown',
+          monospace: true,
+        },
+        {
+          label: 'Connected Peers',
+          value: formatListLabel(syncStatus.discovery.connected_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Relay-assisted Peers',
+          value: formatListLabel(syncStatus.discovery.assist_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Manual Ticket Peers',
+          value: formatListLabel(syncStatus.discovery.manual_ticket_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Community Bootstrap Peers',
+          value: formatListLabel(syncStatus.discovery.bootstrap_seed_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Configured Seed IDs',
+          value: formatListLabel(syncStatus.discovery.configured_seed_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Discovery Error',
+          value: discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none',
+          tone:
+            discoveryError || syncStatus.discovery.last_discovery_error ? 'danger' : 'default',
+        },
+      ],
+      seedPeersInput: discoverySeedInput,
+      seedPeersMessage: discoveryConfig.env_locked
+        ? 'Environment overrides discovery seeds; editing is disabled.'
+        : discoveryEditorDirty
+          ? 'Unsaved discovery seed edits.'
+          : 'Discovery seeds update without changing runtime contracts.',
+      seedPeersMessageTone: discoveryConfig.env_locked ? ('default' as const) : ('default' as const),
+      envLocked: discoveryConfig.env_locked,
+    }),
+    [
+      discoveryConfig.env_locked,
+      discoveryEditorDirty,
+      discoveryError,
+      discoverySeedInput,
+      syncStatus.discovery.assist_peer_ids,
+      syncStatus.discovery.bootstrap_seed_peer_ids,
+      syncStatus.discovery.configured_seed_peer_ids,
+      syncStatus.discovery.connect_mode,
+      syncStatus.discovery.connected_peer_ids,
+      syncStatus.discovery.last_discovery_error,
+      syncStatus.discovery.local_endpoint_id,
+      syncStatus.discovery.manual_ticket_peer_ids,
+      syncStatus.discovery.mode,
+    ]
+  );
+  const communityNodePanelView = useMemo<CommunityNodePanelView>(
+    () => ({
+      status: 'ready' as const,
+      summaryLabel: `${communityNodeStatuses.length} configured`,
+      panelError: communityNodeError,
+      baseUrlsInput: communityNodeInput,
+      editorMessage: communityNodeEditorDirty
+        ? 'Unsaved community node edits.'
+        : 'Save nodes before authenticating or refreshing connectivity metadata.',
+      editorMessageTone: 'default' as const,
+      nodes: communityNodeConfig.nodes.map((node) => {
+        const status = communityNodeStatusByBaseUrl[node.base_url];
+        return {
+          baseUrl: node.base_url,
+          diagnostics: [
+            { label: 'Auth', value: communityNodeAuthLabel(status) },
+            { label: 'Consent', value: communityNodeConsentLabel(status) },
+            {
+              label: 'Connectivity URLs',
+              value: communityNodeConnectivityUrlsLabel(status),
+              monospace: true,
+            },
+            { label: 'Session Activation', value: communityNodeSessionActivationLabel(status) },
+            { label: 'Next Step', value: communityNodeNextStepLabel(status) },
+            {
+              label: 'Last Error',
+              value: status?.last_error ?? 'none',
+              tone: status?.last_error ? 'danger' : 'default',
+            },
+          ],
+          lastError: status?.last_error ?? null,
+        };
+      }),
+    }),
+    [
+      communityNodeConfig.nodes,
+      communityNodeEditorDirty,
+      communityNodeError,
+      communityNodeInput,
+      communityNodeStatusByBaseUrl,
+      communityNodeStatuses.length,
+    ]
+  );
+
   const settingsSections = [
     {
       ...SETTINGS_SECTION_COPY[0],
       content: (
-        <div className='shell-main-stack'>
-          <Card>
-            <CardHeader>
-              <h3>Sync Status</h3>
-              <small>{syncStatus.connected ? 'connected' : 'waiting'}</small>
-            </CardHeader>
-            <dl className='status-grid'>
-              <div>
-                <dt>Connected</dt>
-                <dd>{syncStatus.connected ? 'yes' : 'no'}</dd>
-              </div>
-              <div>
-                <dt>Peers</dt>
-                <dd>{syncStatus.peer_count}</dd>
-              </div>
-              <div>
-                <dt>Pending</dt>
-                <dd>{syncStatus.pending_events}</dd>
-              </div>
-            </dl>
-            <div className='diagnostic-block'>
-              <strong>Configured Peers</strong>
-              <p>
-                {syncStatus.configured_peers.length > 0
-                  ? syncStatus.configured_peers.join(', ')
-                  : 'none'}
-              </p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Connection Detail</strong>
-              <p>{syncStatus.status_detail}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Effective Peers</strong>
-              <p>{effectivePeerIds.join(', ') || 'none'}</p>
-            </div>
-            <div className='diagnostic-block'>
-              <strong>Last Error</strong>
-              <p className={syncStatus.last_error ? 'diagnostic-error' : undefined}>
-                {syncStatus.last_error ?? 'none'}
-              </p>
-            </div>
-            {error ? (
-              <Notice tone='destructive' className='mt-4'>
-                {error}
-              </Notice>
-            ) : null}
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h3>Peer Tickets</h3>
-              <small>manual connectivity</small>
-            </CardHeader>
-            <Label>
-              <span>Your Ticket</span>
-              <Textarea readOnly value={localPeerTicket ?? ''} className='ticket-output' />
-            </Label>
-            <Label>
-              <span>Peer Ticket</span>
-              <Input
-                value={peerTicket}
-                onChange={(event) => setPeerTicket(event.target.value)}
-                placeholder='nodeid@127.0.0.1:7777'
-              />
-            </Label>
-            <Button variant='secondary' onClick={() => void handleImportPeer()}>
-              Import Peer
-            </Button>
-          </Card>
-        </div>
+        <ConnectivityPanel
+          view={connectivityPanelView}
+          onPeerTicketInputChange={setPeerTicket}
+          onImportPeer={() => void handleImportPeer()}
+        />
       ),
     },
     {
       ...SETTINGS_SECTION_COPY[1],
       content: (
-        <Card className='discovery-panel'>
-          <CardHeader>
-            <h3>Discovery</h3>
-            <small>{syncStatus.discovery.mode}</small>
-          </CardHeader>
-          <dl className='status-grid status-grid-compact'>
-            <div>
-              <dt>Mode</dt>
-              <dd>{syncStatus.discovery.mode}</dd>
-            </div>
-            <div>
-              <dt>Connect</dt>
-              <dd>{syncStatus.discovery.connect_mode}</dd>
-            </div>
-            <div>
-              <dt>Env Lock</dt>
-              <dd>{discoveryConfig.env_locked ? 'yes' : 'no'}</dd>
-            </div>
-          </dl>
-          <div className='diagnostic-block'>
-            <strong>Local Endpoint ID</strong>
-            <p>{syncStatus.discovery.local_endpoint_id || 'unknown'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Connected Peers</strong>
-            <p>{syncStatus.discovery.connected_peer_ids.join(', ') || 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Relay-assisted Peers</strong>
-            <p>{syncStatus.discovery.assist_peer_ids.join(', ') || 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Manual Ticket Peers</strong>
-            <p>{syncStatus.discovery.manual_ticket_peer_ids.join(', ') || 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Community Bootstrap Peers</strong>
-            <p>{syncStatus.discovery.bootstrap_seed_peer_ids.join(', ') || 'none'}</p>
-          </div>
-          <div className='diagnostic-block'>
-            <strong>Configured Seed IDs</strong>
-            <p>{syncStatus.discovery.configured_seed_peer_ids.join(', ') || 'none'}</p>
-          </div>
-          <Label>
-            <span>Seed Peers</span>
-            <Textarea
-              value={discoverySeedInput}
-              onChange={(event) => {
-                setDiscoverySeedInput(event.target.value);
-                setDiscoveryEditorDirty(true);
-              }}
-              readOnly={discoveryConfig.env_locked}
-              className='ticket-output discovery-editor'
-              placeholder='node_id or node_id@host:port'
-            />
-          </Label>
-          <div className='diagnostic-block'>
-            <strong>Discovery Error</strong>
-            <p
-              className={
-                discoveryError || syncStatus.discovery.last_discovery_error
-                  ? 'diagnostic-error'
-                  : undefined
-              }
-            >
-              {discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none'}
-            </p>
-          </div>
-          <div className='discovery-actions'>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={discoveryConfig.env_locked || !discoveryEditorDirty}
-              onClick={() => void handleSaveDiscoverySeeds()}
-            >
-              Save Seeds
-            </Button>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={!discoveryEditorDirty}
-              onClick={() => {
-                setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
-                setDiscoveryEditorDirty(false);
-                setDiscoveryError(null);
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-        </Card>
+        <DiscoveryPanel
+          view={discoveryPanelView}
+          saveDisabled={discoveryConfig.env_locked || !discoveryEditorDirty}
+          resetDisabled={!discoveryEditorDirty}
+          onSeedPeersChange={(value) => {
+            setDiscoverySeedInput(value);
+            setDiscoveryEditorDirty(true);
+          }}
+          onSave={() => void handleSaveDiscoverySeeds()}
+          onReset={() => {
+            setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
+            setDiscoveryEditorDirty(false);
+            setDiscoveryError(null);
+          }}
+        />
       ),
     },
     {
       ...SETTINGS_SECTION_COPY[2],
       content: (
-        <Card className='discovery-panel'>
-          <CardHeader>
-            <h3>Community Node</h3>
-            <small>{communityNodeStatuses.length} configured</small>
-          </CardHeader>
-          <Label>
-            <span>Base URLs</span>
-            <Textarea
-              value={communityNodeInput}
-              onChange={(event) => {
-                setCommunityNodeInput(event.target.value);
-                setCommunityNodeEditorDirty(true);
-              }}
-              className='ticket-output discovery-editor'
-              placeholder='https://community.example.com'
-            />
-          </Label>
-          <div className='diagnostic-block'>
-            <strong>Community Node Error</strong>
-            <p className={communityNodeError ? 'diagnostic-error' : undefined}>
-              {communityNodeError ?? 'none'}
-            </p>
-          </div>
-          <div className='discovery-actions'>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={!communityNodeEditorDirty}
-              onClick={() => void handleSaveCommunityNodes()}
-            >
-              Save Nodes
-            </Button>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={!communityNodeEditorDirty}
-              onClick={() => {
-                setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
-                setCommunityNodeEditorDirty(false);
-                setCommunityNodeError(null);
-              }}
-            >
-              Reset
-            </Button>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={communityNodeConfig.nodes.length === 0}
-              onClick={() => void handleClearCommunityNodes()}
-            >
-              Clear
-            </Button>
-          </div>
-          {communityNodeConfig.nodes.map((node) => {
-            const status = communityNodeStatusByBaseUrl[node.base_url];
-            return (
-              <div key={node.base_url} className='diagnostic-block'>
-                <strong>{node.base_url}</strong>
-                <p>
-                  auth:{' '}
-                  {status?.auth_state.authenticated
-                    ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
-                    : 'no'}
-                </p>
-                <p>
-                  consent:{' '}
-                  {status?.consent_state
-                    ? status.consent_state.all_required_accepted
-                      ? 'accepted'
-                      : 'required'
-                    : 'unknown'}
-                </p>
-                <p>connectivity urls: {communityNodeConnectivityUrlsLabel(status)}</p>
-                <p>session activation: {communityNodeSessionActivationLabel(status)}</p>
-                <p>next step: {communityNodeNextStepLabel(status)}</p>
-                <div className='discovery-actions'>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => void handleAuthenticateCommunityNode(node.base_url)}
-                  >
-                    Authenticate
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => void handleFetchCommunityNodeConsents(node.base_url)}
-                  >
-                    Consents
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => void handleAcceptCommunityNodeConsents(node.base_url)}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => void handleRefreshCommunityNode(node.base_url)}
-                  >
-                    Refresh
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => void handleClearCommunityNodeToken(node.base_url)}
-                  >
-                    Clear Token
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </Card>
+        <CommunityNodePanel
+          view={communityNodePanelView}
+          saveDisabled={!communityNodeEditorDirty}
+          resetDisabled={!communityNodeEditorDirty}
+          clearDisabled={communityNodeConfig.nodes.length === 0}
+          onBaseUrlsChange={(value) => {
+            setCommunityNodeInput(value);
+            setCommunityNodeEditorDirty(true);
+          }}
+          onSaveNodes={() => void handleSaveCommunityNodes()}
+          onReset={() => {
+            setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
+            setCommunityNodeEditorDirty(false);
+            setCommunityNodeError(null);
+          }}
+          onClearNodes={() => void handleClearCommunityNodes()}
+          onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
+          onFetchConsents={(baseUrl) => void handleFetchCommunityNodeConsents(baseUrl)}
+          onAcceptConsents={(baseUrl) => void handleAcceptCommunityNodeConsents(baseUrl)}
+          onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
+          onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
+        />
       ),
     },
   ];

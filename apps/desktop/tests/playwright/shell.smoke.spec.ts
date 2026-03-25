@@ -28,12 +28,40 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(page.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
 
   await page.getByTestId('shell-settings-trigger').click();
-  await expect(page.getByRole('dialog', { name: 'Settings & diagnostics' })).toBeVisible();
-  await page.getByTestId('settings-section-discovery').click();
-  await page.getByPlaceholder('node_id or node_id@host:port').fill('seed-peer-1');
-  await page.getByRole('button', { name: 'Save Seeds' }).click();
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByTestId('settings-section-discovery').click();
+  await settingsDialog.getByPlaceholder('node_id or node_id@host:port').fill('seed-peer-1');
+  await settingsDialog.getByRole('button', { name: 'Save Seeds' }).click();
+  await expect(settingsDialog.getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('seed-peer-1');
 
-  await expect(page.getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('seed-peer-1');
+  await settingsDialog.getByRole('textbox', { name: 'Seed Peers' }).fill('seed-peer-1\nseed-peer-2');
+  await settingsDialog.getByRole('button', { name: 'Reset' }).click();
+  await expect(settingsDialog.getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('seed-peer-1');
+
+  await settingsDialog.getByTestId('settings-section-community-node').click();
+  await settingsDialog
+    .getByPlaceholder('https://community.example.com')
+    .fill('https://api.kukuri.app');
+  await settingsDialog.getByRole('button', { name: 'Save Nodes' }).click();
+
+  const nodeCard = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'https://api.kukuri.app' }) })
+    .last();
+
+  await nodeCard.getByRole('button', { name: 'Authenticate' }).click();
+  await expect(nodeCard.getByText('waiting for consent acceptance')).toBeVisible();
+
+  await nodeCard.getByRole('button', { name: 'Accept' }).click();
+  await expect(nodeCard.getByText('active on current session', { exact: true })).toBeVisible();
+  await expect(nodeCard.getByText('connectivity urls active on current session')).toBeVisible();
+
+  await nodeCard.getByRole('button', { name: 'Refresh' }).click();
+  await expect(nodeCard.getByRole('heading', { name: 'https://api.kukuri.app' })).toBeVisible();
+
+  await nodeCard.getByRole('button', { name: 'Clear Token' }).click();
+  await expect(nodeCard).toBeVisible();
 });
 
 test('browser mock narrow shell keeps nav, context, and settings flows reachable without overflow', async ({
@@ -66,10 +94,25 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
 
   await page.keyboard.press('Escape');
   await page.getByTestId('shell-settings-trigger').click();
-  await page.getByTestId('settings-section-connectivity').click();
-  await page.getByPlaceholder('nodeid@127.0.0.1:7777').fill('peer-b@127.0.0.1:8888');
-  await page.getByRole('button', { name: 'Import Peer' }).click();
-  await expect(page.getByPlaceholder('nodeid@127.0.0.1:7777')).toHaveValue('');
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  await settingsDialog.getByTestId('settings-section-connectivity').click();
+  await settingsDialog.getByPlaceholder('nodeid@127.0.0.1:7777').fill('peer-b@127.0.0.1:8888');
+  await settingsDialog.getByRole('button', { name: 'Import Peer' }).click();
+  await expect(settingsDialog.getByPlaceholder('nodeid@127.0.0.1:7777')).toHaveValue('');
+
+  await settingsDialog.getByTestId('settings-section-community-node').click();
+  await settingsDialog
+    .getByPlaceholder('https://community.example.com')
+    .fill('https://api.kukuri.app\nhttps://community.example.com');
+  await settingsDialog.getByRole('button', { name: 'Save Nodes' }).click();
+  await expect(
+    settingsDialog.getByRole('heading', { name: 'https://community.example.com' })
+  ).toBeVisible();
+
+  const settingsNoOverflow = await settingsDialog.evaluate(
+    (element) => element.scrollWidth <= element.clientWidth
+  );
+  expect(settingsNoOverflow).toBeTruthy();
 
   await page.keyboard.press('Escape');
   await page.getByTestId('shell-nav-trigger').click();
