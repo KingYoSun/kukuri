@@ -40,8 +40,15 @@ jobs:
         working-directory: apps/desktop
         run: npx pnpm@10.16.1 install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        working-directory: apps/desktop
+        run: npx pnpm@10.16.1 exec playwright install chromium
+
       - name: Doctor
         run: cargo xtask doctor
+
+      - name: Desktop UI checks
+        run: cargo xtask desktop-ui-check
 
       - name: Workspace tests
         run: cargo xtask test

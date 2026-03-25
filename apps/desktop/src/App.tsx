@@ -2,13 +2,22 @@ import {
   ChangeEvent,
   FormEvent,
   SyntheticEvent,
+  createContext,
   startTransition,
   useCallback,
   useEffect,
+  useContext,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import {
+  HashRouter,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
+import { useStore } from 'zustand';
+import { createStore } from 'zustand/vanilla';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -109,6 +118,112 @@ type AsyncPanelState = {
   error: string | null;
 };
 
+type DesktopShellState = {
+  trackedTopics: string[];
+  activeTopic: string;
+  topicInput: string;
+  composer: string;
+  draftMediaItems: DraftMediaItem[];
+  attachmentInputKey: number;
+  timelinesByTopic: Record<string, PostView[]>;
+  liveSessionsByTopic: Record<string, LiveSessionView[]>;
+  gameRoomsByTopic: Record<string, GameRoomView[]>;
+  joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]>;
+  selectedChannelIdByTopic: Record<string, string | null>;
+  timelineScopeByTopic: Record<string, TimelineScope>;
+  composeChannelByTopic: Record<string, ChannelRef>;
+  thread: PostView[];
+  selectedThread: string | null;
+  replyTarget: PostView | null;
+  peerTicket: string;
+  localPeerTicket: string | null;
+  discoveryConfig: DiscoveryConfig;
+  discoverySeedInput: string;
+  discoveryEditorDirty: boolean;
+  discoveryError: string | null;
+  communityNodeConfig: CommunityNodeConfig;
+  communityNodeStatuses: CommunityNodeNodeStatus[];
+  communityNodeInput: string;
+  communityNodeEditorDirty: boolean;
+  communityNodeError: string | null;
+  mediaObjectUrls: Record<string, string | null>;
+  unsupportedVideoManifests: Record<string, true>;
+  syncStatus: SyncStatus;
+  localProfile: Profile | null;
+  profileDraft: ProfileInput;
+  profileDirty: boolean;
+  profileError: string | null;
+  profilePanelState: AsyncPanelState;
+  profileSaving: boolean;
+  selectedAuthorPubkey: string | null;
+  selectedAuthor: AuthorSocialView | null;
+  authorError: string | null;
+  composerError: string | null;
+  liveTitle: string;
+  liveDescription: string;
+  liveError: string | null;
+  livePanelStateByTopic: Record<string, AsyncPanelState>;
+  liveCreatePending: boolean;
+  livePendingBySessionId: Record<string, true>;
+  channelLabelInput: string;
+  channelAudienceInput: ChannelAudienceKind;
+  inviteTokenInput: string;
+  inviteOutput: string | null;
+  inviteOutputLabel: InviteOutputLabel;
+  channelError: string | null;
+  channelPanelStateByTopic: Record<string, AsyncPanelState>;
+  channelActionPending: PrivateChannelPendingAction;
+  gameTitle: string;
+  gameDescription: string;
+  gameParticipantsInput: string;
+  gameError: string | null;
+  gameDrafts: Record<string, GameEditorDraft>;
+  gamePanelStateByTopic: Record<string, AsyncPanelState>;
+  gameCreatePending: boolean;
+  gameSavingByRoomId: Record<string, true>;
+  error: string | null;
+  shellChromeState: ShellChromeState;
+};
+
+type DesktopShellStateValue<K extends keyof DesktopShellState> =
+  | DesktopShellState[K]
+  | ((current: DesktopShellState[K]) => DesktopShellState[K]);
+
+type DesktopShellStore = DesktopShellState & {
+  patchState: (patch: Partial<DesktopShellState>) => void;
+  resetState: () => void;
+  setField: <K extends keyof DesktopShellState>(
+    key: K,
+    value: DesktopShellStateValue<K>
+  ) => void;
+};
+
+type DesktopShellRouteOverrides = {
+  activeTopic?: string;
+  composeTarget?: ChannelRef;
+  contextMode?: ContextPaneMode;
+  contextOpen?: boolean;
+  primarySection?: PrimarySection;
+  selectedAuthorPubkey?: string | null;
+  selectedThread?: string | null;
+  settingsOpen?: boolean;
+  settingsSection?: SettingsSection;
+  timelineScope?: TimelineScope;
+};
+
+type OpenThreadOptions = {
+  historyMode?: 'push' | 'replace';
+  normalizeOnEmpty?: boolean;
+  topic?: string;
+};
+
+type OpenAuthorOptions = {
+  historyMode?: 'push' | 'replace';
+  normalizeOnError?: boolean;
+};
+
+type DesktopShellStoreApi = ReturnType<typeof createDesktopShellStore>;
+
 type MediaDebugValue = boolean | number | string | null | undefined;
 type MediaDebugFields = Record<string, MediaDebugValue>;
 
@@ -158,6 +273,134 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
     last_discovery_error: null,
   },
 };
+
+function createInitialShellState(): DesktopShellState {
+  return {
+    trackedTopics: [DEFAULT_TOPIC],
+    activeTopic: DEFAULT_TOPIC,
+    topicInput: '',
+    composer: '',
+    draftMediaItems: [],
+    attachmentInputKey: 0,
+    timelinesByTopic: {
+      [DEFAULT_TOPIC]: [],
+    },
+    liveSessionsByTopic: {
+      [DEFAULT_TOPIC]: [],
+    },
+    gameRoomsByTopic: {
+      [DEFAULT_TOPIC]: [],
+    },
+    joinedChannelsByTopic: {
+      [DEFAULT_TOPIC]: [],
+    },
+    selectedChannelIdByTopic: {
+      [DEFAULT_TOPIC]: null,
+    },
+    timelineScopeByTopic: {
+      [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
+    },
+    composeChannelByTopic: {
+      [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
+    },
+    thread: [],
+    selectedThread: null,
+    replyTarget: null,
+    peerTicket: '',
+    localPeerTicket: null,
+    discoveryConfig: DEFAULT_DISCOVERY_CONFIG,
+    discoverySeedInput: '',
+    discoveryEditorDirty: false,
+    discoveryError: null,
+    communityNodeConfig: DEFAULT_COMMUNITY_NODE_CONFIG,
+    communityNodeStatuses: [],
+    communityNodeInput: '',
+    communityNodeEditorDirty: false,
+    communityNodeError: null,
+    mediaObjectUrls: {},
+    unsupportedVideoManifests: {},
+    syncStatus: DEFAULT_SYNC_STATUS,
+    localProfile: null,
+    profileDraft: {},
+    profileDirty: false,
+    profileError: null,
+    profilePanelState: DEFAULT_ASYNC_PANEL_STATE,
+    profileSaving: false,
+    selectedAuthorPubkey: null,
+    selectedAuthor: null,
+    authorError: null,
+    composerError: null,
+    liveTitle: '',
+    liveDescription: '',
+    liveError: null,
+    livePanelStateByTopic: {
+      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+    },
+    liveCreatePending: false,
+    livePendingBySessionId: {},
+    channelLabelInput: '',
+    channelAudienceInput: 'invite_only',
+    inviteTokenInput: '',
+    inviteOutput: null,
+    inviteOutputLabel: 'invite',
+    channelError: null,
+    channelPanelStateByTopic: {
+      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+    },
+    channelActionPending: null,
+    gameTitle: '',
+    gameDescription: '',
+    gameParticipantsInput: '',
+    gameError: null,
+    gameDrafts: {},
+    gamePanelStateByTopic: {
+      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
+    },
+    gameCreatePending: false,
+    gameSavingByRoomId: {},
+    error: null,
+    shellChromeState: {
+      activePrimarySection: 'timeline',
+      activeContextPaneMode: 'thread',
+      activeSettingsSection: 'connectivity',
+      navOpen: false,
+      contextOpen: false,
+      settingsOpen: false,
+    },
+  };
+}
+
+function createDesktopShellStore() {
+  return createStore<DesktopShellStore>((set) => ({
+    ...createInitialShellState(),
+    patchState: (patch) => set((current) => ({ ...current, ...patch })),
+    resetState: () => set(createInitialShellState()),
+    setField: (key, value) =>
+      set((current) => ({
+        [key]:
+          typeof value === 'function'
+            ? (value as (currentValue: DesktopShellState[typeof key]) => DesktopShellState[typeof key])(
+                current[key]
+              )
+            : value,
+      })),
+  }));
+}
+
+const DesktopShellStoreContext = createContext<DesktopShellStoreApi | null>(null);
+
+function useDesktopShellStoreApi() {
+  const store = useContext(DesktopShellStoreContext);
+  if (!store) {
+    throw new Error('desktop shell store is not available');
+  }
+
+  return store;
+}
+
+function useDesktopShellStore() {
+  return useStore(useDesktopShellStoreApi());
+}
 
 const PRIMARY_SECTION_ITEMS: Array<{
   id: PrimarySection;
@@ -213,6 +456,22 @@ const SETTINGS_SECTION_COPY: Array<{
   },
 ];
 
+const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
+  timeline: '/timeline',
+  channels: '/channels',
+  live: '/live',
+  game: '/game',
+  profile: '/profile',
+};
+
+function parsePrimarySectionPath(pathname: string): PrimarySection | null {
+  const normalizedPath = pathname === '/' ? '/timeline' : pathname;
+  const match = (
+    Object.entries(PRIMARY_SECTION_PATHS) as Array<[PrimarySection, string]>
+  ).find(([, path]) => path === normalizedPath);
+  return match?.[0] ?? null;
+}
+
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
 }
@@ -242,6 +501,10 @@ function formatBytes(bytes: number): string {
 
 function shortPubkey(pubkey: string): string {
   return pubkey.slice(0, 12);
+}
+
+function isHex64(value: string): boolean {
+  return value.length === 64 && [...value].every((character) => character.match(/[0-9a-f]/i));
 }
 
 function messageFromError(error: unknown, fallback: string): string {
@@ -918,114 +1181,245 @@ function joinedChannelFromFriendSharePreview(
   };
 }
 
-export function App({ api = runtimeApi }: AppProps) {
-  const [trackedTopics, setTrackedTopics] = useState<string[]>([DEFAULT_TOPIC]);
-  const [activeTopic, setActiveTopic] = useState(DEFAULT_TOPIC);
-  const [topicInput, setTopicInput] = useState('');
-  const [composer, setComposer] = useState('');
-  const [draftMediaItems, setDraftMediaItems] = useState<DraftMediaItem[]>([]);
-  const [attachmentInputKey, setAttachmentInputKey] = useState(0);
-  const [timelinesByTopic, setTimelinesByTopic] = useState<Record<string, PostView[]>>({
-    [DEFAULT_TOPIC]: [],
-  });
-  const [liveSessionsByTopic, setLiveSessionsByTopic] = useState<Record<string, LiveSessionView[]>>({
-    [DEFAULT_TOPIC]: [],
-  });
-  const [gameRoomsByTopic, setGameRoomsByTopic] = useState<Record<string, GameRoomView[]>>({
-    [DEFAULT_TOPIC]: [],
-  });
-  const [joinedChannelsByTopic, setJoinedChannelsByTopic] = useState<
-    Record<string, JoinedPrivateChannelView[]>
-  >({
-    [DEFAULT_TOPIC]: [],
-  });
-  const [selectedChannelIdByTopic, setSelectedChannelIdByTopic] = useState<
-    Record<string, string | null>
-  >({
-    [DEFAULT_TOPIC]: null,
-  });
-  const [timelineScopeByTopic, setTimelineScopeByTopic] = useState<Record<string, TimelineScope>>({
-    [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
-  });
-  const [composeChannelByTopic, setComposeChannelByTopic] = useState<Record<string, ChannelRef>>({
-    [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
-  });
-  const [thread, setThread] = useState<PostView[]>([]);
-  const [selectedThread, setSelectedThread] = useState<string | null>(null);
-  const [replyTarget, setReplyTarget] = useState<PostView | null>(null);
-  const [peerTicket, setPeerTicket] = useState('');
-  const [localPeerTicket, setLocalPeerTicket] = useState<string | null>(null);
-  const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig>(DEFAULT_DISCOVERY_CONFIG);
-  const [discoverySeedInput, setDiscoverySeedInput] = useState('');
-  const [discoveryEditorDirty, setDiscoveryEditorDirty] = useState(false);
-  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
-  const [communityNodeConfig, setCommunityNodeConfig] = useState<CommunityNodeConfig>(
-    DEFAULT_COMMUNITY_NODE_CONFIG
+function DesktopShellPage({ api = runtimeApi }: AppProps) {
+  const storeApi = useDesktopShellStoreApi();
+  const {
+    trackedTopics,
+    activeTopic,
+    topicInput,
+    composer,
+    draftMediaItems,
+    attachmentInputKey,
+    timelinesByTopic,
+    liveSessionsByTopic,
+    gameRoomsByTopic,
+    joinedChannelsByTopic,
+    selectedChannelIdByTopic,
+    timelineScopeByTopic,
+    composeChannelByTopic,
+    thread,
+    selectedThread,
+    replyTarget,
+    peerTicket,
+    localPeerTicket,
+    discoveryConfig,
+    discoverySeedInput,
+    discoveryEditorDirty,
+    discoveryError,
+    communityNodeConfig,
+    communityNodeStatuses,
+    communityNodeInput,
+    communityNodeEditorDirty,
+    communityNodeError,
+    mediaObjectUrls,
+    unsupportedVideoManifests,
+    syncStatus,
+    localProfile,
+    profileDraft,
+    profileDirty,
+    profileError,
+    profilePanelState,
+    profileSaving,
+    selectedAuthorPubkey,
+    selectedAuthor,
+    authorError,
+    composerError,
+    liveTitle,
+    liveDescription,
+    liveError,
+    livePanelStateByTopic,
+    liveCreatePending,
+    livePendingBySessionId,
+    channelLabelInput,
+    channelAudienceInput,
+    inviteTokenInput,
+    inviteOutput,
+    inviteOutputLabel,
+    channelError,
+    channelPanelStateByTopic,
+    channelActionPending,
+    gameTitle,
+    gameDescription,
+    gameParticipantsInput,
+    gameError,
+    gameDrafts,
+    gamePanelStateByTopic,
+    gameCreatePending,
+    gameSavingByRoomId,
+    error,
+    shellChromeState,
+    setField,
+  } = useDesktopShellStore();
+  const makeFieldSetter = useCallback(
+    function <K extends keyof DesktopShellState>(key: K) {
+      return (value: DesktopShellStateValue<K>) => setField(key, value);
+    },
+    [setField]
   );
-  const [communityNodeStatuses, setCommunityNodeStatuses] = useState<CommunityNodeNodeStatus[]>([]);
-  const [communityNodeInput, setCommunityNodeInput] = useState('');
-  const [communityNodeEditorDirty, setCommunityNodeEditorDirty] = useState(false);
-  const [communityNodeError, setCommunityNodeError] = useState<string | null>(null);
-  const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string | null>>({});
-  const [unsupportedVideoManifests, setUnsupportedVideoManifests] = useState<
-    Record<string, true>
-  >({});
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(DEFAULT_SYNC_STATUS);
-  const [localProfile, setLocalProfile] = useState<Profile | null>(null);
-  const [profileDraft, setProfileDraft] = useState<ProfileInput>({});
-  const [profileDirty, setProfileDirty] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profilePanelState, setProfilePanelState] = useState<AsyncPanelState>(DEFAULT_ASYNC_PANEL_STATE);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [selectedAuthorPubkey, setSelectedAuthorPubkey] = useState<string | null>(null);
-  const [selectedAuthor, setSelectedAuthor] = useState<AuthorSocialView | null>(null);
-  const [authorError, setAuthorError] = useState<string | null>(null);
-  const [composerError, setComposerError] = useState<string | null>(null);
-  const [liveTitle, setLiveTitle] = useState('');
-  const [liveDescription, setLiveDescription] = useState('');
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [livePanelStateByTopic, setLivePanelStateByTopic] = useState<Record<string, AsyncPanelState>>({
-    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-  });
-  const [liveCreatePending, setLiveCreatePending] = useState(false);
-  const [livePendingBySessionId, setLivePendingBySessionId] = useState<Record<string, true>>({});
-  const [channelLabelInput, setChannelLabelInput] = useState('');
-  const [channelAudienceInput, setChannelAudienceInput] =
-    useState<ChannelAudienceKind>('invite_only');
-  const [inviteTokenInput, setInviteTokenInput] = useState('');
-  const [inviteOutput, setInviteOutput] = useState<string | null>(null);
-  const [inviteOutputLabel, setInviteOutputLabel] = useState<InviteOutputLabel>('invite');
-  const [channelError, setChannelError] = useState<string | null>(null);
-  const [channelPanelStateByTopic, setChannelPanelStateByTopic] = useState<
-    Record<string, AsyncPanelState>
-  >({
-    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-  });
-  const [channelActionPending, setChannelActionPending] =
-    useState<PrivateChannelPendingAction>(null);
-  const [gameTitle, setGameTitle] = useState('');
-  const [gameDescription, setGameDescription] = useState('');
-  const [gameParticipantsInput, setGameParticipantsInput] = useState('');
-  const [gameError, setGameError] = useState<string | null>(null);
-  const [gameDrafts, setGameDrafts] = useState<Record<string, GameEditorDraft>>({});
-  const [gamePanelStateByTopic, setGamePanelStateByTopic] = useState<Record<string, AsyncPanelState>>({
-    [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-  });
-  const [gameCreatePending, setGameCreatePending] = useState(false);
-  const [gameSavingByRoomId, setGameSavingByRoomId] = useState<Record<string, true>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [shellChromeState, setShellChromeState] = useState<ShellChromeState>({
-    activePrimarySection: 'timeline',
-    activeContextPaneMode: 'thread',
-    activeSettingsSection: 'connectivity',
-    navOpen: false,
-    contextOpen: false,
-    settingsOpen: false,
-  });
+  const setTrackedTopics = useMemo(() => makeFieldSetter('trackedTopics'), [makeFieldSetter]);
+  const setActiveTopic = useMemo(() => makeFieldSetter('activeTopic'), [makeFieldSetter]);
+  const setTopicInput = useMemo(() => makeFieldSetter('topicInput'), [makeFieldSetter]);
+  const setComposer = useMemo(() => makeFieldSetter('composer'), [makeFieldSetter]);
+  const setDraftMediaItems = useMemo(() => makeFieldSetter('draftMediaItems'), [makeFieldSetter]);
+  const setAttachmentInputKey = useMemo(
+    () => makeFieldSetter('attachmentInputKey'),
+    [makeFieldSetter]
+  );
+  const setTimelinesByTopic = useMemo(() => makeFieldSetter('timelinesByTopic'), [makeFieldSetter]);
+  const setLiveSessionsByTopic = useMemo(
+    () => makeFieldSetter('liveSessionsByTopic'),
+    [makeFieldSetter]
+  );
+  const setGameRoomsByTopic = useMemo(() => makeFieldSetter('gameRoomsByTopic'), [makeFieldSetter]);
+  const setJoinedChannelsByTopic = useMemo(
+    () => makeFieldSetter('joinedChannelsByTopic'),
+    [makeFieldSetter]
+  );
+  const setSelectedChannelIdByTopic = useMemo(
+    () => makeFieldSetter('selectedChannelIdByTopic'),
+    [makeFieldSetter]
+  );
+  const setTimelineScopeByTopic = useMemo(
+    () => makeFieldSetter('timelineScopeByTopic'),
+    [makeFieldSetter]
+  );
+  const setComposeChannelByTopic = useMemo(
+    () => makeFieldSetter('composeChannelByTopic'),
+    [makeFieldSetter]
+  );
+  const setThread = useMemo(() => makeFieldSetter('thread'), [makeFieldSetter]);
+  const setSelectedThread = useMemo(() => makeFieldSetter('selectedThread'), [makeFieldSetter]);
+  const setReplyTarget = useMemo(() => makeFieldSetter('replyTarget'), [makeFieldSetter]);
+  const setPeerTicket = useMemo(() => makeFieldSetter('peerTicket'), [makeFieldSetter]);
+  const setLocalPeerTicket = useMemo(() => makeFieldSetter('localPeerTicket'), [makeFieldSetter]);
+  const setDiscoveryConfig = useMemo(() => makeFieldSetter('discoveryConfig'), [makeFieldSetter]);
+  const setDiscoverySeedInput = useMemo(
+    () => makeFieldSetter('discoverySeedInput'),
+    [makeFieldSetter]
+  );
+  const setDiscoveryEditorDirty = useMemo(
+    () => makeFieldSetter('discoveryEditorDirty'),
+    [makeFieldSetter]
+  );
+  const setDiscoveryError = useMemo(() => makeFieldSetter('discoveryError'), [makeFieldSetter]);
+  const setCommunityNodeConfig = useMemo(
+    () => makeFieldSetter('communityNodeConfig'),
+    [makeFieldSetter]
+  );
+  const setCommunityNodeStatuses = useMemo(
+    () => makeFieldSetter('communityNodeStatuses'),
+    [makeFieldSetter]
+  );
+  const setCommunityNodeInput = useMemo(
+    () => makeFieldSetter('communityNodeInput'),
+    [makeFieldSetter]
+  );
+  const setCommunityNodeEditorDirty = useMemo(
+    () => makeFieldSetter('communityNodeEditorDirty'),
+    [makeFieldSetter]
+  );
+  const setCommunityNodeError = useMemo(
+    () => makeFieldSetter('communityNodeError'),
+    [makeFieldSetter]
+  );
+  const setMediaObjectUrls = useMemo(() => makeFieldSetter('mediaObjectUrls'), [makeFieldSetter]);
+  const setUnsupportedVideoManifests = useMemo(
+    () => makeFieldSetter('unsupportedVideoManifests'),
+    [makeFieldSetter]
+  );
+  const setSyncStatus = useMemo(() => makeFieldSetter('syncStatus'), [makeFieldSetter]);
+  const setLocalProfile = useMemo(() => makeFieldSetter('localProfile'), [makeFieldSetter]);
+  const setProfileDraft = useMemo(() => makeFieldSetter('profileDraft'), [makeFieldSetter]);
+  const setProfileDirty = useMemo(() => makeFieldSetter('profileDirty'), [makeFieldSetter]);
+  const setProfileError = useMemo(() => makeFieldSetter('profileError'), [makeFieldSetter]);
+  const setProfilePanelState = useMemo(
+    () => makeFieldSetter('profilePanelState'),
+    [makeFieldSetter]
+  );
+  const setProfileSaving = useMemo(() => makeFieldSetter('profileSaving'), [makeFieldSetter]);
+  const setSelectedAuthorPubkey = useMemo(
+    () => makeFieldSetter('selectedAuthorPubkey'),
+    [makeFieldSetter]
+  );
+  const setSelectedAuthor = useMemo(() => makeFieldSetter('selectedAuthor'), [makeFieldSetter]);
+  const setAuthorError = useMemo(() => makeFieldSetter('authorError'), [makeFieldSetter]);
+  const setComposerError = useMemo(() => makeFieldSetter('composerError'), [makeFieldSetter]);
+  const setLiveTitle = useMemo(() => makeFieldSetter('liveTitle'), [makeFieldSetter]);
+  const setLiveDescription = useMemo(() => makeFieldSetter('liveDescription'), [makeFieldSetter]);
+  const setLiveError = useMemo(() => makeFieldSetter('liveError'), [makeFieldSetter]);
+  const setLivePanelStateByTopic = useMemo(
+    () => makeFieldSetter('livePanelStateByTopic'),
+    [makeFieldSetter]
+  );
+  const setLiveCreatePending = useMemo(
+    () => makeFieldSetter('liveCreatePending'),
+    [makeFieldSetter]
+  );
+  const setLivePendingBySessionId = useMemo(
+    () => makeFieldSetter('livePendingBySessionId'),
+    [makeFieldSetter]
+  );
+  const setChannelLabelInput = useMemo(
+    () => makeFieldSetter('channelLabelInput'),
+    [makeFieldSetter]
+  );
+  const setChannelAudienceInput = useMemo(
+    () => makeFieldSetter('channelAudienceInput'),
+    [makeFieldSetter]
+  );
+  const setInviteTokenInput = useMemo(
+    () => makeFieldSetter('inviteTokenInput'),
+    [makeFieldSetter]
+  );
+  const setInviteOutput = useMemo(() => makeFieldSetter('inviteOutput'), [makeFieldSetter]);
+  const setInviteOutputLabel = useMemo(
+    () => makeFieldSetter('inviteOutputLabel'),
+    [makeFieldSetter]
+  );
+  const setChannelError = useMemo(() => makeFieldSetter('channelError'), [makeFieldSetter]);
+  const setChannelPanelStateByTopic = useMemo(
+    () => makeFieldSetter('channelPanelStateByTopic'),
+    [makeFieldSetter]
+  );
+  const setChannelActionPending = useMemo(
+    () => makeFieldSetter('channelActionPending'),
+    [makeFieldSetter]
+  );
+  const setGameTitle = useMemo(() => makeFieldSetter('gameTitle'), [makeFieldSetter]);
+  const setGameDescription = useMemo(
+    () => makeFieldSetter('gameDescription'),
+    [makeFieldSetter]
+  );
+  const setGameParticipantsInput = useMemo(
+    () => makeFieldSetter('gameParticipantsInput'),
+    [makeFieldSetter]
+  );
+  const setGameError = useMemo(() => makeFieldSetter('gameError'), [makeFieldSetter]);
+  const setGameDrafts = useMemo(() => makeFieldSetter('gameDrafts'), [makeFieldSetter]);
+  const setGamePanelStateByTopic = useMemo(
+    () => makeFieldSetter('gamePanelStateByTopic'),
+    [makeFieldSetter]
+  );
+  const setGameCreatePending = useMemo(
+    () => makeFieldSetter('gameCreatePending'),
+    [makeFieldSetter]
+  );
+  const setGameSavingByRoomId = useMemo(
+    () => makeFieldSetter('gameSavingByRoomId'),
+    [makeFieldSetter]
+  );
+  const setError = useMemo(() => makeFieldSetter('error'), [makeFieldSetter]);
+  const setShellChromeState = useMemo(
+    () => makeFieldSetter('shellChromeState'),
+    [makeFieldSetter]
+  );
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
+  const loadTopicsRequestRef = useRef(0);
+  const pendingRouteUrlRef = useRef<string | null>(null);
+  const didSyncRouteSectionRef = useRef(false);
   const navTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1036,6 +1430,12 @@ export function App({ api = runtimeApi }: AppProps) {
     game: null,
     profile: null,
   });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeSection = useMemo(
+    () => parsePrimarySectionPath(location.pathname) ?? 'timeline',
+    [location.pathname]
+  );
 
   const headline = useMemo(
     () => {
@@ -1105,6 +1505,77 @@ export function App({ api = runtimeApi }: AppProps) {
     () => gamePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE,
     [activeTopic, gamePanelStateByTopic]
   );
+  const syncRoute = useCallback((
+    mode: 'push' | 'replace' = 'replace',
+    overrides?: DesktopShellRouteOverrides
+  ) => {
+    const search = new URLSearchParams();
+    const nextTopic = overrides?.activeTopic ?? activeTopic;
+    const nextTimelineScope = overrides?.timelineScope ?? activeTimelineScope;
+    const nextComposeTarget = overrides?.composeTarget ?? activeComposeChannel;
+    const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
+    const nextContextMode = overrides?.contextMode ?? shellChromeState.activeContextPaneMode;
+    const nextContextOpen = overrides?.contextOpen ?? shellChromeState.contextOpen;
+    const nextSelectedThread = overrides?.selectedThread ?? selectedThread;
+    const nextSelectedAuthorPubkey =
+      overrides?.selectedAuthorPubkey ?? selectedAuthorPubkey;
+    const nextSettingsOpen = overrides?.settingsOpen ?? shellChromeState.settingsOpen;
+    const nextSettingsSection =
+      overrides?.settingsSection ?? shellChromeState.activeSettingsSection;
+
+    search.set('topic', nextTopic);
+    const nextTimelineScopeValue = timelineScopeValue(nextTimelineScope);
+    const nextComposeTargetValue = channelRefValue(nextComposeTarget);
+    if (nextTimelineScopeValue !== 'public') {
+      search.set('timelineScope', nextTimelineScopeValue);
+    }
+    if (nextComposeTargetValue !== 'public') {
+      search.set('composeTarget', nextComposeTargetValue);
+    }
+    if (nextContextOpen) {
+      search.set('context', nextContextMode);
+      if (
+        nextContextMode === 'thread' &&
+        nextSelectedThread
+      ) {
+        search.set('threadId', nextSelectedThread);
+      }
+      if (
+        nextContextMode === 'author' &&
+        nextSelectedAuthorPubkey
+      ) {
+        search.set('authorPubkey', nextSelectedAuthorPubkey);
+      }
+    }
+    if (nextSettingsOpen) {
+      search.set('settings', nextSettingsSection);
+    }
+
+    const nextPath = PRIMARY_SECTION_PATHS[nextPrimarySection];
+    const nextSearch = search.toString();
+    const nextUrl = nextSearch ? `${nextPath}?${nextSearch}` : nextPath;
+    const currentUrl = `${location.pathname}${location.search}`;
+    if (currentUrl !== nextUrl) {
+      pendingRouteUrlRef.current = nextUrl;
+      navigate(nextUrl, { replace: mode === 'replace' });
+      return;
+    }
+    pendingRouteUrlRef.current = null;
+  }, [
+    activeComposeChannel,
+    activeTimelineScope,
+    activeTopic,
+    location.pathname,
+    location.search,
+    navigate,
+    selectedAuthorPubkey,
+    selectedThread,
+    shellChromeState.activeContextPaneMode,
+    shellChromeState.activePrimarySection,
+    shellChromeState.activeSettingsSection,
+    shellChromeState.contextOpen,
+    shellChromeState.settingsOpen,
+  ]);
   const privateChannelListItems = useMemo(
     () =>
       activeJoinedChannels.map((channel) => ({
@@ -1191,6 +1662,15 @@ export function App({ api = runtimeApi }: AppProps) {
 
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
+      const requestId = loadTopicsRequestRef.current + 1;
+      loadTopicsRequestRef.current = requestId;
+      const currentState = storeApi.getState();
+      const currentTimelineScopeByTopic = currentState.timelineScopeByTopic;
+      const currentSelectedAuthorPubkey = currentState.selectedAuthorPubkey;
+      const currentDiscoveryEditorDirty = currentState.discoveryEditorDirty;
+      const currentCommunityNodeEditorDirty = currentState.communityNodeEditorDirty;
+      const currentProfileDirty = currentState.profileDirty;
+
       try {
         const [
           timelineViews,
@@ -1207,7 +1687,7 @@ export function App({ api = runtimeApi }: AppProps) {
                 topic,
                 null,
                 50,
-                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
               ),
             }))
           ),
@@ -1216,7 +1696,7 @@ export function App({ api = runtimeApi }: AppProps) {
               topic,
               sessions: await api.listLiveSessions(
                 topic,
-                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
               ),
             }))
           ),
@@ -1225,7 +1705,7 @@ export function App({ api = runtimeApi }: AppProps) {
               topic,
               rooms: await api.listGameRooms(
                 topic,
-                timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
               ),
             }))
           ),
@@ -1253,10 +1733,13 @@ export function App({ api = runtimeApi }: AppProps) {
           api.getCommunityNodeStatuses(),
           api.getLocalPeerTicket(),
           api.getMyProfile(),
-          selectedAuthorPubkey
-            ? api.getAuthorSocialView(selectedAuthorPubkey)
+          currentSelectedAuthorPubkey
+            ? api.getAuthorSocialView(currentSelectedAuthorPubkey)
             : Promise.resolve(null),
         ]);
+        if (requestId !== loadTopicsRequestRef.current) {
+          return;
+        }
         startTransition(() => {
           setTimelinesByTopic(
             Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
@@ -1342,13 +1825,13 @@ export function App({ api = runtimeApi }: AppProps) {
           setSyncStatus(status);
           if (discoveryResult.status === 'fulfilled') {
             setDiscoveryConfig(discoveryResult.value);
-            if (!discoveryEditorDirty) {
+            if (!currentDiscoveryEditorDirty) {
               setDiscoverySeedInput(seedPeersToEditorValue(discoveryResult.value));
             }
           }
           if (communityConfigResult.status === 'fulfilled') {
             setCommunityNodeConfig(communityConfigResult.value);
-            if (!communityNodeEditorDirty) {
+            if (!currentCommunityNodeEditorDirty) {
               setCommunityNodeInput(communityNodesToEditorValue(communityConfigResult.value));
             }
           }
@@ -1362,7 +1845,7 @@ export function App({ api = runtimeApi }: AppProps) {
           }
           if (profileResult.status === 'fulfilled') {
             setLocalProfile(profileResult.value);
-            if (!profileDirty) {
+            if (!currentProfileDirty) {
               setProfileDraft(profileInputFromProfile(profileResult.value));
             }
             setProfileError(null);
@@ -1378,7 +1861,7 @@ export function App({ api = runtimeApi }: AppProps) {
               error: nextProfileError,
             });
           }
-          if (!selectedAuthorPubkey) {
+          if (!currentSelectedAuthorPubkey) {
             setSelectedAuthor(null);
             setAuthorError(null);
           } else if (authorViewResult.status === 'fulfilled') {
@@ -1399,16 +1882,37 @@ export function App({ api = runtimeApi }: AppProps) {
           setError(null);
         });
       } catch (loadError) {
+        if (requestId !== loadTopicsRequestRef.current) {
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
       }
     },
     [
       api,
-      communityNodeEditorDirty,
-      discoveryEditorDirty,
-      profileDirty,
-      selectedAuthorPubkey,
-      timelineScopeByTopic,
+      setAuthorError,
+      setChannelPanelStateByTopic,
+      setCommunityNodeConfig,
+      setCommunityNodeInput,
+      setCommunityNodeStatuses,
+      setDiscoveryConfig,
+      setDiscoverySeedInput,
+      setError,
+      setGamePanelStateByTopic,
+      setGameRoomsByTopic,
+      setJoinedChannelsByTopic,
+      setLivePanelStateByTopic,
+      setLiveSessionsByTopic,
+      setLocalPeerTicket,
+      setLocalProfile,
+      setProfileDraft,
+      setProfileError,
+      setProfilePanelState,
+      setSelectedAuthor,
+      setSyncStatus,
+      setThread,
+      setTimelinesByTopic,
+      storeApi,
     ]
   );
 
@@ -1459,7 +1963,7 @@ export function App({ api = runtimeApi }: AppProps) {
       }
       return next;
     });
-  }, [activeGameRooms]);
+  }, [activeGameRooms, setGameDrafts]);
 
   useEffect(() => {
     if (!selectedPrivateChannelId) {
@@ -1493,7 +1997,14 @@ export function App({ api = runtimeApi }: AppProps) {
           }
         : current
     );
-  }, [activeJoinedChannels, activeTopic, selectedPrivateChannelId]);
+  }, [
+    activeJoinedChannels,
+    activeTopic,
+    selectedPrivateChannelId,
+    setComposeChannelByTopic,
+    setSelectedChannelIdByTopic,
+    setTimelineScopeByTopic,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -1578,7 +2089,7 @@ export function App({ api = runtimeApi }: AppProps) {
     return () => {
       disposed = true;
     };
-  }, [api, mediaObjectUrls, previewableMediaAttachments]);
+  }, [api, mediaObjectUrls, previewableMediaAttachments, setMediaObjectUrls]);
 
   useEffect(() => {
     if (!selectedThread) {
@@ -1589,7 +2100,7 @@ export function App({ api = runtimeApi }: AppProps) {
       activeContextPaneMode: 'thread',
       contextOpen: true,
     }));
-  }, [selectedThread]);
+  }, [selectedThread, setShellChromeState]);
 
   useEffect(() => {
     if (!selectedAuthorPubkey) {
@@ -1600,7 +2111,7 @@ export function App({ api = runtimeApi }: AppProps) {
       activeContextPaneMode: 'author',
       contextOpen: true,
     }));
-  }, [selectedAuthorPubkey]);
+  }, [selectedAuthorPubkey, setShellChromeState]);
 
   const setNavOpen = useCallback((open: boolean, restoreToTrigger = false) => {
     setShellChromeState((current) => ({
@@ -1612,7 +2123,7 @@ export function App({ api = runtimeApi }: AppProps) {
         navTriggerRef.current?.focus();
       });
     }
-  }, []);
+  }, [setShellChromeState]);
 
   const setContextOpen = useCallback((open: boolean, restoreToTrigger = false) => {
     setShellChromeState((current) => ({
@@ -1624,7 +2135,10 @@ export function App({ api = runtimeApi }: AppProps) {
         contextTriggerRef.current?.focus();
       });
     }
-  }, []);
+    syncRoute(open ? 'push' : 'replace', {
+      contextOpen: open,
+    });
+  }, [setShellChromeState, syncRoute]);
 
   const setSettingsOpen = useCallback((open: boolean, restoreToTrigger = false) => {
     setShellChromeState((current) => ({
@@ -1636,7 +2150,10 @@ export function App({ api = runtimeApi }: AppProps) {
         settingsTriggerRef.current?.focus();
       });
     }
-  }, []);
+    syncRoute(open ? 'push' : 'replace', {
+      settingsOpen: open,
+    });
+  }, [setShellChromeState, syncRoute]);
 
   function setPrimarySectionRef(section: PrimarySection) {
     return (element: HTMLElement | null) => {
@@ -1652,6 +2169,9 @@ export function App({ api = runtimeApi }: AppProps) {
     }));
     window.requestAnimationFrame(() => {
       primarySectionRefs.current[section]?.focus();
+    });
+    syncRoute('push', {
+      primarySection: section,
     });
   }
 
@@ -1688,6 +2208,25 @@ export function App({ api = runtimeApi }: AppProps) {
     shellChromeState.navOpen,
     shellChromeState.settingsOpen,
   ]);
+
+  useEffect(() => {
+    const shouldFocusSection = didSyncRouteSectionRef.current;
+    didSyncRouteSectionRef.current = true;
+    setShellChromeState((current) =>
+      current.activePrimarySection === routeSection
+        ? current
+        : {
+            ...current,
+            activePrimarySection: routeSection,
+          }
+    );
+    if (!shouldFocusSection) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      primarySectionRefs.current[routeSection]?.focus();
+    });
+  }, [routeSection, setShellChromeState]);
 
   function nextDraftId(): string {
     draftSequenceRef.current += 1;
@@ -1796,6 +2335,9 @@ export function App({ api = runtimeApi }: AppProps) {
       ...current,
       activePrimarySection: 'channels',
     }));
+    window.requestAnimationFrame(() => {
+      syncRoute('replace');
+    });
   }
 
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
@@ -1841,6 +2383,10 @@ export function App({ api = runtimeApi }: AppProps) {
       navOpen: false,
     }));
     clearThreadContext();
+    syncRoute('replace', {
+      activeTopic: nextTopic,
+      primarySection: 'timeline',
+    });
     await loadTopics(nextTopics, nextTopic, null);
   }
 
@@ -1851,6 +2397,9 @@ export function App({ api = runtimeApi }: AppProps) {
       navOpen: false,
     }));
     clearThreadContext();
+    syncRoute('replace', {
+      activeTopic: topic,
+    });
     await loadTopics(trackedTopics, topic, null);
   }
 
@@ -1868,6 +2417,9 @@ export function App({ api = runtimeApi }: AppProps) {
       navOpen: false,
     }));
     clearThreadContext();
+    syncRoute('replace', {
+      activeTopic: nextActiveTopic,
+    });
     await loadTopics(nextTopics, nextActiveTopic, null);
   }
 
@@ -1881,6 +2433,9 @@ export function App({ api = runtimeApi }: AppProps) {
       ...current,
       activePrimarySection: 'timeline',
     }));
+    syncRoute('replace', {
+      timelineScope: nextScope,
+    });
     await loadTopics(trackedTopics, activeTopic, selectedThread);
   }
 
@@ -1895,6 +2450,11 @@ export function App({ api = runtimeApi }: AppProps) {
       [activeTopic]:
         nextChannelRef.kind === 'private_channel' ? nextChannelRef.channel_id : current[activeTopic] ?? null,
     }));
+    window.requestAnimationFrame(() => {
+      syncRoute('replace', {
+        composeTarget: nextChannelRef,
+      });
+    });
   }
 
   async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
@@ -1946,6 +2506,18 @@ export function App({ api = runtimeApi }: AppProps) {
         ...current,
         activePrimarySection: 'channels',
       }));
+      syncRoute('replace', {
+        activeTopic,
+        composeTarget: {
+          kind: 'private_channel',
+          channel_id: channel.channel_id,
+        },
+        primarySection: 'channels',
+        timelineScope: {
+          kind: 'channel',
+          channel_id: channel.channel_id,
+        },
+      });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (channelCreateError) {
       setChannelError(messageFromError(channelCreateError, 'failed to create channel'));
@@ -2055,6 +2627,18 @@ export function App({ api = runtimeApi }: AppProps) {
       activePrimarySection: 'channels',
     }));
     clearThreadContext();
+    syncRoute('replace', {
+      activeTopic: topicId,
+      composeTarget: {
+        kind: 'private_channel',
+        channel_id: channelId,
+      },
+      primarySection: 'channels',
+      timelineScope: {
+        kind: 'channel',
+        channel_id: channelId,
+      },
+    });
     await loadTopics(nextTopics, topicId, null);
   }
 
@@ -2177,10 +2761,13 @@ export function App({ api = runtimeApi }: AppProps) {
       setComposerError(null);
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'channels',
+        activePrimarySection: 'timeline',
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       setReplyTarget(null);
+      syncRoute('replace', {
+        primarySection: 'timeline',
+      });
     } catch (publishError) {
       setComposerError(
         publishError instanceof Error ? publishError.message : 'failed to publish'
@@ -2231,22 +2818,72 @@ export function App({ api = runtimeApi }: AppProps) {
     setDraftMediaItems((current) => current.filter((item) => item.id !== itemId));
   }
 
-  async function openThread(threadId: string) {
+  const openThread = useCallback(async (threadId: string, options?: OpenThreadOptions) => {
+    const topic = options?.topic ?? activeTopic;
     try {
-      const threadView = await api.listThread(activeTopic, threadId, null, 50);
+      const threadView = await api.listThread(topic, threadId, null, 50);
+      if (options?.normalizeOnEmpty && threadView.items.length === 0) {
+        startTransition(() => {
+          setSelectedThread(null);
+          setThread([]);
+          setShellChromeState((current) => ({
+            ...current,
+            contextOpen: false,
+          }));
+        });
+        syncRoute('replace', {
+          activeTopic: topic,
+          contextOpen: false,
+          selectedThread: null,
+        });
+        return;
+      }
       startTransition(() => {
+        setActiveTopic(topic);
         setSelectedThread(threadId);
         setThread(threadView.items);
+        setError(null);
         setShellChromeState((current) => ({
           ...current,
           activeContextPaneMode: 'thread',
           contextOpen: true,
         }));
       });
+      syncRoute(options?.historyMode ?? 'push', {
+        activeTopic: topic,
+        contextMode: 'thread',
+        contextOpen: true,
+        selectedThread: threadId,
+      });
     } catch (threadError) {
-      setError(threadError instanceof Error ? threadError.message : 'failed to load thread');
+      const nextError = threadError instanceof Error ? threadError.message : 'failed to load thread';
+      setError(nextError);
+      if (options?.normalizeOnEmpty) {
+        startTransition(() => {
+          setSelectedThread(null);
+          setThread([]);
+          setShellChromeState((current) => ({
+            ...current,
+            contextOpen: false,
+          }));
+        });
+        syncRoute('replace', {
+          activeTopic: topic,
+          contextOpen: false,
+          selectedThread: null,
+        });
+      }
     }
-  }
+  }, [
+    activeTopic,
+    api,
+    setActiveTopic,
+    setError,
+    setSelectedThread,
+    setShellChromeState,
+    setThread,
+    syncRoute,
+  ]);
 
   function beginReply(post: PostView) {
     setReplyTarget(post);
@@ -2263,7 +2900,10 @@ export function App({ api = runtimeApi }: AppProps) {
     setReplyTarget(null);
   }
 
-  async function openAuthorDetail(authorPubkey: string) {
+  const openAuthorDetail = useCallback(async (
+    authorPubkey: string,
+    options?: OpenAuthorOptions
+  ) => {
     try {
       const socialView = await api.getAuthorSocialView(authorPubkey);
       setSelectedAuthorPubkey(authorPubkey);
@@ -2274,10 +2914,36 @@ export function App({ api = runtimeApi }: AppProps) {
         activeContextPaneMode: 'author',
         contextOpen: true,
       }));
+      syncRoute(options?.historyMode ?? 'push', {
+        contextMode: 'author',
+        contextOpen: true,
+        selectedAuthorPubkey: authorPubkey,
+      });
     } catch (detailError) {
-      setAuthorError(detailError instanceof Error ? detailError.message : 'failed to load author');
+      const nextError =
+        detailError instanceof Error ? detailError.message : 'failed to load author';
+      setAuthorError(nextError);
+      if (options?.normalizeOnError) {
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setShellChromeState((current) => ({
+          ...current,
+          contextOpen: false,
+        }));
+        syncRoute('replace', {
+          contextOpen: false,
+          selectedAuthorPubkey: null,
+        });
+      }
     }
-  }
+  }, [
+    api,
+    setAuthorError,
+    setSelectedAuthor,
+    setSelectedAuthorPubkey,
+    setShellChromeState,
+    syncRoute,
+  ]);
 
   async function handleRelationshipAction(authorPubkey: string, following: boolean) {
     try {
@@ -2309,6 +2975,7 @@ export function App({ api = runtimeApi }: AppProps) {
       setDiscoveryEditorDirty(false);
       setDiscoveryError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
+      syncRoute('replace');
     } catch (saveError) {
       setDiscoveryError(
         saveError instanceof Error ? saveError.message : 'failed to update discovery seeds'
@@ -2328,6 +2995,7 @@ export function App({ api = runtimeApi }: AppProps) {
       setCommunityNodeEditorDirty(false);
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
+      syncRoute('replace');
     } catch (saveError) {
       setCommunityNodeError(
         saveError instanceof Error ? saveError.message : 'failed to update community nodes'
@@ -2344,6 +3012,7 @@ export function App({ api = runtimeApi }: AppProps) {
       setCommunityNodeEditorDirty(false);
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
+      syncRoute('replace');
     } catch (clearError) {
       setCommunityNodeError(
         clearError instanceof Error ? clearError.message : 'failed to clear community nodes'
@@ -2455,6 +3124,9 @@ export function App({ api = runtimeApi }: AppProps) {
         ...current,
         activePrimarySection: 'live',
       }));
+      syncRoute('replace', {
+        primarySection: 'live',
+      });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (liveCreateError) {
       setLiveError(messageFromError(liveCreateError, 'failed to create live session'));
@@ -2558,6 +3230,9 @@ export function App({ api = runtimeApi }: AppProps) {
         ...current,
         activePrimarySection: 'game',
       }));
+      syncRoute('replace', {
+        primarySection: 'game',
+      });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (createError) {
       setGameError(messageFromError(createError, 'failed to create game room'));
@@ -2632,6 +3307,216 @@ export function App({ api = runtimeApi }: AppProps) {
       });
     }
   }
+
+  useEffect(() => {
+    const currentUrl = `${location.pathname}${location.search}`;
+    if (pendingRouteUrlRef.current && pendingRouteUrlRef.current !== currentUrl) {
+      return;
+    }
+    pendingRouteUrlRef.current = null;
+
+    if (!parsePrimarySectionPath(location.pathname)) {
+      navigate(`${PRIMARY_SECTION_PATHS.timeline}${location.search}`, { replace: true });
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const requestedTopic = params.get('topic')?.trim() ?? null;
+    const requestedTimelineScopeValue = params.get('timelineScope');
+    const requestedComposeTargetValue = params.get('composeTarget');
+    const requestedSettingsSection = params.get('settings');
+    const requestedContext = params.get('context');
+    const requestedThreadId = params.get('threadId');
+    const requestedAuthorPubkey = params.get('authorPubkey');
+
+    let nextTopic = activeTopic;
+    let shouldReload = false;
+    let shouldNormalize = false;
+
+    if (requestedTopic) {
+      if (trackedTopics.includes(requestedTopic)) {
+        if (requestedTopic !== activeTopic) {
+          nextTopic = requestedTopic;
+          setActiveTopic(requestedTopic);
+          shouldReload = true;
+        }
+      } else {
+        shouldNormalize = true;
+      }
+    } else {
+      shouldNormalize = true;
+    }
+
+    const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
+    const currentTimelineScopeForTopic = timelineScopeByTopic[nextTopic] ?? PUBLIC_TIMELINE_SCOPE;
+    const currentComposeTargetForTopic = composeChannelByTopic[nextTopic] ?? PUBLIC_CHANNEL_REF;
+    let nextTimelineScope = PUBLIC_TIMELINE_SCOPE;
+    let nextComposeTarget = PUBLIC_CHANNEL_REF;
+
+    if (requestedTimelineScopeValue) {
+      const parsedTimelineScope = timelineScopeFromValue(requestedTimelineScopeValue);
+      if (
+        parsedTimelineScope.kind === 'channel' &&
+        !joinedChannelsForTopic.some((channel) => channel.channel_id === parsedTimelineScope.channel_id)
+      ) {
+        shouldNormalize = true;
+      } else {
+        nextTimelineScope = parsedTimelineScope;
+      }
+    }
+
+    if (requestedComposeTargetValue) {
+      const parsedComposeTarget = channelRefFromValue(requestedComposeTargetValue);
+      if (
+        parsedComposeTarget.kind === 'private_channel' &&
+        !joinedChannelsForTopic.some((channel) => channel.channel_id === parsedComposeTarget.channel_id)
+      ) {
+        shouldNormalize = true;
+      } else {
+        nextComposeTarget = parsedComposeTarget;
+      }
+    }
+
+    if (timelineScopeValue(currentTimelineScopeForTopic) !== timelineScopeValue(nextTimelineScope)) {
+      setTimelineScopeByTopic((current) => ({
+        ...current,
+        [nextTopic]: nextTimelineScope,
+      }));
+      shouldReload = true;
+    }
+
+    if (channelRefValue(currentComposeTargetForTopic) !== channelRefValue(nextComposeTarget)) {
+      setComposeChannelByTopic((current) => ({
+        ...current,
+        [nextTopic]: nextComposeTarget,
+      }));
+    }
+
+    if (
+      nextComposeTarget.kind === 'private_channel' &&
+      selectedChannelIdByTopic[nextTopic] !== nextComposeTarget.channel_id
+    ) {
+      setSelectedChannelIdByTopic((current) => ({
+        ...current,
+        [nextTopic]: nextComposeTarget.channel_id,
+      }));
+    }
+
+    if (
+      nextTimelineScope.kind === 'channel' &&
+      selectedChannelIdByTopic[nextTopic] !== nextTimelineScope.channel_id
+    ) {
+      setSelectedChannelIdByTopic((current) => ({
+        ...current,
+        [nextTopic]: nextTimelineScope.channel_id,
+      }));
+    }
+
+    const nextSettingsOpen =
+      requestedSettingsSection === 'connectivity' ||
+      requestedSettingsSection === 'discovery' ||
+      requestedSettingsSection === 'community-node';
+    const nextSettingsSection =
+      requestedSettingsSection === 'connectivity' ||
+      requestedSettingsSection === 'discovery' ||
+      requestedSettingsSection === 'community-node'
+        ? requestedSettingsSection
+        : shellChromeState.activeSettingsSection;
+    const nextContextMode =
+      requestedContext === 'author'
+        ? 'author'
+        : requestedContext === 'thread'
+          ? 'thread'
+          : shellChromeState.activeContextPaneMode;
+    const nextContextOpen =
+      (requestedContext === 'thread' && Boolean(requestedThreadId)) ||
+      (requestedContext === 'author' && Boolean(requestedAuthorPubkey));
+
+    if (
+      shellChromeState.activePrimarySection !== routeSection ||
+      shellChromeState.activeSettingsSection !== nextSettingsSection ||
+      shellChromeState.settingsOpen !== nextSettingsOpen ||
+      shellChromeState.activeContextPaneMode !== nextContextMode ||
+      shellChromeState.contextOpen !== nextContextOpen
+    ) {
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: routeSection,
+        activeSettingsSection: nextSettingsSection,
+        settingsOpen: nextSettingsOpen,
+        activeContextPaneMode: nextContextMode,
+        contextOpen: nextContextOpen,
+      }));
+    }
+
+    if (requestedSettingsSection && !['connectivity', 'discovery', 'community-node'].includes(requestedSettingsSection)) {
+      shouldNormalize = true;
+    }
+
+    if (requestedContext === 'thread') {
+      if (!requestedThreadId) {
+        shouldNormalize = true;
+      } else if (requestedThreadId !== selectedThread || thread.length === 0) {
+        void openThread(requestedThreadId, {
+          historyMode: 'replace',
+          normalizeOnEmpty: true,
+          topic: nextTopic,
+        });
+      }
+    } else if (requestedContext === 'author') {
+      if (!requestedAuthorPubkey) {
+        shouldNormalize = true;
+      } else if (!isHex64(requestedAuthorPubkey)) {
+        shouldNormalize = true;
+      } else if (requestedAuthorPubkey !== selectedAuthorPubkey || !selectedAuthor) {
+        void openAuthorDetail(requestedAuthorPubkey, {
+          historyMode: 'replace',
+          normalizeOnError: true,
+        });
+      }
+    } else if (requestedContext) {
+      shouldNormalize = true;
+    }
+
+    if (shouldReload) {
+      void loadTopics(trackedTopics, nextTopic, requestedContext === 'thread' ? requestedThreadId : null);
+    }
+
+    if (shouldNormalize) {
+      window.requestAnimationFrame(() => {
+        syncRoute('replace');
+      });
+    }
+  }, [
+    activeTopic,
+    composeChannelByTopic,
+    joinedChannelsByTopic,
+    loadTopics,
+    location.pathname,
+    location.search,
+    navigate,
+    openAuthorDetail,
+    openThread,
+    routeSection,
+    selectedAuthor,
+    selectedAuthorPubkey,
+    selectedChannelIdByTopic,
+    selectedThread,
+    setActiveTopic,
+    setComposeChannelByTopic,
+    setSelectedChannelIdByTopic,
+    setShellChromeState,
+    setTimelineScopeByTopic,
+    shellChromeState.activeContextPaneMode,
+    shellChromeState.activePrimarySection,
+    shellChromeState.activeSettingsSection,
+    shellChromeState.contextOpen,
+    shellChromeState.settingsOpen,
+    syncRoute,
+    thread.length,
+    timelineScopeByTopic,
+    trackedTopics,
+  ]);
 
   const buildPostCardView = useCallback(
     (post: PostView, context: 'timeline' | 'thread'): PostCardView => {
@@ -2755,7 +3640,7 @@ export function App({ api = runtimeApi }: AppProps) {
         },
       };
     },
-    [mediaObjectUrls, unsupportedVideoManifests]
+    [mediaObjectUrls, setUnsupportedVideoManifests, unsupportedVideoManifests]
   );
 
   const activeTimelinePostViews = useMemo(
@@ -3144,6 +4029,7 @@ export function App({ api = runtimeApi }: AppProps) {
             setSelectedThread(null);
             setThread([]);
             clearReply();
+            setContextOpen(false);
           }}
           onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
           onOpenThread={(threadId) => void openThread(threadId)}
@@ -3166,6 +4052,7 @@ export function App({ api = runtimeApi }: AppProps) {
               setSelectedAuthorPubkey(null);
               setSelectedAuthor(null);
               setAuthorError(null);
+              setContextOpen(false);
             }}
             onToggleRelationship={(authorPubkey, following) =>
               void handleRelationshipAction(authorPubkey, following)
@@ -3450,11 +4337,17 @@ export function App({ api = runtimeApi }: AppProps) {
             onOpenChange={(open) => setContextOpen(open, !open)}
             activeMode={shellChromeState.activeContextPaneMode}
             onModeChange={(mode) =>
-              setShellChromeState((current) => ({
-                ...current,
-                activeContextPaneMode: mode,
-                contextOpen: true,
-              }))
+              {
+                setShellChromeState((current) => ({
+                  ...current,
+                  activeContextPaneMode: mode,
+                  contextOpen: true,
+                }));
+                syncRoute('replace', {
+                  contextMode: mode,
+                  contextOpen: true,
+                });
+              }
             }
             tabs={contextTabs}
           />
@@ -3467,13 +4360,31 @@ export function App({ api = runtimeApi }: AppProps) {
         onOpenChange={(open) => setSettingsOpen(open, !open)}
         activeSection={shellChromeState.activeSettingsSection}
         onSectionChange={(section) =>
-          setShellChromeState((current) => ({
-            ...current,
-            activeSettingsSection: section,
-          }))
+          {
+            setShellChromeState((current) => ({
+              ...current,
+              activeSettingsSection: section,
+            }));
+            syncRoute('replace', {
+              settingsOpen: true,
+              settingsSection: section,
+            });
+          }
         }
         sections={settingsSections}
       />
     </>
+  );
+}
+
+export function App(props: AppProps) {
+  const [store] = useState<DesktopShellStoreApi>(() => createDesktopShellStore());
+
+  return (
+    <DesktopShellStoreContext.Provider value={store}>
+      <HashRouter>
+        <DesktopShellPage {...props} />
+      </HashRouter>
+    </DesktopShellStoreContext.Provider>
   );
 }

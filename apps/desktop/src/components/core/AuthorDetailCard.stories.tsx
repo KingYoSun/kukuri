@@ -1,0 +1,36 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+
+import {
+  STORY_AUTHOR_DETAIL_VIEW,
+  STORY_EMPTY_AUTHOR_DETAIL_VIEW,
+} from '@/components/storyFixtures';
+
+import { AuthorDetailCard } from './AuthorDetailCard';
+
+const meta = {
+  title: 'Core/AuthorDetailCard',
+  component: AuthorDetailCard,
+  render: (args) => (
+    <div style={{ maxWidth: '420px' }}>
+      <AuthorDetailCard {...args} />
+    </div>
+  ),
+  args: {
+    view: STORY_AUTHOR_DETAIL_VIEW,
+    localAuthorPubkey: 'f'.repeat(64),
+    onClearAuthor: () => undefined,
+    onToggleRelationship: () => undefined,
+  },
+} satisfies Meta<typeof AuthorDetailCard>;
+
+export default meta;
+
+type Story = StoryObj<typeof meta>;
+
+export const Selected: Story = {};
+
+export const Empty: Story = {
+  args: {
+    view: STORY_EMPTY_AUTHOR_DETAIL_VIEW,
+  },
+};

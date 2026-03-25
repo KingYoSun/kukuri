@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 
@@ -11,6 +11,10 @@ import {
   CreateAttachmentInput,
   PostView,
 } from './lib/api';
+
+beforeEach(() => {
+  window.history.replaceState(null, '', '/');
+});
 
 function buildImagePost(overrides?: Partial<PostView>): PostView {
   const attachment: AttachmentView = {
@@ -178,6 +182,9 @@ function installFailedPosterGenerationMocks() {
 }
 
 async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => {
+    expect(window.location.hash).toMatch(/^#\/(?:timeline|channels|live|game|profile)/);
+  });
   await user.click(screen.getByTestId('shell-settings-trigger'));
   return await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
 }
@@ -197,6 +204,11 @@ function closestSection(element: HTMLElement) {
     throw new Error('expected enclosing section');
   }
   return section;
+}
+
+function renderAtHash(hash: string, api = createDesktopMockApi()) {
+  window.history.replaceState(null, '', `/${hash}`);
+  return render(<App api={api} />);
 }
 
 test('desktop shell can publish and render a post', async () => {
@@ -220,6 +232,165 @@ test('desktop shell can publish and render a post', async () => {
   expect(within(syncSection).getAllByText('Configured Peers').length).toBeGreaterThan(0);
   expect(within(syncSection).getByText('Connected to all configured peers')).toBeInTheDocument();
   expect(within(syncSection).getAllByText('peer-a').length).toBeGreaterThan(0);
+});
+
+test.each([
+  {
+    path: '#/timeline',
+    navLabel: 'Timeline',
+    placeholder: 'Write a post',
+  },
+  {
+    path: '#/channels',
+    navLabel: 'Channels',
+    placeholder: 'core contributors',
+  },
+  {
+    path: '#/live',
+    navLabel: 'Live',
+    placeholder: 'Friday stream',
+  },
+  {
+    path: '#/game',
+    navLabel: 'Game',
+    placeholder: 'Top 8 Finals',
+  },
+  {
+    path: '#/profile',
+    navLabel: 'Profile',
+    placeholder: 'Visible label',
+  },
+])('primary hash route $path selects the correct section', async ({ path, navLabel, placeholder }) => {
+  renderAtHash(path);
+
+  const navigation = screen.getByRole('navigation', { name: 'Primary sections' });
+  const navButton = within(navigation).getByRole('button', { name: new RegExp(`^${navLabel}`) });
+  expect(screen.getByPlaceholderText(placeholder)).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(navButton).toHaveAttribute('aria-current', 'location');
+    expect(window.location.hash).toBe(`${path}?topic=kukuri%3Atopic%3Ademo`);
+  });
+});
+
+test('invalid hash routes fall back to the active public timeline and normalize the URL', async () => {
+  renderAtHash(
+    '#/unknown?topic=missing-topic&timelineScope=channel:missing&composeTarget=channel:missing&context=author&authorPubkey=bad&settings=invalid'
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByText('Active topic: kukuri:topic:demo')).toBeInTheDocument();
+  expect(
+    screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
+  ).not.toBeInTheDocument();
+});
+
+test('thread context restores from the hash route and loads the requested thread for the active topic', async () => {
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open',
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'post-thread-open',
+            envelope_id: 'envelope-thread-open',
+            author_pubkey: 'b'.repeat(64),
+            author_name: 'bob',
+            author_display_name: null,
+            following: false,
+            followed_by: true,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'open thread from timeline',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  });
+  expect(screen.getByRole('tabpanel', { name: 'Thread' })).toBeInTheDocument();
+  expect(screen.getAllByText('open thread from timeline').length).toBeGreaterThan(0);
+});
+
+test('author context restores from the hash route when a valid author pubkey is supplied', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  renderAtHash(
+    `#/timeline?topic=kukuri%3Atopic%3Ademo&context=author&authorPubkey=${authorPubkey}`,
+    createDesktopMockApi({
+      authorSocialViews: {
+        [authorPubkey]: {
+          name: 'bob',
+          display_name: null,
+          about: 'author detail from route restore',
+          following: false,
+          followed_by: true,
+          mutual: false,
+          friend_of_friend: false,
+          friend_of_friend_via_pubkeys: [],
+        },
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  });
+  expect(screen.getByText('author detail from route restore')).toBeInTheDocument();
+});
+
+test('settings hash route opens the drawer and keeps the selected section in sync', async () => {
+  const user = userEvent.setup();
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
+
+  const drawer = await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  await waitFor(() => {
+    expect(within(drawer).getByTestId('settings-section-discovery')).toHaveAttribute(
+      'aria-current',
+      'location'
+    );
+  });
+
+  await user.click(within(drawer).getByTestId('settings-section-connectivity'));
+
+  await waitFor(() => {
+    expect(window.location.hash).toContain('settings=connectivity');
+  });
+});
+
+test('topic and private channel selection sync into the hash route', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond');
+  });
+
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
+  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe(
+      '#/channels?topic=kukuri%3Atopic%3Ademo&timelineScope=channel%3Achannel-1&composeTarget=channel%3Achannel-1'
+    );
+  });
 });
 
 test('desktop shell can update discovery seeds', async () => {

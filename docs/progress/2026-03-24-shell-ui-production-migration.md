@@ -6,6 +6,17 @@
 - scope は whole shell rewrite だが、execution order は `infra-first -> staged slices` に固定し、big-bang rewrite は前提にしない。
 - この計画では backend、Tauri command、frontend API contract を変更しない。将来 contract 変更が必要な場合は、この文書に黙って含めず別の implementation change または ADR で明示する。
 
+## 2026-03-25 Status Update
+- Phase 5 の cutover and cleanup は 2026-03-25 時点で implementation 完了扱いに更新した。
+- shell routing は `HashRouter` に固定され、primary section は `#/timeline`, `#/channels`, `#/live`, `#/game`, `#/profile` を使う。route search param は `topic`, `timelineScope`, `composeTarget`, `context`, `threadId`, `authorPubkey`, `settings` に固定した。
+- `App({ api })` の外部 surface は維持しつつ、内部では app-instance-local な zustand store provider と router bootstrap を持つ形へ縮退した。`DesktopApi` / Tauri invoke / domain contract は変更していない。
+- invalid route param は crash ではなく最寄りの妥当 state へ fallback し、hash を `replace` で正規化する。malformed `authorPubkey` と空 thread route は context close に倒す。
+- `legacy-shell.css` は削除し、旧 shell class 群は `.shell-phase1` namespaced stylesheet (`apps/desktop/src/styles/shell-phase1-legacy.css`) へ移した。Storybook preview も `.shell-phase1` + router decorator 前提へ更新した。
+- required Storybook surface として `ShellTopBar`, `ShellNavRail`, `ContextPane`, `SettingsDrawer`, `TopicNavList`, `TimelineFeed`, `ThreadPanel`, `AuthorDetailCard`, `PostMedia` の direct story を追加した。
+- frontend gate として `cargo xtask desktop-ui-check` を追加し、`lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser` を束ねた。GitHub Actions の `Kukuri Fast` / `Kukuri Nightly` Linux lane には Playwright Chromium install と `desktop-ui-check` を追加した。
+- local validation は `cargo xtask desktop-ui-check`, `cargo xtask check`, `cargo xtask e2e-smoke` が pass。`cargo xtask test` は `kukuri_docs_sync::tests::public_replica_syncs_over_custom_relay_seed_peers` が 1 回 timeout で flaky failure を返したが、単体 rerun (`cargo test -p kukuri-docs-sync public_replica_syncs_over_custom_relay_seed_peers -- --nocapture`) は pass した。manual smoke (`tauri:dev` on Linux, packaged Windows app) は未実施。
+- accepted UI review record は [`../ui-reviews/2026-03-25-desktop-phase5-shell-cutover-cleanup.md`](../ui-reviews/2026-03-25-desktop-phase5-shell-cutover-cleanup.md) を正本とする。
+
 ## Purpose / Non-goals
 
 ### Purpose
@@ -19,6 +30,7 @@
 - `legacy/` からの wholesale 移植や、全面 rewrite を 1 PR で完了する前提を置かない。
 
 ## Current Snapshot
+- この section は planning 開始時点 (`2026-03-24`) の snapshot であり、最新状態は上の `2026-03-25 Status Update` を優先する。
 - 現行 frontend は `apps/desktop/src/App.tsx` と `apps/desktop/src/styles.css` 中心の monolithic shell であり、state、layout、product flow、diagnostics flow が 1 surface に集約されている。
 - `App.tsx` は約 3,100 行、`App.test.tsx` は約 2,100 行で、timeline、thread、composer、profile、discovery、community-node、private channel、live、game が同居している。
 - style は shared token layer ではなく hard-coded CSS を中心に構成されている。
