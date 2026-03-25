@@ -191,6 +191,14 @@ async function openSettingsSection(
   return drawer;
 }
 
+function closestSection(element: HTMLElement) {
+  const section = element.closest('section');
+  if (!(section instanceof HTMLElement)) {
+    throw new Error('expected enclosing section');
+  }
+  return section;
+}
+
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
@@ -202,13 +210,16 @@ test('desktop shell can publish and render a post', async () => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
   expect(screen.getByText('Seeded DHT + direct peers')).toBeInTheDocument();
-  expect(screen.getByText('joined / peers: 1')).toBeInTheDocument();
+  const demoTopic = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  expect(demoTopic).not.toBeNull();
+  expect(demoTopic).toHaveTextContent('joined / peers: 1');
 
   const drawer = await openSettingsSection(user, 'connectivity');
   expect(within(drawer).getByDisplayValue('peer1@127.0.0.1:7777')).toBeInTheDocument();
-  expect(within(drawer).getByText('Configured Peers')).toBeInTheDocument();
-  expect(within(drawer).getByText('Connected to all configured peers')).toBeInTheDocument();
-  expect(within(drawer).getAllByText('peer-a').length).toBeGreaterThan(0);
+  const syncSection = closestSection(within(drawer).getByRole('heading', { name: 'Sync Status' }));
+  expect(within(syncSection).getAllByText('Configured Peers').length).toBeGreaterThan(0);
+  expect(within(syncSection).getByText('Connected to all configured peers')).toBeInTheDocument();
+  expect(within(syncSection).getAllByText('peer-a').length).toBeGreaterThan(0);
 });
 
 test('desktop shell can update discovery seeds', async () => {
@@ -326,12 +337,12 @@ test('desktop shell can track multiple topics at once', async () => {
   });
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  const demoTopic = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  expect(demoTopic).not.toBeNull();
   expect(screen.getByText('demo post')).toBeInTheDocument();
-  expect(screen.getByText('idle / peers: 0')).toBeInTheDocument();
-  expect(screen.getByText('expected: 0')).toBeInTheDocument();
-  expect(
-    screen.getByText('Connected to all configured peers for this topic')
-  ).toBeInTheDocument();
+  expect(demoTopic).toHaveTextContent(/\/ peers: \d/);
+  expect(demoTopic).not.toHaveTextContent('expected:');
+  expect(demoTopic).not.toHaveTextContent('Connected to all configured peers for this topic');
 });
 
 test('removing the active topic falls back to the remaining tracked topic', async () => {
@@ -433,8 +444,13 @@ test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', 
     const relayTopic = screen.getByRole('button', { name: 'kukuri:topic:relay' }).closest('li');
     expect(relayTopic).not.toBeNull();
     expect(relayTopic).toHaveTextContent('relay-assisted / peers: 1');
-    expect(relayTopic).toHaveTextContent('relay-assisted sync available via 1 peer(s)');
+    expect(relayTopic).not.toHaveTextContent('relay-assisted sync available via 1 peer(s)');
   });
+
+  await user.click(within(drawer).getByTestId('settings-section-connectivity'));
+  const relayHeading = await within(drawer).findByRole('heading', { name: 'kukuri:topic:relay' });
+  const relaySection = closestSection(relayHeading);
+  expect(within(relaySection).getByText('relay-assisted sync available via 1 peer(s)')).toBeInTheDocument();
 });
 
 test('desktop shell renders diagnostics error reasons', async () => {
@@ -450,14 +466,14 @@ test('desktop shell renders diagnostics error reasons', async () => {
 
   const drawer = await openSettingsSection(user, 'connectivity');
   await waitFor(() => {
-    expect(within(drawer).getByText('Last Error')).toBeInTheDocument();
     expect(
       within(drawer).getByText('failed to import peer ticket: invalid endpoint id')
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('error: timed out waiting for gossip topic join')
-    ).toBeInTheDocument();
   });
+
+  const topicHeading = await within(drawer).findByRole('heading', { name: 'kukuri:topic:demo' });
+  const topicSection = closestSection(topicHeading);
+  expect(within(topicSection).getByText('timed out waiting for gossip topic join')).toBeInTheDocument();
 });
 
 test('desktop shell primary nav jumps focus and settings drawer restores trigger focus on escape', async () => {
@@ -1258,37 +1274,26 @@ test('community node panel activates relay connectivity on the current session a
   );
   await user.click(within(drawer).getByRole('button', { name: 'Save Nodes' }));
 
-  const nodeHeading = await within(drawer).findByText(
-    (_content, element) =>
-      element?.tagName === 'STRONG' && element.textContent === 'https://api.kukuri.app'
-  );
-  const block = nodeHeading.closest('.diagnostic-block') as HTMLElement | null;
-  expect(block).not.toBeNull();
-  const blockElement = block as HTMLElement;
+  const nodeHeading = await within(drawer).findByRole('heading', { name: 'https://api.kukuri.app' });
+  const blockElement = closestSection(nodeHeading);
 
   await user.click(within(blockElement).getByRole('button', { name: 'Authenticate' }));
 
   await waitFor(() => {
-    expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
-      'accept required policies to resolve connectivity urls'
-    );
-    expect(within(blockElement).getByText(/session activation:/i)).toHaveTextContent(
-      'waiting for consent acceptance'
-    );
+    expect(
+      within(blockElement).getByText('accept required policies to resolve connectivity urls')
+    ).toBeInTheDocument();
+    expect(within(blockElement).getByText('waiting for consent acceptance')).toBeInTheDocument();
   });
 
   await user.click(within(blockElement).getByRole('button', { name: 'Accept' }));
 
   await waitFor(() => {
-    expect(within(blockElement).getByText(/connectivity urls:/i)).toHaveTextContent(
-      'https://api.kukuri.app'
-    );
-    expect(within(blockElement).getByText(/session activation:/i)).toHaveTextContent(
-      'active on current session'
-    );
-    expect(within(blockElement).getByText(/next step:/i)).toHaveTextContent(
-      'connectivity urls active on current session'
-    );
+    expect(within(blockElement).getAllByText('https://api.kukuri.app').length).toBeGreaterThan(0);
+    expect(within(blockElement).getByText('active on current session')).toBeInTheDocument();
+    expect(
+      within(blockElement).getByText('connectivity urls active on current session')
+    ).toBeInTheDocument();
   });
 });
 
@@ -1459,7 +1464,7 @@ test('local profile editor saves profile draft from primary navigation and setti
   await user.click(within(profileSection).getByRole('button', { name: 'Save Profile' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Local Author')).toBeInTheDocument();
+    expect(within(profileSection).getByText('Local Author')).toBeInTheDocument();
   });
 
   const drawer = await openSettingsDrawer(user);

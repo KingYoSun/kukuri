@@ -9,10 +9,6 @@ export type TopicDiagnosticSummary = {
   connectionLabel: string;
   peerCount: number;
   lastReceivedLabel: string;
-  expectedPeerCount: number;
-  missingPeerCount: number;
-  statusDetail: string;
-  lastError?: string | null;
 };
 
 export type ComposerDraftAttachmentView = {
