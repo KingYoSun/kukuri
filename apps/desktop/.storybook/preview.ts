@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 import type { Preview } from '@storybook/react-vite';
 
@@ -43,15 +44,22 @@ const preview: Preview = {
           },
         },
         createElement(
-          'div',
-          {
-            style: {
-              width: '100%',
-              maxWidth: `${shellWidth}px`,
-              margin: '0 auto',
+          MemoryRouter,
+          null,
+          createElement(
+            'div',
+            {
+              className: 'shell-phase1',
+              style: {
+                width: '100%',
+                maxWidth: `${shellWidth}px`,
+                margin: '0 auto',
+                padding: 0,
+                gap: 0,
+              },
             },
-          },
-          createElement(Story),
+            createElement(Story),
+          ),
         ),
       );
     },

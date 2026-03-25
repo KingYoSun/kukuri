@@ -13,6 +13,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
+cargo xtask desktop-ui-check
 cargo xtask cn-check
 cargo xtask cn-test
 cargo xtask scenario community_node_public_connectivity
@@ -20,6 +21,8 @@ cargo xtask scenario community_node_multi_device_connectivity
 ```
 
 `cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
+
+`cargo xtask desktop-ui-check` は `apps/desktop` の `lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser` をまとめて流す frontend 専用 gate。
 
 `cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
 
@@ -163,10 +166,13 @@ cargo xtask scenario community_node_multi_device_connectivity
 cd apps/desktop
 npx pnpm@10.16.1 dev
 npx pnpm@10.16.1 test
+npx pnpm@10.16.1 storybook:build
+npx pnpm@10.16.1 test:e2e:browser
 npx pnpm@10.16.1 tauri:dev
 ```
 
 - `pnpm tauri dev` / `pnpm tauri:dev` は loopback の空き port を自動選択し、5173 が使用中なら次の空き port へ退避する。
+- desktop shell UI の primary route は hash-based (`#/timeline`, `#/channels`, `#/live`, `#/game`, `#/profile`) に固定されている。settings / context deep-link も hash search param で復元する。
 - desktop の Tauri backend は `mainline::rpc::socket`, `noq_proto::connection`, `iroh::socket::remote_map::remote_state`, `iroh_docs::engine::live`, `iroh_gossip::net` を既定で `error` へ落としている。community-node connectivity assist / DHT / docs sync の内部 warning を調べたいときだけ `RUST_LOG=warn,mainline::rpc::socket=warn,noq_proto::connection=warn,iroh::socket::remote_map::remote_state=warn,iroh_docs::engine::live=warn,iroh_gossip::net=warn` を明示する。
 
 ## Windows 前提

@@ -14,6 +14,7 @@ fn main() -> Result<()> {
         "doctor" => doctor(),
         "check" => check(),
         "test" => test(),
+        "desktop-ui-check" => desktop_ui_check(),
         "cn-check" => cn_check(),
         "cn-test" => cn_test(),
         "desktop-package" => desktop_package(),
@@ -116,6 +117,15 @@ fn test() -> Result<()> {
         &[("RUST_TEST_THREADS", "1")],
     )?;
     run_pnpm(["test"], &desktop_dir())?;
+    Ok(())
+}
+
+fn desktop_ui_check() -> Result<()> {
+    run_pnpm(["lint"], &desktop_dir())?;
+    run_pnpm(["typecheck"], &desktop_dir())?;
+    run_pnpm(["test"], &desktop_dir())?;
+    run_pnpm(["storybook:build"], &desktop_dir())?;
+    run_pnpm(["test:e2e:browser"], &desktop_dir())?;
     Ok(())
 }
 
@@ -306,7 +316,7 @@ fn run_pnpm(args: impl IntoIterator<Item = &'static str>, cwd: &Path) -> Result<
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|cn-check|cn-test|desktop-package|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|desktop-ui-check|cn-check|cn-test|desktop-package|e2e-smoke|scenario <name>>"
     );
 }
 

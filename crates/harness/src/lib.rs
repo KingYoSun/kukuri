@@ -946,7 +946,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node reconnect",
             reconnect_timeout,
-            PublicReplicationDirection::PreferOriginalPublisher,
+            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
             PublicReplicationLabels {
                 failure: "reconnect post after restart",
                 publisher: "desktop a",
