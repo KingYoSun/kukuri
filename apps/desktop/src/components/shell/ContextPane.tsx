@@ -4,99 +4,67 @@ import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
-
-import { type ContextPaneMode } from './types';
-
-type ContextTab = {
-  id: ContextPaneMode;
-  label: string;
-  summary: string;
-  content: React.ReactNode;
-};
 
 type ContextPaneProps = {
   paneId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  activeMode: ContextPaneMode;
-  onModeChange: (mode: ContextPaneMode) => void;
-  tabs: ContextTab[];
+  title: string;
+  summary?: string | null;
+  showBackdrop?: boolean;
+  stackIndex?: number;
+  onClose: () => void;
+  children: React.ReactNode;
 };
+
+const DETAIL_PANE_INDEX_VAR = '--shell-detail-pane-index' as const;
 
 export function ContextPane({
   paneId,
-  open,
-  onOpenChange,
-  activeMode,
-  onModeChange,
-  tabs,
+  title,
+  showBackdrop = false,
+  stackIndex = 0,
+  onClose,
+  children,
 }: ContextPaneProps) {
-  const activeTab = tabs.find((tab) => tab.id === activeMode) ?? tabs[0];
+  const paneStyle = {
+    [DETAIL_PANE_INDEX_VAR]: String(stackIndex),
+  } as React.CSSProperties;
 
   return (
     <>
       <div
         className='shell-overlay-backdrop shell-context-backdrop'
-        data-open={open}
-        onClick={() => onOpenChange(false)}
+        data-open={showBackdrop}
+        onClick={onClose}
         aria-hidden='true'
       />
       <Card
         as='aside'
         id={paneId}
-        className='shell-context'
-        data-open={open}
-        aria-label='Context pane'
+        className='shell-context shell-detail-pane'
+        data-open='true'
+        aria-label={title}
+        style={paneStyle}
       >
-        <div className='shell-pane-header'>
+        <div className='shell-pane-header shell-pane-header-compact'>
           <div>
-            <p className='eyebrow'>Context</p>
-            <h2 className='shell-pane-heading'>{activeTab.label}</h2>
-            <p className='shell-pane-copy'>{activeTab.summary}</p>
+            <p className='eyebrow'>{title}</p>
+            <span id={`${paneId}-title`} className='sr-only'>
+              {title}
+            </span>
           </div>
           <Button
-            className='shell-context-close'
+            className='shell-context-close shell-icon-button'
             variant='ghost'
             size='icon'
             type='button'
-            aria-label='Close context pane'
-            onClick={() => onOpenChange(false)}
+            aria-label={`Close ${title}`}
+            onClick={onClose}
           >
-            <X className='size-4' aria-hidden='true' />
+            <X className='size-5' aria-hidden='true' />
           </Button>
         </div>
 
-        <div className='shell-tab-list' role='tablist' aria-label='Context tabs'>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={cn('shell-tab', activeMode === tab.id && 'shell-tab-active')}
-              id={`${paneId}-tab-${tab.id}`}
-              role='tab'
-              type='button'
-              aria-selected={activeMode === tab.id}
-              aria-controls={`${paneId}-panel-${tab.id}`}
-              tabIndex={activeMode === tab.id ? 0 : -1}
-              onClick={() => onModeChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {tabs.map((tab) => (
-          <section
-            key={tab.id}
-            id={`${paneId}-panel-${tab.id}`}
-            className='shell-context-panel'
-            role='tabpanel'
-            aria-labelledby={`${paneId}-tab-${tab.id}`}
-            hidden={activeMode !== tab.id}
-          >
-            {tab.content}
-          </section>
-        ))}
+        <div className='shell-context-panel'>{children}</div>
       </Card>
     </>
   );

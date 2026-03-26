@@ -1,3 +1,4 @@
+import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
 
 import { RelationshipBadge } from './RelationshipBadge';
@@ -14,17 +15,29 @@ type PostCardProps = {
 export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCardProps) {
   const { post, context } = view;
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
+  const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
 
   return (
     <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
       <div className='post-meta'>
-        <button className='author-link' type='button' onClick={() => onOpenAuthor(post.author_pubkey)}>
-          {view.authorLabel}
-        </button>
+        <div className='post-meta-author'>
+          <AuthorAvatar
+            label={view.authorLabel}
+            picture={view.authorPicture ?? null}
+            size='sm'
+            testId={`${post.object_id}-author-avatar`}
+          />
+          <button
+            className='author-link'
+            type='button'
+            onClick={() => onOpenAuthor(post.author_pubkey)}
+          >
+            {view.authorLabel}
+          </button>
+        </div>
         <div className='post-meta-trailing'>
           <RelationshipBadge label={view.relationshipLabel} />
-          <span>{post.object_kind}</span>
-          <span className='reply-chip'>{post.audience_label}</span>
+          <span className='post-meta-chip'>{audienceChipLabel}</span>
           <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
         </div>
       </div>
@@ -48,7 +61,7 @@ export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCard
         </div>
 
         <small>{post.envelope_id}</small>
-        {post.reply_to ? <em className='reply-chip'>Reply</em> : null}
+        {post.reply_to ? <em className='post-reply-flag'>Reply</em> : null}
       </button>
 
       <div className='post-actions'>

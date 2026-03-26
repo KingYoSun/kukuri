@@ -17,6 +17,7 @@ type ProfileEditorPanelProps = {
   error: string | null;
   fields: ProfileEditorFields;
   onFieldChange: (field: keyof ProfileEditorFields, value: string) => void;
+  onBack?: () => void;
   onSave: FormEventHandler<HTMLFormElement>;
   onReset: () => void;
 };
@@ -29,6 +30,7 @@ export function ProfileEditorPanel({
   error,
   fields,
   onFieldChange,
+  onBack,
   onSave,
   onReset,
 }: ProfileEditorPanelProps) {
@@ -37,8 +39,15 @@ export function ProfileEditorPanel({
   return (
     <Card className='panel-subsection'>
       <CardHeader>
-        <h3>My Profile</h3>
-        <small>{authorLabel}</small>
+        <div>
+          <h3>My Profile</h3>
+          <small>{authorLabel}</small>
+        </div>
+        {onBack ? (
+          <Button variant='secondary' type='button' onClick={onBack}>
+            プロフィールに戻る
+          </Button>
+        ) : null}
       </CardHeader>
 
       {status === 'loading' ? <Notice>Loading profile…</Notice> : null}

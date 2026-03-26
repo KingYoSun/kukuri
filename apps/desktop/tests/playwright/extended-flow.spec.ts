@@ -6,10 +6,10 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.setViewportSize({ width: 1440, height: 980 });
   await page.goto('/');
 
+  await page.getByRole('tab', { name: 'Channels' }).click();
   await page.getByPlaceholder('core contributors').fill('Core Contributors');
   await page.getByRole('button', { name: 'Create Channel' }).click();
-  await expect(page.getByLabel('Compose Target')).toHaveValue('channel:channel-1');
-  await expect(page.getByText(/Posting to: Core Contributors/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Core Contributors' })).toBeVisible();
   await page.getByRole('button', { name: 'Create Invite' }).click();
   await expect(page.getByText('Latest invite')).toBeVisible();
 
@@ -19,10 +19,16 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.getByRole('button', { name: 'Join Invite' }).click();
   await expect(page.getByRole('button', { name: 'kukuri:topic:demo' })).toBeVisible();
 
-  await page.getByPlaceholder('Friday stream').fill('Launch Party');
-  await page.getByPlaceholder('short session summary').fill('watch along');
+  await page.goto('/#/live');
+  const liveTitle = page.getByLabel('Live Title');
+  const liveDescription = page.getByLabel('Live Description');
+  await liveTitle.fill('Launch Party');
+  await expect(liveTitle).toHaveValue('Launch Party');
+  await liveDescription.fill('watch along');
+  await expect(liveDescription).toHaveValue('watch along');
   await page.getByRole('button', { name: 'Start Live' }).click();
-  await expect(page.getByText('Launch Party')).toBeVisible();
+  const liveCard = page.locator('article.post-card').filter({ has: page.getByText('Launch Party') });
+  await expect(liveCard).toBeVisible();
   await page
     .locator('article.post-card')
     .filter({ has: page.getByText('Launch Party') })
@@ -41,6 +47,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
       .getByText('Ended', { exact: true })
   ).toBeVisible();
 
+  await page.goto('/#/game');
   await page.getByPlaceholder('Top 8 Finals').fill('Grand Finals');
   await page.getByPlaceholder('match summary').fill('set one');
   await page.getByPlaceholder('Alice, Bob').fill('Alice, Bob');
@@ -52,10 +59,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.getByRole('button', { name: 'Save Room' }).click();
   await expect(page.getByText('phase: Round 3')).toBeVisible();
 
-  await page
-    .getByRole('navigation', { name: 'Primary sections' })
-    .getByRole('button', { name: /Profile/i })
-    .click();
+  await page.goto('/#/profile?profileMode=edit');
   await page.getByPlaceholder('Visible label').fill('Browser Author');
   await page.getByRole('button', { name: 'Save Profile' }).click();
   await expect(page.getByText('Browser Author')).toBeVisible();

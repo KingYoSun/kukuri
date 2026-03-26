@@ -4,23 +4,12 @@ import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
-
-import { type PrimarySection } from './types';
-
-type PrimaryNavItem = {
-  id: PrimarySection;
-  label: string;
-  description: string;
-};
 
 type ShellNavRailProps = {
   railId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  primaryItems: PrimaryNavItem[];
-  activePrimarySection: PrimarySection;
-  onSelectPrimarySection: (section: PrimarySection) => void;
+  headerContent: React.ReactNode;
   addTopicControl: React.ReactNode;
   topicList: React.ReactNode;
   topicCount: number;
@@ -30,9 +19,7 @@ export function ShellNavRail({
   railId,
   open,
   onOpenChange,
-  primaryItems,
-  activePrimarySection,
-  onSelectPrimarySection,
+  headerContent,
   addTopicControl,
   topicList,
   topicCount,
@@ -54,39 +41,20 @@ export function ShellNavRail({
         aria-label='Primary navigation'
       >
         <div className='shell-pane-header shell-pane-header-compact'>
-          <div>
-            <p className='eyebrow'>Navigate</p>
-            <h2 className='shell-pane-heading'>Workspace</h2>
-          </div>
+          <p className='eyebrow'>Topics</p>
           <Button
-            className='shell-mobile-close'
+            className='shell-mobile-close shell-icon-button'
             variant='ghost'
             size='icon'
             type='button'
             aria-label='Close navigation'
             onClick={() => onOpenChange(false)}
           >
-            <X className='size-4' aria-hidden='true' />
+            <X className='size-5' aria-hidden='true' />
           </Button>
         </div>
 
-        <nav className='shell-primary-nav' aria-label='Primary sections'>
-          {primaryItems.map((item) => (
-            <button
-              key={item.id}
-              className={cn(
-                'shell-primary-nav-item',
-                activePrimarySection === item.id && 'shell-primary-nav-item-active'
-              )}
-              type='button'
-              aria-current={activePrimarySection === item.id ? 'location' : undefined}
-              onClick={() => onSelectPrimarySection(item.id)}
-            >
-              <span className='shell-primary-nav-label'>{item.label}</span>
-              <span className='shell-primary-nav-copy'>{item.description}</span>
-            </button>
-          ))}
-        </nav>
+        <div className='shell-nav-meta'>{headerContent}</div>
 
         <div className='shell-nav-topic-entry'>{addTopicControl}</div>
 

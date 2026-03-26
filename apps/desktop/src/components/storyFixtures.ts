@@ -75,7 +75,9 @@ export const STORY_TIMELINE_POSTS: PostCardView[] = [
     post: timelineRootPost,
     context: 'timeline',
     authorLabel: 'bob',
+    authorPicture: null,
     relationshipLabel: 'mutual',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-1',
     media: {
       objectId: 'timeline-post-1',
@@ -114,7 +116,9 @@ export const STORY_TIMELINE_POSTS: PostCardView[] = [
     },
     context: 'timeline',
     authorLabel: 'Carol',
+    authorPicture: null,
     relationshipLabel: 'friend of friend',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-2',
     media: {
       objectId: 'timeline-post-2',
@@ -160,7 +164,9 @@ export const STORY_THREAD_POSTS: PostCardView[] = [
     },
     context: 'thread',
     authorLabel: 'dan',
+    authorPicture: null,
     relationshipLabel: 'follows you',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-1',
     media: {
       objectId: 'thread-reply-1',

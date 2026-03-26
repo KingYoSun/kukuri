@@ -18,6 +18,7 @@ import {
 } from 'react-router-dom';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
+import { PanelLeftOpen, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -32,9 +33,7 @@ import {
   type ThreadPanelState,
   type TopicDiagnosticSummary,
 } from '@/components/core/types';
-import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
-import { LiveSessionPanel } from '@/components/extended/LiveSessionPanel';
-import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
+import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
@@ -56,8 +55,8 @@ import { ShellNavRail } from '@/components/shell/ShellNavRail';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import {
-  type ContextPaneMode,
   type PrimarySection,
+  type ProfileWorkspaceMode,
   type SettingsSection,
   type ShellChromeState,
 } from '@/components/shell/types';
@@ -66,6 +65,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 import {
   AuthorSocialView,
@@ -126,6 +128,7 @@ type DesktopShellState = {
   draftMediaItems: DraftMediaItem[];
   attachmentInputKey: number;
   timelinesByTopic: Record<string, PostView[]>;
+  publicTimelinesByTopic: Record<string, PostView[]>;
   liveSessionsByTopic: Record<string, LiveSessionView[]>;
   gameRoomsByTopic: Record<string, GameRoomView[]>;
   joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]>;
@@ -201,9 +204,8 @@ type DesktopShellStore = DesktopShellState & {
 type DesktopShellRouteOverrides = {
   activeTopic?: string;
   composeTarget?: ChannelRef;
-  contextMode?: ContextPaneMode;
-  contextOpen?: boolean;
   primarySection?: PrimarySection;
+  profileMode?: ProfileWorkspaceMode;
   selectedAuthorPubkey?: string | null;
   selectedThread?: string | null;
   settingsOpen?: boolean;
@@ -218,8 +220,10 @@ type OpenThreadOptions = {
 };
 
 type OpenAuthorOptions = {
+  fromThread?: boolean;
   historyMode?: 'push' | 'replace';
   normalizeOnError?: boolean;
+  threadId?: string | null;
 };
 
 type DesktopShellStoreApi = ReturnType<typeof createDesktopShellStore>;
@@ -283,6 +287,9 @@ function createInitialShellState(): DesktopShellState {
     draftMediaItems: [],
     attachmentInputKey: 0,
     timelinesByTopic: {
+      [DEFAULT_TOPIC]: [],
+    },
+    publicTimelinesByTopic: {
       [DEFAULT_TOPIC]: [],
     },
     liveSessionsByTopic: {
@@ -361,10 +368,9 @@ function createInitialShellState(): DesktopShellState {
     error: null,
     shellChromeState: {
       activePrimarySection: 'timeline',
-      activeContextPaneMode: 'thread',
       activeSettingsSection: 'connectivity',
+      profileMode: 'overview',
       navOpen: false,
-      contextOpen: false,
       settingsOpen: false,
     },
   };
@@ -405,32 +411,26 @@ function useDesktopShellStore() {
 const PRIMARY_SECTION_ITEMS: Array<{
   id: PrimarySection;
   label: string;
-  description: string;
 }> = [
   {
     id: 'timeline',
     label: 'Timeline',
-    description: 'Jump to the main feed, scope, and refresh controls.',
   },
   {
     id: 'channels',
     label: 'Channels',
-    description: 'Private channel controls, invite import, and audience policy.',
   },
   {
     id: 'live',
     label: 'Live',
-    description: 'Live session creation and active session status.',
   },
   {
     id: 'game',
     label: 'Game',
-    description: 'Game room creation, score editing, and room status.',
   },
   {
     id: 'profile',
     label: 'Profile',
-    description: 'Edit your local profile as a primary product flow.',
   },
 ];
 
@@ -555,6 +555,26 @@ function strongestRelationshipLabel(relationship: {
     return 'friend of friend';
   }
   return null;
+}
+
+function inviteOutputSummaryLabel(label: InviteOutputLabel): string {
+  if (label === 'grant') {
+    return 'Latest grant';
+  }
+  if (label === 'share') {
+    return 'Latest share';
+  }
+  return 'Latest invite';
+}
+
+function channelPolicyDescription(audienceKind: JoinedPrivateChannelView['audience_kind']) {
+  if (audienceKind === 'friend_only') {
+    return 'Friends: only mutual followers can join';
+  }
+  if (audienceKind === 'friend_plus') {
+    return 'Friends+: participants can share to their mutuals';
+  }
+  return 'Invite only';
 }
 
 function channelRefValue(channelRef: ChannelRef): string {
@@ -1191,6 +1211,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     draftMediaItems,
     attachmentInputKey,
     timelinesByTopic,
+    publicTimelinesByTopic,
     liveSessionsByTopic,
     gameRoomsByTopic,
     joinedChannelsByTopic,
@@ -1266,6 +1287,10 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     [makeFieldSetter]
   );
   const setTimelinesByTopic = useMemo(() => makeFieldSetter('timelinesByTopic'), [makeFieldSetter]);
+  const setPublicTimelinesByTopic = useMemo(
+    () => makeFieldSetter('publicTimelinesByTopic'),
+    [makeFieldSetter]
+  );
   const setLiveSessionsByTopic = useMemo(
     () => makeFieldSetter('liveSessionsByTopic'),
     [makeFieldSetter]
@@ -1422,7 +1447,6 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
   const didSyncRouteSectionRef = useRef(false);
   const navTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
   const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
     timeline: null,
     channels: null,
@@ -1437,19 +1461,13 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     [location.pathname]
   );
 
-  const headline = useMemo(
-    () => {
-      if (syncStatus.discovery.mode === 'seeded_dht') {
-        return syncStatus.connected ? 'Seeded DHT + direct peers' : 'Seeded DHT shell';
-      }
-      return syncStatus.connected ? 'Live over static peers' : 'Local-first shell';
-    },
-    [syncStatus.connected, syncStatus.discovery.mode]
-  );
-
   const activeTimeline = useMemo(
     () => timelinesByTopic[activeTopic] ?? [],
     [activeTopic, timelinesByTopic]
+  );
+  const activePublicTimeline = useMemo(
+    () => publicTimelinesByTopic[activeTopic] ?? [],
+    [activeTopic, publicTimelinesByTopic]
   );
   const activeLiveSessions = useMemo(
     () => liveSessionsByTopic[activeTopic] ?? [],
@@ -1482,6 +1500,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     }
     return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
   }, [activeComposeChannel, activeJoinedChannels, replyTarget]);
+  const profileMode = shellChromeState.profileMode;
   const selectedPrivateChannelId = useMemo(
     () => selectedChannelIdByTopic[activeTopic] ?? null,
     [activeTopic, selectedChannelIdByTopic]
@@ -1514,8 +1533,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     const nextTimelineScope = overrides?.timelineScope ?? activeTimelineScope;
     const nextComposeTarget = overrides?.composeTarget ?? activeComposeChannel;
     const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
-    const nextContextMode = overrides?.contextMode ?? shellChromeState.activeContextPaneMode;
-    const nextContextOpen = overrides?.contextOpen ?? shellChromeState.contextOpen;
+    const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
     const nextSelectedThread = overrides?.selectedThread ?? selectedThread;
     const nextSelectedAuthorPubkey =
       overrides?.selectedAuthorPubkey ?? selectedAuthorPubkey;
@@ -1532,20 +1550,18 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     if (nextComposeTargetValue !== 'public') {
       search.set('composeTarget', nextComposeTargetValue);
     }
-    if (nextContextOpen) {
-      search.set('context', nextContextMode);
-      if (
-        nextContextMode === 'thread' &&
-        nextSelectedThread
-      ) {
-        search.set('threadId', nextSelectedThread);
-      }
-      if (
-        nextContextMode === 'author' &&
-        nextSelectedAuthorPubkey
-      ) {
+    if (nextSelectedThread) {
+      search.set('context', 'thread');
+      search.set('threadId', nextSelectedThread);
+      if (nextSelectedAuthorPubkey) {
         search.set('authorPubkey', nextSelectedAuthorPubkey);
       }
+    } else if (nextSelectedAuthorPubkey) {
+      search.set('context', 'author');
+      search.set('authorPubkey', nextSelectedAuthorPubkey);
+    }
+    if (nextPrimarySection === 'profile' && nextProfileMode === 'edit') {
+      search.set('profileMode', 'edit');
     }
     if (nextSettingsOpen) {
       search.set('settings', nextSettingsSection);
@@ -1570,10 +1586,9 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     navigate,
     selectedAuthorPubkey,
     selectedThread,
-    shellChromeState.activeContextPaneMode,
     shellChromeState.activePrimarySection,
     shellChromeState.activeSettingsSection,
-    shellChromeState.contextOpen,
+    shellChromeState.profileMode,
     shellChromeState.settingsOpen,
   ]);
   const privateChannelListItems = useMemo(
@@ -1646,7 +1661,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
   );
   const previewableMediaAttachments = useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
-    for (const post of [...activeTimeline, ...thread]) {
+    for (const post of [...activeTimeline, ...activePublicTimeline, ...thread]) {
       for (const attachment of [
         selectPrimaryImage(post),
         selectVideoPoster(post),
@@ -1658,7 +1673,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       }
     }
     return [...attachments.values()];
-  }, [activeTimeline, thread]);
+  }, [activePublicTimeline, activeTimeline, thread]);
 
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
@@ -1674,6 +1689,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       try {
         const [
           timelineViews,
+          publicTimelineViews,
           liveViewsResult,
           gameViewsResult,
           joinedChannelViewsResult,
@@ -1689,6 +1705,12 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
                 50,
                 currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
               ),
+            }))
+          ),
+          Promise.all(
+            currentTopics.map(async (topic) => ({
+              topic,
+              timeline: await api.listTimeline(topic, null, 50, PUBLIC_TIMELINE_SCOPE),
             }))
           ),
           Promise.allSettled(
@@ -1743,6 +1765,11 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         startTransition(() => {
           setTimelinesByTopic(
             Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
+          );
+          setPublicTimelinesByTopic(
+            Object.fromEntries(
+              publicTimelineViews.map(({ topic, timeline }) => [topic, timeline.items])
+            )
           );
           setLiveSessionsByTopic((current) => {
             const next = { ...current };
@@ -1912,6 +1939,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       setSyncStatus,
       setThread,
       setTimelinesByTopic,
+      setPublicTimelinesByTopic,
       storeApi,
     ]
   );
@@ -2091,28 +2119,6 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     };
   }, [api, mediaObjectUrls, previewableMediaAttachments, setMediaObjectUrls]);
 
-  useEffect(() => {
-    if (!selectedThread) {
-      return;
-    }
-    setShellChromeState((current) => ({
-      ...current,
-      activeContextPaneMode: 'thread',
-      contextOpen: true,
-    }));
-  }, [selectedThread, setShellChromeState]);
-
-  useEffect(() => {
-    if (!selectedAuthorPubkey) {
-      return;
-    }
-    setShellChromeState((current) => ({
-      ...current,
-      activeContextPaneMode: 'author',
-      contextOpen: true,
-    }));
-  }, [selectedAuthorPubkey, setShellChromeState]);
-
   const setNavOpen = useCallback((open: boolean, restoreToTrigger = false) => {
     setShellChromeState((current) => ({
       ...current,
@@ -2124,21 +2130,6 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       });
     }
   }, [setShellChromeState]);
-
-  const setContextOpen = useCallback((open: boolean, restoreToTrigger = false) => {
-    setShellChromeState((current) => ({
-      ...current,
-      contextOpen: open,
-    }));
-    if (!open && restoreToTrigger) {
-      window.requestAnimationFrame(() => {
-        contextTriggerRef.current?.focus();
-      });
-    }
-    syncRoute(open ? 'push' : 'replace', {
-      contextOpen: open,
-    });
-  }, [setShellChromeState, syncRoute]);
 
   const setSettingsOpen = useCallback((open: boolean, restoreToTrigger = false) => {
     setShellChromeState((current) => ({
@@ -2165,15 +2156,54 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     setShellChromeState((current) => ({
       ...current,
       activePrimarySection: section,
+      profileMode: section === 'profile' ? 'overview' : current.profileMode,
       navOpen: false,
     }));
+    setSelectedThread(null);
+    setThread([]);
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
     window.requestAnimationFrame(() => {
       primarySectionRefs.current[section]?.focus();
     });
     syncRoute('push', {
       primarySection: section,
+      profileMode: section === 'profile' ? 'overview' : undefined,
+      selectedAuthorPubkey: null,
+      selectedThread: null,
     });
   }
+
+  const closeAuthorPane = useCallback(() => {
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
+    syncRoute('replace', {
+      selectedAuthorPubkey: null,
+    });
+  }, [setAuthorError, setSelectedAuthor, setSelectedAuthorPubkey, syncRoute]);
+
+  const closeThreadPane = useCallback(() => {
+    setSelectedThread(null);
+    setThread([]);
+    setReplyTarget(null);
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
+    syncRoute('replace', {
+      selectedThread: null,
+      selectedAuthorPubkey: null,
+    });
+  }, [
+    setAuthorError,
+    setReplyTarget,
+    setSelectedAuthor,
+    setSelectedAuthorPubkey,
+    setSelectedThread,
+    setThread,
+    syncRoute,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2185,9 +2215,14 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         setSettingsOpen(false, true);
         return;
       }
-      if (shellChromeState.contextOpen) {
+      if (selectedAuthorPubkey) {
         event.preventDefault();
-        setContextOpen(false, true);
+        closeAuthorPane();
+        return;
+      }
+      if (selectedThread) {
+        event.preventDefault();
+        closeThreadPane();
         return;
       }
       if (shellChromeState.navOpen) {
@@ -2201,12 +2236,14 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
-    setContextOpen,
+    closeAuthorPane,
+    closeThreadPane,
     setNavOpen,
     setSettingsOpen,
-    shellChromeState.contextOpen,
     shellChromeState.navOpen,
     shellChromeState.settingsOpen,
+    selectedAuthorPubkey,
+    selectedThread,
   ]);
 
   useEffect(() => {
@@ -2280,6 +2317,9 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     setSelectedThread(null);
     setThread([]);
     setReplyTarget(null);
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
   }
 
   function handleProfileFieldChange(
@@ -2311,6 +2351,30 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       error: null,
     });
   }
+
+  const openProfileOverview = useCallback(() => {
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'profile',
+      profileMode: 'overview',
+    }));
+    syncRoute('push', {
+      primarySection: 'profile',
+      profileMode: 'overview',
+    });
+  }, [setShellChromeState, syncRoute]);
+
+  const openProfileEditor = useCallback(() => {
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'profile',
+      profileMode: 'edit',
+    }));
+    syncRoute('push', {
+      primarySection: 'profile',
+      profileMode: 'edit',
+    });
+  }, [setShellChromeState, syncRoute]);
 
   function handleSelectPrivateChannel(channelId: string) {
     setSelectedChannelIdByTopic((current) => ({
@@ -2353,7 +2417,15 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         status: 'ready',
         error: null,
       });
+      setShellChromeState((current) => ({
+        ...current,
+        profileMode: 'overview',
+      }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
+      syncRoute('replace', {
+        primarySection: 'profile',
+        profileMode: 'overview',
+      });
     } catch (saveError) {
       const nextProfileError = messageFromError(saveError, 'failed to save profile');
       setProfileError(nextProfileError);
@@ -2826,14 +2898,13 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         startTransition(() => {
           setSelectedThread(null);
           setThread([]);
-          setShellChromeState((current) => ({
-            ...current,
-            contextOpen: false,
-          }));
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
         });
         syncRoute('replace', {
           activeTopic: topic,
-          contextOpen: false,
+          selectedAuthorPubkey: null,
           selectedThread: null,
         });
         return;
@@ -2842,17 +2913,14 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         setActiveTopic(topic);
         setSelectedThread(threadId);
         setThread(threadView.items);
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
         setError(null);
-        setShellChromeState((current) => ({
-          ...current,
-          activeContextPaneMode: 'thread',
-          contextOpen: true,
-        }));
       });
       syncRoute(options?.historyMode ?? 'push', {
         activeTopic: topic,
-        contextMode: 'thread',
-        contextOpen: true,
+        selectedAuthorPubkey: null,
         selectedThread: threadId,
       });
     } catch (threadError) {
@@ -2862,14 +2930,13 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         startTransition(() => {
           setSelectedThread(null);
           setThread([]);
-          setShellChromeState((current) => ({
-            ...current,
-            contextOpen: false,
-          }));
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
         });
         syncRoute('replace', {
           activeTopic: topic,
-          contextOpen: false,
+          selectedAuthorPubkey: null,
           selectedThread: null,
         });
       }
@@ -2878,22 +2945,27 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     activeTopic,
     api,
     setActiveTopic,
+    setAuthorError,
     setError,
+    setSelectedAuthor,
+    setSelectedAuthorPubkey,
     setSelectedThread,
-    setShellChromeState,
     setThread,
     syncRoute,
   ]);
 
   function beginReply(post: PostView) {
+    const threadId = post.root_id ?? post.object_id;
     setReplyTarget(post);
-    if (post.root_id) {
-      setSelectedThread(post.root_id);
-      void openThread(post.root_id);
-      return;
-    }
-    setSelectedThread(post.object_id);
-    void openThread(post.object_id);
+    setSelectedThread(threadId);
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
+    syncRoute('push', {
+      selectedThread: threadId,
+      selectedAuthorPubkey: null,
+    });
+    void openThread(threadId, { historyMode: 'replace' });
   }
 
   function clearReply() {
@@ -2906,17 +2978,16 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
   ) => {
     try {
       const socialView = await api.getAuthorSocialView(authorPubkey);
+      const nextThreadId = options?.fromThread ? (options.threadId ?? selectedThread) : null;
       setSelectedAuthorPubkey(authorPubkey);
       setSelectedAuthor(socialView);
       setAuthorError(null);
-      setShellChromeState((current) => ({
-        ...current,
-        activeContextPaneMode: 'author',
-        contextOpen: true,
-      }));
+      if (!options?.fromThread) {
+        setSelectedThread(null);
+        setThread([]);
+      }
       syncRoute(options?.historyMode ?? 'push', {
-        contextMode: 'author',
-        contextOpen: true,
+        selectedThread: nextThreadId,
         selectedAuthorPubkey: authorPubkey,
       });
     } catch (detailError) {
@@ -2926,12 +2997,12 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       if (options?.normalizeOnError) {
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
-        setShellChromeState((current) => ({
-          ...current,
-          contextOpen: false,
-        }));
+        if (!options?.fromThread) {
+          setSelectedThread(null);
+          setThread([]);
+        }
         syncRoute('replace', {
-          contextOpen: false,
+          selectedThread: options?.fromThread ? (options.threadId ?? selectedThread) : null,
           selectedAuthorPubkey: null,
         });
       }
@@ -2941,7 +3012,9 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     setAuthorError,
     setSelectedAuthor,
     setSelectedAuthorPubkey,
-    setShellChromeState,
+    setSelectedThread,
+    setThread,
+    selectedThread,
     syncRoute,
   ]);
 
@@ -3326,6 +3399,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     const requestedComposeTargetValue = params.get('composeTarget');
     const requestedSettingsSection = params.get('settings');
     const requestedContext = params.get('context');
+    const requestedProfileMode = params.get('profileMode');
     const requestedThreadId = params.get('threadId');
     const requestedAuthorPubkey = params.get('authorPubkey');
 
@@ -3422,40 +3496,51 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       requestedSettingsSection === 'community-node'
         ? requestedSettingsSection
         : shellChromeState.activeSettingsSection;
-    const nextContextMode =
-      requestedContext === 'author'
-        ? 'author'
-        : requestedContext === 'thread'
-          ? 'thread'
-          : shellChromeState.activeContextPaneMode;
-    const nextContextOpen =
-      (requestedContext === 'thread' && Boolean(requestedThreadId)) ||
-      (requestedContext === 'author' && Boolean(requestedAuthorPubkey));
+    const nextProfileMode =
+      routeSection === 'profile' && requestedProfileMode === 'edit' ? 'edit' : 'overview';
 
     if (
       shellChromeState.activePrimarySection !== routeSection ||
       shellChromeState.activeSettingsSection !== nextSettingsSection ||
       shellChromeState.settingsOpen !== nextSettingsOpen ||
-      shellChromeState.activeContextPaneMode !== nextContextMode ||
-      shellChromeState.contextOpen !== nextContextOpen
+      shellChromeState.profileMode !== nextProfileMode
     ) {
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: routeSection,
         activeSettingsSection: nextSettingsSection,
         settingsOpen: nextSettingsOpen,
-        activeContextPaneMode: nextContextMode,
-        contextOpen: nextContextOpen,
+        profileMode: nextProfileMode,
       }));
     }
 
     if (requestedSettingsSection && !['connectivity', 'discovery', 'community-node'].includes(requestedSettingsSection)) {
       shouldNormalize = true;
     }
+    if (requestedProfileMode && requestedProfileMode !== 'edit') {
+      shouldNormalize = true;
+    }
+    if (requestedProfileMode && routeSection !== 'profile') {
+      shouldNormalize = true;
+    }
 
     if (requestedContext === 'thread') {
+      const threadReadyForNestedAuthor =
+        requestedThreadId !== null &&
+        requestedThreadId.length > 0 &&
+        requestedThreadId === selectedThread &&
+        thread.length > 0;
+
       if (!requestedThreadId) {
         shouldNormalize = true;
+        if (selectedThread || selectedAuthorPubkey) {
+          setSelectedThread(null);
+          setThread([]);
+          setReplyTarget(null);
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
       } else if (requestedThreadId !== selectedThread || thread.length === 0) {
         void openThread(requestedThreadId, {
           historyMode: 'replace',
@@ -3463,11 +3548,60 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
           topic: nextTopic,
         });
       }
-    } else if (requestedContext === 'author') {
       if (!requestedAuthorPubkey) {
-        shouldNormalize = true;
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
       } else if (!isHex64(requestedAuthorPubkey)) {
         shouldNormalize = true;
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
+      } else if (!threadReadyForNestedAuthor) {
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
+      } else if (
+        requestedAuthorPubkey !== selectedAuthorPubkey ||
+        !selectedAuthor ||
+        requestedThreadId !== selectedThread
+      ) {
+        void openAuthorDetail(requestedAuthorPubkey, {
+          fromThread: true,
+          historyMode: 'replace',
+          normalizeOnError: true,
+          threadId: requestedThreadId,
+        });
+      }
+    } else if (requestedContext === 'author') {
+      if (requestedThreadId) {
+        shouldNormalize = true;
+      }
+      if (selectedThread) {
+        setSelectedThread(null);
+        setThread([]);
+        setReplyTarget(null);
+      }
+      if (!requestedAuthorPubkey) {
+        shouldNormalize = true;
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
+      } else if (!isHex64(requestedAuthorPubkey)) {
+        shouldNormalize = true;
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
       } else if (requestedAuthorPubkey !== selectedAuthorPubkey || !selectedAuthor) {
         void openAuthorDetail(requestedAuthorPubkey, {
           historyMode: 'replace',
@@ -3476,6 +3610,26 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       }
     } else if (requestedContext) {
       shouldNormalize = true;
+      if (selectedThread || selectedAuthorPubkey) {
+        setSelectedThread(null);
+        setThread([]);
+        setReplyTarget(null);
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
+    } else {
+      if (requestedThreadId || requestedAuthorPubkey) {
+        shouldNormalize = true;
+      }
+      if (selectedThread || selectedAuthorPubkey) {
+        setSelectedThread(null);
+        setThread([]);
+        setReplyTarget(null);
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
     }
 
     if (shouldReload) {
@@ -3502,15 +3656,20 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     selectedAuthorPubkey,
     selectedChannelIdByTopic,
     selectedThread,
+    setAuthorError,
+    setSelectedThread,
     setActiveTopic,
     setComposeChannelByTopic,
     setSelectedChannelIdByTopic,
+    setSelectedAuthor,
+    setSelectedAuthorPubkey,
     setShellChromeState,
+    setReplyTarget,
+    setThread,
     setTimelineScopeByTopic,
-    shellChromeState.activeContextPaneMode,
     shellChromeState.activePrimarySection,
     shellChromeState.activeSettingsSection,
-    shellChromeState.contextOpen,
+    shellChromeState.profileMode,
     shellChromeState.settingsOpen,
     syncRoute,
     thread.length,
@@ -3602,7 +3761,17 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
           post.author_display_name,
           post.author_name
         ),
+        authorPicture:
+          post.author_pubkey === syncStatus.local_author_pubkey
+            ? localProfile?.picture ?? null
+            : selectedAuthor?.author_pubkey === post.author_pubkey
+              ? selectedAuthor.picture ?? null
+              : null,
         relationshipLabel: strongestRelationshipLabel(post),
+        audienceChipLabel: post.channel_id
+          ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
+            post.audience_label
+          : post.audience_label,
         threadTargetId: post.root_id ?? post.object_id,
         media: {
           objectId: post.object_id,
@@ -3640,12 +3809,31 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         },
       };
     },
-    [mediaObjectUrls, setUnsupportedVideoManifests, unsupportedVideoManifests]
+    [
+      activeJoinedChannels,
+      localProfile?.picture,
+      mediaObjectUrls,
+      selectedAuthor,
+      setUnsupportedVideoManifests,
+      syncStatus.local_author_pubkey,
+      unsupportedVideoManifests,
+    ]
   );
 
   const activeTimelinePostViews = useMemo(
     () => activeTimeline.map((post) => buildPostCardView(post, 'timeline')),
     [activeTimeline, buildPostCardView]
+  );
+  const profileTimelinePostViews = useMemo(
+    () =>
+      activePublicTimeline
+        .filter(
+          (post) =>
+            !post.channel_id &&
+            post.author_pubkey === syncStatus.local_author_pubkey
+        )
+        .map((post) => buildPostCardView(post, 'timeline')),
+    [activePublicTimeline, buildPostCardView, syncStatus.local_author_pubkey]
   );
   const threadPostViews = useMemo(
     () => thread.map((post) => buildPostCardView(post, 'thread')),
@@ -3736,20 +3924,39 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     ],
     [activeJoinedChannels]
   );
-
-  const statusBadges = (
-    <div className='shell-status-badges'>
-      <StatusBadge
-        label={syncStatusBadgeLabel(syncStatus)}
-        tone={syncStatusBadgeTone(syncStatus)}
-      />
-      <StatusBadge label={`${syncStatus.peer_count} peers`} />
-      <StatusBadge
-        label={syncStatus.discovery.mode === 'seeded_dht' ? 'seeded dht' : 'static peers'}
-      />
-      {syncStatus.pending_events > 0 ? (
-        <StatusBadge label={`${syncStatus.pending_events} pending`} tone='warning' />
-      ) : null}
+  const navRailHeader = (
+    <div className='shell-nav-status'>
+      <div className='shell-status-badges'>
+        <StatusBadge
+          label={syncStatusBadgeLabel(syncStatus)}
+          tone={syncStatusBadgeTone(syncStatus)}
+        />
+        <StatusBadge label={`${syncStatus.peer_count} peers`} />
+        <StatusBadge
+          label={syncStatus.discovery.mode === 'seeded_dht' ? 'seeded dht' : 'static peers'}
+        />
+        {syncStatus.pending_events > 0 ? (
+          <StatusBadge label={`${syncStatus.pending_events} pending`} tone='warning' />
+        ) : null}
+      </div>
+      <Button
+        ref={settingsTriggerRef}
+        className='shell-settings-button shell-icon-button'
+        variant='ghost'
+        size='icon'
+        type='button'
+        aria-label={
+          shellChromeState.settingsOpen
+            ? 'Close settings and diagnostics'
+            : 'Open settings and diagnostics'
+        }
+        aria-controls={SHELL_SETTINGS_ID}
+        aria-expanded={shellChromeState.settingsOpen}
+        data-testid='shell-settings-trigger'
+        onClick={() => setSettingsOpen(!shellChromeState.settingsOpen)}
+      >
+        <Settings className='size-5' aria-hidden='true' />
+      </Button>
     </div>
   );
 
@@ -4016,80 +4223,75 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     },
   ];
 
-  const contextTabs = [
-    {
-      id: 'thread' as ContextPaneMode,
-      label: 'Thread',
-      summary: threadPanelState.summary,
-      content: (
-        <ThreadPanel
-          state={threadPanelState}
-          posts={threadPostViews}
-          onClearThread={() => {
-            setSelectedThread(null);
-            setThread([]);
-            clearReply();
-            setContextOpen(false);
-          }}
-          onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-          onOpenThread={(threadId) => void openThread(threadId)}
-          onReply={beginReply}
-        />
-      ),
-    },
-    {
-      id: 'author' as ContextPaneMode,
-      label: 'Author',
-      summary: selectedAuthor
-        ? authorDetailView.displayLabel
-        : 'Select an author to inspect profile and relationship.',
-      content: (
-        <div className='shell-main-stack'>
-          <AuthorDetailCard
-            view={authorDetailView}
-            localAuthorPubkey={syncStatus.local_author_pubkey}
-            onClearAuthor={() => {
-              setSelectedAuthorPubkey(null);
-              setSelectedAuthor(null);
-              setAuthorError(null);
-              setContextOpen(false);
-            }}
-            onToggleRelationship={(authorPubkey, following) =>
-              void handleRelationshipAction(authorPubkey, following)
+  const channelActionDisabled = channelActionPending !== null;
+  const profileAuthorLabel = authorDisplayLabel(
+    syncStatus.local_author_pubkey,
+    localProfile?.display_name,
+    localProfile?.name
+  );
+  const detailPaneStack = (
+    <>
+      {selectedThread ? (
+        <ContextPane
+          paneId={`${SHELL_CONTEXT_ID}-thread`}
+          title='Thread'
+          summary={threadPanelState.summary}
+          showBackdrop={!selectedAuthorPubkey}
+          stackIndex={0}
+          onClose={closeThreadPane}
+        >
+          <ThreadPanel
+            state={threadPanelState}
+            posts={threadPostViews}
+            onOpenAuthor={(authorPubkey) =>
+              void openAuthorDetail(authorPubkey, {
+                fromThread: true,
+                threadId: selectedThread,
+              })
             }
+            onOpenThread={(threadId) => void openThread(threadId)}
+            onReply={beginReply}
           />
-        </div>
-      ),
-    },
-  ];
+        </ContextPane>
+      ) : null}
+      {selectedAuthorPubkey ? (
+        <ContextPane
+          paneId={`${SHELL_CONTEXT_ID}-author`}
+          title='Author'
+          summary={
+            selectedAuthor
+              ? authorDetailView.displayLabel
+              : 'Select an author to inspect profile and relationship.'
+          }
+          showBackdrop={true}
+          stackIndex={selectedThread ? 1 : 0}
+          onClose={closeAuthorPane}
+        >
+          <div className='shell-main-stack'>
+            <AuthorDetailCard
+              view={authorDetailView}
+              localAuthorPubkey={syncStatus.local_author_pubkey}
+              onToggleRelationship={(authorPubkey, following) =>
+                void handleRelationshipAction(authorPubkey, following)
+              }
+            />
+          </div>
+        </ContextPane>
+      ) : null}
+    </>
+  );
 
   return (
     <>
       <ShellFrame
         skipTargetId={SHELL_WORKSPACE_ID}
-        topBar={
-          <ShellTopBar
-            headline={headline}
-            activeTopic={activeTopic}
-            statusBadges={statusBadges}
-            navOpen={shellChromeState.navOpen}
-            settingsOpen={shellChromeState.settingsOpen}
-            navControlsId={SHELL_NAV_ID}
-            settingsControlsId={SHELL_SETTINGS_ID}
-            navButtonRef={navTriggerRef}
-            settingsButtonRef={settingsTriggerRef}
-            onToggleNav={() => setNavOpen(!shellChromeState.navOpen)}
-            onToggleSettings={() => setSettingsOpen(!shellChromeState.settingsOpen)}
-          />
-        }
+        topBar={<ShellTopBar activeTopic={activeTopic} />}
         navRail={
           <ShellNavRail
             railId={SHELL_NAV_ID}
             open={shellChromeState.navOpen}
             onOpenChange={(open) => setNavOpen(open, !open)}
-            primaryItems={PRIMARY_SECTION_ITEMS}
-            activePrimarySection={shellChromeState.activePrimarySection}
-            onSelectPrimarySection={focusPrimarySection}
+            headerContent={navRailHeader}
             addTopicControl={
               <Label>
                 <span>Add Topic</span>
@@ -4111,246 +4313,690 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
         }
         workspace={
           <div className='shell-main-stack'>
-            <Card className='shell-workspace-card'>
-              <div
-                className='shell-section'
-                ref={setPrimarySectionRef('timeline')}
-                tabIndex={-1}
-                onFocusCapture={() =>
-                  setShellChromeState((current) => ({
-                    ...current,
-                    activePrimarySection: 'timeline',
-                  }))
-                }
-              >
-                <TimelineWorkspaceHeader
-                  activeTopic={activeTopic}
-                  viewingLabel={audienceLabelForTimelineScope(
-                    activeTimelineScope,
-                    activeJoinedChannels
-                  )}
-                  postingLabel={activeComposeAudienceLabel}
-                  viewScopeValue={timelineScopeValue(activeTimelineScope)}
-                  composeTargetValue={channelRefValue(activeComposeChannel)}
-                  viewScopeOptions={timelineViewScopeOptions}
-                  composeTargetOptions={composeTargetOptions}
-                  contextButtonRef={contextTriggerRef}
-                  contextOpen={shellChromeState.contextOpen}
-                  contextControlsId={SHELL_CONTEXT_ID}
-                  onOpenContext={() => setContextOpen(true)}
-                  onRefresh={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
-                  onViewScopeChange={(value) => {
-                    void handleTimelineScopeChange(value);
-                  }}
-                  onComposeTargetChange={handleComposeChannelChange}
-                  composeTargetDisabled={Boolean(replyTarget)}
-                />
-                <ComposerPanel
-                  value={composer}
-                  onChange={(event) => setComposer(event.target.value)}
-                  onSubmit={handlePublish}
-                  attachmentInputKey={attachmentInputKey}
-                  onAttachmentSelection={(event) => {
-                    void handleAttachmentSelection(event);
-                  }}
-                  draftMediaItems={composerDraftViews}
-                  onRemoveDraftAttachment={handleRemoveDraftAttachment}
-                  composerError={composerError}
-                  audienceLabel={activeComposeAudienceLabel}
-                  replyTarget={
-                    replyTarget
-                      ? {
-                          content: replyTarget.content,
-                          audienceLabel: replyTarget.audience_label,
-                        }
-                      : null
-                  }
-                  onClearReply={clearReply}
-                />
-                <TimelineFeed
-                  posts={activeTimelinePostViews}
-                  emptyCopy='No posts yet for this topic.'
-                  onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                  onOpenThread={(threadId) => void openThread(threadId)}
-                  onReply={beginReply}
-                />
-              </div>
-
-              <section
-                className='shell-section'
-                ref={setPrimarySectionRef('channels')}
-                tabIndex={-1}
-                onFocusCapture={() =>
-                  setShellChromeState((current) => ({
-                    ...current,
-                    activePrimarySection: 'channels',
-                  }))
-                }
-              >
-                <PrivateChannelPanel
-                  status={activeChannelPanelState.status}
-                  error={channelError ?? activeChannelPanelState.error}
-                  pendingAction={channelActionPending}
-                  channelLabel={channelLabelInput}
-                  channelAudience={channelAudienceInput}
-                  channelAudienceOptions={[
-                    { value: 'invite_only', label: 'Invite only' },
-                    { value: 'friend_only', label: 'Friends' },
-                    { value: 'friend_plus', label: 'Friends+' },
-                  ]}
-                  inviteTokenInput={inviteTokenInput}
-                  inviteOutput={inviteOutput}
-                  inviteOutputLabel={inviteOutputLabel}
-                  channels={privateChannelListItems}
-                  selectedChannel={activePrivateChannel}
-                  onChannelLabelChange={setChannelLabelInput}
-                  onChannelAudienceChange={setChannelAudienceInput}
-                  onInviteTokenChange={setInviteTokenInput}
-                  onCreateChannel={handleCreatePrivateChannel}
-                  onJoinInvite={handleJoinInvite}
-                  onJoinGrant={() => void handleJoinGrant()}
-                  onJoinShare={() => void handleJoinShare()}
-                  onSelectChannel={handleSelectPrivateChannel}
-                  onCreateInvite={() => void handleCreateInvite()}
-                  onCreateGrant={() => void handleCreateGrant()}
-                  onCreateShare={() => void handleCreateShare()}
-                  onFreeze={() => void handleFreezePrivateChannel()}
-                  onRotate={() => void handleRotatePrivateChannel()}
-                />
-              </section>
-
-              <section
-                className='shell-section'
-                ref={setPrimarySectionRef('live')}
-                tabIndex={-1}
-                onFocusCapture={() =>
-                  setShellChromeState((current) => ({
-                    ...current,
-                    activePrimarySection: 'live',
-                  }))
-                }
-              >
-                <LiveSessionPanel
-                  status={activeLivePanelState.status}
-                  error={liveError ?? activeLivePanelState.error}
-                  audienceLabel={activeComposeAudienceLabel}
-                  title={liveTitle}
-                  description={liveDescription}
-                  createPending={liveCreatePending}
-                  sessions={liveSessionListItems}
-                  onTitleChange={setLiveTitle}
-                  onDescriptionChange={setLiveDescription}
-                  onSubmit={handleCreateLiveSession}
-                  onJoin={(sessionId) => void handleJoinLiveSession(sessionId)}
-                  onLeave={(sessionId) => void handleLeaveLiveSession(sessionId)}
-                  onEnd={(sessionId) => void handleEndLiveSession(sessionId)}
-                />
-              </section>
-
-              <section
-                className='shell-section'
-                ref={setPrimarySectionRef('game')}
-                tabIndex={-1}
-                onFocusCapture={() =>
-                  setShellChromeState((current) => ({
-                    ...current,
-                    activePrimarySection: 'game',
-                  }))
-                }
-              >
-                <GameRoomPanel
-                  status={activeGamePanelState.status}
-                  error={gameError ?? activeGamePanelState.error}
-                  audienceLabel={activeComposeAudienceLabel}
-                  title={gameTitle}
-                  description={gameDescription}
-                  participantsInput={gameParticipantsInput}
-                  createPending={gameCreatePending}
-                  rooms={activeGameRooms}
-                  drafts={gameDraftViews}
-                  savingByRoomId={gameSavingByRoomId}
-                  localAuthorPubkey={syncStatus.local_author_pubkey}
-                  onTitleChange={setGameTitle}
-                  onDescriptionChange={setGameDescription}
-                  onParticipantsChange={setGameParticipantsInput}
-                  onSubmit={handleCreateGameRoom}
-                  onDraftStatusChange={(roomId, status) =>
-                    updateGameDraft(roomId, (current) => ({
-                      ...current,
-                      status,
-                    }))
-                  }
-                  onDraftPhaseChange={(roomId, value) =>
-                    updateGameDraft(roomId, (current) => ({
-                      ...current,
-                      phase_label: value,
-                    }))
-                  }
-                  onDraftScoreChange={(roomId, participantId, value) =>
-                    updateGameDraft(roomId, (current) => ({
-                      ...current,
-                      scores: {
-                        ...current.scores,
-                        [participantId]: value,
-                      },
-                    }))
-                  }
-                  onSaveRoom={(roomId) => void handleUpdateGameRoom(roomId)}
-                />
-              </section>
-
-              <section
-                className='shell-section'
-                ref={setPrimarySectionRef('profile')}
-                tabIndex={-1}
-                onFocusCapture={() =>
-                  setShellChromeState((current) => ({
-                    ...current,
-                    activePrimarySection: 'profile',
-                  }))
-                }
-              >
-                <ProfileEditorPanel
-                  authorLabel={authorDisplayLabel(
-                    syncStatus.local_author_pubkey,
-                    localProfile?.display_name,
-                    localProfile?.name
-                  )}
-                  status={profilePanelState.status}
-                  saving={profileSaving}
-                  dirty={profileDirty}
-                  error={profileError ?? profilePanelState.error}
-                  fields={profileEditorFields}
-                  onFieldChange={handleProfileFieldChange}
-                  onSave={handleSaveProfile}
-                  onReset={resetProfileDraft}
-                />
-              </section>
-
+            <Card className='shell-workspace-card shell-workspace-header-card'>
+              <TimelineWorkspaceHeader
+                activeSection={shellChromeState.activePrimarySection}
+                items={PRIMARY_SECTION_ITEMS}
+                onSelectSection={focusPrimarySection}
+              />
             </Card>
-          </div>
-        }
-        contextPane={
-          <ContextPane
-            paneId={SHELL_CONTEXT_ID}
-            open={shellChromeState.contextOpen}
-            onOpenChange={(open) => setContextOpen(open, !open)}
-            activeMode={shellChromeState.activeContextPaneMode}
-            onModeChange={(mode) =>
-              {
+
+            <section
+              className='shell-section'
+              ref={setPrimarySectionRef(shellChromeState.activePrimarySection)}
+              tabIndex={-1}
+              onFocusCapture={() =>
                 setShellChromeState((current) => ({
                   ...current,
-                  activeContextPaneMode: mode,
-                  contextOpen: true,
-                }));
-                syncRoute('replace', {
-                  contextMode: mode,
-                  contextOpen: true,
-                });
+                  activePrimarySection: routeSection,
+                }))
               }
-            }
-            tabs={contextTabs}
-          />
+            >
+              {shellChromeState.activePrimarySection === 'timeline' ? (
+                <>
+                  <Card className='shell-workspace-card'>
+                    <div className='shell-workspace-header'>
+                      <div className='shell-workspace-summary'>
+                        <span className='relationship-badge'>
+                          {`Viewing ${audienceLabelForTimelineScope(
+                            activeTimelineScope,
+                            activeJoinedChannels
+                          )}`}
+                        </span>
+                        <span className='relationship-badge relationship-badge-direct'>
+                          {`Posting ${activeComposeAudienceLabel}`}
+                        </span>
+                      </div>
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
+                      >
+                        Refresh
+                      </Button>
+                    </div>
+                    <div className='shell-workspace-controls'>
+                      <Label>
+                        <span>View Scope</span>
+                        <Select
+                          aria-label='View Scope'
+                          value={timelineScopeValue(activeTimelineScope)}
+                          onChange={(event) => {
+                            void handleTimelineScopeChange(event.target.value);
+                          }}
+                        >
+                          {timelineViewScopeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </Label>
+                      <Label>
+                        <span>Compose Target</span>
+                        <Select
+                          aria-label='Compose Target'
+                          value={channelRefValue(activeComposeChannel)}
+                          disabled={Boolean(replyTarget)}
+                          onChange={(event) => handleComposeChannelChange(event.target.value)}
+                        >
+                          {composeTargetOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </Label>
+                    </div>
+                    <ComposerPanel
+                      value={composer}
+                      onChange={(event) => setComposer(event.target.value)}
+                      onSubmit={handlePublish}
+                      attachmentInputKey={attachmentInputKey}
+                      onAttachmentSelection={(event) => {
+                        void handleAttachmentSelection(event);
+                      }}
+                      draftMediaItems={composerDraftViews}
+                      onRemoveDraftAttachment={handleRemoveDraftAttachment}
+                      composerError={composerError}
+                      audienceLabel={activeComposeAudienceLabel}
+                      replyTarget={
+                        replyTarget
+                          ? {
+                              content: replyTarget.content,
+                              audienceLabel: replyTarget.audience_label,
+                            }
+                          : null
+                      }
+                      onClearReply={clearReply}
+                    />
+                  </Card>
+                  <Card className='shell-workspace-card'>
+                    <TimelineFeed
+                      posts={activeTimelinePostViews}
+                      emptyCopy='No posts yet for this topic.'
+                      onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                      onOpenThread={(threadId) => void openThread(threadId)}
+                      onReply={beginReply}
+                    />
+                  </Card>
+                </>
+              ) : null}
+
+              {shellChromeState.activePrimarySection === 'channels' ? (
+                <>
+                  <Card className='shell-workspace-card'>
+                    <div className='shell-main-stack'>
+                      <div className='shell-workspace-header'>
+                        <div>
+                          <h3>Private Channels</h3>
+                          <small>{privateChannelListItems.length} joined</small>
+                        </div>
+                      </div>
+                      {activeChannelPanelState.status === 'loading' ? (
+                        <Notice>Loading private channels…</Notice>
+                      ) : null}
+                      {activeChannelPanelState.status === 'error' &&
+                      (channelError ?? activeChannelPanelState.error) ? (
+                        <Notice tone='destructive'>
+                          {channelError ?? activeChannelPanelState.error}
+                        </Notice>
+                      ) : null}
+                      <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
+                        <Label>
+                          <span>Create Channel</span>
+                          <Input
+                            value={channelLabelInput}
+                            onChange={(event) => setChannelLabelInput(event.target.value)}
+                            placeholder='core contributors'
+                            disabled={channelActionDisabled}
+                          />
+                        </Label>
+                        <Label>
+                          <span>Audience</span>
+                          <Select
+                            aria-label='Channel Audience'
+                            value={channelAudienceInput}
+                            disabled={channelActionDisabled}
+                            onChange={(event) =>
+                              setChannelAudienceInput(
+                                event.target.value as ChannelAudienceKind
+                              )
+                            }
+                          >
+                            <option value='invite_only'>Invite only</option>
+                            <option value='friend_only'>Friends</option>
+                            <option value='friend_plus'>Friends+</option>
+                          </Select>
+                        </Label>
+                        <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
+                          Create Channel
+                        </Button>
+                      </form>
+                      <form className='composer composer-compact' onSubmit={handleJoinInvite}>
+                        <Label>
+                          <span>Join via Invite</span>
+                          <Textarea
+                            value={inviteTokenInput}
+                            onChange={(event) => setInviteTokenInput(event.target.value)}
+                            placeholder='paste private channel invite, friend grant, or friends+ share'
+                            disabled={channelActionDisabled}
+                          />
+                        </Label>
+                        <div className='discovery-actions'>
+                          <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
+                            Join Invite
+                          </Button>
+                          <Button
+                            variant='secondary'
+                            type='button'
+                            disabled={channelActionDisabled}
+                            onClick={() => void handleJoinGrant()}
+                          >
+                            Join Grant
+                          </Button>
+                          <Button
+                            variant='secondary'
+                            type='button'
+                            disabled={channelActionDisabled}
+                            onClick={() => void handleJoinShare()}
+                          >
+                            Join Share
+                          </Button>
+                        </div>
+                      </form>
+                      {inviteOutput ? (
+                        <Notice tone='accent'>
+                          <strong>{inviteOutputSummaryLabel(inviteOutputLabel)}</strong>
+                          <code className='extended-inline-code'>{inviteOutput}</code>
+                        </Notice>
+                      ) : null}
+                    </div>
+                  </Card>
+                  <Card className='shell-workspace-card'>
+                    {privateChannelListItems.length === 0 && activeChannelPanelState.status === 'ready' ? (
+                      <p className='empty-state'>No joined private channels for this topic.</p>
+                    ) : (
+                      <div className='extended-channel-grid'>
+                        <ul className='post-list'>
+                          {privateChannelListItems.map(({ channel, active }) => (
+                            <li key={channel.channel_id}>
+                              <button
+                                className={`post-card post-link extended-channel-card${
+                                  active ? ' extended-channel-card-active' : ''
+                                }`}
+                                type='button'
+                                aria-pressed={active}
+                                onClick={() => handleSelectPrivateChannel(channel.channel_id)}
+                              >
+                                <div className='post-meta'>
+                                  <span>{channel.label}</span>
+                                  <span>{channel.audience_kind.replace('_', ' ')}</span>
+                                </div>
+                                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                  <span>epoch: {channel.current_epoch_id}</span>
+                                  <span>sharing: {channel.sharing_state}</span>
+                                </div>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <Card
+                          tone={activePrivateChannel ? 'accent' : 'default'}
+                          className='extended-channel-detail'
+                        >
+                          <div className='panel-header'>
+                            <div>
+                              <h4>{activePrivateChannel?.label ?? 'Select a channel'}</h4>
+                              <small>
+                                {activePrivateChannel
+                                  ? channelPolicyDescription(activePrivateChannel.audience_kind)
+                                  : 'Inspect policy and actions here.'}
+                              </small>
+                            </div>
+                          </div>
+
+                          {activePrivateChannel ? (
+                            <>
+                              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                <span>
+                                  Policy: {channelPolicyDescription(activePrivateChannel.audience_kind)}
+                                </span>
+                                <span>epoch: {activePrivateChannel.current_epoch_id}</span>
+                                <span>sharing: {activePrivateChannel.sharing_state}</span>
+                                {activePrivateChannel.joined_via_pubkey ? (
+                                  <span>
+                                    joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {(activePrivateChannel.audience_kind === 'friend_only' ||
+                                activePrivateChannel.audience_kind === 'friend_plus') ? (
+                                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                  <span>participants: {activePrivateChannel.participant_count}</span>
+                                  <span>stale: {activePrivateChannel.stale_participant_count}</span>
+                                  <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
+                                </div>
+                              ) : null}
+                              {activePrivateChannel.audience_kind === 'friend_only' &&
+                              activePrivateChannel.rotation_required ? (
+                                <div className='topic-diagnostic topic-diagnostic-error'>
+                                  <span>
+                                    rotation required: current participants include non-mutual followers
+                                  </span>
+                                </div>
+                              ) : null}
+                              <div className='discovery-actions'>
+                                {activePrivateChannel.audience_kind === 'invite_only' ? (
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={channelActionDisabled}
+                                    onClick={() => void handleCreateInvite()}
+                                  >
+                                    Create Invite
+                                  </Button>
+                                ) : null}
+                                {activePrivateChannel.audience_kind === 'friend_only' ? (
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
+                                    onClick={() => void handleCreateGrant()}
+                                  >
+                                    Create Grant
+                                  </Button>
+                                ) : null}
+                                {activePrivateChannel.audience_kind === 'friend_plus' ? (
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={channelActionDisabled}
+                                    onClick={() => void handleCreateShare()}
+                                  >
+                                    Create Share
+                                  </Button>
+                                ) : null}
+                                {activePrivateChannel.audience_kind === 'friend_plus' ? (
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
+                                    onClick={() => void handleFreezePrivateChannel()}
+                                  >
+                                    Freeze
+                                  </Button>
+                                ) : null}
+                                {activePrivateChannel.audience_kind === 'friend_only' ||
+                                activePrivateChannel.audience_kind === 'friend_plus' ? (
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
+                                    onClick={() => void handleRotatePrivateChannel()}
+                                  >
+                                    Rotate
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : (
+                            <Notice>Select a private channel to inspect policy and actions.</Notice>
+                          )}
+                        </Card>
+                      </div>
+                    )}
+                  </Card>
+                </>
+              ) : null}
+
+              {shellChromeState.activePrimarySection === 'live' ? (
+                <>
+                  <Card className='shell-workspace-card'>
+                    <div className='panel-header'>
+                      <div>
+                        <h3>Live Sessions</h3>
+                        <small>{liveSessionListItems.length} active</small>
+                      </div>
+                    </div>
+                    {activeLivePanelState.status === 'loading' ? (
+                      <Notice>Loading live sessions…</Notice>
+                    ) : null}
+                    {activeLivePanelState.status === 'error' &&
+                    (liveError ?? activeLivePanelState.error) ? (
+                      <Notice tone='destructive'>{liveError ?? activeLivePanelState.error}</Notice>
+                    ) : null}
+                    <form
+                      className='composer composer-compact'
+                      onSubmit={handleCreateLiveSession}
+                      aria-busy={liveCreatePending}
+                    >
+                      <Label>
+                        <span>Live Title</span>
+                        <Input
+                          value={liveTitle}
+                          onChange={(event) => setLiveTitle(event.target.value)}
+                          placeholder='Friday stream'
+                          disabled={liveCreatePending}
+                        />
+                      </Label>
+                      <Label>
+                        <span>Live Description</span>
+                        <Textarea
+                          value={liveDescription}
+                          onChange={(event) => setLiveDescription(event.target.value)}
+                          placeholder='short session summary'
+                          disabled={liveCreatePending}
+                        />
+                      </Label>
+                      <div className='topic-diagnostic topic-diagnostic-secondary'>
+                        <span>Audience: {activeComposeAudienceLabel}</span>
+                      </div>
+                      <Button type='submit' disabled={liveCreatePending}>
+                        Start Live
+                      </Button>
+                    </form>
+                  </Card>
+                  <Card className='shell-workspace-card'>
+                    {liveSessionListItems.length === 0 && activeLivePanelState.status === 'ready' ? (
+                      <p className='empty-state'>No live sessions</p>
+                    ) : null}
+                    <ul className='post-list'>
+                      {liveSessionListItems.map(({ session, isOwner, pending }) => (
+                        <li key={session.session_id}>
+                          <article className='post-card' aria-busy={pending}>
+                            <div className='post-meta'>
+                              <span>{session.title}</span>
+                              <span>{session.status}</span>
+                              <span className='reply-chip'>{session.audience_label}</span>
+                            </div>
+                            <div className='post-body'>
+                              <strong className='post-title'>
+                                {session.description || 'no description'}
+                              </strong>
+                            </div>
+                            <small>{session.session_id}</small>
+                            <div className='topic-diagnostic topic-diagnostic-secondary'>
+                              <span>viewers: {session.viewer_count}</span>
+                              <span>
+                                started: {new Date(session.started_at).toLocaleTimeString('ja-JP')}
+                              </span>
+                            </div>
+                            {session.ended_at ? (
+                              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                <span>
+                                  ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}
+                                </span>
+                              </div>
+                            ) : null}
+                            <div className='post-actions'>
+                              {session.joined_by_me ? (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  disabled={pending}
+                                  onClick={() => void handleLeaveLiveSession(session.session_id)}
+                                >
+                                  Leave
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  disabled={pending || session.status === 'Ended'}
+                                  onClick={() => void handleJoinLiveSession(session.session_id)}
+                                >
+                                  Join
+                                </Button>
+                              )}
+                              {isOwner ? (
+                                <Button
+                                  variant='secondary'
+                                  type='button'
+                                  disabled={pending || session.status === 'Ended'}
+                                  onClick={() => void handleEndLiveSession(session.session_id)}
+                                >
+                                  End
+                                </Button>
+                              ) : null}
+                            </div>
+                          </article>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </>
+              ) : null}
+
+              {shellChromeState.activePrimarySection === 'game' ? (
+                <>
+                  <Card className='shell-workspace-card'>
+                    <div className='panel-header'>
+                      <div>
+                        <h3>Game Rooms</h3>
+                        <small>{activeGameRooms.length} tracked</small>
+                      </div>
+                    </div>
+                    {activeGamePanelState.status === 'loading' ? (
+                      <Notice>Loading game rooms…</Notice>
+                    ) : null}
+                    {activeGamePanelState.status === 'error' &&
+                    (gameError ?? activeGamePanelState.error) ? (
+                      <Notice tone='destructive'>{gameError ?? activeGamePanelState.error}</Notice>
+                    ) : null}
+                    <form
+                      className='composer composer-compact'
+                      onSubmit={handleCreateGameRoom}
+                      aria-busy={gameCreatePending}
+                    >
+                      <Label>
+                        <span>Game Title</span>
+                        <Input
+                          value={gameTitle}
+                          onChange={(event) => setGameTitle(event.target.value)}
+                          placeholder='Top 8 Finals'
+                          disabled={gameCreatePending}
+                        />
+                      </Label>
+                      <Label>
+                        <span>Game Description</span>
+                        <Textarea
+                          value={gameDescription}
+                          onChange={(event) => setGameDescription(event.target.value)}
+                          placeholder='match summary'
+                          disabled={gameCreatePending}
+                        />
+                      </Label>
+                      <Label>
+                        <span>Participants</span>
+                        <Input
+                          value={gameParticipantsInput}
+                          onChange={(event) => setGameParticipantsInput(event.target.value)}
+                          placeholder='Alice, Bob'
+                          disabled={gameCreatePending}
+                        />
+                      </Label>
+                      <div className='topic-diagnostic topic-diagnostic-secondary'>
+                        <span>Audience: {activeComposeAudienceLabel}</span>
+                      </div>
+                      <Button type='submit' disabled={gameCreatePending}>
+                        Create Room
+                      </Button>
+                    </form>
+                  </Card>
+                  <Card className='shell-workspace-card'>
+                    {activeGameRooms.length === 0 && activeGamePanelState.status === 'ready' ? (
+                      <p className='empty-state'>No game rooms</p>
+                    ) : null}
+                    <ul className='post-list'>
+                      {activeGameRooms.map((room) => {
+                        const draft = gameDraftViews[room.room_id];
+                        const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
+                        const pending = Boolean(gameSavingByRoomId[room.room_id]);
+
+                        return (
+                          <li key={room.room_id}>
+                            <article className='post-card' aria-busy={pending}>
+                              <div className='post-meta'>
+                                <span>{room.title}</span>
+                                <span>{room.status}</span>
+                                <span className='reply-chip'>{room.audience_label}</span>
+                              </div>
+                              <div className='post-body'>
+                                <strong className='post-title'>
+                                  {room.description || 'no description'}
+                                </strong>
+                              </div>
+                              <small>{room.room_id}</small>
+                              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                                <span>phase: {room.phase_label ?? 'none'}</span>
+                                <span>
+                                  updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
+                                </span>
+                              </div>
+                              <ul className='draft-attachment-list'>
+                                {room.scores.map((score) => (
+                                  <li
+                                    key={score.participant_id}
+                                    className='draft-attachment-item score-row'
+                                  >
+                                    <div className='draft-attachment-content'>
+                                      <strong>{score.label}</strong>
+                                    </div>
+                                    {isOwner ? (
+                                      <Input
+                                        aria-label={`${room.room_id}-${score.label}-score`}
+                                        value={
+                                          draft?.scores[score.participant_id] ?? String(score.score)
+                                        }
+                                        disabled={pending}
+                                        onChange={(event) =>
+                                          updateGameDraft(room.room_id, (current) => ({
+                                            ...current,
+                                            scores: {
+                                              ...current.scores,
+                                              [score.participant_id]: event.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    ) : (
+                                      <span>{score.score}</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                              {isOwner && draft ? (
+                                <div className='composer composer-compact'>
+                                  <Label>
+                                    <span>Status</span>
+                                    <Select
+                                      aria-label={`${room.room_id}-status`}
+                                      value={draft.status}
+                                      disabled={pending}
+                                      onChange={(event) =>
+                                        updateGameDraft(room.room_id, (current) => ({
+                                          ...current,
+                                          status: event.target.value as GameRoomStatus,
+                                        }))
+                                      }
+                                    >
+                                      <option value='Waiting'>Waiting</option>
+                                      <option value='Running'>Running</option>
+                                      <option value='Paused'>Paused</option>
+                                      <option value='Ended'>Ended</option>
+                                    </Select>
+                                  </Label>
+                                  <Label>
+                                    <span>Phase</span>
+                                    <Input
+                                      aria-label={`${room.room_id}-phase`}
+                                      value={draft.phaseLabel}
+                                      disabled={pending}
+                                      onChange={(event) =>
+                                        updateGameDraft(room.room_id, (current) => ({
+                                          ...current,
+                                          phase_label: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </Label>
+                                  <Button
+                                    variant='secondary'
+                                    type='button'
+                                    disabled={pending}
+                                    onClick={() => void handleUpdateGameRoom(room.room_id)}
+                                  >
+                                    Save Room
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </article>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </Card>
+                </>
+              ) : null}
+
+              {shellChromeState.activePrimarySection === 'profile' ? (
+                <>
+                  {profileMode === 'edit' ? (
+                    <ProfileEditorPanel
+                      authorLabel={profileAuthorLabel}
+                      status={profilePanelState.status}
+                      saving={profileSaving}
+                      dirty={profileDirty}
+                      error={profileError ?? profilePanelState.error}
+                      fields={profileEditorFields}
+                      onFieldChange={handleProfileFieldChange}
+                      onBack={openProfileOverview}
+                      onSave={handleSaveProfile}
+                      onReset={resetProfileDraft}
+                    />
+                  ) : (
+                    <ProfileOverviewPanel
+                      authorLabel={profileAuthorLabel}
+                      about={localProfile?.about ?? null}
+                      picture={localProfile?.picture ?? null}
+                      status={profilePanelState.status}
+                      error={profileError ?? profilePanelState.error}
+                      postCount={profileTimelinePostViews.length}
+                      onEdit={openProfileEditor}
+                    />
+                  )}
+                  <Card className='shell-workspace-card'>
+                    <TimelineFeed
+                      posts={profileTimelinePostViews}
+                      emptyCopy='No public posts from you in this topic yet.'
+                      onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                      onOpenThread={(threadId) => void openThread(threadId)}
+                      onReply={beginReply}
+                    />
+                  </Card>
+                </>
+              ) : null}
+            </section>
+          </div>
+        }
+        detailPaneStack={detailPaneStack}
+        detailPaneCount={(selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)}
+        mobileFooter={
+          <Button
+            ref={navTriggerRef}
+            variant='secondary'
+            type='button'
+            aria-label={shellChromeState.navOpen ? 'Close navigation' : 'Open navigation'}
+            aria-controls={SHELL_NAV_ID}
+            aria-expanded={shellChromeState.navOpen}
+            data-testid='shell-nav-trigger'
+            onClick={() => setNavOpen(!shellChromeState.navOpen)}
+          >
+            <PanelLeftOpen className='size-5' aria-hidden='true' />
+            Topics
+          </Button>
         }
       />
 

@@ -1,5 +1,7 @@
 import type { ChangeEventHandler, FormEventHandler } from 'react';
 
+import { X } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,13 +46,16 @@ export function ComposerPanel({
     <form className='composer' onSubmit={onSubmit}>
       {replyTarget ? (
         <div className='reply-banner'>
-          <div>
-            <strong>Replying</strong>
-            <p>{replyTarget.content}</p>
-            <small>Audience: {replyTarget.audienceLabel}</small>
-          </div>
-          <Button variant='secondary' type='button' onClick={onClearReply}>
-            Clear
+          <strong>Replying</strong>
+          <Button
+            className='shell-icon-button'
+            variant='ghost'
+            size='icon'
+            type='button'
+            aria-label='Clear reply'
+            onClick={onClearReply}
+          >
+            <X className='size-5' aria-hidden='true' />
           </Button>
         </div>
       ) : null}
@@ -61,7 +66,7 @@ export function ComposerPanel({
         placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
       />
 
-      <Label className='file-field'>
+      <Label className='file-field file-field-compact'>
         <span>Attach</span>
         <Input
           key={attachmentInputKey}

@@ -88,9 +88,17 @@
 }
 
 .shell-phase1 .file-field input[type='file'] {
-  padding: 0.65rem 0;
+  min-height: 0;
+  height: auto;
+  padding: 0.1rem 0 0;
   border: 0;
   background: transparent;
+  line-height: 1.2;
+}
+
+.shell-phase1 .file-field-compact {
+  gap: 0.15rem;
+  margin-bottom: 0;
 }
 
 .shell-phase1 .draft-attachment-list {
@@ -169,16 +177,20 @@
 .shell-phase1 .reply-banner {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  align-items: start;
-  padding: 0.9rem;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
   border-radius: 16px;
   background: rgba(0, 179, 164, 0.12);
 }
 
-.shell-phase1 .reply-banner p {
-  margin: 0.35rem 0 0;
-  color: rgba(246, 241, 232, 0.76);
+.shell-phase1 .reply-banner strong {
+  font-size: 0.96rem;
+  line-height: 1.1;
+}
+
+.shell-phase1 .reply-banner .shell-icon-button {
+  margin-left: auto;
 }
 
 .shell-phase1 .composer textarea {
@@ -204,6 +216,21 @@
 .shell-phase1 .button-secondary {
   color: inherit;
   background: var(--surface-button-secondary);
+}
+
+.shell-phase1 .button-ghost {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  box-shadow: none;
+}
+
+.shell-phase1 .button-icon {
+  inline-size: 2.1rem;
+  block-size: 2.1rem;
+  min-inline-size: 2.1rem;
+  padding: 0;
+  border-radius: 14px;
 }
 
 .shell-phase1 .status-grid {
@@ -338,6 +365,42 @@
   border-radius: 18px;
   padding: 0.95rem;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.shell-phase1 .author-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(246, 241, 232, 0.12);
+  background: linear-gradient(145deg, rgba(245, 157, 98, 0.24), rgba(0, 179, 164, 0.2));
+  color: rgba(246, 241, 232, 0.94);
+  font-weight: 700;
+  flex: none;
+}
+
+.shell-phase1 .author-avatar-sm {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 16px;
+  font-size: 0.95rem;
+}
+
+.shell-phase1 .author-avatar-lg {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 22px;
+  font-size: 1.45rem;
+}
+
+.shell-phase1 .author-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shell-phase1 .author-avatar-placeholder {
+  line-height: 1;
 }
 
 .shell-phase1 .post-card-thread {
@@ -508,13 +571,6 @@
   margin-top: 0.75rem;
 }
 
-.shell-phase1 .reply-chip {
-  display: inline-block;
-  margin-top: 0.55rem;
-  font-style: normal;
-  color: #8ce0d6;
-}
-
 .shell-phase1 .active-topic-label {
   color: rgba(246, 241, 232, 0.72);
   font-size: 0.8rem;
@@ -531,11 +587,35 @@
   color: rgba(246, 241, 232, 0.68);
 }
 
+.shell-phase1 .post-meta-author {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .shell-phase1 .post-meta-trailing, .shell-phase1 .post-actions-inline {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.shell-phase1 .post-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  color: rgba(246, 241, 232, 0.9);
+  background: rgba(0, 179, 164, 0.16);
+  line-height: 1.1;
+}
+
+.shell-phase1 .post-reply-flag {
+  display: inline-block;
+  margin-top: 0.55rem;
+  font-style: normal;
+  color: #8ce0d6;
 }
 
 .shell-phase1 .author-link {
@@ -544,6 +624,7 @@
   color: #f6f1e8;
   background: transparent;
   font-weight: 700;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -574,18 +655,113 @@
 .shell-phase1 .author-detail {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
 }
 
-.shell-phase1 .author-detail-header {
+.shell-phase1 .author-detail-toolbar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.shell-phase1 .author-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.shell-phase1 .author-detail-summary {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.shell-phase1 .author-detail-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.shell-phase1 .author-detail-name {
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.shell-phase1 .author-detail-copy {
+  margin: 0;
+  line-height: 1.45;
+  color: rgba(246, 241, 232, 0.78);
+}
+
+.shell-phase1 .author-detail-copy-stack {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.shell-phase1 .author-detail-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
-.shell-phase1 .author-detail-copy {
+.shell-phase1 .author-detail-actions .button {
+  margin-left: auto;
+}
+
+.shell-phase1 .author-detail-break,
+.shell-phase1 .author-detail-monotext {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.shell-phase1 .author-detail-monotext {
+  display: block;
   margin: 0;
-  color: rgba(246, 241, 232, 0.78);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgba(246, 241, 232, 0.54);
+}
+
+.shell-phase1 .shell-icon-button {
+  inline-size: 2.1rem;
+  block-size: 2.1rem;
+  min-inline-size: 2.1rem;
+  padding: 0;
+  border-radius: 14px;
+  color: rgba(246, 241, 232, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  box-shadow: none;
+}
+
+.shell-phase1 .shell-settings-button {
+  inline-size: 2.2rem;
+  block-size: 2.2rem;
+  min-inline-size: 2.2rem;
+}
+
+.shell-phase1 .shell-icon-button:hover,
+.shell-phase1 .shell-icon-button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.shell-phase1 .shell-icon-button svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  stroke-width: 2.35;
+}
+
+.shell-phase1 .shell-settings-button svg {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
 }
 
 .shell-phase1 .post-card small, .shell-phase1 .thread-item small {

@@ -44,7 +44,9 @@ export type PostCardView = {
   post: PostView;
   context: 'timeline' | 'thread';
   authorLabel: string;
+  authorPicture?: string | null;
   relationshipLabel: string | null;
+  audienceChipLabel?: string | null;
   threadTargetId: string;
   media: PostMediaView;
 };

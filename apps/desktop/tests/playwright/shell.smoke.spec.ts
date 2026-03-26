@@ -6,12 +6,16 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: /Seeded DHT/i })).toBeVisible();
+  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
+    'kukuri:topic:demo'
+  );
 
   await page.getByPlaceholder('kukuri:topic:demo').fill('kukuri:topic:browser');
   await page.getByRole('button', { name: 'Add' }).click();
   await page.getByRole('button', { name: /^kukuri:topic:browser$/ }).click();
-  await expect(page.getByText('Active topic: kukuri:topic:browser')).toBeVisible();
+  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
+    'kukuri:topic:browser'
+  );
 
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
   await page.getByRole('button', { name: 'Publish' }).click();
@@ -19,13 +23,14 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(page.getByText('hello browser mock')).toBeVisible();
 
   await page.getByText('hello browser mock').click();
-  await expect(page.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  const threadPane = page.getByRole('complementary', { name: 'Thread' });
+  await expect(threadPane).toBeVisible();
   await page
-    .getByRole('tabpanel', { name: 'Thread' })
+    .getByRole('complementary', { name: 'Thread' })
     .getByRole('button', { name: 'ffffffffffff' })
     .first()
     .click();
-  await expect(page.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
 
   await page.getByTestId('shell-settings-trigger').click();
   const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
@@ -76,23 +81,26 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
 
   await page.getByTestId('shell-nav-trigger').click();
   await page.getByRole('button', { name: /^kukuri:topic:demo$/ }).click();
-  await expect(page.getByText('Active topic: kukuri:topic:demo')).toBeVisible();
+  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
+    'kukuri:topic:demo'
+  );
 
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('narrow browser mock')).toBeVisible();
 
   await page.getByText('narrow browser mock').click();
-  await expect(page.getByRole('tabpanel', { name: 'Thread' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
 
   await page
-    .getByRole('tabpanel', { name: 'Thread' })
+    .getByRole('complementary', { name: 'Thread' })
     .getByRole('button', { name: 'ffffffffffff' })
     .first()
     .click();
-  await expect(page.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
 
-  await page.keyboard.press('Escape');
+  await page.goto('/');
+  await page.getByTestId('shell-nav-trigger').click();
   await page.getByTestId('shell-settings-trigger').click();
   const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
   await settingsDialog.getByTestId('settings-section-connectivity').click();
@@ -115,12 +123,12 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   expect(settingsNoOverflow).toBeTruthy();
 
   await page.keyboard.press('Escape');
-  await page.getByTestId('shell-nav-trigger').click();
   await page
-    .getByRole('navigation', { name: 'Primary sections' })
-    .getByRole('button', { name: /Profile/i })
+    .getByRole('complementary', { name: 'Primary navigation' })
+    .getByLabel('Close navigation')
     .click();
-  await expect(page.getByPlaceholder('Visible label')).toBeVisible();
+  await page.getByRole('tab', { name: 'Profile' }).click();
+  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
 
   const noOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth

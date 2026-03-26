@@ -13,7 +13,6 @@ const meta = {
   args: {
     state: STORY_THREAD_PANEL_STATE,
     posts: STORY_THREAD_POSTS,
-    onClearThread: () => undefined,
     onOpenAuthor: () => undefined,
     onOpenThread: () => undefined,
     onReply: () => undefined,
@@ -23,7 +22,6 @@ const meta = {
       <ThreadPanel
         state={STORY_THREAD_PANEL_STATE}
         posts={STORY_THREAD_POSTS}
-        onClearThread={() => undefined}
         onOpenAuthor={() => undefined}
         onOpenThread={() => undefined}
         onReply={() => undefined}

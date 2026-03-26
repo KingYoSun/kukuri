@@ -24,6 +24,16 @@
 - Windows 側は `cmd.exe /c "cd /d C:\\Users\\kgm11\\kukuri && cargo xtask desktop-package"` が pass し、`apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/kukuri_0.1.0_x64-setup.exe` を生成した。packaged app の install / interactive manual smoke は未実施。
 - 残件は `Windows packaged app の install/manual smoke` と `human review / PR attach / PR identifier` の review 事務のみ。
 
+## 2026-03-26 Desktop Shell IA v2 Update
+- shell IA は `left rail + main workspace + right detail pane stack` へ更新した。中央 lane は `workspace tabs / workspace input surface / workspace synced item list` の 3 区画のみを描画し、`Timeline / Channels / Live / Game / Profile` の同時表示は廃止した。
+- top bar は active topic の 1 行表示のみに縮小し、headline、desktop nav trigger、status badge、settings trigger は除去した。mobile nav trigger は footer-only に移し、desktop では footer 自体を描画しない。
+- left rail 上部へ `接続状況 badge 群 + Settings button` を移し、workspace switch は中央 tab header に集約した。settings button は rail header の primary action として icon size を拡大した。
+- route contract は `#/timeline`, `#/channels`, `#/live`, `#/game`, `#/profile` を維持しつつ、search param は `topic`, `timelineScope`, `composeTarget`, `context`, `threadId`, `authorPubkey`, `profileMode`, `settings` に更新した。`profileMode=edit` は `#/profile` でのみ有効とし、profile default は overview に固定した。
+- context route は `none`, `thread`, `author`, `thread -> author` の 4 組み合わせに正規化した。invalid `threadId` は detail stack 全体を閉じ、invalid nested `authorPubkey` は thread を維持したまま author pane だけを閉じる。
+- right sidebar は廃止し、desktop 幅では thread pane と author pane を必要時だけ右へ積む stack に置き換えた。detail pane 群は translucent panel をやめ、solid surface token を使う。
+- profile overview は topic-first 原則に合わせて `active topic の public timeline` を独立に読み出し、そのうち local author 投稿だけを self timeline として表示する。main timeline が private channel / all-joined scope にあっても profile list は public active topic 基準を維持する。
+- accepted UI review record は [`../ui-reviews/2026-03-26-desktop-shell-ia-v2.md`](../ui-reviews/2026-03-26-desktop-shell-ia-v2.md) を正本とする。
+
 ## Purpose / Non-goals
 
 ### Purpose

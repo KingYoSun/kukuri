@@ -29,7 +29,9 @@ function createView(overrides?: Partial<PostCardView>): PostCardView {
     post: basePost,
     context: 'timeline',
     authorLabel: 'Alice',
+    authorPicture: null,
     relationshipLabel: null,
+    audienceChipLabel: 'Public',
     threadTargetId: 'post-1',
     media: {
       objectId: 'post-1',

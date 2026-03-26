@@ -1,13 +1,11 @@
 import { useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Settings } from 'lucide-react';
 
 import { TopicNavList } from '@/components/core/TopicNavList';
-import {
-  STORY_PRIMARY_ITEMS,
-  STORY_TOPIC_ITEMS,
-} from '@/components/storyFixtures';
-import type { PrimarySection } from '@/components/shell/types';
+import { STORY_TOPIC_ITEMS } from '@/components/storyFixtures';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +14,6 @@ import { ShellNavRail } from './ShellNavRail';
 
 function ShellNavRailStory() {
   const [open, setOpen] = useState(true);
-  const [activePrimarySection, setActivePrimarySection] = useState<PrimarySection>('timeline');
   const [topicInput, setTopicInput] = useState('kukuri:topic:phase5');
 
   return (
@@ -25,9 +22,18 @@ function ShellNavRailStory() {
         railId='storybook-shell-nav'
         open={open}
         onOpenChange={setOpen}
-        primaryItems={STORY_PRIMARY_ITEMS}
-        activePrimarySection={activePrimarySection}
-        onSelectPrimarySection={setActivePrimarySection}
+        headerContent={
+          <div className='shell-nav-status'>
+            <div className='shell-status-badges'>
+              <StatusBadge label='connected' tone='accent' />
+              <StatusBadge label='2 peers' />
+              <StatusBadge label='seeded dht' />
+            </div>
+            <Button className='shell-settings-button' variant='ghost' size='icon' type='button'>
+              <Settings className='size-6' aria-hidden='true' />
+            </Button>
+          </div>
+        }
         addTopicControl={
           <Label>
             <span>Add Topic</span>
@@ -66,9 +72,7 @@ const meta = {
     railId: 'storybook-shell-nav',
     open: true,
     onOpenChange: () => undefined,
-    primaryItems: STORY_PRIMARY_ITEMS,
-    activePrimarySection: 'timeline',
-    onSelectPrimarySection: () => undefined,
+    headerContent: null,
     addTopicControl: null,
     topicList: null,
     topicCount: STORY_TOPIC_ITEMS.length,
@@ -80,4 +84,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  args: {},
+};

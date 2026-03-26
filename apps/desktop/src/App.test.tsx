@@ -13,8 +13,18 @@ import {
 } from './lib/api';
 
 beforeEach(() => {
+  setViewportWidth(1024);
   window.history.replaceState(null, '', '/');
 });
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event('resize'));
+}
 
 function buildImagePost(overrides?: Partial<PostView>): PostView {
   const attachment: AttachmentView = {
@@ -211,6 +221,31 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
   return render(<App api={api} />);
 }
 
+function expectActiveTopicBar(topic: string) {
+  expect(screen.getByRole('banner', { name: 'Active topic bar' })).toHaveTextContent(topic);
+}
+
+function getWorkspaceTabs() {
+  return screen.getByRole('tablist', { name: 'Workspaces' });
+}
+
+async function selectWorkspace(
+  user: ReturnType<typeof userEvent.setup>,
+  label: 'Timeline' | 'Channels' | 'Live' | 'Game' | 'Profile'
+) {
+  await user.click(within(getWorkspaceTabs()).getByRole('tab', { name: label }));
+  await waitFor(() => {
+    expect(within(getWorkspaceTabs()).getByRole('tab', { name: label })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+}
+
+function getDetailPane(name: 'Thread' | 'Author') {
+  return screen.getByRole('complementary', { name });
+}
+
 test('desktop shell can publish and render a post', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
@@ -221,7 +256,8 @@ test('desktop shell can publish and render a post', async () => {
   await waitFor(() => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
-  expect(screen.getByText('Seeded DHT + direct peers')).toBeInTheDocument();
+  expectActiveTopicBar('kukuri:topic:demo');
+  expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
   const demoTopic = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
   expect(demoTopic).not.toBeNull();
   expect(demoTopic).toHaveTextContent('joined / peers: 1');
@@ -237,40 +273,54 @@ test('desktop shell can publish and render a post', async () => {
 test.each([
   {
     path: '#/timeline',
-    navLabel: 'Timeline',
-    placeholder: 'Write a post',
+    workspaceLabel: 'Timeline',
+    expectedControl: () => screen.getByPlaceholderText('Write a post'),
   },
   {
     path: '#/channels',
-    navLabel: 'Channels',
-    placeholder: 'core contributors',
+    workspaceLabel: 'Channels',
+    expectedControl: () => screen.getByPlaceholderText('core contributors'),
   },
   {
     path: '#/live',
-    navLabel: 'Live',
-    placeholder: 'Friday stream',
+    workspaceLabel: 'Live',
+    expectedControl: () => screen.getByPlaceholderText('Friday stream'),
   },
   {
     path: '#/game',
-    navLabel: 'Game',
-    placeholder: 'Top 8 Finals',
+    workspaceLabel: 'Game',
+    expectedControl: () => screen.getByPlaceholderText('Top 8 Finals'),
   },
   {
     path: '#/profile',
-    navLabel: 'Profile',
-    placeholder: 'Visible label',
+    workspaceLabel: 'Profile',
+    expectedControl: () => screen.getByRole('button', { name: 'プロフィールを編集' }),
   },
-])('primary hash route $path selects the correct section', async ({ path, navLabel, placeholder }) => {
+])(
+  'primary hash route $path selects the correct section',
+  async ({ path, workspaceLabel, expectedControl }) => {
   renderAtHash(path);
 
-  const navigation = screen.getByRole('navigation', { name: 'Primary sections' });
-  const navButton = within(navigation).getByRole('button', { name: new RegExp(`^${navLabel}`) });
-  expect(screen.getByPlaceholderText(placeholder)).toBeInTheDocument();
+    const tab = within(getWorkspaceTabs()).getByRole('tab', { name: workspaceLabel });
+    expect(expectedControl()).toBeInTheDocument();
 
-  await waitFor(() => {
-    expect(navButton).toHaveAttribute('aria-current', 'location');
-    expect(window.location.hash).toBe(`${path}?topic=kukuri%3Atopic%3Ademo`);
-  });
+    await waitFor(() => {
+      expect(tab).toHaveAttribute('aria-selected', 'true');
+      expect(window.location.hash).toBe(`${path}?topic=kukuri%3Atopic%3Ademo`);
+    });
+  }
+);
+
+test('mobile nav trigger is footer-only and desktop omits it', async () => {
+  const { unmount } = render(<App api={createDesktopMockApi()} />);
+
+  expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
+
+  unmount();
+  setViewportWidth(640);
+  render(<App api={createDesktopMockApi()} />);
+
+  expect(await screen.findByTestId('shell-nav-trigger')).toBeInTheDocument();
 });
 
 test('invalid hash routes fall back to the active public timeline and normalize the URL', async () => {
@@ -281,7 +331,7 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByText('Active topic: kukuri:topic:demo')).toBeInTheDocument();
+  expectActiveTopicBar('kukuri:topic:demo');
   expect(
     screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
   ).not.toBeInTheDocument();
@@ -319,10 +369,9 @@ test('thread context restores from the hash route and loads the requested thread
   );
 
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Thread')).toBeInTheDocument();
   });
-  expect(screen.getByRole('tabpanel', { name: 'Thread' })).toBeInTheDocument();
-  expect(screen.getAllByText('open thread from timeline').length).toBeGreaterThan(0);
+  expect(within(getDetailPane('Thread')).getAllByText('open thread from timeline').length).toBeGreaterThan(0);
 });
 
 test('author context restores from the hash route when a valid author pubkey is supplied', async () => {
@@ -346,9 +395,75 @@ test('author context restores from the hash route when a valid author pubkey is 
   );
 
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Author')).toBeInTheDocument();
   });
-  expect(screen.getByText('author detail from route restore')).toBeInTheDocument();
+  expect(within(getDetailPane('Author')).getByText('author detail from route restore')).toBeInTheDocument();
+});
+
+test('profile edit route restores the editor and keeps overview as the default profile mode', async () => {
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=edit');
+
+  expect(screen.getByPlaceholderText('Visible label')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'プロフィールに戻る' })).toBeInTheDocument();
+});
+
+test('invalid nested author route keeps the thread pane and normalizes only the author param', async () => {
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&authorPubkey=bad',
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'post-thread-open',
+            envelope_id: 'envelope-thread-open',
+            author_pubkey: 'b'.repeat(64),
+            author_name: 'bob',
+            author_display_name: null,
+            following: false,
+            followed_by: true,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'open thread from timeline',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(getDetailPane('Thread')).toBeInTheDocument();
+    expect(window.location.hash).toBe(
+      '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open'
+    );
+  });
+  expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+});
+
+test('invalid thread route closes the entire detail stack and normalizes the URL', async () => {
+  renderAtHash(
+    `#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=missing-thread&authorPubkey=${'b'.repeat(64)}`,
+    createDesktopMockApi({
+      authorSocialViews: {
+        ['b'.repeat(64)]: {
+          name: 'bob',
+        },
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
 });
 
 test('settings hash route opens the drawer and keeps the selected section in sync', async () => {
@@ -383,6 +498,7 @@ test('topic and private channel selection sync into the hash route', async () =>
   });
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
+  await selectWorkspace(user, 'Channels');
   await user.type(screen.getByPlaceholderText('core contributors'), 'core');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
 
@@ -422,9 +538,9 @@ test('desktop shell can enter reply mode and render reply state', async () => {
     expect(screen.getByText('root post')).toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'Reply' }));
+  await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
+  expect(await screen.findByPlaceholderText('Write a reply')).toBeInTheDocument();
   expect(screen.getByText('Replying')).toBeInTheDocument();
-  expect(screen.getByPlaceholderText('Write a reply')).toBeInTheDocument();
 
   const replyInput = screen.getByPlaceholderText('Write a reply');
   await user.type(replyInput, 'reply post');
@@ -461,10 +577,8 @@ test('reply publish reloads thread only once after a successful submit', async (
     expect(screen.getByText('root post')).toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'Reply' }));
-  await waitFor(() => {
-    expect(screen.getByPlaceholderText('Write a reply')).toBeInTheDocument();
-  });
+  await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
+  await screen.findByPlaceholderText('Write a reply');
   const threadCallsBeforeSubmit = listThreadSpy.mock.calls.length;
 
   const replyInput = screen.getByPlaceholderText('Write a reply');
@@ -516,6 +630,56 @@ test('desktop shell can track multiple topics at once', async () => {
   expect(demoTopic).not.toHaveTextContent('Connected to all configured peers for this topic');
 });
 
+test('profile overview follows the active topic public timeline, not the current compose or channel scope', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await user.type(screen.getByPlaceholderText('Write a post'), 'demo public post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('demo public post')).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Channels');
+  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
+  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Create Invite' })).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Timeline');
+  expect((screen.getByLabelText('Compose Target') as HTMLSelectElement).value).toMatch(
+    /^channel:channel-/
+  );
+  await user.type(screen.getByPlaceholderText('Write a post'), 'demo private post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('demo private post')).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Profile');
+  expect(screen.getByText('demo public post')).toBeInTheDocument();
+  expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
+
+  await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
+  await waitFor(() => {
+    expectActiveTopicBar('kukuri:topic:second');
+  });
+
+  await selectWorkspace(user, 'Timeline');
+  await user.type(screen.getByPlaceholderText('Write a post'), 'second public post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.getByText('second public post')).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Profile');
+  expect(screen.getByText('second public post')).toBeInTheDocument();
+  expect(screen.queryByText('demo public post')).not.toBeInTheDocument();
+});
+
 test('removing the active topic falls back to the remaining tracked topic', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
@@ -525,7 +689,7 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Active topic: kukuri:topic:second')).toBeInTheDocument();
+    expectActiveTopicBar('kukuri:topic:second');
   });
 
   await user.click(screen.getByRole('button', { name: 'Remove kukuri:topic:second' }));
@@ -534,7 +698,7 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
     expect(
       screen.queryByRole('button', { name: 'kukuri:topic:second' })
     ).not.toBeInTheDocument();
-    expect(screen.getByText('Active topic: kukuri:topic:demo')).toBeInTheDocument();
+    expectActiveTopicBar('kukuri:topic:demo');
   });
 });
 
@@ -585,17 +749,17 @@ test('clicking a timeline post opens thread and author detail flows in the conte
 
   await user.click(await screen.findByText('open thread from timeline'));
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Thread')).toBeInTheDocument();
   });
-  expect(screen.getByRole('tabpanel', { name: 'Thread' })).toBeInTheDocument();
+  expect(within(getDetailPane('Thread')).getByText('open thread from timeline')).toBeInTheDocument();
 
-  await user.click(screen.getAllByRole('button', { name: 'bob' })[0]);
+  await user.click(within(getDetailPane('Thread')).getAllByRole('button', { name: 'bob' })[0]);
 
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Author')).toBeInTheDocument();
   });
-  expect(screen.getByText('Author Detail')).toBeInTheDocument();
-  expect(screen.getByText('author detail from timeline')).toBeInTheDocument();
+  expect(within(getDetailPane('Author')).getByTestId('author-detail-avatar')).toBeInTheDocument();
+  expect(within(getDetailPane('Author')).getByText('author detail from timeline')).toBeInTheDocument();
 });
 
 test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', async () => {
@@ -651,7 +815,7 @@ test('desktop shell primary nav jumps focus and settings drawer restores trigger
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  const gameNav = screen.getByRole('button', { name: /Game/i });
+  const gameNav = within(getWorkspaceTabs()).getByRole('tab', { name: 'Game' });
   await user.click(gameNav);
 
   const gameSection = screen.getByPlaceholderText('Top 8 Finals').closest('.shell-section');
@@ -660,11 +824,13 @@ test('desktop shell primary nav jumps focus and settings drawer restores trigger
   }
 
   await waitFor(() => {
-    expect(gameNav).toHaveAttribute('aria-current', 'location');
+    expect(gameNav).toHaveAttribute('aria-selected', 'true');
     expect(gameSection).toHaveFocus();
   });
 
   const settingsTrigger = screen.getByTestId('shell-settings-trigger');
+  expect(settingsTrigger.querySelector('.lucide-settings')).toBeTruthy();
+  expect(settingsTrigger.querySelector('.lucide-settings-2')).toBeFalsy();
   await user.click(settingsTrigger);
   await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
 
@@ -682,6 +848,7 @@ test('desktop shell can create, join, leave, and end a live session', async () =
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
+  await selectWorkspace(user, 'Live');
   await user.type(screen.getByPlaceholderText('Friday stream'), 'Launch Party');
   await user.type(screen.getByPlaceholderText('short session summary'), 'watch along');
   await user.click(screen.getByRole('button', { name: 'Start Live' }));
@@ -712,14 +879,15 @@ test('desktop shell can create a private channel and export an invite', async ()
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
+  await selectWorkspace(user, 'Channels');
   expect(screen.queryByRole('button', { name: 'Create Invite' })).not.toBeInTheDocument();
 
   await user.type(screen.getByPlaceholderText('core contributors'), 'core');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-1');
-    expect(screen.getByText(/Posting to: core/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Invite' })).toBeInTheDocument();
+    expect(screen.getByText(/Policy:/i)).toBeInTheDocument();
   });
 
   await user.click(screen.getByRole('button', { name: 'Create Invite' }));
@@ -747,6 +915,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
     />
   );
 
+  await selectWorkspace(user, 'Channels');
   await user.type(
     screen.getByPlaceholderText(/paste private channel invite/i),
     'invite-token'
@@ -757,10 +926,14 @@ test('desktop shell joins an imported private channel and selects its topic scop
     expect(
       screen.getByRole('button', { name: 'kukuri:topic:private-imported' })
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Imported' })).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Timeline');
+
+  await waitFor(() => {
     expect(screen.getByLabelText('View Scope')).toHaveValue('channel:channel-imported');
     expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-imported');
-    expect(screen.getByText(/Viewing: Imported/i)).toBeInTheDocument();
-    expect(screen.getByText(/Posting to: Imported/i)).toBeInTheDocument();
   });
 });
 
@@ -768,6 +941,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
+  await selectWorkspace(user, 'Channels');
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends');
   await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_only');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
@@ -790,6 +964,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
+  await selectWorkspace(user, 'Channels');
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends+');
   await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_plus');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
@@ -815,6 +990,7 @@ test('desktop shell can create and update a game room', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
+  await selectWorkspace(user, 'Game');
   await user.type(screen.getByPlaceholderText('Top 8 Finals'), 'Grand Finals');
   await user.type(screen.getByPlaceholderText('match summary'), 'set one');
   await user.type(screen.getByPlaceholderText('Alice, Bob'), 'Alice, Bob');
@@ -1115,7 +1291,7 @@ test('thread pane reuses the same image placeholder renderer', async () => {
     expect(screen.getByText('envelope-image-post')).toBeInTheDocument();
   });
   await user.click(screen.getByText('envelope-image-post'));
-  const threadPanel = await screen.findByRole('tabpanel', { name: 'Thread' });
+  const threadPanel = await screen.findByRole('complementary', { name: 'Thread' });
 
   await waitFor(() => {
     expect(within(threadPanel).getByText('syncing image')).toBeInTheDocument();
@@ -1468,64 +1644,63 @@ test('community node panel activates relay connectivity on the current session a
   });
 });
 
-test('context pane auto-switches between author and thread and keeps manual tab selection', async () => {
+test('timeline author detail opens as a single pane, and thread author detail stacks to the right', async () => {
   const user = userEvent.setup();
   const authorPubkey = 'a'.repeat(64);
-
-  render(
-    <App
-      api={createDesktopMockApi({
-        seedPosts: {
-          'kukuri:topic:demo': [
-            {
-              object_id: 'context-post',
-              envelope_id: 'envelope-context-post',
-              author_pubkey: authorPubkey,
-              author_name: 'alice',
-              author_display_name: null,
-              following: false,
-              followed_by: false,
-              mutual: false,
-              friend_of_friend: false,
-              object_kind: 'post',
-              content: 'context body',
-              content_status: 'Available',
-              attachments: [],
-              created_at: 1,
-              reply_to: null,
-              root_id: 'context-post',
-              audience_label: 'Public',
-            },
-          ],
-        },
-        authorSocialViews: {
-          [authorPubkey]: {
-            name: 'alice',
+  const createApi = () =>
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'context-post',
+            envelope_id: 'envelope-context-post',
+            author_pubkey: authorPubkey,
+            author_name: 'alice',
+            author_display_name: null,
+            following: false,
+            followed_by: false,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'context body',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'context-post',
+            audience_label: 'Public',
           },
+        ],
+      },
+      authorSocialViews: {
+        [authorPubkey]: {
+          name: 'alice',
         },
-      })}
-    />
-  );
+      },
+    });
+
+  const { unmount } = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', createApi());
 
   await user.click(await screen.findByRole('button', { name: 'alice' }));
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Author')).toBeInTheDocument();
   });
+  expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
 
-  await user.click(screen.getByText('envelope-context-post'));
+  unmount();
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', createApi());
+
+  await user.click(await screen.findByRole('button', { name: /context body/i }));
   await waitFor(() => {
-    expect(screen.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+    expect(getDetailPane('Thread')).toBeInTheDocument();
   });
+  expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('tab', { name: 'Author' }));
-  expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
-
-  await user.click(screen.getByRole('button', { name: 'Clear Author' }));
-  const authorPanel = screen.getByRole('tabpanel', { name: 'Author' });
-  expect(screen.getByRole('tab', { name: 'Author' })).toHaveAttribute('aria-selected', 'true');
-  expect(
-    within(authorPanel).getByText('Select an author to inspect profile and relationship.')
-  ).toBeInTheDocument();
+  await user.click(within(getDetailPane('Thread')).getByRole('button', { name: 'alice' }));
+  await waitFor(() => {
+    expect(getDetailPane('Author')).toBeInTheDocument();
+  });
+  expect(getDetailPane('Thread')).toBeInTheDocument();
 });
 
 test('post card shows friend of friend badge and author name fallback', async () => {
@@ -1605,7 +1780,7 @@ test('author detail shows via authors and follow action updates relationship', a
 
   await user.click(await screen.findByRole('button', { name: 'bob' }));
 
-  expect(await screen.findByText('Author Detail')).toBeInTheDocument();
+  expect(await screen.findByTestId('author-detail-avatar')).toBeInTheDocument();
   expect(screen.getByText(`${viaA.slice(0, 12)}, ${viaB.slice(0, 12)}`)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Follow' })).toBeInTheDocument();
 
@@ -1623,8 +1798,8 @@ test('local profile editor saves profile draft from primary navigation and setti
 
   render(<App api={api} />);
 
-  const primaryNav = screen.getByRole('navigation', { name: 'Primary sections' });
-  await user.click(within(primaryNav).getByRole('button', { name: /Profile/i }));
+  await selectWorkspace(user, 'Profile');
+  await user.click(screen.getByRole('button', { name: 'プロフィールを編集' }));
   const profileSection = screen.getByPlaceholderText('Visible label').closest('.shell-section');
   if (!(profileSection instanceof HTMLElement)) {
     throw new Error('profile section not found');
@@ -1635,7 +1810,9 @@ test('local profile editor saves profile draft from primary navigation and setti
   await user.click(within(profileSection).getByRole('button', { name: 'Save Profile' }));
 
   await waitFor(() => {
-    expect(within(profileSection).getByText('Local Author')).toBeInTheDocument();
+    expect(screen.getByText('Local Author')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'プロフィールを編集' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
   });
 
   const drawer = await openSettingsDrawer(user);

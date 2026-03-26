@@ -18,7 +18,6 @@ const meta = {
   args: {
     view: STORY_AUTHOR_DETAIL_VIEW,
     localAuthorPubkey: 'f'.repeat(64),
-    onClearAuthor: () => undefined,
     onToggleRelationship: () => undefined,
   },
 } satisfies Meta<typeof AuthorDetailCard>;
