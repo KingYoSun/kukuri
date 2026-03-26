@@ -6,6 +6,7 @@
   --muted-foreground: rgba(246, 241, 232, 0.72);
   --muted-foreground-soft: rgba(246, 241, 232, 0.58);
   --surface-panel: rgba(6, 12, 18, 0.48);
+  --surface-panel-solid: #0c1721;
   --surface-panel-accent: linear-gradient(160deg, rgba(255, 132, 74, 0.14), rgba(8, 17, 26, 0.55));
   --surface-input: rgba(10, 16, 24, 0.8);
   --surface-raised: rgba(8, 15, 23, 0.72);

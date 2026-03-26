@@ -1,31 +1,19 @@
-import { useMemo, useState } from 'react';
-
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { PanelLeftOpen, Settings } from 'lucide-react';
 
-import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
-import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
-import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
-import {
-  communityNodePanelFixture,
-  connectivityPanelFixture,
-  discoveryPanelFixture,
-} from '@/components/settings/fixtures';
+import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
+import { TopicNavList } from '@/components/core/TopicNavList';
+import { STORY_TOPIC_ITEMS } from '@/components/storyFixtures';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Notice } from '@/components/ui/notice';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 import { ContextPane } from './ContextPane';
 import { ShellFrame } from './ShellFrame';
 import { ShellNavRail } from './ShellNavRail';
-import { SettingsDrawer } from './SettingsDrawer';
 import { ShellTopBar } from './ShellTopBar';
-import {
-  type ContextPaneMode,
-  type PrimarySection,
-  type SettingsSection,
-  type ShellChromeState,
-} from './types';
 
 const meta = {
   title: 'Shell/ShellFrame',
@@ -38,375 +26,99 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-type ShellStoryFixtureProps = {
-  width: number;
-  initialChromeState?: Partial<ShellChromeState>;
-};
-
-const PRIMARY_ITEMS: Array<{
-  id: PrimarySection;
-  label: string;
-  description: string;
-}> = [
-  { id: 'timeline', label: 'Timeline', description: 'Feed and scope controls' },
-  { id: 'channels', label: 'Channels', description: 'Private channel entry and composer' },
-  { id: 'live', label: 'Live', description: 'Live sessions and status' },
-  { id: 'game', label: 'Game', description: 'Scoreboards and room editing' },
-  { id: 'profile', label: 'Profile', description: 'Edit author identity' },
-];
-
-const SETTINGS_ITEMS: Array<{
-  id: SettingsSection;
-  label: string;
-  description: string;
-}> = [
-  { id: 'connectivity', label: 'Connectivity', description: 'Peer status and tickets' },
-  { id: 'discovery', label: 'Discovery', description: 'Seed configuration and diagnostics' },
-  {
-    id: 'community-node',
-    label: 'Community Node',
-    description: 'Auth, consent, and community metadata',
-  },
-];
-
-function ShellStoryFixture({ width, initialChromeState }: ShellStoryFixtureProps) {
-  const [chromeState, setChromeState] = useState<ShellChromeState>({
-    activePrimarySection: 'timeline',
-    activeContextPaneMode: 'thread',
-    activeSettingsSection: 'connectivity',
-    navOpen: false,
-    contextOpen: false,
-    settingsOpen: false,
-    ...initialChromeState,
-  });
-  const [peerTicketInput, setPeerTicketInput] = useState(connectivityPanelFixture.peerTicketInput);
-  const [seedPeersInput, setSeedPeersInput] = useState(discoveryPanelFixture.seedPeersInput);
-  const [baseUrlsInput, setBaseUrlsInput] = useState(communityNodePanelFixture.baseUrlsInput);
-
-  const contextTabs = useMemo(
-    () => [
-      {
-        id: 'thread' as ContextPaneMode,
-        label: 'Thread',
-        summary: '3 replies in the active thread',
-        content: (
-          <div className='shell-main-stack'>
-            <Card>
-              <h3>Thread</h3>
-              <p className='lede'>Keep the reading context visible without taking over the workspace.</p>
-            </Card>
-          </div>
-        ),
-      },
-      {
-        id: 'author' as ContextPaneMode,
-        label: 'Author',
-        summary: 'alice',
-        content: (
-          <div className='shell-main-stack'>
-            <Card>
-              <h3>Author Detail</h3>
-              <p className='lede'>Profile, relationship badges, and follow actions live here.</p>
-            </Card>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
-  const settingsSections = useMemo(
-    () => [
-      {
-        ...SETTINGS_ITEMS[0],
-        content: (
-          <ConnectivityPanel
-            view={{ ...connectivityPanelFixture, peerTicketInput }}
-            onPeerTicketInputChange={setPeerTicketInput}
-            onImportPeer={() => {}}
-          />
-        ),
-      },
-      {
-        ...SETTINGS_ITEMS[1],
-        content: (
-          <DiscoveryPanel
-            view={{ ...discoveryPanelFixture, seedPeersInput }}
-            saveDisabled={false}
-            resetDisabled={false}
-            onSeedPeersChange={setSeedPeersInput}
-            onSave={() => {}}
-            onReset={() => setSeedPeersInput(discoveryPanelFixture.seedPeersInput)}
-          />
-        ),
-      },
-      {
-        ...SETTINGS_ITEMS[2],
-        content: (
-          <CommunityNodePanel
-            view={{ ...communityNodePanelFixture, baseUrlsInput }}
-            saveDisabled={false}
-            resetDisabled={false}
-            clearDisabled={false}
-            onBaseUrlsChange={setBaseUrlsInput}
-            onSaveNodes={() => {}}
-            onReset={() => setBaseUrlsInput(communityNodePanelFixture.baseUrlsInput)}
-            onClearNodes={() => setBaseUrlsInput('')}
-            onAuthenticate={() => {}}
-            onFetchConsents={() => {}}
-            onAcceptConsents={() => {}}
-            onRefresh={() => {}}
-            onClearToken={() => {}}
-          />
-        ),
-      },
-    ],
-    [baseUrlsInput, peerTicketInput, seedPeersInput]
-  );
-
+function ShellFrameStory() {
   return (
-    <div style={{ maxWidth: `${width}px`, margin: '0 auto' }}>
+    <div style={{ width: '1440px', minWidth: '1440px', margin: '0 auto' }}>
       <ShellFrame
-        skipTargetId='story-shell-workspace'
-        topBar={
-          <ShellTopBar
-            headline='Seeded DHT + direct peers'
-            activeTopic='kukuri:topic:demo'
-            statusBadges={
-              <>
-                <StatusBadge label='connected' tone='accent' />
-                <StatusBadge label='1 peers' />
-                <StatusBadge label='seeded dht' />
-              </>
-            }
-            navOpen={chromeState.navOpen}
-            settingsOpen={chromeState.settingsOpen}
-            navControlsId='story-shell-nav'
-            settingsControlsId='story-shell-settings'
-            onToggleNav={() =>
-              setChromeState((current) => ({
-                ...current,
-                navOpen: !current.navOpen,
-              }))
-            }
-            onToggleSettings={() =>
-              setChromeState((current) => ({
-                ...current,
-                settingsOpen: !current.settingsOpen,
-              }))
-            }
-          />
-        }
+        skipTargetId='storybook-shell-workspace'
+        topBar={<ShellTopBar activeTopic='kukuri:topic:demo' />}
         navRail={
           <ShellNavRail
-            railId='story-shell-nav'
-            open={chromeState.navOpen}
-            onOpenChange={(open) =>
-              setChromeState((current) => ({
-                ...current,
-                navOpen: open,
-              }))
-            }
-            primaryItems={PRIMARY_ITEMS}
-            activePrimarySection={chromeState.activePrimarySection}
-            onSelectPrimarySection={(section) =>
-              setChromeState((current) => ({
-                ...current,
-                activePrimarySection: section,
-              }))
-            }
-            addTopicControl={
-              <div className='composer composer-compact'>
-                <label className='field flex flex-col gap-2'>
-                  <span>Add Topic</span>
-                  <input
-                    className='h-11 w-full rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-input)] px-4 py-3 text-sm text-foreground'
-                    placeholder='kukuri:topic:demo'
-                    readOnly
-                    value='kukuri:topic:design'
-                  />
-                </label>
-                <Button variant='secondary'>Add</Button>
+            railId='storybook-shell-nav'
+            open={true}
+            onOpenChange={() => undefined}
+            headerContent={
+              <div className='shell-nav-status'>
+                <div className='shell-status-badges'>
+                  <StatusBadge label='connected' tone='accent' />
+                  <StatusBadge label='2 peers' />
+                  <StatusBadge label='seeded dht' />
+                </div>
+                <Button variant='ghost' size='icon' type='button'>
+                  <Settings className='size-5' aria-hidden='true' />
+                </Button>
               </div>
             }
-            topicList={
-              <ul>
-                <li className='topic-item topic-item-active'>
-                  <button className='topic-link' type='button'>
-                    <span className='shell-topic-link-label'>kukuri:topic:demo</span>
-                  </button>
-                  <div className='topic-diagnostic'>
-                    <span>joined / peers: 1</span>
-                    <small>12:45:11</small>
-                  </div>
-                </li>
-                <li className='topic-item'>
-                  <button className='topic-link' type='button'>
-                    <span className='shell-topic-link-label'>kukuri:topic:staging-preview</span>
-                  </button>
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>relay-assisted / peers: 1</span>
-                    <small>no events</small>
-                  </div>
-                </li>
-              </ul>
+            addTopicControl={
+              <Label>
+                <span>Add Topic</span>
+                <div className='topic-input-row'>
+                  <Input value='kukuri:topic:demo' onChange={() => undefined} />
+                  <Button variant='secondary' type='button'>
+                    Add
+                  </Button>
+                </div>
+              </Label>
             }
-            topicCount={2}
+            topicList={
+              <TopicNavList
+                items={STORY_TOPIC_ITEMS}
+                onSelectTopic={() => undefined}
+                onRemoveTopic={() => undefined}
+              />
+            }
+            topicCount={STORY_TOPIC_ITEMS.length}
           />
         }
         workspace={
           <div className='shell-main-stack'>
+            <Card className='shell-workspace-card shell-workspace-header-card'>
+              <TimelineWorkspaceHeader
+                activeSection='timeline'
+                items={[
+                  { id: 'timeline', label: 'Timeline' },
+                  { id: 'channels', label: 'Channels' },
+                  { id: 'live', label: 'Live' },
+                  { id: 'game', label: 'Game' },
+                  { id: 'profile', label: 'Profile' },
+                ]}
+                onSelectSection={() => undefined}
+              />
+            </Card>
             <Card className='shell-workspace-card'>
-              <section className='shell-section' tabIndex={-1}>
-                <div className='shell-workspace-header'>
-                  <div>
-                    <h2>Timeline</h2>
-                    <span className='active-topic-label'>kukuri:topic:demo</span>
-                  </div>
-                  <div className='shell-inline-actions'>
-                    <StatusBadge label='viewing public' />
-                    <StatusBadge label='posting public' />
-                    <Button
-                      className='shell-context-trigger'
-                      variant='ghost'
-                      onClick={() =>
-                        setChromeState((current) => ({
-                          ...current,
-                          contextOpen: true,
-                        }))
-                      }
-                    >
-                      Open Context
-                    </Button>
-                    <Button variant='secondary'>Refresh</Button>
-                  </div>
-                </div>
-                <Notice tone='accent'>
-                  Timeline header, scope selectors, and refresh remain in the primary workspace.
-                </Notice>
-              </section>
-
-              <section className='shell-section' tabIndex={-1}>
-                <Card className='panel-subsection'>
-                  <h3>Channels & Composer</h3>
-                  <p className='lede'>
-                    Private channel controls, invite import, and the main composer stay together.
-                  </p>
-                </Card>
-              </section>
-
-              <section className='shell-section' tabIndex={-1}>
-                <Card className='panel-subsection'>
-                  <h3>Live</h3>
-                  <p className='lede'>Live session entry remains in the workspace stack.</p>
-                </Card>
-              </section>
-
-              <section className='shell-section' tabIndex={-1}>
-                <Card className='panel-subsection'>
-                  <h3>Game</h3>
-                  <p className='lede'>Game room entry and score editing live below live sessions.</p>
-                </Card>
-              </section>
-
-              <section className='shell-section' tabIndex={-1}>
-                <Card className='panel-subsection'>
-                  <h3>Profile</h3>
-                  <p className='lede'>Profile editing is promoted into the primary workspace in Phase 3.</p>
-                </Card>
-              </section>
-
-              <Card className='panel-subsection'>
-                <h3>Timeline Feed</h3>
-                <p className='lede'>Posts render last so composer-heavy flows stay above the fold.</p>
-              </Card>
+              <h3>Workspace Input</h3>
+              <p className='lede'>Active workspace input lives here.</p>
+            </Card>
+            <Card className='shell-workspace-card'>
+              <h3>Workspace List</h3>
+              <p className='lede'>Synchronized items render here.</p>
             </Card>
           </div>
         }
-        contextPane={
+        detailPaneStack={
           <ContextPane
-            paneId='story-shell-context'
-            open={chromeState.contextOpen}
-            onOpenChange={(open) =>
-              setChromeState((current) => ({
-                ...current,
-                contextOpen: open,
-              }))
-            }
-            activeMode={chromeState.activeContextPaneMode}
-            onModeChange={(mode) =>
-              setChromeState((current) => ({
-                ...current,
-                activeContextPaneMode: mode,
-              }))
-            }
-            tabs={contextTabs}
-          />
+            paneId='storybook-shell-thread'
+            title='Thread'
+            summary='2 posts in thread'
+            onClose={() => undefined}
+          >
+            <Card>
+              <p className='lede'>Thread detail pane</p>
+            </Card>
+          </ContextPane>
         }
-      />
-
-      <SettingsDrawer
-        drawerId='story-shell-settings'
-        open={chromeState.settingsOpen}
-        onOpenChange={(open) =>
-          setChromeState((current) => ({
-            ...current,
-            settingsOpen: open,
-          }))
+        detailPaneCount={1}
+        mobileFooter={
+          <Button variant='secondary' type='button'>
+            <PanelLeftOpen className='size-5' aria-hidden='true' />
+            Topics
+          </Button>
         }
-        activeSection={chromeState.activeSettingsSection}
-        onSectionChange={(section) =>
-          setChromeState((current) => ({
-            ...current,
-            activeSettingsSection: section,
-          }))
-        }
-        sections={settingsSections}
       />
     </div>
   );
 }
 
-export const Wide: Story = {
-  render: () => <ShellStoryFixture width={1360} />,
-};
-
-export const Narrow: Story = {
-  render: () => <ShellStoryFixture width={700} />,
-};
-
-export const SettingsDrawerOpen: Story = {
-  render: () => (
-    <ShellStoryFixture
-      width={1360}
-      initialChromeState={{
-        settingsOpen: true,
-        activeSettingsSection: 'community-node',
-      }}
-    />
-  ),
-};
-
-export const ContextThread: Story = {
-  render: () => (
-    <ShellStoryFixture
-      width={1360}
-      initialChromeState={{
-        contextOpen: true,
-        activeContextPaneMode: 'thread',
-      }}
-    />
-  ),
-};
-
-export const ContextAuthor: Story = {
-  render: () => (
-    <ShellStoryFixture
-      width={1360}
-      initialChromeState={{
-        contextOpen: true,
-        activeContextPaneMode: 'author',
-      }}
-    />
-  ),
+export const Default: Story = {
+  render: () => <ShellFrameStory />,
 };

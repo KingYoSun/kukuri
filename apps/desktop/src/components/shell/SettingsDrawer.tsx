@@ -61,13 +61,14 @@ export function SettingsDrawer({
               </h2>
             </div>
             <Button
+              className='shell-icon-button'
               variant='ghost'
               size='icon'
               type='button'
               aria-label='Close settings and diagnostics'
               onClick={() => onOpenChange(false)}
             >
-              <X className='size-4' aria-hidden='true' />
+              <X className='size-5' aria-hidden='true' />
             </Button>
           </div>
           <nav aria-label='Settings sections' className='shell-settings-nav-list'>

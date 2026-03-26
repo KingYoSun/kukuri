@@ -13,12 +13,12 @@ const buttonVariants = cva(
         primary: 'shadow-[0_10px_28px_rgba(245,157,98,0.16)]',
         secondary: 'button-secondary',
         ghost:
-          'border border-[var(--border-subtle)] bg-transparent text-foreground shadow-none hover:bg-white/5',
+          'button-ghost border border-[var(--border-subtle)] bg-transparent text-foreground shadow-none hover:bg-white/5',
       },
       size: {
         default: 'min-h-11 px-4 py-3',
         sm: 'min-h-9 px-3 py-2 text-sm',
-        icon: 'size-10 p-0',
+        icon: 'button-icon size-10 p-0',
       },
     },
     defaultVariants: {

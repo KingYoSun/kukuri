@@ -6,7 +6,7 @@ test('browser mock hash routes deep link profile, channels, and settings surface
   await page.setViewportSize({ width: 1400, height: 980 });
 
   await page.goto('/#/profile');
-  await expect(page.getByPlaceholder('Visible label')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goto('/#/channels');
@@ -31,12 +31,9 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await page.setViewportSize({ width: 700, height: 980 });
   await page.goto('/');
 
-  await page.getByTestId('shell-nav-trigger').click();
-  await page
-    .getByRole('navigation', { name: 'Primary sections' })
-    .getByRole('button', { name: /Profile/i })
-    .click();
-  await expect(page.getByPlaceholder('Visible label')).toBeVisible();
+  await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
+  await page.getByRole('tab', { name: 'Profile' }).click();
+  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goBack();
@@ -49,7 +46,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.getByText('route history post').click();
   await expect(page).toHaveURL(/context=thread/);
-  await expect(page.getByRole('tab', { name: 'Thread' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
 
   await page.goBack();
   await expect(page).not.toHaveURL(/context=thread/);
@@ -57,13 +54,10 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.goForward();
   await expect(page).toHaveURL(/context=thread/);
+  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
 
   await page.goBack();
-  await page.getByTestId('shell-nav-trigger').click();
-  await page
-    .getByRole('navigation', { name: 'Primary sections' })
-    .getByRole('button', { name: /Channels/i })
-    .click();
+  await page.getByRole('tab', { name: 'Channels' }).click();
   await expect(page).toHaveURL(/#\/channels\?topic=/);
   await expect(page.getByPlaceholder('core contributors')).toBeVisible();
 

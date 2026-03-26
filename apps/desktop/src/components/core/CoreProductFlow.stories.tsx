@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -8,6 +9,7 @@ import { ThreadPanel } from '@/components/core/ThreadPanel';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TopicNavList } from '@/components/core/TopicNavList';
+import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
 import { ShellTopBar } from '@/components/shell/ShellTopBar';
@@ -95,7 +97,9 @@ const TIMELINE_POSTS: PostCardView[] = [
     },
     context: 'timeline',
     authorLabel: 'bob',
+    authorPicture: null,
     relationshipLabel: 'mutual',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-1',
     media: {
       objectId: 'timeline-post-1',
@@ -134,7 +138,9 @@ const TIMELINE_POSTS: PostCardView[] = [
     },
     context: 'timeline',
     authorLabel: 'Carol',
+    authorPicture: null,
     relationshipLabel: 'friend of friend',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-2',
     media: {
       objectId: 'timeline-post-2',
@@ -181,7 +187,9 @@ const THREAD_POSTS: PostCardView[] = [
     },
     context: 'thread',
     authorLabel: 'dan',
+    authorPicture: null,
     relationshipLabel: 'follows you',
+    audienceChipLabel: 'Public',
     threadTargetId: 'timeline-post-1',
     media: {
       objectId: 'thread-reply-1',
@@ -232,46 +240,37 @@ function CoreProductFlowStory({ width }: { width: number }) {
   const [topicInput, setTopicInput] = useState('kukuri:topic:phase2');
   const primaryItems = useMemo(
     () => [
-      { id: 'timeline' as const, label: 'Timeline', description: 'Core publish and reading flow' },
-      { id: 'channels' as const, label: 'Channels', description: 'Private channel controls' },
-      { id: 'live' as const, label: 'Live', description: 'Session management' },
-      { id: 'game' as const, label: 'Game', description: 'Room and scoreboards' },
-      { id: 'profile' as const, label: 'Profile', description: 'Author identity editor' },
+      { id: 'timeline' as const, label: 'Timeline' },
+      { id: 'channels' as const, label: 'Channels' },
+      { id: 'live' as const, label: 'Live' },
+      { id: 'game' as const, label: 'Game' },
+      { id: 'profile' as const, label: 'Profile' },
     ],
     []
   );
 
   return (
-    <div style={{ maxWidth: `${width}px`, margin: '0 auto' }}>
+    <div style={{ width: `${width}px`, minWidth: `${width}px`, margin: '0 auto' }}>
       <ShellFrame
         skipTargetId='core-story-workspace'
-        topBar={
-          <ShellTopBar
-            headline='Seeded DHT + direct peers'
-            activeTopic='kukuri:topic:demo'
-            statusBadges={
-              <>
-                <StatusBadge label='connected' tone='accent' />
-                <StatusBadge label='2 peers' />
-                <StatusBadge label='seeded dht' />
-              </>
-            }
-            navOpen={false}
-            settingsOpen={false}
-            navControlsId='core-story-nav'
-            settingsControlsId='core-story-settings'
-            onToggleNav={() => undefined}
-            onToggleSettings={() => undefined}
-          />
-        }
+        topBar={<ShellTopBar activeTopic='kukuri:topic:demo' />}
         navRail={
           <ShellNavRail
             railId='core-story-nav'
             open={false}
             onOpenChange={() => undefined}
-            primaryItems={primaryItems}
-            activePrimarySection='timeline'
-            onSelectPrimarySection={() => undefined}
+            headerContent={
+              <div className='shell-nav-status'>
+                <div className='shell-status-badges'>
+                  <StatusBadge label='connected' tone='accent' />
+                  <StatusBadge label='2 peers' />
+                  <StatusBadge label='seeded dht' />
+                </div>
+                <Button className='shell-settings-button' variant='ghost' size='icon' type='button'>
+                  <Settings className='size-6' aria-hidden='true' />
+                </Button>
+              </div>
+            }
             addTopicControl={
               <Label>
                 <span>Add Topic</span>
@@ -297,30 +296,15 @@ function CoreProductFlowStory({ width }: { width: number }) {
         }
         workspace={
           <div className='shell-main-stack'>
+            <Card className='shell-workspace-card shell-workspace-header-card'>
+              <TimelineWorkspaceHeader
+                activeSection='timeline'
+                items={primaryItems}
+                onSelectSection={() => undefined}
+              />
+            </Card>
             <Card className='shell-workspace-card'>
               <section className='shell-section' tabIndex={-1}>
-                <TimelineWorkspaceHeader
-                  activeTopic='kukuri:topic:demo'
-                  viewingLabel='Public'
-                  postingLabel='Imported'
-                  viewScopeValue='public'
-                  composeTargetValue='public'
-                  viewScopeOptions={[
-                    { value: 'public', label: 'Public' },
-                    { value: 'all_joined', label: 'All joined' },
-                    { value: 'channel:channel-1', label: 'Imported' },
-                  ]}
-                  composeTargetOptions={[
-                    { value: 'public', label: 'Public' },
-                    { value: 'channel:channel-1', label: 'Imported' },
-                  ]}
-                  contextOpen={true}
-                  contextControlsId='core-story-context'
-                  onOpenContext={() => undefined}
-                  onRefresh={() => undefined}
-                  onViewScopeChange={() => undefined}
-                  onComposeTargetChange={() => undefined}
-                />
                 <ComposerPanel
                   value='Sharing the Phase 2 shell review draft.'
                   onChange={() => undefined}
@@ -348,35 +332,48 @@ function CoreProductFlowStory({ width }: { width: number }) {
             </Card>
           </div>
         }
-        contextPane={
-          <div className='shell-main-stack shell-context panel'>
-            <ThreadPanel
-              state={{
-                selectedThreadId: 'timeline-post-1',
-                summary: '2 posts in thread',
-                emptyCopy: 'Select a post to inspect the thread.',
-              }}
-              posts={THREAD_POSTS}
-              onClearThread={() => undefined}
-              onOpenAuthor={() => undefined}
-              onOpenThread={() => undefined}
-              onReply={() => undefined}
-            />
-            <AuthorDetailCard
-              view={AUTHOR_VIEW}
-              localAuthorPubkey={'f'.repeat(64)}
-              onClearAuthor={() => undefined}
-              onToggleRelationship={() => undefined}
-            />
-          </div>
+        detailPaneStack={
+          <>
+            <ContextPane
+              paneId='core-story-thread'
+              title='Thread'
+              summary='2 posts in thread'
+              onClose={() => undefined}
+            >
+              <ThreadPanel
+                state={{
+                  selectedThreadId: 'timeline-post-1',
+                  summary: '2 posts in thread',
+                  emptyCopy: 'Select a post to inspect the thread.',
+                }}
+                posts={THREAD_POSTS}
+                onOpenAuthor={() => undefined}
+                onOpenThread={() => undefined}
+                onReply={() => undefined}
+              />
+            </ContextPane>
+            <ContextPane
+              paneId='core-story-author'
+              title='Author'
+              summary='bob'
+              onClose={() => undefined}
+            >
+              <AuthorDetailCard
+                view={AUTHOR_VIEW}
+                localAuthorPubkey={'f'.repeat(64)}
+                onToggleRelationship={() => undefined}
+              />
+            </ContextPane>
+          </>
         }
+        detailPaneCount={2}
       />
     </div>
   );
 }
 
 export const WideWorkspace: Story = {
-  render: () => <CoreProductFlowStory width={1440} />,
+  render: () => <CoreProductFlowStory width={1720} />,
 };
 
 export const NarrowWorkspace: Story = {

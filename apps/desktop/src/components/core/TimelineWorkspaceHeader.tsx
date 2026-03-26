@@ -1,119 +1,38 @@
-import type * as React from 'react';
+import { cn } from '@/lib/utils';
+import { type PrimarySection } from '@/components/shell/types';
 
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
-
-type SelectOption = {
-  value: string;
+type WorkspaceTab = {
+  id: PrimarySection;
   label: string;
 };
 
 type TimelineWorkspaceHeaderProps = {
-  activeTopic: string;
-  viewingLabel: string;
-  postingLabel: string;
-  viewScopeValue: string;
-  composeTargetValue: string;
-  viewScopeOptions: SelectOption[];
-  composeTargetOptions: SelectOption[];
-  contextButtonRef?: React.RefObject<HTMLButtonElement | null>;
-  contextOpen: boolean;
-  contextControlsId: string;
-  onOpenContext: () => void;
-  onRefresh: () => void;
-  onViewScopeChange: (value: string) => void;
-  onComposeTargetChange: (value: string) => void;
-  composeTargetDisabled?: boolean;
+  activeSection: PrimarySection;
+  items: WorkspaceTab[];
+  onSelectSection: (section: PrimarySection) => void;
 };
 
 export function TimelineWorkspaceHeader({
-  activeTopic,
-  viewingLabel,
-  postingLabel,
-  viewScopeValue,
-  composeTargetValue,
-  viewScopeOptions,
-  composeTargetOptions,
-  contextButtonRef,
-  contextOpen,
-  contextControlsId,
-  onOpenContext,
-  onRefresh,
-  onViewScopeChange,
-  onComposeTargetChange,
-  composeTargetDisabled,
+  activeSection,
+  items,
+  onSelectSection,
 }: TimelineWorkspaceHeaderProps) {
   return (
-    <>
-      <div className='shell-workspace-header'>
-        <div>
-          <h2>Timeline</h2>
-          <span className='active-topic-label'>{activeTopic}</span>
-        </div>
-        <div className='shell-inline-actions'>
-          <div className='shell-workspace-summary'>
-            <span className='relationship-badge'>{`viewing ${viewingLabel.toLowerCase()}`}</span>
-            <span className='relationship-badge relationship-badge-direct'>
-              {`posting ${postingLabel.toLowerCase()}`}
-            </span>
-          </div>
-          <Button
-            ref={contextButtonRef}
-            className='shell-context-trigger'
-            variant='ghost'
-            type='button'
-            aria-label='Open context pane'
-            aria-controls={contextControlsId}
-            aria-expanded={contextOpen}
-            data-testid='shell-context-trigger'
-            onClick={onOpenContext}
-          >
-            Open Context
-          </Button>
-          <Button variant='secondary' onClick={onRefresh}>
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      <div className='topic-diagnostic'>
-        <Label>
-          <span>View Scope</span>
-          <Select
-            aria-label='View Scope'
-            value={viewScopeValue}
-            onChange={(event) => onViewScopeChange(event.target.value)}
-          >
-            {viewScopeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </Label>
-
-        <Label>
-          <span>Compose Target</span>
-          <Select
-            aria-label='Compose Target'
-            value={composeTargetValue}
-            disabled={composeTargetDisabled}
-            onChange={(event) => onComposeTargetChange(event.target.value)}
-          >
-            {composeTargetOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </Label>
-      </div>
-
-      <div className='topic-diagnostic topic-diagnostic-secondary'>
-        <span>Viewing: {viewingLabel}</span>
-        <span>Posting to: {postingLabel}</span>
-      </div>
-    </>
+    <div className='shell-workspace-tabs' role='tablist' aria-label='Workspaces'>
+      {items.map((item) => (
+        <button
+          key={item.id}
+          className={cn('shell-tab', activeSection === item.id && 'shell-tab-active')}
+          id={`workspace-tab-${item.id}`}
+          role='tab'
+          type='button'
+          aria-selected={activeSection === item.id}
+          tabIndex={activeSection === item.id ? 0 : -1}
+          onClick={() => onSelectSection(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
