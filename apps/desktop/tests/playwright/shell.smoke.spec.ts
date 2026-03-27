@@ -1,5 +1,21 @@
 import { expect, test } from '@playwright/test';
 
+test('browser mock wide shell keeps navigation rail beside the workspace', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  await expect(page.getByTestId('shell-nav-trigger')).toHaveCount(0);
+
+  const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
+  const workspace = page.locator('main[aria-label="Primary workspace"]');
+  const navBox = await navRail.boundingBox();
+  const workspaceBox = await workspace.boundingBox();
+
+  expect(navBox).not.toBeNull();
+  expect(workspaceBox).not.toBeNull();
+  expect(navBox!.x + navBox!.width).toBeLessThan(workspaceBox!.x);
+});
+
 test('browser mock shell can switch topics, publish, open thread, open author, and update discovery from settings', async ({
   page,
 }) => {
