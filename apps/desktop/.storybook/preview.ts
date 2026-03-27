@@ -11,6 +11,18 @@ installWindowDesktopMock();
 
 const preview: Preview = {
   globalTypes: {
+    theme: {
+      name: 'Theme',
+      description: 'Desktop shell theme',
+      defaultValue: 'dark',
+      toolbar: {
+        icon: 'mirror',
+        items: [
+          { value: 'dark', title: 'Dark' },
+          { value: 'light', title: 'Light' },
+        ],
+      },
+    },
     shellWidth: {
       name: 'Shell Width',
       description: 'Desktop shell review width',
@@ -32,7 +44,9 @@ const preview: Preview = {
   },
   decorators: [
     (Story, context) => {
+      const theme = context.globals.theme === 'light' ? 'light' : 'dark';
       const shellWidth = context.globals.shellWidth === 'narrow' ? 420 : 960;
+      document.documentElement.dataset.theme = theme;
 
       return createElement(
         'div',
@@ -40,7 +54,7 @@ const preview: Preview = {
           style: {
             minHeight: '100vh',
             padding: '24px',
-            background: 'var(--color-surface-muted)',
+            background: 'var(--shell-background)',
           },
         },
         createElement(

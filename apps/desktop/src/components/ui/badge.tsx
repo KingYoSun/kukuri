@@ -10,13 +10,13 @@ const badgeVariants = cva(
     variants: {
       tone: {
         neutral:
-          'border-[var(--border-subtle)] bg-white/5 text-[var(--muted-foreground)]',
+          'border-[var(--border-subtle)] bg-[var(--surface-badge-neutral)] text-[var(--muted-foreground)]',
         accent:
-          'border-[rgba(0,179,164,0.32)] bg-[rgba(0,179,164,0.14)] text-[var(--accent-foreground)]',
+          'border-[var(--border-accent)] bg-[var(--surface-accent-soft)] text-[var(--accent-foreground)]',
         warning:
-          'border-[rgba(245,157,98,0.28)] bg-[rgba(245,157,98,0.16)] text-[var(--foreground)]',
+          'border-[var(--border-warning)] bg-[var(--surface-warning-soft)] text-[var(--foreground)]',
         destructive:
-          'border-[rgba(255,180,138,0.24)] bg-[rgba(255,180,138,0.12)] text-[var(--destructive)]',
+          'border-[var(--border-destructive)] bg-[var(--surface-destructive-soft)] text-[var(--destructive)]',
       },
     },
     defaultVariants: {

@@ -13,13 +13,14 @@ test('browser mock hash routes deep link profile, channels, and settings surface
   await expect(page.getByPlaceholder('core contributors')).toBeVisible();
   await expect(page).toHaveURL(/#\/channels\?topic=/);
 
-  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
   const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByTestId('settings-section-discovery')).toHaveAttribute(
+  await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
     'aria-current',
     'location'
   );
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   await settingsDialog.getByTestId('settings-section-connectivity').click();
   await expect(page).toHaveURL(/settings=connectivity/);

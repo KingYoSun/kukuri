@@ -10,10 +10,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'shadow-[0_10px_28px_rgba(245,157,98,0.16)]',
+        primary: 'shadow-[var(--shadow-button-primary)]',
         secondary: 'button-secondary',
-        ghost:
-          'button-ghost border border-[var(--border-subtle)] bg-transparent text-foreground shadow-none hover:bg-white/5',
+        ghost: 'button-ghost text-foreground shadow-none hover:bg-[var(--surface-button-ghost-hover)]',
       },
       size: {
         default: 'min-h-11 px-4 py-3',

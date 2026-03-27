@@ -1,6 +1,6 @@
 export type PrimarySection = 'timeline' | 'channels' | 'live' | 'game' | 'profile';
 
-export type SettingsSection = 'connectivity' | 'discovery' | 'community-node';
+export type SettingsSection = 'appearance' | 'connectivity' | 'discovery' | 'community-node';
 
 export type ProfileWorkspaceMode = 'overview' | 'edit';
 

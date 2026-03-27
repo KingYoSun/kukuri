@@ -1,8 +1,25 @@
 import type {
+  AppearancePanelView,
   CommunityNodePanelView,
   ConnectivityPanelView,
   DiscoveryPanelView,
 } from './types';
+
+export const appearancePanelFixture: AppearancePanelView = {
+  selectedTheme: 'dark',
+  options: [
+    {
+      value: 'dark',
+      label: 'Dark',
+      description: 'High-contrast solid surfaces for low-light work.',
+    },
+    {
+      value: 'light',
+      label: 'Light',
+      description: 'Brighter solid surfaces for daytime readability.',
+    },
+  ],
+};
 
 export const connectivityPanelFixture: ConnectivityPanelView = {
   status: 'ready',

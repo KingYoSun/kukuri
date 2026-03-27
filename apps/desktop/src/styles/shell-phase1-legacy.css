@@ -16,7 +16,7 @@
   margin: 0 0 0.5rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #f59d62;
+  color: var(--primary-start);
 }
 
 .shell-phase1 .hero h1 {
@@ -27,7 +27,7 @@
 
 .shell-phase1 .lede {
   max-width: 56ch;
-  color: rgba(246, 241, 232, 0.78);
+  color: var(--muted-foreground);
 }
 
 .shell-phase1 .grid {
@@ -41,7 +41,7 @@
   border-radius: var(--radius-panel);
   padding: 1rem;
   background: var(--surface-panel);
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
   box-shadow: var(--shadow-panel);
 }
 
@@ -92,7 +92,7 @@
   height: auto;
   padding: 0.1rem 0 0;
   border: 0;
-  background: transparent;
+  background: var(--surface-panel);
   line-height: 1.2;
 }
 
@@ -116,7 +116,7 @@
   align-items: center;
   padding: 0.8rem 0.9rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .draft-attachment-content {
@@ -145,7 +145,7 @@
 .shell-phase1 .draft-attachment-item small {
   display: block;
   margin-top: 0.35rem;
-  color: rgba(246, 241, 232, 0.58);
+  color: var(--muted-foreground-soft);
 }
 
 .shell-phase1 .composer {
@@ -181,7 +181,7 @@
   align-items: center;
   padding: 0.75rem 0.9rem;
   border-radius: 16px;
-  background: rgba(0, 179, 164, 0.12);
+  background: var(--surface-accent-soft);
 }
 
 .shell-phase1 .reply-banner strong {
@@ -208,7 +208,7 @@
   border-radius: 999px;
   padding: 0.75rem 1.1rem;
   color: var(--primary-foreground);
-  background: linear-gradient(120deg, var(--primary-start), var(--primary-end));
+  background: var(--surface-button-primary);
   font-weight: 700;
   cursor: pointer;
 }
@@ -220,7 +220,7 @@
 
 .shell-phase1 .button-ghost {
   color: inherit;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-button-ghost);
   border: 1px solid var(--border-subtle);
   box-shadow: none;
 }
@@ -247,12 +247,12 @@
 .shell-phase1 .status-grid div {
   padding: 0.85rem;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .status-grid dt {
   font-size: 0.75rem;
-  color: rgba(246, 241, 232, 0.66);
+  color: var(--muted-foreground);
 }
 
 .shell-phase1 .status-grid dd {
@@ -279,7 +279,7 @@
   align-items: center;
   padding: 0.45rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-panel-soft);
 }
 
 .shell-phase1 .topic-item-active {
@@ -288,7 +288,7 @@
 
 .shell-phase1 .topic-link, .shell-phase1 .topic-remove {
   border: 0;
-  background: transparent;
+  background: none;
   color: inherit;
   cursor: pointer;
 }
@@ -361,10 +361,10 @@
 }
 
 .shell-phase1 .post-card {
-  border: 1px solid rgba(246, 241, 232, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 18px;
   padding: 0.95rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-panel-soft);
 }
 
 .shell-phase1 .author-avatar {
@@ -372,9 +372,9 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid rgba(246, 241, 232, 0.12);
-  background: linear-gradient(145deg, rgba(245, 157, 98, 0.24), rgba(0, 179, 164, 0.2));
-  color: rgba(246, 241, 232, 0.94);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-avatar);
+  color: var(--foreground-strong);
   font-weight: 700;
   flex: none;
 }
@@ -404,14 +404,14 @@
 }
 
 .shell-phase1 .post-card-thread {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .post-link {
   width: 100%;
   text-align: left;
   color: inherit;
-  background: transparent;
+  background: none;
   border: 0;
   cursor: pointer;
 }
@@ -431,16 +431,16 @@
   aspect-ratio: 16 / 9;
   margin: 0.4rem 0 0.75rem;
   border-radius: 16px;
-  border: 1px solid rgba(246, 241, 232, 0.08);
-  background: rgba(8, 15, 23, 0.72);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .media-frame-loading {
-  background: linear-gradient(135deg, rgba(15, 29, 41, 0.96), rgba(11, 24, 36, 0.82));
+  background: var(--surface-media-loading);
 }
 
 .shell-phase1 .media-frame-ready {
-  background: linear-gradient(135deg, rgba(0, 179, 164, 0.18), rgba(10, 20, 28, 0.88));
+  background: var(--surface-media-ready);
 }
 
 .shell-phase1 .media-badges {
@@ -462,23 +462,23 @@
   font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-subtle);
 }
 
 .shell-phase1 .media-status-badge {
-  color: #e9f7f6;
-  background: rgba(12, 28, 39, 0.78);
+  color: var(--foreground-strong);
+  background: var(--surface-contrast);
 }
 
 .shell-phase1 .media-type-badge {
-  color: rgba(246, 241, 232, 0.9);
-  background: rgba(0, 179, 164, 0.18);
+  color: var(--accent-foreground);
+  background: var(--surface-accent-soft);
 }
 
 .shell-phase1 .media-count-badge {
   margin-left: auto;
-  color: rgba(246, 241, 232, 0.92);
-  background: rgba(245, 157, 98, 0.22);
+  color: var(--foreground-strong);
+  background: var(--surface-warning-soft);
 }
 
 .shell-phase1 .media-skeleton, .shell-phase1 .media-ready-placeholder {
@@ -489,28 +489,12 @@
 }
 
 .shell-phase1 .media-skeleton {
-  position: relative;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.04)),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-}
-
-.shell-phase1 .media-skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  transform: translateX(-100%);
-  animation: media-shimmer 1.8s ease-in-out infinite;
+  background: var(--surface-skeleton);
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
 }
 
 .shell-phase1 .media-ready-placeholder {
-  color: rgba(246, 241, 232, 0.78);
+  color: var(--muted-foreground);
   font-size: 0.88rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -526,7 +510,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: rgba(6, 12, 18, 0.9);
+  background: var(--surface-panel);
 }
 
 .shell-phase1 .media-meta {
@@ -535,7 +519,7 @@
   gap: 0.75rem;
   margin-top: -0.15rem;
   margin-bottom: 0.65rem;
-  color: rgba(246, 241, 232, 0.6);
+  color: var(--muted-foreground-soft);
   font-size: 0.76rem;
 }
 
@@ -548,13 +532,8 @@
   display: block;
   height: 0.95rem;
   border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.18),
-    rgba(255, 255, 255, 0.08)
-  );
-  animation: media-shimmer 1.8s ease-in-out infinite;
+  background: var(--surface-skeleton);
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
 }
 
 .shell-phase1 .text-skeleton-line {
@@ -572,7 +551,7 @@
 }
 
 .shell-phase1 .active-topic-label {
-  color: rgba(246, 241, 232, 0.72);
+  color: var(--muted-foreground);
   font-size: 0.8rem;
 }
 
@@ -584,7 +563,7 @@
   gap: 1rem;
   margin-bottom: 0.55rem;
   font-size: 0.8rem;
-  color: rgba(246, 241, 232, 0.68);
+  color: var(--muted-foreground);
 }
 
 .shell-phase1 .post-meta-author {
@@ -606,8 +585,8 @@
   align-items: center;
   border-radius: 999px;
   padding: 0.18rem 0.55rem;
-  color: rgba(246, 241, 232, 0.9);
-  background: rgba(0, 179, 164, 0.16);
+  color: var(--accent-foreground);
+  background: var(--surface-accent-soft);
   line-height: 1.1;
 }
 
@@ -615,14 +594,14 @@
   display: inline-block;
   margin-top: 0.55rem;
   font-style: normal;
-  color: #8ce0d6;
+  color: var(--accent);
 }
 
 .shell-phase1 .author-link {
   padding: 0;
   border: 0;
-  color: #f6f1e8;
-  background: transparent;
+  color: var(--foreground);
+  background: none;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
@@ -633,23 +612,23 @@
   align-items: center;
   border-radius: 999px;
   padding: 0.2rem 0.55rem;
-  color: rgba(246, 241, 232, 0.9);
-  background: rgba(246, 241, 232, 0.08);
+  color: var(--foreground);
+  background: var(--surface-badge-neutral);
 }
 
 .shell-phase1 .relationship-badge-direct {
-  background: rgba(0, 179, 164, 0.2);
-  color: #b9f2ea;
+  background: var(--surface-accent-soft);
+  color: var(--accent-foreground);
 }
 
 .shell-phase1 .relationship-badge-mutual {
-  background: rgba(245, 157, 98, 0.22);
-  color: #ffd6b9;
+  background: var(--surface-warning-soft);
+  color: var(--foreground);
 }
 
 .shell-phase1 .relationship-badge-fof {
-  background: rgba(110, 180, 255, 0.18);
-  color: #c9e1ff;
+  background: var(--surface-info-soft);
+  color: var(--foreground);
 }
 
 .shell-phase1 .author-detail {
@@ -696,7 +675,7 @@
 .shell-phase1 .author-detail-copy {
   margin: 0;
   line-height: 1.45;
-  color: rgba(246, 241, 232, 0.78);
+  color: var(--muted-foreground);
 }
 
 .shell-phase1 .author-detail-copy-stack {
@@ -727,7 +706,7 @@
   margin: 0;
   font-size: 0.72rem;
   line-height: 1.45;
-  color: rgba(246, 241, 232, 0.54);
+  color: var(--muted-foreground-soft);
 }
 
 .shell-phase1 .shell-icon-button {
@@ -736,8 +715,8 @@
   min-inline-size: 2.1rem;
   padding: 0;
   border-radius: 14px;
-  color: rgba(246, 241, 232, 0.92);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--foreground);
+  background: var(--surface-button-ghost);
   border: 1px solid var(--border-subtle);
   box-shadow: none;
 }
@@ -750,7 +729,7 @@
 
 .shell-phase1 .shell-icon-button:hover,
 .shell-phase1 .shell-icon-button:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-button-ghost-hover);
 }
 
 .shell-phase1 .shell-icon-button svg {
@@ -768,33 +747,33 @@
   display: block;
   margin-top: 0.5rem;
   word-break: break-all;
-  color: rgba(246, 241, 232, 0.54);
+  color: var(--muted-foreground-soft);
 }
 
 .shell-phase1 .thread-item {
-  border-left: 3px solid rgba(0, 179, 164, 0.72);
+  border-left: 3px solid var(--border-accent);
   padding-left: 0.85rem;
 }
 
 .shell-phase1 .empty, .shell-phase1 .error {
-  color: rgba(246, 241, 232, 0.72);
+  color: var(--muted-foreground);
 }
 
 .shell-phase1 .error {
   margin-top: 1rem;
-  color: #ffb58c;
+  color: var(--destructive);
 }
 
 .shell-phase1 .error-inline {
   margin-top: 0;
 }
 
-@keyframes media-shimmer {
+@keyframes skeleton-pulse {
   0% {
-    transform: translateX(-100%);
+    opacity: 0.62;
   }
   100% {
-    transform: translateX(100%);
+    opacity: 1;
   }
 }
 

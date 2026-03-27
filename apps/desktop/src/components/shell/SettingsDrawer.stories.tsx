@@ -2,14 +2,17 @@ import { useMemo, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import {
+  appearancePanelFixture,
   communityNodePanelFixture,
   connectivityPanelFixture,
   discoveryPanelFixture,
 } from '@/components/settings/fixtures';
+import type { DesktopTheme } from '@/lib/theme';
 import type { SettingsSection } from '@/components/shell/types';
 
 import { SettingsDrawer } from './SettingsDrawer';
@@ -17,12 +20,24 @@ import { SettingsDrawer } from './SettingsDrawer';
 function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSection?: SettingsSection }) {
   const [open, setOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [theme, setTheme] = useState<DesktopTheme>(appearancePanelFixture.selectedTheme);
   const [peerTicketInput, setPeerTicketInput] = useState(connectivityPanelFixture.peerTicketInput);
   const [seedPeersInput, setSeedPeersInput] = useState(discoveryPanelFixture.seedPeersInput);
   const [baseUrlsInput, setBaseUrlsInput] = useState(communityNodePanelFixture.baseUrlsInput);
 
   const sections = useMemo(
     () => [
+      {
+        id: 'appearance' as const,
+        label: 'Appearance',
+        description: 'Local light and dark theme selection.',
+        content: (
+          <AppearancePanel
+            view={{ ...appearancePanelFixture, selectedTheme: theme }}
+            onThemeChange={setTheme}
+          />
+        ),
+      },
       {
         id: 'connectivity' as const,
         label: 'Connectivity',
@@ -73,7 +88,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
         ),
       },
     ],
-    [baseUrlsInput, peerTicketInput, seedPeersInput]
+    [baseUrlsInput, peerTicketInput, seedPeersInput, theme]
   );
 
   return (
@@ -110,6 +125,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ConnectivityOpen: Story = {};
+
+export const AppearanceOpen: Story = {
+  render: () => <SettingsDrawerStory initialSection='appearance' />,
+};
 
 export const DiscoveryOpen: Story = {
   render: () => <SettingsDrawerStory initialSection='discovery' />,
