@@ -121,10 +121,19 @@
   display: grid;
   gap: 1rem;
   align-items: start;
+  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
+}
+
+.shell-layout[data-detail-pane-count='1'] {
+  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.shell-layout[data-detail-pane-count='2'] {
   grid-template-columns:
     minmax(260px, 280px)
     minmax(0, 1fr)
-    repeat(var(--shell-detail-pane-count, 0), minmax(280px, 320px));
+    minmax(280px, 320px)
+    minmax(280px, 320px);
 }
 
 .shell-main {

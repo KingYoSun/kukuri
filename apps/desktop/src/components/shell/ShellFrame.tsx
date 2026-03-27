@@ -12,8 +12,6 @@ type ShellFrameProps = {
   mobileFooter?: React.ReactNode;
 };
 
-const DETAIL_PANE_COUNT_VAR = '--shell-detail-pane-count' as const;
-
 function isMobileViewport() {
   if (typeof window === 'undefined') {
     return false;
@@ -31,6 +29,7 @@ export function ShellFrame({
   mobileFooter,
 }: ShellFrameProps) {
   const [showMobileFooter, setShowMobileFooter] = React.useState(() => isMobileViewport());
+  const layoutDetailPaneCount = Math.max(0, Math.min(detailPaneCount, 2));
 
   React.useEffect(() => {
     function handleResize() {
@@ -44,20 +43,19 @@ export function ShellFrame({
     };
   }, []);
 
-  const layoutStyle = {
-    [DETAIL_PANE_COUNT_VAR]: String(detailPaneCount),
-  } as React.CSSProperties;
-
   return (
     <div className='shell-phase1'>
       <a className='shell-skip-link' href={`#${skipTargetId}`}>
         Skip to workspace
       </a>
-      <div className='shell-layout shell-topbar-grid' style={layoutStyle}>
+      <div
+        className='shell-layout shell-topbar-grid'
+        data-detail-pane-count={layoutDetailPaneCount}
+      >
         <div className='shell-topbar-spacer' aria-hidden='true' />
         {topBar}
       </div>
-      <div className='shell-layout' style={layoutStyle}>
+      <div className='shell-layout' data-detail-pane-count={layoutDetailPaneCount}>
         {navRail}
         <main
           id={skipTargetId}
