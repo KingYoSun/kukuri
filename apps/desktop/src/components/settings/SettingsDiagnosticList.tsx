@@ -26,7 +26,7 @@ export function SettingsDiagnosticList({
       {items.map((item) => (
         <div
           key={item.label}
-          className='min-w-0 rounded-[18px] border border-[var(--border-subtle)] bg-white/3 px-4 py-3 shadow-[0_12px_32px_rgba(2,7,15,0.1)]'
+          className='min-w-0 rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] px-4 py-3 shadow-[0_12px_32px_rgba(2,7,15,0.1)]'
         >
           <dt className='text-[0.74rem] uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
             {item.label}

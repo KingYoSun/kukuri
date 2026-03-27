@@ -1,34 +1,105 @@
 :root {
   --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --radius: 1rem;
+  --radius-panel: 22px;
+  --radius-input: 14px;
+}
+
+:root,
+:root[data-theme='dark'] {
   --background: #101923;
+  --shell-background: #101923;
   --foreground: #f6f1e8;
   --foreground-strong: #fff7ef;
-  --muted-foreground: rgba(246, 241, 232, 0.72);
-  --muted-foreground-soft: rgba(246, 241, 232, 0.58);
-  --surface-panel: rgba(6, 12, 18, 0.48);
+  --muted-foreground: #cbbdae;
+  --muted-foreground-soft: #a89b8f;
+  --surface-panel: #0c1721;
   --surface-panel-solid: #0c1721;
-  --surface-panel-accent: linear-gradient(160deg, rgba(255, 132, 74, 0.14), rgba(8, 17, 26, 0.55));
-  --surface-input: rgba(10, 16, 24, 0.8);
-  --surface-raised: rgba(8, 15, 23, 0.72);
-  --surface-button-secondary: rgba(246, 241, 232, 0.08);
-  --surface-active: rgba(0, 179, 164, 0.16);
-  --border-subtle: rgba(246, 241, 232, 0.12);
-  --border-subtle-strong: rgba(246, 241, 232, 0.08);
+  --surface-panel-accent: #162231;
+  --surface-panel-muted: #13202c;
+  --surface-panel-soft: #182632;
+  --surface-input: #101b26;
+  --surface-raised: #1b2a36;
+  --surface-button-primary: #f59d62;
+  --surface-button-primary-hover: #ee8f4e;
+  --surface-button-secondary: #233241;
+  --surface-button-ghost: #1a2734;
+  --surface-button-ghost-hover: #223241;
+  --surface-active: #17393c;
+  --surface-overlay: #071019;
+  --surface-avatar: #21303d;
+  --surface-media-loading: #1a2734;
+  --surface-media-ready: #173439;
+  --surface-skeleton: #243442;
+  --surface-selection: #d98b55;
+  --surface-accent-soft: #17393c;
+  --surface-warning-soft: #463423;
+  --surface-destructive-soft: #4a2b22;
+  --surface-info-soft: #203449;
+  --surface-badge-neutral: #1a2734;
+  --surface-contrast: #20303c;
+  --border-subtle: #2a3a4a;
+  --border-subtle-strong: #39495a;
+  --border-accent: #2d7b76;
+  --border-warning: #a36b40;
+  --border-destructive: #a35e49;
   --primary-start: #f59d62;
-  --primary-end: #ffd36e;
+  --primary-end: #f59d62;
   --primary-foreground: #0e1b26;
   --accent: #00b3a4;
   --accent-foreground: #eafffb;
   --destructive: #ffb48a;
-  --ring: rgba(0, 179, 164, 0.48);
+  --ring: rgba(0, 179, 164, 0.45);
   --shadow-panel: 0 18px 60px rgba(2, 7, 15, 0.22);
-  --shell-background:
-    radial-gradient(circle at top left, rgba(255, 132, 74, 0.22), transparent 28%),
-    radial-gradient(circle at top right, rgba(0, 179, 164, 0.18), transparent 22%),
-    linear-gradient(135deg, #101923 0%, #0f2231 48%, #132c3d 100%);
-  --radius: 1rem;
-  --radius-panel: 22px;
-  --radius-input: 14px;
+  --shadow-button-primary: 0 10px 28px rgba(245, 157, 98, 0.16);
+}
+
+:root[data-theme='light'] {
+  --background: #f4efe6;
+  --shell-background: #f4efe6;
+  --foreground: #21303b;
+  --foreground-strong: #15202a;
+  --muted-foreground: #5f6c76;
+  --muted-foreground-soft: #74818a;
+  --surface-panel: #ffffff;
+  --surface-panel-solid: #ffffff;
+  --surface-panel-accent: #f5ede2;
+  --surface-panel-muted: #edf2f6;
+  --surface-panel-soft: #e6edf2;
+  --surface-input: #f8f4ee;
+  --surface-raised: #dde5ec;
+  --surface-button-primary: #d77d45;
+  --surface-button-primary-hover: #c86f38;
+  --surface-button-secondary: #dfe6ec;
+  --surface-button-ghost: #edf2f6;
+  --surface-button-ghost-hover: #e3ebf1;
+  --surface-active: #d8eee9;
+  --surface-overlay: #d7dfe7;
+  --surface-avatar: #dfe8ee;
+  --surface-media-loading: #dde5ec;
+  --surface-media-ready: #d8eee9;
+  --surface-skeleton: #e8eef3;
+  --surface-selection: #e9b28c;
+  --surface-accent-soft: #d8eee9;
+  --surface-warning-soft: #f6e7d9;
+  --surface-destructive-soft: #f6dfd4;
+  --surface-info-soft: #dce7f4;
+  --surface-badge-neutral: #edf2f6;
+  --surface-contrast: #dde5ec;
+  --border-subtle: #cad3db;
+  --border-subtle-strong: #b7c2cb;
+  --border-accent: #78a8a2;
+  --border-warning: #d1a06d;
+  --border-destructive: #d89b86;
+  --primary-start: #d77d45;
+  --primary-end: #d77d45;
+  --primary-foreground: #fff7ef;
+  --accent: #0f8c82;
+  --accent-foreground: #143633;
+  --destructive: #b35f46;
+  --ring: rgba(15, 140, 130, 0.32);
+  --shadow-panel: 0 18px 48px rgba(33, 48, 59, 0.12);
+  --shadow-button-primary: 0 10px 24px rgba(215, 125, 69, 0.18);
 }
 
 @theme inline {

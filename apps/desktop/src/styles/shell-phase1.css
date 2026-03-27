@@ -14,7 +14,7 @@
   border-radius: 999px;
   padding: 0.7rem 1rem;
   color: var(--primary-foreground);
-  background: linear-gradient(120deg, var(--primary-start), var(--primary-end));
+  background: var(--surface-button-primary);
   transform: translateY(-220%);
   transition: transform 180ms ease;
 }
@@ -152,7 +152,7 @@
 }
 
 .extended-channel-card-active {
-  border-color: rgba(0, 179, 164, 0.32);
+  border-color: var(--border-accent);
   background: var(--surface-active);
 }
 
@@ -218,7 +218,7 @@
   border-radius: 18px;
   padding: 0.9rem 1rem;
   color: inherit;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-panel-muted);
   text-align: left;
   cursor: pointer;
 }
@@ -235,7 +235,7 @@
 .shell-primary-nav-item-active,
 .shell-settings-nav-item-active,
 .shell-tab-active {
-  border-color: rgba(0, 179, 164, 0.32);
+  border-color: var(--border-accent);
   background: var(--surface-active);
 }
 
@@ -360,7 +360,7 @@
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: 20px;
-  background: linear-gradient(145deg, rgba(245, 157, 98, 0.22), rgba(0, 179, 164, 0.18));
+  background: var(--surface-avatar);
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--foreground-strong);
@@ -427,7 +427,7 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgba(3, 7, 12, 0.68);
+  background: var(--surface-overlay);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;

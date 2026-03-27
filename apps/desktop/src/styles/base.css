@@ -35,5 +35,5 @@ button:disabled {
 }
 
 ::selection {
-  background: rgba(245, 157, 98, 0.32);
+  background: var(--surface-selection);
 }

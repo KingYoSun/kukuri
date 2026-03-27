@@ -35,10 +35,12 @@ import {
 } from '@/components/core/types';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
+import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import {
+  type AppearancePanelView,
   type CommunityNodePanelView,
   type ConnectivityPanelView,
   type DiscoveryPanelView,
@@ -97,6 +99,7 @@ import {
   runtimeApi,
 } from './lib/api';
 import { blobToCreateAttachment, fileToCreateAttachment } from './lib/attachments';
+import { readDesktopTheme, type DesktopTheme, writeDesktopTheme } from './lib/theme';
 
 type AppProps = {
   api?: DesktopApi;
@@ -217,6 +220,11 @@ type OpenThreadOptions = {
   historyMode?: 'push' | 'replace';
   normalizeOnEmpty?: boolean;
   topic?: string;
+};
+
+type DesktopShellPageProps = AppProps & {
+  theme: DesktopTheme;
+  onThemeChange: (theme: DesktopTheme) => void;
 };
 
 type OpenAuthorOptions = {
@@ -440,6 +448,11 @@ const SETTINGS_SECTION_COPY: Array<{
   description: string;
 }> = [
   {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Local light and dark theme selection.',
+  },
+  {
     id: 'connectivity',
     label: 'Connectivity',
     description: 'Sync summary, peer tickets, and global error visibility.',
@@ -455,6 +468,15 @@ const SETTINGS_SECTION_COPY: Array<{
     description: 'Configured community nodes, auth, consent, and refresh actions.',
   },
 ];
+
+function isSettingsSection(value: string | null): value is SettingsSection {
+  return (
+    value === 'appearance' ||
+    value === 'connectivity' ||
+    value === 'discovery' ||
+    value === 'community-node'
+  );
+}
 
 const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
   timeline: '/timeline',
@@ -1201,7 +1223,11 @@ function joinedChannelFromFriendSharePreview(
   };
 }
 
-function DesktopShellPage({ api = runtimeApi }: AppProps) {
+function DesktopShellPage({
+  api = runtimeApi,
+  theme,
+  onThemeChange,
+}: DesktopShellPageProps) {
   const storeApi = useDesktopShellStoreApi();
   const {
     trackedTopics,
@@ -3486,16 +3512,10 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       }));
     }
 
-    const nextSettingsOpen =
-      requestedSettingsSection === 'connectivity' ||
-      requestedSettingsSection === 'discovery' ||
-      requestedSettingsSection === 'community-node';
-    const nextSettingsSection =
-      requestedSettingsSection === 'connectivity' ||
-      requestedSettingsSection === 'discovery' ||
-      requestedSettingsSection === 'community-node'
-        ? requestedSettingsSection
-        : shellChromeState.activeSettingsSection;
+    const nextSettingsOpen = isSettingsSection(requestedSettingsSection);
+    const nextSettingsSection = isSettingsSection(requestedSettingsSection)
+      ? requestedSettingsSection
+      : shellChromeState.activeSettingsSection;
     const nextProfileMode =
       routeSection === 'profile' && requestedProfileMode === 'edit' ? 'edit' : 'overview';
 
@@ -3514,7 +3534,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       }));
     }
 
-    if (requestedSettingsSection && !['connectivity', 'discovery', 'community-node'].includes(requestedSettingsSection)) {
+    if (requestedSettingsSection && !isSettingsSection(requestedSettingsSection)) {
       shouldNormalize = true;
     }
     if (requestedProfileMode && requestedProfileMode !== 'edit') {
@@ -4038,6 +4058,24 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       trackedTopics,
     ]
   );
+  const appearancePanelView = useMemo<AppearancePanelView>(
+    () => ({
+      selectedTheme: theme,
+      options: [
+        {
+          value: 'dark',
+          label: 'Dark',
+          description: 'High-contrast solid surfaces for low-light work.',
+        },
+        {
+          value: 'light',
+          label: 'Light',
+          description: 'Brighter solid surfaces for daytime readability.',
+        },
+      ],
+    }),
+    [theme]
+  );
   const discoveryPanelView = useMemo<DiscoveryPanelView>(
     () => ({
       status: 'ready' as const,
@@ -4167,6 +4205,15 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
     {
       ...SETTINGS_SECTION_COPY[0],
       content: (
+        <AppearancePanel
+          view={appearancePanelView}
+          onThemeChange={onThemeChange}
+        />
+      ),
+    },
+    {
+      ...SETTINGS_SECTION_COPY[1],
+      content: (
         <ConnectivityPanel
           view={connectivityPanelView}
           onPeerTicketInputChange={setPeerTicket}
@@ -4175,7 +4222,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[1],
+      ...SETTINGS_SECTION_COPY[2],
       content: (
         <DiscoveryPanel
           view={discoveryPanelView}
@@ -4195,7 +4242,7 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[2],
+      ...SETTINGS_SECTION_COPY[3],
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
@@ -5025,11 +5072,20 @@ function DesktopShellPage({ api = runtimeApi }: AppProps) {
 
 export function App(props: AppProps) {
   const [store] = useState<DesktopShellStoreApi>(() => createDesktopShellStore());
+  const [theme, setTheme] = useState<DesktopTheme>(() => readDesktopTheme());
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    writeDesktopTheme(theme);
+  }, [theme]);
 
   return (
     <DesktopShellStoreContext.Provider value={store}>
       <HashRouter>
-        <DesktopShellPage {...props} />
+        <DesktopShellPage {...props} theme={theme} onThemeChange={setTheme} />
       </HashRouter>
     </DesktopShellStoreContext.Provider>
   );

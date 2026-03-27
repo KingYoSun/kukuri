@@ -1,3 +1,5 @@
+import { type DesktopTheme } from '@/lib/theme';
+
 export type SettingsPanelStatus = 'loading' | 'ready' | 'error';
 
 export type SettingsMetricView = {
@@ -64,4 +66,15 @@ export type CommunityNodePanelView = {
   editorMessage?: string;
   editorMessageTone?: 'default' | 'danger';
   nodes: CommunityNodeEntryView[];
+};
+
+export type AppearanceOptionView = {
+  value: DesktopTheme;
+  label: string;
+  description: string;
+};
+
+export type AppearancePanelView = {
+  selectedTheme: DesktopTheme;
+  options: AppearanceOptionView[];
 };

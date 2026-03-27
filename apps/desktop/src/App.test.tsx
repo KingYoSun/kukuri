@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
 
 import { App } from './App';
 import {
@@ -201,7 +202,7 @@ async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
 
 async function openSettingsSection(
   user: ReturnType<typeof userEvent.setup>,
-  section: 'connectivity' | 'discovery' | 'community-node'
+  section: 'appearance' | 'connectivity' | 'discovery' | 'community-node'
 ) {
   const drawer = await openSettingsDrawer(user);
   await user.click(within(drawer).getByTestId(`settings-section-${section}`));
@@ -483,6 +484,46 @@ test('settings hash route opens the drawer and keeps the selected section in syn
   await waitFor(() => {
     expect(window.location.hash).toContain('settings=connectivity');
   });
+});
+
+test('desktop shell defaults to the dark theme and persists it locally', async () => {
+  render(<App api={createDesktopMockApi()} />);
+
+  await waitFor(() => {
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+  });
+  expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('dark');
+});
+
+test('desktop shell restores a persisted light theme on boot', async () => {
+  window.localStorage.setItem(DESKTOP_THEME_STORAGE_KEY, 'light');
+
+  render(<App api={createDesktopMockApi()} />);
+
+  await waitFor(() => {
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+  });
+});
+
+test('appearance settings deep link updates the document theme and storage immediately', async () => {
+  const user = userEvent.setup();
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
+
+  const drawer = await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  await waitFor(() => {
+    expect(within(drawer).getByTestId('settings-section-appearance')).toHaveAttribute(
+      'aria-current',
+      'location'
+    );
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+  });
+
+  await user.click(within(drawer).getByRole('radio', { name: /Light/i }));
+
+  await waitFor(() => {
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+  });
+  expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('light');
 });
 
 test('topic and private channel selection sync into the hash route', async () => {

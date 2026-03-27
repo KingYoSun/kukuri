@@ -82,7 +82,7 @@ export function ConnectivityPanel({
           {view.topics.map((topic) => (
             <section
               key={topic.topic}
-              className='rounded-[20px] border border-[var(--border-subtle)] bg-white/3 p-4 shadow-[0_12px_32px_rgba(2,7,15,0.1)]'
+              className='rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4 shadow-[0_12px_32px_rgba(2,7,15,0.1)]'
             >
               <div className='flex flex-wrap items-start justify-between gap-3'>
                 <div className='min-w-0'>

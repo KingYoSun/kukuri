@@ -2,10 +2,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
+import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
 import { ConnectivityPanel } from './ConnectivityPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import {
+  appearancePanelFixture,
   communityNodePanelFixture,
   connectivityPanelFixture,
   discoveryPanelFixture,
@@ -13,6 +15,22 @@ import {
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
 import { SettingsMetricGrid } from './SettingsMetricGrid';
+
+test('appearance panel switches the selected theme immediately', async () => {
+  const user = userEvent.setup();
+  const onThemeChange = vi.fn();
+
+  render(
+    <AppearancePanel
+      view={appearancePanelFixture}
+      onThemeChange={onThemeChange}
+    />
+  );
+
+  await user.click(screen.getByRole('radio', { name: /Light/i }));
+  expect(onThemeChange).toHaveBeenCalledWith('light');
+  expect(screen.getByRole('radio', { name: /Dark/i })).toHaveAttribute('aria-checked', 'true');
+});
 
 test('connectivity panel renders loading and topic detail states', async () => {
   const user = userEvent.setup();
@@ -95,6 +113,7 @@ test('community node panel renders ready and error states', async () => {
 test('settings panels avoid the legacy grid classname collision', () => {
   const { container } = render(
     <div>
+      <AppearancePanel view={appearancePanelFixture} onThemeChange={() => {}} />
       <ConnectivityPanel
         view={connectivityPanelFixture}
         onPeerTicketInputChange={() => {}}

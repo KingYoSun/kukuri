@@ -9,13 +9,13 @@ const noticeVariants = cva(
   {
     variants: {
       tone: {
-        neutral: 'border-[var(--border-subtle)] bg-white/5 text-foreground',
+        neutral: 'border-[var(--border-subtle)] bg-[var(--surface-panel-muted)] text-foreground',
         accent:
-          'border-[rgba(0,179,164,0.24)] bg-[rgba(0,179,164,0.12)] text-[var(--accent-foreground)]',
+          'border-[var(--border-accent)] bg-[var(--surface-accent-soft)] text-[var(--accent-foreground)]',
         warning:
-          'border-[rgba(245,157,98,0.24)] bg-[rgba(245,157,98,0.1)] text-foreground',
+          'border-[var(--border-warning)] bg-[var(--surface-warning-soft)] text-foreground',
         destructive:
-          'border-[rgba(255,180,138,0.2)] bg-[rgba(255,180,138,0.08)] text-[var(--destructive)]',
+          'border-[var(--border-destructive)] bg-[var(--surface-destructive-soft)] text-[var(--destructive)]',
       },
     },
     defaultVariants: {
