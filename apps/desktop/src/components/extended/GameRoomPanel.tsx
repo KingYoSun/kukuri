@@ -1,4 +1,5 @@
 import type { FormEventHandler } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -7,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatLocalizedTime } from '@/i18n/format';
 import type { GameRoomStatus, GameRoomView } from '@/lib/api';
 
 import { type ExtendedPanelStatus, type GameDraftView, type GameRoomPendingMap } from './types';
@@ -54,54 +56,55 @@ export function GameRoomPanel({
   onDraftScoreChange,
   onSaveRoom,
 }: GameRoomPanelProps) {
+  const { t } = useTranslation(['common', 'game']);
   return (
     <Card className='panel-subsection'>
       <CardHeader>
-        <h3>Game Rooms</h3>
-        <small>{rooms.length} tracked</small>
+        <h3>{t('game:title')}</h3>
+        <small>{t('game:summary', { count: rooms.length })}</small>
       </CardHeader>
 
-      {status === 'loading' ? <Notice>Loading game rooms…</Notice> : null}
+      {status === 'loading' ? <Notice>{t('game:loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
       <form className='composer composer-compact' onSubmit={onSubmit} aria-busy={createPending}>
         <Label>
-          <span>Game Title</span>
+          <span>{t('game:fields.title')}</span>
           <Input
             value={title}
             onChange={(event) => onTitleChange(event.target.value)}
-            placeholder='Top 8 Finals'
+            placeholder={t('game:fields.placeholders.title')}
             disabled={createPending}
           />
         </Label>
         <Label>
-          <span>Game Description</span>
+          <span>{t('game:fields.description')}</span>
           <Textarea
             value={description}
             onChange={(event) => onDescriptionChange(event.target.value)}
-            placeholder='match summary'
+            placeholder={t('game:fields.placeholders.description')}
             disabled={createPending}
           />
         </Label>
         <Label>
-          <span>Participants</span>
+          <span>{t('game:fields.participants')}</span>
           <Input
             value={participantsInput}
             onChange={(event) => onParticipantsChange(event.target.value)}
-            placeholder='Alice, Bob'
+            placeholder={t('game:fields.placeholders.participants')}
             disabled={createPending}
           />
         </Label>
         {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
         <div className='topic-diagnostic topic-diagnostic-secondary'>
-          <span>Audience: {audienceLabel}</span>
+          <span>{t('common:labels.audience')}: {audienceLabel}</span>
         </div>
         <Button type='submit' disabled={createPending}>
-          Create Room
+          {t('game:actions.createRoom')}
         </Button>
       </form>
 
-      {rooms.length === 0 && status === 'ready' ? <p className='empty-state'>No game rooms</p> : null}
+      {rooms.length === 0 && status === 'ready' ? <p className='empty-state'>{t('game:empty')}</p> : null}
 
       <ul className='post-list'>
         {rooms.map((room) => {
@@ -114,16 +117,16 @@ export function GameRoomPanel({
               <article className='post-card' aria-busy={pending}>
                 <div className='post-meta'>
                   <span>{room.title}</span>
-                  <span>{room.status}</span>
+                  <span>{t(`game:statuses.${room.status}`)}</span>
                   <span className='reply-chip'>{room.audience_label}</span>
                 </div>
                 <div className='post-body'>
-                  <strong className='post-title'>{room.description || 'no description'}</strong>
+                  <strong className='post-title'>{room.description || t('common:fallbacks.noDescription')}</strong>
                 </div>
                 <small>{room.room_id}</small>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>phase: {room.phase_label ?? 'none'}</span>
-                  <span>updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}</span>
+                  <span>{t('common:labels.phase')}: {room.phase_label ?? t('common:fallbacks.none')}</span>
+                  <span>{t('common:labels.updated')}: {formatLocalizedTime(room.updated_at)}</span>
                 </div>
                 <ul className='draft-attachment-list'>
                   {room.scores.map((score) => (
@@ -149,7 +152,7 @@ export function GameRoomPanel({
                 {isOwner && draft ? (
                   <div className='composer composer-compact'>
                     <Label>
-                      <span>Status</span>
+                      <span>{t('game:fields.status')}</span>
                       <Select
                         aria-label={`${room.room_id}-status`}
                         value={draft.status}
@@ -158,14 +161,14 @@ export function GameRoomPanel({
                           onDraftStatusChange(room.room_id, event.target.value as GameRoomStatus)
                         }
                       >
-                        <option value='Waiting'>Waiting</option>
-                        <option value='Running'>Running</option>
-                        <option value='Paused'>Paused</option>
-                        <option value='Ended'>Ended</option>
+                        <option value='Waiting'>{t('game:statuses.Waiting')}</option>
+                        <option value='Running'>{t('game:statuses.Running')}</option>
+                        <option value='Paused'>{t('game:statuses.Paused')}</option>
+                        <option value='Ended'>{t('game:statuses.Ended')}</option>
                       </Select>
                     </Label>
                     <Label>
-                      <span>Phase</span>
+                      <span>{t('game:fields.phase')}</span>
                       <Input
                         aria-label={`${room.room_id}-phase`}
                         value={draft.phaseLabel}
@@ -179,7 +182,7 @@ export function GameRoomPanel({
                       disabled={pending}
                       onClick={() => onSaveRoom(room.room_id)}
                     >
-                      Save Room
+                      {t('game:actions.saveRoom')}
                     </Button>
                   </div>
                 ) : null}

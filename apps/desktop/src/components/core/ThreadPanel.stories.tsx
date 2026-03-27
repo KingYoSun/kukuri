@@ -1,18 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import {
-  STORY_THREAD_PANEL_STATE,
-  STORY_THREAD_POSTS,
+  createStoryThreadPanelState,
+  createStoryThreadPosts,
 } from '@/components/storyFixtures';
 
 import { ThreadPanel } from './ThreadPanel';
+
+const threadPanelState = createStoryThreadPanelState();
+const threadPosts = createStoryThreadPosts();
 
 const meta = {
   title: 'Core/ThreadPanel',
   component: ThreadPanel,
   args: {
-    state: STORY_THREAD_PANEL_STATE,
-    posts: STORY_THREAD_POSTS,
+    state: threadPanelState,
+    posts: threadPosts,
     onOpenAuthor: () => undefined,
     onOpenThread: () => undefined,
     onReply: () => undefined,
@@ -20,8 +23,8 @@ const meta = {
   render: () => (
     <div style={{ width: 'min(44rem, calc(100vw - 2rem))' }}>
       <ThreadPanel
-        state={STORY_THREAD_PANEL_STATE}
-        posts={STORY_THREAD_POSTS}
+        state={threadPanelState}
+        posts={threadPosts}
         onOpenAuthor={() => undefined}
         onOpenThread={() => undefined}
         onReply={() => undefined}

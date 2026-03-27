@@ -295,7 +295,7 @@ test.each([
   {
     path: '#/profile',
     workspaceLabel: 'Profile',
-    expectedControl: () => screen.getByRole('button', { name: 'プロフィールを編集' }),
+    expectedControl: () => screen.getByRole('button', { name: 'Edit Profile' }),
   },
 ])(
   'primary hash route $path selects the correct section',
@@ -405,7 +405,7 @@ test('profile edit route restores the editor and keeps overview as the default p
   renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=edit');
 
   expect(screen.getByPlaceholderText('Visible label')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'プロフィールに戻る' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Back to profile' })).toBeInTheDocument();
 });
 
 test('invalid nested author route keeps the thread pane and normalizes only the author param', async () => {
@@ -984,7 +984,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
 
   await selectWorkspace(user, 'Channels');
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends');
-  await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_only');
+  await user.selectOptions(screen.getByLabelText('Audience'), 'friend_only');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
@@ -1007,7 +1007,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
 
   await selectWorkspace(user, 'Channels');
   await user.type(screen.getByPlaceholderText('core contributors'), 'friends+');
-  await user.selectOptions(screen.getByLabelText('Channel Audience'), 'friend_plus');
+  await user.selectOptions(screen.getByLabelText('Audience'), 'friend_plus');
   await user.click(screen.getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
@@ -1072,7 +1072,7 @@ test('single attach button classifies mixed image and video files', async () => 
   const user = userEvent.setup();
   render(<App api={api} />);
 
-  await user.upload(screen.getByLabelText('Attach'), [
+  await user.upload(screen.getByLabelText(/attachment/i), [
     new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' }),
     new File([Uint8Array.from([5, 6, 7, 8])], 'clip.mp4', { type: 'video/mp4' }),
   ]);
@@ -1107,7 +1107,7 @@ test('video upload generates poster attachment before publish', async () => {
   render(<App api={api} />);
 
   await user.upload(
-    screen.getByLabelText('Attach'),
+    screen.getByLabelText(/attachment/i),
     new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
   );
 
@@ -1140,7 +1140,7 @@ test('video upload generates poster attachment with metadata seek fallback', asy
   render(<App api={api} />);
 
   await user.upload(
-    screen.getByLabelText('Attach'),
+    screen.getByLabelText(/attachment/i),
     new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
   );
   await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -1162,7 +1162,7 @@ test('video poster generation failure blocks publish', async () => {
   render(<App api={api} />);
 
   await user.upload(
-    screen.getByLabelText('Attach'),
+    screen.getByLabelText(/attachment/i),
     new File([Uint8Array.from([1, 3, 5, 7])], 'broken.mp4', { type: 'video/mp4' })
   );
 
@@ -1181,7 +1181,7 @@ test('composer shows image draft preview before publish', async () => {
   render(<App api={createDesktopMockApi()} />);
 
   await user.upload(
-    screen.getByLabelText('Attach'),
+    screen.getByLabelText(/attachment/i),
     new File([Uint8Array.from([1, 2, 3, 4])], 'flower.png', { type: 'image/png' })
   );
 
@@ -1198,7 +1198,7 @@ test('composer shows video poster draft preview before publish', async () => {
   render(<App api={createDesktopMockApi()} />);
 
   await user.upload(
-    screen.getByLabelText('Attach'),
+    screen.getByLabelText(/attachment/i),
     new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
   );
 
@@ -1840,7 +1840,7 @@ test('local profile editor saves profile draft from primary navigation and setti
   render(<App api={api} />);
 
   await selectWorkspace(user, 'Profile');
-  await user.click(screen.getByRole('button', { name: 'プロフィールを編集' }));
+  await user.click(screen.getByRole('button', { name: 'Edit Profile' }));
   const profileSection = screen.getByPlaceholderText('Visible label').closest('.shell-section');
   if (!(profileSection instanceof HTMLElement)) {
     throw new Error('profile section not found');
@@ -1852,7 +1852,7 @@ test('local profile editor saves profile draft from primary navigation and setti
 
   await waitFor(() => {
     expect(screen.getByText('Local Author')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'プロフィールを編集' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
     expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
   });
 

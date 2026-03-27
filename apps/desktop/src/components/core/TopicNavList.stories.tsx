@@ -1,15 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { STORY_TOPIC_ITEMS } from '@/components/storyFixtures';
+import { createStoryTopicItems } from '@/components/storyFixtures';
 import { Card } from '@/components/ui/card';
 
 import { TopicNavList } from './TopicNavList';
+
+const topicItems = createStoryTopicItems();
 
 const meta = {
   title: 'Core/TopicNavList',
   component: TopicNavList,
   args: {
-    items: STORY_TOPIC_ITEMS,
+    items: topicItems,
     onSelectTopic: () => undefined,
     onRemoveTopic: () => undefined,
   },
@@ -17,7 +19,7 @@ const meta = {
     <div style={{ maxWidth: '320px' }}>
       <Card className='topic-list'>
         <TopicNavList
-          items={STORY_TOPIC_ITEMS}
+          items={topicItems}
           onSelectTopic={() => undefined}
           onRemoveTopic={() => undefined}
         />

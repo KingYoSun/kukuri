@@ -1,0 +1,68 @@
+{
+  "context": {
+    "author": "Author",
+    "close": "Close {{title}}",
+    "threadEmpty": "Select a post to inspect the thread.",
+    "threadSummary": "{{count}} posts in thread",
+    "thread": "Thread"
+  },
+  "navigation": {
+    "activeCount": "{{count}} active",
+    "addTopic": "Add Topic",
+    "close": "Close navigation",
+    "open": "Open navigation",
+    "placeholder": "kukuri:topic:demo",
+    "primaryNavigation": "Primary navigation",
+    "removeTopic": "Remove {{topic}}",
+    "seededDht": "seeded dht",
+    "staticPeers": "static peers",
+    "title": "Topics",
+    "topicSummary": "{{status}} / peers: {{count}}",
+    "topicsButton": "Topics",
+    "trackedTopics": "Tracked Topics"
+  },
+  "primarySections": {
+    "channels": "Channels",
+    "game": "Game",
+    "live": "Live",
+    "profile": "Profile",
+    "timeline": "Timeline"
+  },
+  "settingsDrawer": {
+    "close": "Close settings and diagnostics",
+    "currentSection": "Current section",
+    "eyebrow": "Settings",
+    "open": "Open settings and diagnostics",
+    "sectionsLabel": "Settings sections",
+    "title": "Settings & diagnostics"
+  },
+  "settingsSections": {
+    "appearance": {
+      "description": "Local light, dark, and language selection.",
+      "label": "Appearance"
+    },
+    "community-node": {
+      "description": "Configured community nodes, auth, consent, and refresh actions.",
+      "label": "Community Node"
+    },
+    "connectivity": {
+      "description": "Sync summary, peer tickets, and global error visibility.",
+      "label": "Connectivity"
+    },
+    "discovery": {
+      "description": "Seeded DHT configuration and discovery diagnostics.",
+      "label": "Discovery"
+    }
+  },
+  "topBar": {
+    "activeTopicBar": "Active topic bar"
+  },
+  "workspace": {
+    "composeTarget": "Compose Target",
+    "noPosts": "No posts yet for this topic.",
+    "noPublicPosts": "No public posts from you in this topic yet.",
+    "refresh": "Refresh",
+    "tabs": "Workspaces",
+    "viewScope": "View Scope"
+  }
+}

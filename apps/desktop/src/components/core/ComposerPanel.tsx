@@ -1,6 +1,7 @@
 import type { ChangeEventHandler, FormEventHandler } from 'react';
 
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,17 +43,19 @@ export function ComposerPanel({
   replyTarget,
   onClearReply,
 }: ComposerPanelProps) {
+  const { t } = useTranslation(['common']);
+
   return (
     <form className='composer' onSubmit={onSubmit}>
       {replyTarget ? (
         <div className='reply-banner'>
-          <strong>Replying</strong>
+          <strong>{t('composer.replying')}</strong>
           <Button
             className='shell-icon-button'
             variant='ghost'
             size='icon'
             type='button'
-            aria-label='Clear reply'
+            aria-label={t('composer.clearReply')}
             onClick={onClearReply}
           >
             <X className='size-5' aria-hidden='true' />
@@ -63,14 +66,14 @@ export function ComposerPanel({
       <Textarea
         value={value}
         onChange={onChange}
-        placeholder={replyTarget ? 'Write a reply' : 'Write a post'}
+        placeholder={replyTarget ? t('composer.writeReply') : t('composer.writePost')}
       />
 
       <Label className='file-field file-field-compact'>
-        <span>Attach</span>
+        <span>{t('common:fallbacks.attachment')}</span>
         <Input
           key={attachmentInputKey}
-          aria-label='Attach'
+          aria-label={t('common:fallbacks.attachment')}
           type='file'
           accept='image/*,video/*'
           multiple
@@ -83,10 +86,10 @@ export function ComposerPanel({
       <ComposerDraftPreviewList items={draftMediaItems} onRemove={onRemoveDraftAttachment} />
 
       <div className='topic-diagnostic topic-diagnostic-secondary'>
-        <span>Audience: {audienceLabel}</span>
+        <span>{t('labels.audience')}: {audienceLabel}</span>
       </div>
 
-      <Button type='submit'>{replyTarget ? 'Reply' : 'Publish'}</Button>
+      <Button type='submit'>{replyTarget ? t('actions.reply') : t('actions.publish')}</Button>
     </form>
   );
 }

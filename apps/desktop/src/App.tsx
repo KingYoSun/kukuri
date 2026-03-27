@@ -16,6 +16,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { PanelLeftOpen, Settings } from 'lucide-react';
@@ -100,6 +101,13 @@ import {
 } from './lib/api';
 import { blobToCreateAttachment, fileToCreateAttachment } from './lib/attachments';
 import { readDesktopTheme, type DesktopTheme, writeDesktopTheme } from './lib/theme';
+import i18n, { type SupportedLocale } from './i18n';
+import {
+  formatLocalizedBytes,
+  formatLocalizedNumber,
+  formatLocalizedTime,
+  getResolvedLocale,
+} from './i18n/format';
 
 type AppProps = {
   api?: DesktopApi;
@@ -266,7 +274,7 @@ const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
   peer_count: 0,
   pending_events: 0,
-  status_detail: 'No peers configured',
+  status_detail: '',
   last_error: null,
   configured_peers: [],
   subscribed_topics: [],
@@ -494,6 +502,10 @@ function parsePrimarySectionPath(pathname: string): PrimarySection | null {
   return match?.[0] ?? null;
 }
 
+function translate(key: string, options?: Record<string, unknown>): string {
+  return i18n.t(key, options) as string;
+}
+
 function selectPrimaryImage(post: PostView): AttachmentView | null {
   return post.attachments.find((attachment) => attachment.role === 'image_original') ?? null;
 }
@@ -511,14 +523,8 @@ function selectVideoManifest(post: PostView): AttachmentView | null {
   );
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${bytes} B`;
+function formatBytes(bytes: number, locale?: string | null): string {
+  return formatLocalizedBytes(bytes, locale);
 }
 
 function shortPubkey(pubkey: string): string {
@@ -551,11 +557,13 @@ function authorDisplayLabel(
 }
 
 function formatListLabel(values: string[]): string {
-  return values.length > 0 ? values.join(', ') : 'none';
+  return values.length > 0 ? values.join(', ') : translate('common:fallbacks.none');
 }
 
-function formatLastReceivedLabel(timestamp?: number | null): string {
-  return timestamp ? new Date(timestamp).toLocaleTimeString('ja-JP') : 'no events';
+function formatLastReceivedLabel(timestamp?: number | null, locale?: string | null): string {
+  return timestamp
+    ? formatLocalizedTime(timestamp, locale)
+    : translate('common:fallbacks.noEvents');
 }
 
 function strongestRelationshipLabel(relationship: {
@@ -581,22 +589,22 @@ function strongestRelationshipLabel(relationship: {
 
 function inviteOutputSummaryLabel(label: InviteOutputLabel): string {
   if (label === 'grant') {
-    return 'Latest grant';
+    return translate('channels:latestGrant');
   }
   if (label === 'share') {
-    return 'Latest share';
+    return translate('channels:latestShare');
   }
-  return 'Latest invite';
+  return translate('channels:latestInvite');
 }
 
 function channelPolicyDescription(audienceKind: JoinedPrivateChannelView['audience_kind']) {
   if (audienceKind === 'friend_only') {
-    return 'Friends: only mutual followers can join';
+    return translate('channels:policies.friend_only');
   }
   if (audienceKind === 'friend_plus') {
-    return 'Friends+: participants can share to their mutuals';
+    return translate('channels:policies.friend_plus');
   }
-  return 'Invite only';
+  return translate('channels:policies.invite_only');
 }
 
 function channelRefValue(channelRef: ChannelRef): string {
@@ -638,11 +646,11 @@ function audienceLabelForChannelRef(
   joinedChannels: JoinedPrivateChannelView[]
 ): string {
   if (channelRef.kind === 'public') {
-    return 'Public';
+    return translate('common:audience.public');
   }
   return (
     joinedChannels.find((channel) => channel.channel_id === channelRef.channel_id)?.label ??
-    'Private channel'
+    translate('common:audience.privateChannel')
   );
 }
 
@@ -651,15 +659,15 @@ function audienceLabelForTimelineScope(
   joinedChannels: JoinedPrivateChannelView[]
 ): string {
   if (scope.kind === 'all_joined') {
-    return 'All joined';
+    return translate('common:audience.allJoined');
   }
   if (scope.kind === 'channel') {
     return (
       joinedChannels.find((channel) => channel.channel_id === scope.channel_id)?.label ??
-      'Private channel'
+      translate('common:audience.privateChannel')
     );
   }
-  return 'Public';
+  return translate('common:audience.public');
 }
 
 function formatSeedPeer(peer: DiscoveryConfig['seed_peers'][number]): string {
@@ -683,9 +691,11 @@ function syncStatusBadgeTone(syncStatus: SyncStatus): 'accent' | 'destructive' |
 
 function syncStatusBadgeLabel(syncStatus: SyncStatus): string {
   if (syncStatus.last_error) {
-    return 'error';
+    return translate('common:states.error');
   }
-  return syncStatus.connected ? 'connected' : 'waiting';
+  return syncStatus.connected
+    ? translate('common:states.connected')
+    : translate('common:states.waiting');
 }
 
 function topicConnectionLabel(diagnostic?: TopicSyncStatus): string {
@@ -706,63 +716,111 @@ function communityNodeConnectivityUrlsLabel(status?: CommunityNodeNodeStatus): s
     return status.resolved_urls.connectivity_urls.join(', ');
   }
   if (status?.consent_state && !status.consent_state.all_required_accepted) {
-    return 'pending consent acceptance';
+    return translate('settings:communityNode.values.pendingConsentAcceptance');
   }
   if (status?.auth_state.authenticated) {
-    return 'not resolved yet';
+    return translate('settings:communityNode.values.notResolvedYet');
   }
-  return 'not resolved';
+  return translate('settings:communityNode.values.notResolved');
 }
 
 function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): string {
   if (!status) {
-    return 'save nodes to begin authentication';
+    return translate('settings:communityNode.values.saveNodesToBegin');
   }
   if (!status.auth_state.authenticated) {
-    return 'authenticate this node';
+    return translate('settings:communityNode.values.authenticateThisNode');
   }
   if (status.consent_state && !status.consent_state.all_required_accepted) {
-    return 'accept required policies to resolve connectivity urls';
+    return translate('settings:communityNode.values.acceptPolicies');
   }
   if (status.restart_required) {
-    return 'unexpected restart requirement; refresh metadata or restart only as fallback';
+    return translate('settings:communityNode.values.restartUnexpected');
   }
   if (!status.resolved_urls) {
-    return 'refresh metadata if connectivity urls stay unresolved';
+    return translate('settings:communityNode.values.refreshMetadata');
   }
-  return 'connectivity urls active on current session';
+  return translate('settings:communityNode.values.connectivityUrlsActiveOnCurrentSession');
 }
 
 function communityNodeSessionActivationLabel(status?: CommunityNodeNodeStatus): string {
   if (!status) {
-    return 'unknown';
+    return translate('common:states.unknown');
   }
   if (status.restart_required) {
-    return 'restart required (unexpected)';
+    return translate('settings:communityNode.values.restartRequiredUnexpected');
   }
   if (status.resolved_urls?.connectivity_urls?.length) {
-    return 'active on current session';
+    return translate('settings:communityNode.values.activeOnCurrentSession');
   }
   if (status.consent_state && !status.consent_state.all_required_accepted) {
-    return 'waiting for consent acceptance';
+    return translate('settings:communityNode.values.waitingForConsent');
   }
   if (status.auth_state.authenticated) {
-    return 'awaiting connectivity metadata';
+    return translate('settings:communityNode.values.awaitingConnectivityMetadata');
   }
-  return 'not authenticated';
+  return translate('settings:communityNode.values.notAuthenticated');
 }
 
 function communityNodeAuthLabel(status?: CommunityNodeNodeStatus): string {
   return status?.auth_state.authenticated
-    ? `yes (${status.auth_state.expires_at ?? 'unknown'})`
-    : 'no';
+    ? `${translate('common:states.yes')} (${status.auth_state.expires_at ?? translate('common:states.unknown')})`
+    : translate('common:states.no');
 }
 
 function communityNodeConsentLabel(status?: CommunityNodeNodeStatus): string {
   if (!status?.consent_state) {
-    return 'unknown';
+    return translate('common:states.unknown');
   }
-  return status.consent_state.all_required_accepted ? 'accepted' : 'required';
+  return status.consent_state.all_required_accepted
+    ? translate('common:states.accepted')
+    : translate('common:states.required');
+}
+
+function translateTopicConnectionText(label: string): string {
+  if (label === 'joined') {
+    return translate('common:states.joined');
+  }
+  if (label === 'relay-assisted') {
+    return translate('common:states.relayAssisted');
+  }
+  if (label === 'idle') {
+    return translate('common:states.idle');
+  }
+  return label;
+}
+
+function translateAudienceKindLabel(kind: ChannelAudienceKind): string {
+  return translate(`channels:audienceOptions.${kind}`);
+}
+
+function translateLiveStatus(status: LiveSessionView['status']): string {
+  return translate(`live:statuses.${status}`);
+}
+
+function translateGameStatus(status: GameRoomStatus): string {
+  return translate(`game:statuses.${status}`);
+}
+
+function translateBooleanLabel(value: boolean): string {
+  return value ? translate('common:states.yes') : translate('common:states.no');
+}
+
+function formatCount(value: number): string {
+  return formatLocalizedNumber(value);
+}
+
+function localizeAudienceLabel(label: string): string {
+  if (label === 'Public') {
+    return translate('common:audience.public');
+  }
+  if (label === 'All joined') {
+    return translate('common:audience.allJoined');
+  }
+  if (label === 'Private channel') {
+    return translate('common:audience.privateChannel');
+  }
+  return label;
 }
 
 function mergeCommunityNodeStatus(
@@ -952,7 +1010,7 @@ async function waitForPosterFrame(video: HTMLVideoElement): Promise<void> {
       }
       settled = true;
       cleanup();
-      reject(new Error('failed to generate video poster'));
+      reject(new Error(translate('common:errors.failedToGenerateVideoPoster')));
     };
 
     const resolveIfReady = () => {
@@ -1037,7 +1095,7 @@ async function generateVideoPoster(file: File): Promise<File> {
           video_height: video.videoHeight || null,
           video_width: video.videoWidth || null,
         });
-        reject(new Error('failed to generate video poster'));
+        reject(new Error(translate('common:errors.failedToGenerateVideoPoster')));
       };
 
       const timeoutId = window.setTimeout(fail, VIDEO_POSTER_TIMEOUT_MS);
@@ -1228,6 +1286,16 @@ function DesktopShellPage({
   theme,
   onThemeChange,
 }: DesktopShellPageProps) {
+  const { t, i18n: i18nInstance } = useTranslation([
+    'common',
+    'shell',
+    'settings',
+    'profile',
+    'channels',
+    'live',
+    'game',
+  ]);
+  const locale = getResolvedLocale(i18nInstance.resolvedLanguage);
   const storeApi = useDesktopShellStoreApi();
   const {
     trackedTopics,
@@ -1297,6 +1365,11 @@ function DesktopShellPage({
     shellChromeState,
     setField,
   } = useDesktopShellStore();
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   const makeFieldSetter = useCallback(
     function <K extends keyof DesktopShellState>(key: K) {
       return (value: DesktopShellStateValue<K>) => setField(key, value);
@@ -1835,7 +1908,10 @@ function DesktopShellPage({
               } else {
                 next[currentTopics[index]] = {
                   status: 'error',
-                  error: messageFromError(result.reason, 'failed to load live sessions'),
+                  error: messageFromError(
+                    result.reason,
+                    translate('common:errors.failedToLoadLiveSessions')
+                  ),
                 };
               }
             }
@@ -1852,7 +1928,10 @@ function DesktopShellPage({
               } else {
                 next[currentTopics[index]] = {
                   status: 'error',
-                  error: messageFromError(result.reason, 'failed to load game rooms'),
+                  error: messageFromError(
+                    result.reason,
+                    translate('common:errors.failedToLoadGameRooms')
+                  ),
                 };
               }
             }
@@ -1869,7 +1948,10 @@ function DesktopShellPage({
               } else {
                 next[currentTopics[index]] = {
                   status: 'error',
-                  error: messageFromError(result.reason, 'failed to load private channels'),
+                  error: messageFromError(
+                    result.reason,
+                    translate('common:errors.failedToLoadPrivateChannels')
+                  ),
                 };
               }
             }
@@ -1907,7 +1989,10 @@ function DesktopShellPage({
               error: null,
             });
           } else {
-            const nextProfileError = messageFromError(profileResult.reason, 'failed to load profile');
+            const nextProfileError = messageFromError(
+              profileResult.reason,
+              translate('common:errors.failedToLoadProfile')
+            );
             setProfileError(nextProfileError);
             setProfilePanelState({
               status: 'error',
@@ -1924,7 +2009,7 @@ function DesktopShellPage({
             setAuthorError(
               authorViewResult.reason instanceof Error
                 ? authorViewResult.reason.message
-                : 'failed to load author'
+                : translate('common:errors.failedToLoadAuthor')
             );
           }
           if (threadView) {
@@ -1938,7 +2023,11 @@ function DesktopShellPage({
         if (requestId !== loadTopicsRequestRef.current) {
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : 'failed to load topic');
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : translate('common:errors.failedToLoadTopic')
+        );
       }
     },
     [
@@ -2453,7 +2542,10 @@ function DesktopShellPage({
         profileMode: 'overview',
       });
     } catch (saveError) {
-      const nextProfileError = messageFromError(saveError, 'failed to save profile');
+      const nextProfileError = messageFromError(
+        saveError,
+        translate('common:errors.failedToSaveProfile')
+      );
       setProfileError(nextProfileError);
       setProfilePanelState({
         status: 'error',
@@ -2558,7 +2650,7 @@ function DesktopShellPage({
   async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!channelLabelInput.trim()) {
-      setChannelError('channel label is required');
+      setChannelError(translate('channels:errors.channelLabelRequired'));
       return;
     }
     setChannelActionPending('create');
@@ -2618,7 +2710,9 @@ function DesktopShellPage({
       });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (channelCreateError) {
-      setChannelError(messageFromError(channelCreateError, 'failed to create channel'));
+      setChannelError(
+        messageFromError(channelCreateError, translate('channels:errors.failedCreateChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2626,7 +2720,7 @@ function DesktopShellPage({
 
   async function handleCreateInvite() {
     if (!activePrivateChannel) {
-      setChannelError('select a private channel before creating an invite');
+      setChannelError(translate('channels:errors.selectChannelForInvite'));
       return;
     }
     setChannelActionPending('invite');
@@ -2636,7 +2730,9 @@ function DesktopShellPage({
       setInviteOutputLabel('invite');
       setChannelError(null);
     } catch (inviteError) {
-      setChannelError(messageFromError(inviteError, 'failed to create invite'));
+      setChannelError(
+        messageFromError(inviteError, translate('channels:errors.failedCreateInvite'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2644,7 +2740,7 @@ function DesktopShellPage({
 
   async function handleCreateGrant() {
     if (!activePrivateChannel) {
-      setChannelError('select a private channel before creating a grant');
+      setChannelError(translate('channels:errors.selectChannelForGrant'));
       return;
     }
     setChannelActionPending('grant');
@@ -2654,7 +2750,9 @@ function DesktopShellPage({
       setInviteOutputLabel('grant');
       setChannelError(null);
     } catch (grantError) {
-      setChannelError(messageFromError(grantError, 'failed to create friend grant'));
+      setChannelError(
+        messageFromError(grantError, translate('channels:errors.failedCreateGrant'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2662,7 +2760,7 @@ function DesktopShellPage({
 
   async function handleCreateShare() {
     if (!activePrivateChannel) {
-      setChannelError('select a private channel before creating a share');
+      setChannelError(translate('channels:errors.selectChannelForShare'));
       return;
     }
     setChannelActionPending('share');
@@ -2672,7 +2770,9 @@ function DesktopShellPage({
       setInviteOutputLabel('share');
       setChannelError(null);
     } catch (shareError) {
-      setChannelError(messageFromError(shareError, 'failed to create friends+ share'));
+      setChannelError(
+        messageFromError(shareError, translate('channels:errors.failedCreateShare'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2743,7 +2843,7 @@ function DesktopShellPage({
   async function handleJoinInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!inviteTokenInput.trim()) {
-      setChannelError('invite token is required');
+      setChannelError(translate('channels:errors.inviteTokenRequired'));
       return;
     }
     setChannelActionPending('join-invite');
@@ -2755,7 +2855,9 @@ function DesktopShellPage({
         joinedChannelFromInvitePreview(preview)
       );
     } catch (inviteError) {
-      setChannelError(messageFromError(inviteError, 'failed to join private channel'));
+      setChannelError(
+        messageFromError(inviteError, translate('channels:errors.failedJoinChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2763,7 +2865,7 @@ function DesktopShellPage({
 
   async function handleJoinGrant() {
     if (!inviteTokenInput.trim()) {
-      setChannelError('grant token is required');
+      setChannelError(translate('channels:errors.grantTokenRequired'));
       return;
     }
     setChannelActionPending('join-grant');
@@ -2775,7 +2877,9 @@ function DesktopShellPage({
         joinedChannelFromFriendGrantPreview(preview)
       );
     } catch (grantError) {
-      setChannelError(messageFromError(grantError, 'failed to join friends channel'));
+      setChannelError(
+        messageFromError(grantError, translate('channels:errors.failedJoinFriendsChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2783,7 +2887,7 @@ function DesktopShellPage({
 
   async function handleJoinShare() {
     if (!inviteTokenInput.trim()) {
-      setChannelError('share token is required');
+      setChannelError(translate('channels:errors.shareTokenRequired'));
       return;
     }
     setChannelActionPending('join-share');
@@ -2795,7 +2899,9 @@ function DesktopShellPage({
         joinedChannelFromFriendSharePreview(preview)
       );
     } catch (shareError) {
-      setChannelError(messageFromError(shareError, 'failed to join friends+ channel'));
+      setChannelError(
+        messageFromError(shareError, translate('channels:errors.failedJoinFriendsPlusChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2803,7 +2909,7 @@ function DesktopShellPage({
 
   async function handleFreezePrivateChannel() {
     if (!activePrivateChannel) {
-      setChannelError('select a private channel before freezing it');
+      setChannelError(translate('channels:errors.selectChannelForFreeze'));
       return;
     }
     setChannelActionPending('freeze');
@@ -2813,7 +2919,9 @@ function DesktopShellPage({
       setChannelError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (freezeError) {
-      setChannelError(messageFromError(freezeError, 'failed to freeze private channel'));
+      setChannelError(
+        messageFromError(freezeError, translate('channels:errors.failedFreezeChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2821,7 +2929,7 @@ function DesktopShellPage({
 
   async function handleRotatePrivateChannel() {
     if (!activePrivateChannel) {
-      setChannelError('select a private channel before rotating it');
+      setChannelError(translate('channels:errors.selectChannelForRotate'));
       return;
     }
     setChannelActionPending('rotate');
@@ -2831,7 +2939,9 @@ function DesktopShellPage({
       setChannelError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (rotateError) {
-      setChannelError(messageFromError(rotateError, 'failed to rotate private channel'));
+      setChannelError(
+        messageFromError(rotateError, translate('channels:errors.failedRotateChannel'))
+      );
     } finally {
       setChannelActionPending(null);
     }
@@ -2868,7 +2978,9 @@ function DesktopShellPage({
       });
     } catch (publishError) {
       setComposerError(
-        publishError instanceof Error ? publishError.message : 'failed to publish'
+        publishError instanceof Error
+          ? publishError.message
+          : translate('common:errors.failedToPublish')
       );
     }
   }
@@ -2892,12 +3004,12 @@ function DesktopShellPage({
           nextItems.push(await buildVideoDraftItem(file));
           continue;
         }
-        failures.push(`unsupported attachment type: ${file.name}`);
+        failures.push(translate('common:errors.unsupportedAttachmentType', { name: file.name }));
       } catch (attachmentError) {
         failures.push(
           attachmentError instanceof Error
             ? attachmentError.message
-            : 'failed to generate video poster'
+            : translate('common:errors.failedToGenerateVideoPoster')
         );
       }
     }
@@ -2950,7 +3062,10 @@ function DesktopShellPage({
         selectedThread: threadId,
       });
     } catch (threadError) {
-      const nextError = threadError instanceof Error ? threadError.message : 'failed to load thread';
+      const nextError =
+        threadError instanceof Error
+          ? threadError.message
+          : translate('common:errors.failedToLoadThread');
       setError(nextError);
       if (options?.normalizeOnEmpty) {
         startTransition(() => {
@@ -3018,7 +3133,9 @@ function DesktopShellPage({
       });
     } catch (detailError) {
       const nextError =
-        detailError instanceof Error ? detailError.message : 'failed to load author';
+        detailError instanceof Error
+          ? detailError.message
+          : translate('common:errors.failedToLoadAuthor');
       setAuthorError(nextError);
       if (options?.normalizeOnError) {
         setSelectedAuthorPubkey(null);
@@ -3057,7 +3174,7 @@ function DesktopShellPage({
       setAuthorError(
         relationshipError instanceof Error
           ? relationshipError.message
-          : 'failed to update follow state'
+          : translate('common:errors.failedToUpdateFollowState')
       );
     }
   }
@@ -3077,7 +3194,9 @@ function DesktopShellPage({
       syncRoute('replace');
     } catch (saveError) {
       setDiscoveryError(
-        saveError instanceof Error ? saveError.message : 'failed to update discovery seeds'
+        saveError instanceof Error
+          ? saveError.message
+          : translate('common:errors.failedToUpdateDiscoverySeeds')
       );
     }
   }
@@ -3097,7 +3216,9 @@ function DesktopShellPage({
       syncRoute('replace');
     } catch (saveError) {
       setCommunityNodeError(
-        saveError instanceof Error ? saveError.message : 'failed to update community nodes'
+        saveError instanceof Error
+          ? saveError.message
+          : translate('common:errors.failedToUpdateCommunityNodes')
       );
     }
   }
@@ -3114,7 +3235,9 @@ function DesktopShellPage({
       syncRoute('replace');
     } catch (clearError) {
       setCommunityNodeError(
-        clearError instanceof Error ? clearError.message : 'failed to clear community nodes'
+        clearError instanceof Error
+          ? clearError.message
+          : translate('common:errors.failedToClearCommunityNodes')
       );
     }
   }
@@ -3128,7 +3251,9 @@ function DesktopShellPage({
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (authError) {
       setCommunityNodeError(
-        authError instanceof Error ? authError.message : 'failed to authenticate community node'
+        authError instanceof Error
+          ? authError.message
+          : translate('common:errors.failedToAuthenticateCommunityNode')
       );
     }
   }
@@ -3142,7 +3267,9 @@ function DesktopShellPage({
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (clearError) {
       setCommunityNodeError(
-        clearError instanceof Error ? clearError.message : 'failed to clear community node token'
+        clearError instanceof Error
+          ? clearError.message
+          : translate('common:errors.failedToClearCommunityNodeToken')
       );
     }
   }
@@ -3156,7 +3283,9 @@ function DesktopShellPage({
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (refreshError) {
       setCommunityNodeError(
-        refreshError instanceof Error ? refreshError.message : 'failed to refresh community node'
+        refreshError instanceof Error
+          ? refreshError.message
+          : translate('common:errors.failedToRefreshCommunityNode')
       );
     }
   }
@@ -3170,7 +3299,9 @@ function DesktopShellPage({
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
       setCommunityNodeError(
-        consentError instanceof Error ? consentError.message : 'failed to fetch consent status'
+        consentError instanceof Error
+          ? consentError.message
+          : translate('common:errors.failedToFetchConsentStatus')
       );
     }
   }
@@ -3184,7 +3315,9 @@ function DesktopShellPage({
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (consentError) {
       setCommunityNodeError(
-        consentError instanceof Error ? consentError.message : 'failed to accept consents'
+        consentError instanceof Error
+          ? consentError.message
+          : translate('common:errors.failedToAcceptConsents')
       );
     }
   }
@@ -3198,14 +3331,18 @@ function DesktopShellPage({
       setPeerTicket('');
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : 'failed to import peer');
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : translate('common:errors.failedToImportPeer')
+      );
     }
   }
 
   async function handleCreateLiveSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!liveTitle.trim()) {
-      setLiveError('live session title is required');
+      setLiveError(translate('live:errors.titleRequired'));
       return;
     }
     setLiveCreatePending(true);
@@ -3228,7 +3365,7 @@ function DesktopShellPage({
       });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (liveCreateError) {
-      setLiveError(messageFromError(liveCreateError, 'failed to create live session'));
+      setLiveError(messageFromError(liveCreateError, translate('live:errors.failedCreate')));
     } finally {
       setLiveCreatePending(false);
     }
@@ -3244,7 +3381,7 @@ function DesktopShellPage({
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (joinError) {
-      setLiveError(messageFromError(joinError, 'failed to join live session'));
+      setLiveError(messageFromError(joinError, translate('live:errors.failedJoin')));
     } finally {
       setLivePendingBySessionId((current) => {
         const next = { ...current };
@@ -3264,7 +3401,7 @@ function DesktopShellPage({
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (leaveError) {
-      setLiveError(messageFromError(leaveError, 'failed to leave live session'));
+      setLiveError(messageFromError(leaveError, translate('live:errors.failedLeave')));
     } finally {
       setLivePendingBySessionId((current) => {
         const next = { ...current };
@@ -3284,7 +3421,7 @@ function DesktopShellPage({
       setLiveError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (endError) {
-      setLiveError(messageFromError(endError, 'failed to end live session'));
+      setLiveError(messageFromError(endError, translate('live:errors.failedEnd')));
     } finally {
       setLivePendingBySessionId((current) => {
         const next = { ...current };
@@ -3305,11 +3442,11 @@ function DesktopShellPage({
       )
     );
     if (!gameTitle.trim()) {
-      setGameError('game room title is required');
+      setGameError(translate('game:errors.titleRequired'));
       return;
     }
     if (participants.length < 2) {
-      setGameError('game room requires at least two unique participants');
+      setGameError(translate('game:errors.participantsRequired'));
       return;
     }
     setGameCreatePending(true);
@@ -3334,7 +3471,7 @@ function DesktopShellPage({
       });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (createError) {
-      setGameError(messageFromError(createError, 'failed to create game room'));
+      setGameError(messageFromError(createError, translate('game:errors.failedCreate')));
     } finally {
       setGameCreatePending(false);
     }
@@ -3368,7 +3505,7 @@ function DesktopShellPage({
       const rawScore = draft.scores[score.participant_id] ?? String(score.score);
       const parsed = Number.parseInt(rawScore, 10);
       if (Number.isNaN(parsed)) {
-        setGameError(`invalid score for ${score.label}`);
+        setGameError(translate('game:errors.invalidScore', { label: score.label }));
         return;
       }
       scores.push({
@@ -3397,7 +3534,7 @@ function DesktopShellPage({
       });
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (updateError) {
-      setGameError(messageFromError(updateError, 'failed to update game room'));
+      setGameError(messageFromError(updateError, translate('game:errors.failedUpdate')));
     } finally {
       setGameSavingByRoomId((current) => {
         const next = { ...current };
@@ -3761,16 +3898,16 @@ function DesktopShellPage({
       const mediaStatusLabel =
         mediaKind === 'video'
           ? videoUnsupportedOnClient
-            ? 'unsupported on this client'
+            ? translate('common:media.unsupportedOnClient')
             : videoPlaybackSrc
-              ? 'playable video'
+              ? translate('common:media.playableVideo')
               : videoPosterPreviewSrc
-                ? 'poster ready'
-                : 'syncing poster'
+                ? translate('common:media.posterReady')
+                : translate('common:media.syncingPoster')
           : mediaKind === 'image'
             ? imagePreviewSrc
-              ? 'image ready'
-              : 'syncing image'
+              ? translate('common:media.imageReady')
+              : translate('common:media.syncingImage')
             : null;
 
       return {
@@ -3790,8 +3927,8 @@ function DesktopShellPage({
         relationshipLabel: strongestRelationshipLabel(post),
         audienceChipLabel: post.channel_id
           ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
-            post.audience_label
-          : post.audience_label,
+            localizeAudienceLabel(post.audience_label)
+          : localizeAudienceLabel(post.audience_label),
         threadTargetId: post.root_id ?? post.object_id,
         media: {
           objectId: post.object_id,
@@ -3809,7 +3946,7 @@ function DesktopShellPage({
                   : 'loading'
                 : 'loading',
           metaMime: mediaMetaAttachment?.mime ?? null,
-          metaBytesLabel: mediaMetaAttachment ? formatBytes(mediaMetaAttachment.bytes) : null,
+          metaBytesLabel: mediaMetaAttachment ? formatBytes(mediaMetaAttachment.bytes, locale) : null,
           imagePreviewSrc,
           videoPosterPreviewSrc,
           videoPlaybackSrc,
@@ -3832,6 +3969,7 @@ function DesktopShellPage({
     [
       activeJoinedChannels,
       localProfile?.picture,
+      locale,
       mediaObjectUrls,
       selectedAuthor,
       setUnsupportedVideoManifests,
@@ -3867,9 +4005,9 @@ function DesktopShellPage({
         removable: trackedTopics.length > 1,
         connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
         peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
-        lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at),
+        lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
       })),
-    [activeTopic, topicDiagnostics, trackedTopics]
+    [activeTopic, locale, topicDiagnostics, trackedTopics]
   );
   const composerDraftViews = useMemo<ComposerDraftMediaView[]>(
     () =>
@@ -3879,22 +4017,22 @@ function DesktopShellPage({
         previewUrl: item.preview_url,
         attachments: item.attachments.map((attachment) => ({
           key: `${attachment.role ?? attachment.mime}-${attachment.file_name ?? item.source_name}`,
-          label: attachment.role ?? 'attachment',
+          label: attachment.role ?? translate('common:fallbacks.attachment'),
           mime: attachment.mime,
-          byteSizeLabel: formatBytes(attachment.byte_size),
+          byteSizeLabel: formatBytes(attachment.byte_size, locale),
         })),
       })),
-    [draftMediaItems]
+    [draftMediaItems, locale]
   );
   const threadPanelState = useMemo<ThreadPanelState>(
     () => ({
       selectedThreadId: selectedThread,
       summary: selectedThread
-        ? `${thread.length} posts in thread`
-        : 'Select a post to inspect the thread.',
-      emptyCopy: 'Select a post to inspect the thread.',
+        ? t('shell:context.threadSummary', { count: formatCount(thread.length) })
+        : t('shell:context.threadEmpty'),
+      emptyCopy: t('shell:context.threadEmpty'),
     }),
-    [selectedThread, thread.length]
+    [selectedThread, t, thread.length]
   );
   const authorDetailView = useMemo<AuthorDetailView>(
     () => ({
@@ -3905,7 +4043,7 @@ function DesktopShellPage({
             selectedAuthor.display_name,
             selectedAuthor.name
           )
-        : 'Author Detail',
+        : t('common:fallbacks.authorDetail'),
       summary: selectedAuthor
         ? {
             label: strongestRelationshipLabel(selectedAuthor),
@@ -3921,28 +4059,28 @@ function DesktopShellPage({
         : null,
       authorError,
     }),
-    [authorError, selectedAuthor, syncStatus.local_author_pubkey]
+    [authorError, selectedAuthor, syncStatus.local_author_pubkey, t]
   );
   const timelineViewScopeOptions = useMemo(
     () => [
-      { value: 'public', label: 'Public' },
-      { value: 'all_joined', label: 'All joined' },
+      { value: 'public', label: t('common:audience.public') },
+      { value: 'all_joined', label: t('common:audience.allJoined') },
       ...activeJoinedChannels.map((channel) => ({
         value: `channel:${channel.channel_id}`,
         label: channel.label,
       })),
     ],
-    [activeJoinedChannels]
+    [activeJoinedChannels, t]
   );
   const composeTargetOptions = useMemo(
     () => [
-      { value: 'public', label: 'Public' },
+      { value: 'public', label: t('common:audience.public') },
       ...activeJoinedChannels.map((channel) => ({
         value: `channel:${channel.channel_id}`,
         label: channel.label,
       })),
     ],
-    [activeJoinedChannels]
+    [activeJoinedChannels, t]
   );
   const navRailHeader = (
     <div className='shell-nav-status'>
@@ -3951,12 +4089,19 @@ function DesktopShellPage({
           label={syncStatusBadgeLabel(syncStatus)}
           tone={syncStatusBadgeTone(syncStatus)}
         />
-        <StatusBadge label={`${syncStatus.peer_count} peers`} />
+        <StatusBadge label={`${formatCount(syncStatus.peer_count)} ${t('settings:connectivity.metrics.peers').toLowerCase()}`} />
         <StatusBadge
-          label={syncStatus.discovery.mode === 'seeded_dht' ? 'seeded dht' : 'static peers'}
+          label={
+            syncStatus.discovery.mode === 'seeded_dht'
+              ? t('shell:navigation.seededDht')
+              : t('shell:navigation.staticPeers')
+          }
         />
         {syncStatus.pending_events > 0 ? (
-          <StatusBadge label={`${syncStatus.pending_events} pending`} tone='warning' />
+          <StatusBadge
+            label={`${formatCount(syncStatus.pending_events)} ${t('settings:connectivity.metrics.pending').toLowerCase()}`}
+            tone='warning'
+          />
         ) : null}
       </div>
       <Button
@@ -3967,8 +4112,8 @@ function DesktopShellPage({
         type='button'
         aria-label={
           shellChromeState.settingsOpen
-            ? 'Close settings and diagnostics'
-            : 'Open settings and diagnostics'
+            ? t('shell:settingsDrawer.close')
+            : t('shell:settingsDrawer.open')
         }
         aria-controls={SHELL_SETTINGS_ID}
         aria-expanded={shellChromeState.settingsOpen}
@@ -3991,36 +4136,42 @@ function DesktopShellPage({
   const connectivityPanelView = useMemo<ConnectivityPanelView>(
     () => ({
       status: 'ready' as const,
-      summaryLabel: syncStatus.connected ? 'connected' : 'waiting',
+      summaryLabel: syncStatusBadgeLabel(syncStatus),
       panelError: error,
       metrics: [
         {
-          label: 'Connected',
-          value: syncStatus.connected ? 'yes' : 'no',
+          label: t('settings:connectivity.metrics.connected'),
+          value: syncStatus.connected ? t('common:states.yes') : t('common:states.no'),
           tone: syncStatus.connected ? 'accent' : 'warning',
         },
-        { label: 'Peers', value: String(syncStatus.peer_count) },
         {
-          label: 'Pending',
-          value: String(syncStatus.pending_events),
+          label: t('settings:connectivity.metrics.peers'),
+          value: formatCount(syncStatus.peer_count),
+        },
+        {
+          label: t('settings:connectivity.metrics.pending'),
+          value: formatCount(syncStatus.pending_events),
           tone: syncStatus.pending_events > 0 ? 'warning' : 'default',
         },
       ],
       diagnostics: [
         {
-          label: 'Configured Peers',
+          label: t('settings:connectivity.diagnostics.configuredPeers'),
           value: formatListLabel(syncStatus.configured_peers),
           monospace: true,
         },
-        { label: 'Connection Detail', value: syncStatus.status_detail },
         {
-          label: 'Effective Peers',
+          label: t('settings:connectivity.diagnostics.connectionDetail'),
+          value: syncStatus.status_detail || t('settings:connectivity.summaryDetailFallback'),
+        },
+        {
+          label: t('settings:connectivity.diagnostics.effectivePeers'),
           value: formatListLabel(effectivePeerIds),
           monospace: true,
         },
         {
-          label: 'Last Error',
-          value: syncStatus.last_error ?? 'none',
+          label: t('settings:connectivity.diagnostics.lastError'),
+          value: syncStatus.last_error ?? t('common:fallbacks.none'),
           tone: syncStatus.last_error ? 'danger' : 'default',
         },
       ],
@@ -4030,11 +4181,15 @@ function DesktopShellPage({
         const diagnostic = topicDiagnostics[topic];
         return {
           topic,
-          summary: `${topicConnectionLabel(diagnostic)} / peers: ${diagnostic?.peer_count ?? 0}`,
-          lastReceivedLabel: formatLastReceivedLabel(diagnostic?.last_received_at),
+          summary: t('settings:connectivity.summary', {
+            status: translateTopicConnectionText(topicConnectionLabel(diagnostic)),
+            count: diagnostic?.peer_count ?? 0,
+          }),
+          lastReceivedLabel: formatLastReceivedLabel(diagnostic?.last_received_at, locale),
           expectedPeerCount: diagnostic?.configured_peer_ids.length ?? 0,
           missingPeerCount: diagnostic?.missing_peer_ids.length ?? 0,
-          statusDetail: diagnostic?.status_detail ?? 'No topic diagnostics yet',
+          statusDetail:
+            diagnostic?.status_detail ?? t('settings:connectivity.summaryDetailFallback'),
           connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
           relayAssistedPeersLabel: formatListLabel(diagnostic?.assist_peer_ids ?? []),
           configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
@@ -4047,13 +4202,10 @@ function DesktopShellPage({
       effectivePeerIds,
       error,
       localPeerTicket,
+      locale,
       peerTicket,
-      syncStatus.connected,
-      syncStatus.configured_peers,
-      syncStatus.last_error,
-      syncStatus.peer_count,
-      syncStatus.pending_events,
-      syncStatus.status_detail,
+      syncStatus,
+      t,
       topicDiagnostics,
       trackedTopics,
     ]
@@ -4061,20 +4213,35 @@ function DesktopShellPage({
   const appearancePanelView = useMemo<AppearancePanelView>(
     () => ({
       selectedTheme: theme,
+      selectedLocale: locale,
       options: [
         {
           value: 'dark',
-          label: 'Dark',
-          description: 'High-contrast solid surfaces for low-light work.',
+          label: t('settings:appearance.themeOptions.dark.label'),
+          description: t('settings:appearance.themeOptions.dark.description'),
         },
         {
           value: 'light',
-          label: 'Light',
-          description: 'Brighter solid surfaces for daytime readability.',
+          label: t('settings:appearance.themeOptions.light.label'),
+          description: t('settings:appearance.themeOptions.light.description'),
+        },
+      ],
+      localeOptions: [
+        {
+          value: 'en',
+          label: t('settings:appearance.languageOptions.en'),
+        },
+        {
+          value: 'ja',
+          label: t('settings:appearance.languageOptions.ja'),
+        },
+        {
+          value: 'zh-CN',
+          label: t('settings:appearance.languageOptions.zh-CN'),
         },
       ],
     }),
-    [theme]
+    [locale, t, theme]
   );
   const discoveryPanelView = useMemo<DiscoveryPanelView>(
     () => ({
@@ -4082,62 +4249,62 @@ function DesktopShellPage({
       summaryLabel: syncStatus.discovery.mode,
       panelError: null,
       metrics: [
-        { label: 'Mode', value: syncStatus.discovery.mode },
+        { label: t('settings:discovery.metrics.mode'), value: syncStatus.discovery.mode },
         {
-          label: 'Connect',
+          label: t('settings:discovery.metrics.connect'),
           value: syncStatus.discovery.connect_mode,
           tone: syncStatus.discovery.connect_mode === 'direct_or_relay' ? 'accent' : 'default',
         },
         {
-          label: 'Env Lock',
-          value: discoveryConfig.env_locked ? 'yes' : 'no',
+          label: t('settings:discovery.metrics.envLock'),
+          value: discoveryConfig.env_locked ? t('common:states.yes') : t('common:states.no'),
           tone: discoveryConfig.env_locked ? 'warning' : 'default',
         },
       ],
       diagnostics: [
         {
-          label: 'Local Endpoint ID',
-          value: syncStatus.discovery.local_endpoint_id || 'unknown',
+          label: t('settings:discovery.diagnostics.localEndpointId'),
+          value: syncStatus.discovery.local_endpoint_id || t('common:fallbacks.unknown'),
           monospace: true,
         },
         {
-          label: 'Connected Peers',
+          label: t('settings:discovery.diagnostics.connectedPeers'),
           value: formatListLabel(syncStatus.discovery.connected_peer_ids),
           monospace: true,
         },
         {
-          label: 'Relay-assisted Peers',
+          label: t('settings:discovery.diagnostics.relayAssistedPeers'),
           value: formatListLabel(syncStatus.discovery.assist_peer_ids),
           monospace: true,
         },
         {
-          label: 'Manual Ticket Peers',
+          label: t('settings:discovery.diagnostics.manualTicketPeers'),
           value: formatListLabel(syncStatus.discovery.manual_ticket_peer_ids),
           monospace: true,
         },
         {
-          label: 'Community Bootstrap Peers',
+          label: t('settings:discovery.diagnostics.communityBootstrapPeers'),
           value: formatListLabel(syncStatus.discovery.bootstrap_seed_peer_ids),
           monospace: true,
         },
         {
-          label: 'Configured Seed IDs',
+          label: t('settings:discovery.diagnostics.configuredSeedIds'),
           value: formatListLabel(syncStatus.discovery.configured_seed_peer_ids),
           monospace: true,
         },
         {
-          label: 'Discovery Error',
-          value: discoveryError ?? syncStatus.discovery.last_discovery_error ?? 'none',
+          label: t('settings:discovery.diagnostics.discoveryError'),
+          value: discoveryError ?? syncStatus.discovery.last_discovery_error ?? t('common:fallbacks.none'),
           tone:
             discoveryError || syncStatus.discovery.last_discovery_error ? 'danger' : 'default',
         },
       ],
       seedPeersInput: discoverySeedInput,
       seedPeersMessage: discoveryConfig.env_locked
-        ? 'Environment overrides discovery seeds; editing is disabled.'
+        ? t('settings:discovery.messages.viewLocked')
         : discoveryEditorDirty
-          ? 'Unsaved discovery seed edits.'
-          : 'Discovery seeds update without changing runtime contracts.',
+          ? t('settings:discovery.messages.unsaved')
+          : t('settings:discovery.messages.saved'),
       seedPeersMessageTone: discoveryConfig.env_locked ? ('default' as const) : ('default' as const),
       envLocked: discoveryConfig.env_locked,
     }),
@@ -4155,35 +4322,48 @@ function DesktopShellPage({
       syncStatus.discovery.local_endpoint_id,
       syncStatus.discovery.manual_ticket_peer_ids,
       syncStatus.discovery.mode,
+      t,
     ]
   );
   const communityNodePanelView = useMemo<CommunityNodePanelView>(
     () => ({
       status: 'ready' as const,
-      summaryLabel: `${communityNodeStatuses.length} configured`,
+      summaryLabel: t('settings:communityNode.summary', { count: communityNodeStatuses.length }),
       panelError: communityNodeError,
       baseUrlsInput: communityNodeInput,
       editorMessage: communityNodeEditorDirty
-        ? 'Unsaved community node edits.'
-        : 'Save nodes before authenticating or refreshing connectivity metadata.',
+        ? t('settings:communityNode.editorMessage.unsaved')
+        : t('settings:communityNode.editorMessage.saved'),
       editorMessageTone: 'default' as const,
       nodes: communityNodeConfig.nodes.map((node) => {
         const status = communityNodeStatusByBaseUrl[node.base_url];
         return {
           baseUrl: node.base_url,
           diagnostics: [
-            { label: 'Auth', value: communityNodeAuthLabel(status) },
-            { label: 'Consent', value: communityNodeConsentLabel(status) },
             {
-              label: 'Connectivity URLs',
+              label: t('settings:communityNode.diagnostics.auth'),
+              value: communityNodeAuthLabel(status),
+            },
+            {
+              label: t('settings:communityNode.diagnostics.consent'),
+              value: communityNodeConsentLabel(status),
+            },
+            {
+              label: t('settings:communityNode.diagnostics.connectivityUrls'),
               value: communityNodeConnectivityUrlsLabel(status),
               monospace: true,
             },
-            { label: 'Session Activation', value: communityNodeSessionActivationLabel(status) },
-            { label: 'Next Step', value: communityNodeNextStepLabel(status) },
             {
-              label: 'Last Error',
-              value: status?.last_error ?? 'none',
+              label: t('settings:communityNode.diagnostics.sessionActivation'),
+              value: communityNodeSessionActivationLabel(status),
+            },
+            {
+              label: t('settings:communityNode.diagnostics.nextStep'),
+              value: communityNodeNextStepLabel(status),
+            },
+            {
+              label: t('settings:communityNode.diagnostics.lastError'),
+              value: status?.last_error ?? t('common:fallbacks.none'),
               tone: status?.last_error ? 'danger' : 'default',
             },
           ],
@@ -4198,21 +4378,42 @@ function DesktopShellPage({
       communityNodeInput,
       communityNodeStatusByBaseUrl,
       communityNodeStatuses.length,
+      t,
     ]
+  );
+  const primarySectionItems = useMemo(
+    () =>
+      PRIMARY_SECTION_ITEMS.map((item) => ({
+        ...item,
+        label: t(`shell:primarySections.${item.id}`),
+      })),
+    [t]
+  );
+  const settingsSectionCopy = useMemo(
+    () =>
+      SETTINGS_SECTION_COPY.map((section) => ({
+        ...section,
+        label: t(`shell:settingsSections.${section.id}.label`),
+        description: t(`shell:settingsSections.${section.id}.description`),
+      })),
+    [t]
   );
 
   const settingsSections = [
     {
-      ...SETTINGS_SECTION_COPY[0],
+      ...settingsSectionCopy[0],
       content: (
         <AppearancePanel
           view={appearancePanelView}
           onThemeChange={onThemeChange}
+          onLocaleChange={(nextLocale: SupportedLocale) => {
+            void i18nInstance.changeLanguage(nextLocale);
+          }}
         />
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[1],
+      ...settingsSectionCopy[1],
       content: (
         <ConnectivityPanel
           view={connectivityPanelView}
@@ -4222,7 +4423,7 @@ function DesktopShellPage({
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[2],
+      ...settingsSectionCopy[2],
       content: (
         <DiscoveryPanel
           view={discoveryPanelView}
@@ -4242,7 +4443,7 @@ function DesktopShellPage({
       ),
     },
     {
-      ...SETTINGS_SECTION_COPY[3],
+      ...settingsSectionCopy[3],
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
@@ -4281,7 +4482,7 @@ function DesktopShellPage({
       {selectedThread ? (
         <ContextPane
           paneId={`${SHELL_CONTEXT_ID}-thread`}
-          title='Thread'
+          title={t('shell:context.thread')}
           summary={threadPanelState.summary}
           showBackdrop={!selectedAuthorPubkey}
           stackIndex={0}
@@ -4304,11 +4505,11 @@ function DesktopShellPage({
       {selectedAuthorPubkey ? (
         <ContextPane
           paneId={`${SHELL_CONTEXT_ID}-author`}
-          title='Author'
+          title={t('shell:context.author')}
           summary={
             selectedAuthor
               ? authorDetailView.displayLabel
-              : 'Select an author to inspect profile and relationship.'
+              : t('common:fallbacks.selectAuthor')
           }
           showBackdrop={true}
           stackIndex={selectedThread ? 1 : 0}
@@ -4341,15 +4542,15 @@ function DesktopShellPage({
             headerContent={navRailHeader}
             addTopicControl={
               <Label>
-                <span>Add Topic</span>
+                <span>{t('shell:navigation.addTopic')}</span>
                 <div className='topic-input-row'>
                   <Input
                     value={topicInput}
                     onChange={(event) => setTopicInput(event.target.value)}
-                    placeholder='kukuri:topic:demo'
+                    placeholder={t('shell:navigation.placeholder')}
                   />
                   <Button variant='secondary' onClick={() => void handleAddTopic()}>
-                    Add
+                    {t('common:actions.add')}
                   </Button>
                 </div>
               </Label>
@@ -4363,7 +4564,7 @@ function DesktopShellPage({
             <Card className='shell-workspace-card shell-workspace-header-card'>
               <TimelineWorkspaceHeader
                 activeSection={shellChromeState.activePrimarySection}
-                items={PRIMARY_SECTION_ITEMS}
+                items={primarySectionItems}
                 onSelectSection={focusPrimarySection}
               />
             </Card>
@@ -4385,13 +4586,17 @@ function DesktopShellPage({
                     <div className='shell-workspace-header'>
                       <div className='shell-workspace-summary'>
                         <span className='relationship-badge'>
-                          {`Viewing ${audienceLabelForTimelineScope(
-                            activeTimelineScope,
-                            activeJoinedChannels
-                          )}`}
+                          {t('common:audience.viewing', {
+                            audience: audienceLabelForTimelineScope(
+                              activeTimelineScope,
+                              activeJoinedChannels
+                            ),
+                          })}
                         </span>
                         <span className='relationship-badge relationship-badge-direct'>
-                          {`Posting ${activeComposeAudienceLabel}`}
+                          {t('common:audience.posting', {
+                            audience: activeComposeAudienceLabel,
+                          })}
                         </span>
                       </div>
                       <Button
@@ -4399,14 +4604,14 @@ function DesktopShellPage({
                         type='button'
                         onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
                       >
-                        Refresh
+                        {t('common:actions.refresh')}
                       </Button>
                     </div>
                     <div className='shell-workspace-controls'>
                       <Label>
-                        <span>View Scope</span>
+                        <span>{t('shell:workspace.viewScope')}</span>
                         <Select
-                          aria-label='View Scope'
+                          aria-label={t('shell:workspace.viewScope')}
                           value={timelineScopeValue(activeTimelineScope)}
                           onChange={(event) => {
                             void handleTimelineScopeChange(event.target.value);
@@ -4420,9 +4625,9 @@ function DesktopShellPage({
                         </Select>
                       </Label>
                       <Label>
-                        <span>Compose Target</span>
+                        <span>{t('shell:workspace.composeTarget')}</span>
                         <Select
-                          aria-label='Compose Target'
+                          aria-label={t('shell:workspace.composeTarget')}
                           value={channelRefValue(activeComposeChannel)}
                           disabled={Boolean(replyTarget)}
                           onChange={(event) => handleComposeChannelChange(event.target.value)}
@@ -4461,7 +4666,7 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <TimelineFeed
                       posts={activeTimelinePostViews}
-                      emptyCopy='No posts yet for this topic.'
+                      emptyCopy={t('shell:workspace.noPosts')}
                       onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                       onOpenThread={(threadId) => void openThread(threadId)}
                       onReply={beginReply}
@@ -4476,12 +4681,12 @@ function DesktopShellPage({
                     <div className='shell-main-stack'>
                       <div className='shell-workspace-header'>
                         <div>
-                          <h3>Private Channels</h3>
-                          <small>{privateChannelListItems.length} joined</small>
+                          <h3>{t('channels:title')}</h3>
+                          <small>{t('channels:joined', { count: privateChannelListItems.length })}</small>
                         </div>
                       </div>
                       {activeChannelPanelState.status === 'loading' ? (
-                        <Notice>Loading private channels…</Notice>
+                        <Notice>{t('channels:loading')}</Notice>
                       ) : null}
                       {activeChannelPanelState.status === 'error' &&
                       (channelError ?? activeChannelPanelState.error) ? (
@@ -4491,18 +4696,18 @@ function DesktopShellPage({
                       ) : null}
                       <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
                         <Label>
-                          <span>Create Channel</span>
+                          <span>{t('channels:editor.createChannel')}</span>
                           <Input
                             value={channelLabelInput}
                             onChange={(event) => setChannelLabelInput(event.target.value)}
-                            placeholder='core contributors'
+                            placeholder={t('channels:editor.placeholders.channelLabel')}
                             disabled={channelActionDisabled}
                           />
                         </Label>
                         <Label>
-                          <span>Audience</span>
+                          <span>{t('channels:editor.audience')}</span>
                           <Select
-                            aria-label='Channel Audience'
+                            aria-label={t('channels:editor.audience')}
                             value={channelAudienceInput}
                             disabled={channelActionDisabled}
                             onChange={(event) =>
@@ -4511,28 +4716,28 @@ function DesktopShellPage({
                               )
                             }
                           >
-                            <option value='invite_only'>Invite only</option>
-                            <option value='friend_only'>Friends</option>
-                            <option value='friend_plus'>Friends+</option>
+                            <option value='invite_only'>{t('channels:audienceOptions.invite_only')}</option>
+                            <option value='friend_only'>{t('channels:audienceOptions.friend_only')}</option>
+                            <option value='friend_plus'>{t('channels:audienceOptions.friend_plus')}</option>
                           </Select>
                         </Label>
                         <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-                          Create Channel
+                          {t('channels:actions.createChannel')}
                         </Button>
                       </form>
                       <form className='composer composer-compact' onSubmit={handleJoinInvite}>
                         <Label>
-                          <span>Join via Invite</span>
+                          <span>{t('channels:editor.joinViaInvite')}</span>
                           <Textarea
                             value={inviteTokenInput}
                             onChange={(event) => setInviteTokenInput(event.target.value)}
-                            placeholder='paste private channel invite, friend grant, or friends+ share'
+                            placeholder={t('channels:editor.placeholders.inviteToken')}
                             disabled={channelActionDisabled}
                           />
                         </Label>
                         <div className='discovery-actions'>
                           <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-                            Join Invite
+                            {t('channels:actions.joinInvite')}
                           </Button>
                           <Button
                             variant='secondary'
@@ -4540,7 +4745,7 @@ function DesktopShellPage({
                             disabled={channelActionDisabled}
                             onClick={() => void handleJoinGrant()}
                           >
-                            Join Grant
+                            {t('channels:actions.joinGrant')}
                           </Button>
                           <Button
                             variant='secondary'
@@ -4548,7 +4753,7 @@ function DesktopShellPage({
                             disabled={channelActionDisabled}
                             onClick={() => void handleJoinShare()}
                           >
-                            Join Share
+                            {t('channels:actions.joinShare')}
                           </Button>
                         </div>
                       </form>
@@ -4562,7 +4767,7 @@ function DesktopShellPage({
                   </Card>
                   <Card className='shell-workspace-card'>
                     {privateChannelListItems.length === 0 && activeChannelPanelState.status === 'ready' ? (
-                      <p className='empty-state'>No joined private channels for this topic.</p>
+                      <p className='empty-state'>{t('channels:empty')}</p>
                     ) : (
                       <div className='extended-channel-grid'>
                         <ul className='post-list'>
@@ -4578,11 +4783,11 @@ function DesktopShellPage({
                               >
                                 <div className='post-meta'>
                                   <span>{channel.label}</span>
-                                  <span>{channel.audience_kind.replace('_', ' ')}</span>
+                                  <span>{translateAudienceKindLabel(channel.audience_kind)}</span>
                                 </div>
                                 <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                  <span>epoch: {channel.current_epoch_id}</span>
-                                  <span>sharing: {channel.sharing_state}</span>
+                                  <span>{t('common:labels.epoch')}: {channel.current_epoch_id}</span>
+                                  <span>{t('common:labels.sharing')}: {channel.sharing_state}</span>
                                 </div>
                               </button>
                             </li>
@@ -4595,11 +4800,11 @@ function DesktopShellPage({
                         >
                           <div className='panel-header'>
                             <div>
-                              <h4>{activePrivateChannel?.label ?? 'Select a channel'}</h4>
+                              <h4>{activePrivateChannel?.label ?? t('channels:selectChannel')}</h4>
                               <small>
                                 {activePrivateChannel
                                   ? channelPolicyDescription(activePrivateChannel.audience_kind)
-                                  : 'Inspect policy and actions here.'}
+                                  : t('channels:inspectHint')}
                               </small>
                             </div>
                           </div>
@@ -4608,30 +4813,28 @@ function DesktopShellPage({
                             <>
                               <div className='topic-diagnostic topic-diagnostic-secondary'>
                                 <span>
-                                  Policy: {channelPolicyDescription(activePrivateChannel.audience_kind)}
+                                  {t('common:labels.policy')}: {channelPolicyDescription(activePrivateChannel.audience_kind)}
                                 </span>
-                                <span>epoch: {activePrivateChannel.current_epoch_id}</span>
-                                <span>sharing: {activePrivateChannel.sharing_state}</span>
+                                <span>{t('common:labels.epoch')}: {activePrivateChannel.current_epoch_id}</span>
+                                <span>{t('common:labels.sharing')}: {activePrivateChannel.sharing_state}</span>
                                 {activePrivateChannel.joined_via_pubkey ? (
                                   <span>
-                                    joined via {shortPubkey(activePrivateChannel.joined_via_pubkey)}
+                                    {t('common:labels.joinedVia')} {shortPubkey(activePrivateChannel.joined_via_pubkey)}
                                   </span>
                                 ) : null}
                               </div>
                               {(activePrivateChannel.audience_kind === 'friend_only' ||
                                 activePrivateChannel.audience_kind === 'friend_plus') ? (
                                 <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                  <span>participants: {activePrivateChannel.participant_count}</span>
-                                  <span>stale: {activePrivateChannel.stale_participant_count}</span>
-                                  <span>owner: {activePrivateChannel.is_owner ? 'yes' : 'no'}</span>
+                                  <span>{t('common:labels.participants')}: {formatCount(activePrivateChannel.participant_count)}</span>
+                                  <span>{t('common:labels.stale')}: {formatCount(activePrivateChannel.stale_participant_count)}</span>
+                                  <span>{t('common:labels.owner')}: {translateBooleanLabel(activePrivateChannel.is_owner)}</span>
                                 </div>
                               ) : null}
                               {activePrivateChannel.audience_kind === 'friend_only' &&
                               activePrivateChannel.rotation_required ? (
                                 <div className='topic-diagnostic topic-diagnostic-error'>
-                                  <span>
-                                    rotation required: current participants include non-mutual followers
-                                  </span>
+                                  <span>{t('channels:rotationRequired')}</span>
                                 </div>
                               ) : null}
                               <div className='discovery-actions'>
@@ -4642,7 +4845,7 @@ function DesktopShellPage({
                                     disabled={channelActionDisabled}
                                     onClick={() => void handleCreateInvite()}
                                   >
-                                    Create Invite
+                                    {t('channels:actions.createInvite')}
                                   </Button>
                                 ) : null}
                                 {activePrivateChannel.audience_kind === 'friend_only' ? (
@@ -4652,7 +4855,7 @@ function DesktopShellPage({
                                     disabled={channelActionDisabled || !activePrivateChannel.is_owner}
                                     onClick={() => void handleCreateGrant()}
                                   >
-                                    Create Grant
+                                    {t('channels:actions.createGrant')}
                                   </Button>
                                 ) : null}
                                 {activePrivateChannel.audience_kind === 'friend_plus' ? (
@@ -4662,7 +4865,7 @@ function DesktopShellPage({
                                     disabled={channelActionDisabled}
                                     onClick={() => void handleCreateShare()}
                                   >
-                                    Create Share
+                                    {t('channels:actions.createShare')}
                                   </Button>
                                 ) : null}
                                 {activePrivateChannel.audience_kind === 'friend_plus' ? (
@@ -4672,7 +4875,7 @@ function DesktopShellPage({
                                     disabled={channelActionDisabled || !activePrivateChannel.is_owner}
                                     onClick={() => void handleFreezePrivateChannel()}
                                   >
-                                    Freeze
+                                    {t('common:actions.freeze')}
                                   </Button>
                                 ) : null}
                                 {activePrivateChannel.audience_kind === 'friend_only' ||
@@ -4683,13 +4886,13 @@ function DesktopShellPage({
                                     disabled={channelActionDisabled || !activePrivateChannel.is_owner}
                                     onClick={() => void handleRotatePrivateChannel()}
                                   >
-                                    Rotate
+                                    {t('common:actions.rotate')}
                                   </Button>
                                 ) : null}
                               </div>
                             </>
                           ) : (
-                            <Notice>Select a private channel to inspect policy and actions.</Notice>
+                            <Notice>{t('channels:selectChannelNotice')}</Notice>
                           )}
                         </Card>
                       </div>
@@ -4703,12 +4906,12 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <div className='panel-header'>
                       <div>
-                        <h3>Live Sessions</h3>
-                        <small>{liveSessionListItems.length} active</small>
+                        <h3>{t('live:title')}</h3>
+                        <small>{t('live:summary', { count: liveSessionListItems.length })}</small>
                       </div>
                     </div>
                     {activeLivePanelState.status === 'loading' ? (
-                      <Notice>Loading live sessions…</Notice>
+                      <Notice>{t('live:loading')}</Notice>
                     ) : null}
                     {activeLivePanelState.status === 'error' &&
                     (liveError ?? activeLivePanelState.error) ? (
@@ -4720,34 +4923,34 @@ function DesktopShellPage({
                       aria-busy={liveCreatePending}
                     >
                       <Label>
-                        <span>Live Title</span>
+                        <span>{t('live:fields.title')}</span>
                         <Input
                           value={liveTitle}
                           onChange={(event) => setLiveTitle(event.target.value)}
-                          placeholder='Friday stream'
+                          placeholder={t('live:fields.placeholders.title')}
                           disabled={liveCreatePending}
                         />
                       </Label>
                       <Label>
-                        <span>Live Description</span>
+                        <span>{t('live:fields.description')}</span>
                         <Textarea
                           value={liveDescription}
                           onChange={(event) => setLiveDescription(event.target.value)}
-                          placeholder='short session summary'
+                          placeholder={t('live:fields.placeholders.description')}
                           disabled={liveCreatePending}
                         />
                       </Label>
                       <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>Audience: {activeComposeAudienceLabel}</span>
+                        <span>{t('common:labels.audience')}: {activeComposeAudienceLabel}</span>
                       </div>
                       <Button type='submit' disabled={liveCreatePending}>
-                        Start Live
+                        {t('live:actions.start')}
                       </Button>
                     </form>
                   </Card>
                   <Card className='shell-workspace-card'>
                     {liveSessionListItems.length === 0 && activeLivePanelState.status === 'ready' ? (
-                      <p className='empty-state'>No live sessions</p>
+                      <p className='empty-state'>{t('live:empty')}</p>
                     ) : null}
                     <ul className='post-list'>
                       {liveSessionListItems.map(({ session, isOwner, pending }) => (
@@ -4755,25 +4958,25 @@ function DesktopShellPage({
                           <article className='post-card' aria-busy={pending}>
                             <div className='post-meta'>
                               <span>{session.title}</span>
-                              <span>{session.status}</span>
-                              <span className='reply-chip'>{session.audience_label}</span>
+                              <span>{translateLiveStatus(session.status)}</span>
+                              <span className='reply-chip'>{localizeAudienceLabel(session.audience_label)}</span>
                             </div>
                             <div className='post-body'>
                               <strong className='post-title'>
-                                {session.description || 'no description'}
+                                {session.description || t('common:fallbacks.noDescription')}
                               </strong>
                             </div>
                             <small>{session.session_id}</small>
                             <div className='topic-diagnostic topic-diagnostic-secondary'>
-                              <span>viewers: {session.viewer_count}</span>
+                              <span>{t('common:labels.viewers')}: {formatCount(session.viewer_count)}</span>
                               <span>
-                                started: {new Date(session.started_at).toLocaleTimeString('ja-JP')}
+                                {t('common:labels.started')}: {formatLocalizedTime(session.started_at)}
                               </span>
                             </div>
                             {session.ended_at ? (
                               <div className='topic-diagnostic topic-diagnostic-secondary'>
                                 <span>
-                                  ended: {new Date(session.ended_at).toLocaleTimeString('ja-JP')}
+                                  {t('common:labels.ended')}: {formatLocalizedTime(session.ended_at)}
                                 </span>
                               </div>
                             ) : null}
@@ -4785,7 +4988,7 @@ function DesktopShellPage({
                                   disabled={pending}
                                   onClick={() => void handleLeaveLiveSession(session.session_id)}
                                 >
-                                  Leave
+                                  {t('common:actions.leave')}
                                 </Button>
                               ) : (
                                 <Button
@@ -4794,7 +4997,7 @@ function DesktopShellPage({
                                   disabled={pending || session.status === 'Ended'}
                                   onClick={() => void handleJoinLiveSession(session.session_id)}
                                 >
-                                  Join
+                                  {t('common:actions.join')}
                                 </Button>
                               )}
                               {isOwner ? (
@@ -4804,7 +5007,7 @@ function DesktopShellPage({
                                   disabled={pending || session.status === 'Ended'}
                                   onClick={() => void handleEndLiveSession(session.session_id)}
                                 >
-                                  End
+                                  {t('common:actions.end')}
                                 </Button>
                               ) : null}
                             </div>
@@ -4821,12 +5024,12 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <div className='panel-header'>
                       <div>
-                        <h3>Game Rooms</h3>
-                        <small>{activeGameRooms.length} tracked</small>
+                        <h3>{t('game:title')}</h3>
+                        <small>{t('game:summary', { count: activeGameRooms.length })}</small>
                       </div>
                     </div>
                     {activeGamePanelState.status === 'loading' ? (
-                      <Notice>Loading game rooms…</Notice>
+                      <Notice>{t('game:loading')}</Notice>
                     ) : null}
                     {activeGamePanelState.status === 'error' &&
                     (gameError ?? activeGamePanelState.error) ? (
@@ -4838,43 +5041,43 @@ function DesktopShellPage({
                       aria-busy={gameCreatePending}
                     >
                       <Label>
-                        <span>Game Title</span>
+                        <span>{t('game:fields.title')}</span>
                         <Input
                           value={gameTitle}
                           onChange={(event) => setGameTitle(event.target.value)}
-                          placeholder='Top 8 Finals'
+                          placeholder={t('game:fields.placeholders.title')}
                           disabled={gameCreatePending}
                         />
                       </Label>
                       <Label>
-                        <span>Game Description</span>
+                        <span>{t('game:fields.description')}</span>
                         <Textarea
                           value={gameDescription}
                           onChange={(event) => setGameDescription(event.target.value)}
-                          placeholder='match summary'
+                          placeholder={t('game:fields.placeholders.description')}
                           disabled={gameCreatePending}
                         />
                       </Label>
                       <Label>
-                        <span>Participants</span>
+                        <span>{t('game:fields.participants')}</span>
                         <Input
                           value={gameParticipantsInput}
                           onChange={(event) => setGameParticipantsInput(event.target.value)}
-                          placeholder='Alice, Bob'
+                          placeholder={t('game:fields.placeholders.participants')}
                           disabled={gameCreatePending}
                         />
                       </Label>
                       <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>Audience: {activeComposeAudienceLabel}</span>
+                        <span>{t('common:labels.audience')}: {activeComposeAudienceLabel}</span>
                       </div>
                       <Button type='submit' disabled={gameCreatePending}>
-                        Create Room
+                        {t('game:actions.createRoom')}
                       </Button>
                     </form>
                   </Card>
                   <Card className='shell-workspace-card'>
                     {activeGameRooms.length === 0 && activeGamePanelState.status === 'ready' ? (
-                      <p className='empty-state'>No game rooms</p>
+                      <p className='empty-state'>{t('game:empty')}</p>
                     ) : null}
                     <ul className='post-list'>
                       {activeGameRooms.map((room) => {
@@ -4887,19 +5090,19 @@ function DesktopShellPage({
                             <article className='post-card' aria-busy={pending}>
                               <div className='post-meta'>
                                 <span>{room.title}</span>
-                                <span>{room.status}</span>
-                                <span className='reply-chip'>{room.audience_label}</span>
+                                <span>{translateGameStatus(room.status)}</span>
+                                <span className='reply-chip'>{localizeAudienceLabel(room.audience_label)}</span>
                               </div>
                               <div className='post-body'>
                                 <strong className='post-title'>
-                                  {room.description || 'no description'}
+                                  {room.description || t('common:fallbacks.noDescription')}
                                 </strong>
                               </div>
                               <small>{room.room_id}</small>
                               <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                <span>phase: {room.phase_label ?? 'none'}</span>
+                                <span>{t('common:labels.phase')}: {room.phase_label ?? t('common:fallbacks.none')}</span>
                                 <span>
-                                  updated: {new Date(room.updated_at).toLocaleTimeString('ja-JP')}
+                                  {t('common:labels.updated')}: {formatLocalizedTime(room.updated_at)}
                                 </span>
                               </div>
                               <ul className='draft-attachment-list'>
@@ -4937,7 +5140,7 @@ function DesktopShellPage({
                               {isOwner && draft ? (
                                 <div className='composer composer-compact'>
                                   <Label>
-                                    <span>Status</span>
+                                    <span>{t('game:fields.status')}</span>
                                     <Select
                                       aria-label={`${room.room_id}-status`}
                                       value={draft.status}
@@ -4949,14 +5152,14 @@ function DesktopShellPage({
                                         }))
                                       }
                                     >
-                                      <option value='Waiting'>Waiting</option>
-                                      <option value='Running'>Running</option>
-                                      <option value='Paused'>Paused</option>
-                                      <option value='Ended'>Ended</option>
+                                      <option value='Waiting'>{t('game:statuses.Waiting')}</option>
+                                      <option value='Running'>{t('game:statuses.Running')}</option>
+                                      <option value='Paused'>{t('game:statuses.Paused')}</option>
+                                      <option value='Ended'>{t('game:statuses.Ended')}</option>
                                     </Select>
                                   </Label>
                                   <Label>
-                                    <span>Phase</span>
+                                    <span>{t('game:fields.phase')}</span>
                                     <Input
                                       aria-label={`${room.room_id}-phase`}
                                       value={draft.phaseLabel}
@@ -4975,7 +5178,7 @@ function DesktopShellPage({
                                     disabled={pending}
                                     onClick={() => void handleUpdateGameRoom(room.room_id)}
                                   >
-                                    Save Room
+                                    {t('game:actions.saveRoom')}
                                   </Button>
                                 </div>
                               ) : null}
@@ -5017,7 +5220,7 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <TimelineFeed
                       posts={profileTimelinePostViews}
-                      emptyCopy='No public posts from you in this topic yet.'
+                      emptyCopy={t('shell:workspace.noPublicPosts')}
                       onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                       onOpenThread={(threadId) => void openThread(threadId)}
                       onReply={beginReply}
@@ -5035,14 +5238,18 @@ function DesktopShellPage({
             ref={navTriggerRef}
             variant='secondary'
             type='button'
-            aria-label={shellChromeState.navOpen ? 'Close navigation' : 'Open navigation'}
+            aria-label={
+              shellChromeState.navOpen
+                ? t('shell:navigation.close')
+                : t('shell:navigation.open')
+            }
             aria-controls={SHELL_NAV_ID}
             aria-expanded={shellChromeState.navOpen}
             data-testid='shell-nav-trigger'
             onClick={() => setNavOpen(!shellChromeState.navOpen)}
           >
             <PanelLeftOpen className='size-5' aria-hidden='true' />
-            Topics
+            {t('shell:navigation.topicsButton')}
           </Button>
         }
       />

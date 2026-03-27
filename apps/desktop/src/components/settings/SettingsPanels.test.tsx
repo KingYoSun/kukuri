@@ -7,10 +7,10 @@ import { CommunityNodePanel } from './CommunityNodePanel';
 import { ConnectivityPanel } from './ConnectivityPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import {
-  appearancePanelFixture,
-  communityNodePanelFixture,
-  connectivityPanelFixture,
-  discoveryPanelFixture,
+  createAppearancePanelFixture,
+  createCommunityNodePanelFixture,
+  createConnectivityPanelFixture,
+  createDiscoveryPanelFixture,
 } from './fixtures';
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
@@ -19,11 +19,13 @@ import { SettingsMetricGrid } from './SettingsMetricGrid';
 test('appearance panel switches the selected theme immediately', async () => {
   const user = userEvent.setup();
   const onThemeChange = vi.fn();
+  const appearancePanelFixture = createAppearancePanelFixture();
 
   render(
     <AppearancePanel
       view={appearancePanelFixture}
       onThemeChange={onThemeChange}
+      onLocaleChange={() => {}}
     />
   );
 
@@ -35,6 +37,7 @@ test('appearance panel switches the selected theme immediately', async () => {
 test('connectivity panel renders loading and topic detail states', async () => {
   const user = userEvent.setup();
   const onImportPeer = vi.fn();
+  const connectivityPanelFixture = createConnectivityPanelFixture();
 
   render(
     <ConnectivityPanel
@@ -57,6 +60,7 @@ test('connectivity panel renders loading and topic detail states', async () => {
 });
 
 test('discovery panel keeps env-locked seed editor read-only', () => {
+  const discoveryPanelFixture = createDiscoveryPanelFixture();
   render(
     <DiscoveryPanel
       view={{
@@ -81,6 +85,7 @@ test('discovery panel keeps env-locked seed editor read-only', () => {
 test('community node panel renders ready and error states', async () => {
   const user = userEvent.setup();
   const onAcceptConsents = vi.fn();
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
 
   render(
     <CommunityNodePanel
@@ -111,9 +116,18 @@ test('community node panel renders ready and error states', async () => {
 });
 
 test('settings panels avoid the legacy grid classname collision', () => {
+  const appearancePanelFixture = createAppearancePanelFixture();
+  const connectivityPanelFixture = createConnectivityPanelFixture();
+  const discoveryPanelFixture = createDiscoveryPanelFixture();
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
+
   const { container } = render(
     <div>
-      <AppearancePanel view={appearancePanelFixture} onThemeChange={() => {}} />
+      <AppearancePanel
+        view={appearancePanelFixture}
+        onThemeChange={() => {}}
+        onLocaleChange={() => {}}
+      />
       <ConnectivityPanel
         view={connectivityPanelFixture}
         onPeerTicketInputChange={() => {}}

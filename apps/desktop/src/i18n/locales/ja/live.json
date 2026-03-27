@@ -1,0 +1,30 @@
+{
+  "actions": {
+    "start": "ライブを開始"
+  },
+  "empty": "ライブセッションはありません",
+  "errors": {
+    "failedCreate": "ライブセッションの作成に失敗しました",
+    "failedEnd": "ライブセッションの終了に失敗しました",
+    "failedJoin": "ライブセッションへの参加に失敗しました",
+    "failedLeave": "ライブセッションからの退出に失敗しました",
+    "titleRequired": "ライブタイトルは必須です"
+  },
+  "fields": {
+    "description": "ライブ概要",
+    "placeholders": {
+      "description": "短いセッション概要",
+      "title": "金曜配信"
+    },
+    "title": "ライブタイトル"
+  },
+  "loading": "ライブセッションを読み込み中…",
+  "statuses": {
+    "Ended": "終了",
+    "Live": "配信中",
+    "Paused": "一時停止",
+    "Scheduled": "予定"
+  },
+  "summary": "{{count}} 件アクティブ",
+  "title": "ライブセッション"
+}

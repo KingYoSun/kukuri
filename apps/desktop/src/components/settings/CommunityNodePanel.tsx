@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
@@ -39,44 +41,46 @@ export function CommunityNodePanel({
   onRefresh,
   onClearToken,
 }: CommunityNodePanelProps) {
+  const { t } = useTranslation(['common', 'settings']);
+
   return (
     <Card className='min-w-0 space-y-4'>
       <CardHeader>
-        <h3>Community Node</h3>
+        <h3>{t('settings:communityNode.title')}</h3>
         <small>{view.summaryLabel}</small>
       </CardHeader>
 
-      {view.status === 'loading' ? <Notice>Loading community node diagnostics…</Notice> : null}
+      {view.status === 'loading' ? <Notice>{t('settings:communityNode.loading')}</Notice> : null}
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
       <SettingsEditorField
-        label='Base URLs'
-        hint='One HTTPS base URL per line.'
+        label={t('settings:communityNode.baseUrlsLabel')}
+        hint={t('settings:communityNode.baseUrlsHint')}
         message={view.editorMessage}
         tone={view.editorMessageTone}
       >
         <Textarea
-          aria-label='Base URLs'
+          aria-label={t('settings:communityNode.baseUrlsLabel')}
           value={view.baseUrlsInput}
           onChange={(event) => onBaseUrlsChange(event.target.value)}
           className='min-h-[120px] resize-y font-mono text-[0.8rem]'
-          placeholder='https://community.example.com'
+          placeholder={t('settings:communityNode.baseUrlsPlaceholder')}
         />
       </SettingsEditorField>
 
       <SettingsActionRow>
         <Button variant='secondary' disabled={saveDisabled} onClick={onSaveNodes}>
-          Save Nodes
+          {t('settings:communityNode.actions.saveNodes')}
         </Button>
         <Button variant='secondary' disabled={resetDisabled} onClick={onReset}>
-          Reset
+          {t('common:actions.reset')}
         </Button>
         <Button variant='secondary' disabled={clearDisabled} onClick={onClearNodes}>
-          Clear
+          {t('settings:communityNode.actions.clearNodes')}
         </Button>
       </SettingsActionRow>
 
-      {view.nodes.length === 0 ? <Notice>No community nodes configured.</Notice> : null}
+      {view.nodes.length === 0 ? <Notice>{t('settings:communityNode.noNodes')}</Notice> : null}
 
       <div className='min-w-0 space-y-3'>
         {view.nodes.map((node) => (
@@ -88,7 +92,7 @@ export function CommunityNodePanel({
               <div className='min-w-0'>
                 <h4 className='break-all text-base font-semibold text-foreground'>{node.baseUrl}</h4>
                 <p className='mt-2 text-sm text-[var(--muted-foreground)]'>
-                  Auth, consent, and connectivity state for this node.
+                  {t('settings:communityNode.nodeSummary')}
                 </p>
               </div>
             </div>
@@ -100,19 +104,19 @@ export function CommunityNodePanel({
             <div className='mt-4'>
               <SettingsActionRow>
                 <Button variant='secondary' onClick={() => onAuthenticate(node.baseUrl)}>
-                  Authenticate
+                  {t('common:actions.authenticate')}
                 </Button>
                 <Button variant='secondary' onClick={() => onFetchConsents(node.baseUrl)}>
-                  Consents
+                  {t('common:actions.consents')}
                 </Button>
                 <Button variant='secondary' onClick={() => onAcceptConsents(node.baseUrl)}>
-                  Accept
+                  {t('common:actions.accept')}
                 </Button>
                 <Button variant='secondary' onClick={() => onRefresh(node.baseUrl)}>
-                  Refresh
+                  {t('common:actions.refresh')}
                 </Button>
                 <Button variant='secondary' onClick={() => onClearToken(node.baseUrl)}>
-                  Clear Token
+                  {t('settings:communityNode.actions.clearToken')}
                 </Button>
               </SettingsActionRow>
             </div>

@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,6 +25,8 @@ export function ShellNavRail({
   topicList,
   topicCount,
 }: ShellNavRailProps) {
+  const { t } = useTranslation('shell');
+
   return (
     <>
       <div
@@ -38,16 +41,16 @@ export function ShellNavRail({
         id={railId}
         className='shell-nav'
         data-open={open}
-        aria-label='Primary navigation'
+        aria-label={t('navigation.primaryNavigation')}
       >
         <div className='shell-pane-header shell-pane-header-compact'>
-          <p className='eyebrow'>Topics</p>
+          <p className='eyebrow'>{t('navigation.title')}</p>
           <Button
             className='shell-mobile-close shell-icon-button'
             variant='ghost'
             size='icon'
             type='button'
-            aria-label='Close navigation'
+            aria-label={t('navigation.close')}
             onClick={() => onOpenChange(false)}
           >
             <X className='size-5' aria-hidden='true' />
@@ -60,8 +63,8 @@ export function ShellNavRail({
 
         <section className='topic-list shell-nav-topic-list'>
           <div className='panel-header'>
-            <h3>Tracked Topics</h3>
-            <small>{topicCount} active</small>
+            <h3>{t('navigation.trackedTopics')}</h3>
+            <small>{t('navigation.activeCount', { count: topicCount })}</small>
           </div>
           {topicList}
         </section>

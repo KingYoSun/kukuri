@@ -1,28 +1,43 @@
+import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
 
 import { Card, CardHeader } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
 
 import { type AppearancePanelView } from './types';
 
 type AppearancePanelProps = {
   view: AppearancePanelView;
   onThemeChange: (theme: AppearancePanelView['selectedTheme']) => void;
+  onLocaleChange: (locale: AppearancePanelView['selectedLocale']) => void;
 };
 
-export function AppearancePanel({ view, onThemeChange }: AppearancePanelProps) {
+export function AppearancePanel({
+  view,
+  onThemeChange,
+  onLocaleChange,
+}: AppearancePanelProps) {
+  const { t } = useTranslation(['common', 'settings']);
+
   return (
     <Card className='space-y-4'>
       <CardHeader>
-        <h3>Appearance</h3>
-        <small>{view.selectedTheme === 'dark' ? 'dark theme selected' : 'light theme selected'}</small>
+        <h3>{t('settings:appearance.title')}</h3>
+        <small>
+          {view.selectedTheme === 'dark'
+            ? t('settings:appearance.darkSelected')
+            : t('settings:appearance.lightSelected')}
+        </small>
       </CardHeader>
 
-      <Notice>Theme changes apply immediately on this device and stay local to this desktop.</Notice>
+      <Notice>{t('settings:appearance.themeHint')}</Notice>
 
       <div
         role='radiogroup'
-        aria-label='Theme mode'
+        aria-label={t('settings:appearance.themeLabel')}
         className='gap-3'
         style={{
           display: 'grid',
@@ -59,12 +74,31 @@ export function AppearancePanel({ view, onThemeChange }: AppearancePanelProps) {
                     : 'border-[var(--border-subtle)] bg-[var(--surface-badge-neutral)] text-[var(--muted-foreground)]'
                 )}
               >
-                {selected ? 'Active' : 'Available'}
+                {selected ? t('common:states.active') : t('common:states.available')}
               </span>
             </button>
           );
         })}
       </div>
+
+      <Label>
+        <span>{t('settings:appearance.languageLabel')}</span>
+        <Select
+          aria-label={t('settings:appearance.languageLabel')}
+          value={view.selectedLocale}
+          onChange={(event) =>
+            onLocaleChange(event.target.value as AppearancePanelView['selectedLocale'])
+          }
+        >
+          {view.localeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </Label>
+
+      <Notice>{t('settings:appearance.languageHint')}</Notice>
     </Card>
   );
 }

@@ -1,0 +1,30 @@
+{
+  "actions": {
+    "start": "Start Live"
+  },
+  "empty": "No live sessions",
+  "errors": {
+    "failedCreate": "failed to create live session",
+    "failedEnd": "failed to end live session",
+    "failedJoin": "failed to join live session",
+    "failedLeave": "failed to leave live session",
+    "titleRequired": "live session title is required"
+  },
+  "fields": {
+    "description": "Live Description",
+    "placeholders": {
+      "description": "short session summary",
+      "title": "Friday stream"
+    },
+    "title": "Live Title"
+  },
+  "loading": "Loading live sessions…",
+  "statuses": {
+    "Ended": "Ended",
+    "Live": "Live",
+    "Paused": "Paused",
+    "Scheduled": "Scheduled"
+  },
+  "summary": "{{count}} active",
+  "title": "Live Sessions"
+}

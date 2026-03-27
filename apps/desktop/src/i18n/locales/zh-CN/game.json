@@ -1,0 +1,35 @@
+{
+  "actions": {
+    "createRoom": "创建房间",
+    "saveRoom": "保存房间"
+  },
+  "empty": "暂无游戏房间",
+  "errors": {
+    "failedCreate": "创建游戏房间失败",
+    "failedUpdate": "更新游戏房间失败",
+    "invalidScore": "{{label}} 的分数无效",
+    "participantsRequired": "游戏房间至少需要两个不重复的参与者",
+    "titleRequired": "房间标题为必填项"
+  },
+  "fields": {
+    "description": "游戏简介",
+    "participants": "参与者",
+    "phase": "阶段",
+    "placeholders": {
+      "description": "比赛摘要",
+      "participants": "Alice, Bob",
+      "title": "八强决赛"
+    },
+    "status": "状态",
+    "title": "房间标题"
+  },
+  "loading": "正在加载游戏房间…",
+  "statuses": {
+    "Ended": "已结束",
+    "Paused": "已暂停",
+    "Running": "进行中",
+    "Waiting": "等待中"
+  },
+  "summary": "已跟踪 {{count}} 个",
+  "title": "游戏房间"
+}

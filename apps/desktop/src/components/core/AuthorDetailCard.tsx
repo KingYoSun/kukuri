@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Card, CardHeader } from '@/components/ui/card';
 
 import { AuthorAvatar } from './AuthorAvatar';
@@ -15,6 +17,7 @@ export function AuthorDetailCard({
   localAuthorPubkey,
   onToggleRelationship,
 }: AuthorDetailCardProps) {
+  const { t } = useTranslation(['common']);
   const author = view.author;
   const relationshipLabel = view.summary?.label ?? null;
   const showFollowAction = author?.author_pubkey !== localAuthorPubkey;
@@ -38,7 +41,7 @@ export function AuthorDetailCard({
               </div>
               <div className='author-detail-copy-stack'>
                 <p className='author-detail-copy author-detail-break'>
-                  {author.about?.trim() || 'No profile bio published yet.'}
+                  {author.about?.trim() || t('fallbacks.noBio')}
                 </p>
                 <small className='author-detail-monotext'>{author.author_pubkey}</small>
               </div>
@@ -47,7 +50,7 @@ export function AuthorDetailCard({
 
           {view.summary && view.summary.viaPubkeys.length > 0 ? (
             <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>via</span>
+              <span>{t('relationships.via')}</span>
               <p className='author-detail-break'>{view.summary.viaPubkeys.join(', ')}</p>
             </div>
           ) : null}
@@ -61,14 +64,16 @@ export function AuthorDetailCard({
                   type='button'
                   onClick={() => onToggleRelationship(author.author_pubkey, author.following)}
                 >
-                  {view.summary?.followActionLabel ?? (author.following ? 'Unfollow' : 'Follow')}
+                  {view.summary?.followActionLabel === 'Unfollow'
+                    ? t('actions.unfollow')
+                    : t('actions.follow')}
                 </button>
               ) : null}
             </div>
           ) : null}
         </>
       ) : (
-        <p className='empty'>Select an author to inspect profile and relationship.</p>
+        <p className='empty'>{t('fallbacks.selectAuthor')}</p>
       )}
 
       {view.authorError ? <p className='error error-inline'>{view.authorError}</p> : null}

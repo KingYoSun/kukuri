@@ -4,17 +4,19 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings } from 'lucide-react';
 
 import { TopicNavList } from '@/components/core/TopicNavList';
-import { STORY_TOPIC_ITEMS } from '@/components/storyFixtures';
+import { createStoryTopicItems } from '@/components/storyFixtures';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import i18n from '@/i18n';
 
 import { ShellNavRail } from './ShellNavRail';
 
 function ShellNavRailStory() {
   const [open, setOpen] = useState(true);
   const [topicInput, setTopicInput] = useState('kukuri:topic:phase5');
+  const topicItems = createStoryTopicItems();
 
   return (
     <div style={{ maxWidth: '320px' }}>
@@ -25,9 +27,9 @@ function ShellNavRailStory() {
         headerContent={
           <div className='shell-nav-status'>
             <div className='shell-status-badges'>
-              <StatusBadge label='connected' tone='accent' />
+              <StatusBadge label={i18n.t('common:states.connected')} tone='accent' />
               <StatusBadge label='2 peers' />
-              <StatusBadge label='seeded dht' />
+              <StatusBadge label={i18n.t('shell:navigation.seededDht')} />
             </div>
             <Button className='shell-settings-button' variant='ghost' size='icon' type='button'>
               <Settings className='size-6' aria-hidden='true' />
@@ -36,31 +38,33 @@ function ShellNavRailStory() {
         }
         addTopicControl={
           <Label>
-            <span>Add Topic</span>
+            <span>{i18n.t('shell:navigation.addTopic')}</span>
             <div className='topic-input-row'>
               <Input
                 value={topicInput}
                 onChange={(event) => setTopicInput(event.target.value)}
-                placeholder='kukuri:topic:demo'
+                placeholder={i18n.t('shell:navigation.placeholder')}
               />
               <Button variant='secondary' type='button'>
-                Add
+                {i18n.t('common:actions.add')}
               </Button>
             </div>
           </Label>
         }
         topicList={
           <TopicNavList
-            items={STORY_TOPIC_ITEMS}
+            items={topicItems}
             onSelectTopic={() => undefined}
             onRemoveTopic={() => undefined}
           />
         }
-        topicCount={STORY_TOPIC_ITEMS.length}
+        topicCount={topicItems.length}
       />
     </div>
   );
 }
+
+const topicItems = createStoryTopicItems();
 
 const meta = {
   title: 'Shell/ShellNavRail',
@@ -75,7 +79,7 @@ const meta = {
     headerContent: null,
     addTopicControl: null,
     topicList: null,
-    topicCount: STORY_TOPIC_ITEMS.length,
+    topicCount: topicItems.length,
   },
   render: () => <ShellNavRailStory />,
 } satisfies Meta<typeof ShellNavRail>;

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { type TopicDiagnosticSummary } from './types';
 
 type TopicNavListProps = {
@@ -7,6 +9,8 @@ type TopicNavListProps = {
 };
 
 export function TopicNavList({ items, onSelectTopic, onRemoveTopic }: TopicNavListProps) {
+  const { t } = useTranslation(['common', 'shell']);
+
   return (
     <ul>
       {items.map((item) => (
@@ -21,7 +25,7 @@ export function TopicNavList({ items, onSelectTopic, onRemoveTopic }: TopicNavLi
             <button
               className='topic-remove'
               type='button'
-              aria-label={`Remove ${item.topic}`}
+              aria-label={t('shell:navigation.removeTopic', { topic: item.topic })}
               onClick={() => onRemoveTopic(item.topic)}
             >
               x
@@ -30,7 +34,17 @@ export function TopicNavList({ items, onSelectTopic, onRemoveTopic }: TopicNavLi
 
           <div className='topic-diagnostic'>
             <span>
-              {item.connectionLabel} / peers: {item.peerCount}
+              {t('shell:navigation.topicSummary', {
+                status:
+                  item.connectionLabel === 'joined'
+                    ? t('common:states.joined')
+                    : item.connectionLabel === 'relay-assisted'
+                      ? t('common:states.relayAssisted')
+                      : item.connectionLabel === 'idle'
+                        ? t('common:states.idle')
+                        : item.connectionLabel,
+                count: item.peerCount,
+              })}
             </span>
             <small>{item.lastReceivedLabel}</small>
           </div>

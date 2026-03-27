@@ -1,0 +1,61 @@
+{
+  "actions": {
+    "createChannel": "Create Channel",
+    "createGrant": "Create Grant",
+    "createInvite": "Create Invite",
+    "createShare": "Create Share",
+    "joinGrant": "Join Grant",
+    "joinInvite": "Join Invite",
+    "joinShare": "Join Share"
+  },
+  "audienceOptions": {
+    "friend_only": "Friends",
+    "friend_plus": "Friends+",
+    "invite_only": "Invite only"
+  },
+  "editor": {
+    "audience": "Audience",
+    "createChannel": "Create Channel",
+    "joinViaInvite": "Join via Invite",
+    "placeholders": {
+      "channelLabel": "core contributors",
+      "inviteToken": "paste private channel invite, friend grant, or friends+ share"
+    }
+  },
+  "empty": "No joined private channels for this topic.",
+  "errors": {
+    "channelLabelRequired": "channel label is required",
+    "grantTokenRequired": "grant token is required",
+    "inviteTokenRequired": "invite token is required",
+    "selectChannelForFreeze": "select a private channel before freezing it",
+    "selectChannelForGrant": "select a private channel before creating a grant",
+    "selectChannelForInvite": "select a private channel before creating an invite",
+    "selectChannelForRotate": "select a private channel before rotating it",
+    "selectChannelForShare": "select a private channel before creating a share",
+    "shareTokenRequired": "share token is required",
+    "failedCreateChannel": "failed to create channel",
+    "failedCreateInvite": "failed to create invite",
+    "failedCreateGrant": "failed to create friend grant",
+    "failedCreateShare": "failed to create friends+ share",
+    "failedFreezeChannel": "failed to freeze private channel",
+    "failedJoinChannel": "failed to join private channel",
+    "failedJoinFriendsChannel": "failed to join friends channel",
+    "failedJoinFriendsPlusChannel": "failed to join friends+ channel",
+    "failedRotateChannel": "failed to rotate private channel"
+  },
+  "inspectHint": "Inspect policy and actions here.",
+  "joined": "{{count}} joined",
+  "loading": "Loading private channels…",
+  "latestGrant": "Latest grant",
+  "latestInvite": "Latest invite",
+  "latestShare": "Latest share",
+  "policies": {
+    "friend_only": "Friends: only mutual followers can join",
+    "friend_plus": "Friends+: participants can share to their mutuals",
+    "invite_only": "Invite only"
+  },
+  "rotationRequired": "rotation required: current participants include non-mutual followers",
+  "selectChannel": "Select a channel",
+  "selectChannelNotice": "Select a private channel to inspect policy and actions.",
+  "title": "Private Channels"
+}

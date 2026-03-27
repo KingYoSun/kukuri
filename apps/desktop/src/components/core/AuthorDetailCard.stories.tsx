@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import {
-  STORY_AUTHOR_DETAIL_VIEW,
+  createStoryAuthorDetailView,
   STORY_EMPTY_AUTHOR_DETAIL_VIEW,
 } from '@/components/storyFixtures';
 
 import { AuthorDetailCard } from './AuthorDetailCard';
+
+const authorDetailView = createStoryAuthorDetailView();
 
 const meta = {
   title: 'Core/AuthorDetailCard',
@@ -16,7 +18,7 @@ const meta = {
     </div>
   ),
   args: {
-    view: STORY_AUTHOR_DETAIL_VIEW,
+    view: authorDetailView,
     localAuthorPubkey: 'f'.repeat(64),
     onToggleRelationship: () => undefined,
   },

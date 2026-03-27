@@ -1,15 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { STORY_TIMELINE_POSTS } from '@/components/storyFixtures';
+import { createStoryTimelinePosts } from '@/components/storyFixtures';
+import i18n from '@/i18n';
 
 import { TimelineFeed } from './TimelineFeed';
+
+const timelinePosts = createStoryTimelinePosts();
 
 const meta = {
   title: 'Core/TimelineFeed',
   component: TimelineFeed,
   args: {
-    posts: STORY_TIMELINE_POSTS,
-    emptyCopy: 'No posts yet for this topic.',
+    posts: timelinePosts,
+    emptyCopy: i18n.t('shell:workspace.noPosts'),
     onOpenAuthor: () => undefined,
     onOpenThread: () => undefined,
     onReply: () => undefined,
@@ -17,8 +20,8 @@ const meta = {
   render: () => (
     <div style={{ width: 'min(44rem, calc(100vw - 2rem))' }}>
       <TimelineFeed
-        posts={STORY_TIMELINE_POSTS}
-        emptyCopy='No posts yet for this topic.'
+        posts={timelinePosts}
+        emptyCopy={i18n.t('shell:workspace.noPosts')}
         onOpenAuthor={() => undefined}
         onOpenThread={() => undefined}
         onReply={() => undefined}

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
 
 type RelationshipBadgeProps = {
@@ -6,9 +8,22 @@ type RelationshipBadgeProps = {
 };
 
 export function RelationshipBadge({ label, className }: RelationshipBadgeProps) {
+  const { t } = useTranslation('common');
+
   if (!label) {
     return null;
   }
+
+  const displayLabel =
+    label === 'mutual'
+      ? t('relationships.mutual')
+      : label === 'friend of friend'
+        ? t('relationships.friendOfFriend')
+        : label === 'following'
+          ? t('relationships.following')
+          : label === 'follows you'
+            ? t('relationships.followsYou')
+            : label;
 
   return (
     <span
@@ -20,7 +35,7 @@ export function RelationshipBadge({ label, className }: RelationshipBadgeProps) 
         className
       )}
     >
-      {label}
+      {displayLabel}
     </span>
   );
 }

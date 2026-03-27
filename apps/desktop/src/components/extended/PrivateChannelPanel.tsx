@@ -1,4 +1,5 @@
 import type { FormEventHandler } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -17,28 +18,34 @@ import {
   type PrivateChannelPendingAction,
 } from './types';
 
-function audienceSummaryLabel(label: InviteOutputLabel): string {
+function audienceSummaryLabel(
+  label: InviteOutputLabel,
+  t: ReturnType<typeof useTranslation<'channels'>>['t']
+): string {
   if (label === 'grant') {
-    return 'Latest grant';
+    return t('latestGrant');
   }
   if (label === 'share') {
-    return 'Latest share';
+    return t('latestShare');
   }
-  return 'Latest invite';
+  return t('latestInvite');
 }
 
 function shortPubkey(pubkey: string): string {
   return pubkey.slice(0, 12);
 }
 
-function policyDescription(audienceKind: PrivateChannelListItemView['channel']['audience_kind']) {
+function policyDescription(
+  audienceKind: PrivateChannelListItemView['channel']['audience_kind'],
+  t: ReturnType<typeof useTranslation<'channels'>>['t']
+) {
   if (audienceKind === 'friend_only') {
-    return 'Friends: only mutual followers can join';
+    return t('policies.friend_only');
   }
   if (audienceKind === 'friend_plus') {
-    return 'Friends+: participants can share to their mutuals';
+    return t('policies.friend_plus');
   }
-  return 'Invite only';
+  return t('policies.invite_only');
 }
 
 type PrivateChannelPanelProps = {
@@ -94,34 +101,35 @@ export function PrivateChannelPanel({
   onFreeze,
   onRotate,
 }: PrivateChannelPanelProps) {
+  const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
   const selectedChannelId = selectedChannel?.channel_id ?? null;
 
   return (
     <Card className='panel-subsection'>
       <CardHeader>
-        <h3>Private Channels</h3>
-        <small>{channels.length} joined</small>
+        <h3>{t('channels:title')}</h3>
+        <small>{t('channels:joined', { count: channels.length })}</small>
       </CardHeader>
 
-      {status === 'loading' ? <Notice>Loading private channels…</Notice> : null}
+      {status === 'loading' ? <Notice>{t('channels:loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
       <div className='extended-module-stack'>
         <form className='composer composer-compact' onSubmit={onCreateChannel}>
           <Label>
-            <span>Create Channel</span>
+            <span>{t('channels:editor.createChannel')}</span>
             <Input
               value={channelLabel}
               onChange={(event) => onChannelLabelChange(event.target.value)}
-              placeholder='core contributors'
+              placeholder={t('channels:editor.placeholders.channelLabel')}
               disabled={channelActionDisabled}
             />
           </Label>
           <Label>
-            <span>Audience</span>
+            <span>{t('channels:editor.audience')}</span>
             <Select
-              aria-label='Channel Audience'
+              aria-label={t('channels:editor.audience')}
               value={channelAudience}
               onChange={(event) => onChannelAudienceChange(event.target.value as ChannelAudienceOption['value'])}
               disabled={channelActionDisabled}
@@ -134,17 +142,17 @@ export function PrivateChannelPanel({
             </Select>
           </Label>
           <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-            Create Channel
+            {t('channels:actions.createChannel')}
           </Button>
         </form>
 
         <form className='composer composer-compact' onSubmit={onJoinInvite}>
           <Label>
-            <span>Join via Invite</span>
+            <span>{t('channels:editor.joinViaInvite')}</span>
             <Textarea
               value={inviteTokenInput}
               onChange={(event) => onInviteTokenChange(event.target.value)}
-              placeholder='paste private channel invite, friend grant, or friends+ share'
+              placeholder={t('channels:editor.placeholders.inviteToken')}
               disabled={channelActionDisabled}
             />
           </Label>
@@ -154,7 +162,7 @@ export function PrivateChannelPanel({
               type='submit'
               disabled={channelActionDisabled}
             >
-              Join Invite
+              {t('channels:actions.joinInvite')}
             </Button>
             <Button
               variant='secondary'
@@ -162,7 +170,7 @@ export function PrivateChannelPanel({
               disabled={channelActionDisabled}
               onClick={onJoinGrant}
             >
-              Join Grant
+              {t('channels:actions.joinGrant')}
             </Button>
             <Button
               variant='secondary'
@@ -170,20 +178,20 @@ export function PrivateChannelPanel({
               disabled={channelActionDisabled}
               onClick={onJoinShare}
             >
-              Join Share
+              {t('channels:actions.joinShare')}
             </Button>
           </div>
         </form>
 
         {inviteOutput ? (
           <Notice tone='accent'>
-            <strong>{audienceSummaryLabel(inviteOutputLabel)}</strong>
+            <strong>{audienceSummaryLabel(inviteOutputLabel, t)}</strong>
             <code className='extended-inline-code'>{inviteOutput}</code>
           </Notice>
         ) : null}
 
         {channels.length === 0 && status === 'ready' ? (
-          <p className='empty-state'>No joined private channels for this topic.</p>
+          <p className='empty-state'>{t('channels:empty')}</p>
         ) : null}
 
         {channels.length > 0 ? (
@@ -202,11 +210,11 @@ export function PrivateChannelPanel({
                   >
                     <div className='post-meta'>
                       <span>{channel.label}</span>
-                      <span>{channel.audience_kind.replace('_', ' ')}</span>
+                      <span>{t(`channels:audienceOptions.${channel.audience_kind}`)}</span>
                     </div>
                     <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>epoch: {channel.current_epoch_id}</span>
-                      <span>sharing: {channel.sharing_state}</span>
+                      <span>{t('common:labels.epoch')}: {channel.current_epoch_id}</span>
+                      <span>{t('common:labels.sharing')}: {channel.sharing_state}</span>
                     </div>
                   </button>
                 </li>
@@ -214,33 +222,39 @@ export function PrivateChannelPanel({
             </ul>
 
             <Card tone={selectedChannel ? 'accent' : 'default'} className='extended-channel-detail'>
-              <CardHeader>
-                <h4>{selectedChannel?.label ?? 'Select a channel'}</h4>
-                <small>{selectedChannel ? policyDescription(selectedChannel.audience_kind) : 'Inspect policy and actions here.'}</small>
+            <CardHeader>
+                <h4>{selectedChannel?.label ?? t('channels:selectChannel')}</h4>
+                <small>
+                  {selectedChannel
+                    ? policyDescription(selectedChannel.audience_kind, t)
+                    : t('channels:inspectHint')}
+                </small>
               </CardHeader>
 
               {selectedChannel ? (
                 <>
                   <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>Policy: {policyDescription(selectedChannel.audience_kind)}</span>
-                    <span>epoch: {selectedChannel.current_epoch_id}</span>
-                    <span>sharing: {selectedChannel.sharing_state}</span>
+                    <span>
+                      {t('common:labels.policy')}: {policyDescription(selectedChannel.audience_kind, t)}
+                    </span>
+                    <span>{t('common:labels.epoch')}: {selectedChannel.current_epoch_id}</span>
+                    <span>{t('common:labels.sharing')}: {selectedChannel.sharing_state}</span>
                     {selectedChannel.joined_via_pubkey ? (
-                      <span>joined via {shortPubkey(selectedChannel.joined_via_pubkey)}</span>
+                      <span>{t('common:labels.joinedVia')} {shortPubkey(selectedChannel.joined_via_pubkey)}</span>
                     ) : null}
                   </div>
                   {(selectedChannel.audience_kind === 'friend_only' ||
                     selectedChannel.audience_kind === 'friend_plus') ? (
                     <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>participants: {selectedChannel.participant_count}</span>
-                      <span>stale: {selectedChannel.stale_participant_count}</span>
-                      <span>owner: {selectedChannel.is_owner ? 'yes' : 'no'}</span>
+                      <span>{t('common:labels.participants')}: {selectedChannel.participant_count}</span>
+                      <span>{t('common:labels.stale')}: {selectedChannel.stale_participant_count}</span>
+                      <span>{t('common:labels.owner')}: {selectedChannel.is_owner ? t('common:states.yes') : t('common:states.no')}</span>
                     </div>
                   ) : null}
                   {selectedChannel.audience_kind === 'friend_only' &&
                   selectedChannel.rotation_required ? (
                     <div className='topic-diagnostic topic-diagnostic-error'>
-                      <span>rotation required: current participants include non-mutual followers</span>
+                      <span>{t('channels:rotationRequired')}</span>
                     </div>
                   ) : null}
                   <div className='discovery-actions'>
@@ -251,7 +265,7 @@ export function PrivateChannelPanel({
                         disabled={channelActionDisabled || selectedChannelId === null}
                         onClick={onCreateInvite}
                       >
-                        Create Invite
+                        {t('channels:actions.createInvite')}
                       </Button>
                     ) : null}
                     {selectedChannel.audience_kind === 'friend_only' ? (
@@ -261,7 +275,7 @@ export function PrivateChannelPanel({
                         disabled={channelActionDisabled || !selectedChannel.is_owner}
                         onClick={onCreateGrant}
                       >
-                        Create Grant
+                        {t('channels:actions.createGrant')}
                       </Button>
                     ) : null}
                     {selectedChannel.audience_kind === 'friend_plus' ? (
@@ -271,7 +285,7 @@ export function PrivateChannelPanel({
                         disabled={channelActionDisabled || selectedChannelId === null}
                         onClick={onCreateShare}
                       >
-                        Create Share
+                        {t('channels:actions.createShare')}
                       </Button>
                     ) : null}
                     {selectedChannel.audience_kind === 'friend_plus' ? (
@@ -281,7 +295,7 @@ export function PrivateChannelPanel({
                         disabled={channelActionDisabled || !selectedChannel.is_owner}
                         onClick={onFreeze}
                       >
-                        Freeze
+                        {t('common:actions.freeze')}
                       </Button>
                     ) : null}
                     {selectedChannel.audience_kind === 'friend_only' ||
@@ -292,13 +306,13 @@ export function PrivateChannelPanel({
                         disabled={channelActionDisabled || !selectedChannel.is_owner}
                         onClick={onRotate}
                       >
-                        Rotate
+                        {t('common:actions.rotate')}
                       </Button>
                     ) : null}
                   </div>
                 </>
               ) : (
-                <Notice>Select a private channel to inspect policy and actions.</Notice>
+                <Notice>{t('channels:selectChannelNotice')}</Notice>
               )}
             </Card>
           </div>

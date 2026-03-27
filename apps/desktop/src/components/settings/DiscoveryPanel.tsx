@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
@@ -26,41 +28,43 @@ export function DiscoveryPanel({
   onSave,
   onReset,
 }: DiscoveryPanelProps) {
+  const { t } = useTranslation(['common', 'settings']);
+
   return (
     <Card className='space-y-4'>
       <CardHeader>
-        <h3>Discovery</h3>
+        <h3>{t('settings:discovery.title')}</h3>
         <small>{view.summaryLabel}</small>
       </CardHeader>
 
-      {view.status === 'loading' ? <Notice>Loading discovery diagnostics…</Notice> : null}
+      {view.status === 'loading' ? <Notice>{t('settings:discovery.loading')}</Notice> : null}
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
       <SettingsMetricGrid items={view.metrics} />
       <SettingsDiagnosticList items={view.diagnostics} columns={2} />
 
       <SettingsEditorField
-        label='Seed Peers'
-        hint='One endpoint id per line. addr hints stay optional.'
+        label={t('settings:discovery.seedPeersLabel')}
+        hint={t('settings:discovery.seedPeersHint')}
         message={view.seedPeersMessage}
         tone={view.seedPeersMessageTone}
       >
         <Textarea
-          aria-label='Seed Peers'
+          aria-label={t('settings:discovery.seedPeersLabel')}
           value={view.seedPeersInput}
           onChange={(event) => onSeedPeersChange(event.target.value)}
           readOnly={view.envLocked}
           className='min-h-[120px] resize-y font-mono text-[0.8rem]'
-          placeholder='node_id or node_id@host:port'
+          placeholder={t('settings:discovery.seedPeersPlaceholder')}
         />
       </SettingsEditorField>
 
       <SettingsActionRow>
         <Button variant='secondary' disabled={saveDisabled} onClick={onSave}>
-          Save Seeds
+          {t('settings:discovery.actions.saveSeeds')}
         </Button>
         <Button variant='secondary' disabled={resetDisabled} onClick={onReset}>
-          Reset
+          {t('common:actions.reset')}
         </Button>
       </SettingsActionRow>
     </Card>
