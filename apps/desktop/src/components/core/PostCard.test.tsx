@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { expect, test, vi } from 'vitest';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
@@ -78,4 +79,81 @@ test('post card renders the author image when one is available', () => {
     'src',
     'https://example.com/avatar.png'
   );
+});
+
+test('post card renders repost source context for quote reposts', () => {
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...createView().post,
+          object_kind: 'repost',
+          content: 'adding context',
+          repost_commentary: 'adding context',
+          repost_of: {
+            source_object_id: 'source-1',
+            source_topic_id: 'kukuri:topic:source',
+            source_author_pubkey: 'b'.repeat(64),
+            source_author_display_name: 'Source Author',
+            source_author_name: null,
+            source_object_kind: 'post',
+            content: 'original body',
+            attachments: [],
+            reply_to: null,
+            root_id: 'source-1',
+          },
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.getByText('Quote repost')).toBeInTheDocument();
+  expect(screen.getByText('Source Author')).toBeInTheDocument();
+  expect(screen.getByText('original body')).toBeInTheDocument();
+});
+
+test('simple repost opens the source thread in its published topic', async () => {
+  const user = userEvent.setup();
+  const onOpenThread = vi.fn();
+  const onOpenThreadInTopic = vi.fn();
+
+  render(
+    <PostCard
+      view={createView({
+        canReply: false,
+        threadTargetId: 'source-root',
+        threadTopicId: 'kukuri:topic:source',
+        post: {
+          ...createView().post,
+          object_kind: 'repost',
+          content: '',
+          repost_commentary: null,
+          repost_of: {
+            source_object_id: 'source-1',
+            source_topic_id: 'kukuri:topic:source',
+            source_author_pubkey: 'b'.repeat(64),
+            source_author_display_name: 'Source Author',
+            source_author_name: null,
+            source_object_kind: 'post',
+            content: 'original body',
+            attachments: [],
+            reply_to: null,
+            root_id: 'source-root',
+          },
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={onOpenThread}
+      onOpenThreadInTopic={onOpenThreadInTopic}
+      onReply={() => undefined}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: /Source Author/i }));
+
+  expect(onOpenThread).not.toHaveBeenCalled();
+  expect(onOpenThreadInTopic).toHaveBeenCalledWith('source-root', 'kukuri:topic:source');
 });

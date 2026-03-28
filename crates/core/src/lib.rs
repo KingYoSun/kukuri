@@ -480,6 +480,8 @@ pub struct KukuriPostEnvelopeContentV1 {
     pub visibility: ObjectVisibility,
     pub reply_to: Option<EnvelopeId>,
     pub root_id: Option<EnvelopeId>,
+    #[serde(default)]
+    pub repost_of: Option<RepostSourceSnapshotV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -499,6 +501,8 @@ pub struct KukuriPostObjectV1 {
     pub visibility: ObjectVisibility,
     pub reply_to: Option<EnvelopeId>,
     pub root: Option<EnvelopeId>,
+    #[serde(default)]
+    pub repost_of: Option<RepostSourceSnapshotV1>,
     pub status: ObjectStatus,
     pub signature: String,
 }
@@ -539,10 +543,25 @@ pub struct AuthorProfileDocV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepostSourceSnapshotV1 {
+    pub source_object_id: EnvelopeId,
+    pub source_topic_id: TopicId,
+    pub source_author_pubkey: Pubkey,
+    pub source_object_kind: String,
+    pub content: String,
+    #[serde(default)]
+    pub attachments: Vec<AssetRef>,
+    #[serde(default)]
+    pub reply_to_object_id: Option<EnvelopeId>,
+    #[serde(default)]
+    pub root_id: Option<EnvelopeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KukuriProfilePostEnvelopeContentV1 {
     pub author_pubkey: Pubkey,
     pub profile_topic_id: TopicId,
-    pub origin_topic_id: TopicId,
+    pub published_topic_id: TopicId,
     pub object_id: EnvelopeId,
     pub created_at: i64,
     pub object_kind: String,
@@ -559,7 +578,7 @@ pub struct KukuriProfilePostEnvelopeContentV1 {
 pub struct AuthorProfilePostDocV1 {
     pub author_pubkey: Pubkey,
     pub profile_topic_id: TopicId,
-    pub origin_topic_id: TopicId,
+    pub published_topic_id: TopicId,
     pub object_id: EnvelopeId,
     pub created_at: i64,
     pub object_kind: String,
@@ -577,7 +596,7 @@ pub struct AuthorProfilePostDocV1 {
 pub struct ProfilePost {
     pub author_pubkey: Pubkey,
     pub profile_topic_id: TopicId,
-    pub origin_topic_id: TopicId,
+    pub published_topic_id: TopicId,
     pub object_id: EnvelopeId,
     pub created_at: i64,
     pub object_kind: String,
@@ -585,6 +604,44 @@ pub struct ProfilePost {
     pub attachments: Vec<AssetRef>,
     pub reply_to_object_id: Option<EnvelopeId>,
     pub root_id: Option<EnvelopeId>,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriProfileRepostEnvelopeContentV1 {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub published_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    #[serde(default)]
+    pub commentary: Option<String>,
+    pub repost_of: RepostSourceSnapshotV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorProfileRepostDocV1 {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub published_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    #[serde(default)]
+    pub commentary: Option<String>,
+    pub repost_of: RepostSourceSnapshotV1,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileRepost {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub published_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    #[serde(default)]
+    pub commentary: Option<String>,
+    pub repost_of: RepostSourceSnapshotV1,
     pub envelope_id: EnvelopeId,
 }
 
@@ -901,7 +958,7 @@ impl KukuriEnvelope {
     }
 
     pub fn post_content(&self) -> Result<Option<KukuriPostEnvelopeContentV1>> {
-        if !matches!(self.kind.as_str(), "post" | "comment") {
+        if !matches!(self.kind.as_str(), "post" | "comment" | "repost") {
             return Ok(None);
         }
         serde_json::from_str(self.content.as_str())
@@ -928,6 +985,7 @@ impl KukuriEnvelope {
             visibility: content.visibility,
             reply_to: content.reply_to,
             root: content.root_id,
+            repost_of: content.repost_of,
             status: ObjectStatus::Active,
             signature: self.sig.clone(),
         }))
@@ -1030,6 +1088,7 @@ pub fn build_post_envelope_with_payload_in_channel(
         visibility,
         reply_to: reply_id.clone(),
         root_id: root_id.clone(),
+        repost_of: None,
     };
     let mut tags = vec![
         vec!["topic".into(), topic.as_str().into()],
@@ -1045,6 +1104,56 @@ pub fn build_post_envelope_with_payload_in_channel(
         tags.push(vec!["channel".into(), channel_id.as_str().to_string()]);
     }
     sign_envelope_json(keys, kind, tags, &content)
+}
+
+pub fn build_repost_envelope(
+    keys: &KukuriKeys,
+    topic: &TopicId,
+    repost_of: RepostSourceSnapshotV1,
+    commentary: Option<&str>,
+) -> Result<KukuriEnvelope> {
+    if !matches!(repost_of.source_object_kind.as_str(), "post" | "comment") {
+        bail!("repost source object kind must be post or comment");
+    }
+    let normalized_commentary = commentary
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let content = KukuriPostEnvelopeContentV1 {
+        object_kind: "repost".into(),
+        topic_id: topic.clone(),
+        channel_id: None,
+        payload_ref: PayloadRef::InlineText {
+            text: normalized_commentary.clone().unwrap_or_default(),
+        },
+        attachments: Vec::new(),
+        media_manifest_refs: Vec::new(),
+        visibility: ObjectVisibility::Public,
+        reply_to: None,
+        root_id: None,
+        repost_of: Some(repost_of.clone()),
+    };
+    sign_envelope_json(
+        keys,
+        "repost",
+        vec![
+            vec!["topic".into(), topic.as_str().into()],
+            vec!["object".into(), "repost".into()],
+            vec![
+                "source_topic".into(),
+                repost_of.source_topic_id.as_str().to_string(),
+            ],
+            vec![
+                "source_object".into(),
+                repost_of.source_object_id.as_str().to_string(),
+            ],
+            vec![
+                "source_author".into(),
+                repost_of.source_author_pubkey.as_str().to_string(),
+            ],
+        ],
+        &content,
+    )
 }
 
 pub fn build_media_manifest_envelope(
@@ -1109,10 +1218,55 @@ pub fn build_profile_post_envelope(
             vec!["author".into(), content.author_pubkey.as_str().to_string()],
             vec!["object".into(), "profile-post".into()],
             vec![
-                "origin_topic".into(),
-                content.origin_topic_id.as_str().to_string(),
+                "published_topic".into(),
+                content.published_topic_id.as_str().to_string(),
             ],
             vec!["post".into(), content.object_id.as_str().to_string()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn build_profile_repost_envelope(
+    keys: &KukuriKeys,
+    content: &KukuriProfileRepostEnvelopeContentV1,
+) -> Result<KukuriEnvelope> {
+    let author_pubkey = keys.public_key();
+    if content.author_pubkey != author_pubkey {
+        bail!("profile repost author pubkey must match signer");
+    }
+    if content.profile_topic_id != author_profile_topic_id(content.author_pubkey.as_str()) {
+        bail!("profile repost topic id must match author profile topic");
+    }
+    if !matches!(
+        content.repost_of.source_object_kind.as_str(),
+        "post" | "comment"
+    ) {
+        bail!("profile repost source object kind must be post or comment");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded =
+        serde_json::to_string(content).context("failed to encode profile repost content")?;
+    sign_envelope_at(
+        keys,
+        "profile-repost",
+        vec![
+            vec!["author".into(), content.author_pubkey.as_str().to_string()],
+            vec!["object".into(), "profile-repost".into()],
+            vec![
+                "published_topic".into(),
+                content.published_topic_id.as_str().to_string(),
+            ],
+            vec!["repost".into(), content.object_id.as_str().to_string()],
+            vec![
+                "source_topic".into(),
+                content.repost_of.source_topic_id.as_str().to_string(),
+            ],
+            vec![
+                "source_object".into(),
+                content.repost_of.source_object_id.as_str().to_string(),
+            ],
         ],
         encoded,
         created_at,
@@ -1716,7 +1870,7 @@ pub fn parse_profile_post(envelope: &KukuriEnvelope) -> Result<Option<ProfilePos
     Ok(Some(ProfilePost {
         author_pubkey: content.author_pubkey,
         profile_topic_id: content.profile_topic_id,
-        origin_topic_id: content.origin_topic_id,
+        published_topic_id: content.published_topic_id,
         object_id: content.object_id,
         created_at: content.created_at,
         object_kind: content.object_kind,
@@ -1724,6 +1878,42 @@ pub fn parse_profile_post(envelope: &KukuriEnvelope) -> Result<Option<ProfilePos
         attachments: content.attachments,
         reply_to_object_id: content.reply_to_object_id,
         root_id: content.root_id,
+        envelope_id: envelope.id.clone(),
+    }))
+}
+
+pub fn parse_profile_repost(envelope: &KukuriEnvelope) -> Result<Option<ProfileRepost>> {
+    if envelope.kind != "profile-repost" {
+        return Ok(None);
+    }
+
+    let content: KukuriProfileRepostEnvelopeContentV1 = serde_json::from_str(&envelope.content)
+        .context("failed to parse profile repost envelope")?;
+    validate_pubkey(content.author_pubkey.as_str())
+        .context("invalid profile repost author pubkey")?;
+    validate_pubkey(content.repost_of.source_author_pubkey.as_str())
+        .context("invalid profile repost source author pubkey")?;
+    if content.author_pubkey != envelope.pubkey {
+        bail!("profile repost author pubkey must match envelope signer");
+    }
+    if content.profile_topic_id != author_profile_topic_id(content.author_pubkey.as_str()) {
+        bail!("profile repost topic id must match author profile topic");
+    }
+    if !matches!(
+        content.repost_of.source_object_kind.as_str(),
+        "post" | "comment"
+    ) {
+        bail!("profile repost source object kind must be post or comment");
+    }
+
+    Ok(Some(ProfileRepost {
+        author_pubkey: content.author_pubkey,
+        profile_topic_id: content.profile_topic_id,
+        published_topic_id: content.published_topic_id,
+        object_id: content.object_id,
+        created_at: content.created_at,
+        commentary: content.commentary,
+        repost_of: content.repost_of,
         envelope_id: envelope.id.clone(),
     }))
 }
@@ -1987,7 +2177,7 @@ mod tests {
             &KukuriProfilePostEnvelopeContentV1 {
                 author_pubkey: author_pubkey.clone(),
                 profile_topic_id: author_profile_topic_id(author_pubkey.as_str()),
-                origin_topic_id: TopicId::new("kukuri:topic:demo"),
+                published_topic_id: TopicId::new("kukuri:topic:demo"),
                 object_id: EnvelopeId::from("post-1"),
                 created_at: 42,
                 object_kind: "comment".into(),
@@ -2013,7 +2203,10 @@ mod tests {
             profile_post.profile_topic_id,
             author_profile_topic_id(author_pubkey.as_str())
         );
-        assert_eq!(profile_post.origin_topic_id.as_str(), "kukuri:topic:demo");
+        assert_eq!(
+            profile_post.published_topic_id.as_str(),
+            "kukuri:topic:demo"
+        );
         assert_eq!(profile_post.object_id.as_str(), "post-1");
         assert_eq!(profile_post.created_at, 42);
         assert_eq!(profile_post.object_kind, "comment");
@@ -2031,6 +2224,101 @@ mod tests {
             Some("root-1")
         );
         assert_eq!(profile_post.envelope_id, envelope.id);
+    }
+
+    #[test]
+    fn repost_envelope_roundtrip() {
+        let keys = generate_keys();
+        let envelope = build_repost_envelope(
+            &keys,
+            &TopicId::new("kukuri:topic:target"),
+            RepostSourceSnapshotV1 {
+                source_object_id: EnvelopeId::from("source-1"),
+                source_topic_id: TopicId::new("kukuri:topic:source"),
+                source_author_pubkey: generate_keys().public_key(),
+                source_object_kind: "comment".into(),
+                content: "quoted source".into(),
+                attachments: vec![AssetRef {
+                    hash: BlobHash::new("hash-1"),
+                    mime: "image/png".into(),
+                    bytes: 24,
+                    role: AssetRole::ImageOriginal,
+                }],
+                reply_to_object_id: Some(EnvelopeId::from("root-1")),
+                root_id: Some(EnvelopeId::from("root-1")),
+            },
+            Some("quote commentary"),
+        )
+        .expect("repost envelope");
+
+        envelope.verify().expect("signature verification");
+        let repost = envelope
+            .to_post_object()
+            .expect("parse repost")
+            .expect("repost object");
+        assert_eq!(repost.object_kind, "repost");
+        assert_eq!(repost.topic_id.as_str(), "kukuri:topic:target");
+        assert_eq!(
+            repost
+                .repost_of
+                .as_ref()
+                .map(|value| value.source_topic_id.as_str()),
+            Some("kukuri:topic:source")
+        );
+        assert_eq!(
+            match repost.payload_ref {
+                PayloadRef::InlineText { text } => text,
+                PayloadRef::BlobText { .. } => String::new(),
+            },
+            "quote commentary"
+        );
+    }
+
+    #[test]
+    fn profile_repost_envelope_roundtrip() {
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key();
+        let envelope = build_profile_repost_envelope(
+            &keys,
+            &KukuriProfileRepostEnvelopeContentV1 {
+                author_pubkey: author_pubkey.clone(),
+                profile_topic_id: author_profile_topic_id(author_pubkey.as_str()),
+                published_topic_id: TopicId::new("kukuri:topic:target"),
+                object_id: EnvelopeId::from("repost-1"),
+                created_at: 55,
+                commentary: Some("quote commentary".into()),
+                repost_of: RepostSourceSnapshotV1 {
+                    source_object_id: EnvelopeId::from("source-1"),
+                    source_topic_id: TopicId::new("kukuri:topic:source"),
+                    source_author_pubkey: generate_keys().public_key(),
+                    source_object_kind: "post".into(),
+                    content: "source content".into(),
+                    attachments: Vec::new(),
+                    reply_to_object_id: None,
+                    root_id: Some(EnvelopeId::from("source-1")),
+                },
+            },
+        )
+        .expect("profile repost envelope");
+
+        envelope.verify().expect("signature verification");
+        let profile_repost = parse_profile_repost(&envelope)
+            .expect("parse profile repost")
+            .expect("profile repost");
+        assert_eq!(profile_repost.author_pubkey, author_pubkey);
+        assert_eq!(
+            profile_repost.published_topic_id.as_str(),
+            "kukuri:topic:target"
+        );
+        assert_eq!(profile_repost.object_id.as_str(), "repost-1");
+        assert_eq!(
+            profile_repost.commentary.as_deref(),
+            Some("quote commentary")
+        );
+        assert_eq!(
+            profile_repost.repost_of.source_topic_id.as_str(),
+            "kukuri:topic:source"
+        );
     }
 
     #[test]

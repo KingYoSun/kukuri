@@ -8,7 +8,10 @@ type TimelineFeedProps = {
   itemClassName?: string;
   onOpenAuthor: (authorPubkey: string) => void;
   onOpenThread: (threadId: string) => void;
+  onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
   onReply: (post: PostCardView['post']) => void;
+  onRepost?: (post: PostCardView['post']) => void;
+  onQuoteRepost?: (post: PostCardView['post']) => void;
   readOnly?: boolean;
   onOpenOriginalTopic?: (topicId: string) => void;
 };
@@ -20,7 +23,10 @@ export function TimelineFeed({
   itemClassName,
   onOpenAuthor,
   onOpenThread,
+  onOpenThreadInTopic,
   onReply,
+  onRepost,
+  onQuoteRepost,
   readOnly = false,
   onOpenOriginalTopic,
 }: TimelineFeedProps) {
@@ -36,7 +42,10 @@ export function TimelineFeed({
             view={view}
             onOpenAuthor={onOpenAuthor}
             onOpenThread={onOpenThread}
+            onOpenThreadInTopic={onOpenThreadInTopic}
             onReply={onReply}
+            onRepost={onRepost}
+            onQuoteRepost={onQuoteRepost}
             readOnly={readOnly}
             onOpenOriginalTopic={onOpenOriginalTopic}
           />

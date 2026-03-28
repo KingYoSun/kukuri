@@ -6,7 +6,10 @@ type ThreadPanelProps = {
   posts: PostCardView[];
   onOpenAuthor: (authorPubkey: string) => void;
   onOpenThread: (threadId: string) => void;
+  onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
   onReply: (post: PostCardView['post']) => void;
+  onRepost?: (post: PostCardView['post']) => void;
+  onQuoteRepost?: (post: PostCardView['post']) => void;
 };
 
 export function ThreadPanel({
@@ -14,7 +17,10 @@ export function ThreadPanel({
   posts,
   onOpenAuthor,
   onOpenThread,
+  onOpenThreadInTopic,
   onReply,
+  onRepost,
+  onQuoteRepost,
 }: ThreadPanelProps) {
   return (
     <div className='shell-main-stack'>
@@ -25,7 +31,10 @@ export function ThreadPanel({
         itemClassName='thread-item'
         onOpenAuthor={onOpenAuthor}
         onOpenThread={onOpenThread}
+        onOpenThreadInTopic={onOpenThreadInTopic}
         onReply={onReply}
+        onRepost={onRepost}
+        onQuoteRepost={onQuoteRepost}
       />
     </div>
   );

@@ -12,7 +12,9 @@
     "join": "加入",
     "leave": "离开",
     "publish": "发布",
+    "quoteRepost": "引用转发",
     "refresh": "刷新",
+    "repost": "转发",
     "reply": "回复",
     "reset": "重置",
     "rotate": "轮换",
@@ -20,9 +22,12 @@
     "unfollow": "取消关注"
   },
   "composer": {
+    "clearQuoteRepost": "清除引用转发",
+    "quoteReposting": "引用转发中",
     "clearReply": "清除回复",
     "replying": "回复中",
     "writePost": "写一条帖子",
+    "writeQuoteRepost": "写一条引用转发",
     "writeReply": "写一条回复"
   },
   "audience": {
@@ -53,7 +58,12 @@
     "failedToUpdateCommunityNodes": "更新社区节点失败",
     "failedToUpdateDiscoverySeeds": "更新发现种子失败",
     "failedToUpdateFollowState": "更新关注状态失败",
+    "quoteRepostRequiresCommentary": "引用转发需要评论内容",
     "unsupportedAttachmentType": "不支持的附件类型: {{name}}"
+  },
+  "feed": {
+    "quoteRepost": "引用转发",
+    "reposted": "已转发"
   },
   "fallbacks": {
     "attachment": "附件",
@@ -77,6 +87,7 @@
     "phase": "阶段",
     "policy": "策略",
     "sharing": "共享",
+    "sourceTopic": "来源主题",
     "stale": "过期",
     "started": "开始",
     "updated": "更新",

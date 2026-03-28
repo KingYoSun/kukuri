@@ -12,7 +12,9 @@
     "join": "参加",
     "leave": "退出",
     "publish": "投稿",
+    "quoteRepost": "引用リポスト",
     "refresh": "更新",
+    "repost": "リポスト",
     "reply": "返信",
     "reset": "リセット",
     "rotate": "ローテーション",
@@ -20,9 +22,12 @@
     "unfollow": "フォロー解除"
   },
   "composer": {
+    "clearQuoteRepost": "引用リポストをクリア",
+    "quoteReposting": "引用リポスト中",
     "clearReply": "返信をクリア",
     "replying": "返信中",
     "writePost": "投稿を書く",
+    "writeQuoteRepost": "引用リポストを書く",
     "writeReply": "返信を書く"
   },
   "audience": {
@@ -53,7 +58,12 @@
     "failedToUpdateCommunityNodes": "コミュニティノードの更新に失敗しました",
     "failedToUpdateDiscoverySeeds": "ディスカバリーシードの更新に失敗しました",
     "failedToUpdateFollowState": "フォロー状態の更新に失敗しました",
+    "quoteRepostRequiresCommentary": "引用リポストにはコメントが必要です",
     "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}"
+  },
+  "feed": {
+    "quoteRepost": "引用リポスト",
+    "reposted": "リポスト"
   },
   "fallbacks": {
     "attachment": "添付",
@@ -77,6 +87,7 @@
     "phase": "フェーズ",
     "policy": "ポリシー",
     "sharing": "共有",
+    "sourceTopic": "元トピック",
     "stale": "期限切れ",
     "started": "開始",
     "updated": "更新",

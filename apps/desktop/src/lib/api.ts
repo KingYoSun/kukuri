@@ -34,9 +34,26 @@ export type PostView = {
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+  published_topic_id?: string | null;
   origin_topic_id?: string | null;
+  repost_of?: RepostSourceView | null;
+  repost_commentary?: string | null;
+  is_threadable?: boolean;
   channel_id?: string | null;
   audience_label: string;
+};
+
+export type RepostSourceView = {
+  source_object_id: string;
+  source_topic_id: string;
+  source_author_pubkey: string;
+  source_author_name?: string | null;
+  source_author_display_name?: string | null;
+  source_object_kind: string;
+  content: string;
+  attachments: AttachmentView[];
+  reply_to?: string | null;
+  root_id?: string | null;
 };
 
 export type Profile = {
@@ -85,6 +102,13 @@ export type CreateAttachmentInput = {
   byte_size: number;
   data_base64: string;
   role?: string | null;
+};
+
+export type CreateRepostInput = {
+  topic: string;
+  source_topic: string;
+  source_object_id: string;
+  commentary?: string | null;
 };
 
 export type BlobMediaPayload = {
@@ -288,6 +312,12 @@ export interface DesktopApi {
     attachments?: CreateAttachmentInput[],
     channelRef?: ChannelRef
   ): Promise<string>;
+  createRepost(
+    topic: string,
+    sourceTopic: string,
+    sourceObjectId: string,
+    commentary?: string | null
+  ): Promise<string>;
   listTimeline(
     topic: string,
     cursor?: TimelineCursor | null,
@@ -435,6 +465,24 @@ export const runtimeApi: DesktopApi = {
         reply_to: replyTo,
         channel_ref: channelRef,
         attachments,
+      },
+    });
+  },
+  createRepost: async (topic, sourceTopic, sourceObjectId, commentary) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createRepost(
+        topic,
+        sourceTopic,
+        sourceObjectId,
+        commentary
+      );
+    }
+    return invokeDesktop<string>('create_repost', {
+      request: {
+        topic,
+        source_topic: sourceTopic,
+        source_object_id: sourceObjectId,
+        commentary,
       },
     });
   },

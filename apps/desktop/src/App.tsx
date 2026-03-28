@@ -149,6 +149,7 @@ type DesktopShellState = {
   thread: PostView[];
   selectedThread: string | null;
   replyTarget: PostView | null;
+  repostTarget: PostView | null;
   peerTicket: string;
   localPeerTicket: string | null;
   discoveryConfig: DiscoveryConfig;
@@ -331,6 +332,7 @@ function createInitialShellState(): DesktopShellState {
     thread: [],
     selectedThread: null,
     replyTarget: null,
+    repostTarget: null,
     peerTicket: '',
     localPeerTicket: null,
     discoveryConfig: DEFAULT_DISCOVERY_CONFIG,
@@ -558,6 +560,18 @@ function authorDisplayLabel(
   name?: string | null
 ): string {
   return displayName?.trim() || name?.trim() || shortPubkey(authorPubkey);
+}
+
+function publishedTopicIdForPost(post: Pick<PostView, 'published_topic_id' | 'origin_topic_id'>): string | null {
+  return post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
+}
+
+function canCreateRepostFromPost(post: PostView): boolean {
+  return (post.object_kind === 'post' || post.object_kind === 'comment') && !post.channel_id;
+}
+
+function isQuoteRepost(post: Pick<PostView, 'object_kind' | 'repost_commentary'>): boolean {
+  return post.object_kind === 'repost' && Boolean(post.repost_commentary?.trim());
 }
 
 function formatListLabel(values: string[]): string {
@@ -1319,6 +1333,7 @@ function DesktopShellPage({
     thread,
     selectedThread,
     replyTarget,
+    repostTarget,
     peerTicket,
     localPeerTicket,
     discoveryConfig,
@@ -1420,6 +1435,7 @@ function DesktopShellPage({
   const setThread = useMemo(() => makeFieldSetter('thread'), [makeFieldSetter]);
   const setSelectedThread = useMemo(() => makeFieldSetter('selectedThread'), [makeFieldSetter]);
   const setReplyTarget = useMemo(() => makeFieldSetter('replyTarget'), [makeFieldSetter]);
+  const setRepostTarget = useMemo(() => makeFieldSetter('repostTarget'), [makeFieldSetter]);
   const setPeerTicket = useMemo(() => makeFieldSetter('peerTicket'), [makeFieldSetter]);
   const setLocalPeerTicket = useMemo(() => makeFieldSetter('localPeerTicket'), [makeFieldSetter]);
   const setDiscoveryConfig = useMemo(() => makeFieldSetter('discoveryConfig'), [makeFieldSetter]);
@@ -1596,6 +1612,9 @@ function DesktopShellPage({
     [activeTopic, timelineScopeByTopic]
   );
   const activeComposeChannel = useMemo(() => {
+    if (repostTarget) {
+      return PUBLIC_CHANNEL_REF;
+    }
     if (replyTarget?.channel_id) {
       return {
         kind: 'private_channel',
@@ -1603,13 +1622,16 @@ function DesktopShellPage({
       } as ChannelRef;
     }
     return composeChannelByTopic[activeTopic] ?? PUBLIC_CHANNEL_REF;
-  }, [activeTopic, composeChannelByTopic, replyTarget]);
+  }, [activeTopic, composeChannelByTopic, replyTarget, repostTarget]);
   const activeComposeAudienceLabel = useMemo(() => {
+    if (repostTarget) {
+      return translate('common:audience.public');
+    }
     if (replyTarget) {
       return replyTarget.audience_label;
     }
     return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
-  }, [activeComposeChannel, activeJoinedChannels, replyTarget]);
+  }, [activeComposeChannel, activeJoinedChannels, replyTarget, repostTarget]);
   const profileMode = shellChromeState.profileMode;
   const selectedPrivateChannelId = useMemo(
     () => selectedChannelIdByTopic[activeTopic] ?? null,
@@ -2362,6 +2384,7 @@ function DesktopShellPage({
     setSelectedThread(null);
     setThread([]);
     setReplyTarget(null);
+    setRepostTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
@@ -2373,6 +2396,7 @@ function DesktopShellPage({
   }, [
     setAuthorError,
     setReplyTarget,
+    setRepostTarget,
     setSelectedAuthor,
     setSelectedAuthorTimeline,
     setSelectedAuthorPubkey,
@@ -2493,6 +2517,7 @@ function DesktopShellPage({
     setSelectedThread(null);
     setThread([]);
     setReplyTarget(null);
+    setRepostTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
@@ -3032,15 +3057,57 @@ function DesktopShellPage({
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmedComposer = composer.trim();
     const attachments = draftMediaItems.flatMap((item) => item.attachments);
-    if (!composer.trim() && attachments.length === 0) {
+    if (repostTarget) {
+      const sourceTopic = publishedTopicIdForPost(repostTarget);
+      if (!sourceTopic) {
+        setComposerError(translate('common:errors.failedToPublish'));
+        return;
+      }
+      if (!trimmedComposer) {
+        setComposerError(translate('common:errors.quoteRepostRequiresCommentary'));
+        return;
+      }
+
+      try {
+        await api.createRepost(activeTopic, sourceTopic, repostTarget.object_id, trimmedComposer);
+        releaseAllDraftPreviews();
+        setComposer('');
+        setDraftMediaItems([]);
+        setAttachmentInputKey((value) => value + 1);
+        setComposerError(null);
+        setReplyTarget(null);
+        setRepostTarget(null);
+        setSelectedThread(null);
+        setThread([]);
+        setShellChromeState((current) => ({
+          ...current,
+          activePrimarySection: 'timeline',
+        }));
+        await loadTopics(trackedTopics, activeTopic, null);
+        syncRoute('replace', {
+          primarySection: 'timeline',
+          selectedThread: null,
+        });
+      } catch (publishError) {
+        setComposerError(
+          publishError instanceof Error
+            ? publishError.message
+            : translate('common:errors.failedToPublish')
+        );
+      }
+      return;
+    }
+
+    if (!trimmedComposer && attachments.length === 0) {
       return;
     }
 
     try {
       await api.createPost(
         activeTopic,
-        composer.trim(),
+        trimmedComposer,
         replyTarget?.object_id ?? null,
         attachments,
         activeComposeChannel
@@ -3056,6 +3123,7 @@ function DesktopShellPage({
       }));
       await loadTopics(trackedTopics, activeTopic, selectedThread);
       setReplyTarget(null);
+      setRepostTarget(null);
       syncRoute('replace', {
         primarySection: 'timeline',
       });
@@ -3180,6 +3248,7 @@ function DesktopShellPage({
 
   function beginReply(post: PostView) {
     const threadId = post.root_id ?? post.object_id;
+    setRepostTarget(null);
     setReplyTarget(post);
     setSelectedThread(threadId);
     setSelectedAuthorPubkey(null);
@@ -3194,6 +3263,62 @@ function DesktopShellPage({
 
   function clearReply() {
     setReplyTarget(null);
+    setRepostTarget(null);
+  }
+
+  function clearRepost() {
+    setRepostTarget(null);
+  }
+
+  async function handleSimpleRepost(post: PostView) {
+    const sourceTopic = publishedTopicIdForPost(post);
+    if (!sourceTopic || !canCreateRepostFromPost(post)) {
+      setComposerError(translate('common:errors.failedToPublish'));
+      return;
+    }
+
+    try {
+      await api.createRepost(activeTopic, sourceTopic, post.object_id, null);
+      setComposerError(null);
+      setReplyTarget(null);
+      setRepostTarget(null);
+      setSelectedThread(null);
+      setThread([]);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'timeline',
+      }));
+      await loadTopics(trackedTopics, activeTopic, null);
+      syncRoute('replace', {
+        primarySection: 'timeline',
+        selectedThread: null,
+      });
+    } catch (repostError) {
+      setComposerError(
+        repostError instanceof Error
+          ? repostError.message
+          : translate('common:errors.failedToPublish')
+      );
+    }
+  }
+
+  function beginQuoteRepost(post: PostView) {
+    if (!canCreateRepostFromPost(post)) {
+      return;
+    }
+    releaseAllDraftPreviews();
+    setDraftMediaItems([]);
+    setAttachmentInputKey((value) => value + 1);
+    setComposer('');
+    setComposerError(null);
+    setReplyTarget(null);
+    setRepostTarget(post);
+    setSelectedAuthorPubkey(null);
+    setSelectedAuthor(null);
+    setAuthorError(null);
+    syncRoute('replace', {
+      selectedAuthorPubkey: null,
+    });
   }
 
   const openAuthorDetail = useCallback(async (
@@ -3780,6 +3905,7 @@ function DesktopShellPage({
           setSelectedThread(null);
           setThread([]);
           setReplyTarget(null);
+          setRepostTarget(null);
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);
@@ -3830,6 +3956,7 @@ function DesktopShellPage({
         setSelectedThread(null);
         setThread([]);
         setReplyTarget(null);
+        setRepostTarget(null);
       }
       if (!requestedAuthorPubkey) {
         shouldNormalize = true;
@@ -3857,6 +3984,7 @@ function DesktopShellPage({
         setSelectedThread(null);
         setThread([]);
         setReplyTarget(null);
+        setRepostTarget(null);
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setAuthorError(null);
@@ -3869,6 +3997,7 @@ function DesktopShellPage({
         setSelectedThread(null);
         setThread([]);
         setReplyTarget(null);
+        setRepostTarget(null);
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setAuthorError(null);
@@ -3908,6 +4037,7 @@ function DesktopShellPage({
     setSelectedAuthorPubkey,
     setShellChromeState,
     setReplyTarget,
+    setRepostTarget,
     setThread,
     setTimelineScopeByTopic,
     shellChromeState.activePrimarySection,
@@ -3995,6 +4125,15 @@ function DesktopShellPage({
               ? translate('common:media.imageReady')
               : translate('common:media.syncingImage')
             : null;
+      const publishedTopicId = publishedTopicIdForPost(post);
+      const threadTargetId =
+        post.object_kind === 'repost' && !isQuoteRepost(post) && post.repost_of
+          ? post.repost_of.root_id ?? post.repost_of.source_object_id
+          : post.root_id ?? post.object_id;
+      const threadTopicId =
+        post.object_kind === 'repost' && !isQuoteRepost(post) && post.repost_of
+          ? post.repost_of.source_topic_id
+          : publishedTopicId;
 
       return {
         post,
@@ -4015,7 +4154,10 @@ function DesktopShellPage({
           ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
             localizeAudienceLabel(post.audience_label)
           : localizeAudienceLabel(post.audience_label),
-        threadTargetId: post.root_id ?? post.object_id,
+        threadTargetId,
+        threadTopicId,
+        canReply: post.is_threadable ?? (post.object_kind !== 'repost' || isQuoteRepost(post)),
+        canRepost: canCreateRepostFromPost(post),
         media: {
           objectId: post.object_id,
           kind: mediaKind,
@@ -4581,7 +4723,10 @@ function DesktopShellPage({
               })
             }
             onOpenThread={(threadId) => void openThread(threadId)}
+            onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
             onReply={beginReply}
+            onRepost={(post) => void handleSimpleRepost(post)}
+            onQuoteRepost={beginQuoteRepost}
           />
         </ContextPane>
       ) : null}
@@ -4612,6 +4757,7 @@ function DesktopShellPage({
                 emptyCopy={t('profile:feed.noAuthorPosts')}
                 onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                 onOpenThread={(threadId) => void openThread(threadId)}
+                onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
                 onReply={beginReply}
                 readOnly={true}
                 onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
@@ -4723,7 +4869,7 @@ function DesktopShellPage({
                         <Select
                           aria-label={t('shell:workspace.composeTarget')}
                           value={channelRefValue(activeComposeChannel)}
-                          disabled={Boolean(replyTarget)}
+                          disabled={Boolean(replyTarget || repostTarget)}
                           onChange={(event) => handleComposeChannelChange(event.target.value)}
                         >
                           {composeTargetOptions.map((option) => (
@@ -4754,7 +4900,21 @@ function DesktopShellPage({
                             }
                           : null
                       }
+                      repostTarget={
+                        repostTarget
+                          ? {
+                              content: repostTarget.content,
+                              authorLabel: authorDisplayLabel(
+                                repostTarget.author_pubkey,
+                                repostTarget.author_display_name,
+                                repostTarget.author_name
+                              ),
+                            }
+                          : null
+                      }
                       onClearReply={clearReply}
+                      onClearRepost={clearRepost}
+                      attachmentsDisabled={Boolean(repostTarget)}
                     />
                   </Card>
                   <Card className='shell-workspace-card'>
@@ -4763,7 +4923,10 @@ function DesktopShellPage({
                       emptyCopy={t('shell:workspace.noPosts')}
                       onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                       onOpenThread={(threadId) => void openThread(threadId)}
+                      onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
                       onReply={beginReply}
+                      onRepost={(post) => void handleSimpleRepost(post)}
+                      onQuoteRepost={beginQuoteRepost}
                     />
                   </Card>
                 </>
@@ -5317,6 +5480,7 @@ function DesktopShellPage({
                       emptyCopy={t('profile:feed.noOwnPosts')}
                       onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                       onOpenThread={(threadId) => void openThread(threadId)}
+                      onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
                       onReply={beginReply}
                       readOnly={true}
                       onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}

@@ -640,6 +640,82 @@ test('reply publish reloads thread only once after a successful submit', async (
   expect(listThreadSpy.mock.calls.length - threadCallsBeforeSubmit).toBe(1);
 });
 
+test('desktop shell can create a simple repost from timeline', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const originalCreateRepost = api.createRepost;
+  const createRepostSpy = vi.fn((topic, sourceTopic, sourceObjectId, commentary) =>
+    originalCreateRepost(topic, sourceTopic, sourceObjectId, commentary)
+  );
+  api.createRepost = createRepostSpy;
+
+  render(<App api={api} />);
+
+  await user.type(screen.getByPlaceholderText('Write a post'), 'source post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  const sourcePost = await screen.findByText('source post');
+  const card = sourcePost.closest('article');
+  if (!card) {
+    throw new Error('source post card not found');
+  }
+
+  await user.click(within(card).getByRole('button', { name: 'Repost' }));
+
+  await waitFor(() => {
+    expect(createRepostSpy).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      'kukuri:topic:demo',
+      expect.any(String),
+      null
+    );
+  });
+  expect(screen.getByText('Reposted')).toBeInTheDocument();
+});
+
+test('desktop shell can create a quote repost from the composer', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const originalCreateRepost = api.createRepost;
+  const createRepostSpy = vi.fn((topic, sourceTopic, sourceObjectId, commentary) =>
+    originalCreateRepost(topic, sourceTopic, sourceObjectId, commentary)
+  );
+  api.createRepost = createRepostSpy;
+
+  render(<App api={api} />);
+
+  await user.type(screen.getByPlaceholderText('Write a post'), 'source post');
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  const sourcePost = await screen.findByText('source post');
+  const card = sourcePost.closest('article');
+  if (!card) {
+    throw new Error('source post card not found');
+  }
+
+  await user.click(within(card).getByRole('button', { name: 'Quote Repost' }));
+
+  const quoteInput = await screen.findByPlaceholderText('Write a quote repost');
+  expect(screen.getByText('Quote reposting')).toBeInTheDocument();
+  expect(screen.getByLabelText(/attachment/i)).toBeDisabled();
+
+  await user.type(quoteInput, 'quoted take');
+  const composer = quoteInput.closest('form');
+  if (!composer) {
+    throw new Error('quote repost composer form not found');
+  }
+  const submitButton = within(composer).getByRole('button', { name: 'Quote Repost' });
+  await user.click(submitButton);
+
+  await waitFor(() => {
+    expect(createRepostSpy).toHaveBeenCalledWith(
+      'kukuri:topic:demo',
+      'kukuri:topic:demo',
+      expect.any(String),
+      'quoted take'
+    );
+  });
+  expect(screen.getByText('quoted take')).toBeInTheDocument();
+});
+
 test('desktop shell can track multiple topics at once', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
