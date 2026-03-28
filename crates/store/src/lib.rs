@@ -6,9 +6,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry,
-    KukuriEnvelope, LiveSessionStatus, PayloadRef, Profile, ReplicaId, RepostSourceSnapshotV1,
-    ThreadRef, parse_follow_edge, parse_profile,
+    BlobHash, CustomReactionAssetSnapshotV1, EnvelopeId, FollowEdge, FollowEdgeStatus,
+    GameRoomStatus, GameScoreEntry, KukuriEnvelope, LiveSessionStatus, ObjectStatus, PayloadRef,
+    Profile, ReactionKeyKind, ReplicaId, RepostSourceSnapshotV1, ThreadRef, parse_follow_edge,
+    parse_profile,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha384};
@@ -56,6 +57,38 @@ pub struct ObjectProjectionRow {
     pub source_blob_hash: Option<BlobHash>,
     pub derived_at: i64,
     pub projection_version: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactionProjectionRow {
+    pub source_replica_id: ReplicaId,
+    pub target_object_id: EnvelopeId,
+    pub reaction_id: EnvelopeId,
+    pub author_pubkey: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub reaction_key_kind: ReactionKeyKind,
+    pub normalized_reaction_key: String,
+    pub emoji: Option<String>,
+    pub custom_asset_id: Option<String>,
+    pub custom_asset_snapshot: Option<CustomReactionAssetSnapshotV1>,
+    pub status: ObjectStatus,
+    pub source_key: String,
+    pub source_envelope_id: EnvelopeId,
+    pub derived_at: i64,
+    pub projection_version: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkedCustomReactionRow {
+    pub asset_id: String,
+    pub owner_pubkey: String,
+    pub blob_hash: BlobHash,
+    pub mime: String,
+    pub bytes: u64,
+    pub width: u32,
+    pub height: u32,
+    pub bookmarked_at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +219,21 @@ pub trait ProjectionStore: Send + Sync {
     async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()>;
     async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()>;
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()>;
+    async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()>;
+    async fn get_reaction_cache(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+        reaction_id: &EnvelopeId,
+    ) -> Result<Option<ReactionProjectionRow>>;
+    async fn list_reaction_cache_for_target(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+    ) -> Result<Vec<ReactionProjectionRow>>;
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()>;
+    async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>>;
+    async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()>;
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
 }
 
@@ -627,6 +675,8 @@ impl Store for SqliteStore {
     }
 }
 
+type MemoryReactionProjectionRows = HashMap<(String, String, String), ReactionProjectionRow>;
+
 #[derive(Clone, Default)]
 pub struct MemoryStore {
     envelopes: Arc<RwLock<HashMap<EnvelopeId, KukuriEnvelope>>>,
@@ -641,6 +691,8 @@ pub struct MemoryStore {
         Arc<RwLock<HashMap<(String, String), AuthorRelationshipProjectionRow>>>,
     live_presence: Arc<RwLock<HashMap<LivePresenceKey, LivePresenceValue>>>,
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
+    reaction_projection_rows: Arc<RwLock<MemoryReactionProjectionRows>>,
+    bookmarked_custom_reactions: Arc<RwLock<HashMap<String, BookmarkedCustomReactionRow>>>,
 }
 
 #[async_trait]
@@ -1308,6 +1360,163 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
+        let snapshot_json = row
+            .custom_asset_snapshot
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+        sqlx::query(
+            r#"
+            INSERT INTO reaction_cache (
+              source_replica_id, target_object_id, reaction_id, author_pubkey, created_at,
+              updated_at, reaction_key_kind, normalized_reaction_key, emoji, custom_asset_id,
+              custom_asset_snapshot_json, status, source_key, source_envelope_id, derived_at,
+              projection_version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            ON CONFLICT(source_replica_id, target_object_id, reaction_id) DO UPDATE SET
+              author_pubkey = excluded.author_pubkey,
+              created_at = excluded.created_at,
+              updated_at = excluded.updated_at,
+              reaction_key_kind = excluded.reaction_key_kind,
+              normalized_reaction_key = excluded.normalized_reaction_key,
+              emoji = excluded.emoji,
+              custom_asset_id = excluded.custom_asset_id,
+              custom_asset_snapshot_json = excluded.custom_asset_snapshot_json,
+              status = excluded.status,
+              source_key = excluded.source_key,
+              source_envelope_id = excluded.source_envelope_id,
+              derived_at = excluded.derived_at,
+              projection_version = excluded.projection_version
+            "#,
+        )
+        .bind(row.source_replica_id.as_str())
+        .bind(row.target_object_id.as_str())
+        .bind(row.reaction_id.as_str())
+        .bind(row.author_pubkey.as_str())
+        .bind(row.created_at)
+        .bind(row.updated_at)
+        .bind(reaction_key_kind_name(&row.reaction_key_kind))
+        .bind(row.normalized_reaction_key.as_str())
+        .bind(row.emoji.as_deref())
+        .bind(row.custom_asset_id.as_deref())
+        .bind(snapshot_json.as_deref())
+        .bind(object_status_name(&row.status))
+        .bind(row.source_key.as_str())
+        .bind(row.source_envelope_id.as_str())
+        .bind(row.derived_at)
+        .bind(row.projection_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_reaction_cache(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+        reaction_id: &EnvelopeId,
+    ) -> Result<Option<ReactionProjectionRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT source_replica_id, target_object_id, reaction_id, author_pubkey, created_at,
+                   updated_at, reaction_key_kind, normalized_reaction_key, emoji,
+                   custom_asset_id, custom_asset_snapshot_json, status, source_key,
+                   source_envelope_id, derived_at, projection_version
+            FROM reaction_cache
+            WHERE source_replica_id = ?1 AND target_object_id = ?2 AND reaction_id = ?3
+            "#,
+        )
+        .bind(source_replica_id.as_str())
+        .bind(target_object_id.as_str())
+        .bind(reaction_id.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_reaction_projection).transpose()
+    }
+
+    async fn list_reaction_cache_for_target(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+    ) -> Result<Vec<ReactionProjectionRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT source_replica_id, target_object_id, reaction_id, author_pubkey, created_at,
+                   updated_at, reaction_key_kind, normalized_reaction_key, emoji,
+                   custom_asset_id, custom_asset_snapshot_json, status, source_key,
+                   source_envelope_id, derived_at, projection_version
+            FROM reaction_cache
+            WHERE source_replica_id = ?1 AND target_object_id = ?2
+            ORDER BY normalized_reaction_key ASC, reaction_id ASC
+            "#,
+        )
+        .bind(source_replica_id.as_str())
+        .bind(target_object_id.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_reaction_projection).collect()
+    }
+
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO bookmarked_custom_reactions (
+              asset_id, owner_pubkey, blob_hash, mime, bytes, width, height, bookmarked_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(asset_id) DO UPDATE SET
+              owner_pubkey = excluded.owner_pubkey,
+              blob_hash = excluded.blob_hash,
+              mime = excluded.mime,
+              bytes = excluded.bytes,
+              width = excluded.width,
+              height = excluded.height,
+              bookmarked_at = excluded.bookmarked_at
+            "#,
+        )
+        .bind(row.asset_id.as_str())
+        .bind(row.owner_pubkey.as_str())
+        .bind(row.blob_hash.as_str())
+        .bind(row.mime.as_str())
+        .bind(row.bytes as i64)
+        .bind(i64::from(row.width))
+        .bind(i64::from(row.height))
+        .bind(row.bookmarked_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT asset_id, owner_pubkey, blob_hash, mime, bytes, width, height, bookmarked_at
+            FROM bookmarked_custom_reactions
+            ORDER BY bookmarked_at DESC, asset_id DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(row_to_bookmarked_custom_reaction)
+            .collect()
+    }
+
+    async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM bookmarked_custom_reactions
+            WHERE asset_id = ?1
+            "#,
+        )
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         sqlx::query("DELETE FROM object_thread_cache")
             .execute(&self.pool)
@@ -1322,6 +1531,9 @@ impl ProjectionStore for SqliteStore {
             .execute(&self.pool)
             .await?;
         sqlx::query("DELETE FROM live_presence_cache")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM reaction_cache")
             .execute(&self.pool)
             .await?;
         for row in rows {
@@ -1564,6 +1776,93 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
+        self.reaction_projection_rows.write().await.insert(
+            (
+                row.source_replica_id.as_str().to_string(),
+                row.target_object_id.as_str().to_string(),
+                row.reaction_id.as_str().to_string(),
+            ),
+            row,
+        );
+        Ok(())
+    }
+
+    async fn get_reaction_cache(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+        reaction_id: &EnvelopeId,
+    ) -> Result<Option<ReactionProjectionRow>> {
+        Ok(self
+            .reaction_projection_rows
+            .read()
+            .await
+            .get(&(
+                source_replica_id.as_str().to_string(),
+                target_object_id.as_str().to_string(),
+                reaction_id.as_str().to_string(),
+            ))
+            .cloned())
+    }
+
+    async fn list_reaction_cache_for_target(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+    ) -> Result<Vec<ReactionProjectionRow>> {
+        let mut items = self
+            .reaction_projection_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| {
+                row.source_replica_id == *source_replica_id
+                    && row.target_object_id == *target_object_id
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            left.normalized_reaction_key
+                .cmp(&right.normalized_reaction_key)
+                .then_with(|| left.reaction_id.cmp(&right.reaction_id))
+        });
+        Ok(items)
+    }
+
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
+        self.bookmarked_custom_reactions
+            .write()
+            .await
+            .insert(row.asset_id.clone(), row);
+        Ok(())
+    }
+
+    async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>> {
+        let mut items = self
+            .bookmarked_custom_reactions
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .bookmarked_at
+                .cmp(&left.bookmarked_at)
+                .then_with(|| right.asset_id.cmp(&left.asset_id))
+        });
+        Ok(items)
+    }
+
+    async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
+        self.bookmarked_custom_reactions
+            .write()
+            .await
+            .remove(asset_id);
+        Ok(())
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
@@ -1573,6 +1872,7 @@ impl ProjectionStore for MemoryStore {
         self.live_session_rows.write().await.clear();
         self.game_room_rows.write().await.clear();
         self.live_presence.write().await.clear();
+        self.reaction_projection_rows.write().await.clear();
         Ok(())
     }
 }
@@ -1624,6 +1924,49 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
             .map(BlobHash::new),
         derived_at: row.get("derived_at"),
         projection_version: row.get("projection_version"),
+    })
+}
+
+fn row_to_reaction_projection(row: sqlx::sqlite::SqliteRow) -> Result<ReactionProjectionRow> {
+    Ok(ReactionProjectionRow {
+        source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
+        target_object_id: row.get::<String, _>("target_object_id").into(),
+        reaction_id: row.get::<String, _>("reaction_id").into(),
+        author_pubkey: row.get("author_pubkey"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        reaction_key_kind: parse_reaction_key_kind(
+            row.get::<String, _>("reaction_key_kind").as_str(),
+        )?,
+        normalized_reaction_key: row.get("normalized_reaction_key"),
+        emoji: row.try_get("emoji").ok(),
+        custom_asset_id: row.try_get("custom_asset_id").ok(),
+        custom_asset_snapshot: row
+            .try_get::<String, _>("custom_asset_snapshot_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?,
+        status: parse_object_status(row.get::<String, _>("status").as_str())?,
+        source_key: row.get("source_key"),
+        source_envelope_id: row.get::<String, _>("source_envelope_id").into(),
+        derived_at: row.get("derived_at"),
+        projection_version: row.get("projection_version"),
+    })
+}
+
+fn row_to_bookmarked_custom_reaction(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<BookmarkedCustomReactionRow> {
+    Ok(BookmarkedCustomReactionRow {
+        asset_id: row.get("asset_id"),
+        owner_pubkey: row.get("owner_pubkey"),
+        blob_hash: BlobHash::new(row.get::<String, _>("blob_hash")),
+        mime: row.get("mime"),
+        bytes: row.get::<i64, _>("bytes") as u64,
+        width: row.get::<i64, _>("width") as u32,
+        height: row.get::<i64, _>("height") as u32,
+        bookmarked_at: row.get("bookmarked_at"),
     })
 }
 
@@ -1710,6 +2053,40 @@ fn parse_follow_edge_status(value: &str) -> Result<FollowEdgeStatus> {
         "active" => Ok(FollowEdgeStatus::Active),
         "revoked" => Ok(FollowEdgeStatus::Revoked),
         _ => anyhow::bail!("unknown follow edge status: {value}"),
+    }
+}
+
+fn object_status_name(status: &ObjectStatus) -> &'static str {
+    match status {
+        ObjectStatus::Active => "active",
+        ObjectStatus::Edited => "edited",
+        ObjectStatus::Deleted => "deleted",
+        ObjectStatus::Tombstoned => "tombstoned",
+    }
+}
+
+fn parse_object_status(value: &str) -> Result<ObjectStatus> {
+    match value {
+        "active" => Ok(ObjectStatus::Active),
+        "edited" => Ok(ObjectStatus::Edited),
+        "deleted" => Ok(ObjectStatus::Deleted),
+        "tombstoned" => Ok(ObjectStatus::Tombstoned),
+        _ => anyhow::bail!("unknown object status: {value}"),
+    }
+}
+
+fn reaction_key_kind_name(kind: &ReactionKeyKind) -> &'static str {
+    match kind {
+        ReactionKeyKind::Emoji => "emoji",
+        ReactionKeyKind::CustomAsset => "custom_asset",
+    }
+}
+
+fn parse_reaction_key_kind(value: &str) -> Result<ReactionKeyKind> {
+    match value {
+        "emoji" => Ok(ReactionKeyKind::Emoji),
+        "custom_asset" => Ok(ReactionKeyKind::CustomAsset),
+        _ => anyhow::bail!("unknown reaction key kind: {value}"),
     }
 }
 

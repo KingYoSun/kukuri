@@ -24,8 +24,15 @@ function createView(overrides?: Partial<PostCardView>): PostCardView {
       created_at: 1,
       reply_to: null,
       root_id: 'post-1',
+      published_topic_id: null,
+      origin_topic_id: null,
+      repost_of: null,
+      repost_commentary: null,
+      is_threadable: true,
       channel_id: null,
       audience_label: 'Public',
+      reaction_summary: [],
+      my_reactions: [],
     },
     context: 'timeline',
     authorLabel: 'Alice',
@@ -156,4 +163,112 @@ test('simple repost opens the source thread in its published topic', async () =>
 
   expect(onOpenThread).not.toHaveBeenCalled();
   expect(onOpenThreadInTopic).toHaveBeenCalledWith('source-root', 'kukuri:topic:source');
+});
+
+test('post card toggles reaction summary chips and opens the reaction tray', async () => {
+  const user = userEvent.setup();
+  const onToggleReaction = vi.fn();
+  const onBookmarkCustomReaction = vi.fn();
+  const onManageReactions = vi.fn();
+  const customAsset = {
+    asset_id: 'asset-1',
+    owner_pubkey: 'b'.repeat(64),
+    blob_hash: 'blob-1',
+    mime: 'image/png',
+    bytes: 128,
+    width: 128,
+    height: 128,
+  };
+  const view = createView({
+    post: {
+      ...createView().post,
+      reaction_summary: [
+        {
+          reaction_key_kind: 'emoji',
+          normalized_reaction_key: 'emoji:👍',
+          emoji: '👍',
+          custom_asset: null,
+          count: 2,
+        },
+        {
+          reaction_key_kind: 'custom_asset',
+          normalized_reaction_key: 'custom_asset:asset-1',
+          emoji: null,
+          custom_asset: customAsset,
+          count: 1,
+        },
+      ],
+      my_reactions: [
+        {
+          reaction_key_kind: 'emoji',
+          normalized_reaction_key: 'emoji:👍',
+          emoji: '👍',
+          custom_asset: null,
+        },
+      ],
+    },
+  });
+
+  render(
+    <PostCard
+      view={view}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      localAuthorPubkey={'a'.repeat(64)}
+      mediaObjectUrls={{ 'blob-1': 'https://example.com/reaction.png' }}
+      onToggleReaction={onToggleReaction}
+      onBookmarkCustomReaction={onBookmarkCustomReaction}
+      onManageReactions={onManageReactions}
+    />
+  );
+
+  await user.click(screen.getAllByRole('button', { name: /👍/ })[0]);
+  expect(onToggleReaction).toHaveBeenNthCalledWith(1, view.post, { kind: 'emoji', emoji: '👍' });
+
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onBookmarkCustomReaction).toHaveBeenCalledWith(customAsset);
+
+  await user.click(screen.getByRole('button', { name: 'React' }));
+  await user.click(screen.getByRole('button', { name: '🔥' }));
+  expect(onToggleReaction).toHaveBeenNthCalledWith(2, view.post, { kind: 'emoji', emoji: '🔥' });
+
+  await user.click(screen.getByRole('button', { name: 'Manage reactions' }));
+  expect(onManageReactions).toHaveBeenCalledTimes(1);
+});
+
+test('read-only post card hides reaction affordances and keeps the original topic action', async () => {
+  const user = userEvent.setup();
+  const onOpenOriginalTopic = vi.fn();
+
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...createView().post,
+          published_topic_id: 'kukuri:topic:source',
+          reaction_summary: [
+            {
+              reaction_key_kind: 'emoji',
+              normalized_reaction_key: 'emoji:👍',
+              emoji: '👍',
+              custom_asset: null,
+              count: 3,
+            },
+          ],
+        },
+      })}
+      readOnly
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onOpenOriginalTopic={onOpenOriginalTopic}
+    />
+  );
+
+  expect(screen.queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
+  expect(screen.queryByText('3')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Open original topic' }));
+  expect(onOpenOriginalTopic).toHaveBeenCalledWith('kukuri:topic:source');
 });

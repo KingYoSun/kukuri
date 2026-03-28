@@ -565,6 +565,125 @@
   margin-top: 0.75rem;
 }
 
+.shell-phase1 .post-reaction-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-right: auto;
+}
+
+.shell-phase1 .post-reaction-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.shell-phase1 .post-reaction-chip,
+.shell-phase1 .post-reaction-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.28rem 0.6rem;
+  background: var(--surface-card);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.shell-phase1 .post-reaction-chip-active {
+  border-color: var(--accent);
+  background: var(--surface-accent-soft);
+}
+
+.shell-phase1 .post-reaction-chip-image {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.shell-phase1 .post-reaction-tray {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  background: var(--surface-subtle);
+}
+
+.shell-phase1 .post-reaction-picker-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.shell-phase1 .reactions-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.shell-phase1 .reactions-editor-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.shell-phase1 .reactions-editor-source,
+.shell-phase1 .reactions-preview-card {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.shell-phase1 .reactions-editor-image {
+  width: min(100%, 16rem);
+  border-radius: 1rem;
+  object-fit: contain;
+  background: var(--surface-subtle);
+}
+
+.shell-phase1 .reactions-crop-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.shell-phase1 .reactions-preview-thumb,
+.shell-phase1 .reactions-asset-thumb {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 1rem;
+  background-color: var(--surface-card);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  object-fit: cover;
+}
+
+.shell-phase1 .reactions-asset-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.shell-phase1 .reactions-asset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.shell-phase1 .reactions-asset-card,
+.shell-phase1 .reactions-saved-card {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.shell-phase1 .reactions-saved-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .shell-phase1 .active-topic-label {
   color: var(--muted-foreground);
   font-size: 0.8rem;

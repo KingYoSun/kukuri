@@ -128,5 +128,19 @@
     "seedPeersLabel": "Seed Peers",
     "seedPeersPlaceholder": "node_id or node_id@host:port",
     "title": "Discovery"
+  },
+  "reactions": {
+    "summary": "{{owned}} owned / {{saved}} saved",
+    "myCustomReactions": "My custom reactions",
+    "myCustomReactionsHint": "Create square 128x128 reaction images here.",
+    "uploadLabel": "Upload image",
+    "sourceSize": "Source {{width}} x {{height}}",
+    "cropSize": "Crop size",
+    "preview": "Reaction preview",
+    "previewHint": "The final asset is normalized to 128x128.",
+    "noOwnedAssets": "No custom reactions yet.",
+    "savedReactions": "Saved reactions",
+    "savedReactionsHint": "Bookmark custom reactions from other people to reuse them.",
+    "noSavedAssets": "No saved reactions yet."
   }
 }

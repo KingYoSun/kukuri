@@ -10,10 +10,14 @@ use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
+use image::imageops::FilterType;
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
-    AppService, AuthorSocialView, BlobMediaPayload, CreateGameRoomInput, CreateLiveSessionInput,
-    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
-    PrivateChannelCapability, ProfileInput, SyncStatus, TimelineView, UpdateGameRoomInput,
+    AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
+    CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
+    CustomReactionAssetView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
+    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
+    SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -23,8 +27,9 @@ use kukuri_cn_core::{
 };
 use kukuri_core::{
     AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
-    FriendOnlyGrantPreview, FriendPlusSharePreview, GameRoomStatus, GossipHint, KukuriKeys,
-    PrivateChannelInvitePreview, Profile, ReplicaId, TimelineScope, TopicId,
+    CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview, FriendPlusSharePreview, GameRoomStatus,
+    GossipHint, KukuriKeys, PrivateChannelInvitePreview, Profile, ReactionKeyV1, ReplicaId,
+    TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -83,6 +88,60 @@ pub struct CreateAttachmentRequest {
     pub byte_size: u64,
     pub data_base64: String,
     pub role: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReactionKeyRequest {
+    Emoji {
+        emoji: String,
+    },
+    CustomAsset {
+        asset_id: String,
+        owner_pubkey: String,
+        blob_hash: String,
+        mime: String,
+        bytes: u64,
+        width: u32,
+        height: u32,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToggleReactionRequest {
+    pub target_topic_id: String,
+    pub target_object_id: String,
+    pub reaction_key: ReactionKeyRequest,
+    pub channel_ref: Option<ChannelRef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomReactionCropRect {
+    pub x: u32,
+    pub y: u32,
+    pub size: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateCustomReactionAssetRequest {
+    pub upload: CreateAttachmentRequest,
+    pub crop_rect: CustomReactionCropRect,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkCustomReactionRequest {
+    pub asset_id: String,
+    pub owner_pubkey: String,
+    pub blob_hash: String,
+    pub mime: String,
+    pub bytes: u64,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoveBookmarkedCustomReactionRequest {
+    pub asset_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -754,6 +813,76 @@ impl DesktopRuntime {
                 request.source_object_id.as_str(),
                 request.commentary.as_deref(),
             )
+            .await
+    }
+
+    pub async fn toggle_reaction(
+        &self,
+        request: ToggleReactionRequest,
+    ) -> Result<ReactionStateView> {
+        self.app_service
+            .toggle_reaction(
+                request.target_topic_id.as_str(),
+                request.target_object_id.as_str(),
+                reaction_key_from_request(request.reaction_key)?,
+                request.channel_ref,
+            )
+            .await
+    }
+
+    pub async fn list_my_custom_reaction_assets(&self) -> Result<Vec<CustomReactionAssetView>> {
+        self.app_service.list_my_custom_reaction_assets().await
+    }
+
+    pub async fn create_custom_reaction_asset(
+        &self,
+        request: CreateCustomReactionAssetRequest,
+    ) -> Result<CustomReactionAssetView> {
+        let upload = request.upload;
+        let raw = BASE64_STANDARD
+            .decode(upload.data_base64.as_bytes())
+            .context("failed to decode custom reaction upload")?;
+        let normalized =
+            normalize_custom_reaction_upload(raw, upload.mime.as_str(), &request.crop_rect)?;
+        self.app_service
+            .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                mime: normalized.mime,
+                bytes: normalized.bytes,
+                width: 128,
+                height: 128,
+            })
+            .await
+    }
+
+    pub async fn list_bookmarked_custom_reactions(
+        &self,
+    ) -> Result<Vec<BookmarkedCustomReactionView>> {
+        self.app_service.list_bookmarked_custom_reactions().await
+    }
+
+    pub async fn bookmark_custom_reaction(
+        &self,
+        request: BookmarkCustomReactionRequest,
+    ) -> Result<BookmarkedCustomReactionView> {
+        self.app_service
+            .bookmark_custom_reaction(CustomReactionAssetSnapshotV1 {
+                asset_id: request.asset_id,
+                owner_pubkey: request.owner_pubkey.into(),
+                blob_hash: BlobHash::new(request.blob_hash),
+                mime: request.mime,
+                bytes: request.bytes,
+                width: request.width,
+                height: request.height,
+            })
+            .await
+    }
+
+    pub async fn remove_bookmarked_custom_reaction(
+        &self,
+        request: RemoveBookmarkedCustomReactionRequest,
+    ) -> Result<()> {
+        self.app_service
+            .remove_bookmarked_custom_reaction(request.asset_id.as_str())
             .await
     }
 
@@ -1747,6 +1876,115 @@ fn pending_attachment_from_request(request: CreateAttachmentRequest) -> Result<P
     })
 }
 
+struct NormalizedCustomReactionUpload {
+    mime: String,
+    bytes: Vec<u8>,
+}
+
+fn reaction_key_from_request(request: ReactionKeyRequest) -> Result<ReactionKeyV1> {
+    Ok(match request {
+        ReactionKeyRequest::Emoji { emoji } => ReactionKeyV1::Emoji { emoji },
+        ReactionKeyRequest::CustomAsset {
+            asset_id,
+            owner_pubkey,
+            blob_hash,
+            mime,
+            bytes,
+            width,
+            height,
+        } => ReactionKeyV1::CustomAsset {
+            asset_id: asset_id.clone(),
+            snapshot: CustomReactionAssetSnapshotV1 {
+                asset_id,
+                owner_pubkey: owner_pubkey.into(),
+                blob_hash: BlobHash::new(blob_hash),
+                mime,
+                bytes,
+                width,
+                height,
+            },
+        },
+    })
+}
+
+fn normalize_custom_reaction_upload(
+    bytes: Vec<u8>,
+    mime: &str,
+    crop_rect: &CustomReactionCropRect,
+) -> Result<NormalizedCustomReactionUpload> {
+    if crop_rect.size == 0 {
+        bail!("custom reaction crop size must be greater than zero");
+    }
+    if mime.trim() == "image/gif" {
+        return normalize_custom_reaction_gif(bytes, crop_rect);
+    }
+    normalize_custom_reaction_static(bytes, crop_rect)
+}
+
+fn normalize_custom_reaction_static(
+    bytes: Vec<u8>,
+    crop_rect: &CustomReactionCropRect,
+) -> Result<NormalizedCustomReactionUpload> {
+    let image = image::load_from_memory(bytes.as_slice()).context("failed to decode image")?;
+    validate_crop_rect(image.width(), image.height(), crop_rect)?;
+    let cropped = crop_static_image(image, crop_rect);
+    let mut out = std::io::Cursor::new(Vec::new());
+    cropped
+        .write_to(&mut out, ImageFormat::Png)
+        .context("failed to encode normalized PNG")?;
+    Ok(NormalizedCustomReactionUpload {
+        mime: "image/png".into(),
+        bytes: out.into_inner(),
+    })
+}
+
+fn normalize_custom_reaction_gif(
+    bytes: Vec<u8>,
+    crop_rect: &CustomReactionCropRect,
+) -> Result<NormalizedCustomReactionUpload> {
+    let decoder = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(bytes))
+        .context("failed to decode GIF")?;
+    let (width, height) = decoder.dimensions();
+    validate_crop_rect(width, height, crop_rect)?;
+    let frames = decoder
+        .into_frames()
+        .collect_frames()
+        .context("failed to collect GIF frames")?;
+    let normalized_frames = frames.into_iter().map(|frame| {
+        let delay = frame.delay();
+        let buffer = frame.into_buffer();
+        let image = DynamicImage::ImageRgba8(buffer);
+        let resized = crop_static_image(image, crop_rect).into_rgba8();
+        image::Frame::from_parts(resized, 0, 0, delay)
+    });
+    let mut out = std::io::Cursor::new(Vec::new());
+    {
+        let mut encoder = image::codecs::gif::GifEncoder::new(&mut out);
+        encoder
+            .encode_frames(normalized_frames)
+            .context("failed to encode normalized GIF")?;
+    }
+    Ok(NormalizedCustomReactionUpload {
+        mime: "image/gif".into(),
+        bytes: out.into_inner(),
+    })
+}
+
+fn crop_static_image(image: DynamicImage, crop_rect: &CustomReactionCropRect) -> DynamicImage {
+    image
+        .crop_imm(crop_rect.x, crop_rect.y, crop_rect.size, crop_rect.size)
+        .resize_exact(128, 128, FilterType::Lanczos3)
+}
+
+fn validate_crop_rect(width: u32, height: u32, crop_rect: &CustomReactionCropRect) -> Result<()> {
+    if crop_rect.x.saturating_add(crop_rect.size) > width
+        || crop_rect.y.saturating_add(crop_rect.size) > height
+    {
+        bail!("custom reaction crop rectangle exceeds the source image bounds");
+    }
+    Ok(())
+}
+
 fn discovery_config_path(db_path: &Path) -> PathBuf {
     db_path.with_extension(DISCOVERY_CONFIG_FILE_EXTENSION)
 }
@@ -2272,6 +2510,7 @@ mod tests {
     };
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use image::{AnimationDecoder, Delay, Frame, GenericImageView, ImageFormat, Rgba, RgbaImage};
     use iroh::address_lookup::EndpointInfo;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
@@ -2310,6 +2549,82 @@ mod tests {
         } else {
             Duration::from_secs(15)
         }
+    }
+
+    fn png_source_bytes() -> Vec<u8> {
+        let image =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(320, 180, Rgba([0, 179, 164, 255])));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut out, ImageFormat::Png)
+            .expect("encode png");
+        out.into_inner()
+    }
+
+    fn animated_gif_source_bytes() -> Vec<u8> {
+        let mut out = std::io::Cursor::new(Vec::new());
+        {
+            let mut encoder = image::codecs::gif::GifEncoder::new(&mut out);
+            let frames = vec![
+                Frame::from_parts(
+                    RgbaImage::from_pixel(4, 2, Rgba([255, 0, 0, 255])),
+                    0,
+                    0,
+                    Delay::from_numer_denom_ms(40, 1),
+                ),
+                Frame::from_parts(
+                    RgbaImage::from_pixel(4, 2, Rgba([0, 0, 255, 255])),
+                    0,
+                    0,
+                    Delay::from_numer_denom_ms(40, 1),
+                ),
+            ];
+            encoder.encode_frames(frames).expect("encode gif");
+        }
+        out.into_inner()
+    }
+
+    #[test]
+    fn normalize_custom_reaction_static_resizes_png_to_square() {
+        let normalized = normalize_custom_reaction_static(
+            png_source_bytes(),
+            &CustomReactionCropRect {
+                x: 70,
+                y: 0,
+                size: 180,
+            },
+        )
+        .expect("normalize png");
+        let image = image::load_from_memory(normalized.bytes.as_slice()).expect("decode png");
+
+        assert_eq!(normalized.mime, "image/png");
+        assert_eq!(image.dimensions(), (128, 128));
+    }
+
+    #[test]
+    fn animated_gif_custom_reaction_preserves_gif_mime_after_normalization() {
+        let normalized = normalize_custom_reaction_gif(
+            animated_gif_source_bytes(),
+            &CustomReactionCropRect {
+                x: 1,
+                y: 0,
+                size: 2,
+            },
+        )
+        .expect("normalize gif");
+        let decoder =
+            image::codecs::gif::GifDecoder::new(std::io::Cursor::new(normalized.bytes.clone()))
+                .expect("decode normalized gif");
+        let dimensions = decoder.dimensions();
+        let frame_count = decoder
+            .into_frames()
+            .collect_frames()
+            .expect("collect normalized gif frames")
+            .len();
+
+        assert_eq!(normalized.mime, "image/gif");
+        assert_eq!(dimensions, (128, 128));
+        assert_eq!(frame_count, 2);
     }
 
     fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {

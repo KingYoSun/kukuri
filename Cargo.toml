@@ -37,6 +37,7 @@ futures-util = "0.3.32"
 hex = "0.4.3"
 hkdf = "0.12.4"
 httpdate = "1.0.3"
+image = { version = "0.25.8", default-features = false, features = ["png", "gif", "jpeg", "webp"] }
 iroh = { version = "0.97.0", features = ["address-lookup-mdns", "address-lookup-pkarr-dht"] }
 iroh-docs = "0.97.0"
 iroh-blobs = "0.99.0"

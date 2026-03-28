@@ -78,6 +78,8 @@ const timelineRootPost = {
   root_id: 'timeline-post-1',
   channel_id: null,
   audience_label: 'Public',
+  reaction_summary: [],
+  my_reactions: [],
 };
 
 export function createStoryTimelinePosts(): PostCardView[] {
@@ -124,6 +126,8 @@ export function createStoryTimelinePosts(): PostCardView[] {
         root_id: 'timeline-post-2',
         channel_id: null,
         audience_label: 'Public',
+        reaction_summary: [],
+        my_reactions: [],
       },
       context: 'timeline',
       authorLabel: 'Carol',
@@ -177,6 +181,8 @@ export function createStoryThreadPosts(): PostCardView[] {
         root_id: 'timeline-post-1',
         channel_id: null,
         audience_label: 'Public',
+        reaction_summary: [],
+        my_reactions: [],
       },
       context: 'thread',
       authorLabel: 'dan',

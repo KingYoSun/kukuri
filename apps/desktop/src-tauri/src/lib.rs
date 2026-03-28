@@ -1,18 +1,19 @@
 use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
-    CommunityNodeTargetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
+    AcceptCommunityNodeConsentsRequest, AuthorRequest, BookmarkCustomReactionRequest,
+    CommunityNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
+    CreateCustomReactionAssetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest, DesktopRuntime,
-    DiscoveryConfig,
-    ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
+    DiscoveryConfig, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
     ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest, GetBlobMediaRequest,
     GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
     ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
     ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
+    RemoveBookmarkedCustomReactionRequest, RotatePrivateChannelRequest,
+    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetMyProfileRequest,
+    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -101,6 +102,72 @@ async fn create_repost(
     request: CreateRepostRequest,
 ) -> Result<String, String> {
     state.runtime.create_repost(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn toggle_reaction(
+    state: tauri::State<'_, DesktopState>,
+    request: ToggleReactionRequest,
+) -> Result<kukuri_app_api::ReactionStateView, String> {
+    state.runtime.toggle_reaction(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_my_custom_reaction_assets(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_app_api::CustomReactionAssetView>, String> {
+    state
+        .runtime
+        .list_my_custom_reaction_assets()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn create_custom_reaction_asset(
+    state: tauri::State<'_, DesktopState>,
+    request: CreateCustomReactionAssetRequest,
+) -> Result<kukuri_app_api::CustomReactionAssetView, String> {
+    state
+        .runtime
+        .create_custom_reaction_asset(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_bookmarked_custom_reactions(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_app_api::BookmarkedCustomReactionView>, String> {
+    state
+        .runtime
+        .list_bookmarked_custom_reactions()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn bookmark_custom_reaction(
+    state: tauri::State<'_, DesktopState>,
+    request: BookmarkCustomReactionRequest,
+) -> Result<kukuri_app_api::BookmarkedCustomReactionView, String> {
+    state
+        .runtime
+        .bookmark_custom_reaction(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn remove_bookmarked_custom_reaction(
+    state: tauri::State<'_, DesktopState>,
+    request: RemoveBookmarkedCustomReactionRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .remove_bookmarked_custom_reaction(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -621,6 +688,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_post,
             create_repost,
+            toggle_reaction,
+            list_my_custom_reaction_assets,
+            create_custom_reaction_asset,
+            list_bookmarked_custom_reactions,
+            bookmark_custom_reaction,
+            remove_bookmarked_custom_reaction,
             create_private_channel,
             export_private_channel_invite,
             import_private_channel_invite,

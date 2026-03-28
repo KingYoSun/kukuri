@@ -40,11 +40,13 @@ import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
+import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import {
   type AppearancePanelView,
   type CommunityNodePanelView,
   type ConnectivityPanelView,
   type DiscoveryPanelView,
+  type ReactionsPanelView,
 } from '@/components/settings/types';
 import {
   type ExtendedPanelStatus,
@@ -76,8 +78,11 @@ import {
   AuthorSocialView,
   AttachmentView,
   BlobMediaPayload,
+  BookmarkedCustomReactionView,
   ChannelAudienceKind,
   ChannelRef,
+  CustomReactionAssetView,
+  CustomReactionCropRect,
   CommunityNodeConfig,
   CommunityNodeNodeStatus,
   CreateAttachmentInput,
@@ -94,6 +99,8 @@ import {
   Profile,
   ProfileInput,
   PrivateChannelInvitePreview,
+  ReactionKeyInput,
+  ReactionStateView,
   SyncStatus,
   TimelineScope,
   TopicSyncStatus,
@@ -166,6 +173,8 @@ type DesktopShellState = {
   syncStatus: SyncStatus;
   localProfile: Profile | null;
   profileTimeline: PostView[];
+  ownedReactionAssets: CustomReactionAssetView[];
+  bookmarkedReactionAssets: BookmarkedCustomReactionView[];
   profileDraft: ProfileInput;
   profileDirty: boolean;
   profileError: string | null;
@@ -198,6 +207,8 @@ type DesktopShellState = {
   gamePanelStateByTopic: Record<string, AsyncPanelState>;
   gameCreatePending: boolean;
   gameSavingByRoomId: Record<string, true>;
+  reactionPanelState: AsyncPanelState;
+  reactionCreatePending: boolean;
   error: string | null;
   shellChromeState: ShellChromeState;
 };
@@ -349,6 +360,8 @@ function createInitialShellState(): DesktopShellState {
     syncStatus: DEFAULT_SYNC_STATUS,
     localProfile: null,
     profileTimeline: [],
+    ownedReactionAssets: [],
+    bookmarkedReactionAssets: [],
     profileDraft: {},
     profileDirty: false,
     profileError: null,
@@ -387,6 +400,8 @@ function createInitialShellState(): DesktopShellState {
     },
     gameCreatePending: false,
     gameSavingByRoomId: {},
+    reactionPanelState: DEFAULT_ASYNC_PANEL_STATE,
+    reactionCreatePending: false,
     error: null,
     shellChromeState: {
       activePrimarySection: 'timeline',
@@ -481,6 +496,11 @@ const SETTINGS_SECTION_COPY: Array<{
     label: 'Community Node',
     description: 'Configured community nodes, auth, consent, and refresh actions.',
   },
+  {
+    id: 'reactions',
+    label: 'Reactions',
+    description: 'Custom reaction creation and saved reaction management.',
+  },
 ];
 
 function isSettingsSection(value: string | null): value is SettingsSection {
@@ -488,7 +508,8 @@ function isSettingsSection(value: string | null): value is SettingsSection {
     value === 'appearance' ||
     value === 'connectivity' ||
     value === 'discovery' ||
-    value === 'community-node'
+    value === 'community-node' ||
+    value === 'reactions'
   );
 }
 
@@ -564,6 +585,18 @@ function authorDisplayLabel(
 
 function publishedTopicIdForPost(post: Pick<PostView, 'published_topic_id' | 'origin_topic_id'>): string | null {
   return post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
+}
+
+function patchReactionStateIntoPosts(posts: PostView[], reactionState: ReactionStateView): PostView[] {
+  return posts.map((post) =>
+    post.object_id === reactionState.target_object_id
+      ? {
+          ...post,
+          reaction_summary: reactionState.reaction_summary,
+          my_reactions: reactionState.my_reactions,
+        }
+      : post
+  );
 }
 
 function canCreateRepostFromPost(post: PostView): boolean {
@@ -1350,6 +1383,8 @@ function DesktopShellPage({
     syncStatus,
     localProfile,
     profileTimeline,
+    ownedReactionAssets,
+    bookmarkedReactionAssets,
     profileDraft,
     profileDirty,
     profileError,
@@ -1382,6 +1417,8 @@ function DesktopShellPage({
     gamePanelStateByTopic,
     gameCreatePending,
     gameSavingByRoomId,
+    reactionPanelState,
+    reactionCreatePending,
     error,
     shellChromeState,
     setField,
@@ -1476,6 +1513,14 @@ function DesktopShellPage({
   const setSyncStatus = useMemo(() => makeFieldSetter('syncStatus'), [makeFieldSetter]);
   const setLocalProfile = useMemo(() => makeFieldSetter('localProfile'), [makeFieldSetter]);
   const setProfileTimeline = useMemo(() => makeFieldSetter('profileTimeline'), [makeFieldSetter]);
+  const setOwnedReactionAssets = useMemo(
+    () => makeFieldSetter('ownedReactionAssets'),
+    [makeFieldSetter]
+  );
+  const setBookmarkedReactionAssets = useMemo(
+    () => makeFieldSetter('bookmarkedReactionAssets'),
+    [makeFieldSetter]
+  );
   const setProfileDraft = useMemo(() => makeFieldSetter('profileDraft'), [makeFieldSetter]);
   const setProfileDirty = useMemo(() => makeFieldSetter('profileDirty'), [makeFieldSetter]);
   const setProfileError = useMemo(() => makeFieldSetter('profileError'), [makeFieldSetter]);
@@ -1557,6 +1602,14 @@ function DesktopShellPage({
   );
   const setGameSavingByRoomId = useMemo(
     () => makeFieldSetter('gameSavingByRoomId'),
+    [makeFieldSetter]
+  );
+  const setReactionPanelState = useMemo(
+    () => makeFieldSetter('reactionPanelState'),
+    [makeFieldSetter]
+  );
+  const setReactionCreatePending = useMemo(
+    () => makeFieldSetter('reactionCreatePending'),
     [makeFieldSetter]
   );
   const setError = useMemo(() => makeFieldSetter('error'), [makeFieldSetter]);
@@ -1817,8 +1870,25 @@ function DesktopShellPage({
         }
       }
     }
+    for (const asset of [...ownedReactionAssets, ...bookmarkedReactionAssets]) {
+      attachments.set(asset.blob_hash, {
+        hash: asset.blob_hash,
+        mime: asset.mime,
+        bytes: asset.bytes,
+        role: 'image_original',
+        status: 'Available',
+      });
+    }
     return [...attachments.values()];
-  }, [activePublicTimeline, activeTimeline, profileTimeline, selectedAuthorTimeline, thread]);
+  }, [
+    activePublicTimeline,
+    activeTimeline,
+    bookmarkedReactionAssets,
+    ownedReactionAssets,
+    profileTimeline,
+    selectedAuthorTimeline,
+    thread,
+  ]);
 
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
@@ -1896,6 +1966,8 @@ function DesktopShellPage({
           authorViewResult,
           profileTimelineResult,
           authorTimelineResult,
+          ownedReactionAssetsResult,
+          bookmarkedReactionAssetsResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
@@ -1909,6 +1981,8 @@ function DesktopShellPage({
           currentSelectedAuthorPubkey
             ? api.listProfileTimeline(currentSelectedAuthorPubkey, null, 50)
             : Promise.resolve(null),
+          api.listMyCustomReactionAssets(),
+          api.listBookmarkedCustomReactions(),
         ]);
         if (requestId !== loadTopicsRequestRef.current) {
           return;
@@ -2030,6 +2104,31 @@ function DesktopShellPage({
           if (ticketResult.status === 'fulfilled') {
             setLocalPeerTicket(ticketResult.value);
           }
+          if (ownedReactionAssetsResult.status === 'fulfilled') {
+            setOwnedReactionAssets(ownedReactionAssetsResult.value);
+          }
+          if (bookmarkedReactionAssetsResult.status === 'fulfilled') {
+            setBookmarkedReactionAssets(bookmarkedReactionAssetsResult.value);
+          }
+          setReactionPanelState({
+            status:
+              ownedReactionAssetsResult.status === 'fulfilled' &&
+              bookmarkedReactionAssetsResult.status === 'fulfilled'
+                ? 'ready'
+                : 'error',
+            error:
+              ownedReactionAssetsResult.status === 'rejected'
+                ? messageFromError(
+                    ownedReactionAssetsResult.reason,
+                    translate('common:errors.failedToLoadSettings')
+                  )
+                : bookmarkedReactionAssetsResult.status === 'rejected'
+                  ? messageFromError(
+                      bookmarkedReactionAssetsResult.reason,
+                      translate('common:errors.failedToLoadSettings')
+                    )
+                  : null,
+          });
           if (profileResult.status === 'fulfilled') {
             setLocalProfile(profileResult.value);
             if (!currentProfileDirty) {
@@ -2125,10 +2224,13 @@ function DesktopShellPage({
       setLiveSessionsByTopic,
       setLocalPeerTicket,
       setLocalProfile,
+      setOwnedReactionAssets,
       setProfileTimeline,
       setProfileDraft,
       setProfileError,
       setProfilePanelState,
+      setBookmarkedReactionAssets,
+      setReactionPanelState,
       setSelectedAuthor,
       setSelectedAuthorTimeline,
       setSyncStatus,
@@ -2338,6 +2440,18 @@ function DesktopShellPage({
     }
     syncRoute(open ? 'push' : 'replace', {
       settingsOpen: open,
+    });
+  }, [setShellChromeState, syncRoute]);
+
+  const openReactionSettings = useCallback(() => {
+    setShellChromeState((current) => ({
+      ...current,
+      settingsOpen: true,
+      activeSettingsSection: 'reactions',
+    }));
+    syncRoute('push', {
+      settingsOpen: true,
+      settingsSection: 'reactions',
     });
   }, [setShellChromeState, syncRoute]);
 
@@ -3177,6 +3291,103 @@ function DesktopShellPage({
   function handleRemoveDraftAttachment(itemId: string) {
     releaseDraftPreview(itemId);
     setDraftMediaItems((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  function patchReactionState(reactionState: ReactionStateView) {
+    setTimelinesByTopic((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([topic, posts]) => [
+          topic,
+          patchReactionStateIntoPosts(posts, reactionState),
+        ])
+      )
+    );
+    setPublicTimelinesByTopic((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([topic, posts]) => [
+          topic,
+          patchReactionStateIntoPosts(posts, reactionState),
+        ])
+      )
+    );
+    setThread((current) => patchReactionStateIntoPosts(current, reactionState));
+    setProfileTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
+    setSelectedAuthorTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
+  }
+
+  async function handleToggleReaction(post: PostView, reactionKey: ReactionKeyInput) {
+    const topicId = publishedTopicIdForPost(post);
+    if (!topicId) {
+      setError(translate('common:errors.failedToPublish'));
+      return;
+    }
+    try {
+      const nextState = await api.toggleReaction(
+        topicId,
+        post.object_id,
+        reactionKey,
+        post.channel_id ? { kind: 'private_channel', channel_id: post.channel_id } : { kind: 'public' }
+      );
+      patchReactionState(nextState);
+      setError(null);
+    } catch (reactionError) {
+      setError(messageFromError(reactionError, translate('common:errors.failedToPublish')));
+    }
+  }
+
+  async function handleCreateCustomReactionAsset(file: File, cropRect: CustomReactionCropRect) {
+    setReactionCreatePending(true);
+    try {
+      const upload = await fileToCreateAttachment(file, 'image_original');
+      const asset = await api.createCustomReactionAsset(upload, cropRect);
+      setOwnedReactionAssets((current) => [asset, ...current.filter((item) => item.asset_id !== asset.asset_id)]);
+      setReactionPanelState({
+        status: 'ready',
+        error: null,
+      });
+    } catch (reactionError) {
+      setReactionPanelState({
+        status: 'error',
+        error: messageFromError(reactionError, translate('common:errors.failedToPublish')),
+      });
+    } finally {
+      setReactionCreatePending(false);
+    }
+  }
+
+  async function handleBookmarkCustomReaction(asset: CustomReactionAssetView) {
+    try {
+      const bookmarked = await api.bookmarkCustomReaction(asset);
+      setBookmarkedReactionAssets((current) => [
+        bookmarked,
+        ...current.filter((item) => item.asset_id !== bookmarked.asset_id),
+      ]);
+      setReactionPanelState({
+        status: 'ready',
+        error: null,
+      });
+    } catch (bookmarkError) {
+      setReactionPanelState({
+        status: 'error',
+        error: messageFromError(bookmarkError, translate('common:errors.failedToPublish')),
+      });
+    }
+  }
+
+  async function handleRemoveBookmarkedCustomReaction(assetId: string) {
+    try {
+      await api.removeBookmarkedCustomReaction(assetId);
+      setBookmarkedReactionAssets((current) => current.filter((item) => item.asset_id !== assetId));
+      setReactionPanelState({
+        status: 'ready',
+        error: null,
+      });
+    } catch (bookmarkError) {
+      setReactionPanelState({
+        status: 'error',
+        error: messageFromError(bookmarkError, translate('common:errors.failedToPublish')),
+      });
+    }
   }
 
   const openThread = useCallback(async (threadId: string, options?: OpenThreadOptions) => {
@@ -4606,6 +4817,25 @@ function DesktopShellPage({
       t,
     ]
   );
+  const reactionsPanelView = useMemo<ReactionsPanelView>(
+    () => ({
+      status: reactionPanelState.status,
+      summaryLabel: t('settings:reactions.summary', {
+        owned: ownedReactionAssets.length,
+        saved: bookmarkedReactionAssets.length,
+      }),
+      panelError: reactionPanelState.error,
+      ownedAssets: ownedReactionAssets,
+      bookmarkedAssets: bookmarkedReactionAssets,
+    }),
+    [
+      bookmarkedReactionAssets,
+      ownedReactionAssets,
+      reactionPanelState.error,
+      reactionPanelState.status,
+      t,
+    ]
+  );
   const primarySectionItems = useMemo(
     () =>
       PRIMARY_SECTION_ITEMS.map((item) => ({
@@ -4694,6 +4924,18 @@ function DesktopShellPage({
         />
       ),
     },
+    {
+      ...settingsSectionCopy[4],
+      content: (
+        <ReactionsPanel
+          view={reactionsPanelView}
+          creating={reactionCreatePending}
+          mediaObjectUrls={mediaObjectUrls}
+          onCreateAsset={(file, cropRect) => void handleCreateCustomReactionAsset(file, cropRect)}
+          onRemoveBookmark={(assetId) => void handleRemoveBookmarkedCustomReaction(assetId)}
+        />
+      ),
+    },
   ];
 
   const channelActionDisabled = channelActionPending !== null;
@@ -4727,6 +4969,13 @@ function DesktopShellPage({
             onReply={beginReply}
             onRepost={(post) => void handleSimpleRepost(post)}
             onQuoteRepost={beginQuoteRepost}
+            localAuthorPubkey={syncStatus.local_author_pubkey}
+            mediaObjectUrls={mediaObjectUrls}
+            ownedReactionAssets={ownedReactionAssets}
+            bookmarkedReactionAssets={bookmarkedReactionAssets}
+            onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+            onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+            onManageReactions={openReactionSettings}
           />
         </ContextPane>
       ) : null}
@@ -4927,6 +5176,13 @@ function DesktopShellPage({
                       onReply={beginReply}
                       onRepost={(post) => void handleSimpleRepost(post)}
                       onQuoteRepost={beginQuoteRepost}
+                      localAuthorPubkey={syncStatus.local_author_pubkey}
+                      mediaObjectUrls={mediaObjectUrls}
+                      ownedReactionAssets={ownedReactionAssets}
+                      bookmarkedReactionAssets={bookmarkedReactionAssets}
+                      onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+                      onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                      onManageReactions={openReactionSettings}
                     />
                   </Card>
                 </>

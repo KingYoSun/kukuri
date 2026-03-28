@@ -127,5 +127,19 @@
     "seedPeersLabel": "种子 Peer",
     "seedPeersPlaceholder": "node_id or node_id@host:port",
     "title": "发现"
+  },
+  "reactions": {
+    "summary": "自有 {{owned}} 个 / 已保存 {{saved}} 个",
+    "myCustomReactions": "我的自定义回应",
+    "myCustomReactionsHint": "在这里创建 128x128 的方形回应图片。",
+    "uploadLabel": "上传图片",
+    "sourceSize": "源尺寸 {{width}} x {{height}}",
+    "cropSize": "裁剪尺寸",
+    "preview": "预览",
+    "previewHint": "保存时会标准化为 128x128。",
+    "noOwnedAssets": "还没有自定义回应。",
+    "savedReactions": "已保存回应",
+    "savedReactionsHint": "把别人的自定义回应保存下来以便复用。",
+    "noSavedAssets": "还没有已保存的回应。"
   }
 }
