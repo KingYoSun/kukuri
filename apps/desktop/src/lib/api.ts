@@ -41,8 +41,8 @@ export type PostView = {
   is_threadable?: boolean;
   channel_id?: string | null;
   audience_label: string;
-  reaction_summary: ReactionSummaryView[];
-  my_reactions: ReactionKeyView[];
+  reaction_summary?: ReactionSummaryView[];
+  my_reactions?: ReactionKeyView[];
 };
 
 export type CustomReactionAssetView = {

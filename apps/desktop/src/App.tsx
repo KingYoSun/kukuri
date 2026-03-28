@@ -3338,7 +3338,7 @@ function DesktopShellPage({
   async function handleCreateCustomReactionAsset(file: File, cropRect: CustomReactionCropRect) {
     setReactionCreatePending(true);
     try {
-      const upload = await fileToCreateAttachment(file);
+      const upload = await fileToCreateAttachment(file, 'image_original');
       const asset = await api.createCustomReactionAsset(upload, cropRect);
       setOwnedReactionAssets((current) => [asset, ...current.filter((item) => item.asset_id !== asset.asset_id)]);
       setReactionPanelState({
@@ -4819,7 +4819,7 @@ function DesktopShellPage({
   );
   const reactionsPanelView = useMemo<ReactionsPanelView>(
     () => ({
-      status: reactionPanelState.status === 'idle' ? 'loading' : reactionPanelState.status,
+      status: reactionPanelState.status,
       summaryLabel: t('settings:reactions.summary', {
         owned: ownedReactionAssets.length,
         saved: bookmarkedReactionAssets.length,

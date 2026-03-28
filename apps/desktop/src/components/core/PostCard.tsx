@@ -89,11 +89,10 @@ export function PostCard({
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
   const hasPrimaryContent = isPendingText || post.content.trim().length > 0;
-  const myReactions = post.my_reactions ?? [];
   const reactionSummary = post.reaction_summary ?? [];
   const myReactionKeys = useMemo(
-    () => new Set(myReactions.map((reaction) => reaction.normalized_reaction_key)),
-    [myReactions]
+    () => new Set((post.my_reactions ?? []).map((reaction) => reaction.normalized_reaction_key)),
+    [post.my_reactions]
   );
   const bookmarkedAssetIds = useMemo(
     () => new Set(bookmarkedReactionAssets.map((asset) => asset.asset_id)),

@@ -164,8 +164,8 @@ function reactionStateForPost(post: PostView): ReactionStateView {
   return {
     target_object_id: post.object_id,
     source_replica_id: post.channel_id ?? 'public',
-    reaction_summary: [...post.reaction_summary],
-    my_reactions: [...post.my_reactions],
+    reaction_summary: [...(post.reaction_summary ?? [])],
+    my_reactions: [...(post.my_reactions ?? [])],
   };
 }
 
@@ -434,10 +434,13 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       }
       const post = withSocialPostDefaults(posts[index]);
       const myReactions = new Map(
-        post.my_reactions.map((reaction) => [reaction.normalized_reaction_key, reaction])
+        (post.my_reactions ?? []).map((reaction) => [reaction.normalized_reaction_key, reaction])
       );
       const summary = new Map(
-        post.reaction_summary.map((reaction) => [reaction.normalized_reaction_key, { ...reaction }])
+        (post.reaction_summary ?? []).map((reaction) => [
+          reaction.normalized_reaction_key,
+          { ...reaction },
+        ])
       );
       if (myReactions.has(normalizedKey)) {
         myReactions.delete(normalizedKey);
@@ -485,7 +488,9 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     async listMyCustomReactionAssets() {
       return ownedCustomReactionAssets.map((asset) => ({ ...asset }));
     },
-    async createCustomReactionAsset(_upload, _cropRect: CustomReactionCropRect) {
+    async createCustomReactionAsset(upload, cropRect: CustomReactionCropRect) {
+      void upload;
+      void cropRect;
       sequence += 1;
       const asset: CustomReactionAssetView = {
         asset_id: `asset-${sequence}`,
