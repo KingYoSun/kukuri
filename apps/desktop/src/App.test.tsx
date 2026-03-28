@@ -671,7 +671,7 @@ test('desktop shell can track multiple topics at once', async () => {
   expect(demoTopic).not.toHaveTextContent('Connected to all configured peers for this topic');
 });
 
-test('profile overview follows the active topic public timeline, not the current compose or channel scope', async () => {
+test('profile overview aggregates public posts across topics and excludes private channel posts', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
@@ -701,6 +701,7 @@ test('profile overview follows the active topic public timeline, not the current
   await selectWorkspace(user, 'Profile');
   expect(screen.getByText('demo public post')).toBeInTheDocument();
   expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
+  expect(screen.getAllByText('kukuri:topic:demo').length).toBeGreaterThan(0);
 
   await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
   await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -717,8 +718,15 @@ test('profile overview follows the active topic public timeline, not the current
   });
 
   await selectWorkspace(user, 'Profile');
+  expect(screen.getByText('demo public post')).toBeInTheDocument();
   expect(screen.getByText('second public post')).toBeInTheDocument();
-  expect(screen.queryByText('demo public post')).not.toBeInTheDocument();
+  expect(screen.queryByText('demo private post')).not.toBeInTheDocument();
+  const profileSection = screen.getByText('second public post').closest('.shell-section');
+  if (!(profileSection instanceof HTMLElement)) {
+    throw new Error('profile section not found');
+  }
+  expect(within(profileSection).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(within(profileSection).getAllByRole('button', { name: 'Open original topic' }).length).toBe(2);
 });
 
 test('removing the active topic falls back to the remaining tracked topic', async () => {
@@ -1831,6 +1839,85 @@ test('author detail shows via authors and follow action updates relationship', a
     expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
   });
   expect(screen.getAllByText('following').length).toBeGreaterThan(0);
+});
+
+test('author detail shows profile topic posts and can open an untracked origin topic', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const user = userEvent.setup();
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-author-demo',
+              envelope_id: 'envelope-author-demo',
+              author_pubkey: authorPubkey,
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'post from demo topic',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-author-demo',
+              audience_label: 'Public',
+            },
+          ],
+          'kukuri:topic:relay': [
+            {
+              object_id: 'post-author-relay',
+              envelope_id: 'envelope-author-relay',
+              author_pubkey: authorPubkey,
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'post from relay topic',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 2,
+              reply_to: null,
+              root_id: 'post-author-relay',
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          [authorPubkey]: {
+            name: 'bob',
+            about: 'author detail profile feed',
+          },
+        },
+      })}
+    />
+  );
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+
+  const authorPane = await screen.findByRole('complementary', { name: 'Author' });
+  expect(within(authorPane).getByText('post from demo topic')).toBeInTheDocument();
+  expect(within(authorPane).getByText('post from relay topic')).toBeInTheDocument();
+  expect(within(authorPane).getByText('kukuri:topic:relay')).toBeInTheDocument();
+  expect(within(authorPane).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+
+  await user.click(within(authorPane).getAllByRole('button', { name: 'Open original topic' })[0]);
+
+  await waitFor(() => {
+    expectActiveTopicBar('kukuri:topic:relay');
+    expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+  });
+  expect(screen.getByText('post from relay topic')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'kukuri:topic:relay' })).toBeInTheDocument();
 });
 
 test('local profile editor saves profile draft from primary navigation and settings stays diagnostics-only', async () => {

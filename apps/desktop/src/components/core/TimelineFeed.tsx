@@ -9,6 +9,8 @@ type TimelineFeedProps = {
   onOpenAuthor: (authorPubkey: string) => void;
   onOpenThread: (threadId: string) => void;
   onReply: (post: PostCardView['post']) => void;
+  readOnly?: boolean;
+  onOpenOriginalTopic?: (topicId: string) => void;
 };
 
 export function TimelineFeed({
@@ -19,6 +21,8 @@ export function TimelineFeed({
   onOpenAuthor,
   onOpenThread,
   onReply,
+  readOnly = false,
+  onOpenOriginalTopic,
 }: TimelineFeedProps) {
   if (posts.length === 0) {
     return <p className='empty'>{emptyCopy}</p>;
@@ -33,6 +37,8 @@ export function TimelineFeed({
             onOpenAuthor={onOpenAuthor}
             onOpenThread={onOpenThread}
             onReply={onReply}
+            readOnly={readOnly}
+            onOpenOriginalTopic={onOpenOriginalTopic}
           />
         </li>
       ))}

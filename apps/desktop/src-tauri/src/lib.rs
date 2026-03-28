@@ -8,10 +8,11 @@ use kukuri_desktop_runtime::{
     ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest, GetBlobMediaRequest,
     GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
-    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListThreadRequest,
-    ListTimelineRequest, LiveSessionCommandRequest, RotatePrivateChannelRequest,
-    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetMyProfileRequest,
-    UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest, resolve_db_path_from_env,
+    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
+    SetMyProfileRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest, AuthorRequest,
+    resolve_db_path_from_env,
 };
 use tauri::Manager;
 use tracing::{info, warn};
@@ -231,6 +232,18 @@ async fn list_thread(
     request: ListThreadRequest,
 ) -> Result<kukuri_app_api::TimelineView, String> {
     state.runtime.list_thread(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_profile_timeline(
+    state: tauri::State<'_, DesktopState>,
+    request: ListProfileTimelineRequest,
+) -> Result<kukuri_app_api::TimelineView, String> {
+    state
+        .runtime
+        .list_profile_timeline(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -610,6 +623,7 @@ pub fn run() {
             list_joined_private_channels,
             list_timeline,
             list_thread,
+            list_profile_timeline,
             get_my_profile,
             set_my_profile,
             follow_author,

@@ -153,6 +153,10 @@ impl TopicId {
     }
 }
 
+pub fn author_profile_topic_id(author_pubkey: &str) -> TopicId {
+    TopicId::new(format!("kukuri:topic:profile:{author_pubkey}"))
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ChannelId(pub String);
@@ -531,6 +535,56 @@ pub struct AuthorProfileDocV1 {
     pub about: Option<String>,
     pub picture: Option<String>,
     pub updated_at: i64,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KukuriProfilePostEnvelopeContentV1 {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub origin_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    pub object_kind: String,
+    pub content: String,
+    #[serde(default)]
+    pub attachments: Vec<AssetRef>,
+    #[serde(default)]
+    pub reply_to_object_id: Option<EnvelopeId>,
+    #[serde(default)]
+    pub root_id: Option<EnvelopeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorProfilePostDocV1 {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub origin_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    pub object_kind: String,
+    pub content: String,
+    #[serde(default)]
+    pub attachments: Vec<AssetRef>,
+    #[serde(default)]
+    pub reply_to_object_id: Option<EnvelopeId>,
+    #[serde(default)]
+    pub root_id: Option<EnvelopeId>,
+    pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfilePost {
+    pub author_pubkey: Pubkey,
+    pub profile_topic_id: TopicId,
+    pub origin_topic_id: TopicId,
+    pub object_id: EnvelopeId,
+    pub created_at: i64,
+    pub object_kind: String,
+    pub content: String,
+    pub attachments: Vec<AssetRef>,
+    pub reply_to_object_id: Option<EnvelopeId>,
+    pub root_id: Option<EnvelopeId>,
     pub envelope_id: EnvelopeId,
 }
 
@@ -1026,6 +1080,39 @@ pub fn build_profile_envelope(
         vec![
             vec!["author".into(), content.author_pubkey.as_str().to_string()],
             vec!["object".into(), "identity-profile".into()],
+        ],
+        encoded,
+        created_at,
+    )
+}
+
+pub fn build_profile_post_envelope(
+    keys: &KukuriKeys,
+    content: &KukuriProfilePostEnvelopeContentV1,
+) -> Result<KukuriEnvelope> {
+    let author_pubkey = keys.public_key();
+    if content.author_pubkey != author_pubkey {
+        bail!("profile post author pubkey must match signer");
+    }
+    if content.profile_topic_id != author_profile_topic_id(content.author_pubkey.as_str()) {
+        bail!("profile post topic id must match author profile topic");
+    }
+    if !matches!(content.object_kind.as_str(), "post" | "comment") {
+        bail!("profile post object kind must be post or comment");
+    }
+    let created_at = now_timestamp_millis()?;
+    let encoded = serde_json::to_string(content).context("failed to encode envelope content")?;
+    sign_envelope_at(
+        keys,
+        "profile-post",
+        vec![
+            vec!["author".into(), content.author_pubkey.as_str().to_string()],
+            vec!["object".into(), "profile-post".into()],
+            vec![
+                "origin_topic".into(),
+                content.origin_topic_id.as_str().to_string(),
+            ],
+            vec!["post".into(), content.object_id.as_str().to_string()],
         ],
         encoded,
         created_at,
@@ -1607,6 +1694,40 @@ pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
     }))
 }
 
+pub fn parse_profile_post(envelope: &KukuriEnvelope) -> Result<Option<ProfilePost>> {
+    if envelope.kind != "profile-post" {
+        return Ok(None);
+    }
+
+    let content: KukuriProfilePostEnvelopeContentV1 =
+        serde_json::from_str(&envelope.content).context("failed to parse profile post envelope")?;
+    validate_pubkey(content.author_pubkey.as_str())
+        .context("invalid profile post author pubkey")?;
+    if content.author_pubkey != envelope.pubkey {
+        bail!("profile post author pubkey must match envelope signer");
+    }
+    if content.profile_topic_id != author_profile_topic_id(content.author_pubkey.as_str()) {
+        bail!("profile post topic id must match author profile topic");
+    }
+    if !matches!(content.object_kind.as_str(), "post" | "comment") {
+        bail!("profile post object kind must be post or comment");
+    }
+
+    Ok(Some(ProfilePost {
+        author_pubkey: content.author_pubkey,
+        profile_topic_id: content.profile_topic_id,
+        origin_topic_id: content.origin_topic_id,
+        object_id: content.object_id,
+        created_at: content.created_at,
+        object_kind: content.object_kind,
+        content: content.content,
+        attachments: content.attachments,
+        reply_to_object_id: content.reply_to_object_id,
+        root_id: content.root_id,
+        envelope_id: envelope.id.clone(),
+    }))
+}
+
 pub fn parse_follow_edge(envelope: &KukuriEnvelope) -> Result<Option<FollowEdge>> {
     if envelope.kind != "follow-edge" {
         return Ok(None);
@@ -1855,6 +1976,61 @@ mod tests {
         assert_eq!(profile.pubkey, keys.public_key());
         assert_eq!(profile.display_name.as_deref(), Some("Alice"));
         assert_eq!(profile.about.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn profile_post_envelope_roundtrip() {
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key();
+        let envelope = build_profile_post_envelope(
+            &keys,
+            &KukuriProfilePostEnvelopeContentV1 {
+                author_pubkey: author_pubkey.clone(),
+                profile_topic_id: author_profile_topic_id(author_pubkey.as_str()),
+                origin_topic_id: TopicId::new("kukuri:topic:demo"),
+                object_id: EnvelopeId::from("post-1"),
+                created_at: 42,
+                object_kind: "comment".into(),
+                content: "hello profile topic".into(),
+                attachments: vec![AssetRef {
+                    hash: BlobHash::new("hash-1"),
+                    mime: "image/png".into(),
+                    bytes: 12,
+                    role: AssetRole::ImageOriginal,
+                }],
+                reply_to_object_id: Some(EnvelopeId::from("root-1")),
+                root_id: Some(EnvelopeId::from("root-1")),
+            },
+        )
+        .expect("profile post envelope");
+
+        envelope.verify().expect("signature verification");
+        let profile_post = parse_profile_post(&envelope)
+            .expect("parse profile post")
+            .expect("profile post");
+        assert_eq!(profile_post.author_pubkey, author_pubkey);
+        assert_eq!(
+            profile_post.profile_topic_id,
+            author_profile_topic_id(author_pubkey.as_str())
+        );
+        assert_eq!(profile_post.origin_topic_id.as_str(), "kukuri:topic:demo");
+        assert_eq!(profile_post.object_id.as_str(), "post-1");
+        assert_eq!(profile_post.created_at, 42);
+        assert_eq!(profile_post.object_kind, "comment");
+        assert_eq!(profile_post.content, "hello profile topic");
+        assert_eq!(profile_post.attachments.len(), 1);
+        assert_eq!(
+            profile_post
+                .reply_to_object_id
+                .as_ref()
+                .map(EnvelopeId::as_str),
+            Some("root-1")
+        );
+        assert_eq!(
+            profile_post.root_id.as_ref().map(EnvelopeId::as_str),
+            Some("root-1")
+        );
+        assert_eq!(profile_post.envelope_id, envelope.id);
     }
 
     #[test]

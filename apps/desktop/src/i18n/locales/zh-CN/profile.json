@@ -20,7 +20,13 @@
     "edit": "编辑资料",
     "loading": "正在加载资料…",
     "noBio": "尚未发布个人简介。",
-    "postCount": "当前主题下的公开帖子",
+    "postCount": "公开帖子",
     "title": "资料"
+  },
+  "feed": {
+    "noAuthorPosts": "这位作者还没有公开帖子。",
+    "noOwnPosts": "还没有公开帖子。",
+    "openOriginalTopic": "打开原始主题",
+    "originTopic": "原始主题"
   }
 }

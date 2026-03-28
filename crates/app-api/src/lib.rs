@@ -8,26 +8,28 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, AuthorProfileDocV1, CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef,
-    ChannelSharingState, CreatePrivateChannelInput, EnvelopeId, FollowEdge, FollowEdgeDocV1,
-    FollowEdgeStatus, FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME,
-    GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry,
-    GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
-    KukuriProfileEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, CanonicalPostHeader,
+    ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, CreatePrivateChannelInput,
+    EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview,
+    FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
+    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope,
+    KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
+    KukuriProfilePostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
     LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
     PayloadRef, PrivateChannelInvitePreview, PrivateChannelJoinMode, PrivateChannelMetadataDocV1,
     PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
-    PrivateChannelRotationGrantPayloadV1, Profile, Pubkey, ReplicaId, TimelineScope, TopicId,
-    build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
-    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
-    build_post_envelope_with_payload_in_channel, build_private_channel_invite_token,
-    build_private_channel_participant_envelope, build_private_channel_policy_envelope,
-    build_private_channel_rotation_grant_envelope, build_profile_envelope,
-    decrypt_private_channel_rotation_grant, encrypt_private_channel_rotation_grant, generate_keys,
-    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
+    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, Pubkey, ReplicaId, TimelineScope,
+    TopicId, author_profile_topic_id, build_follow_edge_envelope, build_friend_only_grant_token,
+    build_friend_plus_share_token, build_game_session_envelope, build_live_session_envelope,
+    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
+    build_private_channel_invite_token, build_private_channel_participant_envelope,
+    build_private_channel_policy_envelope, build_private_channel_rotation_grant_envelope,
+    build_profile_envelope, build_profile_post_envelope, decrypt_private_channel_rotation_grant,
+    encrypt_private_channel_rotation_grant, generate_keys, parse_follow_edge,
+    parse_friend_only_grant_token, parse_friend_plus_share_token,
     parse_private_channel_invite_token, parse_private_channel_participant,
     parse_private_channel_policy, parse_private_channel_rotation_grant, parse_profile,
-    timeline_sort_key,
+    parse_profile_post, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
@@ -67,6 +69,7 @@ pub struct PostView {
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
     pub object_kind: String,
+    pub origin_topic_id: Option<String>,
     pub channel_id: Option<String>,
     pub audience_label: String,
 }
@@ -465,6 +468,36 @@ impl AppService {
         self.build_author_social_view(author_pubkey.as_str()).await
     }
 
+    pub async fn list_profile_timeline(
+        &self,
+        author_pubkey: &str,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<TimelineView> {
+        let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+        self.ensure_author_subscription(author_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        let mut posts =
+            load_profile_posts_from_author_replica(self.docs_sync.as_ref(), author_pubkey.as_str())
+                .await?;
+        posts.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.object_id.cmp(&left.object_id))
+        });
+        let page = profile_post_page(posts, cursor, limit);
+        let mut items = Vec::with_capacity(page.items.len());
+        for post in page.items {
+            items.push(self.profile_post_to_view(post).await?);
+        }
+        Ok(TimelineView {
+            items,
+            next_cursor: page.next_cursor,
+        })
+    }
+
     pub async fn create_post(
         &self,
         topic_id: &str,
@@ -634,6 +667,9 @@ impl AppService {
             },
             effective_channel_id.as_ref(),
         )?;
+        let post_object = envelope
+            .to_post_object()?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse post object for profile topic"))?;
         self.ingest_event(
             &write_replica,
             envelope.clone(),
@@ -641,6 +677,32 @@ impl AppService {
             stored_attachments,
         )
         .await?;
+        if effective_channel_id.is_none() {
+            let local_author_pubkey = self.current_author_pubkey();
+            let profile_post_envelope = build_profile_post_envelope(
+                self.keys.as_ref(),
+                &KukuriProfilePostEnvelopeContentV1 {
+                    author_pubkey: Pubkey::from(local_author_pubkey.as_str()),
+                    profile_topic_id: author_profile_topic_id(local_author_pubkey.as_str()),
+                    origin_topic_id: topic.clone(),
+                    object_id: post_object.object_id.clone(),
+                    created_at: post_object.created_at,
+                    object_kind: post_object.object_kind.clone(),
+                    content: content.to_string(),
+                    attachments: post_object.attachments.clone(),
+                    reply_to_object_id: post_object.reply_to.clone(),
+                    root_id: post_object.root.clone(),
+                },
+            )?;
+            let profile_post = parse_profile_post(&profile_post_envelope)?
+                .ok_or_else(|| anyhow::anyhow!("failed to parse profile post envelope"))?;
+            persist_profile_post_doc(
+                self.docs_sync.as_ref(),
+                &profile_post,
+                &profile_post_envelope,
+            )
+            .await?;
+        }
         self.hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, effective_channel_id.as_ref()),
@@ -3689,8 +3751,53 @@ impl AppService {
             } else {
                 "post".into()
             },
+            origin_topic_id: Some(row.topic_id.clone()),
             channel_id: channel_id_for_view(row.channel_id.as_str()),
             audience_label,
+        })
+    }
+
+    async fn profile_post_to_view(&self, profile_post: ProfilePost) -> Result<PostView> {
+        let profile = self
+            .store
+            .get_profile(profile_post.author_pubkey.as_str())
+            .await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(
+                self.current_author_pubkey().as_str(),
+                profile_post.author_pubkey.as_str(),
+            )
+            .await?;
+
+        Ok(PostView {
+            object_id: profile_post.object_id.0.clone(),
+            envelope_id: profile_post.object_id.0.clone(),
+            author_pubkey: profile_post.author_pubkey.as_str().to_string(),
+            author_name: profile.as_ref().and_then(|value| value.name.clone()),
+            author_display_name: profile
+                .as_ref()
+                .and_then(|value| value.display_name.clone()),
+            following: relationship.as_ref().is_some_and(|value| value.following),
+            followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
+            mutual: relationship.as_ref().is_some_and(|value| value.mutual),
+            friend_of_friend: relationship
+                .as_ref()
+                .is_some_and(|value| value.friend_of_friend),
+            object_kind: profile_post.object_kind,
+            content: profile_post.content,
+            content_status: BlobViewStatus::Available,
+            attachments: attachment_views_from_refs(
+                self.blob_service.as_ref(),
+                &profile_post.attachments,
+            )
+            .await?,
+            created_at: profile_post.created_at,
+            reply_to: profile_post.reply_to_object_id.map(|id| id.0),
+            root_id: profile_post.root_id.map(|id| id.0),
+            origin_topic_id: Some(profile_post.origin_topic_id.as_str().to_string()),
+            channel_id: None,
+            audience_label: "Public".into(),
         })
     }
 }
@@ -3847,6 +3954,45 @@ async fn persist_profile_doc(
         .await
 }
 
+async fn persist_profile_post_doc(
+    docs_sync: &dyn DocsSync,
+    profile_post: &ProfilePost,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile_post.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile/posts", profile_post.object_id.as_str()),
+                value: serde_json::to_value(AuthorProfilePostDocV1 {
+                    author_pubkey: profile_post.author_pubkey.clone(),
+                    profile_topic_id: profile_post.profile_topic_id.clone(),
+                    origin_topic_id: profile_post.origin_topic_id.clone(),
+                    object_id: profile_post.object_id.clone(),
+                    created_at: profile_post.created_at,
+                    object_kind: profile_post.object_kind.clone(),
+                    content: profile_post.content.clone(),
+                    attachments: profile_post.attachments.clone(),
+                    reply_to_object_id: profile_post.reply_to_object_id.clone(),
+                    root_id: profile_post.root_id.clone(),
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
 async fn persist_follow_edge_doc(
     docs_sync: &dyn DocsSync,
     edge: &FollowEdge,
@@ -3983,6 +4129,79 @@ async fn fetch_author_envelope_by_id(
     let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
     envelope.verify()?;
     Ok(Some(envelope))
+}
+
+async fn load_profile_posts_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<ProfilePost>> {
+    let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+    let replica = author_replica_id(author_pubkey.as_str());
+    let expected_profile_topic_id = author_profile_topic_id(author_pubkey.as_str());
+    let mut items = Vec::new();
+    let mut seen_object_ids = BTreeSet::new();
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("profile/posts/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice()) {
+            Ok(doc)
+                if doc.author_pubkey.as_str() == author_pubkey
+                    && doc.profile_topic_id == expected_profile_topic_id =>
+            {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    match parse_profile_post(&envelope) {
+                        Ok(Some(profile_post))
+                            if profile_post.author_pubkey == doc.author_pubkey
+                                && profile_post.profile_topic_id == doc.profile_topic_id
+                                && profile_post.origin_topic_id == doc.origin_topic_id
+                                && profile_post.object_id == doc.object_id
+                                && profile_post.created_at == doc.created_at
+                                && profile_post.object_kind == doc.object_kind
+                                && profile_post.content == doc.content
+                                && profile_post.attachments == doc.attachments
+                                && profile_post.reply_to_object_id == doc.reply_to_object_id
+                                && profile_post.root_id == doc.root_id =>
+                        {
+                            if seen_object_ids.insert(profile_post.object_id.clone()) {
+                                items.push(profile_post);
+                            }
+                        }
+                        Ok(Some(_)) | Ok(None) => {}
+                        Err(error) => {
+                            warn!(
+                                author_pubkey = %author_pubkey,
+                                key = %record.key,
+                                envelope_id = %doc.envelope_id.as_str(),
+                                error = %error,
+                                "ignoring invalid profile post envelope"
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile post doc with mismatched author or topic"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode profile post doc"
+                );
+            }
+        }
+    }
+
+    Ok(items)
 }
 
 fn merge_seed_peers(
@@ -4786,6 +5005,41 @@ fn projection_page_needs_hydration(page: &Page<ObjectProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
 }
 
+fn profile_post_page(
+    posts: Vec<ProfilePost>,
+    cursor: Option<TimelineCursor>,
+    limit: usize,
+) -> Page<ProfilePost> {
+    if limit == 0 {
+        return Page {
+            items: Vec::new(),
+            next_cursor: cursor,
+        };
+    }
+
+    let mut items = Vec::new();
+    let mut next_cursor = None;
+    for post in posts {
+        let include = cursor.as_ref().is_none_or(|current| {
+            post.created_at < current.created_at
+                || (post.created_at == current.created_at && post.object_id < current.object_id)
+        });
+        if !include {
+            continue;
+        }
+        if items.len() >= limit {
+            next_cursor = Some(TimelineCursor {
+                created_at: post.created_at,
+                object_id: post.object_id.clone(),
+            });
+            break;
+        }
+        items.push(post);
+    }
+
+    Page { items, next_cursor }
+}
+
 async fn filtered_timeline_page(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
@@ -5119,6 +5373,23 @@ async fn attachment_views(
 ) -> Result<Vec<AttachmentView>> {
     let mut attachments = Vec::with_capacity(header.attachments.len());
     for attachment in &header.attachments {
+        attachments.push(AttachmentView {
+            hash: attachment.hash.as_str().to_string(),
+            mime: attachment.mime.clone(),
+            bytes: attachment.bytes,
+            role: attachment_role_name(&attachment.role).to_string(),
+            status: best_effort_blob_view_status(blob_service, &attachment.hash).await,
+        });
+    }
+    Ok(attachments)
+}
+
+async fn attachment_views_from_refs(
+    blob_service: &dyn BlobService,
+    refs: &[kukuri_core::AssetRef],
+) -> Result<Vec<AttachmentView>> {
+    let mut attachments = Vec::with_capacity(refs.len());
+    for attachment in refs {
         attachments.push(AttachmentView {
             hash: attachment.hash.as_str().to_string(),
             mime: attachment.mime.clone(),
@@ -6173,6 +6444,25 @@ mod tests {
         }
     }
 
+    async fn author_profile_post_docs(
+        docs_sync: &dyn DocsSync,
+        author_pubkey: &str,
+    ) -> Vec<AuthorProfilePostDocV1> {
+        docs_sync
+            .query_replica(
+                &author_replica_id(author_pubkey),
+                DocQuery::Prefix("profile/posts/".into()),
+            )
+            .await
+            .expect("profile post docs")
+            .into_iter()
+            .map(|record| {
+                serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice())
+                    .expect("decode profile post doc")
+            })
+            .collect()
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -6318,6 +6608,281 @@ mod tests {
         assert_eq!(timeline.items.len(), 1);
         assert_eq!(timeline.items[0].object_id, object_id);
         assert_eq!(timeline.items[0].content, "hello app");
+    }
+
+    #[tokio::test]
+    async fn create_public_post_persists_profile_post_doc_and_lists_profile_timeline() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            keys,
+        );
+        let topic = "kukuri:topic:profile-doc";
+
+        let object_id = app
+            .create_post(topic, "hello profile", None)
+            .await
+            .expect("create post");
+        let profile_docs =
+            author_profile_post_docs(docs_sync.as_ref(), author_pubkey.as_str()).await;
+
+        assert_eq!(profile_docs.len(), 1);
+        assert_eq!(profile_docs[0].author_pubkey.as_str(), author_pubkey);
+        assert_eq!(
+            profile_docs[0].profile_topic_id,
+            author_profile_topic_id(author_pubkey.as_str())
+        );
+        assert_eq!(profile_docs[0].origin_topic_id.as_str(), topic);
+        assert_eq!(profile_docs[0].object_id.as_str(), object_id);
+        assert_eq!(profile_docs[0].object_kind, "post");
+
+        let timeline = app
+            .list_profile_timeline(author_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile timeline");
+        let post = timeline
+            .items
+            .iter()
+            .find(|post| post.object_id == object_id)
+            .expect("profile post");
+
+        assert_eq!(post.content, "hello profile");
+        assert_eq!(post.origin_topic_id.as_deref(), Some(topic));
+        assert_eq!(post.channel_id, None);
+        assert_eq!(post.audience_label, "Public");
+    }
+
+    #[tokio::test]
+    async fn public_reply_is_indexed_in_profile_timeline() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            keys,
+        );
+        let topic = "kukuri:topic:profile-replies";
+
+        let root_id = app
+            .create_post(topic, "root", None)
+            .await
+            .expect("root post");
+        let reply_id = app
+            .create_post(topic, "reply", Some(root_id.as_str()))
+            .await
+            .expect("reply post");
+        let profile_docs =
+            author_profile_post_docs(docs_sync.as_ref(), author_pubkey.as_str()).await;
+        let reply_doc = profile_docs
+            .iter()
+            .find(|doc| doc.object_id.as_str() == reply_id)
+            .expect("reply profile doc");
+
+        assert_eq!(reply_doc.object_kind, "comment");
+        assert_eq!(
+            reply_doc.reply_to_object_id.as_ref().map(|id| id.as_str()),
+            Some(root_id.as_str())
+        );
+        assert_eq!(
+            reply_doc.root_id.as_ref().map(|id| id.as_str()),
+            Some(root_id.as_str())
+        );
+
+        let timeline = app
+            .list_profile_timeline(author_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile timeline");
+        let reply = timeline
+            .items
+            .iter()
+            .find(|post| post.object_id == reply_id)
+            .expect("profile reply");
+
+        assert_eq!(reply.object_kind, "comment");
+        assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
+        assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
+        assert_eq!(reply.origin_topic_id.as_deref(), Some(topic));
+    }
+
+    #[tokio::test]
+    async fn private_channel_post_is_not_indexed_in_profile_timeline() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            keys,
+        );
+        let topic = "kukuri:topic:profile-private";
+        let channel = app
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "core".into(),
+                audience_kind: ChannelAudienceKind::InviteOnly,
+            })
+            .await
+            .expect("create private channel");
+
+        let private_object_id = app
+            .create_post_in_channel(
+                topic,
+                ChannelRef::PrivateChannel {
+                    channel_id: ChannelId::new(channel.channel_id.clone()),
+                },
+                "private hello",
+                None,
+            )
+            .await
+            .expect("create private post");
+
+        let profile_docs =
+            author_profile_post_docs(docs_sync.as_ref(), author_pubkey.as_str()).await;
+        assert!(profile_docs.is_empty());
+
+        let timeline = app
+            .list_profile_timeline(author_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile timeline");
+        assert!(
+            timeline
+                .items
+                .iter()
+                .all(|post| post.object_id != private_object_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            keys,
+        );
+        let topic = "kukuri:topic:profile-invalid";
+        let valid_object_id = app
+            .create_post(topic, "valid profile post", None)
+            .await
+            .expect("valid post");
+        let forged_content = KukuriProfilePostEnvelopeContentV1 {
+            author_pubkey: Pubkey::from(author_pubkey.as_str()),
+            profile_topic_id: author_profile_topic_id(author_pubkey.as_str()),
+            origin_topic_id: TopicId::new(topic),
+            object_id: EnvelopeId::from("forged-profile-post"),
+            created_at: 123,
+            object_kind: "post".into(),
+            content: "forged profile post".into(),
+            attachments: Vec::new(),
+            reply_to_object_id: None,
+            root_id: None,
+        };
+        let forged_envelope = kukuri_core::sign_envelope_json(
+            &generate_keys(),
+            "profile-post",
+            vec![
+                vec!["author".into(), author_pubkey.clone()],
+                vec!["object".into(), "profile-post".into()],
+                vec!["origin_topic".into(), topic.into()],
+                vec!["post".into(), forged_content.object_id.as_str().to_string()],
+            ],
+            &forged_content,
+        )
+        .expect("forged envelope");
+        let replica = author_replica_id(author_pubkey.as_str());
+        docs_sync
+            .open_replica(&replica)
+            .await
+            .expect("open author replica");
+        docs_sync
+            .apply_doc_op(
+                &replica,
+                DocOp::SetJson {
+                    key: stable_key("profile/posts", forged_content.object_id.as_str()),
+                    value: serde_json::to_value(AuthorProfilePostDocV1 {
+                        author_pubkey: forged_content.author_pubkey.clone(),
+                        profile_topic_id: forged_content.profile_topic_id.clone(),
+                        origin_topic_id: forged_content.origin_topic_id.clone(),
+                        object_id: forged_content.object_id.clone(),
+                        created_at: forged_content.created_at,
+                        object_kind: forged_content.object_kind.clone(),
+                        content: forged_content.content.clone(),
+                        attachments: forged_content.attachments.clone(),
+                        reply_to_object_id: None,
+                        root_id: None,
+                        envelope_id: forged_envelope.id.clone(),
+                    })
+                    .expect("forged doc json"),
+                },
+            )
+            .await
+            .expect("persist forged profile doc");
+        docs_sync
+            .apply_doc_op(
+                &replica,
+                DocOp::SetJson {
+                    key: stable_key("envelopes", forged_envelope.id.as_str()),
+                    value: serde_json::to_value(&forged_envelope).expect("forged envelope json"),
+                },
+            )
+            .await
+            .expect("persist forged envelope");
+
+        let profile_docs =
+            author_profile_post_docs(docs_sync.as_ref(), author_pubkey.as_str()).await;
+        assert_eq!(profile_docs.len(), 2);
+
+        let timeline = app
+            .list_profile_timeline(author_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile timeline");
+
+        assert!(
+            timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == valid_object_id)
+        );
+        assert!(
+            timeline
+                .items
+                .iter()
+                .all(|post| post.object_id != forged_content.object_id.as_str())
+        );
     }
 
     #[tokio::test]

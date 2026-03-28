@@ -14,13 +14,23 @@ type PostCardProps = {
   onOpenAuthor: (authorPubkey: string) => void;
   onOpenThread: (threadId: string) => void;
   onReply: (post: PostCardView['post']) => void;
+  readOnly?: boolean;
+  onOpenOriginalTopic?: (topicId: string) => void;
 };
 
-export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCardProps) {
-  const { t } = useTranslation(['common']);
+export function PostCard({
+  view,
+  onOpenAuthor,
+  onOpenThread,
+  onReply,
+  readOnly = false,
+  onOpenOriginalTopic,
+}: PostCardProps) {
+  const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
+  const originTopicId = post.origin_topic_id?.trim() || null;
 
   return (
     <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
@@ -47,32 +57,76 @@ export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCard
         </div>
       </div>
 
-      <button className='post-link' type='button' onClick={() => onOpenThread(view.threadTargetId)}>
-        <PostMedia media={view.media} />
+      {readOnly ? (
+        <div className='post-link'>
+          <PostMedia media={view.media} />
 
-        <div className='post-body'>
-          {isPendingText ? (
-            <div
-              className='text-skeleton-group'
-              data-testid={`text-skeleton-${post.object_id}`}
-              aria-hidden='true'
-            >
-              <span className='text-skeleton text-skeleton-line' />
-              <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
+          <div className='post-body'>
+            {isPendingText ? (
+              <div
+                className='text-skeleton-group'
+                data-testid={`text-skeleton-${post.object_id}`}
+                aria-hidden='true'
+              >
+                <span className='text-skeleton text-skeleton-line' />
+                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
+              </div>
+            ) : (
+              <strong className='post-title'>{post.content}</strong>
+            )}
+          </div>
+
+          <small>{post.envelope_id}</small>
+          {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
+          {originTopicId ? (
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+              <span>{t('feed.originTopic', { ns: 'profile' })}</span>
+              <span className='shell-topic-link-label' title={originTopicId}>
+                {originTopicId}
+              </span>
             </div>
-          ) : (
-            <strong className='post-title'>{post.content}</strong>
-          )}
+          ) : null}
         </div>
+      ) : (
+        <button className='post-link' type='button' onClick={() => onOpenThread(view.threadTargetId)}>
+          <PostMedia media={view.media} />
 
-        <small>{post.envelope_id}</small>
-        {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
-      </button>
+          <div className='post-body'>
+            {isPendingText ? (
+              <div
+                className='text-skeleton-group'
+                data-testid={`text-skeleton-${post.object_id}`}
+                aria-hidden='true'
+              >
+                <span className='text-skeleton text-skeleton-line' />
+                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
+              </div>
+            ) : (
+              <strong className='post-title'>{post.content}</strong>
+            )}
+          </div>
+
+          <small>{post.envelope_id}</small>
+          {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
+        </button>
+      )}
 
       <div className='post-actions'>
-        <Button variant='secondary' type='button' onClick={() => onReply(post)}>
-          {t('actions.reply')}
-        </Button>
+        {readOnly ? (
+          originTopicId ? (
+            <Button
+              variant='secondary'
+              type='button'
+              onClick={() => onOpenOriginalTopic?.(originTopicId)}
+            >
+              {t('feed.openOriginalTopic', { ns: 'profile' })}
+            </Button>
+          ) : null
+        ) : (
+          <Button variant='secondary' type='button' onClick={() => onReply(post)}>
+            {t('actions.reply')}
+          </Button>
+        )}
       </div>
     </article>
   );
