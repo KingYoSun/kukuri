@@ -34,6 +34,7 @@ export type PostView = {
   created_at: number;
   reply_to?: string | null;
   root_id?: string | null;
+  origin_topic_id?: string | null;
   channel_id?: string | null;
   audience_label: string;
 };
@@ -299,6 +300,11 @@ export interface DesktopApi {
     cursor?: TimelineCursor | null,
     limit?: number
   ): Promise<TimelineView>;
+  listProfileTimeline(
+    pubkey: string,
+    cursor?: TimelineCursor | null,
+    limit?: number
+  ): Promise<TimelineView>;
   getMyProfile(): Promise<Profile>;
   setMyProfile(input: ProfileInput): Promise<Profile>;
   followAuthor(pubkey: string): Promise<AuthorSocialView>;
@@ -453,6 +459,18 @@ export const runtimeApi: DesktopApi = {
       request: {
         topic,
         thread_id: threadId,
+        cursor,
+        limit,
+      },
+    });
+  },
+  listProfileTimeline: async (pubkey, cursor, limit) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listProfileTimeline(pubkey, cursor, limit);
+    }
+    return invokeDesktop<TimelineView>('list_profile_timeline', {
+      request: {
+        pubkey,
         cursor,
         limit,
       },

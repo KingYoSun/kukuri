@@ -94,6 +94,13 @@ pub struct ListThreadRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListProfileTimelineRequest {
+    pub pubkey: String,
+    pub cursor: Option<TimelineCursor>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportPeerTicketRequest {
     pub ticket: String,
 }
@@ -746,6 +753,19 @@ impl DesktopRuntime {
             .list_thread(
                 request.topic.as_str(),
                 request.thread_id.as_str(),
+                request.cursor,
+                request.limit.unwrap_or(50),
+            )
+            .await
+    }
+
+    pub async fn list_profile_timeline(
+        &self,
+        request: ListProfileTimelineRequest,
+    ) -> Result<TimelineView> {
+        self.app_service
+            .list_profile_timeline(
+                request.pubkey.as_str(),
                 request.cursor,
                 request.limit.unwrap_or(50),
             )
@@ -2685,6 +2705,62 @@ mod tests {
         }
     }
 
+    async fn wait_for_profile_timeline_posts(
+        runtime: &DesktopRuntime,
+        author_pubkey: &str,
+        object_ids: &[String],
+        timeout_label: &str,
+    ) -> TimelineView {
+        match timeout(runtime_replication_timeout(), async {
+            loop {
+                let timeline = runtime
+                    .list_profile_timeline(ListProfileTimelineRequest {
+                        pubkey: author_pubkey.to_string(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("profile timeline");
+                if object_ids.iter().all(|object_id| {
+                    timeline
+                        .items
+                        .iter()
+                        .any(|post| post.object_id == *object_id)
+                }) {
+                    return timeline;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        {
+            Ok(timeline) => timeline,
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                let visible_items = runtime
+                    .list_profile_timeline(ListProfileTimelineRequest {
+                        pubkey: author_pubkey.to_string(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .ok()
+                    .map(|timeline| {
+                        timeline
+                            .items
+                            .into_iter()
+                            .map(|post| format!("{}@{:?}", post.object_id, post.origin_topic_id))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "{timeout_label}: {}; visible_items={visible_items:?}",
+                    format_sync_snapshot(&status, "")
+                );
+            }
+        }
+    }
+
     fn public_replication_retry_schedule(
         step_timeout: Duration,
         same_author_shared_identity: bool,
@@ -2792,14 +2868,18 @@ mod tests {
                 } else {
                     (publisher, subscriber)
                 };
-                wait_for_direct_topic_peer_count_result(
-                    active_publisher,
-                    topic,
-                    1,
-                    attempt_timeout,
-                )
-                .await
-                .context("publishing runtime did not observe direct public topic connectivity")?;
+                if publish_from_subscriber {
+                    wait_for_direct_topic_peer_count_result(
+                        active_publisher,
+                        topic,
+                        1,
+                        attempt_timeout,
+                    )
+                    .await
+                    .context(
+                        "publishing runtime did not observe direct public topic connectivity",
+                    )?;
+                }
                 let object_id = active_publisher
                     .create_post(CreatePostRequest {
                         topic: topic.to_string(),
@@ -3427,6 +3507,196 @@ mod tests {
         assert_eq!(post.content, "hello desktop runtime");
         let status = runtime_a.get_sync_status().await.expect("sync status");
         assert!(status.last_sync_ts.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
+        let dir = tempdir().expect("tempdir");
+        let db_a = dir.path().join("profile-runtime-a.db");
+        let db_b = dir.path().join("profile-runtime-b.db");
+        let runtime_a = DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime a");
+        let runtime_b = DesktopRuntime::new_with_config_and_identity(
+            &db_b,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime b");
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .await
+            .expect("import b");
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .await
+            .expect("import a");
+        wait_for_connected_peer_count(&runtime_a, 1, "profile topic owner peer readiness timeout")
+            .await;
+        wait_for_connected_peer_count(&runtime_b, 1, "profile topic viewer peer readiness timeout")
+            .await;
+
+        let author_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a")
+            .local_author_pubkey;
+        let tracked_topic = "kukuri:topic:desktop-profile-demo";
+        let untracked_topic = "kukuri:topic:desktop-profile-relay";
+        let public_scope = TimelineScope::Public;
+
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: tracked_topic.into(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a tracked topic");
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: untracked_topic.into(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe a untracked topic");
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: tracked_topic.into(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe b tracked topic");
+
+        let tracked_object_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: tracked_topic.into(),
+                content: "tracked profile post".into(),
+                reply_to: None,
+                channel_ref: ChannelRef::Public,
+                attachments: vec![],
+            })
+            .await
+            .expect("tracked public post");
+        let untracked_object_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: untracked_topic.into(),
+                content: "untracked profile post".into(),
+                reply_to: None,
+                channel_ref: ChannelRef::Public,
+                attachments: vec![],
+            })
+            .await
+            .expect("untracked public post");
+
+        wait_for_timeline_post(
+            &runtime_b,
+            tracked_topic,
+            &public_scope,
+            tracked_object_id.as_str(),
+            "tracked topic visibility timeout",
+        )
+        .await;
+
+        let before_profile = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status before profile");
+        assert!(
+            before_profile
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == tracked_topic)
+        );
+        assert!(
+            before_profile
+                .subscribed_topics
+                .iter()
+                .all(|topic| topic != untracked_topic)
+        );
+
+        let profile_timeline = wait_for_profile_timeline_posts(
+            &runtime_b,
+            author_pubkey.as_str(),
+            &[tracked_object_id.clone(), untracked_object_id.clone()],
+            "profile timeline visibility timeout",
+        )
+        .await;
+        assert!(
+            profile_timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == tracked_object_id
+                    && post.origin_topic_id.as_deref() == Some(tracked_topic))
+        );
+        assert!(
+            profile_timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == untracked_object_id
+                    && post.origin_topic_id.as_deref() == Some(untracked_topic))
+        );
+
+        let after_profile = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status after profile");
+        assert!(
+            after_profile
+                .subscribed_topics
+                .iter()
+                .all(|topic| topic != untracked_topic)
+        );
+
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: untracked_topic.into(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("open original topic");
+        wait_for_timeline_post(
+            &runtime_b,
+            untracked_topic,
+            &public_scope,
+            untracked_object_id.as_str(),
+            "origin topic visibility timeout",
+        )
+        .await;
+
+        let after_origin = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status after origin");
+        assert!(
+            after_origin
+                .subscribed_topics
+                .iter()
+                .any(|topic| topic == untracked_topic)
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

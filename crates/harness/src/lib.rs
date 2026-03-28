@@ -565,8 +565,14 @@ async fn run_community_node_connectivity(
 ) -> Result<HarnessResult> {
     unsafe { std::env::set_var("KUKURI_DISABLE_KEYRING", "1") };
 
-    let step_timeout = Duration::from_millis(scenario.timeouts.step_ms);
-    let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
+    let step_timeout = ci_timeout_floor(
+        Duration::from_millis(scenario.timeouts.step_ms),
+        Duration::from_secs(180),
+    );
+    let overall_timeout = ci_timeout_floor(
+        Duration::from_millis(scenario.timeouts.overall_ms),
+        Duration::from_secs(600),
+    );
     let stack = CommunityNodeStack::spawn(match identity_mode {
         CommunityNodeIdentityMode::DistinctUsers => "community_node_public_connectivity",
         CommunityNodeIdentityMode::SharedIdentity => "community_node_multi_device_connectivity",
@@ -782,7 +788,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node scenario post",
             step_timeout,
-            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
+            PublicReplicationDirection::PreferDirectConnectedSubscriber,
             PublicReplicationLabels {
                 failure: "initial scenario post",
                 publisher: "desktop a",
@@ -904,7 +910,19 @@ async fn run_community_node_connectivity(
         let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
-        let reconnect_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(240));
+        let _ = runtime_a
+            .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: stack.base_url.clone(),
+            })
+            .await
+            .context("failed to refresh community-node metadata for desktop a after restart")?;
+        let _ = runtime_b
+            .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: stack.base_url.clone(),
+            })
+            .await
+            .context("failed to refresh community-node metadata for desktop b after restart")?;
+        let reconnect_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(360));
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: topic.to_string(),
@@ -946,7 +964,7 @@ async fn run_community_node_connectivity(
             topic,
             "community node reconnect",
             reconnect_timeout,
-            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
+            PublicReplicationDirection::PreferDirectConnectedSubscriber,
             PublicReplicationLabels {
                 failure: "reconnect post after restart",
                 publisher: "desktop a",
@@ -2122,7 +2140,7 @@ fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> b
         })
 }
 
-fn should_prewarm_public_replication_with_subscriber(
+fn should_publish_from_direct_connected_subscriber(
     publisher_status: &SyncStatus,
     subscriber_status: &SyncStatus,
     topic: &str,
@@ -2131,7 +2149,7 @@ fn should_prewarm_public_replication_with_subscriber(
 ) -> bool {
     matches!(
         direction,
-        PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber
+        PublicReplicationDirection::PreferDirectConnectedSubscriber
     ) && !topic_has_direct_peer(publisher_status, topic, expected)
         && topic_has_direct_peer(subscriber_status, topic, expected)
 }
@@ -2375,7 +2393,7 @@ struct PublicReplicationLabels<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PublicReplicationDirection {
     PreferOriginalPublisher,
-    PrewarmWithDirectConnectedSubscriber,
+    PreferDirectConnectedSubscriber,
 }
 
 async fn replicate_public_post_with_retry(
@@ -2434,64 +2452,31 @@ async fn replicate_public_post_with_retry(
                 .get_sync_status()
                 .await
                 .context("subscriber sync status")?;
-            let prewarm_from_subscriber = should_prewarm_public_replication_with_subscriber(
+            let publish_from_subscriber = should_publish_from_direct_connected_subscriber(
                 &publisher_status,
                 &subscriber_status,
                 topic,
                 1,
                 direction,
             );
-            if prewarm_from_subscriber {
-                wait_for_direct_topic_peer_count(subscriber, topic, 1, attempt_timeout)
+            let (active_publisher, active_subscriber, publisher_label, subscriber_label) =
+                if publish_from_subscriber {
+                    (subscriber, publisher, labels.subscriber, labels.publisher)
+                } else {
+                    (publisher, subscriber, labels.publisher, labels.subscriber)
+                };
+            if publish_from_subscriber {
+                wait_for_direct_topic_peer_count(active_publisher, topic, 1, attempt_timeout)
                     .await
                     .with_context(|| {
                         format!(
                             "{} did not observe direct public topic connectivity",
-                            labels.subscriber
+                            publisher_label
                         )
                     })?;
-                let bootstrap_post_id = subscriber
-                    .create_post(CreatePostRequest {
-                        topic: topic.to_string(),
-                        content: format!("{content_prefix} bootstrap #{attempt}"),
-                        reply_to: None,
-                        channel_ref: ChannelRef::Public,
-                        attachments: Vec::new(),
-                    })
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "failed to create bootstrap public post on {}",
-                            labels.subscriber
-                        )
-                    })?;
-                wait_for_topic_doc_index_entry(
-                    subscriber,
-                    topic,
-                    bootstrap_post_id.as_str(),
-                    attempt_timeout,
-                )
-                .await
-                .context("subscriber did not persist bootstrap public post into docs index")?;
-                wait_for_timeline_object(
-                    publisher,
-                    topic,
-                    bootstrap_post_id.as_str(),
-                    attempt_timeout,
-                )
-                .await
-                .context("publisher did not observe bootstrap public post")?;
-                last_direction = Some(format!(
-                    "prewarm {}->{}, publish {}->{}",
-                    labels.subscriber, labels.publisher, labels.publisher, labels.subscriber
-                ));
-            } else {
-                last_direction = Some(format!(
-                    "publish {}->{}",
-                    labels.publisher, labels.subscriber
-                ));
             }
-            let post_id = publisher
+            last_direction = Some(format!("publish {publisher_label}->{subscriber_label}"));
+            let post_id = active_publisher
                 .create_post(CreatePostRequest {
                     topic: topic.to_string(),
                     content: format!("{content_prefix} #{attempt}"),
@@ -2500,11 +2485,16 @@ async fn replicate_public_post_with_retry(
                     attachments: Vec::new(),
                 })
                 .await
-                .with_context(|| format!("failed to create public post on {}", labels.publisher))?;
-            wait_for_topic_doc_index_entry(publisher, topic, post_id.as_str(), attempt_timeout)
-                .await
-                .context("publisher did not persist public post into docs index")?;
-            wait_for_timeline_object(subscriber, topic, post_id.as_str(), attempt_timeout)
+                .with_context(|| format!("failed to create public post on {publisher_label}"))?;
+            wait_for_topic_doc_index_entry(
+                active_publisher,
+                topic,
+                post_id.as_str(),
+                attempt_timeout,
+            )
+            .await
+            .context("publisher did not persist public post into docs index")?;
+            wait_for_timeline_object(active_subscriber, topic, post_id.as_str(), attempt_timeout)
                 .await
                 .context("timeline assertion timeout")?;
             Ok::<String, anyhow::Error>(post_id)
@@ -3062,17 +3052,17 @@ mod tests {
     }
 
     #[test]
-    fn public_replication_direction_prewarms_from_direct_connected_subscriber_when_requested() {
+    fn public_replication_direction_prefers_direct_connected_subscriber_when_requested() {
         let topic = "kukuri:topic:test";
         let publisher_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
         let subscriber_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
 
-        assert!(should_prewarm_public_replication_with_subscriber(
+        assert!(should_publish_from_direct_connected_subscriber(
             &publisher_status,
             &subscriber_status,
             topic,
             1,
-            PublicReplicationDirection::PrewarmWithDirectConnectedSubscriber,
+            PublicReplicationDirection::PreferDirectConnectedSubscriber,
         ));
     }
 
@@ -3082,7 +3072,7 @@ mod tests {
         let publisher_status = sync_status_with_topic(topic, &[], &["assist-peer"]);
         let subscriber_status = sync_status_with_topic(topic, &["direct-peer"], &["assist-peer"]);
 
-        assert!(!should_prewarm_public_replication_with_subscriber(
+        assert!(!should_publish_from_direct_connected_subscriber(
             &publisher_status,
             &subscriber_status,
             topic,

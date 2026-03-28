@@ -20,7 +20,13 @@
     "edit": "プロフィールを編集",
     "loading": "プロフィールを読み込み中…",
     "noBio": "まだプロフィール文が公開されていません。",
-    "postCount": "現在のトピックでの公開投稿",
+    "postCount": "公開投稿",
     "title": "プロフィール"
+  },
+  "feed": {
+    "noAuthorPosts": "この著者にはまだ公開投稿がありません。",
+    "noOwnPosts": "まだ公開投稿がありません。",
+    "openOriginalTopic": "元のトピックを開く",
+    "originTopic": "元のトピック"
   }
 }

@@ -164,6 +164,7 @@ type DesktopShellState = {
   unsupportedVideoManifests: Record<string, true>;
   syncStatus: SyncStatus;
   localProfile: Profile | null;
+  profileTimeline: PostView[];
   profileDraft: ProfileInput;
   profileDirty: boolean;
   profileError: string | null;
@@ -171,6 +172,7 @@ type DesktopShellState = {
   profileSaving: boolean;
   selectedAuthorPubkey: string | null;
   selectedAuthor: AuthorSocialView | null;
+  selectedAuthorTimeline: PostView[];
   authorError: string | null;
   composerError: string | null;
   liveTitle: string;
@@ -344,6 +346,7 @@ function createInitialShellState(): DesktopShellState {
     unsupportedVideoManifests: {},
     syncStatus: DEFAULT_SYNC_STATUS,
     localProfile: null,
+    profileTimeline: [],
     profileDraft: {},
     profileDirty: false,
     profileError: null,
@@ -351,6 +354,7 @@ function createInitialShellState(): DesktopShellState {
     profileSaving: false,
     selectedAuthorPubkey: null,
     selectedAuthor: null,
+    selectedAuthorTimeline: [],
     authorError: null,
     composerError: null,
     liveTitle: '',
@@ -1330,6 +1334,7 @@ function DesktopShellPage({
     unsupportedVideoManifests,
     syncStatus,
     localProfile,
+    profileTimeline,
     profileDraft,
     profileDirty,
     profileError,
@@ -1337,6 +1342,7 @@ function DesktopShellPage({
     profileSaving,
     selectedAuthorPubkey,
     selectedAuthor,
+    selectedAuthorTimeline,
     authorError,
     composerError,
     liveTitle,
@@ -1453,6 +1459,7 @@ function DesktopShellPage({
   );
   const setSyncStatus = useMemo(() => makeFieldSetter('syncStatus'), [makeFieldSetter]);
   const setLocalProfile = useMemo(() => makeFieldSetter('localProfile'), [makeFieldSetter]);
+  const setProfileTimeline = useMemo(() => makeFieldSetter('profileTimeline'), [makeFieldSetter]);
   const setProfileDraft = useMemo(() => makeFieldSetter('profileDraft'), [makeFieldSetter]);
   const setProfileDirty = useMemo(() => makeFieldSetter('profileDirty'), [makeFieldSetter]);
   const setProfileError = useMemo(() => makeFieldSetter('profileError'), [makeFieldSetter]);
@@ -1466,6 +1473,10 @@ function DesktopShellPage({
     [makeFieldSetter]
   );
   const setSelectedAuthor = useMemo(() => makeFieldSetter('selectedAuthor'), [makeFieldSetter]);
+  const setSelectedAuthorTimeline = useMemo(
+    () => makeFieldSetter('selectedAuthorTimeline'),
+    [makeFieldSetter]
+  );
   const setAuthorError = useMemo(() => makeFieldSetter('authorError'), [makeFieldSetter]);
   const setComposerError = useMemo(() => makeFieldSetter('composerError'), [makeFieldSetter]);
   const setLiveTitle = useMemo(() => makeFieldSetter('liveTitle'), [makeFieldSetter]);
@@ -1627,16 +1638,23 @@ function DesktopShellPage({
     mode: 'push' | 'replace' = 'replace',
     overrides?: DesktopShellRouteOverrides
   ) => {
+    const hasOverride = <K extends keyof DesktopShellRouteOverrides>(key: K) =>
+      overrides ? Object.prototype.hasOwnProperty.call(overrides, key) : false;
     const search = new URLSearchParams();
     const nextTopic = overrides?.activeTopic ?? activeTopic;
     const nextTimelineScope = overrides?.timelineScope ?? activeTimelineScope;
     const nextComposeTarget = overrides?.composeTarget ?? activeComposeChannel;
     const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
     const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
-    const nextSelectedThread = overrides?.selectedThread ?? selectedThread;
-    const nextSelectedAuthorPubkey =
-      overrides?.selectedAuthorPubkey ?? selectedAuthorPubkey;
-    const nextSettingsOpen = overrides?.settingsOpen ?? shellChromeState.settingsOpen;
+    const nextSelectedThread = hasOverride('selectedThread')
+      ? overrides?.selectedThread ?? null
+      : selectedThread;
+    const nextSelectedAuthorPubkey = hasOverride('selectedAuthorPubkey')
+      ? overrides?.selectedAuthorPubkey ?? null
+      : selectedAuthorPubkey;
+    const nextSettingsOpen = hasOverride('settingsOpen')
+      ? overrides?.settingsOpen ?? false
+      : shellChromeState.settingsOpen;
     const nextSettingsSection =
       overrides?.settingsSection ?? shellChromeState.activeSettingsSection;
 
@@ -1760,7 +1778,13 @@ function DesktopShellPage({
   );
   const previewableMediaAttachments = useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
-    for (const post of [...activeTimeline, ...activePublicTimeline, ...thread]) {
+    for (const post of [
+      ...activeTimeline,
+      ...activePublicTimeline,
+      ...profileTimeline,
+      ...selectedAuthorTimeline,
+      ...thread,
+    ]) {
       for (const attachment of [
         selectPrimaryImage(post),
         selectVideoPoster(post),
@@ -1772,7 +1796,7 @@ function DesktopShellPage({
       }
     }
     return [...attachments.values()];
-  }, [activePublicTimeline, activeTimeline, thread]);
+  }, [activePublicTimeline, activeTimeline, profileTimeline, selectedAuthorTimeline, thread]);
 
   const loadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
@@ -1848,6 +1872,8 @@ function DesktopShellPage({
           ticketResult,
           profileResult,
           authorViewResult,
+          profileTimelineResult,
+          authorTimelineResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
@@ -1856,6 +1882,10 @@ function DesktopShellPage({
           api.getMyProfile(),
           currentSelectedAuthorPubkey
             ? api.getAuthorSocialView(currentSelectedAuthorPubkey)
+            : Promise.resolve(null),
+          api.listProfileTimeline(status.local_author_pubkey, null, 50),
+          currentSelectedAuthorPubkey
+            ? api.listProfileTimeline(currentSelectedAuthorPubkey, null, 50)
             : Promise.resolve(null),
         ]);
         if (requestId !== loadTopicsRequestRef.current) {
@@ -1983,16 +2013,31 @@ function DesktopShellPage({
             if (!currentProfileDirty) {
               setProfileDraft(profileInputFromProfile(profileResult.value));
             }
-            setProfileError(null);
-            setProfilePanelState({
-              status: 'ready',
-              error: null,
-            });
+            if (profileTimelineResult.status === 'fulfilled') {
+              setProfileTimeline(profileTimelineResult.value.items);
+              setProfileError(null);
+              setProfilePanelState({
+                status: 'ready',
+                error: null,
+              });
+            } else {
+              const nextProfileError = messageFromError(
+                profileTimelineResult.reason,
+                translate('common:errors.failedToLoadProfile')
+              );
+              setProfileTimeline([]);
+              setProfileError(nextProfileError);
+              setProfilePanelState({
+                status: 'error',
+                error: nextProfileError,
+              });
+            }
           } else {
             const nextProfileError = messageFromError(
               profileResult.reason,
               translate('common:errors.failedToLoadProfile')
             );
+            setProfileTimeline([]);
             setProfileError(nextProfileError);
             setProfilePanelState({
               status: 'error',
@@ -2001,15 +2046,26 @@ function DesktopShellPage({
           }
           if (!currentSelectedAuthorPubkey) {
             setSelectedAuthor(null);
+            setSelectedAuthorTimeline([]);
             setAuthorError(null);
-          } else if (authorViewResult.status === 'fulfilled') {
+          } else if (
+            authorViewResult.status === 'fulfilled' &&
+            authorTimelineResult.status === 'fulfilled'
+          ) {
             setSelectedAuthor(authorViewResult.value);
+            setSelectedAuthorTimeline(authorTimelineResult.value?.items ?? []);
             setAuthorError(null);
           } else {
+            setSelectedAuthorTimeline([]);
             setAuthorError(
-              authorViewResult.reason instanceof Error
-                ? authorViewResult.reason.message
-                : translate('common:errors.failedToLoadAuthor')
+              messageFromError(
+                authorViewResult.status === 'rejected'
+                  ? authorViewResult.reason
+                  : authorTimelineResult.status === 'rejected'
+                    ? authorTimelineResult.reason
+                    : null,
+                translate('common:errors.failedToLoadAuthor')
+              )
             );
           }
           if (threadView) {
@@ -2047,10 +2103,12 @@ function DesktopShellPage({
       setLiveSessionsByTopic,
       setLocalPeerTicket,
       setLocalProfile,
+      setProfileTimeline,
       setProfileDraft,
       setProfileError,
       setProfilePanelState,
       setSelectedAuthor,
+      setSelectedAuthorTimeline,
       setSyncStatus,
       setThread,
       setTimelinesByTopic,
@@ -2078,7 +2136,7 @@ function DesktopShellPage({
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [activeTopic, loadTopics, selectedThread, trackedTopics]);
+  }, [activeTopic, loadTopics, selectedAuthorPubkey, selectedThread, trackedTopics]);
 
   useEffect(() => {
     const remoteObjectUrls = remoteObjectUrlRef.current;
@@ -2293,11 +2351,12 @@ function DesktopShellPage({
   const closeAuthorPane = useCallback(() => {
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
+    setSelectedAuthorTimeline([]);
     setAuthorError(null);
     syncRoute('replace', {
       selectedAuthorPubkey: null,
     });
-  }, [setAuthorError, setSelectedAuthor, setSelectedAuthorPubkey, syncRoute]);
+  }, [setAuthorError, setSelectedAuthor, setSelectedAuthorTimeline, setSelectedAuthorPubkey, syncRoute]);
 
   const closeThreadPane = useCallback(() => {
     setSelectedThread(null);
@@ -2305,6 +2364,7 @@ function DesktopShellPage({
     setReplyTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
+    setSelectedAuthorTimeline([]);
     setAuthorError(null);
     syncRoute('replace', {
       selectedThread: null,
@@ -2314,6 +2374,7 @@ function DesktopShellPage({
     setAuthorError,
     setReplyTarget,
     setSelectedAuthor,
+    setSelectedAuthorTimeline,
     setSelectedAuthorPubkey,
     setSelectedThread,
     setThread,
@@ -2434,6 +2495,7 @@ function DesktopShellPage({
     setReplyTarget(null);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
+    setSelectedAuthorTimeline([]);
     setAuthorError(null);
   }
 
@@ -2591,6 +2653,27 @@ function DesktopShellPage({
       activeTopic: topic,
     });
     await loadTopics(trackedTopics, topic, null);
+  }
+
+  async function handleOpenOriginalTopic(topicId: string) {
+    const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
+    setTrackedTopics(nextTopics);
+    setActiveTopic(topicId);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+      navOpen: false,
+    }));
+    clearThreadContext();
+    syncRoute('replace', {
+      activeTopic: topicId,
+      primarySection: 'timeline',
+      timelineScope: timelineScopeByTopic[topicId] ?? PUBLIC_TIMELINE_SCOPE,
+      composeTarget: composeChannelByTopic[topicId] ?? PUBLIC_CHANNEL_REF,
+      selectedAuthorPubkey: null,
+      selectedThread: null,
+    });
+    await loadTopics(nextTopics, topicId, null);
   }
 
   async function handleRemoveTopic(topic: string) {
@@ -3122,6 +3205,7 @@ function DesktopShellPage({
       const nextThreadId = options?.fromThread ? (options.threadId ?? selectedThread) : null;
       setSelectedAuthorPubkey(authorPubkey);
       setSelectedAuthor(socialView);
+      setSelectedAuthorTimeline([]);
       setAuthorError(null);
       if (!options?.fromThread) {
         setSelectedThread(null);
@@ -3140,6 +3224,7 @@ function DesktopShellPage({
       if (options?.normalizeOnError) {
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
+        setSelectedAuthorTimeline([]);
         if (!options?.fromThread) {
           setSelectedThread(null);
           setThread([]);
@@ -3154,6 +3239,7 @@ function DesktopShellPage({
     api,
     setAuthorError,
     setSelectedAuthor,
+    setSelectedAuthorTimeline,
     setSelectedAuthorPubkey,
     setSelectedThread,
     setThread,
@@ -3983,15 +4069,12 @@ function DesktopShellPage({
     [activeTimeline, buildPostCardView]
   );
   const profileTimelinePostViews = useMemo(
-    () =>
-      activePublicTimeline
-        .filter(
-          (post) =>
-            !post.channel_id &&
-            post.author_pubkey === syncStatus.local_author_pubkey
-        )
-        .map((post) => buildPostCardView(post, 'timeline')),
-    [activePublicTimeline, buildPostCardView, syncStatus.local_author_pubkey]
+    () => profileTimeline.map((post) => buildPostCardView(post, 'timeline')),
+    [buildPostCardView, profileTimeline]
+  );
+  const selectedAuthorTimelinePostViews = useMemo(
+    () => selectedAuthorTimeline.map((post) => buildPostCardView(post, 'timeline')),
+    [buildPostCardView, selectedAuthorTimeline]
   );
   const threadPostViews = useMemo(
     () => thread.map((post) => buildPostCardView(post, 'thread')),
@@ -4523,6 +4606,17 @@ function DesktopShellPage({
                 void handleRelationshipAction(authorPubkey, following)
               }
             />
+            <Card className='shell-workspace-card'>
+              <TimelineFeed
+                posts={selectedAuthorTimelinePostViews}
+                emptyCopy={t('profile:feed.noAuthorPosts')}
+                onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                onOpenThread={(threadId) => void openThread(threadId)}
+                onReply={beginReply}
+                readOnly={true}
+                onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
+              />
+            </Card>
           </div>
         </ContextPane>
       ) : null}
@@ -5220,10 +5314,12 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <TimelineFeed
                       posts={profileTimelinePostViews}
-                      emptyCopy={t('shell:workspace.noPublicPosts')}
+                      emptyCopy={t('profile:feed.noOwnPosts')}
                       onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
                       onOpenThread={(threadId) => void openThread(threadId)}
                       onReply={beginReply}
+                      readOnly={true}
+                      onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
                     />
                   </Card>
                 </>

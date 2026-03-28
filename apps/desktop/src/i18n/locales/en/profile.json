@@ -20,7 +20,13 @@
     "edit": "Edit Profile",
     "loading": "Loading profile…",
     "noBio": "No profile bio published yet.",
-    "postCount": "Public posts in active topic",
+    "postCount": "Public posts",
     "title": "Profile"
+  },
+  "feed": {
+    "noAuthorPosts": "No public posts from this author yet.",
+    "noOwnPosts": "No public posts published yet.",
+    "openOriginalTopic": "Open original topic",
+    "originTopic": "Origin topic"
   }
 }

@@ -26,6 +26,7 @@ export type DesktopMockApiOptions = {
   topicLastError?: string | null;
   assistPeerIds?: string[];
   seedPosts?: Record<string, TimelineView['items']>;
+  authorProfileTimelines?: Record<string, TimelineView['items']>;
   seedLiveSessions?: Record<string, LiveSessionView[]>;
   seedGameRooms?: Record<string, GameRoomView[]>;
   myProfile?: Partial<Profile>;
@@ -43,6 +44,7 @@ function withSocialPostDefaults(post: PostView): PostView {
     followed_by: post.followed_by ?? false,
     mutual: post.mutual ?? false,
     friend_of_friend: post.friend_of_friend ?? false,
+    origin_topic_id: post.origin_topic_id ?? null,
     channel_id: post.channel_id ?? null,
     audience_label: post.audience_label ?? (post.channel_id ? 'Private channel' : 'Public'),
     attachments: [...post.attachments],
@@ -146,9 +148,35 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
     Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
       topic,
+      posts.map((post) => withSocialPostDefaults({ ...post, origin_topic_id: post.origin_topic_id ?? topic })),
+    ])
+  );
+  const authorProfileTimelines: Record<string, TimelineView['items']> = Object.fromEntries(
+    Object.entries(options?.authorProfileTimelines ?? {}).map(([pubkey, posts]) => [
+      pubkey,
       posts.map((post) => withSocialPostDefaults(post)),
     ])
   );
+  for (const [topic, posts] of Object.entries(postsByTopic)) {
+    for (const post of posts) {
+      if (post.channel_id) {
+        continue;
+      }
+      const current = authorProfileTimelines[post.author_pubkey] ?? [];
+      if (current.some((item) => item.object_id === post.object_id)) {
+        continue;
+      }
+      authorProfileTimelines[post.author_pubkey] = [
+        withSocialPostDefaults({
+          ...post,
+          origin_topic_id: post.origin_topic_id ?? topic,
+          channel_id: null,
+          audience_label: 'Public',
+        }),
+        ...current,
+      ].sort((left, right) => right.created_at - left.created_at || right.object_id.localeCompare(left.object_id));
+    }
+  }
   const liveSessionsByTopic: Record<string, LiveSessionView[]> = Object.fromEntries(
     Object.entries(options?.seedLiveSessions ?? {}).map(([topic, sessions]) => [
       topic,
@@ -256,11 +284,38 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           created_at: sequence,
           reply_to: replyTo ?? null,
           root_id: rootId,
+          origin_topic_id: topic,
           channel_id: channelId,
           audience_label: channelId ? 'Private channel' : 'Public',
         }),
         ...posts,
       ];
+      if (!channelId) {
+        authorProfileTimelines[syncStatus.local_author_pubkey] = [
+          withSocialPostDefaults({
+            object_id: objectId,
+            envelope_id: objectId,
+            author_pubkey: syncStatus.local_author_pubkey,
+            following: false,
+            followed_by: false,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: replyTo ? 'comment' : 'post',
+            content,
+            content_status: 'Available',
+            attachments: postAttachments,
+            created_at: sequence,
+            reply_to: replyTo ?? null,
+            root_id: rootId,
+            origin_topic_id: topic,
+            channel_id: null,
+            audience_label: 'Public',
+          }),
+          ...(authorProfileTimelines[syncStatus.local_author_pubkey] ?? []).filter(
+            (post) => post.object_id !== objectId
+          ),
+        ];
+      }
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));
       if (!syncStatus.topic_diagnostics.some((entry) => entry.topic === topic)) {
         syncStatus.topic_diagnostics.push({
@@ -310,6 +365,12 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       const posts = postsByTopic[topic] ?? [];
       return {
         items: posts.filter((post) => post.root_id === threadId || post.object_id === threadId),
+        next_cursor: null,
+      };
+    },
+    async listProfileTimeline(pubkey) {
+      return {
+        items: [...(authorProfileTimelines[pubkey] ?? [])],
         next_cursor: null,
       };
     },
