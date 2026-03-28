@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
     BlobHash, EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry,
-    KukuriEnvelope, LiveSessionStatus, PayloadRef, Profile, ReplicaId, ThreadRef,
-    parse_follow_edge, parse_profile,
+    KukuriEnvelope, LiveSessionStatus, PayloadRef, Profile, ReplicaId, RepostSourceSnapshotV1,
+    ThreadRef, parse_follow_edge, parse_profile,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha384};
@@ -44,10 +44,12 @@ pub struct ObjectProjectionRow {
     pub channel_id: String,
     pub author_pubkey: String,
     pub created_at: i64,
+    pub object_kind: String,
     pub root_object_id: Option<EnvelopeId>,
     pub reply_to_object_id: Option<EnvelopeId>,
     pub payload_ref: PayloadRef,
     pub content: Option<String>,
+    pub repost_of: Option<RepostSourceSnapshotV1>,
     pub source_replica_id: ReplicaId,
     pub source_key: String,
     pub source_envelope_id: EnvelopeId,
@@ -822,23 +824,31 @@ impl Store for MemoryStore {
 impl ProjectionStore for SqliteStore {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()> {
         let payload_json = serde_json::to_string(&row.payload_ref)?;
+        let repost_json = row
+            .repost_of
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
         sqlx::query(
             r#"
             INSERT INTO object_index_cache (
-              object_id, topic_id, channel_id, author_pubkey, created_at, root_object_id,
-              reply_to_object_id, payload_ref_json, content, source_replica_id, source_key,
-              source_envelope_id, source_blob_hash, derived_at, projection_version
+              object_id, topic_id, channel_id, author_pubkey, created_at, object_kind,
+              root_object_id, reply_to_object_id, payload_ref_json, content, repost_of_json,
+              source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
+              projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
             ON CONFLICT(object_id) DO UPDATE SET
               topic_id = excluded.topic_id,
               channel_id = excluded.channel_id,
               author_pubkey = excluded.author_pubkey,
               created_at = excluded.created_at,
+              object_kind = excluded.object_kind,
               root_object_id = excluded.root_object_id,
               reply_to_object_id = excluded.reply_to_object_id,
               payload_ref_json = excluded.payload_ref_json,
               content = excluded.content,
+              repost_of_json = excluded.repost_of_json,
               source_replica_id = excluded.source_replica_id,
               source_key = excluded.source_key,
               source_envelope_id = excluded.source_envelope_id,
@@ -852,10 +862,12 @@ impl ProjectionStore for SqliteStore {
         .bind(row.channel_id.as_str())
         .bind(row.author_pubkey.as_str())
         .bind(row.created_at)
+        .bind(row.object_kind.as_str())
         .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
         .bind(row.reply_to_object_id.as_ref().map(EnvelopeId::as_str))
         .bind(payload_json)
         .bind(row.content.as_deref())
+        .bind(repost_json.as_deref())
         .bind(row.source_replica_id.as_str())
         .bind(row.source_key.as_str())
         .bind(row.source_envelope_id.as_str())
@@ -900,9 +912,10 @@ impl ProjectionStore for SqliteStore {
     ) -> Result<Option<ObjectProjectionRow>> {
         let row = sqlx::query(
             r#"
-            SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   channel_id, payload_ref_json, content, source_replica_id, source_key,
-                   source_envelope_id, source_blob_hash, derived_at, projection_version
+            SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
+                   reply_to_object_id, channel_id, payload_ref_json, content, repost_of_json,
+                   source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
+                   projection_version
             FROM object_index_cache
             WHERE object_id = ?1
             "#,
@@ -922,9 +935,10 @@ impl ProjectionStore for SqliteStore {
     ) -> Result<Page<ObjectProjectionRow>> {
         let rows = sqlx::query(
             r#"
-            SELECT object_id, topic_id, author_pubkey, created_at, root_object_id, reply_to_object_id,
-                   channel_id, payload_ref_json, content, source_replica_id, source_key,
-                   source_envelope_id, source_blob_hash, derived_at, projection_version
+            SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
+                   reply_to_object_id, channel_id, payload_ref_json, content, repost_of_json,
+                   source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
+                   projection_version
             FROM object_index_cache
             WHERE topic_id = ?1
               AND (
@@ -955,10 +969,11 @@ impl ProjectionStore for SqliteStore {
     ) -> Result<Page<ObjectProjectionRow>> {
         let rows = sqlx::query(
             r#"
-            SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.root_object_id,
-                   oic.reply_to_object_id, oic.channel_id, oic.payload_ref_json, oic.content,
-                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
-                   oic.source_blob_hash, oic.derived_at, oic.projection_version
+            SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.object_kind,
+                   oic.root_object_id, oic.reply_to_object_id, oic.channel_id,
+                   oic.payload_ref_json, oic.content, oic.repost_of_json, oic.source_replica_id,
+                   oic.source_key, oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
+                   oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -1581,6 +1596,7 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
         channel_id: row.get("channel_id"),
         author_pubkey: row.get("author_pubkey"),
         created_at: row.get("created_at"),
+        object_kind: row.get("object_kind"),
         root_object_id: row
             .try_get::<String, _>("root_object_id")
             .ok()
@@ -1593,6 +1609,12 @@ fn row_to_object_projection(row: sqlx::sqlite::SqliteRow) -> Result<ObjectProjec
             .map(EnvelopeId::from),
         payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
         content: row.try_get("content").ok(),
+        repost_of: row
+            .try_get::<String, _>("repost_of_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?,
         source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
         source_key: row.get("source_key"),
         source_envelope_id: row.get::<String, _>("source_envelope_id").into(),
@@ -2006,6 +2028,7 @@ mod tests {
                 channel_id: "public".into(),
                 author_pubkey: "a".repeat(64),
                 created_at: 10,
+                object_kind: "post".into(),
                 root_object_id: None,
                 reply_to_object_id: None,
                 payload_ref: PayloadRef::BlobText {
@@ -2014,6 +2037,7 @@ mod tests {
                     bytes: 4,
                 },
                 content: Some("root".into()),
+                repost_of: None,
                 source_replica_id: ReplicaId::new(format!("topic::{topic}")),
                 source_key: "objects/object-root/header".into(),
                 source_envelope_id: root_id.clone(),
@@ -2027,6 +2051,7 @@ mod tests {
                 channel_id: "public".into(),
                 author_pubkey: "b".repeat(64),
                 created_at: 11,
+                object_kind: "comment".into(),
                 root_object_id: Some(root_id.clone()),
                 reply_to_object_id: Some(root_id.clone()),
                 payload_ref: PayloadRef::BlobText {
@@ -2035,6 +2060,7 @@ mod tests {
                     bytes: 5,
                 },
                 content: Some("reply".into()),
+                repost_of: None,
                 source_replica_id: ReplicaId::new(format!("topic::{topic}")),
                 source_key: "objects/object-reply/header".into(),
                 source_envelope_id: reply_id.clone(),

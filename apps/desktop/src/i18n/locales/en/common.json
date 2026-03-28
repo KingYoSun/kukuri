@@ -12,7 +12,9 @@
     "join": "Join",
     "leave": "Leave",
     "publish": "Publish",
+    "quoteRepost": "Quote Repost",
     "refresh": "Refresh",
+    "repost": "Repost",
     "reply": "Reply",
     "reset": "Reset",
     "rotate": "Rotate",
@@ -20,9 +22,12 @@
     "unfollow": "Unfollow"
   },
   "composer": {
+    "clearQuoteRepost": "Clear quote repost",
+    "quoteReposting": "Quote reposting",
     "clearReply": "Clear reply",
     "replying": "Replying",
     "writePost": "Write a post",
+    "writeQuoteRepost": "Write a quote repost",
     "writeReply": "Write a reply"
   },
   "audience": {
@@ -53,7 +58,12 @@
     "failedToUpdateCommunityNodes": "failed to update community nodes",
     "failedToUpdateDiscoverySeeds": "failed to update discovery seeds",
     "failedToUpdateFollowState": "failed to update follow state",
+    "quoteRepostRequiresCommentary": "quote repost requires commentary",
     "unsupportedAttachmentType": "unsupported attachment type: {{name}}"
+  },
+  "feed": {
+    "quoteRepost": "Quote repost",
+    "reposted": "Reposted"
   },
   "fallbacks": {
     "attachment": "attachment",
@@ -77,6 +87,7 @@
     "phase": "phase",
     "policy": "Policy",
     "sharing": "sharing",
+    "sourceTopic": "Source topic",
     "stale": "stale",
     "started": "started",
     "updated": "updated",

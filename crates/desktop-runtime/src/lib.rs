@@ -68,6 +68,15 @@ pub struct CreatePostRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateRepostRequest {
+    pub topic: String,
+    pub source_topic: String,
+    pub source_object_id: String,
+    #[serde(default)]
+    pub commentary: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateAttachmentRequest {
     pub file_name: Option<String>,
     pub mime: String,
@@ -733,6 +742,17 @@ impl DesktopRuntime {
                 request.content.as_str(),
                 request.reply_to.as_deref(),
                 attachments,
+            )
+            .await
+    }
+
+    pub async fn create_repost(&self, request: CreateRepostRequest) -> Result<String> {
+        self.app_service
+            .create_repost(
+                request.topic.as_str(),
+                request.source_topic.as_str(),
+                request.source_object_id.as_str(),
+                request.commentary.as_deref(),
             )
             .await
     }

@@ -8,28 +8,30 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob};
 use kukuri_core::{
-    AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, CanonicalPostHeader,
-    ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, CreatePrivateChannelInput,
-    EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview,
-    FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
-    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope,
-    KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
-    KukuriProfilePostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1,
+    CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState,
+    CreatePrivateChannelInput, EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
+    FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant,
+    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
+    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
+    KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
+    KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
     LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
     PayloadRef, PrivateChannelInvitePreview, PrivateChannelJoinMode, PrivateChannelMetadataDocV1,
     PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
-    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, Pubkey, ReplicaId, TimelineScope,
-    TopicId, author_profile_topic_id, build_follow_edge_envelope, build_friend_only_grant_token,
-    build_friend_plus_share_token, build_game_session_envelope, build_live_session_envelope,
-    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
-    build_private_channel_invite_token, build_private_channel_participant_envelope,
-    build_private_channel_policy_envelope, build_private_channel_rotation_grant_envelope,
-    build_profile_envelope, build_profile_post_envelope, decrypt_private_channel_rotation_grant,
-    encrypt_private_channel_rotation_grant, generate_keys, parse_follow_edge,
-    parse_friend_only_grant_token, parse_friend_plus_share_token,
+    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, ProfileRepost, Pubkey, ReplicaId,
+    RepostSourceSnapshotV1, TimelineScope, TopicId, author_profile_topic_id,
+    build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
+    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
+    build_post_envelope_with_payload_in_channel, build_private_channel_invite_token,
+    build_private_channel_participant_envelope, build_private_channel_policy_envelope,
+    build_private_channel_rotation_grant_envelope, build_profile_envelope,
+    build_profile_post_envelope, build_profile_repost_envelope, build_repost_envelope,
+    decrypt_private_channel_rotation_grant, encrypt_private_channel_rotation_grant, generate_keys,
+    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
     parse_private_channel_invite_token, parse_private_channel_participant,
     parse_private_channel_policy, parse_private_channel_rotation_grant, parse_profile,
-    parse_profile_post, timeline_sort_key,
+    parse_profile_post, parse_profile_repost, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
@@ -69,9 +71,27 @@ pub struct PostView {
     pub reply_to: Option<String>,
     pub root_id: Option<String>,
     pub object_kind: String,
+    pub published_topic_id: Option<String>,
     pub origin_topic_id: Option<String>,
+    pub repost_of: Option<RepostSourceView>,
+    pub repost_commentary: Option<String>,
+    pub is_threadable: bool,
     pub channel_id: Option<String>,
     pub audience_label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepostSourceView {
+    pub source_object_id: String,
+    pub source_topic_id: String,
+    pub source_author_pubkey: String,
+    pub source_author_name: Option<String>,
+    pub source_author_display_name: Option<String>,
+    pub source_object_kind: String,
+    pub content: String,
+    pub attachments: Vec<AttachmentView>,
+    pub reply_to: Option<String>,
+    pub root_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +206,33 @@ pub struct UpdateGameRoomInput {
 pub struct TimelineView {
     pub items: Vec<PostView>,
     pub next_cursor: Option<TimelineCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ProfileTimelineItem {
+    Post(ProfilePost),
+    Repost(ProfileRepost),
+}
+
+impl ProfileTimelineItem {
+    fn created_at(&self) -> i64 {
+        match self {
+            Self::Post(post) => post.created_at,
+            Self::Repost(repost) => repost.created_at,
+        }
+    }
+
+    fn object_id(&self) -> &EnvelopeId {
+        match self {
+            Self::Post(post) => &post.object_id,
+            Self::Repost(repost) => &repost.object_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ResolvedRepostSource {
+    repost_of: RepostSourceSnapshotV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -481,21 +528,116 @@ impl AppService {
         let mut posts =
             load_profile_posts_from_author_replica(self.docs_sync.as_ref(), author_pubkey.as_str())
                 .await?;
-        posts.sort_by(|left, right| {
+        let mut reposts = load_profile_reposts_from_author_replica(
+            self.docs_sync.as_ref(),
+            author_pubkey.as_str(),
+        )
+        .await?;
+        let mut items = Vec::with_capacity(posts.len() + reposts.len());
+        items.extend(posts.drain(..).map(ProfileTimelineItem::Post));
+        items.extend(reposts.drain(..).map(ProfileTimelineItem::Repost));
+        items.sort_by(|left, right| {
             right
-                .created_at
-                .cmp(&left.created_at)
-                .then_with(|| right.object_id.cmp(&left.object_id))
+                .created_at()
+                .cmp(&left.created_at())
+                .then_with(|| right.object_id().cmp(left.object_id()))
         });
-        let page = profile_post_page(posts, cursor, limit);
-        let mut items = Vec::with_capacity(page.items.len());
-        for post in page.items {
-            items.push(self.profile_post_to_view(post).await?);
+        let page = profile_timeline_page(items, cursor, limit);
+        let mut views = Vec::with_capacity(page.items.len());
+        for item in page.items {
+            match item {
+                ProfileTimelineItem::Post(post) => {
+                    views.push(self.profile_post_to_view(post).await?)
+                }
+                ProfileTimelineItem::Repost(repost) => {
+                    views.push(self.profile_repost_to_view(repost).await?)
+                }
+            }
         }
         Ok(TimelineView {
-            items,
+            items: views,
             next_cursor: page.next_cursor,
         })
+    }
+
+    pub async fn create_repost(
+        &self,
+        target_topic_id: &str,
+        source_topic_id: &str,
+        source_object_id: &str,
+        commentary: Option<&str>,
+    ) -> Result<String> {
+        self.ensure_topic_subscription(target_topic_id).await?;
+        self.ensure_topic_subscription(source_topic_id).await?;
+
+        let normalized_commentary = normalize_repost_commentary(commentary.map(str::to_string));
+        if let Some(existing_object_id) = self
+            .find_existing_simple_repost(
+                target_topic_id,
+                source_object_id,
+                normalized_commentary.as_deref(),
+            )
+            .await?
+        {
+            return Ok(existing_object_id);
+        }
+
+        let source_object = self
+            .resolve_repost_source(source_topic_id, source_object_id)
+            .await?;
+        let topic = TopicId::new(target_topic_id);
+        let envelope = build_repost_envelope(
+            self.keys.as_ref(),
+            &topic,
+            source_object.repost_of.clone(),
+            normalized_commentary.as_deref(),
+        )?;
+        let repost_object = envelope
+            .to_post_object()?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse repost object"))?;
+        self.ingest_event(
+            &topic_replica_id(target_topic_id),
+            envelope.clone(),
+            None,
+            Vec::new(),
+        )
+        .await?;
+
+        let local_author_pubkey = self.current_author_pubkey();
+        let profile_repost_envelope = build_profile_repost_envelope(
+            self.keys.as_ref(),
+            &KukuriProfileRepostEnvelopeContentV1 {
+                author_pubkey: Pubkey::from(local_author_pubkey.as_str()),
+                profile_topic_id: author_profile_topic_id(local_author_pubkey.as_str()),
+                published_topic_id: topic.clone(),
+                object_id: repost_object.object_id.clone(),
+                created_at: repost_object.created_at,
+                commentary: normalized_commentary.clone(),
+                repost_of: source_object.repost_of,
+            },
+        )?;
+        let profile_repost = parse_profile_repost(&profile_repost_envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse profile repost envelope"))?;
+        persist_profile_repost_doc(
+            self.docs_sync.as_ref(),
+            &profile_repost,
+            &profile_repost_envelope,
+        )
+        .await?;
+
+        self.hint_transport
+            .publish_hint(
+                &channel_hint_topic_for(target_topic_id, None),
+                GossipHint::TopicObjectsChanged {
+                    topic_id: topic,
+                    objects: vec![HintObjectRef {
+                        object_id: envelope.id.0.clone(),
+                        object_kind: envelope.kind.clone(),
+                    }],
+                },
+            )
+            .await?;
+        Ok(envelope.id.0)
     }
 
     pub async fn create_post(
@@ -562,6 +704,12 @@ impl AppService {
             let content = parent
                 .post_content()?
                 .ok_or_else(|| anyhow::anyhow!("reply target is not a post object"))?;
+            if content.object_kind == "repost"
+                && normalize_repost_commentary(content_from_payload_ref(&content.payload_ref))
+                    .is_none()
+            {
+                anyhow::bail!("simple repost cannot be a reply parent");
+            }
             if content.topic_id.as_str() != topic_id {
                 anyhow::bail!("reply target topic does not match");
             }
@@ -684,7 +832,7 @@ impl AppService {
                 &KukuriProfilePostEnvelopeContentV1 {
                     author_pubkey: Pubkey::from(local_author_pubkey.as_str()),
                     profile_topic_id: author_profile_topic_id(local_author_pubkey.as_str()),
-                    origin_topic_id: topic.clone(),
+                    published_topic_id: topic.clone(),
                     object_id: post_object.object_id.clone(),
                     created_at: post_object.created_at,
                     object_kind: post_object.object_kind.clone(),
@@ -716,6 +864,112 @@ impl AppService {
             )
             .await?;
         Ok(envelope.id.0)
+    }
+
+    async fn resolve_repost_source(
+        &self,
+        source_topic_id: &str,
+        source_object_id: &str,
+    ) -> Result<ResolvedRepostSource> {
+        let source_object_id = EnvelopeId::from(source_object_id);
+        if ProjectionStore::get_object_projection(self.projection_store.as_ref(), &source_object_id)
+            .await?
+            .is_none()
+        {
+            let _ = hydrate_topic_state_with_services(
+                self.docs_sync.as_ref(),
+                self.blob_service.as_ref(),
+                self.projection_store.as_ref(),
+                source_topic_id,
+            )
+            .await?;
+        }
+        let projection = ProjectionStore::get_object_projection(
+            self.projection_store.as_ref(),
+            &source_object_id,
+        )
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("repost source object not found"))?;
+        if projection.topic_id != source_topic_id {
+            anyhow::bail!("repost source topic does not match");
+        }
+        if projection.channel_id != PUBLIC_CHANNEL_ID {
+            anyhow::bail!("only public posts and comments can be reposted");
+        }
+        if !matches!(projection.object_kind.as_str(), "post" | "comment") {
+            anyhow::bail!("only public posts and comments can be reposted");
+        }
+
+        let header = fetch_post_object_for_projection(
+            self.docs_sync.as_ref(),
+            &projection.source_replica_id,
+            projection.source_key.as_str(),
+        )
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("repost source header not found"))?;
+        let content = match &projection.payload_ref {
+            PayloadRef::InlineText { text } => text.clone(),
+            PayloadRef::BlobText { hash, .. } => {
+                fetch_projection_blob_text(self.blob_service.as_ref(), hash)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("repost source content is unavailable"))?
+            }
+        };
+        Ok(ResolvedRepostSource {
+            repost_of: RepostSourceSnapshotV1 {
+                source_object_id: header.object_id,
+                source_topic_id: header.topic_id,
+                source_author_pubkey: header.author,
+                source_object_kind: header.object_kind,
+                content,
+                attachments: header.attachments,
+                reply_to_object_id: header.reply_to,
+                root_id: header.root,
+            },
+        })
+    }
+
+    async fn find_existing_simple_repost(
+        &self,
+        target_topic_id: &str,
+        source_object_id: &str,
+        commentary: Option<&str>,
+    ) -> Result<Option<String>> {
+        if commentary.is_some() {
+            return Ok(None);
+        }
+        let target_replica = topic_replica_id(target_topic_id);
+        let local_author_pubkey = self.current_author_pubkey();
+        for record in self
+            .docs_sync
+            .query_replica(&target_replica, DocQuery::Prefix("objects/".into()))
+            .await?
+        {
+            if !record.key.ends_with("/state") {
+                continue;
+            }
+            let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+            if header.object_kind != "repost"
+                || header.author.as_str() != local_author_pubkey
+                || header.channel_id.is_some()
+            {
+                continue;
+            }
+            let Some(repost_of) = header.repost_of.as_ref() else {
+                continue;
+            };
+            if repost_of.source_object_id.as_str() != source_object_id {
+                continue;
+            }
+            let commentary = match &header.payload_ref {
+                PayloadRef::InlineText { text } => normalize_repost_commentary(Some(text.clone())),
+                PayloadRef::BlobText { .. } => None,
+            };
+            if commentary.is_none() {
+                return Ok(Some(header.object_id.as_str().to_string()));
+            }
+        }
+        Ok(None)
     }
 
     pub async fn list_timeline(
@@ -3225,8 +3479,16 @@ impl AppService {
         &self,
         rows: &[ObjectProjectionRow],
     ) -> Result<()> {
-        for author_pubkey in rows.iter().map(|row| row.author_pubkey.as_str()) {
-            self.ensure_author_subscription(author_pubkey).await?;
+        let mut author_pubkeys = BTreeSet::new();
+        for row in rows {
+            author_pubkeys.insert(row.author_pubkey.clone());
+            if let Some(repost_of) = row.repost_of.as_ref() {
+                author_pubkeys.insert(repost_of.source_author_pubkey.as_str().to_string());
+            }
+        }
+        for author_pubkey in author_pubkeys {
+            self.ensure_author_subscription(author_pubkey.as_str())
+                .await?;
         }
         Ok(())
     }
@@ -3349,16 +3611,18 @@ impl AppService {
         self.store.put_envelope(envelope.clone()).await?;
         let mut object = envelope
             .to_post_object()?
-            .ok_or_else(|| anyhow::anyhow!("expected post/comment envelope"))?;
-        object.attachments = attachments
-            .iter()
-            .map(|(role, stored)| kukuri_core::AssetRef {
-                hash: stored.hash.clone(),
-                mime: stored.mime.clone(),
-                bytes: stored.bytes,
-                role: role.clone(),
-            })
-            .collect();
+            .ok_or_else(|| anyhow::anyhow!("expected timeline envelope"))?;
+        if object.object_kind != "repost" {
+            object.attachments = attachments
+                .iter()
+                .map(|(role, stored)| kukuri_core::AssetRef {
+                    hash: stored.hash.clone(),
+                    mime: stored.mime.clone(),
+                    bytes: stored.bytes,
+                    role: role.clone(),
+                })
+                .collect();
+        }
         let content = match &object.payload_ref {
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => self
@@ -3414,14 +3678,10 @@ impl AppService {
             return Ok(None);
         };
 
-        let object_kind = if projection.reply_to_object_id.is_some() {
-            "comment"
-        } else {
-            "post"
-        };
+        let object_kind = projection.object_kind.as_str();
         let mut tags = vec![
             vec!["topic".into(), projection.topic_id.clone()],
-            vec!["object".into(), object_kind.into()],
+            vec!["object".into(), object_kind.to_string()],
         ];
         if projection.channel_id != PUBLIC_CHANNEL_ID {
             tags.push(vec!["channel".into(), projection.channel_id.clone()]);
@@ -3447,6 +3707,7 @@ impl AppService {
                 },
                 reply_to: projection.reply_to_object_id.clone(),
                 root_id: projection.root_object_id.clone(),
+                repost_of: projection.repost_of.clone(),
             })?,
             sig: String::new(),
         }))
@@ -3715,12 +3976,22 @@ impl AppService {
                 row.author_pubkey.as_str(),
             )
             .await?;
-        let content_status =
-            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?;
-        let attachments = if let Some(post_object) = post_object {
+        let repost_commentary = normalize_repost_commentary(row.content.clone());
+        let content_status = if row.object_kind == "repost" {
+            BlobViewStatus::Available
+        } else {
+            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?
+        };
+        let attachments = if row.object_kind == "repost" {
+            Vec::new()
+        } else if let Some(post_object) = post_object {
             attachment_views(self.blob_service.as_ref(), &post_object).await?
         } else {
             Vec::new()
+        };
+        let repost_of = match row.repost_of.clone() {
+            Some(snapshot) => Some(self.repost_snapshot_to_view(snapshot).await?),
+            None => None,
         };
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
@@ -3746,12 +4017,12 @@ impl AppService {
             created_at: row.created_at,
             reply_to: row.reply_to_object_id.clone().map(|id| id.0),
             root_id: row.root_object_id.clone().map(|id| id.0),
-            object_kind: if row.reply_to_object_id.is_some() {
-                "comment".into()
-            } else {
-                "post".into()
-            },
+            object_kind: row.object_kind.clone(),
+            published_topic_id: Some(row.topic_id.clone()),
             origin_topic_id: Some(row.topic_id.clone()),
+            repost_of,
+            repost_commentary: repost_commentary.clone(),
+            is_threadable: row.object_kind != "repost" || repost_commentary.is_some(),
             channel_id: channel_id_for_view(row.channel_id.as_str()),
             audience_label,
         })
@@ -3795,9 +4066,88 @@ impl AppService {
             created_at: profile_post.created_at,
             reply_to: profile_post.reply_to_object_id.map(|id| id.0),
             root_id: profile_post.root_id.map(|id| id.0),
-            origin_topic_id: Some(profile_post.origin_topic_id.as_str().to_string()),
+            published_topic_id: Some(profile_post.published_topic_id.as_str().to_string()),
+            origin_topic_id: Some(profile_post.published_topic_id.as_str().to_string()),
+            repost_of: None,
+            repost_commentary: None,
+            is_threadable: true,
             channel_id: None,
             audience_label: "Public".into(),
+        })
+    }
+
+    async fn profile_repost_to_view(&self, profile_repost: ProfileRepost) -> Result<PostView> {
+        let profile = self
+            .store
+            .get_profile(profile_repost.author_pubkey.as_str())
+            .await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(
+                self.current_author_pubkey().as_str(),
+                profile_repost.author_pubkey.as_str(),
+            )
+            .await?;
+
+        Ok(PostView {
+            object_id: profile_repost.object_id.0.clone(),
+            envelope_id: profile_repost.envelope_id.0.clone(),
+            author_pubkey: profile_repost.author_pubkey.as_str().to_string(),
+            author_name: profile.as_ref().and_then(|value| value.name.clone()),
+            author_display_name: profile
+                .as_ref()
+                .and_then(|value| value.display_name.clone()),
+            following: relationship.as_ref().is_some_and(|value| value.following),
+            followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
+            mutual: relationship.as_ref().is_some_and(|value| value.mutual),
+            friend_of_friend: relationship
+                .as_ref()
+                .is_some_and(|value| value.friend_of_friend),
+            object_kind: "repost".into(),
+            content: profile_repost.commentary.clone().unwrap_or_default(),
+            content_status: BlobViewStatus::Available,
+            attachments: Vec::new(),
+            created_at: profile_repost.created_at,
+            reply_to: None,
+            root_id: None,
+            published_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),
+            origin_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),
+            repost_of: Some(
+                self.repost_snapshot_to_view(profile_repost.repost_of)
+                    .await?,
+            ),
+            repost_commentary: profile_repost.commentary.clone(),
+            is_threadable: profile_repost.commentary.is_some(),
+            channel_id: None,
+            audience_label: "Public".into(),
+        })
+    }
+
+    async fn repost_snapshot_to_view(
+        &self,
+        snapshot: RepostSourceSnapshotV1,
+    ) -> Result<RepostSourceView> {
+        let source_profile = self
+            .store
+            .get_profile(snapshot.source_author_pubkey.as_str())
+            .await?;
+        Ok(RepostSourceView {
+            source_object_id: snapshot.source_object_id.as_str().to_string(),
+            source_topic_id: snapshot.source_topic_id.as_str().to_string(),
+            source_author_pubkey: snapshot.source_author_pubkey.as_str().to_string(),
+            source_author_name: source_profile.as_ref().and_then(|value| value.name.clone()),
+            source_author_display_name: source_profile
+                .as_ref()
+                .and_then(|value| value.display_name.clone()),
+            source_object_kind: snapshot.source_object_kind,
+            content: snapshot.content,
+            attachments: attachment_views_from_refs(
+                self.blob_service.as_ref(),
+                &snapshot.attachments,
+            )
+            .await?,
+            reply_to: snapshot.reply_to_object_id.map(|id| id.0),
+            root_id: snapshot.root_id.map(|id| id.0),
         })
     }
 }
@@ -3807,6 +4157,17 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
         let trimmed = value.trim();
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
+}
+
+fn normalize_repost_commentary(value: Option<String>) -> Option<String> {
+    normalize_optional_text(value)
+}
+
+fn content_from_payload_ref(payload_ref: &PayloadRef) -> Option<String> {
+    match payload_ref {
+        PayloadRef::InlineText { text } => Some(text.clone()),
+        PayloadRef::BlobText { .. } => None,
+    }
 }
 
 fn normalize_author_pubkey(pubkey: &str) -> Result<String> {
@@ -3969,7 +4330,7 @@ async fn persist_profile_post_doc(
                 value: serde_json::to_value(AuthorProfilePostDocV1 {
                     author_pubkey: profile_post.author_pubkey.clone(),
                     profile_topic_id: profile_post.profile_topic_id.clone(),
-                    origin_topic_id: profile_post.origin_topic_id.clone(),
+                    published_topic_id: profile_post.published_topic_id.clone(),
                     object_id: profile_post.object_id.clone(),
                     created_at: profile_post.created_at,
                     object_kind: profile_post.object_kind.clone(),
@@ -3977,6 +4338,42 @@ async fn persist_profile_post_doc(
                     attachments: profile_post.attachments.clone(),
                     reply_to_object_id: profile_post.reply_to_object_id.clone(),
                     root_id: profile_post.root_id.clone(),
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+async fn persist_profile_repost_doc(
+    docs_sync: &dyn DocsSync,
+    profile_repost: &ProfileRepost,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile_repost.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile/reposts", profile_repost.object_id.as_str()),
+                value: serde_json::to_value(AuthorProfileRepostDocV1 {
+                    author_pubkey: profile_repost.author_pubkey.clone(),
+                    profile_topic_id: profile_repost.profile_topic_id.clone(),
+                    published_topic_id: profile_repost.published_topic_id.clone(),
+                    object_id: profile_repost.object_id.clone(),
+                    created_at: profile_repost.created_at,
+                    commentary: profile_repost.commentary.clone(),
+                    repost_of: profile_repost.repost_of.clone(),
                     envelope_id: envelope.id.clone(),
                 })?,
             },
@@ -4157,7 +4554,7 @@ async fn load_profile_posts_from_author_replica(
                         Ok(Some(profile_post))
                             if profile_post.author_pubkey == doc.author_pubkey
                                 && profile_post.profile_topic_id == doc.profile_topic_id
-                                && profile_post.origin_topic_id == doc.origin_topic_id
+                                && profile_post.published_topic_id == doc.published_topic_id
                                 && profile_post.object_id == doc.object_id
                                 && profile_post.created_at == doc.created_at
                                 && profile_post.object_kind == doc.object_kind
@@ -4196,6 +4593,76 @@ async fn load_profile_posts_from_author_replica(
                     key = %record.key,
                     error = %error,
                     "failed to decode profile post doc"
+                );
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+async fn load_profile_reposts_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<ProfileRepost>> {
+    let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+    let replica = author_replica_id(author_pubkey.as_str());
+    let expected_profile_topic_id = author_profile_topic_id(author_pubkey.as_str());
+    let mut items = Vec::new();
+    let mut seen_object_ids = BTreeSet::new();
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("profile/reposts/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<AuthorProfileRepostDocV1>(record.value.as_slice()) {
+            Ok(doc)
+                if doc.author_pubkey.as_str() == author_pubkey
+                    && doc.profile_topic_id == expected_profile_topic_id =>
+            {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    match parse_profile_repost(&envelope) {
+                        Ok(Some(profile_repost))
+                            if profile_repost.author_pubkey == doc.author_pubkey
+                                && profile_repost.profile_topic_id == doc.profile_topic_id
+                                && profile_repost.published_topic_id == doc.published_topic_id
+                                && profile_repost.object_id == doc.object_id
+                                && profile_repost.created_at == doc.created_at
+                                && profile_repost.commentary == doc.commentary
+                                && profile_repost.repost_of == doc.repost_of =>
+                        {
+                            if seen_object_ids.insert(profile_repost.object_id.clone()) {
+                                items.push(profile_repost);
+                            }
+                        }
+                        Ok(Some(_)) | Ok(None) => {}
+                        Err(error) => {
+                            warn!(
+                                author_pubkey = %author_pubkey,
+                                key = %record.key,
+                                envelope_id = %doc.envelope_id.as_str(),
+                                error = %error,
+                                "ignoring invalid profile repost envelope"
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile repost doc with mismatched author or topic"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode profile repost doc"
                 );
             }
         }
@@ -4809,10 +5276,12 @@ fn projection_row_from_header(
         channel_id: channel_storage_id(header.channel_id.as_ref()),
         author_pubkey: header.author.as_str().to_string(),
         created_at: header.created_at,
+        object_kind: header.object_kind.clone(),
         root_object_id: header.root.clone(),
         reply_to_object_id: header.reply_to.clone(),
         payload_ref: header.payload_ref.clone(),
         content,
+        repost_of: header.repost_of.clone(),
         source_replica_id: source_replica_id.clone(),
         source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
         source_envelope_id: header.envelope_id.clone(),
@@ -5005,11 +5474,11 @@ fn projection_page_needs_hydration(page: &Page<ObjectProjectionRow>) -> bool {
     page.items.iter().any(|item| item.content.is_none())
 }
 
-fn profile_post_page(
-    posts: Vec<ProfilePost>,
+fn profile_timeline_page(
+    posts: Vec<ProfileTimelineItem>,
     cursor: Option<TimelineCursor>,
     limit: usize,
-) -> Page<ProfilePost> {
+) -> Page<ProfileTimelineItem> {
     if limit == 0 {
         return Page {
             items: Vec::new(),
@@ -5021,16 +5490,17 @@ fn profile_post_page(
     let mut next_cursor = None;
     for post in posts {
         let include = cursor.as_ref().is_none_or(|current| {
-            post.created_at < current.created_at
-                || (post.created_at == current.created_at && post.object_id < current.object_id)
+            post.created_at() < current.created_at
+                || (post.created_at() == current.created_at
+                    && post.object_id() < &current.object_id)
         });
         if !include {
             continue;
         }
         if items.len() >= limit {
             next_cursor = Some(TimelineCursor {
-                created_at: post.created_at,
-                object_id: post.object_id.clone(),
+                created_at: post.created_at(),
+                object_id: post.object_id().clone(),
             });
             break;
         }
@@ -6463,6 +6933,25 @@ mod tests {
             .collect()
     }
 
+    async fn author_profile_repost_docs(
+        docs_sync: &dyn DocsSync,
+        author_pubkey: &str,
+    ) -> Vec<AuthorProfileRepostDocV1> {
+        docs_sync
+            .query_replica(
+                &author_replica_id(author_pubkey),
+                DocQuery::Prefix("profile/reposts/".into()),
+            )
+            .await
+            .expect("profile repost docs")
+            .into_iter()
+            .map(|record| {
+                serde_json::from_slice::<AuthorProfileRepostDocV1>(record.value.as_slice())
+                    .expect("decode profile repost doc")
+            })
+            .collect()
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -6642,7 +7131,7 @@ mod tests {
             profile_docs[0].profile_topic_id,
             author_profile_topic_id(author_pubkey.as_str())
         );
-        assert_eq!(profile_docs[0].origin_topic_id.as_str(), topic);
+        assert_eq!(profile_docs[0].published_topic_id.as_str(), topic);
         assert_eq!(profile_docs[0].object_id.as_str(), object_id);
         assert_eq!(profile_docs[0].object_kind, "post");
 
@@ -6657,7 +7146,7 @@ mod tests {
             .expect("profile post");
 
         assert_eq!(post.content, "hello profile");
-        assert_eq!(post.origin_topic_id.as_deref(), Some(topic));
+        assert_eq!(post.published_topic_id.as_deref(), Some(topic));
         assert_eq!(post.channel_id, None);
         assert_eq!(post.audience_label, "Public");
     }
@@ -6719,7 +7208,7 @@ mod tests {
         assert_eq!(reply.object_kind, "comment");
         assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
         assert_eq!(reply.root_id.as_deref(), Some(root_id.as_str()));
-        assert_eq!(reply.origin_topic_id.as_deref(), Some(topic));
+        assert_eq!(reply.published_topic_id.as_deref(), Some(topic));
     }
 
     #[tokio::test]
@@ -6778,6 +7267,364 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_same_topic_repost_persists_repost_object_and_profile_repost_doc() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            keys,
+        );
+        let topic = "kukuri:topic:repost-same";
+
+        let source_object_id = app
+            .create_post(topic, "hello repost", None)
+            .await
+            .expect("create source post");
+        let repost_object_id = app
+            .create_repost(topic, topic, source_object_id.as_str(), None)
+            .await
+            .expect("create repost");
+
+        let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
+        let repost = timeline
+            .items
+            .iter()
+            .find(|post| post.object_id == repost_object_id)
+            .expect("repost item");
+
+        assert_eq!(repost.object_kind, "repost");
+        assert_eq!(repost.published_topic_id.as_deref(), Some(topic));
+        assert!(repost.repost_of.is_some());
+        assert_eq!(repost.repost_commentary, None);
+        assert!(!repost.is_threadable);
+
+        let profile_docs =
+            author_profile_repost_docs(docs_sync.as_ref(), author_pubkey.as_str()).await;
+        assert_eq!(profile_docs.len(), 1);
+        assert_eq!(profile_docs[0].object_id.as_str(), repost_object_id);
+        assert_eq!(profile_docs[0].published_topic_id.as_str(), topic);
+        assert_eq!(profile_docs[0].repost_of.source_topic_id.as_str(), topic);
+    }
+
+    #[tokio::test]
+    async fn create_cross_topic_repost_renders_from_target_topic_without_tracking_source_topic() {
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let peer_snapshot = PeerSnapshot::default();
+        let transport_a = Arc::new(StaticTransport::new(peer_snapshot.clone()));
+        let transport_b = Arc::new(StaticTransport::new(peer_snapshot));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys_a = generate_keys();
+        let author_pubkey = keys_a.public_key_hex();
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a,
+            transport_a,
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a,
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b,
+            transport_b,
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service,
+            generate_keys(),
+        );
+        let source_topic = "kukuri:topic:repost-source";
+        let target_topic = "kukuri:topic:repost-target";
+
+        let source_object_id = app_a
+            .create_post(source_topic, "source post", None)
+            .await
+            .expect("create source post");
+        let repost_object_id = app_a
+            .create_repost(target_topic, source_topic, source_object_id.as_str(), None)
+            .await
+            .expect("create cross-topic repost");
+
+        let target_timeline = app_b
+            .list_timeline(target_topic, None, 20)
+            .await
+            .expect("target timeline");
+        let repost = target_timeline
+            .items
+            .iter()
+            .find(|post| post.object_id == repost_object_id)
+            .expect("repost item");
+
+        assert_eq!(repost.object_kind, "repost");
+        assert_eq!(repost.published_topic_id.as_deref(), Some(target_topic));
+        assert_eq!(
+            repost
+                .repost_of
+                .as_ref()
+                .map(|value| value.source_topic_id.as_str()),
+            Some(source_topic)
+        );
+        assert_eq!(
+            repost
+                .repost_of
+                .as_ref()
+                .map(|value| value.source_object_id.as_str()),
+            Some(source_object_id.as_str())
+        );
+        assert_eq!(
+            repost
+                .repost_of
+                .as_ref()
+                .map(|value| value.content.as_str()),
+            Some("source post")
+        );
+
+        let profile_timeline = app_a
+            .list_profile_timeline(author_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile timeline");
+        assert!(
+            profile_timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == repost_object_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn simple_repost_is_unique_per_author_target_and_original() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let source_topic = "kukuri:topic:repost-unique-source";
+        let target_topic = "kukuri:topic:repost-unique-target";
+
+        let source_object_id = app
+            .create_post(source_topic, "source post", None)
+            .await
+            .expect("create source post");
+        let repost_a = app
+            .create_repost(target_topic, source_topic, source_object_id.as_str(), None)
+            .await
+            .expect("create first repost");
+        let repost_b = app
+            .create_repost(target_topic, source_topic, source_object_id.as_str(), None)
+            .await
+            .expect("create second repost");
+
+        assert_eq!(repost_a, repost_b);
+
+        let timeline = app
+            .list_timeline(target_topic, None, 20)
+            .await
+            .expect("timeline");
+        assert_eq!(
+            timeline
+                .items
+                .iter()
+                .filter(|post| post.object_id == repost_a)
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn quote_repost_allows_multiple_distinct_quotes_for_same_original() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let source_topic = "kukuri:topic:quote-source";
+        let target_topic = "kukuri:topic:quote-target";
+
+        let source_object_id = app
+            .create_post(source_topic, "quoted source", None)
+            .await
+            .expect("create source post");
+        let quote_a = app
+            .create_repost(
+                target_topic,
+                source_topic,
+                source_object_id.as_str(),
+                Some("first quote"),
+            )
+            .await
+            .expect("create first quote repost");
+        let quote_b = app
+            .create_repost(
+                target_topic,
+                source_topic,
+                source_object_id.as_str(),
+                Some("second quote"),
+            )
+            .await
+            .expect("create second quote repost");
+
+        assert_ne!(quote_a, quote_b);
+
+        let timeline = app
+            .list_timeline(target_topic, None, 20)
+            .await
+            .expect("timeline");
+        assert!(
+            timeline
+                .items
+                .iter()
+                .filter(|post| post.object_kind == "repost")
+                .count()
+                >= 2
+        );
+    }
+
+    #[tokio::test]
+    async fn quote_repost_opens_own_thread_and_simple_repost_cannot_be_reply_parent() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let source_topic = "kukuri:topic:reply-source";
+        let target_topic = "kukuri:topic:reply-target";
+
+        let source_object_id = app
+            .create_post(source_topic, "source post", None)
+            .await
+            .expect("create source post");
+        let simple_repost_id = app
+            .create_repost(target_topic, source_topic, source_object_id.as_str(), None)
+            .await
+            .expect("create simple repost");
+        let quote_repost_id = app
+            .create_repost(
+                target_topic,
+                source_topic,
+                source_object_id.as_str(),
+                Some("quoted reply target"),
+            )
+            .await
+            .expect("create quote repost");
+
+        let simple_reply_error = app
+            .create_post(
+                target_topic,
+                "reply to simple repost",
+                Some(simple_repost_id.as_str()),
+            )
+            .await
+            .expect_err("simple repost should reject replies");
+        assert!(
+            simple_reply_error
+                .to_string()
+                .contains("simple repost cannot be a reply parent")
+        );
+
+        let reply_id = app
+            .create_post(
+                target_topic,
+                "reply to quote repost",
+                Some(quote_repost_id.as_str()),
+            )
+            .await
+            .expect("reply to quote repost");
+        let thread = app
+            .list_thread(target_topic, quote_repost_id.as_str(), None, 20)
+            .await
+            .expect("quote repost thread");
+        assert!(
+            thread
+                .items
+                .iter()
+                .any(|post| post.object_id == quote_repost_id)
+        );
+        assert!(thread.items.iter().any(|post| post.object_id == reply_id));
+    }
+
+    #[tokio::test]
+    async fn private_channel_post_cannot_be_reposted_publicly() {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store,
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let topic = "kukuri:topic:repost-private";
+        let channel = app
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "core".into(),
+                audience_kind: ChannelAudienceKind::InviteOnly,
+            })
+            .await
+            .expect("create private channel");
+        let private_object_id = app
+            .create_post_in_channel(
+                topic,
+                ChannelRef::PrivateChannel {
+                    channel_id: ChannelId::new(channel.channel_id.clone()),
+                },
+                "private source",
+                None,
+            )
+            .await
+            .expect("create private post");
+
+        let error = app
+            .create_repost(topic, topic, private_object_id.as_str(), None)
+            .await
+            .expect_err("private post should not be repostable");
+        assert!(
+            error
+                .to_string()
+                .contains("only public posts and comments can be reposted")
+        );
+    }
+
+    #[tokio::test]
     async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
@@ -6802,7 +7649,7 @@ mod tests {
         let forged_content = KukuriProfilePostEnvelopeContentV1 {
             author_pubkey: Pubkey::from(author_pubkey.as_str()),
             profile_topic_id: author_profile_topic_id(author_pubkey.as_str()),
-            origin_topic_id: TopicId::new(topic),
+            published_topic_id: TopicId::new(topic),
             object_id: EnvelopeId::from("forged-profile-post"),
             created_at: 123,
             object_kind: "post".into(),
@@ -6817,7 +7664,7 @@ mod tests {
             vec![
                 vec!["author".into(), author_pubkey.clone()],
                 vec!["object".into(), "profile-post".into()],
-                vec!["origin_topic".into(), topic.into()],
+                vec!["published_topic".into(), topic.into()],
                 vec!["post".into(), forged_content.object_id.as_str().to_string()],
             ],
             &forged_content,
@@ -6836,7 +7683,7 @@ mod tests {
                     value: serde_json::to_value(AuthorProfilePostDocV1 {
                         author_pubkey: forged_content.author_pubkey.clone(),
                         profile_topic_id: forged_content.profile_topic_id.clone(),
-                        origin_topic_id: forged_content.origin_topic_id.clone(),
+                        published_topic_id: forged_content.published_topic_id.clone(),
                         object_id: forged_content.object_id.clone(),
                         created_at: forged_content.created_at,
                         object_kind: forged_content.object_kind.clone(),

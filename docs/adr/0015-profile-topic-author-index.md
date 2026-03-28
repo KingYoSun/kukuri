@@ -14,6 +14,7 @@ Proposed
 - `docs/adr/0012-topic-first_progressive_community_filtering_draft.md`
 - `docs/adr/0013-social-graph-foundation-draft.md`
 - `docs/adr/0014-uiux-dev-flow.md`
+- `docs/adr/0016-repost-data-classification.md`
 
 ## Feature Data Classification
 - Feature 名: author profile topic
@@ -52,6 +53,8 @@ current `main` の profile overview は、active topic の public timeline を l
 ## 2. Decision
 
 profile topic v1 は、author ごとの public 投稿を束ねる virtual / system topic として扱う。
+
+Note: `profile feed は profile-post だけを集約する` という v1 初期制約は `docs/adr/0016-repost-data-classification.md` で superseded される。read-only feed である点は維持する。
 
 ### 2.1 Logical topic id
 

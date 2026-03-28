@@ -48,6 +48,9 @@ export type PostCardView = {
   relationshipLabel: string | null;
   audienceChipLabel?: string | null;
   threadTargetId: string;
+  threadTopicId?: string | null;
+  canReply?: boolean;
+  canRepost?: boolean;
   media: PostMediaView;
 };
 

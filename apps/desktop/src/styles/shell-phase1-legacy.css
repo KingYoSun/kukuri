@@ -424,6 +424,19 @@
   display: block;
 }
 
+.shell-phase1 .repost-source-card {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--surface-panel-muted);
+}
+
+.shell-phase1 .repost-source-body {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .shell-phase1 .media-frame {
   position: relative;
   overflow: hidden;
@@ -547,6 +560,8 @@
 .shell-phase1 .post-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.75rem;
 }
 

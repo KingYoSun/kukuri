@@ -44,7 +44,12 @@ function withSocialPostDefaults(post: PostView): PostView {
     followed_by: post.followed_by ?? false,
     mutual: post.mutual ?? false,
     friend_of_friend: post.friend_of_friend ?? false,
+    published_topic_id: post.published_topic_id ?? post.origin_topic_id ?? null,
     origin_topic_id: post.origin_topic_id ?? null,
+    repost_of: post.repost_of ?? null,
+    repost_commentary: post.repost_commentary ?? null,
+    is_threadable:
+      post.is_threadable ?? (post.object_kind !== 'repost' || Boolean(post.repost_commentary)),
     channel_id: post.channel_id ?? null,
     audience_label: post.audience_label ?? (post.channel_id ? 'Private channel' : 'Public'),
     attachments: [...post.attachments],
@@ -331,6 +336,69 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           last_error: null,
         });
       }
+      return objectId;
+    },
+    async createRepost(topic, sourceTopic, sourceObjectId, commentary) {
+      sequence += 1;
+      const objectId = `${topic}-repost-${sequence}`;
+      const sourcePost = (postsByTopic[sourceTopic] ?? []).find((post) => post.object_id === sourceObjectId);
+      if (!sourcePost || sourcePost.channel_id) {
+        throw new Error('only public posts and comments can be reposted');
+      }
+      const normalizedCommentary = commentary?.trim() ? commentary.trim() : null;
+      if (!normalizedCommentary) {
+        const existing = (postsByTopic[topic] ?? []).find(
+          (post) =>
+            post.object_kind === 'repost' &&
+            post.author_pubkey === syncStatus.local_author_pubkey &&
+            post.repost_of?.source_object_id === sourceObjectId &&
+            !post.repost_commentary
+        );
+        if (existing) {
+          return existing.object_id;
+        }
+      }
+      const repost = withSocialPostDefaults({
+        object_id: objectId,
+        envelope_id: `envelope-${sequence}`,
+        author_pubkey: syncStatus.local_author_pubkey,
+        following: false,
+        followed_by: false,
+        mutual: false,
+        friend_of_friend: false,
+        object_kind: 'repost',
+        content: normalizedCommentary ?? '',
+        content_status: 'Available',
+        attachments: [],
+        created_at: sequence,
+        reply_to: null,
+        root_id: null,
+        published_topic_id: topic,
+        origin_topic_id: topic,
+        repost_of: {
+          source_object_id: sourceObjectId,
+          source_topic_id: sourceTopic,
+          source_author_pubkey: sourcePost.author_pubkey,
+          source_author_name: sourcePost.author_name ?? null,
+          source_author_display_name: sourcePost.author_display_name ?? null,
+          source_object_kind: sourcePost.object_kind,
+          content: sourcePost.content,
+          attachments: sourcePost.attachments.map((attachment) => ({ ...attachment })),
+          reply_to: sourcePost.reply_to ?? null,
+          root_id: sourcePost.root_id ?? null,
+        },
+        repost_commentary: normalizedCommentary,
+        is_threadable: Boolean(normalizedCommentary),
+        channel_id: null,
+        audience_label: 'Public',
+      });
+      postsByTopic[topic] = [repost, ...(postsByTopic[topic] ?? [])];
+      authorProfileTimelines[syncStatus.local_author_pubkey] = [
+        repost,
+        ...(authorProfileTimelines[syncStatus.local_author_pubkey] ?? []).filter(
+          (post) => post.object_id !== objectId
+        ),
+      ];
       return objectId;
     },
     async listTimeline(topic, _cursor, _limit, scope: TimelineScope = { kind: 'public' }) {
