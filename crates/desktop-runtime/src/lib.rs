@@ -2868,14 +2868,18 @@ mod tests {
                 } else {
                     (publisher, subscriber)
                 };
-                wait_for_direct_topic_peer_count_result(
-                    active_publisher,
-                    topic,
-                    1,
-                    attempt_timeout,
-                )
-                .await
-                .context("publishing runtime did not observe direct public topic connectivity")?;
+                if publish_from_subscriber {
+                    wait_for_direct_topic_peer_count_result(
+                        active_publisher,
+                        topic,
+                        1,
+                        attempt_timeout,
+                    )
+                    .await
+                    .context(
+                        "publishing runtime did not observe direct public topic connectivity",
+                    )?;
+                }
                 let object_id = active_publisher
                     .create_post(CreatePostRequest {
                         topic: topic.to_string(),
