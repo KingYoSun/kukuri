@@ -820,6 +820,9 @@ async fn run_community_node_connectivity(
         push_named_step(&mut steps, "reply_thread", started_at);
 
         if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
+            let (public_feature_attempts, public_feature_timeout) =
+                public_replication_retry_schedule(step_timeout, false);
+
             let started_at = Instant::now();
             let session_id = runtime_a
                 .create_live_session(kukuri_desktop_runtime::CreateLiveSessionRequest {
@@ -830,7 +833,36 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to create live session on desktop a")?;
-            wait_for_live_session(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
+            let mut live_session_error = None;
+            for attempt in 1..=public_feature_attempts {
+                match wait_for_live_session(
+                    &runtime_b,
+                    topic,
+                    session_id.as_str(),
+                    public_feature_timeout,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        live_session_error = None;
+                        break;
+                    }
+                    Err(error) if attempt < public_feature_attempts => {
+                        live_session_error = Some(format!("{error:#}"));
+                        refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                            .await
+                            .context("failed to refresh public topic after live-session timeout")?;
+                        sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        live_session_error = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = live_session_error {
+                anyhow::bail!("desktop b did not receive community live session: {error}");
+            }
             runtime_b
                 .join_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
                     topic: topic.to_string(),
@@ -838,8 +870,37 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to join live session on desktop b")?;
-            wait_for_live_viewer_count(&runtime_a, topic, session_id.as_str(), 1, step_timeout)
-                .await?;
+            let mut live_viewer_error = None;
+            for attempt in 1..=public_feature_attempts {
+                match wait_for_live_viewer_count(
+                    &runtime_a,
+                    topic,
+                    session_id.as_str(),
+                    1,
+                    public_feature_timeout,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        live_viewer_error = None;
+                        break;
+                    }
+                    Err(error) if attempt < public_feature_attempts => {
+                        live_viewer_error = Some(format!("{error:#}"));
+                        refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                            .await
+                            .context("failed to refresh public topic after live-viewer timeout")?;
+                        sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        live_viewer_error = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = live_viewer_error {
+                anyhow::bail!("desktop a did not observe community live viewer count: {error}");
+            }
             runtime_a
                 .end_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
                     topic: topic.to_string(),
@@ -847,7 +908,36 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to end live session on desktop a")?;
-            wait_for_live_ended(&runtime_b, topic, session_id.as_str(), step_timeout).await?;
+            let mut live_ended_error = None;
+            for attempt in 1..=public_feature_attempts {
+                match wait_for_live_ended(
+                    &runtime_b,
+                    topic,
+                    session_id.as_str(),
+                    public_feature_timeout,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        live_ended_error = None;
+                        break;
+                    }
+                    Err(error) if attempt < public_feature_attempts => {
+                        live_ended_error = Some(format!("{error:#}"));
+                        refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                            .await
+                            .context("failed to refresh public topic after live-ended timeout")?;
+                        sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        live_ended_error = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = live_ended_error {
+                anyhow::bail!("desktop b did not observe ended community live session: {error}");
+            }
             push_named_step(&mut steps, "live", started_at);
 
             let started_at = Instant::now();
@@ -863,8 +953,36 @@ async fn run_community_node_connectivity(
                 .context("failed to create game room on desktop a")?;
             let room_a =
                 wait_for_game_room(&runtime_a, topic, room_id.as_str(), step_timeout).await?;
-            let _room_b =
-                wait_for_game_room(&runtime_b, topic, room_id.as_str(), step_timeout).await?;
+            let mut game_room_error = None;
+            for attempt in 1..=public_feature_attempts {
+                match wait_for_game_room(
+                    &runtime_b,
+                    topic,
+                    room_id.as_str(),
+                    public_feature_timeout,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        game_room_error = None;
+                        break;
+                    }
+                    Err(error) if attempt < public_feature_attempts => {
+                        game_room_error = Some(format!("{error:#}"));
+                        refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                            .await
+                            .context("failed to refresh public topic after game-room timeout")?;
+                        sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        game_room_error = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = game_room_error {
+                anyhow::bail!("desktop b did not receive community game room: {error}");
+            }
             let scores = room_a
                 .scores
                 .iter()
@@ -891,15 +1009,38 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to update game room on desktop a")?;
-            wait_for_game_score(
-                &runtime_b,
-                topic,
-                room_id.as_str(),
-                "Alice",
-                2,
-                step_timeout,
-            )
-            .await?;
+            let mut game_score_error = None;
+            for attempt in 1..=public_feature_attempts {
+                match wait_for_game_score(
+                    &runtime_b,
+                    topic,
+                    room_id.as_str(),
+                    "Alice",
+                    2,
+                    public_feature_timeout,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        game_score_error = None;
+                        break;
+                    }
+                    Err(error) if attempt < public_feature_attempts => {
+                        game_score_error = Some(format!("{error:#}"));
+                        refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                            .await
+                            .context("failed to refresh public topic after game-score timeout")?;
+                        sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        game_score_error = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = game_score_error {
+                anyhow::bail!("desktop b did not observe community game score: {error}");
+            }
             push_named_step(&mut steps, "game", started_at);
         }
 
@@ -2575,6 +2716,33 @@ async fn refresh_private_channel_pair(
             limit: Some(20),
         })
         .await;
+    Ok(())
+}
+
+async fn refresh_public_pair(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    topic: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await;
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await;
+    wait_for_topic_peer_count(runtime_a, topic, 1, step_timeout).await?;
+    wait_for_topic_peer_count(runtime_b, topic, 1, step_timeout).await?;
     Ok(())
 }
 
