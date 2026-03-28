@@ -231,10 +231,7 @@ pub trait ProjectionStore: Send + Sync {
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
     ) -> Result<Vec<ReactionProjectionRow>>;
-    async fn put_bookmarked_custom_reaction(
-        &self,
-        row: BookmarkedCustomReactionRow,
-    ) -> Result<()>;
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()>;
     async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>>;
     async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()>;
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
@@ -678,6 +675,8 @@ impl Store for SqliteStore {
     }
 }
 
+type MemoryReactionProjectionRows = HashMap<(String, String, String), ReactionProjectionRow>;
+
 #[derive(Clone, Default)]
 pub struct MemoryStore {
     envelopes: Arc<RwLock<HashMap<EnvelopeId, KukuriEnvelope>>>,
@@ -692,8 +691,7 @@ pub struct MemoryStore {
         Arc<RwLock<HashMap<(String, String), AuthorRelationshipProjectionRow>>>,
     live_presence: Arc<RwLock<HashMap<LivePresenceKey, LivePresenceValue>>>,
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
-    reaction_projection_rows:
-        Arc<RwLock<HashMap<(String, String, String), ReactionProjectionRow>>>,
+    reaction_projection_rows: Arc<RwLock<MemoryReactionProjectionRows>>,
     bookmarked_custom_reactions: Arc<RwLock<HashMap<String, BookmarkedCustomReactionRow>>>,
 }
 
@@ -1461,10 +1459,7 @@ impl ProjectionStore for SqliteStore {
         rows.into_iter().map(row_to_reaction_projection).collect()
     }
 
-    async fn put_bookmarked_custom_reaction(
-        &self,
-        row: BookmarkedCustomReactionRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO bookmarked_custom_reactions (
@@ -1822,7 +1817,8 @@ impl ProjectionStore for MemoryStore {
             .await
             .values()
             .filter(|row| {
-                row.source_replica_id == *source_replica_id && row.target_object_id == *target_object_id
+                row.source_replica_id == *source_replica_id
+                    && row.target_object_id == *target_object_id
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -1834,10 +1830,7 @@ impl ProjectionStore for MemoryStore {
         Ok(items)
     }
 
-    async fn put_bookmarked_custom_reaction(
-        &self,
-        row: BookmarkedCustomReactionRow,
-    ) -> Result<()> {
+    async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         self.bookmarked_custom_reactions
             .write()
             .await
@@ -1863,7 +1856,10 @@ impl ProjectionStore for MemoryStore {
     }
 
     async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
-        self.bookmarked_custom_reactions.write().await.remove(asset_id);
+        self.bookmarked_custom_reactions
+            .write()
+            .await
+            .remove(asset_id);
         Ok(())
     }
 
@@ -1939,7 +1935,9 @@ fn row_to_reaction_projection(row: sqlx::sqlite::SqliteRow) -> Result<ReactionPr
         author_pubkey: row.get("author_pubkey"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
-        reaction_key_kind: parse_reaction_key_kind(row.get::<String, _>("reaction_key_kind").as_str())?,
+        reaction_key_kind: parse_reaction_key_kind(
+            row.get::<String, _>("reaction_key_kind").as_str(),
+        )?,
         normalized_reaction_key: row.get("normalized_reaction_key"),
         emoji: row.try_get("emoji").ok(),
         custom_asset_id: row.try_get("custom_asset_id").ok(),

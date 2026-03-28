@@ -578,7 +578,9 @@ pub struct CustomReactionAssetSnapshotV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ReactionKeyV1 {
-    Emoji { emoji: String },
+    Emoji {
+        emoji: String,
+    },
     CustomAsset {
         asset_id: String,
         snapshot: CustomReactionAssetSnapshotV1,
@@ -1407,18 +1409,20 @@ pub fn build_reaction_envelope(
         vec![
             vec!["topic".into(), target_topic_id.as_str().into()],
             vec!["object".into(), "reaction".into()],
-            vec!["target_object".into(), target_object_id.as_str().to_string()],
-            vec!["reaction_id".into(), reaction_id.as_str().to_string()],
             vec![
-                "reaction_key".into(),
-                normalized_reaction_key.clone(),
+                "target_object".into(),
+                target_object_id.as_str().to_string(),
             ],
+            vec!["reaction_id".into(), reaction_id.as_str().to_string()],
+            vec!["reaction_key".into(), normalized_reaction_key.clone()],
             vec!["author".into(), author_pubkey.as_str().to_string()],
         ]
         .into_iter()
-        .chain(channel_id.into_iter().map(|channel_id| {
-            vec!["channel".into(), channel_id.as_str().to_string()]
-        }))
+        .chain(
+            channel_id
+                .into_iter()
+                .map(|channel_id| vec!["channel".into(), channel_id.as_str().to_string()]),
+        )
         .collect(),
         serde_json::to_string(&KukuriReactionEnvelopeContentV1 {
             reaction_id: reaction_id.clone(),
@@ -2297,7 +2301,10 @@ pub fn parse_reaction(envelope: &KukuriEnvelope) -> Result<Option<ReactionDocV1>
             }
         }
     }
-    if !matches!(reaction.status, ObjectStatus::Active | ObjectStatus::Deleted) {
+    if !matches!(
+        reaction.status,
+        ObjectStatus::Active | ObjectStatus::Deleted
+    ) {
         bail!("reaction status must be active or deleted");
     }
     Ok(Some(reaction))
@@ -2762,7 +2769,9 @@ mod tests {
             &topic,
             None,
             &target_object_id,
-            ReactionKeyV1::Emoji { emoji: " 👍 ".into() },
+            ReactionKeyV1::Emoji {
+                emoji: " 👍 ".into(),
+            },
             &reaction_id,
             ObjectStatus::Active,
         )

@@ -10,29 +10,28 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1,
     CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState,
-    CreatePrivateChannelInput, CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1,
-    EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview,
-    FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
-    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef,
-    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
-    KukuriProfilePostEnvelopeContentV1, KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME,
-    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
-    MediaManifestItem, ObjectStatus, ObjectVisibility, PayloadRef, PrivateChannelInvitePreview,
-    PrivateChannelJoinMode, PrivateChannelMetadataDocV1, PrivateChannelParticipantDocV1,
-    PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
-    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, ProfileRepost, Pubkey,
-    ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId, RepostSourceSnapshotV1,
-    TimelineScope, TopicId, author_profile_topic_id, build_custom_reaction_asset_envelope,
-    build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
-    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
+    CreatePrivateChannelInput, CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1, EnvelopeId,
+    FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview, FriendPlusSharePreview,
+    GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1,
+    GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys,
+    KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
+    KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
+    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectStatus,
+    ObjectVisibility, PayloadRef, PrivateChannelInvitePreview, PrivateChannelJoinMode,
+    PrivateChannelMetadataDocV1, PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1,
+    PrivateChannelRotationGrantDocV1, PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost,
+    ProfileRepost, Pubkey, ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId,
+    RepostSourceSnapshotV1, TimelineScope, TopicId, author_profile_topic_id,
+    build_custom_reaction_asset_envelope, build_follow_edge_envelope,
+    build_friend_only_grant_token, build_friend_plus_share_token, build_game_session_envelope,
+    build_live_session_envelope, build_media_manifest_envelope,
     build_post_envelope_with_payload_in_channel, build_private_channel_invite_token,
     build_private_channel_participant_envelope, build_private_channel_policy_envelope,
     build_private_channel_rotation_grant_envelope, build_profile_envelope,
     build_profile_post_envelope, build_profile_repost_envelope, build_reaction_envelope,
-    build_repost_envelope, decrypt_private_channel_rotation_grant,
-    deterministic_reaction_id, encrypt_private_channel_rotation_grant, generate_keys,
-    parse_custom_reaction_asset, parse_follow_edge,
-    parse_friend_only_grant_token, parse_friend_plus_share_token,
+    build_repost_envelope, decrypt_private_channel_rotation_grant, deterministic_reaction_id,
+    encrypt_private_channel_rotation_grant, generate_keys, parse_custom_reaction_asset,
+    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
     parse_private_channel_invite_token, parse_private_channel_participant,
     parse_private_channel_policy, parse_private_channel_rotation_grant, parse_profile,
     parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
@@ -43,8 +42,8 @@ use kukuri_docs_sync::{
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page,
-    ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
+    GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore,
+    ReactionProjectionRow, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -703,7 +702,8 @@ impl AppService {
         channel_ref: Option<ChannelRef>,
     ) -> Result<ReactionStateView> {
         let target_topic_id = TopicId::new(target_topic_id);
-        self.ensure_topic_subscription(target_topic_id.as_str()).await?;
+        self.ensure_topic_subscription(target_topic_id.as_str())
+            .await?;
         let target_object_id = EnvelopeId::from(target_object_id);
         let target = self
             .projection_store
@@ -719,10 +719,8 @@ impl AppService {
         let target_channel_id = channel_id_from_storage(target.channel_id.as_str());
         match (channel_ref.as_ref(), target_channel_id.as_ref()) {
             (Some(ChannelRef::Public), None) | (None, None) => {}
-            (
-                Some(ChannelRef::PrivateChannel { channel_id }),
-                Some(target_channel_id),
-            ) if channel_id == target_channel_id => {}
+            (Some(ChannelRef::PrivateChannel { channel_id }), Some(target_channel_id))
+                if channel_id == target_channel_id => {}
             (None, Some(_)) => {}
             _ => anyhow::bail!("reaction channel does not match the target object"),
         }
@@ -813,9 +811,11 @@ impl AppService {
 
     pub async fn list_my_custom_reaction_assets(&self) -> Result<Vec<CustomReactionAssetView>> {
         let author_pubkey = self.current_author_pubkey();
-        let mut items =
-            load_custom_reaction_assets_from_author_replica(self.docs_sync.as_ref(), &author_pubkey)
-                .await?;
+        let mut items = load_custom_reaction_assets_from_author_replica(
+            self.docs_sync.as_ref(),
+            &author_pubkey,
+        )
+        .await?;
         items.sort_by(|left, right| {
             right
                 .created_at
@@ -4897,7 +4897,10 @@ async fn load_custom_reaction_assets_from_author_replica(
     let replica = author_replica_id(author_pubkey);
     let mut items = Vec::new();
     for record in docs_sync
-        .query_replica(&replica, DocQuery::Prefix(stable_key("reactions/assets", "")))
+        .query_replica(
+            &replica,
+            DocQuery::Prefix(stable_key("reactions/assets", "")),
+        )
         .await?
     {
         if !record.key.ends_with("/state") {
@@ -5719,7 +5722,9 @@ fn custom_reaction_asset_view_from_snapshot(
     }
 }
 
-fn custom_reaction_asset_view_from_doc(asset: &CustomReactionAssetDocV1) -> CustomReactionAssetView {
+fn custom_reaction_asset_view_from_doc(
+    asset: &CustomReactionAssetDocV1,
+) -> CustomReactionAssetView {
     CustomReactionAssetView {
         asset_id: asset.asset_id.clone(),
         owner_pubkey: asset.author_pubkey.as_str().to_string(),
@@ -5857,7 +5862,8 @@ async fn hydrate_subscription_state_with_services(
     let post_count =
         hydrate_object_projection_from_replica(docs_sync, blob_service, projection_store, replica)
             .await?;
-    let reaction_count = hydrate_reaction_cache_from_replica(docs_sync, projection_store, replica).await?;
+    let reaction_count =
+        hydrate_reaction_cache_from_replica(docs_sync, projection_store, replica).await?;
     let live_count = hydrate_live_sessions_from_replica(
         docs_sync,
         blob_service,
@@ -7659,7 +7665,9 @@ mod tests {
             .toggle_reaction(
                 topic,
                 object_id.as_str(),
-                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                ReactionKeyV1::Emoji {
+                    emoji: "👍".into()
+                },
                 None,
             )
             .await
@@ -7688,10 +7696,7 @@ mod tests {
             )
             .await
             .expect("reaction rows");
-        let timeline = app
-            .list_timeline(topic, None, 20)
-            .await
-            .expect("timeline");
+        let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
         let post = timeline
             .items
             .iter()
@@ -7699,7 +7704,10 @@ mod tests {
             .expect("reaction post");
         let author_replica = author_replica_id(custom_asset.owner_pubkey.as_str());
         let asset_docs = docs_sync
-            .query_replica(&author_replica, DocQuery::Prefix("reactions/assets/".into()))
+            .query_replica(
+                &author_replica,
+                DocQuery::Prefix("reactions/assets/".into()),
+            )
             .await
             .expect("asset docs");
         let stored_blob = blob_service
@@ -7711,24 +7719,27 @@ mod tests {
         assert_eq!(emoji_state.target_object_id, object_id);
         assert_eq!(custom_state.target_object_id, object_id);
         assert_eq!(reaction_rows.len(), 2);
-        assert!(reaction_rows.iter().all(|row| row.status == ObjectStatus::Active));
+        assert!(
+            reaction_rows
+                .iter()
+                .all(|row| row.status == ObjectStatus::Active)
+        );
         assert_eq!(post.reaction_summary.len(), 2);
         assert_eq!(post.my_reactions.len(), 2);
-        assert!(
-            post.reaction_summary.iter().any(|entry| {
-                entry.reaction_key_kind == "emoji"
-                    && entry.emoji.as_deref() == Some("👍")
-                    && entry.count == 1
-            })
-        );
-        assert!(
-            post.reaction_summary.iter().any(|entry| {
-                entry.reaction_key_kind == "custom_asset"
-                    && entry.custom_asset.as_ref().map(|asset| asset.asset_id.as_str())
-                        == Some(custom_asset.asset_id.as_str())
-                    && entry.count == 1
-            })
-        );
+        assert!(post.reaction_summary.iter().any(|entry| {
+            entry.reaction_key_kind == "emoji"
+                && entry.emoji.as_deref() == Some("👍")
+                && entry.count == 1
+        }));
+        assert!(post.reaction_summary.iter().any(|entry| {
+            entry.reaction_key_kind == "custom_asset"
+                && entry
+                    .custom_asset
+                    .as_ref()
+                    .map(|asset| asset.asset_id.as_str())
+                    == Some(custom_asset.asset_id.as_str())
+                && entry.count == 1
+        }));
         assert_eq!(asset_docs.len(), 2);
         assert_eq!(stored_blob, tiny_png_bytes());
     }
@@ -7747,7 +7758,7 @@ mod tests {
                 topic,
                 object_id.as_str(),
                 ReactionKeyV1::Emoji {
-                    emoji: "🎉".into(),
+                    emoji: "🎉".into()
                 },
                 None,
             )
@@ -7758,7 +7769,7 @@ mod tests {
                 topic,
                 object_id.as_str(),
                 ReactionKeyV1::Emoji {
-                    emoji: "🎉".into(),
+                    emoji: "🎉".into()
                 },
                 None,
             )
@@ -7796,7 +7807,9 @@ mod tests {
         app.toggle_reaction(
             topic,
             object_id.as_str(),
-            ReactionKeyV1::Emoji { emoji: "🔥".into() },
+            ReactionKeyV1::Emoji {
+                emoji: "🔥".into()
+            },
             None,
         )
         .await
@@ -7805,7 +7818,9 @@ mod tests {
             .toggle_reaction(
                 topic,
                 object_id.as_str(),
-                ReactionKeyV1::Emoji { emoji: "😂".into() },
+                ReactionKeyV1::Emoji {
+                    emoji: "😂".into()
+                },
                 None,
             )
             .await
@@ -7845,7 +7860,10 @@ mod tests {
             .expect("list owned assets");
         let author_replica = author_replica_id(asset.owner_pubkey.as_str());
         let asset_docs = docs_sync
-            .query_replica(&author_replica, DocQuery::Prefix("reactions/assets/".into()))
+            .query_replica(
+                &author_replica,
+                DocQuery::Prefix("reactions/assets/".into()),
+            )
             .await
             .expect("asset docs");
         let stored_blob = blob_service
@@ -7946,7 +7964,9 @@ mod tests {
             .toggle_reaction(
                 topic,
                 old_post_id.as_str(),
-                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                ReactionKeyV1::Emoji {
+                    emoji: "👍".into()
+                },
                 Some(channel_ref.clone()),
             )
             .await
@@ -7969,7 +7989,9 @@ mod tests {
             .toggle_reaction(
                 topic,
                 new_post_id.as_str(),
-                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                ReactionKeyV1::Emoji {
+                    emoji: "👍".into()
+                },
                 Some(channel_ref),
             )
             .await
@@ -7996,8 +8018,14 @@ mod tests {
 
         assert_ne!(rotated.current_epoch_id, channel.current_epoch_id);
         assert_ne!(old_target.source_replica_id, new_target.source_replica_id);
-        assert_eq!(old_state.source_replica_id, old_target.source_replica_id.as_str());
-        assert_eq!(new_state.source_replica_id, new_target.source_replica_id.as_str());
+        assert_eq!(
+            old_state.source_replica_id,
+            old_target.source_replica_id.as_str()
+        );
+        assert_eq!(
+            new_state.source_replica_id,
+            new_target.source_replica_id.as_str()
+        );
         assert_eq!(old_rows.len(), 1);
         assert_eq!(new_rows.len(), 1);
         assert_eq!(old_rows[0].status, ObjectStatus::Active);

@@ -10,12 +10,14 @@ use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
+use image::imageops::FilterType;
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
     CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
     CustomReactionAssetView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
-    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput,
-    ReactionStateView, SyncStatus, TimelineView, UpdateGameRoomInput,
+    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
+    SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -25,9 +27,9 @@ use kukuri_cn_core::{
 };
 use kukuri_core::{
     AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
-    CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview, FriendPlusSharePreview,
-    GameRoomStatus, GossipHint, KukuriKeys, PrivateChannelInvitePreview, Profile, ReactionKeyV1,
-    ReplicaId, TimelineScope, TopicId,
+    CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview, FriendPlusSharePreview, GameRoomStatus,
+    GossipHint, KukuriKeys, PrivateChannelInvitePreview, Profile, ReactionKeyV1, ReplicaId,
+    TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
@@ -41,8 +43,6 @@ use kukuri_transport::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use image::imageops::FilterType;
-use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 
 use crate::identity::{
     IdentityStorageMode, delete_optional_secret, load_optional_secret, load_or_create_keys,
@@ -93,7 +93,9 @@ pub struct CreateAttachmentRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ReactionKeyRequest {
-    Emoji { emoji: String },
+    Emoji {
+        emoji: String,
+    },
     CustomAsset {
         asset_id: String,
         owner_pubkey: String,
@@ -814,7 +816,10 @@ impl DesktopRuntime {
             .await
     }
 
-    pub async fn toggle_reaction(&self, request: ToggleReactionRequest) -> Result<ReactionStateView> {
+    pub async fn toggle_reaction(
+        &self,
+        request: ToggleReactionRequest,
+    ) -> Result<ReactionStateView> {
         self.app_service
             .toggle_reaction(
                 request.target_topic_id.as_str(),
@@ -837,11 +842,8 @@ impl DesktopRuntime {
         let raw = BASE64_STANDARD
             .decode(upload.data_base64.as_bytes())
             .context("failed to decode custom reaction upload")?;
-        let normalized = normalize_custom_reaction_upload(
-            raw,
-            upload.mime.as_str(),
-            &request.crop_rect,
-        )?;
+        let normalized =
+            normalize_custom_reaction_upload(raw, upload.mime.as_str(), &request.crop_rect)?;
         self.app_service
             .create_custom_reaction_asset(CreateCustomReactionAssetInput {
                 mime: normalized.mime,
@@ -1969,11 +1971,9 @@ fn normalize_custom_reaction_gif(
 }
 
 fn crop_static_image(image: DynamicImage, crop_rect: &CustomReactionCropRect) -> DynamicImage {
-    image.crop_imm(crop_rect.x, crop_rect.y, crop_rect.size, crop_rect.size).resize_exact(
-        128,
-        128,
-        FilterType::Lanczos3,
-    )
+    image
+        .crop_imm(crop_rect.x, crop_rect.y, crop_rect.size, crop_rect.size)
+        .resize_exact(128, 128, FilterType::Lanczos3)
 }
 
 fn validate_crop_rect(width: u32, height: u32, crop_rect: &CustomReactionCropRect) -> Result<()> {
@@ -2510,9 +2510,7 @@ mod tests {
     };
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-    use image::{
-        AnimationDecoder, Delay, Frame, GenericImageView, ImageFormat, Rgba, RgbaImage,
-    };
+    use image::{AnimationDecoder, Delay, Frame, GenericImageView, ImageFormat, Rgba, RgbaImage};
     use iroh::address_lookup::EndpointInfo;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
@@ -2554,7 +2552,8 @@ mod tests {
     }
 
     fn png_source_bytes() -> Vec<u8> {
-        let image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(320, 180, Rgba([0, 179, 164, 255])));
+        let image =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(320, 180, Rgba([0, 179, 164, 255])));
         let mut out = std::io::Cursor::new(Vec::new());
         image
             .write_to(&mut out, ImageFormat::Png)
@@ -2613,10 +2612,9 @@ mod tests {
             },
         )
         .expect("normalize gif");
-        let decoder = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(
-            normalized.bytes.clone(),
-        ))
-        .expect("decode normalized gif");
+        let decoder =
+            image::codecs::gif::GifDecoder::new(std::io::Cursor::new(normalized.bytes.clone()))
+                .expect("decode normalized gif");
         let dimensions = decoder.dimensions();
         let frame_count = decoder
             .into_frames()
