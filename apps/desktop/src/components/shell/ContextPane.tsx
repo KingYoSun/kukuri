@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,6 +26,7 @@ export function ContextPane({
   onClose,
   children,
 }: ContextPaneProps) {
+  const { t } = useTranslation('shell');
   const paneStyle = {
     [DETAIL_PANE_INDEX_VAR]: String(stackIndex),
   } as React.CSSProperties;
@@ -57,7 +59,7 @@ export function ContextPane({
             variant='ghost'
             size='icon'
             type='button'
-            aria-label={`Close ${title}`}
+            aria-label={t('context.close', { title })}
             onClick={onClose}
           >
             <X className='size-5' aria-hidden='true' />

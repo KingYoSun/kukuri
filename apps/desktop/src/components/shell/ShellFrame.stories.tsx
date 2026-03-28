@@ -3,12 +3,13 @@ import { PanelLeftOpen, Settings } from 'lucide-react';
 
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TopicNavList } from '@/components/core/TopicNavList';
-import { STORY_TOPIC_ITEMS } from '@/components/storyFixtures';
+import { createStoryTopicItems } from '@/components/storyFixtures';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import i18n from '@/i18n';
 
 import { ContextPane } from './ContextPane';
 import { ShellFrame } from './ShellFrame';
@@ -27,6 +28,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 function ShellFrameStory() {
+  const topicItems = createStoryTopicItems();
   return (
     <div style={{ width: '1440px', minWidth: '1440px', margin: '0 auto' }}>
       <ShellFrame
@@ -40,9 +42,9 @@ function ShellFrameStory() {
             headerContent={
               <div className='shell-nav-status'>
                 <div className='shell-status-badges'>
-                  <StatusBadge label='connected' tone='accent' />
+                  <StatusBadge label={i18n.t('common:states.connected')} tone='accent' />
                   <StatusBadge label='2 peers' />
-                  <StatusBadge label='seeded dht' />
+                  <StatusBadge label={i18n.t('shell:navigation.seededDht')} />
                 </div>
                 <Button variant='ghost' size='icon' type='button'>
                   <Settings className='size-5' aria-hidden='true' />
@@ -51,23 +53,23 @@ function ShellFrameStory() {
             }
             addTopicControl={
               <Label>
-                <span>Add Topic</span>
+                <span>{i18n.t('shell:navigation.addTopic')}</span>
                 <div className='topic-input-row'>
                   <Input value='kukuri:topic:demo' onChange={() => undefined} />
                   <Button variant='secondary' type='button'>
-                    Add
+                    {i18n.t('common:actions.add')}
                   </Button>
                 </div>
               </Label>
             }
             topicList={
               <TopicNavList
-                items={STORY_TOPIC_ITEMS}
+                items={topicItems}
                 onSelectTopic={() => undefined}
                 onRemoveTopic={() => undefined}
               />
             }
-            topicCount={STORY_TOPIC_ITEMS.length}
+            topicCount={topicItems.length}
           />
         }
         workspace={
@@ -76,11 +78,11 @@ function ShellFrameStory() {
               <TimelineWorkspaceHeader
                 activeSection='timeline'
                 items={[
-                  { id: 'timeline', label: 'Timeline' },
-                  { id: 'channels', label: 'Channels' },
-                  { id: 'live', label: 'Live' },
-                  { id: 'game', label: 'Game' },
-                  { id: 'profile', label: 'Profile' },
+                  { id: 'timeline', label: i18n.t('shell:primarySections.timeline') },
+                  { id: 'channels', label: i18n.t('shell:primarySections.channels') },
+                  { id: 'live', label: i18n.t('shell:primarySections.live') },
+                  { id: 'game', label: i18n.t('shell:primarySections.game') },
+                  { id: 'profile', label: i18n.t('shell:primarySections.profile') },
                 ]}
                 onSelectSection={() => undefined}
               />
@@ -98,8 +100,8 @@ function ShellFrameStory() {
         detailPaneStack={
           <ContextPane
             paneId='storybook-shell-thread'
-            title='Thread'
-            summary='2 posts in thread'
+            title={i18n.t('shell:context.thread')}
+            summary={i18n.t('shell:context.threadSummary', { count: 2 })}
             onClose={() => undefined}
           >
             <Card>
@@ -111,7 +113,7 @@ function ShellFrameStory() {
         mobileFooter={
           <Button variant='secondary' type='button'>
             <PanelLeftOpen className='size-5' aria-hidden='true' />
-            Topics
+            {i18n.t('shell:navigation.topicsButton')}
           </Button>
         }
       />

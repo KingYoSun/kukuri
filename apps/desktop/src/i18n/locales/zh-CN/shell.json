@@ -1,0 +1,68 @@
+{
+  "context": {
+    "author": "作者",
+    "close": "关闭 {{title}}",
+    "threadEmpty": "选择一条帖子以查看线程。",
+    "threadSummary": "线程中有 {{count}} 条帖子",
+    "thread": "线程"
+  },
+  "navigation": {
+    "activeCount": "{{count}} 个活跃",
+    "addTopic": "添加主题",
+    "close": "关闭导航",
+    "open": "打开导航",
+    "placeholder": "kukuri:topic:demo",
+    "primaryNavigation": "主导航",
+    "removeTopic": "移除 {{topic}}",
+    "seededDht": "seeded dht",
+    "staticPeers": "static peers",
+    "title": "主题",
+    "topicSummary": "{{status}} / peers: {{count}}",
+    "topicsButton": "主题",
+    "trackedTopics": "跟踪的主题"
+  },
+  "primarySections": {
+    "channels": "频道",
+    "game": "游戏",
+    "live": "直播",
+    "profile": "资料",
+    "timeline": "时间线"
+  },
+  "settingsDrawer": {
+    "close": "关闭设置和诊断",
+    "currentSection": "当前部分",
+    "eyebrow": "设置",
+    "open": "打开设置和诊断",
+    "sectionsLabel": "设置部分",
+    "title": "设置与诊断"
+  },
+  "settingsSections": {
+    "appearance": {
+      "description": "本地亮色、暗色与语言选择。",
+      "label": "显示"
+    },
+    "community-node": {
+      "description": "community node 配置、认证、同意与刷新操作。",
+      "label": "社区节点"
+    },
+    "connectivity": {
+      "description": "同步摘要、peer ticket 和全局错误可见性。",
+      "label": "连接"
+    },
+    "discovery": {
+      "description": "seeded DHT 配置与 discovery diagnostics。",
+      "label": "发现"
+    }
+  },
+  "topBar": {
+    "activeTopicBar": "当前主题栏"
+  },
+  "workspace": {
+    "composeTarget": "发布目标",
+    "noPosts": "该主题下还没有帖子。",
+    "noPublicPosts": "你在该主题下还没有公开帖子。",
+    "refresh": "刷新",
+    "tabs": "工作区",
+    "viewScope": "查看范围"
+  }
+}

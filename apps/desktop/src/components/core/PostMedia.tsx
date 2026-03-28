@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { type PostMediaView } from './types';
 
@@ -7,6 +8,8 @@ type PostMediaProps = {
 };
 
 export function PostMedia({ media }: PostMediaProps) {
+  const { t } = useTranslation('common');
+
   if (!media.kind) {
     return null;
   }
@@ -20,7 +23,7 @@ export function PostMedia({ media }: PostMediaProps) {
       >
         <div className='media-badges'>
           {media.statusLabel ? <span className='media-status-badge'>{media.statusLabel}</span> : null}
-          {media.kind === 'video' ? <span className='media-type-badge'>video</span> : null}
+          {media.kind === 'video' ? <span className='media-type-badge'>{t('media.video')}</span> : null}
           {media.extraAttachmentCount > 0 ? (
             <span className='media-count-badge'>+{media.extraAttachmentCount}</span>
           ) : null}
@@ -40,14 +43,14 @@ export function PostMedia({ media }: PostMediaProps) {
           <img
             className='media-preview'
             src={media.videoPosterPreviewSrc}
-            alt='video poster'
+            alt={t('media.videoPosterAlt')}
             data-testid={`media-preview-${media.objectId}`}
           />
         ) : media.kind === 'image' && media.imagePreviewSrc ? (
           <img
             className='media-preview'
             src={media.imagePreviewSrc}
-            alt='image attachment'
+            alt={t('media.imageAlt')}
             data-testid={`media-preview-${media.objectId}`}
           />
         ) : (

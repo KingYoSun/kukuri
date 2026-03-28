@@ -1,0 +1,68 @@
+{
+  "context": {
+    "author": "著者",
+    "close": "{{title}} を閉じる",
+    "threadEmpty": "投稿を選択するとスレッドを確認できます。",
+    "threadSummary": "スレッド内 {{count}} 件の投稿",
+    "thread": "スレッド"
+  },
+  "navigation": {
+    "activeCount": "{{count}} 件アクティブ",
+    "addTopic": "トピックを追加",
+    "close": "ナビゲーションを閉じる",
+    "open": "ナビゲーションを開く",
+    "placeholder": "kukuri:topic:demo",
+    "primaryNavigation": "メインナビゲーション",
+    "removeTopic": "{{topic}} を削除",
+    "seededDht": "seeded dht",
+    "staticPeers": "static peers",
+    "title": "トピック",
+    "topicSummary": "{{status}} / peers: {{count}}",
+    "topicsButton": "トピック",
+    "trackedTopics": "追跡中のトピック"
+  },
+  "primarySections": {
+    "channels": "チャンネル",
+    "game": "ゲーム",
+    "live": "ライブ",
+    "profile": "プロフィール",
+    "timeline": "タイムライン"
+  },
+  "settingsDrawer": {
+    "close": "設定と診断を閉じる",
+    "currentSection": "現在のセクション",
+    "eyebrow": "設定",
+    "open": "設定と診断を開く",
+    "sectionsLabel": "設定セクション",
+    "title": "設定と診断"
+  },
+  "settingsSections": {
+    "appearance": {
+      "description": "ローカルのライト / ダーク / 言語設定です。",
+      "label": "表示"
+    },
+    "community-node": {
+      "description": "community node の設定、認証、同意、更新操作です。",
+      "label": "コミュニティノード"
+    },
+    "connectivity": {
+      "description": "同期概要、peer ticket、全体エラーの確認です。",
+      "label": "接続"
+    },
+    "discovery": {
+      "description": "seeded DHT 設定と discovery diagnostics です。",
+      "label": "ディスカバリー"
+    }
+  },
+  "topBar": {
+    "activeTopicBar": "アクティブトピックバー"
+  },
+  "workspace": {
+    "composeTarget": "投稿先",
+    "noPosts": "このトピックにはまだ投稿がありません。",
+    "noPublicPosts": "このトピックにはまだ自分の公開投稿がありません。",
+    "refresh": "更新",
+    "tabs": "ワークスペース",
+    "viewScope": "表示範囲"
+  }
+}

@@ -103,6 +103,28 @@ test('browser mock shell persists appearance theme changes across reloads', asyn
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
+test('browser mock shell persists language changes across reloads', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByPlaceholder('Write a post')).toBeVisible();
+
+  await page.getByTestId('shell-settings-trigger').click();
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  await settingsDialog.getByTestId('settings-section-appearance').click();
+  await settingsDialog.getByLabel('Language').selectOption('ja');
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
+  await expect(page.getByRole('button', { name: '投稿' })).toBeVisible();
+
+  await page.reload();
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
+});
+
 test('browser mock narrow shell keeps nav, context, and settings flows reachable without overflow', async ({
   page,
 }) => {
@@ -162,7 +184,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
     .getByLabel('Close navigation')
     .click();
   await page.getByRole('tab', { name: 'Profile' }).click();
-  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
 
   const noOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth

@@ -1,0 +1,26 @@
+{
+  "editor": {
+    "about": "简介",
+    "back": "返回资料",
+    "displayName": "显示名称",
+    "loading": "正在加载资料…",
+    "name": "名称",
+    "picture": "图片 URL",
+    "placeholders": {
+      "about": "简短介绍",
+      "displayName": "显示名称",
+      "name": "规范名称",
+      "picture": "https://..."
+    },
+    "reset": "重置",
+    "save": "保存资料",
+    "title": "我的资料"
+  },
+  "overview": {
+    "edit": "编辑资料",
+    "loading": "正在加载资料…",
+    "noBio": "尚未发布个人简介。",
+    "postCount": "当前主题下的公开帖子",
+    "title": "资料"
+  }
+}

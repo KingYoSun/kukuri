@@ -1,0 +1,131 @@
+{
+  "appearance": {
+    "darkSelected": "已选择深色主题",
+    "languageHint": "语言更改会立即在此设备生效，并仅保存在本地。",
+    "languageLabel": "语言",
+    "languageOptions": {
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文"
+    },
+    "lightSelected": "已选择浅色主题",
+    "themeHint": "主题更改会立即在此设备生效，并仅保存在本地。",
+    "themeLabel": "主题模式",
+    "themeOptions": {
+      "dark": {
+        "description": "适合低光环境的高对比纯色界面。",
+        "label": "深色"
+      },
+      "light": {
+        "description": "适合白天阅读的明亮纯色界面。",
+        "label": "浅色"
+      }
+    },
+    "title": "显示"
+  },
+  "communityNode": {
+    "actions": {
+      "clearNodes": "清除",
+      "clearToken": "清除令牌",
+      "saveNodes": "保存节点"
+    },
+    "baseUrlsHint": "每行一个 HTTPS 基础 URL。",
+    "baseUrlsLabel": "基础 URL",
+    "baseUrlsPlaceholder": "https://community.example.com",
+    "diagnostics": {
+      "auth": "认证",
+      "connectivityUrls": "连接 URL",
+      "consent": "同意",
+      "lastError": "最近错误",
+      "nextStep": "下一步",
+      "sessionActivation": "会话激活"
+    },
+    "editorMessage": {
+      "saved": "在认证或刷新连接元数据之前请先保存节点。",
+      "unsaved": "社区节点有未保存的更改。"
+    },
+    "loading": "正在加载社区节点诊断…",
+    "noNodes": "尚未配置社区节点。",
+    "nodeSummary": "此节点的认证、同意和连接状态。",
+    "summary": "已配置 {{count}} 个",
+    "title": "社区节点",
+    "values": {
+      "acceptPolicies": "请接受必需策略以解析连接 URL",
+      "activeOnCurrentSession": "当前会话已生效",
+      "connectivityUrlsActiveOnCurrentSession": "连接 URL 已在当前会话生效",
+      "authenticateThisNode": "请认证此节点",
+      "awaitingConnectivityMetadata": "等待连接元数据",
+      "notAuthenticated": "未认证",
+      "notResolved": "未解析",
+      "notResolvedYet": "尚未解析",
+      "pendingConsentAcceptance": "等待接受同意",
+      "refreshMetadata": "如果连接 URL 仍未解析，请刷新元数据",
+      "restartRequiredUnexpected": "需要重启（非预期）",
+      "restartUnexpected": "出现非预期的重启要求；先尝试刷新元数据，最后再重启",
+      "saveNodesToBegin": "请先保存节点再开始认证",
+      "waitingForConsent": "等待接受同意"
+    }
+  },
+  "connectivity": {
+    "diagnostics": {
+      "configuredPeers": "已配置 Peer",
+      "connectedPeers": "已连接 Peer",
+      "connectionDetail": "连接详情",
+      "effectivePeers": "有效 Peer",
+      "lastError": "最近错误",
+      "missingPeers": "缺失 Peer",
+      "relayAssistedPeers": "中继辅助 Peer",
+      "statusDetail": "状态详情"
+    },
+    "lastReceivedBadge": "最近接收 {{value}}",
+    "loading": "正在加载连接诊断…",
+    "manualConnectivity": "手动连接",
+    "metrics": {
+      "connected": "已连接",
+      "expected": "期望值",
+      "lastReceived": "最近接收",
+      "missing": "缺失",
+      "peers": "Peer 数",
+      "pending": "待处理"
+    },
+    "noTopicDiagnostics": "尚无主题诊断。",
+    "peerTicket": "Peer 票据",
+    "peerTicketPlaceholder": "nodeid@127.0.0.1:7777",
+    "peerTickets": "Peer 票据",
+    "summary": "{{status}} / peers: {{count}}",
+    "summaryDetailFallback": "尚无主题诊断",
+    "title": "同步状态",
+    "topicConnectivity": "主题连接详情",
+    "tracked": "已跟踪 {{count}} 个",
+    "yourTicket": "你的票据"
+  },
+  "discovery": {
+    "actions": {
+      "saveSeeds": "保存种子"
+    },
+    "diagnostics": {
+      "communityBootstrapPeers": "社区引导 Peer",
+      "configuredSeedIds": "已配置种子 ID",
+      "connectedPeers": "已连接 Peer",
+      "discoveryError": "发现错误",
+      "localEndpointId": "本地端点 ID",
+      "manualTicketPeers": "手动票据 Peer",
+      "relayAssistedPeers": "中继辅助 Peer"
+    },
+    "loading": "正在加载发现诊断…",
+    "messages": {
+      "saved": "更新发现种子不会改变 runtime contract。",
+      "unsaved": "发现种子有未保存更改。",
+      "viewLocked": "环境变量覆盖了发现种子，因此无法编辑。"
+    },
+    "metrics": {
+      "connect": "连接方式",
+      "envLock": "环境锁定",
+      "mode": "模式"
+    },
+    "seedPeersHint": "每行一个 endpoint id。地址提示可选。",
+    "seedPeersLabel": "种子 Peer",
+    "seedPeersPlaceholder": "node_id or node_id@host:port",
+    "title": "发现"
+  }
+}

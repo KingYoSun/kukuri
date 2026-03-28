@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
@@ -21,6 +23,8 @@ export function ProfileOverviewPanel({
   postCount,
   onEdit,
 }: ProfileOverviewPanelProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <Card className='panel-subsection'>
       <CardHeader className='profile-overview-header'>
@@ -33,22 +37,22 @@ export function ProfileOverviewPanel({
             )}
           </div>
           <div>
-            <h3>Profile</h3>
+            <h3>{t('overview.title')}</h3>
             <small>{authorLabel}</small>
           </div>
         </div>
         <Button variant='secondary' type='button' onClick={onEdit}>
-          プロフィールを編集
+          {t('overview.edit')}
         </Button>
       </CardHeader>
 
-      {status === 'loading' ? <Notice>Loading profile…</Notice> : null}
+      {status === 'loading' ? <Notice>{t('overview.loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
       <div className='shell-main-stack'>
-        <p className='lede'>{about?.trim() || 'No profile bio published yet.'}</p>
+        <p className='lede'>{about?.trim() || t('overview.noBio')}</p>
         <div className='topic-diagnostic topic-diagnostic-secondary'>
-          <span>Public posts in active topic</span>
+          <span>{t('overview.postCount')}</span>
           <span>{postCount}</span>
         </div>
       </div>

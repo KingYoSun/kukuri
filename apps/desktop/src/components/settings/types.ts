@@ -1,4 +1,5 @@
 import { type DesktopTheme } from '@/lib/theme';
+import { type SupportedLocale } from '@/i18n';
 
 export type SettingsPanelStatus = 'loading' | 'ready' | 'error';
 
@@ -74,7 +75,14 @@ export type AppearanceOptionView = {
   description: string;
 };
 
+export type LocaleOptionView = {
+  value: SupportedLocale;
+  label: string;
+};
+
 export type AppearancePanelView = {
   selectedTheme: DesktopTheme;
+  selectedLocale: SupportedLocale;
   options: AppearanceOptionView[];
+  localeOptions: LocaleOptionView[];
 };

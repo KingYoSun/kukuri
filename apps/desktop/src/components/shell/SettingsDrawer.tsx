@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -32,6 +33,7 @@ export function SettingsDrawer({
   onSectionChange,
   sections,
 }: SettingsDrawerProps) {
+  const { t } = useTranslation('shell');
   const currentSection = sections.find((section) => section.id === activeSection) ?? sections[0];
 
   return (
@@ -55,9 +57,9 @@ export function SettingsDrawer({
         <div className='shell-settings-nav'>
           <div className='shell-pane-header shell-pane-header-compact'>
             <div>
-              <p className='eyebrow'>Settings</p>
+              <p className='eyebrow'>{t('settingsDrawer.eyebrow')}</p>
               <h2 id={`${drawerId}-title`} className='shell-pane-heading'>
-                Settings & diagnostics
+                {t('settingsDrawer.title')}
               </h2>
             </div>
             <Button
@@ -65,13 +67,13 @@ export function SettingsDrawer({
               variant='ghost'
               size='icon'
               type='button'
-              aria-label='Close settings and diagnostics'
+              aria-label={t('settingsDrawer.close')}
               onClick={() => onOpenChange(false)}
             >
               <X className='size-5' aria-hidden='true' />
             </Button>
           </div>
-          <nav aria-label='Settings sections' className='shell-settings-nav-list'>
+          <nav aria-label={t('settingsDrawer.sectionsLabel')} className='shell-settings-nav-list'>
             {sections.map((section) => (
               <button
                 key={section.id}
@@ -93,7 +95,7 @@ export function SettingsDrawer({
 
         <div className='shell-settings-body'>
           <div className='shell-settings-current'>
-            <p className='eyebrow'>Current section</p>
+            <p className='eyebrow'>{t('settingsDrawer.currentSection')}</p>
             <h3 className='shell-pane-heading'>{currentSection.label}</h3>
             <p className='shell-pane-copy'>{currentSection.description}</p>
           </div>

@@ -1,0 +1,26 @@
+{
+  "editor": {
+    "about": "About",
+    "back": "Back to profile",
+    "displayName": "Display Name",
+    "loading": "Loading profile…",
+    "name": "Name",
+    "picture": "Picture URL",
+    "placeholders": {
+      "about": "Short bio",
+      "displayName": "Visible label",
+      "name": "Canonical name",
+      "picture": "https://..."
+    },
+    "reset": "Reset",
+    "save": "Save Profile",
+    "title": "My Profile"
+  },
+  "overview": {
+    "edit": "Edit Profile",
+    "loading": "Loading profile…",
+    "noBio": "No profile bio published yet.",
+    "postCount": "Public posts in active topic",
+    "title": "Profile"
+  }
+}

@@ -6,7 +6,7 @@ test('browser mock hash routes deep link profile, channels, and settings surface
   await page.setViewportSize({ width: 1400, height: 980 });
 
   await page.goto('/#/profile');
-  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goto('/#/channels');
@@ -34,7 +34,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await expect(page.getByTestId('shell-nav-trigger')).toBeVisible();
   await page.getByRole('tab', { name: 'Profile' }).click();
-  await expect(page.getByRole('button', { name: 'プロフィールを編集' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Profile' })).toBeVisible();
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goBack();

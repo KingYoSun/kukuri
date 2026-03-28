@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -7,89 +7,93 @@ import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import {
-  appearancePanelFixture,
-  communityNodePanelFixture,
-  connectivityPanelFixture,
-  discoveryPanelFixture,
+  createAppearancePanelFixture,
+  createCommunityNodePanelFixture,
+  createConnectivityPanelFixture,
+  createDiscoveryPanelFixture,
 } from '@/components/settings/fixtures';
 import type { DesktopTheme } from '@/lib/theme';
+import type { SupportedLocale } from '@/i18n';
 import type { SettingsSection } from '@/components/shell/types';
 
 import { SettingsDrawer } from './SettingsDrawer';
 
 function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSection?: SettingsSection }) {
+  const appearancePanelFixture = createAppearancePanelFixture();
+  const connectivityPanelFixture = createConnectivityPanelFixture();
+  const discoveryPanelFixture = createDiscoveryPanelFixture();
+  const communityNodePanelFixture = createCommunityNodePanelFixture();
   const [open, setOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
   const [theme, setTheme] = useState<DesktopTheme>(appearancePanelFixture.selectedTheme);
+  const [locale, setLocale] = useState<SupportedLocale>(appearancePanelFixture.selectedLocale);
   const [peerTicketInput, setPeerTicketInput] = useState(connectivityPanelFixture.peerTicketInput);
   const [seedPeersInput, setSeedPeersInput] = useState(discoveryPanelFixture.seedPeersInput);
   const [baseUrlsInput, setBaseUrlsInput] = useState(communityNodePanelFixture.baseUrlsInput);
 
-  const sections = useMemo(
-    () => [
-      {
-        id: 'appearance' as const,
-        label: 'Appearance',
-        description: 'Local light and dark theme selection.',
-        content: (
-          <AppearancePanel
-            view={{ ...appearancePanelFixture, selectedTheme: theme }}
-            onThemeChange={setTheme}
-          />
-        ),
-      },
-      {
-        id: 'connectivity' as const,
-        label: 'Connectivity',
-        description: 'Peer status and topic diagnostics',
-        content: (
-          <ConnectivityPanel
-            view={{ ...connectivityPanelFixture, peerTicketInput }}
-            onPeerTicketInputChange={setPeerTicketInput}
-            onImportPeer={() => undefined}
-          />
-        ),
-      },
-      {
-        id: 'discovery' as const,
-        label: 'Discovery',
-        description: 'Seeded DHT configuration and diagnostics',
-        content: (
-          <DiscoveryPanel
-            view={{ ...discoveryPanelFixture, seedPeersInput }}
-            saveDisabled={false}
-            resetDisabled={false}
-            onSeedPeersChange={setSeedPeersInput}
-            onSave={() => undefined}
-            onReset={() => setSeedPeersInput(discoveryPanelFixture.seedPeersInput)}
-          />
-        ),
-      },
-      {
-        id: 'community-node' as const,
-        label: 'Community Node',
-        description: 'Auth, consent, and connectivity urls',
-        content: (
-          <CommunityNodePanel
-            view={{ ...communityNodePanelFixture, baseUrlsInput }}
-            saveDisabled={false}
-            resetDisabled={false}
-            clearDisabled={false}
-            onBaseUrlsChange={setBaseUrlsInput}
-            onSaveNodes={() => undefined}
-            onReset={() => setBaseUrlsInput(communityNodePanelFixture.baseUrlsInput)}
-            onClearNodes={() => setBaseUrlsInput('')}
-            onAuthenticate={() => undefined}
-            onFetchConsents={() => undefined}
-            onAcceptConsents={() => undefined}
-            onRefresh={() => undefined}
-            onClearToken={() => undefined}
-          />
-        ),
-      },
-    ],
-    [baseUrlsInput, peerTicketInput, seedPeersInput, theme]
-  );
+  const sections = [
+    {
+      id: 'appearance' as const,
+      label: 'Appearance',
+      description: 'Local light and dark theme selection.',
+      content: (
+        <AppearancePanel
+          view={{ ...createAppearancePanelFixture(), selectedTheme: theme, selectedLocale: locale }}
+          onThemeChange={setTheme}
+          onLocaleChange={setLocale}
+        />
+      ),
+    },
+    {
+      id: 'connectivity' as const,
+      label: 'Connectivity',
+      description: 'Peer status and topic diagnostics',
+      content: (
+        <ConnectivityPanel
+          view={{ ...connectivityPanelFixture, peerTicketInput }}
+          onPeerTicketInputChange={setPeerTicketInput}
+          onImportPeer={() => undefined}
+        />
+      ),
+    },
+    {
+      id: 'discovery' as const,
+      label: 'Discovery',
+      description: 'Seeded DHT configuration and diagnostics',
+      content: (
+        <DiscoveryPanel
+          view={{ ...discoveryPanelFixture, seedPeersInput }}
+          saveDisabled={false}
+          resetDisabled={false}
+          onSeedPeersChange={setSeedPeersInput}
+          onSave={() => undefined}
+          onReset={() => setSeedPeersInput(discoveryPanelFixture.seedPeersInput)}
+        />
+      ),
+    },
+    {
+      id: 'community-node' as const,
+      label: 'Community Node',
+      description: 'Auth, consent, and connectivity urls',
+      content: (
+        <CommunityNodePanel
+          view={{ ...communityNodePanelFixture, baseUrlsInput }}
+          saveDisabled={false}
+          resetDisabled={false}
+          clearDisabled={false}
+          onBaseUrlsChange={setBaseUrlsInput}
+          onSaveNodes={() => undefined}
+          onReset={() => setBaseUrlsInput(communityNodePanelFixture.baseUrlsInput)}
+          onClearNodes={() => setBaseUrlsInput('')}
+          onAuthenticate={() => undefined}
+          onFetchConsents={() => undefined}
+          onAcceptConsents={() => undefined}
+          onRefresh={() => undefined}
+          onClearToken={() => undefined}
+        />
+      ),
+    },
+  ];
 
   return (
     <SettingsDrawer

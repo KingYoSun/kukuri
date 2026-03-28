@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import type { Preview } from '@storybook/react-vite';
 
+import i18n, { type SupportedLocale } from '@/i18n';
 import { installWindowDesktopMock } from '@/mocks/installWindowDesktopMock';
 
 import '@/styles/index.css';
@@ -35,6 +36,19 @@ const preview: Preview = {
         ],
       },
     },
+    locale: {
+      name: 'Locale',
+      description: 'Desktop shell locale',
+      defaultValue: 'en',
+      toolbar: {
+        icon: 'globe',
+        items: [
+          { value: 'en', title: 'English' },
+          { value: 'ja', title: '日本語' },
+          { value: 'zh-CN', title: '简体中文' }
+        ]
+      }
+    }
   },
   parameters: {
     layout: 'fullscreen',
@@ -46,7 +60,10 @@ const preview: Preview = {
     (Story, context) => {
       const theme = context.globals.theme === 'light' ? 'light' : 'dark';
       const shellWidth = context.globals.shellWidth === 'narrow' ? 420 : 960;
+      const locale = (context.globals.locale ?? 'en') as SupportedLocale;
       document.documentElement.dataset.theme = theme;
+      document.documentElement.lang = locale;
+      void i18n.changeLanguage(locale);
 
       return createElement(
         'div',

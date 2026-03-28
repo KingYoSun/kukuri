@@ -1,3 +1,7 @@
+import { useTranslation } from 'react-i18next';
+
+import { formatLocalizedTime } from '@/i18n/format';
+
 import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
 
@@ -13,6 +17,7 @@ type PostCardProps = {
 };
 
 export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCardProps) {
+  const { t } = useTranslation(['common']);
   const { post, context } = view;
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
@@ -38,7 +43,7 @@ export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCard
         <div className='post-meta-trailing'>
           <RelationshipBadge label={view.relationshipLabel} />
           <span className='post-meta-chip'>{audienceChipLabel}</span>
-          <span>{new Date(post.created_at * 1000).toLocaleTimeString('ja-JP')}</span>
+          <span>{formatLocalizedTime(post.created_at * 1000)}</span>
         </div>
       </div>
 
@@ -61,12 +66,12 @@ export function PostCard({ view, onOpenAuthor, onOpenThread, onReply }: PostCard
         </div>
 
         <small>{post.envelope_id}</small>
-        {post.reply_to ? <em className='post-reply-flag'>Reply</em> : null}
+        {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
       </button>
 
       <div className='post-actions'>
         <Button variant='secondary' type='button' onClick={() => onReply(post)}>
-          Reply
+          {t('actions.reply')}
         </Button>
       </div>
     </article>

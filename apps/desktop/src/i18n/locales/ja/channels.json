@@ -1,0 +1,61 @@
+{
+  "actions": {
+    "createChannel": "チャンネルを作成",
+    "createGrant": "権限付与を作成",
+    "createInvite": "招待を作成",
+    "createShare": "共有を作成",
+    "joinGrant": "権限付与で参加",
+    "joinInvite": "招待で参加",
+    "joinShare": "共有で参加"
+  },
+  "audienceOptions": {
+    "friend_only": "友だち限定",
+    "friend_plus": "友だち+",
+    "invite_only": "招待限定"
+  },
+  "editor": {
+    "audience": "公開範囲",
+    "createChannel": "チャンネルを作成",
+    "joinViaInvite": "招待経由で参加",
+    "placeholders": {
+      "channelLabel": "コアメンバー",
+      "inviteToken": "プライベートチャンネル招待、権限付与、共有トークンを貼り付け"
+    }
+  },
+  "empty": "このトピックには参加済みのプライベートチャンネルがありません。",
+  "errors": {
+    "channelLabelRequired": "チャンネル名は必須です",
+    "grantTokenRequired": "権限付与トークンは必須です",
+    "inviteTokenRequired": "招待トークンは必須です",
+    "selectChannelForFreeze": "凍結する前にプライベートチャンネルを選択してください",
+    "selectChannelForGrant": "権限付与を作成する前にプライベートチャンネルを選択してください",
+    "selectChannelForInvite": "招待作成前にプライベートチャンネルを選択してください",
+    "selectChannelForRotate": "ローテーション前にプライベートチャンネルを選択してください",
+    "selectChannelForShare": "共有を作成する前にプライベートチャンネルを選択してください",
+    "shareTokenRequired": "共有トークンは必須です",
+    "failedCreateChannel": "チャンネルの作成に失敗しました",
+    "failedCreateInvite": "招待の作成に失敗しました",
+    "failedCreateGrant": "権限付与の作成に失敗しました",
+    "failedCreateShare": "共有の作成に失敗しました",
+    "failedFreezeChannel": "プライベートチャンネルの凍結に失敗しました",
+    "failedJoinChannel": "プライベートチャンネルへの参加に失敗しました",
+    "failedJoinFriendsChannel": "友だち限定チャンネルへの参加に失敗しました",
+    "failedJoinFriendsPlusChannel": "友だち+ チャンネルへの参加に失敗しました",
+    "failedRotateChannel": "プライベートチャンネルのローテーションに失敗しました"
+  },
+  "inspectHint": "ここでポリシーと操作を確認できます。",
+  "joined": "{{count}} 件参加中",
+  "loading": "プライベートチャンネルを読み込み中…",
+  "latestGrant": "最新の権限付与",
+  "latestInvite": "最新の招待",
+  "latestShare": "最新の共有",
+  "policies": {
+    "friend_only": "友だち限定: 相互フォローの相手だけが参加できます",
+    "friend_plus": "友だち+: 参加者が相互フォロー相手へ共有できます",
+    "invite_only": "招待限定: 招待トークンを持つ相手だけが参加できます"
+  },
+  "rotationRequired": "ローテーションが必要です: 現在の参加者に相互フォローでない相手が含まれています",
+  "selectChannel": "チャンネルを選択",
+  "selectChannelNotice": "プライベートチャンネルを選択するとポリシーと操作を確認できます。",
+  "title": "プライベートチャンネル"
+}

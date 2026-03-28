@@ -1,0 +1,35 @@
+{
+  "actions": {
+    "createRoom": "Create Room",
+    "saveRoom": "Save Room"
+  },
+  "empty": "No game rooms",
+  "errors": {
+    "failedCreate": "failed to create game room",
+    "failedUpdate": "failed to update game room",
+    "invalidScore": "invalid score for {{label}}",
+    "participantsRequired": "game room requires at least two unique participants",
+    "titleRequired": "game room title is required"
+  },
+  "fields": {
+    "description": "Game Description",
+    "participants": "Participants",
+    "phase": "Phase",
+    "placeholders": {
+      "description": "match summary",
+      "participants": "Alice, Bob",
+      "title": "Top 8 Finals"
+    },
+    "status": "Status",
+    "title": "Game Title"
+  },
+  "loading": "Loading game rooms…",
+  "statuses": {
+    "Ended": "Ended",
+    "Paused": "Paused",
+    "Running": "Running",
+    "Waiting": "Waiting"
+  },
+  "summary": "{{count}} tracked",
+  "title": "Game Rooms"
+}

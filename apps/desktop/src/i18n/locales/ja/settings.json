@@ -1,0 +1,131 @@
+{
+  "appearance": {
+    "darkSelected": "ダークテーマを選択中",
+    "languageHint": "言語の変更はこの端末ですぐ反映され、ローカルに保存されます。",
+    "languageLabel": "言語",
+    "languageOptions": {
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文"
+    },
+    "lightSelected": "ライトテーマを選択中",
+    "themeHint": "テーマ変更はこの端末ですぐ反映され、ローカルに保存されます。",
+    "themeLabel": "テーマ",
+    "themeOptions": {
+      "dark": {
+        "description": "暗い環境でも見やすい高コントラストの配色です。",
+        "label": "ダーク"
+      },
+      "light": {
+        "description": "日中の視認性を優先した明るい配色です。",
+        "label": "ライト"
+      }
+    },
+    "title": "表示"
+  },
+  "communityNode": {
+    "actions": {
+      "clearNodes": "クリア",
+      "clearToken": "トークンをクリア",
+      "saveNodes": "ノードを保存"
+    },
+    "baseUrlsHint": "HTTPS の base URL を 1 行に 1 つ入力します。",
+    "baseUrlsLabel": "ベース URL",
+    "baseUrlsPlaceholder": "https://community.example.com",
+    "diagnostics": {
+      "auth": "認証",
+      "connectivityUrls": "接続 URL",
+      "consent": "同意",
+      "lastError": "最終エラー",
+      "nextStep": "次の手順",
+      "sessionActivation": "セッション有効化"
+    },
+    "editorMessage": {
+      "saved": "認証や接続メタデータ更新の前にノードを保存してください。",
+      "unsaved": "コミュニティノードの未保存変更があります。"
+    },
+    "loading": "コミュニティノード診断を読み込み中…",
+    "noNodes": "設定済みのコミュニティノードはありません。",
+    "nodeSummary": "このノードの認証、同意、接続状態です。",
+    "summary": "{{count}} 件設定済み",
+    "title": "コミュニティノード",
+    "values": {
+      "acceptPolicies": "接続 URL を解決するには必須 policy に同意してください",
+      "activeOnCurrentSession": "現在のセッションで有効",
+      "connectivityUrlsActiveOnCurrentSession": "接続 URL は現在のセッションで有効です",
+      "authenticateThisNode": "このノードを認証してください",
+      "awaitingConnectivityMetadata": "接続メタデータを待機中",
+      "notAuthenticated": "未認証",
+      "notResolved": "未解決",
+      "notResolvedYet": "まだ未解決",
+      "pendingConsentAcceptance": "同意受諾待ち",
+      "refreshMetadata": "接続 URL が解決されない場合はメタデータを更新してください",
+      "restartRequiredUnexpected": "再起動が必要です（想定外）",
+      "restartUnexpected": "想定外の再起動要求です。まずはメタデータ更新を試し、最後の手段として再起動してください",
+      "saveNodesToBegin": "認証を始めるにはノードを保存してください",
+      "waitingForConsent": "同意受諾を待機中"
+    }
+  },
+  "connectivity": {
+    "diagnostics": {
+      "configuredPeers": "設定済みピア",
+      "connectedPeers": "接続中のピア",
+      "connectionDetail": "接続詳細",
+      "effectivePeers": "有効ピア",
+      "lastError": "最終エラー",
+      "missingPeers": "不足ピア",
+      "relayAssistedPeers": "リレー補助ピア",
+      "statusDetail": "状態詳細"
+    },
+    "lastReceivedBadge": "最終受信 {{value}}",
+    "loading": "接続診断を読み込み中…",
+    "manualConnectivity": "手動接続",
+    "metrics": {
+      "connected": "接続",
+      "expected": "期待値",
+      "lastReceived": "最終受信",
+      "missing": "不足",
+      "peers": "ピア数",
+      "pending": "保留"
+    },
+    "noTopicDiagnostics": "トピック diagnostics はまだありません。",
+    "peerTicket": "ピアチケット",
+    "peerTicketPlaceholder": "nodeid@127.0.0.1:7777",
+    "peerTickets": "ピアチケット",
+    "summary": "{{status}} / peers: {{count}}",
+    "summaryDetailFallback": "トピック diagnostics はまだありません",
+    "title": "同期状態",
+    "topicConnectivity": "トピック接続詳細",
+    "tracked": "{{count}} 件追跡中",
+    "yourTicket": "自分のチケット"
+  },
+  "discovery": {
+    "actions": {
+      "saveSeeds": "シードを保存"
+    },
+    "diagnostics": {
+      "communityBootstrapPeers": "コミュニティブートストラップピア",
+      "configuredSeedIds": "設定済みシード ID",
+      "connectedPeers": "接続中のピア",
+      "discoveryError": "ディスカバリーエラー",
+      "localEndpointId": "ローカルエンドポイント ID",
+      "manualTicketPeers": "手動チケットピア",
+      "relayAssistedPeers": "リレー補助ピア"
+    },
+    "loading": "ディスカバリー診断を読み込み中…",
+    "messages": {
+      "saved": "ディスカバリーシードの更新は runtime contract を変更しません。",
+      "unsaved": "ディスカバリーシードの未保存変更があります。",
+      "viewLocked": "環境変数が discovery seeds を上書きしているため編集できません。"
+    },
+    "metrics": {
+      "connect": "接続方式",
+      "envLock": "環境固定",
+      "mode": "モード"
+    },
+    "seedPeersHint": "endpoint id を 1 行に 1 つ入力します。addr hint は任意です。",
+    "seedPeersLabel": "シードピア",
+    "seedPeersPlaceholder": "node_id or node_id@host:port",
+    "title": "ディスカバリー"
+  }
+}
