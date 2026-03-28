@@ -127,5 +127,19 @@
     "seedPeersLabel": "シードピア",
     "seedPeersPlaceholder": "node_id or node_id@host:port",
     "title": "ディスカバリー"
+  },
+  "reactions": {
+    "summary": "自作 {{owned}} 件 / 保存 {{saved}} 件",
+    "myCustomReactions": "自分のカスタムリアクション",
+    "myCustomReactionsHint": "ここで 128x128 の正方形リアクション画像を作成します。",
+    "uploadLabel": "画像をアップロード",
+    "sourceSize": "元画像 {{width}} x {{height}}",
+    "cropSize": "切り抜きサイズ",
+    "preview": "プレビュー",
+    "previewHint": "保存時に 128x128 に正規化されます。",
+    "noOwnedAssets": "まだカスタムリアクションがありません。",
+    "savedReactions": "保存したリアクション",
+    "savedReactionsHint": "他人のカスタムリアクションを保存して再利用します。",
+    "noSavedAssets": "保存済みリアクションはありません。"
   }
 }

@@ -52,6 +52,10 @@
     "discovery": {
       "description": "seeded DHT 配置与 discovery diagnostics。",
       "label": "发现"
+    },
+    "reactions": {
+      "description": "创建自定义回应并管理已保存回应。",
+      "label": "Reactions"
     }
   },
   "topBar": {

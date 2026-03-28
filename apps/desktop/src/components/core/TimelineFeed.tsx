@@ -1,3 +1,9 @@
+import type {
+  BookmarkedCustomReactionView,
+  CustomReactionAssetView,
+  ReactionKeyInput,
+} from '@/lib/api';
+
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
 
@@ -14,6 +20,13 @@ type TimelineFeedProps = {
   onQuoteRepost?: (post: PostCardView['post']) => void;
   readOnly?: boolean;
   onOpenOriginalTopic?: (topicId: string) => void;
+  localAuthorPubkey?: string;
+  mediaObjectUrls?: Record<string, string | null>;
+  ownedReactionAssets?: CustomReactionAssetView[];
+  bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
+  onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  onManageReactions?: () => void;
 };
 
 export function TimelineFeed({
@@ -29,6 +42,13 @@ export function TimelineFeed({
   onQuoteRepost,
   readOnly = false,
   onOpenOriginalTopic,
+  localAuthorPubkey,
+  mediaObjectUrls = {},
+  ownedReactionAssets = [],
+  bookmarkedReactionAssets = [],
+  onToggleReaction,
+  onBookmarkCustomReaction,
+  onManageReactions,
 }: TimelineFeedProps) {
   if (posts.length === 0) {
     return <p className='empty'>{emptyCopy}</p>;
@@ -48,6 +68,13 @@ export function TimelineFeed({
             onQuoteRepost={onQuoteRepost}
             readOnly={readOnly}
             onOpenOriginalTopic={onOpenOriginalTopic}
+            localAuthorPubkey={localAuthorPubkey}
+            mediaObjectUrls={mediaObjectUrls}
+            ownedReactionAssets={ownedReactionAssets}
+            bookmarkedReactionAssets={bookmarkedReactionAssets}
+            onToggleReaction={onToggleReaction}
+            onBookmarkCustomReaction={onBookmarkCustomReaction}
+            onManageReactions={onManageReactions}
           />
         </li>
       ))}

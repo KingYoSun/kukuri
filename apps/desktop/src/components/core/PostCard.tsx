@@ -1,9 +1,17 @@
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { formatLocalizedTime } from '@/i18n/format';
+import type {
+  BookmarkedCustomReactionView,
+  CustomReactionAssetView,
+  ReactionKeyInput,
+  ReactionKeyView,
+} from '@/lib/api';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 import { RelationshipBadge } from './RelationshipBadge';
 import { PostMedia } from './PostMedia';
@@ -30,7 +38,26 @@ type PostCardProps = {
   onQuoteRepost?: (post: PostCardView['post']) => void;
   readOnly?: boolean;
   onOpenOriginalTopic?: (topicId: string) => void;
+  localAuthorPubkey?: string;
+  mediaObjectUrls?: Record<string, string | null>;
+  ownedReactionAssets?: CustomReactionAssetView[];
+  bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
+  onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  onManageReactions?: () => void;
 };
+
+const PRESET_EMOJI_REACTIONS = ['👍', '❤️', '😂', '🎉', '🔥'];
+
+function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
+  if (reaction.reaction_key_kind === 'emoji' && reaction.emoji?.trim()) {
+    return { kind: 'emoji', emoji: reaction.emoji };
+  }
+  if (reaction.reaction_key_kind === 'custom_asset' && reaction.custom_asset) {
+    return { kind: 'custom_asset', asset: reaction.custom_asset };
+  }
+  return null;
+}
 
 export function PostCard({
   view,
@@ -42,9 +69,18 @@ export function PostCard({
   onQuoteRepost,
   readOnly = false,
   onOpenOriginalTopic,
+  localAuthorPubkey,
+  mediaObjectUrls = {},
+  ownedReactionAssets = [],
+  bookmarkedReactionAssets = [],
+  onToggleReaction,
+  onBookmarkCustomReaction,
+  onManageReactions,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
+  const [reactionTrayOpen, setReactionTrayOpen] = useState(false);
+  const [emojiInput, setEmojiInput] = useState('');
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
@@ -53,6 +89,23 @@ export function PostCard({
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
   const hasPrimaryContent = isPendingText || post.content.trim().length > 0;
+  const myReactions = post.my_reactions ?? [];
+  const reactionSummary = post.reaction_summary ?? [];
+  const myReactionKeys = useMemo(
+    () => new Set(myReactions.map((reaction) => reaction.normalized_reaction_key)),
+    [myReactions]
+  );
+  const bookmarkedAssetIds = useMemo(
+    () => new Set(bookmarkedReactionAssets.map((asset) => asset.asset_id)),
+    [bookmarkedReactionAssets]
+  );
+  const pickerAssets = useMemo(() => {
+    const deduped = new Map<string, CustomReactionAssetView>();
+    for (const asset of [...ownedReactionAssets, ...bookmarkedReactionAssets]) {
+      deduped.set(asset.asset_id, asset);
+    }
+    return [...deduped.values()];
+  }, [bookmarkedReactionAssets, ownedReactionAssets]);
 
   const openPrimaryTarget = () => {
     const topicId = view.threadTopicId?.trim();
@@ -191,6 +244,65 @@ export function PostCard({
           ) : null
         ) : (
           <>
+            {reactionSummary.length > 0 ? (
+              <div className='post-reaction-summary'>
+                {reactionSummary.map((reaction) => {
+                  const reactionKey = reactionKeyInputFromView(reaction);
+                  const previewUrl =
+                    reaction.custom_asset &&
+                    typeof mediaObjectUrls[reaction.custom_asset.blob_hash] === 'string'
+                      ? mediaObjectUrls[reaction.custom_asset.blob_hash]
+                      : null;
+                  const canBookmark =
+                    reaction.custom_asset &&
+                    reaction.custom_asset.owner_pubkey !== localAuthorPubkey &&
+                    !bookmarkedAssetIds.has(reaction.custom_asset.asset_id);
+                  return (
+                    <span key={reaction.normalized_reaction_key} className='post-reaction-chip-wrap'>
+                      <button
+                        className={`post-reaction-chip${
+                          myReactionKeys.has(reaction.normalized_reaction_key)
+                            ? ' post-reaction-chip-active'
+                            : ''
+                        }`}
+                        type='button'
+                        onClick={() => {
+                          if (reactionKey && onToggleReaction) {
+                            onToggleReaction(post, reactionKey);
+                          }
+                        }}
+                      >
+                        {previewUrl ? (
+                          <img
+                            className='post-reaction-chip-image'
+                            src={previewUrl}
+                            alt={reaction.custom_asset?.asset_id ?? reaction.emoji ?? reaction.normalized_reaction_key}
+                          />
+                        ) : null}
+                        <span>{reaction.emoji ?? reaction.custom_asset?.asset_id.slice(0, 6) ?? '?'}</span>
+                        <span>{reaction.count}</span>
+                      </button>
+                      {canBookmark && reaction.custom_asset && onBookmarkCustomReaction ? (
+                        <Button
+                          variant='secondary'
+                          type='button'
+                          onClick={() => onBookmarkCustomReaction(reaction.custom_asset as CustomReactionAssetView)}
+                        >
+                          {t('common:actions.save')}
+                        </Button>
+                      ) : null}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+            <Button
+              variant='secondary'
+              type='button'
+              onClick={() => setReactionTrayOpen((current) => !current)}
+            >
+              {t('actions.react')}
+            </Button>
             {canRepost && onRepost ? (
               <Button variant='secondary' type='button' onClick={() => onRepost(post)}>
                 {t('actions.repost')}
@@ -209,6 +321,73 @@ export function PostCard({
           </>
         )}
       </div>
+      {!readOnly && reactionTrayOpen ? (
+        <div className='post-reaction-tray'>
+          <div className='post-reaction-picker-row'>
+            {PRESET_EMOJI_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                className='post-reaction-picker-button'
+                type='button'
+                onClick={() => onToggleReaction?.(post, { kind: 'emoji', emoji })}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <form
+            className='post-reaction-picker-row'
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!emojiInput.trim()) {
+                return;
+              }
+              onToggleReaction?.(post, {
+                kind: 'emoji',
+                emoji: emojiInput,
+              });
+              setEmojiInput('');
+            }}
+          >
+            <Input
+              value={emojiInput}
+              placeholder={t('actions.react')}
+              onChange={(event) => setEmojiInput(event.target.value)}
+            />
+            <Button type='submit'>{t('actions.react')}</Button>
+          </form>
+          {pickerAssets.length > 0 ? (
+            <div className='post-reaction-picker-row'>
+              {pickerAssets.map((asset) => {
+                const previewUrl =
+                  typeof mediaObjectUrls[asset.blob_hash] === 'string'
+                    ? mediaObjectUrls[asset.blob_hash]
+                    : null;
+                return (
+                  <button
+                    key={asset.asset_id}
+                    className='post-reaction-picker-button'
+                    type='button'
+                    onClick={() => onToggleReaction?.(post, { kind: 'custom_asset', asset })}
+                    title={asset.asset_id}
+                  >
+                    {previewUrl ? (
+                      <img className='post-reaction-chip-image' src={previewUrl} alt={asset.asset_id} />
+                    ) : (
+                      asset.asset_id.slice(0, 4)
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className='post-actions-inline'>
+            <Button variant='secondary' type='button' onClick={() => onManageReactions?.()}>
+              {t('actions.manageReactions')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

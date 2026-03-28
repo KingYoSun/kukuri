@@ -10,36 +10,41 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1,
     CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState,
-    CreatePrivateChannelInput, EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
-    FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant,
-    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
-    KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
-    KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
-    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectVisibility,
-    PayloadRef, PrivateChannelInvitePreview, PrivateChannelJoinMode, PrivateChannelMetadataDocV1,
-    PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
-    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, ProfileRepost, Pubkey, ReplicaId,
-    RepostSourceSnapshotV1, TimelineScope, TopicId, author_profile_topic_id,
+    CreatePrivateChannelInput, CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1,
+    EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview,
+    FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1,
+    GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef,
+    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1,
+    KukuriProfilePostEnvelopeContentV1, KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME,
+    LiveSessionManifestBlobV1, LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef,
+    MediaManifestItem, ObjectStatus, ObjectVisibility, PayloadRef, PrivateChannelInvitePreview,
+    PrivateChannelJoinMode, PrivateChannelMetadataDocV1, PrivateChannelParticipantDocV1,
+    PrivateChannelPolicyDocV1, PrivateChannelRotationGrantDocV1,
+    PrivateChannelRotationGrantPayloadV1, Profile, ProfilePost, ProfileRepost, Pubkey,
+    ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId, RepostSourceSnapshotV1,
+    TimelineScope, TopicId, author_profile_topic_id, build_custom_reaction_asset_envelope,
     build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
     build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
     build_post_envelope_with_payload_in_channel, build_private_channel_invite_token,
     build_private_channel_participant_envelope, build_private_channel_policy_envelope,
     build_private_channel_rotation_grant_envelope, build_profile_envelope,
-    build_profile_post_envelope, build_profile_repost_envelope, build_repost_envelope,
-    decrypt_private_channel_rotation_grant, encrypt_private_channel_rotation_grant, generate_keys,
-    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
+    build_profile_post_envelope, build_profile_repost_envelope, build_reaction_envelope,
+    build_repost_envelope, decrypt_private_channel_rotation_grant,
+    deterministic_reaction_id, encrypt_private_channel_rotation_grant, generate_keys,
+    parse_custom_reaction_asset, parse_follow_edge,
+    parse_friend_only_grant_token, parse_friend_plus_share_token,
     parse_private_channel_invite_token, parse_private_channel_participant,
     parse_private_channel_policy, parse_private_channel_rotation_grant, parse_profile,
-    parse_profile_post, parse_profile_repost, timeline_sort_key,
+    parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
     private_channel_hint_topic, private_channel_replica_id, stable_key, topic_replica_id,
 };
 use kukuri_store::{
-    AuthorRelationshipProjectionRow, BlobCacheStatus, GameRoomProjectionRow,
-    LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore, Store, TimelineCursor,
+    AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
+    GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page,
+    ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -78,6 +83,56 @@ pub struct PostView {
     pub is_threadable: bool,
     pub channel_id: Option<String>,
     pub audience_label: String,
+    #[serde(default)]
+    pub reaction_summary: Vec<ReactionSummaryView>,
+    #[serde(default)]
+    pub my_reactions: Vec<ReactionKeyView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactionKeyView {
+    pub reaction_key_kind: String,
+    pub normalized_reaction_key: String,
+    pub emoji: Option<String>,
+    pub custom_asset: Option<CustomReactionAssetView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactionSummaryView {
+    pub reaction_key_kind: String,
+    pub normalized_reaction_key: String,
+    pub emoji: Option<String>,
+    pub custom_asset: Option<CustomReactionAssetView>,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactionStateView {
+    pub target_object_id: String,
+    pub source_replica_id: String,
+    pub reaction_summary: Vec<ReactionSummaryView>,
+    pub my_reactions: Vec<ReactionKeyView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomReactionAssetView {
+    pub asset_id: String,
+    pub owner_pubkey: String,
+    pub blob_hash: String,
+    pub mime: String,
+    pub bytes: u64,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub type BookmarkedCustomReactionView = CustomReactionAssetView;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateCustomReactionAssetInput {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -638,6 +693,180 @@ impl AppService {
             )
             .await?;
         Ok(envelope.id.0)
+    }
+
+    pub async fn toggle_reaction(
+        &self,
+        target_topic_id: &str,
+        target_object_id: &str,
+        reaction_key: ReactionKeyV1,
+        channel_ref: Option<ChannelRef>,
+    ) -> Result<ReactionStateView> {
+        let target_topic_id = TopicId::new(target_topic_id);
+        self.ensure_topic_subscription(target_topic_id.as_str()).await?;
+        let target_object_id = EnvelopeId::from(target_object_id);
+        let target = self
+            .projection_store
+            .get_object_projection(&target_object_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("reaction target was not found"))?;
+        if !matches!(target.object_kind.as_str(), "post" | "comment") {
+            anyhow::bail!("reaction target must be a post or comment");
+        }
+        if target.topic_id != target_topic_id.as_str() {
+            anyhow::bail!("reaction target topic does not match");
+        }
+        let target_channel_id = channel_id_from_storage(target.channel_id.as_str());
+        match (channel_ref.as_ref(), target_channel_id.as_ref()) {
+            (Some(ChannelRef::Public), None) | (None, None) => {}
+            (
+                Some(ChannelRef::PrivateChannel { channel_id }),
+                Some(target_channel_id),
+            ) if channel_id == target_channel_id => {}
+            (None, Some(_)) => {}
+            _ => anyhow::bail!("reaction channel does not match the target object"),
+        }
+        let current_author = Pubkey::from(self.current_author_pubkey());
+        let normalized_reaction_key = reaction_key.normalized_key()?;
+        let reaction_id = deterministic_reaction_id(
+            &target.source_replica_id,
+            &target_object_id,
+            &current_author,
+            normalized_reaction_key.as_str(),
+        );
+        let next_status = match self
+            .projection_store
+            .get_reaction_cache(&target.source_replica_id, &target_object_id, &reaction_id)
+            .await?
+        {
+            Some(existing) if existing.status == ObjectStatus::Active => ObjectStatus::Deleted,
+            _ => ObjectStatus::Active,
+        };
+        let envelope = build_reaction_envelope(
+            self.keys.as_ref(),
+            &target_topic_id,
+            target_channel_id.as_ref(),
+            &target_object_id,
+            reaction_key,
+            &reaction_id,
+            next_status.clone(),
+        )?;
+        let reaction = parse_reaction(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse reaction envelope"))?;
+        persist_reaction_doc(
+            self.docs_sync.as_ref(),
+            &target.source_replica_id,
+            &reaction,
+            &envelope,
+        )
+        .await?;
+        self.store.put_envelope(envelope.clone()).await?;
+        self.projection_store
+            .upsert_reaction_cache(reaction_projection_row_from_doc(
+                &reaction,
+                &target.source_replica_id,
+            ))
+            .await?;
+        self.hint_transport
+            .publish_hint(
+                &channel_hint_topic_for(target_topic_id.as_str(), target_channel_id.as_ref()),
+                GossipHint::TopicObjectsChanged {
+                    topic_id: target_topic_id.clone(),
+                    objects: vec![HintObjectRef {
+                        object_id: target_object_id.as_str().to_string(),
+                        object_kind: "reaction".into(),
+                    }],
+                },
+            )
+            .await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        self.reaction_state_for_target(&target.source_replica_id, &target_object_id)
+            .await
+    }
+
+    pub async fn create_custom_reaction_asset(
+        &self,
+        input: CreateCustomReactionAssetInput,
+    ) -> Result<CustomReactionAssetView> {
+        let stored_blob = self
+            .blob_service
+            .put_blob(input.bytes, input.mime.as_str())
+            .await?;
+        let envelope = build_custom_reaction_asset_envelope(
+            self.keys.as_ref(),
+            stored_blob.hash.clone(),
+            input.mime,
+            stored_blob.bytes,
+            input.width,
+            input.height,
+        )?;
+        let asset = parse_custom_reaction_asset(&envelope)?
+            .ok_or_else(|| anyhow::anyhow!("failed to parse custom reaction asset envelope"))?;
+        persist_custom_reaction_asset_doc(self.docs_sync.as_ref(), &asset, &envelope).await?;
+        self.store.put_envelope(envelope).await?;
+        self.projection_store
+            .mark_blob_status(&stored_blob.hash, BlobCacheStatus::Available)
+            .await?;
+        *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+        Ok(custom_reaction_asset_view_from_doc(&asset))
+    }
+
+    pub async fn list_my_custom_reaction_assets(&self) -> Result<Vec<CustomReactionAssetView>> {
+        let author_pubkey = self.current_author_pubkey();
+        let mut items =
+            load_custom_reaction_assets_from_author_replica(self.docs_sync.as_ref(), &author_pubkey)
+                .await?;
+        items.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.asset_id.cmp(&left.asset_id))
+        });
+        Ok(items
+            .into_iter()
+            .map(|asset| custom_reaction_asset_view_from_doc(&asset))
+            .collect())
+    }
+
+    pub async fn list_bookmarked_custom_reactions(
+        &self,
+    ) -> Result<Vec<BookmarkedCustomReactionView>> {
+        Ok(self
+            .projection_store
+            .list_bookmarked_custom_reactions()
+            .await?
+            .into_iter()
+            .map(bookmarked_custom_reaction_view_from_row)
+            .collect())
+    }
+
+    pub async fn bookmark_custom_reaction(
+        &self,
+        asset: CustomReactionAssetSnapshotV1,
+    ) -> Result<BookmarkedCustomReactionView> {
+        if asset.owner_pubkey.as_str() == self.current_author_pubkey() {
+            anyhow::bail!("bookmarking your own custom reaction is not supported");
+        }
+        let row = BookmarkedCustomReactionRow {
+            asset_id: asset.asset_id.clone(),
+            owner_pubkey: asset.owner_pubkey.as_str().to_string(),
+            blob_hash: asset.blob_hash,
+            mime: asset.mime,
+            bytes: asset.bytes,
+            width: asset.width,
+            height: asset.height,
+            bookmarked_at: Utc::now().timestamp_millis(),
+        };
+        self.projection_store
+            .put_bookmarked_custom_reaction(row.clone())
+            .await?;
+        Ok(bookmarked_custom_reaction_view_from_row(row))
+    }
+
+    pub async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
+        self.projection_store
+            .remove_bookmarked_custom_reaction(asset_id)
+            .await
     }
 
     pub async fn create_post(
@@ -2678,6 +2907,44 @@ impl AppService {
         self.keys.public_key_hex()
     }
 
+    async fn reaction_state_for_target(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_id: &EnvelopeId,
+    ) -> Result<ReactionStateView> {
+        let rows = self
+            .projection_store
+            .list_reaction_cache_for_target(source_replica_id, target_object_id)
+            .await?;
+        let current_author = self.current_author_pubkey();
+        let mut summary = BTreeMap::<String, ReactionSummaryView>::new();
+        let mut my_reactions = Vec::new();
+        for row in rows {
+            let key_view = reaction_key_view_from_projection(&row);
+            if row.status == ObjectStatus::Active {
+                summary
+                    .entry(row.normalized_reaction_key.clone())
+                    .and_modify(|value| value.count += 1)
+                    .or_insert_with(|| ReactionSummaryView {
+                        reaction_key_kind: key_view.reaction_key_kind.clone(),
+                        normalized_reaction_key: key_view.normalized_reaction_key.clone(),
+                        emoji: key_view.emoji.clone(),
+                        custom_asset: key_view.custom_asset.clone(),
+                        count: 1,
+                    });
+                if row.author_pubkey == current_author {
+                    my_reactions.push(key_view);
+                }
+            }
+        }
+        Ok(ReactionStateView {
+            target_object_id: target_object_id.as_str().to_string(),
+            source_replica_id: source_replica_id.as_str().to_string(),
+            reaction_summary: summary.into_values().collect(),
+            my_reactions,
+        })
+    }
+
     async fn maybe_redeem_rotation_grants_for_scope(
         &self,
         topic_id: &str,
@@ -3996,6 +4263,9 @@ impl AppService {
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
             .await;
+        let reaction_state = self
+            .reaction_state_for_target(&row.source_replica_id, &row.object_id)
+            .await?;
 
         Ok(PostView {
             object_id: row.object_id.0.clone(),
@@ -4025,6 +4295,8 @@ impl AppService {
             is_threadable: row.object_kind != "repost" || repost_commentary.is_some(),
             channel_id: channel_id_for_view(row.channel_id.as_str()),
             audience_label,
+            reaction_summary: reaction_state.reaction_summary,
+            my_reactions: reaction_state.my_reactions,
         })
     }
 
@@ -4073,6 +4345,8 @@ impl AppService {
             is_threadable: true,
             channel_id: None,
             audience_label: "Public".into(),
+            reaction_summary: Vec::new(),
+            my_reactions: Vec::new(),
         })
     }
 
@@ -4120,6 +4394,8 @@ impl AppService {
             is_threadable: profile_repost.commentary.is_some(),
             channel_id: None,
             audience_label: "Public".into(),
+            reaction_summary: Vec::new(),
+            my_reactions: Vec::new(),
         })
     }
 
@@ -4423,6 +4699,92 @@ async fn persist_follow_edge_doc(
         .await
 }
 
+async fn persist_custom_reaction_asset_doc(
+    docs_sync: &dyn DocsSync,
+    asset: &CustomReactionAssetDocV1,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(asset.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("reactions/assets", &format!("{}/state", asset.asset_id)),
+                value: serde_json::to_value(asset)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("reactions/assets", &format!("{}/envelope", asset.asset_id)),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+async fn persist_reaction_doc(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    reaction: &ReactionDocV1,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    docs_sync.open_replica(replica).await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "reactions",
+                    &format!(
+                        "{}/{}/state",
+                        reaction.target_object_id.as_str(),
+                        reaction.reaction_id.as_str()
+                    ),
+                ),
+                value: serde_json::to_value(reaction)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "reactions",
+                    &format!(
+                        "{}/{}/envelope",
+                        reaction.target_object_id.as_str(),
+                        reaction.reaction_id.as_str()
+                    ),
+                ),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
 async fn hydrate_author_state_with_services(
     docs_sync: &dyn DocsSync,
     store: &dyn Store,
@@ -4526,6 +4888,27 @@ async fn fetch_author_envelope_by_id(
     let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
     envelope.verify()?;
     Ok(Some(envelope))
+}
+
+async fn load_custom_reaction_assets_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<CustomReactionAssetDocV1>> {
+    let replica = author_replica_id(author_pubkey);
+    let mut items = Vec::new();
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix(stable_key("reactions/assets", "")))
+        .await?
+    {
+        if !record.key.ends_with("/state") {
+            continue;
+        }
+        let doc: CustomReactionAssetDocV1 = serde_json::from_slice(record.value.as_slice())?;
+        if doc.author_pubkey.as_str() == author_pubkey {
+            items.push(doc);
+        }
+    }
+    Ok(items)
 }
 
 async fn load_profile_posts_from_author_replica(
@@ -5291,6 +5674,96 @@ fn projection_row_from_header(
     }
 }
 
+fn reaction_projection_row_from_doc(
+    reaction: &ReactionDocV1,
+    source_replica_id: &ReplicaId,
+) -> ReactionProjectionRow {
+    ReactionProjectionRow {
+        source_replica_id: source_replica_id.clone(),
+        target_object_id: reaction.target_object_id.clone(),
+        reaction_id: reaction.reaction_id.clone(),
+        author_pubkey: reaction.author_pubkey.as_str().to_string(),
+        created_at: reaction.created_at,
+        updated_at: reaction.updated_at,
+        reaction_key_kind: reaction.reaction_key_kind.clone(),
+        normalized_reaction_key: reaction.normalized_reaction_key.clone(),
+        emoji: reaction.emoji.clone(),
+        custom_asset_id: reaction.custom_asset_id.clone(),
+        custom_asset_snapshot: reaction.custom_asset_snapshot.clone(),
+        status: reaction.status.clone(),
+        source_key: stable_key(
+            "reactions",
+            &format!(
+                "{}/{}/state",
+                reaction.target_object_id.as_str(),
+                reaction.reaction_id.as_str()
+            ),
+        ),
+        source_envelope_id: reaction.envelope_id.clone(),
+        derived_at: Utc::now().timestamp_millis(),
+        projection_version: 1,
+    }
+}
+
+fn custom_reaction_asset_view_from_snapshot(
+    snapshot: &CustomReactionAssetSnapshotV1,
+) -> CustomReactionAssetView {
+    CustomReactionAssetView {
+        asset_id: snapshot.asset_id.clone(),
+        owner_pubkey: snapshot.owner_pubkey.as_str().to_string(),
+        blob_hash: snapshot.blob_hash.as_str().to_string(),
+        mime: snapshot.mime.clone(),
+        bytes: snapshot.bytes,
+        width: snapshot.width,
+        height: snapshot.height,
+    }
+}
+
+fn custom_reaction_asset_view_from_doc(asset: &CustomReactionAssetDocV1) -> CustomReactionAssetView {
+    CustomReactionAssetView {
+        asset_id: asset.asset_id.clone(),
+        owner_pubkey: asset.author_pubkey.as_str().to_string(),
+        blob_hash: asset.blob_hash.as_str().to_string(),
+        mime: asset.mime.clone(),
+        bytes: asset.bytes,
+        width: asset.width,
+        height: asset.height,
+    }
+}
+
+fn bookmarked_custom_reaction_view_from_row(
+    row: BookmarkedCustomReactionRow,
+) -> BookmarkedCustomReactionView {
+    BookmarkedCustomReactionView {
+        asset_id: row.asset_id,
+        owner_pubkey: row.owner_pubkey,
+        blob_hash: row.blob_hash.as_str().to_string(),
+        mime: row.mime,
+        bytes: row.bytes,
+        width: row.width,
+        height: row.height,
+    }
+}
+
+fn reaction_key_kind_label(kind: &ReactionKeyKind) -> &'static str {
+    match kind {
+        ReactionKeyKind::Emoji => "emoji",
+        ReactionKeyKind::CustomAsset => "custom_asset",
+    }
+}
+
+fn reaction_key_view_from_projection(row: &ReactionProjectionRow) -> ReactionKeyView {
+    ReactionKeyView {
+        reaction_key_kind: reaction_key_kind_label(&row.reaction_key_kind).to_string(),
+        normalized_reaction_key: row.normalized_reaction_key.clone(),
+        emoji: row.emoji.clone(),
+        custom_asset: row
+            .custom_asset_snapshot
+            .as_ref()
+            .map(custom_reaction_asset_view_from_snapshot),
+    }
+}
+
 async fn hydrate_object_projection_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -5336,6 +5809,28 @@ async fn hydrate_object_projection_from_replica(
     Ok(hydrated)
 }
 
+async fn hydrate_reaction_cache_from_replica(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+) -> Result<usize> {
+    let records = docs_sync
+        .query_replica(replica, DocQuery::Prefix("reactions/".into()))
+        .await?;
+    let mut hydrated = 0usize;
+    for record in records {
+        if !record.key.ends_with("/state") {
+            continue;
+        }
+        let reaction: ReactionDocV1 = serde_json::from_slice(record.value.as_slice())?;
+        projection_store
+            .upsert_reaction_cache(reaction_projection_row_from_doc(&reaction, replica))
+            .await?;
+        hydrated += 1;
+    }
+    Ok(hydrated)
+}
+
 async fn hydrate_topic_state_with_services(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -5362,6 +5857,7 @@ async fn hydrate_subscription_state_with_services(
     let post_count =
         hydrate_object_projection_from_replica(docs_sync, blob_service, projection_store, replica)
             .await?;
+    let reaction_count = hydrate_reaction_cache_from_replica(docs_sync, projection_store, replica).await?;
     let live_count = hydrate_live_sessions_from_replica(
         docs_sync,
         blob_service,
@@ -5378,7 +5874,7 @@ async fn hydrate_subscription_state_with_services(
         replica,
     )
     .await?;
-    Ok(post_count + live_count + game_count)
+    Ok(post_count + reaction_count + live_count + game_count)
 }
 
 async fn hydrate_live_sessions_from_replica(
@@ -6147,7 +6643,7 @@ mod tests {
     use kukuri_core::build_post_envelope_with_payload;
     use kukuri_docs_sync::IrohDocsNode;
     use kukuri_docs_sync::IrohDocsSync;
-    use kukuri_store::MemoryStore;
+    use kukuri_store::{MemoryStore, SqliteStore};
     use kukuri_transport::{
         DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
         IrohGossipTransport, SeedPeer,
@@ -6914,6 +7410,48 @@ mod tests {
         }
     }
 
+    fn tiny_png_bytes() -> Vec<u8> {
+        base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZPioAAAAASUVORK5CYII=")
+            .expect("decode png")
+    }
+
+    fn reaction_snapshot_from_view(
+        asset: &CustomReactionAssetView,
+    ) -> CustomReactionAssetSnapshotV1 {
+        CustomReactionAssetSnapshotV1 {
+            asset_id: asset.asset_id.clone(),
+            owner_pubkey: Pubkey::from(asset.owner_pubkey.as_str()),
+            blob_hash: kukuri_core::BlobHash::new(asset.blob_hash.clone()),
+            mime: asset.mime.clone(),
+            bytes: asset.bytes,
+            width: asset.width,
+            height: asset.height,
+        }
+    }
+
+    fn local_app_with_memory_services() -> (
+        AppService,
+        Arc<MemoryStore>,
+        Arc<MemoryDocsSync>,
+        Arc<MemoryBlobService>,
+    ) {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport,
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            generate_keys(),
+        );
+        (app, store, docs_sync, blob_service)
+    }
+
     async fn author_profile_post_docs(
         docs_sync: &dyn DocsSync,
         author_pubkey: &str,
@@ -7100,6 +7638,374 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn public_post_reaction_persists_and_aggregates_emoji_and_custom_keys() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = "kukuri:topic:reaction-public";
+        let object_id = app
+            .create_post(topic, "reactable post", None)
+            .await
+            .expect("create post");
+        let custom_asset = app
+            .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                mime: "image/png".into(),
+                bytes: tiny_png_bytes(),
+                width: 128,
+                height: 128,
+            })
+            .await
+            .expect("create custom reaction asset");
+
+        let emoji_state = app
+            .toggle_reaction(
+                topic,
+                object_id.as_str(),
+                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                None,
+            )
+            .await
+            .expect("toggle emoji reaction");
+        let custom_state = app
+            .toggle_reaction(
+                topic,
+                object_id.as_str(),
+                ReactionKeyV1::CustomAsset {
+                    asset_id: custom_asset.asset_id.clone(),
+                    snapshot: reaction_snapshot_from_view(&custom_asset),
+                },
+                None,
+            )
+            .await
+            .expect("toggle custom reaction");
+        let target = store
+            .get_object_projection(&EnvelopeId::from(object_id.clone()))
+            .await
+            .expect("object projection")
+            .expect("target projection");
+        let reaction_rows = store
+            .list_reaction_cache_for_target(
+                &target.source_replica_id,
+                &EnvelopeId::from(object_id.clone()),
+            )
+            .await
+            .expect("reaction rows");
+        let timeline = app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline");
+        let post = timeline
+            .items
+            .iter()
+            .find(|item| item.object_id == object_id)
+            .expect("reaction post");
+        let author_replica = author_replica_id(custom_asset.owner_pubkey.as_str());
+        let asset_docs = docs_sync
+            .query_replica(&author_replica, DocQuery::Prefix("reactions/assets/".into()))
+            .await
+            .expect("asset docs");
+        let stored_blob = blob_service
+            .fetch_blob(&kukuri_core::BlobHash::new(custom_asset.blob_hash.clone()))
+            .await
+            .expect("fetch stored blob")
+            .expect("stored blob bytes");
+
+        assert_eq!(emoji_state.target_object_id, object_id);
+        assert_eq!(custom_state.target_object_id, object_id);
+        assert_eq!(reaction_rows.len(), 2);
+        assert!(reaction_rows.iter().all(|row| row.status == ObjectStatus::Active));
+        assert_eq!(post.reaction_summary.len(), 2);
+        assert_eq!(post.my_reactions.len(), 2);
+        assert!(
+            post.reaction_summary.iter().any(|entry| {
+                entry.reaction_key_kind == "emoji"
+                    && entry.emoji.as_deref() == Some("👍")
+                    && entry.count == 1
+            })
+        );
+        assert!(
+            post.reaction_summary.iter().any(|entry| {
+                entry.reaction_key_kind == "custom_asset"
+                    && entry.custom_asset.as_ref().map(|asset| asset.asset_id.as_str())
+                        == Some(custom_asset.asset_id.as_str())
+                    && entry.count == 1
+            })
+        );
+        assert_eq!(asset_docs.len(), 2);
+        assert_eq!(stored_blob, tiny_png_bytes());
+    }
+
+    #[tokio::test]
+    async fn same_author_same_reaction_key_toggles_off() {
+        let (app, store, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:reaction-toggle";
+        let object_id = app
+            .create_post(topic, "toggle me", None)
+            .await
+            .expect("create post");
+
+        let first = app
+            .toggle_reaction(
+                topic,
+                object_id.as_str(),
+                ReactionKeyV1::Emoji {
+                    emoji: "🎉".into(),
+                },
+                None,
+            )
+            .await
+            .expect("first toggle");
+        let second = app
+            .toggle_reaction(
+                topic,
+                object_id.as_str(),
+                ReactionKeyV1::Emoji {
+                    emoji: "🎉".into(),
+                },
+                None,
+            )
+            .await
+            .expect("second toggle");
+        let target = store
+            .get_object_projection(&EnvelopeId::from(object_id.clone()))
+            .await
+            .expect("object projection")
+            .expect("target projection");
+        let reaction_rows = store
+            .list_reaction_cache_for_target(
+                &target.source_replica_id,
+                &EnvelopeId::from(object_id.clone()),
+            )
+            .await
+            .expect("reaction rows");
+
+        assert_eq!(first.reaction_summary.len(), 1);
+        assert!(second.reaction_summary.is_empty());
+        assert!(second.my_reactions.is_empty());
+        assert_eq!(reaction_rows.len(), 1);
+        assert_eq!(reaction_rows[0].status, ObjectStatus::Deleted);
+    }
+
+    #[tokio::test]
+    async fn different_reaction_keys_can_coexist_on_same_target() {
+        let (app, _, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:reaction-coexist";
+        let object_id = app
+            .create_post(topic, "multiple reactions", None)
+            .await
+            .expect("create post");
+
+        app.toggle_reaction(
+            topic,
+            object_id.as_str(),
+            ReactionKeyV1::Emoji { emoji: "🔥".into() },
+            None,
+        )
+        .await
+        .expect("fire reaction");
+        let state = app
+            .toggle_reaction(
+                topic,
+                object_id.as_str(),
+                ReactionKeyV1::Emoji { emoji: "😂".into() },
+                None,
+            )
+            .await
+            .expect("laugh reaction");
+
+        assert_eq!(state.reaction_summary.len(), 2);
+        assert_eq!(state.my_reactions.len(), 2);
+        assert!(
+            state
+                .reaction_summary
+                .iter()
+                .any(|entry| entry.normalized_reaction_key == "emoji:🔥" && entry.count == 1)
+        );
+        assert!(
+            state
+                .reaction_summary
+                .iter()
+                .any(|entry| entry.normalized_reaction_key == "emoji:😂" && entry.count == 1)
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_reaction_asset_is_author_owned_public_blob_backed_object() {
+        let (app, _, docs_sync, blob_service) = local_app_with_memory_services();
+        let asset = app
+            .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                mime: "image/png".into(),
+                bytes: tiny_png_bytes(),
+                width: 128,
+                height: 128,
+            })
+            .await
+            .expect("create custom reaction asset");
+        let listed = app
+            .list_my_custom_reaction_assets()
+            .await
+            .expect("list owned assets");
+        let author_replica = author_replica_id(asset.owner_pubkey.as_str());
+        let asset_docs = docs_sync
+            .query_replica(&author_replica, DocQuery::Prefix("reactions/assets/".into()))
+            .await
+            .expect("asset docs");
+        let stored_blob = blob_service
+            .fetch_blob(&kukuri_core::BlobHash::new(asset.blob_hash.clone()))
+            .await
+            .expect("fetch blob")
+            .expect("stored blob");
+
+        assert_eq!(listed, vec![asset.clone()]);
+        assert_eq!(asset_docs.len(), 2);
+        assert_eq!(stored_blob, tiny_png_bytes());
+    }
+
+    #[tokio::test]
+    async fn local_bookmarks_restore_saved_custom_reactions_after_restart() {
+        let dir = tempdir().expect("tempdir");
+        let database_path = dir.path().join("bookmark-store.sqlite");
+        let store = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("sqlite store"),
+        );
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let local_keys = generate_keys();
+        let foreign_keys = generate_keys();
+        let foreign_pubkey = foreign_keys.public_key_hex();
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            local_keys,
+        );
+
+        app.bookmark_custom_reaction(CustomReactionAssetSnapshotV1 {
+            asset_id: "asset-bookmarked".into(),
+            owner_pubkey: Pubkey::from(foreign_pubkey.as_str()),
+            blob_hash: kukuri_core::BlobHash::new("blob-bookmarked"),
+            mime: "image/png".into(),
+            bytes: 128,
+            width: 128,
+            height: 128,
+        })
+        .await
+        .expect("bookmark custom reaction");
+        drop(app);
+        store.close().await;
+
+        let reopened = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("reopen sqlite store"),
+        );
+        let reopened_app = AppService::new_with_services(
+            reopened.clone(),
+            reopened.clone(),
+            transport,
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let bookmarks = reopened_app
+            .list_bookmarked_custom_reactions()
+            .await
+            .expect("list bookmarks after restart");
+
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].asset_id, "asset-bookmarked");
+        assert_eq!(bookmarks[0].owner_pubkey, foreign_pubkey);
+    }
+
+    #[tokio::test]
+    async fn private_channel_reaction_stays_epoch_scoped_after_rotate() {
+        let (app, store, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:reaction-private";
+        let channel = app
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "friends".into(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create private channel");
+        let channel_id = ChannelId::new(channel.channel_id.clone());
+        let channel_ref = ChannelRef::PrivateChannel {
+            channel_id: channel_id.clone(),
+        };
+        let old_post_id = app
+            .create_post_in_channel(topic, channel_ref.clone(), "before rotate", None)
+            .await
+            .expect("create old epoch post");
+        let old_state = app
+            .toggle_reaction(
+                topic,
+                old_post_id.as_str(),
+                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                Some(channel_ref.clone()),
+            )
+            .await
+            .expect("toggle old epoch reaction");
+        let old_target = store
+            .get_object_projection(&EnvelopeId::from(old_post_id.clone()))
+            .await
+            .expect("old projection")
+            .expect("old target");
+
+        let rotated = app
+            .rotate_private_channel(topic, channel.channel_id.as_str())
+            .await
+            .expect("rotate private channel");
+        let new_post_id = app
+            .create_post_in_channel(topic, channel_ref.clone(), "after rotate", None)
+            .await
+            .expect("create new epoch post");
+        let new_state = app
+            .toggle_reaction(
+                topic,
+                new_post_id.as_str(),
+                ReactionKeyV1::Emoji { emoji: "👍".into() },
+                Some(channel_ref),
+            )
+            .await
+            .expect("toggle new epoch reaction");
+        let new_target = store
+            .get_object_projection(&EnvelopeId::from(new_post_id.clone()))
+            .await
+            .expect("new projection")
+            .expect("new target");
+        let old_rows = store
+            .list_reaction_cache_for_target(
+                &old_target.source_replica_id,
+                &EnvelopeId::from(old_post_id),
+            )
+            .await
+            .expect("old reaction rows");
+        let new_rows = store
+            .list_reaction_cache_for_target(
+                &new_target.source_replica_id,
+                &EnvelopeId::from(new_post_id),
+            )
+            .await
+            .expect("new reaction rows");
+
+        assert_ne!(rotated.current_epoch_id, channel.current_epoch_id);
+        assert_ne!(old_target.source_replica_id, new_target.source_replica_id);
+        assert_eq!(old_state.source_replica_id, old_target.source_replica_id.as_str());
+        assert_eq!(new_state.source_replica_id, new_target.source_replica_id.as_str());
+        assert_eq!(old_rows.len(), 1);
+        assert_eq!(new_rows.len(), 1);
+        assert_eq!(old_rows[0].status, ObjectStatus::Active);
+        assert_eq!(new_rows[0].status, ObjectStatus::Active);
+        assert_ne!(old_rows[0].source_replica_id, new_rows[0].source_replica_id);
+    }
+
+    #[tokio::test]
     async fn create_public_post_persists_profile_post_doc_and_lists_profile_timeline() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
@@ -7149,6 +8055,8 @@ mod tests {
         assert_eq!(post.published_topic_id.as_deref(), Some(topic));
         assert_eq!(post.channel_id, None);
         assert_eq!(post.audience_label, "Public");
+        assert!(post.reaction_summary.is_empty());
+        assert!(post.my_reactions.is_empty());
     }
 
     #[tokio::test]

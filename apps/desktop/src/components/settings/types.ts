@@ -1,5 +1,6 @@
 import { type DesktopTheme } from '@/lib/theme';
 import { type SupportedLocale } from '@/i18n';
+import { type BookmarkedCustomReactionView, type CustomReactionAssetView } from '@/lib/api';
 
 export type SettingsPanelStatus = 'loading' | 'ready' | 'error';
 
@@ -85,4 +86,12 @@ export type AppearancePanelView = {
   selectedLocale: SupportedLocale;
   options: AppearanceOptionView[];
   localeOptions: LocaleOptionView[];
+};
+
+export type ReactionsPanelView = {
+  status: SettingsPanelStatus;
+  summaryLabel: string;
+  panelError?: string | null;
+  ownedAssets: CustomReactionAssetView[];
+  bookmarkedAssets: BookmarkedCustomReactionView[];
 };

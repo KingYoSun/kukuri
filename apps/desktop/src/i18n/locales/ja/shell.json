@@ -52,6 +52,10 @@
     "discovery": {
       "description": "seeded DHT 設定と discovery diagnostics です。",
       "label": "ディスカバリー"
+    },
+    "reactions": {
+      "description": "カスタムリアクションの作成と保存済みリアクションの管理。",
+      "label": "Reactions"
     }
   },
   "topBar": {

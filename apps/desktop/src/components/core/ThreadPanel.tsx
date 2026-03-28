@@ -1,3 +1,9 @@
+import type {
+  BookmarkedCustomReactionView,
+  CustomReactionAssetView,
+  ReactionKeyInput,
+} from '@/lib/api';
+
 import { TimelineFeed } from './TimelineFeed';
 import { type PostCardView, type ThreadPanelState } from './types';
 
@@ -10,6 +16,13 @@ type ThreadPanelProps = {
   onReply: (post: PostCardView['post']) => void;
   onRepost?: (post: PostCardView['post']) => void;
   onQuoteRepost?: (post: PostCardView['post']) => void;
+  localAuthorPubkey?: string;
+  mediaObjectUrls?: Record<string, string | null>;
+  ownedReactionAssets?: CustomReactionAssetView[];
+  bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
+  onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  onManageReactions?: () => void;
 };
 
 export function ThreadPanel({
@@ -21,6 +34,13 @@ export function ThreadPanel({
   onReply,
   onRepost,
   onQuoteRepost,
+  localAuthorPubkey,
+  mediaObjectUrls,
+  ownedReactionAssets,
+  bookmarkedReactionAssets,
+  onToggleReaction,
+  onBookmarkCustomReaction,
+  onManageReactions,
 }: ThreadPanelProps) {
   return (
     <div className='shell-main-stack'>
@@ -35,6 +55,13 @@ export function ThreadPanel({
         onReply={onReply}
         onRepost={onRepost}
         onQuoteRepost={onQuoteRepost}
+        localAuthorPubkey={localAuthorPubkey}
+        mediaObjectUrls={mediaObjectUrls}
+        ownedReactionAssets={ownedReactionAssets}
+        bookmarkedReactionAssets={bookmarkedReactionAssets}
+        onToggleReaction={onToggleReaction}
+        onBookmarkCustomReaction={onBookmarkCustomReaction}
+        onManageReactions={onManageReactions}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
 import { ConnectivityPanel } from './ConnectivityPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
+import { ReactionsPanel } from './ReactionsPanel';
 import {
   createAppearancePanelFixture,
   createCommunityNodePanelFixture,
@@ -165,4 +166,54 @@ test('settings panels avoid the legacy grid classname collision', () => {
   );
 
   expect(container.querySelector('.grid')).toBeNull();
+});
+
+test('reactions panel renders owned and saved assets and removes bookmarks', async () => {
+  const user = userEvent.setup();
+  const onRemoveBookmark = vi.fn();
+
+  render(
+    <ReactionsPanel
+      view={{
+        status: 'ready',
+        summaryLabel: 'ready',
+        ownedAssets: [
+          {
+            asset_id: 'asset-owned',
+            owner_pubkey: 'a'.repeat(64),
+            blob_hash: 'blob-owned',
+            mime: 'image/png',
+            bytes: 128,
+            width: 128,
+            height: 128,
+          },
+        ],
+        bookmarkedAssets: [
+          {
+            asset_id: 'asset-saved',
+            owner_pubkey: 'b'.repeat(64),
+            blob_hash: 'blob-saved',
+            mime: 'image/gif',
+            bytes: 256,
+            width: 128,
+            height: 128,
+          },
+        ],
+      }}
+      creating={false}
+      mediaObjectUrls={{
+        'blob-owned': 'https://example.com/owned.png',
+        'blob-saved': 'https://example.com/saved.gif',
+      }}
+      onCreateAsset={() => {}}
+      onRemoveBookmark={onRemoveBookmark}
+    />
+  );
+
+  expect(screen.getByText('My custom reactions')).toBeInTheDocument();
+  expect(screen.getByAltText('asset-owned')).toHaveAttribute('src', 'https://example.com/owned.png');
+  expect(screen.getByAltText('asset-saved')).toHaveAttribute('src', 'https://example.com/saved.gif');
+
+  await user.click(screen.getByRole('button', { name: 'Clear' }));
+  expect(onRemoveBookmark).toHaveBeenCalledWith('asset-saved');
 });

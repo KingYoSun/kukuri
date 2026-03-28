@@ -2,9 +2,12 @@ import {
   type AttachmentView,
   type AuthorSocialView,
   type BlobMediaPayload,
+  type BookmarkedCustomReactionView,
   type ChannelAudienceKind,
   type CommunityNodeConfig,
   type CommunityNodeNodeStatus,
+  type CustomReactionAssetView,
+  type CustomReactionCropRect,
   type DesktopApi,
   type DiscoveryConfig,
   type FriendOnlyGrantPreview,
@@ -16,6 +19,8 @@ import {
   type PostView,
   type PrivateChannelInvitePreview,
   type Profile,
+  type ReactionKeyInput,
+  type ReactionStateView,
   type SyncStatus,
   type TimelineScope,
   type TimelineView,
@@ -53,6 +58,8 @@ function withSocialPostDefaults(post: PostView): PostView {
     channel_id: post.channel_id ?? null,
     audience_label: post.audience_label ?? (post.channel_id ? 'Private channel' : 'Public'),
     attachments: [...post.attachments],
+    reaction_summary: [...(post.reaction_summary ?? [])],
+    my_reactions: [...(post.my_reactions ?? [])],
   };
 }
 
@@ -145,6 +152,21 @@ function filterChannelScopedItems<T extends { channel_id?: string | null }>(
     return items.filter((item) => !item.channel_id || joinedIds.has(item.channel_id));
   }
   return items.filter((item) => !item.channel_id);
+}
+
+function normalizedReactionKey(reactionKey: ReactionKeyInput): string {
+  return reactionKey.kind === 'emoji'
+    ? `emoji:${reactionKey.emoji.trim()}`
+    : `custom_asset:${reactionKey.asset.asset_id}`;
+}
+
+function reactionStateForPost(post: PostView): ReactionStateView {
+  return {
+    target_object_id: post.object_id,
+    source_replica_id: post.channel_id ?? 'public',
+    reaction_summary: [...post.reaction_summary],
+    my_reactions: [...post.my_reactions],
+  };
 }
 
 export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopApi {
@@ -256,6 +278,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       withDefaultAuthorView(pubkey, view),
     ])
   );
+  const ownedCustomReactionAssets: CustomReactionAssetView[] = [];
+  const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
 
   const api: DesktopApi = {
     async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
@@ -400,6 +424,100 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         ),
       ];
       return objectId;
+    },
+    async toggleReaction(targetTopicId, targetObjectId, reactionKey) {
+      const normalizedKey = normalizedReactionKey(reactionKey);
+      const posts = postsByTopic[targetTopicId] ?? [];
+      const index = posts.findIndex((post) => post.object_id === targetObjectId);
+      if (index < 0) {
+        throw new Error('reaction target was not found');
+      }
+      const post = withSocialPostDefaults(posts[index]);
+      const myReactions = new Map(
+        post.my_reactions.map((reaction) => [reaction.normalized_reaction_key, reaction])
+      );
+      const summary = new Map(
+        post.reaction_summary.map((reaction) => [reaction.normalized_reaction_key, { ...reaction }])
+      );
+      if (myReactions.has(normalizedKey)) {
+        myReactions.delete(normalizedKey);
+        const current = summary.get(normalizedKey);
+        if (current) {
+          const nextCount = current.count - 1;
+          if (nextCount <= 0) {
+            summary.delete(normalizedKey);
+          } else {
+            current.count = nextCount;
+          }
+        }
+      } else {
+        const keyView =
+          reactionKey.kind === 'emoji'
+            ? {
+                reaction_key_kind: 'emoji',
+                normalized_reaction_key: normalizedKey,
+                emoji: reactionKey.emoji.trim(),
+                custom_asset: null,
+              }
+            : {
+                reaction_key_kind: 'custom_asset',
+                normalized_reaction_key: normalizedKey,
+                emoji: null,
+                custom_asset: { ...reactionKey.asset },
+              };
+        myReactions.set(normalizedKey, keyView);
+        const current = summary.get(normalizedKey);
+        summary.set(normalizedKey, {
+          ...(current ?? keyView),
+          count: (current?.count ?? 0) + 1,
+        });
+      }
+      const nextPost = withSocialPostDefaults({
+        ...post,
+        reaction_summary: Array.from(summary.values()),
+        my_reactions: Array.from(myReactions.values()),
+      });
+      postsByTopic[targetTopicId] = posts.map((candidate) =>
+        candidate.object_id === targetObjectId ? nextPost : candidate
+      );
+      return reactionStateForPost(nextPost);
+    },
+    async listMyCustomReactionAssets() {
+      return ownedCustomReactionAssets.map((asset) => ({ ...asset }));
+    },
+    async createCustomReactionAsset(_upload, _cropRect: CustomReactionCropRect) {
+      sequence += 1;
+      const asset: CustomReactionAssetView = {
+        asset_id: `asset-${sequence}`,
+        owner_pubkey: syncStatus.local_author_pubkey,
+        blob_hash: `blob-${sequence}`,
+        mime: 'image/png',
+        bytes: 128,
+        width: 128,
+        height: 128,
+      };
+      ownedCustomReactionAssets.unshift(asset);
+      return { ...asset };
+    },
+    async listBookmarkedCustomReactions() {
+      return bookmarkedCustomReactionAssets.map((asset) => ({ ...asset }));
+    },
+    async bookmarkCustomReaction(asset) {
+      const existing = bookmarkedCustomReactionAssets.find(
+        (candidate) => candidate.asset_id === asset.asset_id
+      );
+      if (existing) {
+        return { ...existing };
+      }
+      const bookmarked = { ...asset };
+      bookmarkedCustomReactionAssets.unshift(bookmarked);
+      return bookmarked;
+    },
+    async removeBookmarkedCustomReaction(assetId) {
+      const index = bookmarkedCustomReactionAssets.findIndex((asset) => asset.asset_id === assetId);
+      if (index >= 0) {
+        bookmarkedCustomReactionAssets.splice(index, 1);
+      }
     },
     async listTimeline(topic, _cursor, _limit, scope: TimelineScope = { kind: 'public' }) {
       syncStatus.subscribed_topics = Array.from(new Set([...syncStatus.subscribed_topics, topic]));

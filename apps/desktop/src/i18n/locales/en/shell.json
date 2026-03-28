@@ -52,6 +52,10 @@
     "discovery": {
       "description": "Seeded DHT configuration and discovery diagnostics.",
       "label": "Discovery"
+    },
+    "reactions": {
+      "description": "Custom reaction creation and saved reaction management.",
+      "label": "Reactions"
     }
   },
   "topBar": {

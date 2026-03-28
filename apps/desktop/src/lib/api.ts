@@ -41,6 +41,48 @@ export type PostView = {
   is_threadable?: boolean;
   channel_id?: string | null;
   audience_label: string;
+  reaction_summary: ReactionSummaryView[];
+  my_reactions: ReactionKeyView[];
+};
+
+export type CustomReactionAssetView = {
+  asset_id: string;
+  owner_pubkey: string;
+  blob_hash: string;
+  mime: string;
+  bytes: number;
+  width: number;
+  height: number;
+};
+
+export type BookmarkedCustomReactionView = CustomReactionAssetView;
+
+export type ReactionKeyView = {
+  reaction_key_kind: 'emoji' | 'custom_asset' | string;
+  normalized_reaction_key: string;
+  emoji?: string | null;
+  custom_asset?: CustomReactionAssetView | null;
+};
+
+export type ReactionSummaryView = ReactionKeyView & {
+  count: number;
+};
+
+export type ReactionStateView = {
+  target_object_id: string;
+  source_replica_id: string;
+  reaction_summary: ReactionSummaryView[];
+  my_reactions: ReactionKeyView[];
+};
+
+export type ReactionKeyInput =
+  | { kind: 'emoji'; emoji: string }
+  | { kind: 'custom_asset'; asset: CustomReactionAssetView };
+
+export type CustomReactionCropRect = {
+  x: number;
+  y: number;
+  size: number;
 };
 
 export type RepostSourceView = {
@@ -318,6 +360,20 @@ export interface DesktopApi {
     sourceObjectId: string,
     commentary?: string | null
   ): Promise<string>;
+  toggleReaction(
+    targetTopicId: string,
+    targetObjectId: string,
+    reactionKey: ReactionKeyInput,
+    channelRef?: ChannelRef | null
+  ): Promise<ReactionStateView>;
+  listMyCustomReactionAssets(): Promise<CustomReactionAssetView[]>;
+  createCustomReactionAsset(
+    upload: CreateAttachmentInput,
+    cropRect: CustomReactionCropRect
+  ): Promise<CustomReactionAssetView>;
+  listBookmarkedCustomReactions(): Promise<BookmarkedCustomReactionView[]>;
+  bookmarkCustomReaction(asset: CustomReactionAssetView): Promise<BookmarkedCustomReactionView>;
+  removeBookmarkedCustomReaction(assetId: string): Promise<void>;
   listTimeline(
     topic: string,
     cursor?: TimelineCursor | null,
@@ -483,6 +539,85 @@ export const runtimeApi: DesktopApi = {
         source_topic: sourceTopic,
         source_object_id: sourceObjectId,
         commentary,
+      },
+    });
+  },
+  toggleReaction: async (targetTopicId, targetObjectId, reactionKey, channelRef = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.toggleReaction(
+        targetTopicId,
+        targetObjectId,
+        reactionKey,
+        channelRef
+      );
+    }
+    return invokeDesktop<ReactionStateView>('toggle_reaction', {
+      request: {
+        target_topic_id: targetTopicId,
+        target_object_id: targetObjectId,
+        reaction_key:
+          reactionKey.kind === 'emoji'
+            ? { kind: 'emoji', emoji: reactionKey.emoji }
+            : {
+                kind: 'custom_asset',
+                asset_id: reactionKey.asset.asset_id,
+                owner_pubkey: reactionKey.asset.owner_pubkey,
+                blob_hash: reactionKey.asset.blob_hash,
+                mime: reactionKey.asset.mime,
+                bytes: reactionKey.asset.bytes,
+                width: reactionKey.asset.width,
+                height: reactionKey.asset.height,
+              },
+        channel_ref: channelRef,
+      },
+    });
+  },
+  listMyCustomReactionAssets: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listMyCustomReactionAssets();
+    }
+    return invokeDesktop<CustomReactionAssetView[]>('list_my_custom_reaction_assets');
+  },
+  createCustomReactionAsset: async (upload, cropRect) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createCustomReactionAsset(upload, cropRect);
+    }
+    return invokeDesktop<CustomReactionAssetView>('create_custom_reaction_asset', {
+      request: {
+        upload,
+        crop_rect: cropRect,
+      },
+    });
+  },
+  listBookmarkedCustomReactions: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listBookmarkedCustomReactions();
+    }
+    return invokeDesktop<BookmarkedCustomReactionView[]>('list_bookmarked_custom_reactions');
+  },
+  bookmarkCustomReaction: async (asset) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.bookmarkCustomReaction(asset);
+    }
+    return invokeDesktop<BookmarkedCustomReactionView>('bookmark_custom_reaction', {
+      request: {
+        asset_id: asset.asset_id,
+        owner_pubkey: asset.owner_pubkey,
+        blob_hash: asset.blob_hash,
+        mime: asset.mime,
+        bytes: asset.bytes,
+        width: asset.width,
+        height: asset.height,
+      },
+    });
+  },
+  removeBookmarkedCustomReaction: async (assetId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.removeBookmarkedCustomReaction(assetId);
+    }
+    return invokeDesktop<void>('remove_bookmarked_custom_reaction', {
+      request: {
+        asset_id: assetId,
       },
     });
   },
