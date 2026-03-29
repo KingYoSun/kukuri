@@ -49,6 +49,7 @@ Thumbs.db
 build/
 out/
 release/
+apps/desktop/storybook-static/
 
 # Rust
 **/*.rs.bk
