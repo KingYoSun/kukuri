@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Search, SmilePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -53,14 +53,11 @@ export function ReactionPickerPopover({
   const [query, setQuery] = useState('');
   const trimmedQuery = query.trim();
   const normalizedQuery = trimmedQuery.toLowerCase();
-  const filteredAssets = useMemo(() => {
-    if (!normalizedQuery) {
-      return [];
-    }
-    return assets.filter((asset) =>
-      [asset.search_key, asset.asset_id].some((value) => value.toLowerCase().includes(normalizedQuery))
-    );
-  }, [assets, normalizedQuery]);
+  const filteredAssets = normalizedQuery
+    ? assets.filter((asset) =>
+        [asset.search_key, asset.asset_id].some((value) => value.toLowerCase().includes(normalizedQuery))
+      )
+    : [];
   const canUseEmojiQuery = trimmedQuery.length > 0 && looksLikeEmojiQuery(trimmedQuery);
 
   const handleSelect = (reactionKey: ReactionKeyInput) => {
