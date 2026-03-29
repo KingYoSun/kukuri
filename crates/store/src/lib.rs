@@ -2743,9 +2743,10 @@ mod tests {
                 .expect("upsert reaction cache");
         }
 
-        let recent = ProjectionStore::list_recent_reaction_cache_by_author(&store, author_pubkey.as_str())
-            .await
-            .expect("list recent reaction cache");
+        let recent =
+            ProjectionStore::list_recent_reaction_cache_by_author(&store, author_pubkey.as_str())
+                .await
+                .expect("list recent reaction cache");
 
         assert_eq!(recent.len(), 2);
         assert_eq!(recent[0].normalized_reaction_key, "emoji:😂");

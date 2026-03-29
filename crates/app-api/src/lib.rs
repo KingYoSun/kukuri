@@ -6030,7 +6030,10 @@ fn custom_reaction_asset_view_from_snapshot(
         asset_id: snapshot.asset_id.clone(),
         owner_pubkey: snapshot.owner_pubkey.as_str().to_string(),
         blob_hash: snapshot.blob_hash.as_str().to_string(),
-        search_key: search_key_or_asset_id(snapshot.search_key.as_str(), snapshot.asset_id.as_str()),
+        search_key: search_key_or_asset_id(
+            snapshot.search_key.as_str(),
+            snapshot.asset_id.as_str(),
+        ),
         mime: snapshot.mime.clone(),
         bytes: snapshot.bytes,
         width: snapshot.width,
@@ -8253,7 +8256,7 @@ mod tests {
             topic,
             object_id.as_str(),
             ReactionKeyV1::Emoji {
-                emoji: "🔥".into(),
+                emoji: "🔥".into()
             },
             None,
         )
@@ -8264,7 +8267,7 @@ mod tests {
             topic,
             object_id.as_str(),
             ReactionKeyV1::Emoji {
-                emoji: "😂".into(),
+                emoji: "😂".into()
             },
             None,
         )
@@ -8275,7 +8278,7 @@ mod tests {
             topic,
             object_id.as_str(),
             ReactionKeyV1::Emoji {
-                emoji: "🔥".into(),
+                emoji: "🔥".into()
             },
             None,
         )
