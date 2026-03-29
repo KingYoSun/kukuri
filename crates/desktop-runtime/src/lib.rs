@@ -2844,6 +2844,38 @@ mod tests {
         }
     }
 
+    async fn wait_for_direct_topic_peer_count(
+        runtime: &DesktopRuntime,
+        topic: &str,
+        expected: usize,
+        timeout_label: &str,
+    ) {
+        match timeout(runtime_replication_timeout(), async {
+            let mut stable_ready_polls = 0usize;
+            loop {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                let ready = topic_has_direct_peer(&status, topic, expected);
+                if ready {
+                    stable_ready_polls += 1;
+                    if stable_ready_polls >= 3 {
+                        return;
+                    }
+                } else {
+                    stable_ready_polls = 0;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
+            }
+        }
+    }
+
     async fn wait_for_connected_peer_count(
         runtime: &DesktopRuntime,
         expected: usize,
@@ -4119,6 +4151,20 @@ mod tests {
             })
             .await
             .expect("subscribe b tracked topic");
+        wait_for_direct_topic_peer_count(
+            &runtime_a,
+            tracked_topic,
+            1,
+            "profile tracked topic direct readiness timeout a",
+        )
+        .await;
+        wait_for_direct_topic_peer_count(
+            &runtime_b,
+            tracked_topic,
+            1,
+            "profile tracked topic direct readiness timeout b",
+        )
+        .await;
 
         let tracked_object_id = replicate_public_post_with_retry(
             &runtime_a,
