@@ -9,10 +9,13 @@
   "navigation": {
     "activeCount": "{{count}} 个活跃",
     "addTopic": "添加主题",
+    "channel": "频道",
+    "channelsGroup": "频道",
     "close": "关闭导航",
     "open": "打开导航",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "主导航",
+    "publicScope": "公开动态",
     "removeTopic": "移除 {{topic}}",
     "seededDht": "seeded dht",
     "staticPeers": "static peers",
@@ -22,7 +25,6 @@
     "trackedTopics": "跟踪的主题"
   },
   "primarySections": {
-    "channels": "频道",
     "game": "游戏",
     "live": "直播",
     "profile": "资料",

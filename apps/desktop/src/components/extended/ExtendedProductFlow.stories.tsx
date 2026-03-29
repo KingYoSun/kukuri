@@ -93,15 +93,9 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
           onChannelAudienceChange={() => undefined}
           onInviteTokenChange={setInviteToken}
           onCreateChannel={(event) => event.preventDefault()}
-          onJoinInvite={(event) => event.preventDefault()}
-          onJoinGrant={() => undefined}
-          onJoinShare={() => undefined}
+          onJoin={(event) => event.preventDefault()}
           onSelectChannel={() => undefined}
-          onCreateInvite={() => undefined}
-          onCreateGrant={() => undefined}
-          onCreateShare={() => undefined}
-          onFreeze={() => undefined}
-          onRotate={() => undefined}
+          onShare={() => undefined}
         />
 
         <LiveSessionPanel

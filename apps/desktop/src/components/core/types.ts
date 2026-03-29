@@ -1,14 +1,23 @@
 import type * as React from 'react';
 
-import type { AuthorSocialView, PostView } from '@/lib/api';
+import type { AuthorSocialView, ChannelAudienceKind, PostView } from '@/lib/api';
+
+export type TopicChannelSummary = {
+  channelId: string;
+  label: string;
+  audienceKind: ChannelAudienceKind;
+  active: boolean;
+};
 
 export type TopicDiagnosticSummary = {
   topic: string;
   active: boolean;
+  publicActive?: boolean;
   removable: boolean;
   connectionLabel: string;
   peerCount: number;
   lastReceivedLabel: string;
+  channels?: TopicChannelSummary[];
 };
 
 export type ComposerDraftAttachmentView = {

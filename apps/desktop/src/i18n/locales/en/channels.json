@@ -1,12 +1,8 @@
 {
   "actions": {
     "createChannel": "Create Channel",
-    "createGrant": "Create Grant",
-    "createInvite": "Create Invite",
-    "createShare": "Create Share",
-    "joinGrant": "Join Grant",
-    "joinInvite": "Join Invite",
-    "joinShare": "Join Share"
+    "join": "Join",
+    "share": "Share"
   },
   "audienceOptions": {
     "friend_only": "Friends",
@@ -16,7 +12,7 @@
   "editor": {
     "audience": "Audience",
     "createChannel": "Create Channel",
-    "joinViaInvite": "Join via Invite",
+    "join": "Join",
     "placeholders": {
       "channelLabel": "core contributors",
       "inviteToken": "paste private channel invite, friend grant, or friends+ share"
@@ -25,28 +21,16 @@
   "empty": "No joined private channels for this topic.",
   "errors": {
     "channelLabelRequired": "channel label is required",
-    "grantTokenRequired": "grant token is required",
     "inviteTokenRequired": "invite token is required",
-    "selectChannelForFreeze": "select a private channel before freezing it",
-    "selectChannelForGrant": "select a private channel before creating a grant",
-    "selectChannelForInvite": "select a private channel before creating an invite",
-    "selectChannelForRotate": "select a private channel before rotating it",
     "selectChannelForShare": "select a private channel before creating a share",
-    "shareTokenRequired": "share token is required",
     "failedCreateChannel": "failed to create channel",
-    "failedCreateInvite": "failed to create invite",
-    "failedCreateGrant": "failed to create friend grant",
     "failedCreateShare": "failed to create friends+ share",
-    "failedFreezeChannel": "failed to freeze private channel",
     "failedJoinChannel": "failed to join private channel",
-    "failedJoinFriendsChannel": "failed to join friends channel",
-    "failedJoinFriendsPlusChannel": "failed to join friends+ channel",
-    "failedRotateChannel": "failed to rotate private channel"
+    "failedShareChannel": "failed to share private channel"
   },
   "inspectHint": "Inspect policy and actions here.",
   "joined": "{{count}} joined",
   "loading": "Loading private channels…",
-  "latestGrant": "Latest grant",
   "latestInvite": "Latest invite",
   "latestShare": "Latest share",
   "policies": {

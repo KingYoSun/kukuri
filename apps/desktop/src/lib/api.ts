@@ -315,11 +315,31 @@ export type JoinedPrivateChannelView = {
   stale_participant_count: number;
 };
 
+export type ChannelAccessTokenKind = 'invite' | 'grant' | 'share';
+
+export type ChannelAccessTokenExport = {
+  kind: ChannelAccessTokenKind;
+  token: string;
+};
+
+export type ChannelAccessTokenPreview = {
+  kind: ChannelAccessTokenKind;
+  topic_id: string;
+  channel_id: string;
+  channel_label: string;
+  owner_pubkey: string;
+  inviter_pubkey?: string | null;
+  sponsor_pubkey?: string | null;
+  epoch_id: string;
+};
+
 export type PrivateChannelInvitePreview = {
   channel_id: string;
   topic_id: string;
   channel_label: string;
   inviter_pubkey: string;
+  owner_pubkey: string;
+  epoch_id: string;
   expires_at?: number | null;
   namespace_secret_hex: string;
 };
@@ -425,6 +445,12 @@ export interface DesktopApi {
     expiresAt?: number | null
   ): Promise<string>;
   importPrivateChannelInvite(token: string): Promise<PrivateChannelInvitePreview>;
+  exportChannelAccessToken(
+    topic: string,
+    channelId: string,
+    expiresAt?: number | null
+  ): Promise<ChannelAccessTokenExport>;
+  importChannelAccessToken(token: string): Promise<ChannelAccessTokenPreview>;
   exportFriendOnlyGrant(
     topic: string,
     channelId: string,
@@ -816,6 +842,26 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.importPrivateChannelInvite(token);
     }
     return invokeDesktop<PrivateChannelInvitePreview>('import_private_channel_invite', {
+      request: { token },
+    });
+  },
+  exportChannelAccessToken: async (topic, channelId, expiresAt = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.exportChannelAccessToken(topic, channelId, expiresAt);
+    }
+    return invokeDesktop<ChannelAccessTokenExport>('export_channel_access_token', {
+      request: {
+        topic,
+        channel_id: channelId,
+        expires_at: expiresAt,
+      },
+    });
+  },
+  importChannelAccessToken: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importChannelAccessToken(token);
+    }
+    return invokeDesktop<ChannelAccessTokenPreview>('import_channel_access_token', {
       request: { token },
     });
   },

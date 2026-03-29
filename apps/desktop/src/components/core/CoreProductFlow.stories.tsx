@@ -41,6 +41,7 @@ const TOPIC_ITEMS: TopicDiagnosticSummary[] = [
   {
     topic: 'kukuri:topic:demo',
     active: true,
+    publicActive: true,
     removable: false,
     connectionLabel: 'joined',
     peerCount: 2,
@@ -49,6 +50,7 @@ const TOPIC_ITEMS: TopicDiagnosticSummary[] = [
   {
     topic: 'kukuri:topic:relay',
     active: false,
+    publicActive: false,
     removable: true,
     connectionLabel: 'relay-assisted',
     peerCount: 1,
@@ -241,7 +243,6 @@ function CoreProductFlowStory({ width }: { width: number }) {
   const primaryItems = useMemo(
     () => [
       { id: 'timeline' as const, label: 'Timeline' },
-      { id: 'channels' as const, label: 'Channels' },
       { id: 'live' as const, label: 'Live' },
       { id: 'game' as const, label: 'Game' },
       { id: 'profile' as const, label: 'Profile' },
@@ -284,10 +285,12 @@ function CoreProductFlowStory({ width }: { width: number }) {
                 </div>
               </Label>
             }
+            channelControl={<div />}
             topicList={
               <TopicNavList
                 items={TOPIC_ITEMS}
                 onSelectTopic={() => undefined}
+                onSelectChannel={() => undefined}
                 onRemoveTopic={() => undefined}
               />
             }

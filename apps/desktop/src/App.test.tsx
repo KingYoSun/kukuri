@@ -232,7 +232,7 @@ function getWorkspaceTabs() {
 
 async function selectWorkspace(
   user: ReturnType<typeof userEvent.setup>,
-  label: 'Timeline' | 'Channels' | 'Live' | 'Game' | 'Profile'
+  label: 'Timeline' | 'Live' | 'Game' | 'Profile'
 ) {
   await user.click(within(getWorkspaceTabs()).getByRole('tab', { name: label }));
   await waitFor(() => {
@@ -241,6 +241,23 @@ async function selectWorkspace(
       'true'
     );
   });
+}
+
+function getPrimaryNavigation() {
+  return screen.getByLabelText('Primary navigation');
+}
+
+async function openChannelSection(
+  user: ReturnType<typeof userEvent.setup>,
+  nav = getPrimaryNavigation()
+) {
+  const trigger = nav.querySelector<HTMLButtonElement>('.shell-nav-accordion-trigger');
+  if (!trigger) {
+    throw new Error('channel accordion trigger not found');
+  }
+  if (trigger.getAttribute('aria-expanded') !== 'true') {
+    await user.click(trigger);
+  }
 }
 
 function getDetailPane(name: 'Thread' | 'Author') {
@@ -279,8 +296,8 @@ test.each([
   },
   {
     path: '#/channels',
-    workspaceLabel: 'Channels',
-    expectedControl: () => screen.getByPlaceholderText('core contributors'),
+    workspaceLabel: 'Timeline',
+    expectedControl: () => screen.getByPlaceholderText('Write a post'),
   },
   {
     path: '#/live',
@@ -300,14 +317,18 @@ test.each([
 ])(
   'primary hash route $path selects the correct section',
   async ({ path, workspaceLabel, expectedControl }) => {
-  renderAtHash(path);
+    renderAtHash(path);
 
     const tab = within(getWorkspaceTabs()).getByRole('tab', { name: workspaceLabel });
     expect(expectedControl()).toBeInTheDocument();
 
     await waitFor(() => {
       expect(tab).toHaveAttribute('aria-selected', 'true');
-      expect(window.location.hash).toBe(`${path}?topic=kukuri%3Atopic%3Ademo`);
+      expect(window.location.hash).toBe(
+        path === '#/channels'
+          ? '#/timeline?topic=kukuri%3Atopic%3Ademo'
+          : `${path}?topic=kukuri%3Atopic%3Ademo`
+      );
     });
   }
 );
@@ -529,6 +550,7 @@ test('appearance settings deep link updates the document theme and storage immed
 test('topic and private channel selection sync into the hash route', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
 
   await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:second');
   await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -539,14 +561,52 @@ test('topic and private channel selection sync into the hash route', async () =>
   });
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
-  await selectWorkspace(user, 'Channels');
-  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
-  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'core');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe(
-      '#/channels?topic=kukuri%3Atopic%3Ademo&timelineScope=channel%3Achannel-1&composeTarget=channel%3Achannel-1'
+      '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1'
     );
+  });
+});
+
+test('tracked topics show public and channel scope separately in the sidebar', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
+
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'core');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
+
+  const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  if (!(topicItem instanceof HTMLElement)) {
+    throw new Error('active topic item not found');
+  }
+
+  expect(within(topicItem).getByText('Channels')).toBeInTheDocument();
+  const publicButton = within(topicItem).getByText('Public').closest('button');
+  const channelButton = within(topicItem).getByText('core').closest('button');
+  if (!(publicButton instanceof HTMLButtonElement)) {
+    throw new Error('public scope button not found');
+  }
+  if (!(channelButton instanceof HTMLButtonElement)) {
+    throw new Error('channel scope button not found');
+  }
+
+  await waitFor(() => {
+    expect(publicButton).toHaveAttribute('aria-pressed', 'false');
+    expect(channelButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  await user.click(publicButton);
+
+  await waitFor(() => {
+    expect(publicButton).toHaveAttribute('aria-pressed', 'true');
+    expect(channelButton).toHaveAttribute('aria-pressed', 'false');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
 });
 
@@ -750,6 +810,7 @@ test('desktop shell can track multiple topics at once', async () => {
 test('profile overview aggregates public posts across topics and excludes private channel posts', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
 
   await user.type(screen.getByPlaceholderText('Write a post'), 'demo public post');
   await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -757,17 +818,12 @@ test('profile overview aggregates public posts across topics and excludes privat
     expect(screen.getByText('demo public post')).toBeInTheDocument();
   });
 
-  await selectWorkspace(user, 'Channels');
-  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
-  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'core');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: 'Create Invite' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Share' })).toBeInTheDocument();
   });
-
-  await selectWorkspace(user, 'Timeline');
-  expect((screen.getByLabelText('Compose Target') as HTMLSelectElement).value).toMatch(
-    /^channel:channel-/
-  );
   await user.type(screen.getByPlaceholderText('Write a post'), 'demo private post');
   await user.click(screen.getByRole('button', { name: 'Publish' }));
   await waitFor(() => {
@@ -983,18 +1039,23 @@ test('desktop shell can create, join, leave, and end a live session', async () =
   });
   expect(screen.getByText('watch along')).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Join' }));
+  const liveCard = screen.getByText('Launch Party').closest('article');
+  if (!(liveCard instanceof HTMLElement)) {
+    throw new Error('live session card not found');
+  }
+
+  await user.click(within(liveCard).getByRole('button', { name: 'Join' }));
   await waitFor(() => {
     expect(screen.getByText('viewers: 1')).toBeInTheDocument();
   });
-  expect(screen.getByRole('button', { name: 'Leave' })).toBeInTheDocument();
+  expect(within(liveCard).getByRole('button', { name: 'Leave' })).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Leave' }));
+  await user.click(within(liveCard).getByRole('button', { name: 'Leave' }));
   await waitFor(() => {
     expect(screen.getByText('viewers: 0')).toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'End' }));
+  await user.click(within(liveCard).getByRole('button', { name: 'End' }));
   await waitFor(() => {
     expect(screen.getByText('Ended')).toBeInTheDocument();
   });
@@ -1003,22 +1064,21 @@ test('desktop shell can create, join, leave, and end a live session', async () =
 test('desktop shell can create a private channel and export an invite', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
 
-  await selectWorkspace(user, 'Channels');
-  expect(screen.queryByRole('button', { name: 'Create Invite' })).not.toBeInTheDocument();
-
-  await user.type(screen.getByPlaceholderText('core contributors'), 'core');
-  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'core');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: 'Create Invite' })).toBeInTheDocument();
-    expect(screen.getByText(/Policy:/i)).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
   });
 
-  await user.click(screen.getByRole('button', { name: 'Create Invite' }));
+  await user.click(within(nav).getByRole('button', { name: 'Share' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Latest invite')).toBeInTheDocument();
+    expect(screen.getByText('Share')).toBeInTheDocument();
     expect(screen.getByText(/invite:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
   });
 });
@@ -1033,54 +1093,48 @@ test('desktop shell joins an imported private channel and selects its topic scop
           topic_id: 'kukuri:topic:private-imported',
           channel_label: 'Imported',
           inviter_pubkey: 'f'.repeat(64),
+          owner_pubkey: 'f'.repeat(64),
+          epoch_id: 'epoch-imported-1',
           expires_at: null,
           namespace_secret_hex: 'a'.repeat(64),
         },
       })}
     />
   );
+  const nav = getPrimaryNavigation();
 
-  await selectWorkspace(user, 'Channels');
-  await user.type(
-    screen.getByPlaceholderText(/paste private channel invite/i),
-    'invite-token'
-  );
-  await user.click(screen.getByRole('button', { name: 'Join Invite' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText(/paste private channel invite/i), 'invite-token');
+  await user.click(within(nav).getByRole('button', { name: 'Join' }));
 
   await waitFor(() => {
-    expect(
-      screen.getByRole('button', { name: 'kukuri:topic:private-imported' })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Imported' })).toBeInTheDocument();
-  });
-
-  await selectWorkspace(user, 'Timeline');
-
-  await waitFor(() => {
-    expect(screen.getByLabelText('View Scope')).toHaveValue('channel:channel-imported');
-    expect(screen.getByLabelText('Compose Target')).toHaveValue('channel:channel-imported');
+    expectActiveTopicBar('kukuri:topic:private-imported');
+    expect(window.location.hash).toBe(
+      '#/timeline?topic=kukuri%3Atopic%3Aprivate-imported&channel=channel-imported'
+    );
   });
 });
 
 test('desktop shell shows friend-only controls and can create a grant', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
 
-  await selectWorkspace(user, 'Channels');
-  await user.type(screen.getByPlaceholderText('core contributors'), 'friends');
-  await user.selectOptions(screen.getByLabelText('Audience'), 'friend_only');
-  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'friends');
+  await user.selectOptions(within(nav).getByLabelText('Audience'), 'friend_only');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(screen.getByText(/Policy: Friends: only mutual followers can join/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create Grant' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'Create Grant' }));
+  await user.click(within(nav).getByRole('button', { name: 'Share' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Latest grant')).toBeInTheDocument();
+    expect(screen.getByText('Share')).toBeInTheDocument();
     expect(screen.getByText(/grant:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
   });
 });
@@ -1088,25 +1142,23 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
 test('desktop shell shows friend-plus controls and can create a share', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
+  const nav = getPrimaryNavigation();
 
-  await selectWorkspace(user, 'Channels');
-  await user.type(screen.getByPlaceholderText('core contributors'), 'friends+');
-  await user.selectOptions(screen.getByLabelText('Audience'), 'friend_plus');
-  await user.click(screen.getByRole('button', { name: 'Create Channel' }));
+  await openChannelSection(user, nav);
+  await user.type(within(nav).getByPlaceholderText('core contributors'), 'friends+');
+  await user.selectOptions(within(nav).getByLabelText('Audience'), 'friend_plus');
+  await user.click(within(nav).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(
-      screen.getByText(/Policy: Friends\+: participants can share to their mutuals/i)
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create Share' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Freeze' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(screen.queryByRole('button', { name: 'Freeze' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
 
-  await user.click(screen.getByRole('button', { name: 'Create Share' }));
+  await user.click(within(nav).getByRole('button', { name: 'Share' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Latest share')).toBeInTheDocument();
     expect(screen.getByText(/share:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
   });
 });

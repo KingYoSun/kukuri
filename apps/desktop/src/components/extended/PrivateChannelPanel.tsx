@@ -22,17 +22,10 @@ function audienceSummaryLabel(
   label: InviteOutputLabel,
   t: ReturnType<typeof useTranslation<'channels'>>['t']
 ): string {
-  if (label === 'grant') {
-    return t('latestGrant');
-  }
-  if (label === 'share') {
+  if (label === 'grant' || label === 'share') {
     return t('latestShare');
   }
   return t('latestInvite');
-}
-
-function shortPubkey(pubkey: string): string {
-  return pubkey.slice(0, 12);
 }
 
 function policyDescription(
@@ -64,15 +57,9 @@ type PrivateChannelPanelProps = {
   onChannelAudienceChange: (value: ChannelAudienceOption['value']) => void;
   onInviteTokenChange: (value: string) => void;
   onCreateChannel: FormEventHandler<HTMLFormElement>;
-  onJoinInvite: FormEventHandler<HTMLFormElement>;
-  onJoinGrant: () => void;
-  onJoinShare: () => void;
+  onJoin: FormEventHandler<HTMLFormElement>;
   onSelectChannel: (channelId: string) => void;
-  onCreateInvite: () => void;
-  onCreateGrant: () => void;
-  onCreateShare: () => void;
-  onFreeze: () => void;
-  onRotate: () => void;
+  onShare: () => void;
 };
 
 export function PrivateChannelPanel({
@@ -91,15 +78,9 @@ export function PrivateChannelPanel({
   onChannelAudienceChange,
   onInviteTokenChange,
   onCreateChannel,
-  onJoinInvite,
-  onJoinGrant,
-  onJoinShare,
+  onJoin,
   onSelectChannel,
-  onCreateInvite,
-  onCreateGrant,
-  onCreateShare,
-  onFreeze,
-  onRotate,
+  onShare,
 }: PrivateChannelPanelProps) {
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
@@ -146,9 +127,9 @@ export function PrivateChannelPanel({
           </Button>
         </form>
 
-        <form className='composer composer-compact' onSubmit={onJoinInvite}>
+        <form className='composer composer-compact' onSubmit={onJoin}>
           <Label>
-            <span>{t('channels:editor.joinViaInvite')}</span>
+            <span>{t('channels:editor.join')}</span>
             <Textarea
               value={inviteTokenInput}
               onChange={(event) => onInviteTokenChange(event.target.value)}
@@ -156,31 +137,9 @@ export function PrivateChannelPanel({
               disabled={channelActionDisabled}
             />
           </Label>
-          <div className='discovery-actions'>
-            <Button
-              variant='secondary'
-              type='submit'
-              disabled={channelActionDisabled}
-            >
-              {t('channels:actions.joinInvite')}
-            </Button>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={channelActionDisabled}
-              onClick={onJoinGrant}
-            >
-              {t('channels:actions.joinGrant')}
-            </Button>
-            <Button
-              variant='secondary'
-              type='button'
-              disabled={channelActionDisabled}
-              onClick={onJoinShare}
-            >
-              {t('channels:actions.joinShare')}
-            </Button>
-          </div>
+          <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
+            {t('channels:actions.join')}
+          </Button>
         </form>
 
         {inviteOutput ? (
@@ -212,10 +171,6 @@ export function PrivateChannelPanel({
                       <span>{channel.label}</span>
                       <span>{t(`channels:audienceOptions.${channel.audience_kind}`)}</span>
                     </div>
-                    <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>{t('common:labels.epoch')}: {channel.current_epoch_id}</span>
-                      <span>{t('common:labels.sharing')}: {channel.sharing_state}</span>
-                    </div>
                   </button>
                 </li>
               ))}
@@ -237,11 +192,6 @@ export function PrivateChannelPanel({
                     <span>
                       {t('common:labels.policy')}: {policyDescription(selectedChannel.audience_kind, t)}
                     </span>
-                    <span>{t('common:labels.epoch')}: {selectedChannel.current_epoch_id}</span>
-                    <span>{t('common:labels.sharing')}: {selectedChannel.sharing_state}</span>
-                    {selectedChannel.joined_via_pubkey ? (
-                      <span>{t('common:labels.joinedVia')} {shortPubkey(selectedChannel.joined_via_pubkey)}</span>
-                    ) : null}
                   </div>
                   {(selectedChannel.audience_kind === 'friend_only' ||
                     selectedChannel.audience_kind === 'friend_plus') ? (
@@ -258,57 +208,14 @@ export function PrivateChannelPanel({
                     </div>
                   ) : null}
                   <div className='discovery-actions'>
-                    {selectedChannel.audience_kind === 'invite_only' ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={channelActionDisabled || selectedChannelId === null}
-                        onClick={onCreateInvite}
-                      >
-                        {t('channels:actions.createInvite')}
-                      </Button>
-                    ) : null}
-                    {selectedChannel.audience_kind === 'friend_only' ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={channelActionDisabled || !selectedChannel.is_owner}
-                        onClick={onCreateGrant}
-                      >
-                        {t('channels:actions.createGrant')}
-                      </Button>
-                    ) : null}
-                    {selectedChannel.audience_kind === 'friend_plus' ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={channelActionDisabled || selectedChannelId === null}
-                        onClick={onCreateShare}
-                      >
-                        {t('channels:actions.createShare')}
-                      </Button>
-                    ) : null}
-                    {selectedChannel.audience_kind === 'friend_plus' ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={channelActionDisabled || !selectedChannel.is_owner}
-                        onClick={onFreeze}
-                      >
-                        {t('common:actions.freeze')}
-                      </Button>
-                    ) : null}
-                    {selectedChannel.audience_kind === 'friend_only' ||
-                    selectedChannel.audience_kind === 'friend_plus' ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={channelActionDisabled || !selectedChannel.is_owner}
-                        onClick={onRotate}
-                      >
-                        {t('common:actions.rotate')}
-                      </Button>
-                    ) : null}
+                    <Button
+                      variant='secondary'
+                      type='button'
+                      disabled={channelActionDisabled || selectedChannelId === null}
+                      onClick={onShare}
+                    >
+                      {t('channels:actions.share')}
+                    </Button>
                   </div>
                 </>
               ) : (

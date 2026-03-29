@@ -1,4 +1,4 @@
-export type PrimarySection = 'timeline' | 'channels' | 'live' | 'game' | 'profile';
+export type PrimarySection = 'timeline' | 'live' | 'game' | 'profile';
 
 export type SettingsSection =
   | 'appearance'

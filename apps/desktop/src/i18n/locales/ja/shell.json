@@ -9,10 +9,13 @@
   "navigation": {
     "activeCount": "{{count}} 件アクティブ",
     "addTopic": "トピックを追加",
+    "channel": "チャンネル",
+    "channelsGroup": "チャンネル",
     "close": "ナビゲーションを閉じる",
     "open": "ナビゲーションを開く",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "メインナビゲーション",
+    "publicScope": "公開フィード",
     "removeTopic": "{{topic}} を削除",
     "seededDht": "seeded dht",
     "staticPeers": "static peers",
@@ -22,7 +25,6 @@
     "trackedTopics": "追跡中のトピック"
   },
   "primarySections": {
-    "channels": "チャンネル",
     "game": "ゲーム",
     "live": "ライブ",
     "profile": "プロフィール",

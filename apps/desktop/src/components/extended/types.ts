@@ -16,14 +16,8 @@ export type ProfileEditorFields = {
 
 export type PrivateChannelPendingAction =
   | 'create'
-  | 'invite'
-  | 'grant'
+  | 'join'
   | 'share'
-  | 'join-invite'
-  | 'join-grant'
-  | 'join-share'
-  | 'freeze'
-  | 'rotate'
   | null;
 
 export type InviteOutputLabel = 'invite' | 'grant' | 'share';

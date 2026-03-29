@@ -846,6 +846,7 @@ pub struct CreatePrivateChannelInput {
 #[serde(rename_all = "snake_case")]
 pub enum PrivateChannelJoinMode {
     OwnerSeed,
+    InviteToken,
     FriendOnlyGrant,
     FriendPlusShare,
     RotationRedeem,
@@ -898,6 +899,8 @@ pub struct KukuriPrivateChannelInviteEnvelopeContentV1 {
     pub channel_id: ChannelId,
     pub topic_id: TopicId,
     pub channel_label: String,
+    pub owner_pubkey: Pubkey,
+    pub epoch_id: String,
     pub namespace_secret_hex: String,
     pub expires_at: Option<i64>,
 }
@@ -913,6 +916,8 @@ pub struct PrivateChannelInvitePreview {
     pub topic_id: TopicId,
     pub channel_label: String,
     pub inviter_pubkey: Pubkey,
+    pub owner_pubkey: Pubkey,
+    pub epoch_id: String,
     pub expires_at: Option<i64>,
     pub namespace_secret_hex: String,
 }
@@ -996,6 +1001,9 @@ pub struct PrivateChannelRotationGrantDocV1 {
     pub nonce_hex: String,
     pub ciphertext_hex: String,
 }
+
+pub type PrivateChannelEpochHandoffGrantPayloadV1 = PrivateChannelRotationGrantPayloadV1;
+pub type PrivateChannelEpochHandoffGrantDocV1 = PrivateChannelRotationGrantDocV1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KukuriEnvelope {
@@ -1658,29 +1666,37 @@ pub fn build_game_session_envelope<T: Serialize>(
     )
 }
 
+pub struct PrivateChannelInviteTokenParams<'a> {
+    pub topic: &'a TopicId,
+    pub channel_id: &'a ChannelId,
+    pub channel_label: &'a str,
+    pub owner_pubkey: &'a Pubkey,
+    pub epoch_id: &'a str,
+    pub namespace_secret_hex: &'a str,
+    pub expires_at: Option<i64>,
+}
+
 pub fn build_private_channel_invite_token(
     keys: &KukuriKeys,
-    topic: &TopicId,
-    channel_id: &ChannelId,
-    channel_label: &str,
-    namespace_secret_hex: &str,
-    expires_at: Option<i64>,
+    params: PrivateChannelInviteTokenParams<'_>,
 ) -> Result<String> {
     let token = PrivateChannelInviteTokenV1 {
         envelope: sign_envelope_json(
             keys,
             "channel-invite",
             vec![
-                vec!["topic".into(), topic.as_str().to_string()],
+                vec!["topic".into(), params.topic.as_str().to_string()],
                 vec!["object".into(), "channel-invite".into()],
-                vec!["channel".into(), channel_id.as_str().to_string()],
+                vec!["channel".into(), params.channel_id.as_str().to_string()],
             ],
             &KukuriPrivateChannelInviteEnvelopeContentV1 {
-                channel_id: channel_id.clone(),
-                topic_id: topic.clone(),
-                channel_label: channel_label.trim().to_string(),
-                namespace_secret_hex: namespace_secret_hex.trim().to_string(),
-                expires_at,
+                channel_id: params.channel_id.clone(),
+                topic_id: params.topic.clone(),
+                channel_label: params.channel_label.trim().to_string(),
+                owner_pubkey: params.owner_pubkey.clone(),
+                epoch_id: params.epoch_id.trim().to_string(),
+                namespace_secret_hex: params.namespace_secret_hex.trim().to_string(),
+                expires_at: params.expires_at,
             },
         )?,
     };
@@ -1772,6 +1788,10 @@ pub fn parse_private_channel_invite_token(token: &str) -> Result<PrivateChannelI
     if content.channel_label.trim().is_empty() {
         bail!("channel invite label is required");
     }
+    validate_pubkey(content.owner_pubkey.as_str()).context("invalid channel invite owner")?;
+    if content.epoch_id.trim().is_empty() {
+        bail!("channel invite epoch id is required");
+    }
     let secret_bytes =
         hex::decode(content.namespace_secret_hex.trim()).context("invalid invite secret hex")?;
     if secret_bytes.len() != 32 {
@@ -1787,6 +1807,8 @@ pub fn parse_private_channel_invite_token(token: &str) -> Result<PrivateChannelI
         topic_id: content.topic_id,
         channel_label: content.channel_label,
         inviter_pubkey: token.envelope.pubkey,
+        owner_pubkey: content.owner_pubkey,
+        epoch_id: content.epoch_id,
         expires_at: content.expires_at,
         namespace_secret_hex: content.namespace_secret_hex,
     })
@@ -2030,6 +2052,13 @@ pub fn encrypt_private_channel_rotation_grant(
     })
 }
 
+pub fn encrypt_private_channel_epoch_handoff_grant(
+    owner_keys: &KukuriKeys,
+    payload: &PrivateChannelEpochHandoffGrantPayloadV1,
+) -> Result<PrivateChannelEpochHandoffGrantDocV1> {
+    encrypt_private_channel_rotation_grant(owner_keys, payload)
+}
+
 pub fn decrypt_private_channel_rotation_grant(
     local_keys: &KukuriKeys,
     doc: &PrivateChannelRotationGrantDocV1,
@@ -2085,6 +2114,13 @@ pub fn decrypt_private_channel_rotation_grant(
     Ok(payload)
 }
 
+pub fn decrypt_private_channel_epoch_handoff_grant(
+    local_keys: &KukuriKeys,
+    doc: &PrivateChannelEpochHandoffGrantDocV1,
+) -> Result<PrivateChannelEpochHandoffGrantPayloadV1> {
+    decrypt_private_channel_rotation_grant(local_keys, doc)
+}
+
 pub fn build_private_channel_rotation_grant_envelope(
     owner_keys: &KukuriKeys,
     doc: &PrivateChannelRotationGrantDocV1,
@@ -2111,6 +2147,13 @@ pub fn build_private_channel_rotation_grant_envelope(
         encoded,
         created_at,
     )
+}
+
+pub fn build_private_channel_epoch_handoff_grant_envelope(
+    owner_keys: &KukuriKeys,
+    doc: &PrivateChannelEpochHandoffGrantDocV1,
+) -> Result<KukuriEnvelope> {
+    build_private_channel_rotation_grant_envelope(owner_keys, doc)
 }
 
 pub fn parse_private_channel_rotation_grant(
@@ -2144,6 +2187,12 @@ pub fn parse_private_channel_rotation_grant(
     let _ = hex::decode(doc.ciphertext_hex.trim())
         .context("invalid channel rotation grant ciphertext")?;
     Ok(Some(doc))
+}
+
+pub fn parse_private_channel_epoch_handoff_grant(
+    envelope: &KukuriEnvelope,
+) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
+    parse_private_channel_rotation_grant(envelope)
 }
 
 pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {

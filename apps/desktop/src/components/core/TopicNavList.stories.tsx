@@ -13,6 +13,7 @@ const meta = {
   args: {
     items: topicItems,
     onSelectTopic: () => undefined,
+    onSelectChannel: () => undefined,
     onRemoveTopic: () => undefined,
   },
   render: () => (
@@ -21,6 +22,7 @@ const meta = {
         <TopicNavList
           items={topicItems}
           onSelectTopic={() => undefined}
+          onSelectChannel={() => undefined}
           onRemoveTopic={() => undefined}
         />
       </Card>
@@ -32,4 +34,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  args: {
+    onSelectChannel: () => undefined,
+  },
+};

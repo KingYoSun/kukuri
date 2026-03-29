@@ -75,15 +75,9 @@ const STORY_ARGS = {
   onChannelAudienceChange: () => undefined,
   onInviteTokenChange: () => undefined,
   onCreateChannel: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
-  onJoinInvite: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
-  onJoinGrant: () => undefined,
-  onJoinShare: () => undefined,
+  onJoin: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
   onSelectChannel: () => undefined,
-  onCreateInvite: () => undefined,
-  onCreateGrant: () => undefined,
-  onCreateShare: () => undefined,
-  onFreeze: () => undefined,
-  onRotate: () => undefined,
+  onShare: () => undefined,
 } satisfies React.ComponentProps<typeof PrivateChannelPanel>;
 
 function ChannelStory({
@@ -124,15 +118,9 @@ function ChannelStory({
       onChannelAudienceChange={setAudience}
       onInviteTokenChange={setToken}
       onCreateChannel={(event) => event.preventDefault()}
-      onJoinInvite={(event) => event.preventDefault()}
-      onJoinGrant={() => undefined}
-      onJoinShare={() => undefined}
+      onJoin={(event) => event.preventDefault()}
       onSelectChannel={() => undefined}
-      onCreateInvite={() => undefined}
-      onCreateGrant={() => undefined}
-      onCreateShare={() => undefined}
-      onFreeze={() => undefined}
-      onRotate={() => undefined}
+      onShare={() => undefined}
     />
   );
 }

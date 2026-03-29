@@ -75,6 +75,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 import {
+  ChannelAccessTokenPreview,
   AuthorSocialView,
   AttachmentView,
   BlobMediaPayload,
@@ -88,8 +89,6 @@ import {
   CreateAttachmentInput,
   DesktopApi,
   DiscoveryConfig,
-  FriendOnlyGrantPreview,
-  FriendPlusSharePreview,
   GameRoomStatus,
   GameRoomView,
   GameScoreView,
@@ -98,7 +97,6 @@ import {
   PostView,
   Profile,
   ProfileInput,
-  PrivateChannelInvitePreview,
   ReactionKeyInput,
   ReactionStateView,
   SyncStatus,
@@ -454,10 +452,6 @@ const PRIMARY_SECTION_ITEMS: Array<{
     label: 'Timeline',
   },
   {
-    id: 'channels',
-    label: 'Channels',
-  },
-  {
     id: 'live',
     label: 'Live',
   },
@@ -515,7 +509,6 @@ function isSettingsSection(value: string | null): value is SettingsSection {
 
 const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
   timeline: '/timeline',
-  channels: '/channels',
   live: '/live',
   game: '/game',
   profile: '/profile',
@@ -523,6 +516,9 @@ const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
 
 function parsePrimarySectionPath(pathname: string): PrimarySection | null {
   const normalizedPath = pathname === '/' ? '/timeline' : pathname;
+  if (normalizedPath === '/channels') {
+    return null;
+  }
   const match = (
     Object.entries(PRIMARY_SECTION_PATHS) as Array<[PrimarySection, string]>
   ).find(([, path]) => path === normalizedPath);
@@ -639,57 +635,27 @@ function strongestRelationshipLabel(relationship: {
 }
 
 function inviteOutputSummaryLabel(label: InviteOutputLabel): string {
-  if (label === 'grant') {
-    return translate('channels:latestGrant');
-  }
-  if (label === 'share') {
-    return translate('channels:latestShare');
-  }
-  return translate('channels:latestInvite');
+  return label === 'share'
+    ? translate('channels:actions.share')
+    : translate('channels:actions.join');
 }
 
-function channelPolicyDescription(audienceKind: JoinedPrivateChannelView['audience_kind']) {
-  if (audienceKind === 'friend_only') {
-    return translate('channels:policies.friend_only');
-  }
-  if (audienceKind === 'friend_plus') {
-    return translate('channels:policies.friend_plus');
-  }
-  return translate('channels:policies.invite_only');
+function privateTimelineScope(channelId: string | null): TimelineScope {
+  return channelId
+    ? {
+        kind: 'channel',
+        channel_id: channelId,
+      }
+    : PUBLIC_TIMELINE_SCOPE;
 }
 
-function channelRefValue(channelRef: ChannelRef): string {
-  return channelRef.kind === 'public' ? 'public' : `channel:${channelRef.channel_id}`;
-}
-
-function channelRefFromValue(value: string): ChannelRef {
-  if (value.startsWith('channel:')) {
-    return {
-      kind: 'private_channel',
-      channel_id: value.slice('channel:'.length),
-    };
-  }
-  return PUBLIC_CHANNEL_REF;
-}
-
-function timelineScopeValue(scope: TimelineScope): string {
-  if (scope.kind === 'channel') {
-    return `channel:${scope.channel_id}`;
-  }
-  return scope.kind;
-}
-
-function timelineScopeFromValue(value: string): TimelineScope {
-  if (value.startsWith('channel:')) {
-    return {
-      kind: 'channel',
-      channel_id: value.slice('channel:'.length),
-    };
-  }
-  if (value === 'all_joined') {
-    return { kind: 'all_joined' };
-  }
-  return PUBLIC_TIMELINE_SCOPE;
+function privateComposeTarget(channelId: string | null): ChannelRef {
+  return channelId
+    ? {
+        kind: 'private_channel',
+        channel_id: channelId,
+      }
+    : PUBLIC_CHANNEL_REF;
 }
 
 function audienceLabelForChannelRef(
@@ -851,10 +817,6 @@ function translateLiveStatus(status: LiveSessionView['status']): string {
 
 function translateGameStatus(status: GameRoomStatus): string {
   return translate(`game:statuses.${status}`);
-}
-
-function translateBooleanLabel(value: boolean): string {
-  return value ? translate('common:states.yes') : translate('common:states.no');
 }
 
 function formatCount(value: number): string {
@@ -1269,65 +1231,59 @@ function upsertJoinedChannel(
   return [...remaining, nextChannel];
 }
 
-function joinedChannelFromInvitePreview(
-  preview: PrivateChannelInvitePreview
+function joinedChannelFromAccessTokenPreview(
+  preview: ChannelAccessTokenPreview
 ): JoinedPrivateChannelView {
+  if (preview.kind === 'grant') {
+    return {
+      topic_id: preview.topic_id,
+      channel_id: preview.channel_id,
+      label: preview.channel_label,
+      creator_pubkey: preview.owner_pubkey,
+      owner_pubkey: preview.owner_pubkey,
+      joined_via_pubkey: preview.sponsor_pubkey ?? null,
+      audience_kind: 'friend_only',
+      is_owner: false,
+      current_epoch_id: preview.epoch_id,
+      archived_epoch_ids: [],
+      sharing_state: 'open',
+      rotation_required: false,
+      participant_count: 1,
+      stale_participant_count: 0,
+    };
+  }
+  if (preview.kind === 'share') {
+    return {
+      topic_id: preview.topic_id,
+      channel_id: preview.channel_id,
+      label: preview.channel_label,
+      creator_pubkey: preview.owner_pubkey,
+      owner_pubkey: preview.owner_pubkey,
+      joined_via_pubkey: preview.sponsor_pubkey ?? null,
+      audience_kind: 'friend_plus',
+      is_owner: false,
+      current_epoch_id: preview.epoch_id,
+      archived_epoch_ids: [],
+      sharing_state: 'open',
+      rotation_required: false,
+      participant_count: 2,
+      stale_participant_count: 0,
+    };
+  }
   return {
     topic_id: preview.topic_id,
     channel_id: preview.channel_id,
     label: preview.channel_label,
-    creator_pubkey: preview.inviter_pubkey,
-    owner_pubkey: preview.inviter_pubkey,
-    joined_via_pubkey: null,
-    audience_kind: 'invite_only',
-    is_owner: false,
-    current_epoch_id: 'legacy',
-    archived_epoch_ids: [],
-    sharing_state: 'open',
-    rotation_required: false,
-    participant_count: 0,
-    stale_participant_count: 0,
-  };
-}
-
-function joinedChannelFromFriendGrantPreview(
-  preview: FriendOnlyGrantPreview
-): JoinedPrivateChannelView {
-  return {
-    topic_id: preview.topic_id,
-    channel_id: preview.channel_id,
-    label: preview.channel_label,
-    creator_pubkey: preview.owner_pubkey,
+    creator_pubkey: preview.inviter_pubkey ?? preview.owner_pubkey,
     owner_pubkey: preview.owner_pubkey,
-    joined_via_pubkey: null,
-    audience_kind: 'friend_only',
+    joined_via_pubkey: preview.inviter_pubkey ?? null,
+    audience_kind: 'invite_only',
     is_owner: false,
     current_epoch_id: preview.epoch_id,
     archived_epoch_ids: [],
     sharing_state: 'open',
     rotation_required: false,
     participant_count: 1,
-    stale_participant_count: 0,
-  };
-}
-
-function joinedChannelFromFriendSharePreview(
-  preview: FriendPlusSharePreview
-): JoinedPrivateChannelView {
-  return {
-    topic_id: preview.topic_id,
-    channel_id: preview.channel_id,
-    label: preview.channel_label,
-    creator_pubkey: preview.owner_pubkey,
-    owner_pubkey: preview.owner_pubkey,
-    joined_via_pubkey: preview.sponsor_pubkey,
-    audience_kind: 'friend_plus',
-    is_owner: false,
-    current_epoch_id: preview.epoch_id,
-    archived_epoch_ids: [],
-    sharing_state: 'open',
-    rotation_required: false,
-    participant_count: 2,
     stale_participant_count: 0,
   };
 }
@@ -1628,7 +1584,6 @@ function DesktopShellPage({
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const primarySectionRefs = useRef<Record<PrimarySection, HTMLElement | null>>({
     timeline: null,
-    channels: null,
     live: null,
     game: null,
     profile: null,
@@ -1660,9 +1615,13 @@ function DesktopShellPage({
     () => joinedChannelsByTopic[activeTopic] ?? [],
     [activeTopic, joinedChannelsByTopic]
   );
+  const selectedPrivateChannelId = useMemo(
+    () => selectedChannelIdByTopic[activeTopic] ?? null,
+    [activeTopic, selectedChannelIdByTopic]
+  );
   const activeTimelineScope = useMemo(
-    () => timelineScopeByTopic[activeTopic] ?? PUBLIC_TIMELINE_SCOPE,
-    [activeTopic, timelineScopeByTopic]
+    () => privateTimelineScope(selectedPrivateChannelId),
+    [selectedPrivateChannelId]
   );
   const activeComposeChannel = useMemo(() => {
     if (repostTarget) {
@@ -1674,8 +1633,8 @@ function DesktopShellPage({
         channel_id: replyTarget.channel_id,
       } as ChannelRef;
     }
-    return composeChannelByTopic[activeTopic] ?? PUBLIC_CHANNEL_REF;
-  }, [activeTopic, composeChannelByTopic, replyTarget, repostTarget]);
+    return privateComposeTarget(selectedPrivateChannelId);
+  }, [replyTarget, repostTarget, selectedPrivateChannelId]);
   const activeComposeAudienceLabel = useMemo(() => {
     if (repostTarget) {
       return translate('common:audience.public');
@@ -1686,10 +1645,6 @@ function DesktopShellPage({
     return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
   }, [activeComposeChannel, activeJoinedChannels, replyTarget, repostTarget]);
   const profileMode = shellChromeState.profileMode;
-  const selectedPrivateChannelId = useMemo(
-    () => selectedChannelIdByTopic[activeTopic] ?? null,
-    [activeTopic, selectedChannelIdByTopic]
-  );
   const activePrivateChannel = useMemo(
     () =>
       selectedPrivateChannelId
@@ -1717,9 +1672,8 @@ function DesktopShellPage({
       overrides ? Object.prototype.hasOwnProperty.call(overrides, key) : false;
     const search = new URLSearchParams();
     const nextTopic = overrides?.activeTopic ?? activeTopic;
-    const nextTimelineScope = overrides?.timelineScope ?? activeTimelineScope;
-    const nextComposeTarget = overrides?.composeTarget ?? activeComposeChannel;
     const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
+    const resolvedPrimarySection = nextPrimarySection;
     const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
     const nextSelectedThread = hasOverride('selectedThread')
       ? overrides?.selectedThread ?? null
@@ -1732,15 +1686,21 @@ function DesktopShellPage({
       : shellChromeState.settingsOpen;
     const nextSettingsSection =
       overrides?.settingsSection ?? shellChromeState.activeSettingsSection;
+    let nextSelectedChannelId = selectedChannelIdByTopic[nextTopic] ?? null;
+
+    if (hasOverride('composeTarget')) {
+      nextSelectedChannelId =
+        overrides?.composeTarget?.kind === 'private_channel'
+          ? overrides.composeTarget.channel_id
+          : null;
+    } else if (hasOverride('timelineScope')) {
+      nextSelectedChannelId =
+        overrides?.timelineScope?.kind === 'channel' ? overrides.timelineScope.channel_id : null;
+    }
 
     search.set('topic', nextTopic);
-    const nextTimelineScopeValue = timelineScopeValue(nextTimelineScope);
-    const nextComposeTargetValue = channelRefValue(nextComposeTarget);
-    if (nextTimelineScopeValue !== 'public') {
-      search.set('timelineScope', nextTimelineScopeValue);
-    }
-    if (nextComposeTargetValue !== 'public') {
-      search.set('composeTarget', nextComposeTargetValue);
+    if (nextSelectedChannelId) {
+      search.set('channel', nextSelectedChannelId);
     }
     if (nextSelectedThread) {
       search.set('context', 'thread');
@@ -1752,14 +1712,14 @@ function DesktopShellPage({
       search.set('context', 'author');
       search.set('authorPubkey', nextSelectedAuthorPubkey);
     }
-    if (nextPrimarySection === 'profile' && nextProfileMode === 'edit') {
+    if (resolvedPrimarySection === 'profile' && nextProfileMode === 'edit') {
       search.set('profileMode', 'edit');
     }
     if (nextSettingsOpen) {
       search.set('settings', nextSettingsSection);
     }
 
-    const nextPath = PRIMARY_SECTION_PATHS[nextPrimarySection];
+    const nextPath = PRIMARY_SECTION_PATHS[resolvedPrimarySection];
     const nextSearch = search.toString();
     const nextUrl = nextSearch ? `${nextPath}?${nextSearch}` : nextPath;
     const currentUrl = `${location.pathname}${location.search}`;
@@ -1770,27 +1730,18 @@ function DesktopShellPage({
     }
     pendingRouteUrlRef.current = null;
   }, [
-    activeComposeChannel,
-    activeTimelineScope,
     activeTopic,
     location.pathname,
     location.search,
     navigate,
     selectedAuthorPubkey,
     selectedThread,
+    selectedChannelIdByTopic,
     shellChromeState.activePrimarySection,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileMode,
     shellChromeState.settingsOpen,
   ]);
-  const privateChannelListItems = useMemo(
-    () =>
-      activeJoinedChannels.map((channel) => ({
-        channel,
-        active: channel.channel_id === selectedPrivateChannelId,
-      })),
-    [activeJoinedChannels, selectedPrivateChannelId]
-  );
   const liveSessionListItems = useMemo(
     () =>
       activeLiveSessions.map((session) => ({
@@ -1895,7 +1846,7 @@ function DesktopShellPage({
       const requestId = loadTopicsRequestRef.current + 1;
       loadTopicsRequestRef.current = requestId;
       const currentState = storeApi.getState();
-      const currentTimelineScopeByTopic = currentState.timelineScopeByTopic;
+      const currentSelectedChannelIdByTopic = currentState.selectedChannelIdByTopic;
       const currentSelectedAuthorPubkey = currentState.selectedAuthorPubkey;
       const currentDiscoveryEditorDirty = currentState.discoveryEditorDirty;
       const currentCommunityNodeEditorDirty = currentState.communityNodeEditorDirty;
@@ -1913,14 +1864,14 @@ function DesktopShellPage({
         ] = await Promise.all([
           Promise.all(
             currentTopics.map(async (topic) => ({
-              topic,
-              timeline: await api.listTimeline(
                 topic,
-                null,
-                50,
-                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
-              ),
-            }))
+                timeline: await api.listTimeline(
+                  topic,
+                  null,
+                  50,
+                  privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
+                ),
+              }))
           ),
           Promise.all(
             currentTopics.map(async (topic) => ({
@@ -1933,7 +1884,7 @@ function DesktopShellPage({
               topic,
               sessions: await api.listLiveSessions(
                 topic,
-                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+                privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
               ),
             }))
           ),
@@ -1942,7 +1893,7 @@ function DesktopShellPage({
               topic,
               rooms: await api.listGameRooms(
                 topic,
-                currentTimelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE
+                privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
               ),
             }))
           ),
@@ -2713,7 +2664,8 @@ function DesktopShellPage({
     }));
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'channels',
+      activePrimarySection: 'timeline',
+      navOpen: false,
     }));
     window.requestAnimationFrame(() => {
       syncRoute('replace');
@@ -2783,13 +2735,29 @@ function DesktopShellPage({
 
   async function handleSelectTopic(topic: string) {
     setActiveTopic(topic);
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [topic]: null,
+    }));
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [topic]: PUBLIC_TIMELINE_SCOPE,
+    }));
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [topic]: PUBLIC_CHANNEL_REF,
+    }));
     setShellChromeState((current) => ({
       ...current,
+      activePrimarySection: 'timeline',
       navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
       activeTopic: topic,
+      primarySection: 'timeline',
+      timelineScope: PUBLIC_TIMELINE_SCOPE,
+      composeTarget: PUBLIC_CHANNEL_REF,
     });
     await loadTopics(trackedTopics, topic, null);
   }
@@ -2807,8 +2775,8 @@ function DesktopShellPage({
     syncRoute('replace', {
       activeTopic: topicId,
       primarySection: 'timeline',
-      timelineScope: timelineScopeByTopic[topicId] ?? PUBLIC_TIMELINE_SCOPE,
-      composeTarget: composeChannelByTopic[topicId] ?? PUBLIC_CHANNEL_REF,
+      timelineScope: privateTimelineScope(selectedChannelIdByTopic[topicId] ?? null),
+      composeTarget: privateComposeTarget(selectedChannelIdByTopic[topicId] ?? null),
       selectedAuthorPubkey: null,
       selectedThread: null,
     });
@@ -2833,40 +2801,6 @@ function DesktopShellPage({
       activeTopic: nextActiveTopic,
     });
     await loadTopics(nextTopics, nextActiveTopic, null);
-  }
-
-  async function handleTimelineScopeChange(value: string) {
-    const nextScope = timelineScopeFromValue(value);
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [activeTopic]: nextScope,
-    }));
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-    }));
-    syncRoute('replace', {
-      timelineScope: nextScope,
-    });
-    await loadTopics(trackedTopics, activeTopic, selectedThread);
-  }
-
-  function handleComposeChannelChange(value: string) {
-    const nextChannelRef = channelRefFromValue(value);
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [activeTopic]: nextChannelRef,
-    }));
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [activeTopic]:
-        nextChannelRef.kind === 'private_channel' ? nextChannelRef.channel_id : current[activeTopic] ?? null,
-    }));
-    window.requestAnimationFrame(() => {
-      syncRoute('replace', {
-        composeTarget: nextChannelRef,
-      });
-    });
   }
 
   async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
@@ -2916,7 +2850,8 @@ function DesktopShellPage({
       }));
       setShellChromeState((current) => ({
         ...current,
-        activePrimarySection: 'channels',
+        activePrimarySection: 'timeline',
+        navOpen: false,
       }));
       syncRoute('replace', {
         activeTopic,
@@ -2924,7 +2859,7 @@ function DesktopShellPage({
           kind: 'private_channel',
           channel_id: channel.channel_id,
         },
-        primarySection: 'channels',
+        primarySection: 'timeline',
         timelineScope: {
           kind: 'channel',
           channel_id: channel.channel_id,
@@ -2940,60 +2875,20 @@ function DesktopShellPage({
     }
   }
 
-  async function handleCreateInvite() {
-    if (!activePrivateChannel) {
-      setChannelError(translate('channels:errors.selectChannelForInvite'));
-      return;
-    }
-    setChannelActionPending('invite');
-    try {
-      const token = await api.exportPrivateChannelInvite(activeTopic, activePrivateChannel.channel_id, null);
-      setInviteOutput(token);
-      setInviteOutputLabel('invite');
-      setChannelError(null);
-    } catch (inviteError) {
-      setChannelError(
-        messageFromError(inviteError, translate('channels:errors.failedCreateInvite'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleCreateGrant() {
-    if (!activePrivateChannel) {
-      setChannelError(translate('channels:errors.selectChannelForGrant'));
-      return;
-    }
-    setChannelActionPending('grant');
-    try {
-      const token = await api.exportFriendOnlyGrant(activeTopic, activePrivateChannel.channel_id, null);
-      setInviteOutput(token);
-      setInviteOutputLabel('grant');
-      setChannelError(null);
-    } catch (grantError) {
-      setChannelError(
-        messageFromError(grantError, translate('channels:errors.failedCreateGrant'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleCreateShare() {
+  async function handleShareChannelAccess() {
     if (!activePrivateChannel) {
       setChannelError(translate('channels:errors.selectChannelForShare'));
       return;
     }
     setChannelActionPending('share');
     try {
-      const token = await api.exportFriendPlusShare(activeTopic, activePrivateChannel.channel_id, null);
-      setInviteOutput(token);
-      setInviteOutputLabel('share');
+      const access = await api.exportChannelAccessToken(activeTopic, activePrivateChannel.channel_id, null);
+      setInviteOutput(access.token);
+      setInviteOutputLabel(access.kind);
       setChannelError(null);
     } catch (shareError) {
       setChannelError(
-        messageFromError(shareError, translate('channels:errors.failedCreateShare'))
+        messageFromError(shareError, translate('channels:errors.failedShareChannel'))
       );
     } finally {
       setChannelActionPending(null);
@@ -3044,7 +2939,8 @@ function DesktopShellPage({
     setChannelError(null);
     setShellChromeState((current) => ({
       ...current,
-      activePrimarySection: 'channels',
+      activePrimarySection: 'timeline',
+      navOpen: false,
     }));
     clearThreadContext();
     syncRoute('replace', {
@@ -3053,7 +2949,7 @@ function DesktopShellPage({
         kind: 'private_channel',
         channel_id: channelId,
       },
-      primarySection: 'channels',
+      primarySection: 'timeline',
       timelineScope: {
         kind: 'channel',
         channel_id: channelId,
@@ -3062,108 +2958,22 @@ function DesktopShellPage({
     await loadTopics(nextTopics, topicId, null);
   }
 
-  async function handleJoinInvite(event: FormEvent<HTMLFormElement>) {
+  async function handleJoinChannelAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!inviteTokenInput.trim()) {
       setChannelError(translate('channels:errors.inviteTokenRequired'));
       return;
     }
-    setChannelActionPending('join-invite');
+    setChannelActionPending('join');
     try {
-      const preview = await api.importPrivateChannelInvite(inviteTokenInput.trim());
+      const preview = await api.importChannelAccessToken(inviteTokenInput.trim());
       await activateImportedPrivateChannel(
         preview.topic_id,
         preview.channel_id,
-        joinedChannelFromInvitePreview(preview)
+        joinedChannelFromAccessTokenPreview(preview)
       );
-    } catch (inviteError) {
-      setChannelError(
-        messageFromError(inviteError, translate('channels:errors.failedJoinChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleJoinGrant() {
-    if (!inviteTokenInput.trim()) {
-      setChannelError(translate('channels:errors.grantTokenRequired'));
-      return;
-    }
-    setChannelActionPending('join-grant');
-    try {
-      const preview = await api.importFriendOnlyGrant(inviteTokenInput.trim());
-      await activateImportedPrivateChannel(
-        preview.topic_id,
-        preview.channel_id,
-        joinedChannelFromFriendGrantPreview(preview)
-      );
-    } catch (grantError) {
-      setChannelError(
-        messageFromError(grantError, translate('channels:errors.failedJoinFriendsChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleJoinShare() {
-    if (!inviteTokenInput.trim()) {
-      setChannelError(translate('channels:errors.shareTokenRequired'));
-      return;
-    }
-    setChannelActionPending('join-share');
-    try {
-      const preview = await api.importFriendPlusShare(inviteTokenInput.trim());
-      await activateImportedPrivateChannel(
-        preview.topic_id,
-        preview.channel_id,
-        joinedChannelFromFriendSharePreview(preview)
-      );
-    } catch (shareError) {
-      setChannelError(
-        messageFromError(shareError, translate('channels:errors.failedJoinFriendsPlusChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleFreezePrivateChannel() {
-    if (!activePrivateChannel) {
-      setChannelError(translate('channels:errors.selectChannelForFreeze'));
-      return;
-    }
-    setChannelActionPending('freeze');
-    try {
-      await api.freezePrivateChannel(activeTopic, activePrivateChannel.channel_id);
-      setInviteOutput(null);
-      setChannelError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (freezeError) {
-      setChannelError(
-        messageFromError(freezeError, translate('channels:errors.failedFreezeChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleRotatePrivateChannel() {
-    if (!activePrivateChannel) {
-      setChannelError(translate('channels:errors.selectChannelForRotate'));
-      return;
-    }
-    setChannelActionPending('rotate');
-    try {
-      await api.rotatePrivateChannel(activeTopic, activePrivateChannel.channel_id);
-      setInviteOutput(null);
-      setChannelError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (rotateError) {
-      setChannelError(
-        messageFromError(rotateError, translate('channels:errors.failedRotateChannel'))
-      );
+    } catch (joinError) {
+      setChannelError(messageFromError(joinError, translate('channels:errors.failedJoinChannel')));
     } finally {
       setChannelActionPending(null);
     }
@@ -3980,6 +3790,7 @@ function DesktopShellPage({
 
     const params = new URLSearchParams(location.search);
     const requestedTopic = params.get('topic')?.trim() ?? null;
+    const requestedChannelParam = params.get('channel')?.trim() ?? null;
     const requestedTimelineScopeValue = params.get('timelineScope');
     const requestedComposeTargetValue = params.get('composeTarget');
     const requestedSettingsSection = params.get('settings');
@@ -4007,68 +3818,47 @@ function DesktopShellPage({
     }
 
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
-    const currentTimelineScopeForTopic = timelineScopeByTopic[nextTopic] ?? PUBLIC_TIMELINE_SCOPE;
-    const currentComposeTargetForTopic = composeChannelByTopic[nextTopic] ?? PUBLIC_CHANNEL_REF;
-    let nextTimelineScope = PUBLIC_TIMELINE_SCOPE;
-    let nextComposeTarget = PUBLIC_CHANNEL_REF;
-
-    if (requestedTimelineScopeValue) {
-      const parsedTimelineScope = timelineScopeFromValue(requestedTimelineScopeValue);
-      if (
-        parsedTimelineScope.kind === 'channel' &&
-        !joinedChannelsForTopic.some((channel) => channel.channel_id === parsedTimelineScope.channel_id)
-      ) {
-        shouldNormalize = true;
-      } else {
-        nextTimelineScope = parsedTimelineScope;
+    const currentSelectedChannelIdForTopic = selectedChannelIdByTopic[nextTopic] ?? null;
+    let nextSelectedChannelId = requestedChannelParam;
+    if (!nextSelectedChannelId) {
+      const legacyRequestedChannel = [requestedComposeTargetValue, requestedTimelineScopeValue]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => {
+          if (value.startsWith('channel:')) {
+            return value.slice('channel:'.length);
+          }
+          return null;
+        })
+        .find((value): value is string => value !== null);
+      if (legacyRequestedChannel) {
+        nextSelectedChannelId = legacyRequestedChannel;
       }
     }
-
-    if (requestedComposeTargetValue) {
-      const parsedComposeTarget = channelRefFromValue(requestedComposeTargetValue);
-      if (
-        parsedComposeTarget.kind === 'private_channel' &&
-        !joinedChannelsForTopic.some((channel) => channel.channel_id === parsedComposeTarget.channel_id)
-      ) {
-        shouldNormalize = true;
-      } else {
-        nextComposeTarget = parsedComposeTarget;
-      }
+    if (requestedTimelineScopeValue || requestedComposeTargetValue) {
+      shouldNormalize = true;
+    }
+    if (
+      nextSelectedChannelId &&
+      !joinedChannelsForTopic.some((channel) => channel.channel_id === nextSelectedChannelId)
+    ) {
+      shouldNormalize = true;
+      nextSelectedChannelId = null;
     }
 
-    if (timelineScopeValue(currentTimelineScopeForTopic) !== timelineScopeValue(nextTimelineScope)) {
+    if (currentSelectedChannelIdForTopic !== nextSelectedChannelId) {
+      setSelectedChannelIdByTopic((current) => ({
+        ...current,
+        [nextTopic]: nextSelectedChannelId,
+      }));
       setTimelineScopeByTopic((current) => ({
         ...current,
-        [nextTopic]: nextTimelineScope,
+        [nextTopic]: privateTimelineScope(nextSelectedChannelId),
       }));
-      shouldReload = true;
-    }
-
-    if (channelRefValue(currentComposeTargetForTopic) !== channelRefValue(nextComposeTarget)) {
       setComposeChannelByTopic((current) => ({
         ...current,
-        [nextTopic]: nextComposeTarget,
+        [nextTopic]: privateComposeTarget(nextSelectedChannelId),
       }));
-    }
-
-    if (
-      nextComposeTarget.kind === 'private_channel' &&
-      selectedChannelIdByTopic[nextTopic] !== nextComposeTarget.channel_id
-    ) {
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [nextTopic]: nextComposeTarget.channel_id,
-      }));
-    }
-
-    if (
-      nextTimelineScope.kind === 'channel' &&
-      selectedChannelIdByTopic[nextTopic] !== nextTimelineScope.channel_id
-    ) {
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [nextTopic]: nextTimelineScope.channel_id,
-      }));
+      shouldReload = true;
     }
 
     const nextSettingsOpen = isSettingsSection(requestedSettingsSection);
@@ -4438,12 +4228,22 @@ function DesktopShellPage({
       trackedTopics.map((topic) => ({
         topic,
         active: topic === activeTopic,
+        publicActive: topic === activeTopic && (selectedChannelIdByTopic[topic] ?? null) === null,
         removable: trackedTopics.length > 1,
         connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
         peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
         lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
+        channels:
+          topic === activeTopic
+            ? (joinedChannelsByTopic[topic] ?? []).map((channel) => ({
+                channelId: channel.channel_id,
+                label: channel.label,
+                audienceKind: channel.audience_kind,
+                active: selectedChannelIdByTopic[topic] === channel.channel_id,
+              }))
+            : [],
       })),
-    [activeTopic, locale, topicDiagnostics, trackedTopics]
+    [activeTopic, joinedChannelsByTopic, locale, selectedChannelIdByTopic, topicDiagnostics, trackedTopics]
   );
   const composerDraftViews = useMemo<ComposerDraftMediaView[]>(
     () =>
@@ -4497,27 +4297,6 @@ function DesktopShellPage({
     }),
     [authorError, selectedAuthor, syncStatus.local_author_pubkey, t]
   );
-  const timelineViewScopeOptions = useMemo(
-    () => [
-      { value: 'public', label: t('common:audience.public') },
-      { value: 'all_joined', label: t('common:audience.allJoined') },
-      ...activeJoinedChannels.map((channel) => ({
-        value: `channel:${channel.channel_id}`,
-        label: channel.label,
-      })),
-    ],
-    [activeJoinedChannels, t]
-  );
-  const composeTargetOptions = useMemo(
-    () => [
-      { value: 'public', label: t('common:audience.public') },
-      ...activeJoinedChannels.map((channel) => ({
-        value: `channel:${channel.channel_id}`,
-        label: channel.label,
-      })),
-    ],
-    [activeJoinedChannels, t]
-  );
   const navRailHeader = (
     <div className='shell-nav-status'>
       <div className='shell-status-badges'>
@@ -4565,8 +4344,79 @@ function DesktopShellPage({
     <TopicNavList
       items={topicNavItems}
       onSelectTopic={(topic) => void handleSelectTopic(topic)}
+      onSelectChannel={(topic, channelId) => {
+        if (topic !== activeTopic) {
+          setActiveTopic(topic);
+        }
+        handleSelectPrivateChannel(channelId);
+      }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
     />
+  );
+  const channelControl = (
+    <div className='shell-main-stack'>
+      {activeChannelPanelState.status === 'loading' ? <Notice>{t('channels:loading')}</Notice> : null}
+      {channelError ?? activeChannelPanelState.error ? (
+        <Notice tone='destructive'>{channelError ?? activeChannelPanelState.error}</Notice>
+      ) : null}
+      <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
+        <Label>
+          <span>{t('channels:editor.createChannel')}</span>
+          <Input
+            value={channelLabelInput}
+            onChange={(event) => setChannelLabelInput(event.target.value)}
+            placeholder={t('channels:editor.placeholders.channelLabel')}
+            disabled={channelActionPending !== null}
+          />
+        </Label>
+        <Label>
+          <span>{t('channels:editor.audience')}</span>
+          <Select
+            aria-label={t('channels:editor.audience')}
+            value={channelAudienceInput}
+            disabled={channelActionPending !== null}
+            onChange={(event) => setChannelAudienceInput(event.target.value as ChannelAudienceKind)}
+          >
+            <option value='invite_only'>{t('channels:audienceOptions.invite_only')}</option>
+            <option value='friend_only'>{t('channels:audienceOptions.friend_only')}</option>
+            <option value='friend_plus'>{t('channels:audienceOptions.friend_plus')}</option>
+          </Select>
+        </Label>
+        <div className='discovery-actions'>
+          <Button variant='secondary' type='submit' disabled={channelActionPending !== null}>
+            {t('channels:actions.createChannel')}
+          </Button>
+          <Button
+            variant='secondary'
+            type='button'
+            disabled={channelActionPending !== null || !activePrivateChannel}
+            onClick={() => void handleShareChannelAccess()}
+          >
+            {t('channels:actions.share')}
+          </Button>
+        </div>
+      </form>
+      <form className='composer composer-compact' onSubmit={handleJoinChannelAccess}>
+        <Label>
+          <span>{t('channels:editor.join')}</span>
+          <Textarea
+            value={inviteTokenInput}
+            onChange={(event) => setInviteTokenInput(event.target.value)}
+            placeholder={t('channels:editor.placeholders.inviteToken')}
+            disabled={channelActionPending !== null}
+          />
+        </Label>
+        <Button variant='secondary' type='submit' disabled={channelActionPending !== null}>
+          {t('channels:actions.join')}
+        </Button>
+      </form>
+      {inviteOutput ? (
+        <Notice tone='accent'>
+          <strong>{inviteOutputSummaryLabel(inviteOutputLabel)}</strong>
+          <code className='extended-inline-code'>{inviteOutput}</code>
+        </Notice>
+      ) : null}
+    </div>
   );
 
   const connectivityPanelView = useMemo<ConnectivityPanelView>(
@@ -4938,7 +4788,6 @@ function DesktopShellPage({
     },
   ];
 
-  const channelActionDisabled = channelActionPending !== null;
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
     localProfile?.display_name,
@@ -5044,6 +4893,12 @@ function DesktopShellPage({
                 </div>
               </Label>
             }
+            channelControl={channelControl}
+            channelSummary={
+              activePrivateChannel
+                ? `${activePrivateChannel.label} · ${translateAudienceKindLabel(activePrivateChannel.audience_kind)}`
+                : t('common:audience.public')
+            }
             topicList={topicList}
             topicCount={syncStatus.subscribed_topics.length}
           />
@@ -5095,39 +4950,6 @@ function DesktopShellPage({
                       >
                         {t('common:actions.refresh')}
                       </Button>
-                    </div>
-                    <div className='shell-workspace-controls'>
-                      <Label>
-                        <span>{t('shell:workspace.viewScope')}</span>
-                        <Select
-                          aria-label={t('shell:workspace.viewScope')}
-                          value={timelineScopeValue(activeTimelineScope)}
-                          onChange={(event) => {
-                            void handleTimelineScopeChange(event.target.value);
-                          }}
-                        >
-                          {timelineViewScopeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </Label>
-                      <Label>
-                        <span>{t('shell:workspace.composeTarget')}</span>
-                        <Select
-                          aria-label={t('shell:workspace.composeTarget')}
-                          value={channelRefValue(activeComposeChannel)}
-                          disabled={Boolean(replyTarget || repostTarget)}
-                          onChange={(event) => handleComposeChannelChange(event.target.value)}
-                        >
-                          {composeTargetOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </Label>
                     </div>
                     <ComposerPanel
                       value={composer}
@@ -5184,232 +5006,6 @@ function DesktopShellPage({
                       onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
                       onManageReactions={openReactionSettings}
                     />
-                  </Card>
-                </>
-              ) : null}
-
-              {shellChromeState.activePrimarySection === 'channels' ? (
-                <>
-                  <Card className='shell-workspace-card'>
-                    <div className='shell-main-stack'>
-                      <div className='shell-workspace-header'>
-                        <div>
-                          <h3>{t('channels:title')}</h3>
-                          <small>{t('channels:joined', { count: privateChannelListItems.length })}</small>
-                        </div>
-                      </div>
-                      {activeChannelPanelState.status === 'loading' ? (
-                        <Notice>{t('channels:loading')}</Notice>
-                      ) : null}
-                      {activeChannelPanelState.status === 'error' &&
-                      (channelError ?? activeChannelPanelState.error) ? (
-                        <Notice tone='destructive'>
-                          {channelError ?? activeChannelPanelState.error}
-                        </Notice>
-                      ) : null}
-                      <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
-                        <Label>
-                          <span>{t('channels:editor.createChannel')}</span>
-                          <Input
-                            value={channelLabelInput}
-                            onChange={(event) => setChannelLabelInput(event.target.value)}
-                            placeholder={t('channels:editor.placeholders.channelLabel')}
-                            disabled={channelActionDisabled}
-                          />
-                        </Label>
-                        <Label>
-                          <span>{t('channels:editor.audience')}</span>
-                          <Select
-                            aria-label={t('channels:editor.audience')}
-                            value={channelAudienceInput}
-                            disabled={channelActionDisabled}
-                            onChange={(event) =>
-                              setChannelAudienceInput(
-                                event.target.value as ChannelAudienceKind
-                              )
-                            }
-                          >
-                            <option value='invite_only'>{t('channels:audienceOptions.invite_only')}</option>
-                            <option value='friend_only'>{t('channels:audienceOptions.friend_only')}</option>
-                            <option value='friend_plus'>{t('channels:audienceOptions.friend_plus')}</option>
-                          </Select>
-                        </Label>
-                        <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-                          {t('channels:actions.createChannel')}
-                        </Button>
-                      </form>
-                      <form className='composer composer-compact' onSubmit={handleJoinInvite}>
-                        <Label>
-                          <span>{t('channels:editor.joinViaInvite')}</span>
-                          <Textarea
-                            value={inviteTokenInput}
-                            onChange={(event) => setInviteTokenInput(event.target.value)}
-                            placeholder={t('channels:editor.placeholders.inviteToken')}
-                            disabled={channelActionDisabled}
-                          />
-                        </Label>
-                        <div className='discovery-actions'>
-                          <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-                            {t('channels:actions.joinInvite')}
-                          </Button>
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            disabled={channelActionDisabled}
-                            onClick={() => void handleJoinGrant()}
-                          >
-                            {t('channels:actions.joinGrant')}
-                          </Button>
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            disabled={channelActionDisabled}
-                            onClick={() => void handleJoinShare()}
-                          >
-                            {t('channels:actions.joinShare')}
-                          </Button>
-                        </div>
-                      </form>
-                      {inviteOutput ? (
-                        <Notice tone='accent'>
-                          <strong>{inviteOutputSummaryLabel(inviteOutputLabel)}</strong>
-                          <code className='extended-inline-code'>{inviteOutput}</code>
-                        </Notice>
-                      ) : null}
-                    </div>
-                  </Card>
-                  <Card className='shell-workspace-card'>
-                    {privateChannelListItems.length === 0 && activeChannelPanelState.status === 'ready' ? (
-                      <p className='empty-state'>{t('channels:empty')}</p>
-                    ) : (
-                      <div className='extended-channel-grid'>
-                        <ul className='post-list'>
-                          {privateChannelListItems.map(({ channel, active }) => (
-                            <li key={channel.channel_id}>
-                              <button
-                                className={`post-card post-link extended-channel-card${
-                                  active ? ' extended-channel-card-active' : ''
-                                }`}
-                                type='button'
-                                aria-pressed={active}
-                                onClick={() => handleSelectPrivateChannel(channel.channel_id)}
-                              >
-                                <div className='post-meta'>
-                                  <span>{channel.label}</span>
-                                  <span>{translateAudienceKindLabel(channel.audience_kind)}</span>
-                                </div>
-                                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                  <span>{t('common:labels.epoch')}: {channel.current_epoch_id}</span>
-                                  <span>{t('common:labels.sharing')}: {channel.sharing_state}</span>
-                                </div>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <Card
-                          tone={activePrivateChannel ? 'accent' : 'default'}
-                          className='extended-channel-detail'
-                        >
-                          <div className='panel-header'>
-                            <div>
-                              <h4>{activePrivateChannel?.label ?? t('channels:selectChannel')}</h4>
-                              <small>
-                                {activePrivateChannel
-                                  ? channelPolicyDescription(activePrivateChannel.audience_kind)
-                                  : t('channels:inspectHint')}
-                              </small>
-                            </div>
-                          </div>
-
-                          {activePrivateChannel ? (
-                            <>
-                              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                <span>
-                                  {t('common:labels.policy')}: {channelPolicyDescription(activePrivateChannel.audience_kind)}
-                                </span>
-                                <span>{t('common:labels.epoch')}: {activePrivateChannel.current_epoch_id}</span>
-                                <span>{t('common:labels.sharing')}: {activePrivateChannel.sharing_state}</span>
-                                {activePrivateChannel.joined_via_pubkey ? (
-                                  <span>
-                                    {t('common:labels.joinedVia')} {shortPubkey(activePrivateChannel.joined_via_pubkey)}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {(activePrivateChannel.audience_kind === 'friend_only' ||
-                                activePrivateChannel.audience_kind === 'friend_plus') ? (
-                                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                  <span>{t('common:labels.participants')}: {formatCount(activePrivateChannel.participant_count)}</span>
-                                  <span>{t('common:labels.stale')}: {formatCount(activePrivateChannel.stale_participant_count)}</span>
-                                  <span>{t('common:labels.owner')}: {translateBooleanLabel(activePrivateChannel.is_owner)}</span>
-                                </div>
-                              ) : null}
-                              {activePrivateChannel.audience_kind === 'friend_only' &&
-                              activePrivateChannel.rotation_required ? (
-                                <div className='topic-diagnostic topic-diagnostic-error'>
-                                  <span>{t('channels:rotationRequired')}</span>
-                                </div>
-                              ) : null}
-                              <div className='discovery-actions'>
-                                {activePrivateChannel.audience_kind === 'invite_only' ? (
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={channelActionDisabled}
-                                    onClick={() => void handleCreateInvite()}
-                                  >
-                                    {t('channels:actions.createInvite')}
-                                  </Button>
-                                ) : null}
-                                {activePrivateChannel.audience_kind === 'friend_only' ? (
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
-                                    onClick={() => void handleCreateGrant()}
-                                  >
-                                    {t('channels:actions.createGrant')}
-                                  </Button>
-                                ) : null}
-                                {activePrivateChannel.audience_kind === 'friend_plus' ? (
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={channelActionDisabled}
-                                    onClick={() => void handleCreateShare()}
-                                  >
-                                    {t('channels:actions.createShare')}
-                                  </Button>
-                                ) : null}
-                                {activePrivateChannel.audience_kind === 'friend_plus' ? (
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
-                                    onClick={() => void handleFreezePrivateChannel()}
-                                  >
-                                    {t('common:actions.freeze')}
-                                  </Button>
-                                ) : null}
-                                {activePrivateChannel.audience_kind === 'friend_only' ||
-                                activePrivateChannel.audience_kind === 'friend_plus' ? (
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={channelActionDisabled || !activePrivateChannel.is_owner}
-                                    onClick={() => void handleRotatePrivateChannel()}
-                                  >
-                                    {t('common:actions.rotate')}
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </>
-                          ) : (
-                            <Notice>{t('channels:selectChannelNotice')}</Notice>
-                          )}
-                        </Card>
-                      </div>
-                    )}
                   </Card>
                 </>
               ) : null}

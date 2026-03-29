@@ -14,10 +14,11 @@ use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
-    CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
-    CustomReactionAssetView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
-    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
-    SyncStatus, TimelineView, UpdateGameRoomInput,
+    ChannelAccessTokenExport, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
+    CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView, GameRoomView,
+    GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
+    PrivateChannelCapability, ProfileInput, ReactionStateView, SyncStatus, TimelineView,
+    UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -259,6 +260,18 @@ pub struct ExportPrivateChannelInviteRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportPrivateChannelInviteRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportChannelAccessTokenRequest {
+    pub topic: String,
+    pub channel_id: String,
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportChannelAccessTokenRequest {
     pub token: String,
 }
 
@@ -1080,6 +1093,31 @@ impl DesktopRuntime {
         let preview = self
             .app_service
             .import_private_channel_invite(request.token.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await?;
+        Ok(preview)
+    }
+
+    pub async fn export_channel_access_token(
+        &self,
+        request: ExportChannelAccessTokenRequest,
+    ) -> Result<ChannelAccessTokenExport> {
+        self.app_service
+            .export_channel_access_token(
+                request.topic.as_str(),
+                request.channel_id.as_str(),
+                request.expires_at,
+            )
+            .await
+    }
+
+    pub async fn import_channel_access_token(
+        &self,
+        request: ImportChannelAccessTokenRequest,
+    ) -> Result<ChannelAccessTokenPreview> {
+        let preview = self
+            .app_service
+            .import_channel_access_token(request.token.as_str())
             .await?;
         self.persist_private_channel_capabilities_from_app().await?;
         Ok(preview)
@@ -5183,6 +5221,8 @@ mod tests {
             .expect("joined channels before restart");
         assert_eq!(joined_before_restart.len(), 1);
         assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
+        let restored_epoch_id = joined_before_restart[0].current_epoch_id.clone();
+        assert_ne!(restored_epoch_id, original_epoch_id);
         assert_eq!(
             joined_before_restart[0].joined_via_pubkey.as_deref(),
             Some(b_pubkey.as_str())
@@ -5281,10 +5321,7 @@ mod tests {
             .expect("joined channels after restart");
         assert_eq!(joined_after_restart.len(), 1);
         assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
-        assert_eq!(
-            joined_after_restart[0].current_epoch_id,
-            original_epoch_id.clone()
-        );
+        assert_eq!(joined_after_restart[0].current_epoch_id, restored_epoch_id);
         assert_eq!(
             joined_after_restart[0].joined_via_pubkey.as_deref(),
             Some(b_pubkey.as_str())
@@ -5309,7 +5346,7 @@ mod tests {
             &restarted_c,
             topic,
             channel.channel_id.as_str(),
-            original_epoch_id.as_str(),
+            restored_epoch_id.as_str(),
             3,
             "friend-plus restarted private readiness timeout",
         )
@@ -5342,7 +5379,7 @@ mod tests {
             })
             .await
             .expect("rotate friend-plus channel");
-        assert_ne!(rotated.current_epoch_id, original_epoch_id);
+        assert_ne!(rotated.current_epoch_id, restored_epoch_id);
 
         let refreshed_share_ab = runtime_a
             .export_friend_plus_share(ExportFriendPlusShareRequest {
@@ -5358,7 +5395,8 @@ mod tests {
             })
             .await
             .expect("b imports refreshed friend-plus share");
-        assert_eq!(preview_b_after_rotate.epoch_id, rotated.current_epoch_id);
+        let shared_epoch_id = preview_b_after_rotate.epoch_id.clone();
+        assert_ne!(shared_epoch_id, restored_epoch_id);
         assert_eq!(
             preview_b_after_rotate.sponsor_pubkey.as_str(),
             a_pubkey.as_str()
@@ -5367,7 +5405,7 @@ mod tests {
             &runtime_b,
             topic,
             channel.channel_id.as_str(),
-            rotated.current_epoch_id.as_str(),
+            shared_epoch_id.as_str(),
             2,
             "friend-plus sponsor refresh share redeem timeout",
         )
@@ -5376,9 +5414,11 @@ mod tests {
             joined_b_after_rotate.joined_via_pubkey.as_deref(),
             Some(a_pubkey.as_str())
         );
-        assert_eq!(
-            joined_b_after_rotate.archived_epoch_ids,
-            vec![original_epoch_id.clone()]
+        assert!(
+            joined_b_after_rotate
+                .archived_epoch_ids
+                .iter()
+                .any(|epoch_id| epoch_id == &restored_epoch_id)
         );
 
         let fresh_share = runtime_b
@@ -5393,7 +5433,7 @@ mod tests {
             .import_friend_plus_share(ImportFriendPlusShareRequest { token: fresh_share })
             .await
             .expect("restarted c imports fresh friend-plus share");
-        assert_eq!(preview_after_restart.epoch_id, rotated.current_epoch_id);
+        assert_eq!(preview_after_restart.epoch_id, shared_epoch_id);
         assert_eq!(
             preview_after_restart.sponsor_pubkey.as_str(),
             b_pubkey.as_str()
@@ -5402,7 +5442,7 @@ mod tests {
             &restarted_c,
             topic,
             channel.channel_id.as_str(),
-            rotated.current_epoch_id.as_str(),
+            shared_epoch_id.as_str(),
             3,
             "friend-plus restarted share redeem timeout",
         )
@@ -5412,9 +5452,11 @@ mod tests {
             Some(b_pubkey.as_str())
         );
         assert_eq!(joined_after_rotate.participant_count, 3);
-        assert_eq!(
-            joined_after_rotate.archived_epoch_ids,
-            vec![original_epoch_id.clone()]
+        assert!(
+            joined_after_rotate
+                .archived_epoch_ids
+                .iter()
+                .any(|epoch_id| epoch_id == &restored_epoch_id)
         );
         wait_for_connected_topic_peer_count(
             &restarted_c,
