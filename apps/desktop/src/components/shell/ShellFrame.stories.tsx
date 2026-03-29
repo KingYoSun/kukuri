@@ -62,10 +62,12 @@ function ShellFrameStory() {
                 </div>
               </Label>
             }
+            channelControl={<div />}
             topicList={
               <TopicNavList
                 items={topicItems}
                 onSelectTopic={() => undefined}
+                onSelectChannel={() => undefined}
                 onRemoveTopic={() => undefined}
               />
             }
@@ -79,7 +81,6 @@ function ShellFrameStory() {
                 activeSection='timeline'
                 items={[
                   { id: 'timeline', label: i18n.t('shell:primarySections.timeline') },
-                  { id: 'channels', label: i18n.t('shell:primarySections.channels') },
                   { id: 'live', label: i18n.t('shell:primarySections.live') },
                   { id: 'game', label: i18n.t('shell:primarySections.game') },
                   { id: 'profile', label: i18n.t('shell:primarySections.profile') },

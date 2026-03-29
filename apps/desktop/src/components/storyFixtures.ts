@@ -18,7 +18,6 @@ export function createStoryPrimaryItems(): Array<{
 }> {
   return [
     { id: 'timeline', label: i18n.t('shell:primarySections.timeline'), description: 'Feed and scope controls' },
-    { id: 'channels', label: i18n.t('shell:primarySections.channels'), description: 'Private channel entry and composer' },
     { id: 'live', label: i18n.t('shell:primarySections.live'), description: 'Live sessions and status' },
     { id: 'game', label: i18n.t('shell:primarySections.game'), description: 'Scoreboards and room editing' },
     { id: 'profile', label: i18n.t('shell:primarySections.profile'), description: 'Edit author identity' },
@@ -32,6 +31,7 @@ export function createStoryTopicItems(): TopicDiagnosticSummary[] {
     {
       topic: STORY_ACTIVE_TOPIC,
       active: true,
+      publicActive: true,
       removable: false,
       connectionLabel: i18n.t('common:states.joined'),
       peerCount: 2,
@@ -40,6 +40,7 @@ export function createStoryTopicItems(): TopicDiagnosticSummary[] {
     {
       topic: 'kukuri:topic:relay',
       active: false,
+      publicActive: false,
       removable: true,
       connectionLabel: i18n.t('common:states.relayAssisted'),
       peerCount: 1,

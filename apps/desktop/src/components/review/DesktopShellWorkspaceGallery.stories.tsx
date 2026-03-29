@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings } from 'lucide-react';
@@ -36,7 +36,6 @@ type Story = StoryObj<typeof meta>;
 
 const PRIMARY_ITEMS: Array<{ id: PrimarySection; label: string }> = [
   { id: 'timeline', label: 'Timeline' },
-  { id: 'channels', label: 'Channels' },
   { id: 'live', label: 'Live' },
   { id: 'game', label: 'Game' },
   { id: 'profile', label: 'Profile' },
@@ -46,14 +45,30 @@ const TOPIC_ITEMS: TopicDiagnosticSummary[] = [
   {
     topic: STORY_ACTIVE_TOPIC,
     active: true,
+    publicActive: false,
     removable: false,
     connectionLabel: 'joined',
     peerCount: 2,
     lastReceivedLabel: '12:45:11',
+    channels: [
+      {
+        channelId: 'channel-1',
+        label: 'Core Contributors',
+        audienceKind: 'friend_plus',
+        active: true,
+      },
+      {
+        channelId: 'channel-2',
+        label: 'Review Room',
+        audienceKind: 'invite_only',
+        active: false,
+      },
+    ],
   },
   {
     topic: 'kukuri:topic:relay',
     active: false,
+    publicActive: false,
     removable: true,
     connectionLabel: 'relay-assisted',
     peerCount: 1,
@@ -105,6 +120,59 @@ const PROFILE_TIMELINE_POSTS: PostCardView[] = [
   },
 ];
 
+function ChannelRailControl() {
+  const [channelLabel, setChannelLabel] = useState('Core Contributors');
+  const [inviteToken, setInviteToken] = useState('share:kukuri:topic:demo:channel-1');
+
+  return (
+    <div className='shell-main-stack'>
+      <form className='composer composer-compact' onSubmit={(event) => event.preventDefault()}>
+        <Label>
+          <span>Create Channel</span>
+          <Input
+            value={channelLabel}
+            onChange={(event) => setChannelLabel(event.target.value)}
+            placeholder='core contributors'
+          />
+        </Label>
+        <Label>
+          <span>Audience</span>
+          <Select aria-label='Channel Audience' defaultValue='friend_plus'>
+            <option value='invite_only'>Invite only</option>
+            <option value='friend_only'>Friends</option>
+            <option value='friend_plus'>Friends+</option>
+          </Select>
+        </Label>
+        <div className='discovery-actions'>
+          <Button variant='secondary' type='submit'>
+            Create Channel
+          </Button>
+          <Button variant='secondary' type='button'>
+            Share
+          </Button>
+        </div>
+      </form>
+      <form className='composer composer-compact' onSubmit={(event) => event.preventDefault()}>
+        <Label>
+          <span>Join</span>
+          <Textarea
+            value={inviteToken}
+            onChange={(event) => setInviteToken(event.target.value)}
+            placeholder='paste private channel invite, friend grant, or friends+ share'
+          />
+        </Label>
+        <Button variant='secondary' type='submit'>
+          Join
+        </Button>
+      </form>
+      <Notice tone='accent'>
+        <strong>Share</strong>
+        <code className='extended-inline-code'>share:kukuri:topic:demo:channel-1</code>
+      </Notice>
+    </div>
+  );
+}
+
 function ShellSurface({
   activeSection,
   workspace,
@@ -153,10 +221,13 @@ function ShellSurface({
                 </div>
               </Label>
             }
+            channelControl={<ChannelRailControl />}
+            channelSummary='Core Contributors · Friends+'
             topicList={
               <TopicNavList
                 items={TOPIC_ITEMS}
                 onSelectTopic={() => undefined}
+                onSelectChannel={() => undefined}
                 onRemoveTopic={() => undefined}
               />
             }
@@ -180,144 +251,47 @@ function ShellSurface({
   );
 }
 
-function ChannelsWorkspace() {
-  const [channelLabel, setChannelLabel] = useState('Core Contributors');
-  const [inviteToken, setInviteToken] = useState('grant:kukuri:topic:demo:channel-1');
-
-  const channelCards = useMemo(
-    () => [
-      {
-        channel_id: 'channel-1',
-        label: 'Core Contributors',
-        audience: 'friend plus',
-        epoch: 'epoch-4',
-        sharing: 'open',
-        active: true,
-      },
-      {
-        channel_id: 'channel-2',
-        label: 'Review Room',
-        audience: 'invite only',
-        epoch: 'epoch-1',
-        sharing: 'invite',
-        active: false,
-      },
-    ],
-    []
-  );
+function TimelineWorkspace() {
+  const [composer, setComposer] = useState('Weekly checkpoint is now scoped to Core Contributors.');
 
   return (
     <>
       <Card className='shell-workspace-card'>
-        <div className='shell-main-stack'>
-          <div className='shell-workspace-header'>
-            <div>
-              <h3>Private Channels</h3>
-              <small>2 joined</small>
-            </div>
+        <div className='shell-workspace-header'>
+          <div className='shell-workspace-summary'>
+            <span className='relationship-badge'>Viewing: Core Contributors</span>
+            <span className='relationship-badge relationship-badge-direct'>
+              Posting: Core Contributors
+            </span>
           </div>
-          <form className='composer composer-compact' onSubmit={(event) => event.preventDefault()}>
-            <Label>
-              <span>Create Channel</span>
-              <Input
-                value={channelLabel}
-                onChange={(event) => setChannelLabel(event.target.value)}
-                placeholder='core contributors'
-              />
-            </Label>
-            <Label>
-              <span>Audience</span>
-              <Select aria-label='Channel Audience' defaultValue='friend_plus'>
-                <option value='invite_only'>Invite only</option>
-                <option value='friend_only'>Friends</option>
-                <option value='friend_plus'>Friends+</option>
-              </Select>
-            </Label>
-            <Button variant='secondary' type='submit'>
-              Create Channel
-            </Button>
-          </form>
-          <form className='composer composer-compact' onSubmit={(event) => event.preventDefault()}>
-            <Label>
-              <span>Join via Invite</span>
-              <Textarea
-                value={inviteToken}
-                onChange={(event) => setInviteToken(event.target.value)}
-                placeholder='paste private channel invite, friend grant, or friends+ share'
-              />
-            </Label>
-            <div className='discovery-actions'>
-              <Button variant='secondary' type='submit'>
-                Join Invite
-              </Button>
-              <Button variant='secondary' type='button'>
-                Join Grant
-              </Button>
-              <Button variant='secondary' type='button'>
-                Join Share
-              </Button>
-            </div>
-          </form>
-          <Notice tone='accent'>
-            <strong>Latest share</strong>
-            <code className='extended-inline-code'>share:kukuri:topic:demo:channel-1</code>
-          </Notice>
+          <Button variant='secondary' type='button'>
+            Refresh
+          </Button>
         </div>
       </Card>
       <Card className='shell-workspace-card'>
-        <div className='extended-channel-grid'>
-          <ul className='post-list'>
-            {channelCards.map((channel) => (
-              <li key={channel.channel_id}>
-                <button
-                  className={`post-card post-link extended-channel-card${
-                    channel.active ? ' extended-channel-card-active' : ''
-                  }`}
-                  type='button'
-                  aria-pressed={channel.active}
-                >
-                  <div className='post-meta'>
-                    <span>{channel.label}</span>
-                    <span>{channel.audience}</span>
-                  </div>
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>epoch: {channel.epoch}</span>
-                    <span>sharing: {channel.sharing}</span>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <Card tone='accent' className='extended-channel-detail'>
-            <div className='panel-header'>
-              <div>
-                <h4>Core Contributors</h4>
-                <small>Friends+: participants can share to their mutuals</small>
-              </div>
-            </div>
+        <form className='composer' onSubmit={(event) => event.preventDefault()}>
+          <Textarea
+            value={composer}
+            onChange={(event) => setComposer(event.target.value)}
+            placeholder='Write a post'
+          />
+          <div className='composer-footer'>
             <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>Policy: Friends+: participants can share to their mutuals</span>
-              <span>epoch: epoch-4</span>
-              <span>sharing: open</span>
+              <span>Audience: Core Contributors</span>
             </div>
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>participants: 3</span>
-              <span>stale: 0</span>
-              <span>owner: yes</span>
-            </div>
-            <div className='discovery-actions'>
-              <Button variant='secondary' type='button'>
-                Create Share
-              </Button>
-              <Button variant='secondary' type='button'>
-                Freeze
-              </Button>
-              <Button variant='secondary' type='button'>
-                Rotate
-              </Button>
-            </div>
-          </Card>
-        </div>
+            <Button type='submit'>Publish</Button>
+          </div>
+        </form>
+      </Card>
+      <Card className='shell-workspace-card'>
+        <TimelineFeed
+          posts={PROFILE_TIMELINE_POSTS}
+          emptyCopy='No posts yet for this topic.'
+          onOpenAuthor={() => undefined}
+          onOpenThread={() => undefined}
+          onReply={() => undefined}
+        />
       </Card>
     </>
   );
@@ -552,7 +526,7 @@ function ProfileEditWorkspace() {
 function GalleryStory() {
   return (
     <div style={{ display: 'grid', gap: '3rem', padding: '2rem 0 4rem' }}>
-      <ShellSurface activeSection='channels' workspace={<ChannelsWorkspace />} />
+      <ShellSurface activeSection='timeline' workspace={<TimelineWorkspace />} />
       <ShellSurface activeSection='live' workspace={<LiveWorkspace />} />
       <ShellSurface activeSection='game' workspace={<GameWorkspace />} />
       <ShellSurface activeSection='profile' workspace={<ProfileOverviewWorkspace />} />

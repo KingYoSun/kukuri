@@ -3,6 +3,8 @@ import {
   type AuthorSocialView,
   type BlobMediaPayload,
   type BookmarkedCustomReactionView,
+  type ChannelAccessTokenExport,
+  type ChannelAccessTokenPreview,
   type ChannelAudienceKind,
   type CommunityNodeConfig,
   type CommunityNodeNodeStatus,
@@ -722,11 +724,11 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         owner_pubkey: syncStatus.local_author_pubkey,
         audience_kind: audienceKind,
         is_owner: true,
-        current_epoch_id: audienceKind === 'invite_only' ? 'legacy' : `epoch-${sequence}`,
+        current_epoch_id: `epoch-${sequence}`,
         archived_epoch_ids: [],
         sharing_state: 'open',
         rotation_required: false,
-        participant_count: audienceKind === 'invite_only' ? 0 : 1,
+        participant_count: 1,
         stale_participant_count: 0,
       });
       joinedChannelsByTopic[topic] = [...(joinedChannelsByTopic[topic] ?? []), channel];
@@ -741,6 +743,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         topic_id: 'kukuri:topic:demo',
         channel_label: 'Imported',
         inviter_pubkey: syncStatus.local_author_pubkey,
+        owner_pubkey: syncStatus.local_author_pubkey,
+        epoch_id: 'epoch-imported-1',
         expires_at: null,
         namespace_secret_hex: 'a'.repeat(64),
       };
@@ -751,18 +755,75 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           channel_id: preview.channel_id,
           label: preview.channel_label,
           creator_pubkey: preview.inviter_pubkey,
-          owner_pubkey: preview.inviter_pubkey,
+          owner_pubkey: preview.owner_pubkey,
           audience_kind: 'invite_only',
           is_owner: false,
-          current_epoch_id: 'legacy',
+          current_epoch_id: preview.epoch_id,
           archived_epoch_ids: [],
           sharing_state: 'open',
           rotation_required: false,
-          participant_count: 0,
+          participant_count: 1,
           stale_participant_count: 0,
         }),
       ];
       return preview;
+    },
+    async exportChannelAccessToken(topic, channelId) {
+      const channel = (joinedChannelsByTopic[topic] ?? []).find(
+        (item) => item.channel_id === channelId
+      );
+      if (!channel) {
+        throw new Error('private channel is not joined');
+      }
+      const kind =
+        channel.audience_kind === 'invite_only'
+          ? 'invite'
+          : channel.audience_kind === 'friend_only'
+            ? 'grant'
+            : 'share';
+      return {
+        kind,
+        token: `${kind}:${topic}:${channelId}`,
+      } satisfies ChannelAccessTokenExport;
+    },
+    async importChannelAccessToken(token) {
+      if (token.startsWith('grant:')) {
+        const preview = await this.importFriendOnlyGrant(token);
+        return {
+          kind: 'grant',
+          topic_id: preview.topic_id,
+          channel_id: preview.channel_id,
+          channel_label: preview.channel_label,
+          owner_pubkey: preview.owner_pubkey,
+          inviter_pubkey: null,
+          sponsor_pubkey: preview.owner_pubkey,
+          epoch_id: preview.epoch_id,
+        } satisfies ChannelAccessTokenPreview;
+      }
+      if (token.startsWith('share:')) {
+        const preview = await this.importFriendPlusShare(token);
+        return {
+          kind: 'share',
+          topic_id: preview.topic_id,
+          channel_id: preview.channel_id,
+          channel_label: preview.channel_label,
+          owner_pubkey: preview.owner_pubkey,
+          inviter_pubkey: null,
+          sponsor_pubkey: preview.sponsor_pubkey,
+          epoch_id: preview.epoch_id,
+        } satisfies ChannelAccessTokenPreview;
+      }
+      const preview = await this.importPrivateChannelInvite(token);
+      return {
+        kind: 'invite',
+        topic_id: preview.topic_id,
+        channel_id: preview.channel_id,
+        channel_label: preview.channel_label,
+        owner_pubkey: preview.owner_pubkey,
+        inviter_pubkey: preview.inviter_pubkey,
+        sponsor_pubkey: null,
+        epoch_id: preview.epoch_id,
+      } satisfies ChannelAccessTokenPreview;
     },
     async exportFriendOnlyGrant(topic, channelId) {
       return `grant:${topic}:${channelId}`;

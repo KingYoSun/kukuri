@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,9 @@ type ShellNavRailProps = {
   onOpenChange: (open: boolean) => void;
   headerContent: React.ReactNode;
   addTopicControl: React.ReactNode;
+  channelControl?: React.ReactNode;
+  channelDefaultOpen?: boolean;
+  channelSummary?: React.ReactNode;
   topicList: React.ReactNode;
   topicCount: number;
 };
@@ -22,10 +25,15 @@ export function ShellNavRail({
   onOpenChange,
   headerContent,
   addTopicControl,
+  channelControl,
+  channelDefaultOpen = false,
+  channelSummary,
   topicList,
   topicCount,
 }: ShellNavRailProps) {
   const { t } = useTranslation('shell');
+  const [channelOpen, setChannelOpen] = React.useState(channelDefaultOpen);
+  const hasChannelControl = channelControl !== null && channelControl !== undefined;
 
   return (
     <>
@@ -60,6 +68,29 @@ export function ShellNavRail({
         <div className='shell-nav-meta'>{headerContent}</div>
 
         <div className='shell-nav-topic-entry'>{addTopicControl}</div>
+
+        {hasChannelControl ? (
+          <section
+            className='shell-nav-topic-entry shell-nav-accordion'
+            data-open={channelOpen}
+          >
+            <button
+              className='shell-nav-accordion-trigger'
+              type='button'
+              aria-expanded={channelOpen}
+              onClick={() => setChannelOpen((current) => !current)}
+            >
+              <span className='shell-nav-accordion-title'>{t('navigation.channel')}</span>
+              {channelSummary ? (
+                <span className='shell-nav-accordion-summary'>{channelSummary}</span>
+              ) : null}
+              <ChevronDown className='shell-nav-accordion-icon size-4' aria-hidden='true' />
+            </button>
+            <div className='shell-nav-accordion-content' hidden={!channelOpen}>
+              {channelControl}
+            </div>
+          </section>
+        ) : null}
 
         <section className='topic-list shell-nav-topic-list'>
           <div className='panel-header'>

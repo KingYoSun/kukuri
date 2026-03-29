@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+async function openChannelSection(page: Page) {
+  const trigger = page.locator('.shell-nav-accordion-trigger').first();
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
+    await trigger.click();
+  }
+}
 
 test('browser mock shell can run profile, private channel, live, and game flows', async ({
   page,
@@ -6,18 +13,24 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.setViewportSize({ width: 1440, height: 980 });
   await page.goto('/');
 
-  await page.getByRole('tab', { name: 'Channels' }).click();
+  await openChannelSection(page);
   await page.getByPlaceholder('core contributors').fill('Core Contributors');
   await page.getByRole('button', { name: 'Create Channel' }).click();
-  await expect(page.getByRole('heading', { name: 'Core Contributors' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create Invite' }).click();
-  await expect(page.getByText('Latest invite')).toBeVisible();
+  await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-1/);
+  await expect(
+    page.locator('.topic-list').getByRole('button', { name: /^Core Contributors\b/i })
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Share' }).click();
+  await expect(page.getByText(/^invite:kukuri:topic:demo:channel-1$/)).toBeVisible();
 
+  await openChannelSection(page);
   await page
     .getByPlaceholder('paste private channel invite, friend grant, or friends+ share')
     .fill('invite-token');
-  await page.getByRole('button', { name: 'Join Invite' }).click();
-  await expect(page.getByRole('button', { name: 'kukuri:topic:demo' })).toBeVisible();
+  await page.getByRole('button', { name: 'Join' }).click();
+  await expect(
+    page.locator('.topic-list').getByRole('button', { name: /^Imported\b/i })
+  ).toBeVisible();
 
   await page.goto('/#/live');
   const liveTitle = page.getByLabel('Live Title');

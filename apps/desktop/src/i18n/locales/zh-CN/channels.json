@@ -1,12 +1,8 @@
 {
   "actions": {
     "createChannel": "创建频道",
-    "createGrant": "创建授权",
-    "createInvite": "创建邀请",
-    "createShare": "创建共享",
-    "joinGrant": "通过授权加入",
-    "joinInvite": "通过邀请加入",
-    "joinShare": "通过共享加入"
+    "join": "加入",
+    "share": "共享"
   },
   "audienceOptions": {
     "friend_only": "仅好友",
@@ -16,7 +12,7 @@
   "editor": {
     "audience": "受众",
     "createChannel": "创建频道",
-    "joinViaInvite": "通过邀请加入",
+    "join": "加入",
     "placeholders": {
       "channelLabel": "核心成员",
       "inviteToken": "粘贴私密频道邀请、授权或共享令牌"
@@ -25,28 +21,16 @@
   "empty": "此主题下还没有已加入的私密频道。",
   "errors": {
     "channelLabelRequired": "频道名称为必填项",
-    "grantTokenRequired": "授权令牌为必填项",
     "inviteTokenRequired": "邀请令牌为必填项",
-    "selectChannelForFreeze": "冻结前请先选择私密频道",
-    "selectChannelForGrant": "创建授权前请先选择私密频道",
-    "selectChannelForInvite": "创建邀请前请先选择私密频道",
-    "selectChannelForRotate": "轮换前请先选择私密频道",
     "selectChannelForShare": "创建共享前请先选择私密频道",
-    "shareTokenRequired": "共享令牌为必填项",
     "failedCreateChannel": "创建频道失败",
-    "failedCreateInvite": "创建邀请失败",
-    "failedCreateGrant": "创建授权失败",
     "failedCreateShare": "创建共享失败",
-    "failedFreezeChannel": "冻结私密频道失败",
     "failedJoinChannel": "加入私密频道失败",
-    "failedJoinFriendsChannel": "加入仅好友频道失败",
-    "failedJoinFriendsPlusChannel": "加入好友+频道失败",
-    "failedRotateChannel": "轮换私密频道失败"
+    "failedShareChannel": "共享私密频道失败"
   },
   "inspectHint": "在这里查看策略和操作。",
   "joined": "已加入 {{count}} 个",
   "loading": "正在加载私密频道…",
-  "latestGrant": "最新授权",
   "latestInvite": "最新邀请",
   "latestShare": "最新共享",
   "policies": {

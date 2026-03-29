@@ -5,15 +5,15 @@ use kukuri_desktop_runtime::{
     CommunityNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
     CreateCustomReactionAssetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest, DesktopRuntime,
-    DiscoveryConfig, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
-    ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest, GetBlobMediaRequest,
-    GetBlobPreviewRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
-    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListGameRoomsRequest,
-    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
-    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    RemoveBookmarkedCustomReactionRequest, RotatePrivateChannelRequest,
-    SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest, SetMyProfileRequest,
-    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
+    DiscoveryConfig, ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
+    ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
+    GetBlobMediaRequest, GetBlobPreviewRequest, ImportChannelAccessTokenRequest,
+    ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest, ImportPeerTicketRequest,
+    ImportPrivateChannelInviteRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
+    ListLiveSessionsRequest, ListProfileTimelineRequest, ListThreadRequest, ListTimelineRequest,
+    LiveSessionCommandRequest, RemoveBookmarkedCustomReactionRequest,
+    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
+    SetMyProfileRequest, ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
     resolve_db_path_from_env,
 };
 use tauri::Manager;
@@ -202,6 +202,30 @@ async fn import_private_channel_invite(
     state
         .runtime
         .import_private_channel_invite(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn export_channel_access_token(
+    state: tauri::State<'_, DesktopState>,
+    request: ExportChannelAccessTokenRequest,
+) -> Result<kukuri_app_api::ChannelAccessTokenExport, String> {
+    state
+        .runtime
+        .export_channel_access_token(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn import_channel_access_token(
+    state: tauri::State<'_, DesktopState>,
+    request: ImportChannelAccessTokenRequest,
+) -> Result<kukuri_app_api::ChannelAccessTokenPreview, String> {
+    state
+        .runtime
+        .import_channel_access_token(request)
         .await
         .map_err(map_error)
 }
@@ -697,6 +721,8 @@ pub fn run() {
             create_private_channel,
             export_private_channel_invite,
             import_private_channel_invite,
+            export_channel_access_token,
+            import_channel_access_token,
             export_friend_only_grant,
             import_friend_only_grant,
             export_friend_plus_share,

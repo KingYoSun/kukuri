@@ -9,10 +9,13 @@
   "navigation": {
     "activeCount": "{{count}} active",
     "addTopic": "Add Topic",
+    "channel": "Channel",
+    "channelsGroup": "Channels",
     "close": "Close navigation",
     "open": "Open navigation",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "Primary navigation",
+    "publicScope": "Topic feed",
     "removeTopic": "Remove {{topic}}",
     "seededDht": "seeded dht",
     "staticPeers": "static peers",
@@ -22,7 +25,6 @@
     "trackedTopics": "Tracked Topics"
   },
   "primarySections": {
-    "channels": "Channels",
     "game": "Game",
     "live": "Live",
     "profile": "Profile",
