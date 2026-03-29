@@ -122,6 +122,29 @@ test('post card renders repost source context for quote reposts', () => {
   expect(screen.getByText('original body')).toBeInTheDocument();
 });
 
+test('post card marks long content fields as wrap-safe', () => {
+  const longContent = 'channel_payload_'.repeat(48);
+  const longEnvelopeId = 'f'.repeat(192);
+
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...createView().post,
+          content: longContent,
+          envelope_id: longEnvelopeId,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.getByText(longContent)).toHaveClass('post-copy-wrap');
+  expect(screen.getByText(longEnvelopeId)).toHaveClass('post-copy-wrap');
+});
+
 test('simple repost opens the source thread in its published topic', async () => {
   const user = userEvent.setup();
   const onOpenThread = vi.fn();
@@ -165,16 +188,26 @@ test('simple repost opens the source thread in its published topic', async () =>
   expect(onOpenThreadInTopic).toHaveBeenCalledWith('source-root', 'kukuri:topic:source');
 });
 
-test('post card toggles reaction summary chips and opens the reaction tray', async () => {
+test('post card toggles reaction summary chips and uses the reaction popover for recent and custom search', async () => {
   const user = userEvent.setup();
   const onToggleReaction = vi.fn();
   const onBookmarkCustomReaction = vi.fn();
-  const onManageReactions = vi.fn();
   const customAsset = {
     asset_id: 'asset-1',
     owner_pubkey: 'b'.repeat(64),
     blob_hash: 'blob-1',
+    search_key: 'party-parrot',
     mime: 'image/png',
+    bytes: 128,
+    width: 128,
+    height: 128,
+  };
+  const bookmarkedAsset = {
+    asset_id: 'asset-2',
+    owner_pubkey: 'c'.repeat(64),
+    blob_hash: 'blob-2',
+    search_key: 'saved-cat',
+    mime: 'image/gif',
     bytes: 128,
     width: 128,
     height: 128,
@@ -216,10 +249,22 @@ test('post card toggles reaction summary chips and opens the reaction tray', asy
       onOpenThread={() => undefined}
       onReply={() => undefined}
       localAuthorPubkey={'a'.repeat(64)}
-      mediaObjectUrls={{ 'blob-1': 'https://example.com/reaction.png' }}
+      mediaObjectUrls={{
+        'blob-1': 'https://example.com/reaction.png',
+        'blob-2': 'https://example.com/bookmarked.png',
+      }}
+      bookmarkedReactionAssets={[bookmarkedAsset]}
+      recentReactions={[
+        {
+          reaction_key_kind: 'emoji',
+          normalized_reaction_key: 'emoji:🔥',
+          emoji: '🔥',
+          custom_asset: null,
+          updated_at: 2,
+        },
+      ]}
       onToggleReaction={onToggleReaction}
       onBookmarkCustomReaction={onBookmarkCustomReaction}
-      onManageReactions={onManageReactions}
     />
   );
 
@@ -230,11 +275,17 @@ test('post card toggles reaction summary chips and opens the reaction tray', asy
   expect(onBookmarkCustomReaction).toHaveBeenCalledWith(customAsset);
 
   await user.click(screen.getByRole('button', { name: 'React' }));
+  expect(screen.queryByRole('button', { name: 'Manage reactions' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '🔥' }));
   expect(onToggleReaction).toHaveBeenNthCalledWith(2, view.post, { kind: 'emoji', emoji: '🔥' });
 
-  await user.click(screen.getByRole('button', { name: 'Manage reactions' }));
-  expect(onManageReactions).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'React' }));
+  await user.type(screen.getByPlaceholderText('Search reactions'), 'saved');
+  await user.click(screen.getByRole('button', { name: /saved-cat/i }));
+  expect(onToggleReaction).toHaveBeenNthCalledWith(3, view.post, {
+    kind: 'custom_asset',
+    asset: bookmarkedAsset,
+  });
 });
 
 test('read-only post card hides reaction affordances and keeps the original topic action', async () => {

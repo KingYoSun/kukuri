@@ -115,10 +115,20 @@ pub struct ReactionStateView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentReactionView {
+    pub reaction_key_kind: String,
+    pub normalized_reaction_key: String,
+    pub emoji: Option<String>,
+    pub custom_asset: Option<CustomReactionAssetView>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CustomReactionAssetView {
     pub asset_id: String,
     pub owner_pubkey: String,
     pub blob_hash: String,
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -129,6 +139,7 @@ pub type BookmarkedCustomReactionView = CustomReactionAssetView;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateCustomReactionAssetInput {
+    pub search_key: String,
     pub mime: String,
     pub bytes: Vec<u8>,
     pub width: u32,
@@ -861,6 +872,7 @@ impl AppService {
         let envelope = build_custom_reaction_asset_envelope(
             self.keys.as_ref(),
             stored_blob.hash.clone(),
+            input.search_key,
             input.mime,
             stored_blob.bytes,
             input.width,
@@ -896,6 +908,30 @@ impl AppService {
             .collect())
     }
 
+    pub async fn list_recent_reactions(&self, limit: usize) -> Result<Vec<RecentReactionView>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let author_pubkey = self.current_author_pubkey();
+        let mut seen = BTreeSet::new();
+        let mut items = Vec::new();
+        for row in self
+            .projection_store
+            .list_recent_reaction_cache_by_author(author_pubkey.as_str())
+            .await?
+        {
+            if !seen.insert(row.normalized_reaction_key.clone()) {
+                continue;
+            }
+            items.push(recent_reaction_view_from_projection(&row));
+            if items.len() >= limit {
+                break;
+            }
+        }
+        Ok(items)
+    }
+
     pub async fn list_bookmarked_custom_reactions(
         &self,
     ) -> Result<Vec<BookmarkedCustomReactionView>> {
@@ -919,6 +955,7 @@ impl AppService {
             asset_id: asset.asset_id.clone(),
             owner_pubkey: asset.owner_pubkey.as_str().to_string(),
             blob_hash: asset.blob_hash,
+            search_key: search_key_or_asset_id(asset.search_key.as_str(), asset.asset_id.as_str()),
             mime: asset.mime,
             bytes: asset.bytes,
             width: asset.width,
@@ -3034,6 +3071,11 @@ impl AppService {
         hash: &str,
         mime: &str,
     ) -> Result<Option<BlobMediaPayload>> {
+        let hash = hash.trim();
+        if hash.is_empty() {
+            warn!(mime = %mime, "blob media payload fetch skipped because hash was blank");
+            return Ok(None);
+        }
         info!(hash = %hash, mime = %mime, "blob media payload fetch requested");
         let bytes = match self
             .blob_service
@@ -5988,6 +6030,10 @@ fn custom_reaction_asset_view_from_snapshot(
         asset_id: snapshot.asset_id.clone(),
         owner_pubkey: snapshot.owner_pubkey.as_str().to_string(),
         blob_hash: snapshot.blob_hash.as_str().to_string(),
+        search_key: search_key_or_asset_id(
+            snapshot.search_key.as_str(),
+            snapshot.asset_id.as_str(),
+        ),
         mime: snapshot.mime.clone(),
         bytes: snapshot.bytes,
         width: snapshot.width,
@@ -6002,6 +6048,7 @@ fn custom_reaction_asset_view_from_doc(
         asset_id: asset.asset_id.clone(),
         owner_pubkey: asset.author_pubkey.as_str().to_string(),
         blob_hash: asset.blob_hash.as_str().to_string(),
+        search_key: search_key_or_asset_id(asset.search_key.as_str(), asset.asset_id.as_str()),
         mime: asset.mime.clone(),
         bytes: asset.bytes,
         width: asset.width,
@@ -6012,14 +6059,29 @@ fn custom_reaction_asset_view_from_doc(
 fn bookmarked_custom_reaction_view_from_row(
     row: BookmarkedCustomReactionRow,
 ) -> BookmarkedCustomReactionView {
+    let asset_id = row.asset_id;
     BookmarkedCustomReactionView {
-        asset_id: row.asset_id,
+        asset_id: asset_id.clone(),
         owner_pubkey: row.owner_pubkey,
         blob_hash: row.blob_hash.as_str().to_string(),
+        search_key: search_key_or_asset_id(row.search_key.as_str(), asset_id.as_str()),
         mime: row.mime,
         bytes: row.bytes,
         width: row.width,
         height: row.height,
+    }
+}
+
+fn recent_reaction_view_from_projection(row: &ReactionProjectionRow) -> RecentReactionView {
+    RecentReactionView {
+        reaction_key_kind: reaction_key_kind_label(&row.reaction_key_kind).to_string(),
+        normalized_reaction_key: row.normalized_reaction_key.clone(),
+        emoji: row.emoji.clone(),
+        custom_asset: row
+            .custom_asset_snapshot
+            .as_ref()
+            .map(custom_reaction_asset_view_from_snapshot),
+        updated_at: row.updated_at,
     }
 }
 
@@ -6040,6 +6102,14 @@ fn reaction_key_view_from_projection(row: &ReactionProjectionRow) -> ReactionKey
             .as_ref()
             .map(custom_reaction_asset_view_from_snapshot),
     }
+}
+
+fn search_key_or_asset_id(search_key: &str, asset_id: &str) -> String {
+    let normalized = search_key.trim();
+    if normalized.is_empty() {
+        return asset_id.to_string();
+    }
+    normalized.to_string()
 }
 
 async fn hydrate_object_projection_from_replica(
@@ -6922,7 +6992,7 @@ mod tests {
     use kukuri_core::build_post_envelope_with_payload;
     use kukuri_docs_sync::IrohDocsNode;
     use kukuri_docs_sync::IrohDocsSync;
-    use kukuri_store::{MemoryStore, SqliteStore};
+    use kukuri_store::{BookmarkedCustomReactionRow, MemoryStore, SqliteStore};
     use kukuri_transport::{
         DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
         IrohGossipTransport, SeedPeer,
@@ -7702,6 +7772,7 @@ mod tests {
             asset_id: asset.asset_id.clone(),
             owner_pubkey: Pubkey::from(asset.owner_pubkey.as_str()),
             blob_hash: kukuri_core::BlobHash::new(asset.blob_hash.clone()),
+            search_key: asset.search_key.clone(),
             mime: asset.mime.clone(),
             bytes: asset.bytes,
             width: asset.width,
@@ -7945,6 +8016,7 @@ mod tests {
             .expect("create post");
         let custom_asset = app
             .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                search_key: "party".into(),
                 mime: "image/png".into(),
                 bytes: tiny_png_bytes(),
                 width: 128,
@@ -8139,6 +8211,7 @@ mod tests {
         let (app, _, docs_sync, blob_service) = local_app_with_memory_services();
         let asset = app
             .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                search_key: "party".into(),
                 mime: "image/png".into(),
                 bytes: tiny_png_bytes(),
                 width: 128,
@@ -8165,8 +8238,61 @@ mod tests {
             .expect("stored blob");
 
         assert_eq!(listed, vec![asset.clone()]);
+        assert_eq!(asset.search_key, "party");
         assert_eq!(asset_docs.len(), 2);
         assert_eq!(stored_blob, tiny_png_bytes());
+    }
+
+    #[tokio::test]
+    async fn recent_reactions_return_latest_unique_keys_even_after_toggle_off() {
+        let (app, _, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:reaction-recent";
+        let object_id = app
+            .create_post(topic, "recent reactions", None)
+            .await
+            .expect("create post");
+
+        app.toggle_reaction(
+            topic,
+            object_id.as_str(),
+            ReactionKeyV1::Emoji {
+                emoji: "🔥".into()
+            },
+            None,
+        )
+        .await
+        .expect("fire reaction");
+        sleep(Duration::from_millis(5)).await;
+        app.toggle_reaction(
+            topic,
+            object_id.as_str(),
+            ReactionKeyV1::Emoji {
+                emoji: "😂".into()
+            },
+            None,
+        )
+        .await
+        .expect("laugh reaction");
+        sleep(Duration::from_millis(5)).await;
+        app.toggle_reaction(
+            topic,
+            object_id.as_str(),
+            ReactionKeyV1::Emoji {
+                emoji: "🔥".into()
+            },
+            None,
+        )
+        .await
+        .expect("toggle fire reaction off");
+
+        let recent = app
+            .list_recent_reactions(8)
+            .await
+            .expect("list recent reactions");
+
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].normalized_reaction_key, "emoji:🔥");
+        assert_eq!(recent[1].normalized_reaction_key, "emoji:😂");
     }
 
     #[tokio::test]
@@ -8198,6 +8324,7 @@ mod tests {
             asset_id: "asset-bookmarked".into(),
             owner_pubkey: Pubkey::from(foreign_pubkey.as_str()),
             blob_hash: kukuri_core::BlobHash::new("blob-bookmarked"),
+            search_key: "bookmark".into(),
             mime: "image/png".into(),
             bytes: 128,
             width: 128,
@@ -8230,6 +8357,42 @@ mod tests {
         assert_eq!(bookmarks.len(), 1);
         assert_eq!(bookmarks[0].asset_id, "asset-bookmarked");
         assert_eq!(bookmarks[0].owner_pubkey, foreign_pubkey);
+        assert_eq!(bookmarks[0].search_key, "bookmark");
+    }
+
+    #[test]
+    fn legacy_custom_reaction_records_fall_back_to_asset_id_for_search_key() {
+        let owner_pubkey = "b".repeat(64);
+        let snapshot = CustomReactionAssetSnapshotV1 {
+            asset_id: "asset-legacy".into(),
+            owner_pubkey: Pubkey::from(owner_pubkey.as_str()),
+            blob_hash: kukuri_core::BlobHash::new("blob-legacy"),
+            search_key: "   ".into(),
+            mime: "image/png".into(),
+            bytes: 128,
+            width: 128,
+            height: 128,
+        };
+        let row = BookmarkedCustomReactionRow {
+            asset_id: "asset-bookmarked-legacy".into(),
+            owner_pubkey: owner_pubkey.clone(),
+            blob_hash: kukuri_core::BlobHash::new("blob-bookmarked-legacy"),
+            search_key: String::new(),
+            mime: "image/png".into(),
+            bytes: 128,
+            width: 128,
+            height: 128,
+            bookmarked_at: 1,
+        };
+
+        assert_eq!(
+            custom_reaction_asset_view_from_snapshot(&snapshot).search_key,
+            "asset-legacy"
+        );
+        assert_eq!(
+            bookmarked_custom_reaction_view_from_row(row).search_key,
+            "asset-bookmarked-legacy"
+        );
     }
 
     #[tokio::test]

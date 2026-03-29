@@ -182,6 +182,7 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
             asset_id: 'asset-owned',
             owner_pubkey: 'a'.repeat(64),
             blob_hash: 'blob-owned',
+            search_key: 'party-parrot',
             mime: 'image/png',
             bytes: 128,
             width: 128,
@@ -193,6 +194,7 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
             asset_id: 'asset-saved',
             owner_pubkey: 'b'.repeat(64),
             blob_hash: 'blob-saved',
+            search_key: 'saved-cat',
             mime: 'image/gif',
             bytes: 256,
             width: 128,
@@ -211,6 +213,8 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
   );
 
   expect(screen.getByText('My custom reactions')).toBeInTheDocument();
+  expect(screen.getByText('party-parrot')).toBeInTheDocument();
+  expect(screen.getByText('saved-cat')).toBeInTheDocument();
   expect(screen.getByAltText('asset-owned')).toHaveAttribute('src', 'https://example.com/owned.png');
   expect(screen.getByAltText('asset-saved')).toHaveAttribute('src', 'https://example.com/saved.gif');
 

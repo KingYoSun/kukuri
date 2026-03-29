@@ -17,8 +17,8 @@ use kukuri_app_api::{
     ChannelAccessTokenExport, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
     CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView, GameRoomView,
     GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
-    PrivateChannelCapability, ProfileInput, ReactionStateView, SyncStatus, TimelineView,
-    UpdateGameRoomInput,
+    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
+    TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -101,6 +101,7 @@ pub enum ReactionKeyRequest {
         asset_id: String,
         owner_pubkey: String,
         blob_hash: String,
+        search_key: String,
         mime: String,
         bytes: u64,
         width: u32,
@@ -127,6 +128,7 @@ pub struct CustomReactionCropRect {
 pub struct CreateCustomReactionAssetRequest {
     pub upload: CreateAttachmentRequest,
     pub crop_rect: CustomReactionCropRect,
+    pub search_key: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,6 +136,7 @@ pub struct BookmarkCustomReactionRequest {
     pub asset_id: String,
     pub owner_pubkey: String,
     pub blob_hash: String,
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -143,6 +146,11 @@ pub struct BookmarkCustomReactionRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoveBookmarkedCustomReactionRequest {
     pub asset_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListRecentReactionsRequest {
+    pub limit: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -850,6 +858,15 @@ impl DesktopRuntime {
         self.app_service.list_my_custom_reaction_assets().await
     }
 
+    pub async fn list_recent_reactions(
+        &self,
+        request: ListRecentReactionsRequest,
+    ) -> Result<Vec<RecentReactionView>> {
+        self.app_service
+            .list_recent_reactions(request.limit.unwrap_or(8))
+            .await
+    }
+
     pub async fn create_custom_reaction_asset(
         &self,
         request: CreateCustomReactionAssetRequest,
@@ -862,6 +879,7 @@ impl DesktopRuntime {
             normalize_custom_reaction_upload(raw, upload.mime.as_str(), &request.crop_rect)?;
         self.app_service
             .create_custom_reaction_asset(CreateCustomReactionAssetInput {
+                search_key: request.search_key,
                 mime: normalized.mime,
                 bytes: normalized.bytes,
                 width: 128,
@@ -885,6 +903,7 @@ impl DesktopRuntime {
                 asset_id: request.asset_id,
                 owner_pubkey: request.owner_pubkey.into(),
                 blob_hash: BlobHash::new(request.blob_hash),
+                search_key: request.search_key,
                 mime: request.mime,
                 bytes: request.bytes,
                 width: request.width,
@@ -1275,6 +1294,10 @@ impl DesktopRuntime {
         &self,
         request: GetBlobMediaRequest,
     ) -> Result<Option<BlobMediaPayload>> {
+        if request.hash.trim().is_empty() {
+            tracing::warn!(mime = %request.mime, "blob media payload request skipped because hash was blank");
+            return Ok(None);
+        }
         self.app_service
             .blob_media_payload(request.hash.as_str(), request.mime.as_str())
             .await
@@ -1935,6 +1958,7 @@ fn reaction_key_from_request(request: ReactionKeyRequest) -> Result<ReactionKeyV
             asset_id,
             owner_pubkey,
             blob_hash,
+            search_key,
             mime,
             bytes,
             width,
@@ -1945,6 +1969,7 @@ fn reaction_key_from_request(request: ReactionKeyRequest) -> Result<ReactionKeyV
                 asset_id,
                 owner_pubkey: owner_pubkey.into(),
                 blob_hash: BlobHash::new(blob_hash),
+                search_key,
                 mime,
                 bytes,
                 width,
@@ -6322,6 +6347,29 @@ mod tests {
             payload.bytes_base64,
             BASE64_STANDARD.encode(b"blob-media-roundtrip")
         );
+    }
+
+    #[tokio::test]
+    async fn blank_blob_media_hash_returns_none_without_panicking() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("blank-blob-media-hash.db");
+        let runtime = DesktopRuntime::new_with_config_and_identity(
+            &db_path,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .expect("runtime");
+
+        let payload = runtime
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: "   ".into(),
+                mime: "image/png".into(),
+            })
+            .await
+            .expect("blank hash payload");
+
+        assert!(payload.is_none());
     }
 
     #[tokio::test]

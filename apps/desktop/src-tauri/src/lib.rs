@@ -10,8 +10,9 @@ use kukuri_desktop_runtime::{
     GetBlobMediaRequest, GetBlobPreviewRequest, ImportChannelAccessTokenRequest,
     ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest, ImportPeerTicketRequest,
     ImportPrivateChannelInviteRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
-    ListLiveSessionsRequest, ListProfileTimelineRequest, ListThreadRequest, ListTimelineRequest,
-    LiveSessionCommandRequest, RemoveBookmarkedCustomReactionRequest,
+    ListLiveSessionsRequest, ListProfileTimelineRequest, ListRecentReactionsRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    RemoveBookmarkedCustomReactionRequest,
     RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
     SetMyProfileRequest, ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
     resolve_db_path_from_env,
@@ -119,6 +120,18 @@ async fn list_my_custom_reaction_assets(
     state
         .runtime
         .list_my_custom_reaction_assets()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_recent_reactions(
+    state: tauri::State<'_, DesktopState>,
+    request: ListRecentReactionsRequest,
+) -> Result<Vec<kukuri_app_api::RecentReactionView>, String> {
+    state
+        .runtime
+        .list_recent_reactions(request)
         .await
         .map_err(map_error)
 }
@@ -714,6 +727,7 @@ pub fn run() {
             create_repost,
             toggle_reaction,
             list_my_custom_reaction_assets,
+            list_recent_reactions,
             create_custom_reaction_asset,
             list_bookmarked_custom_reactions,
             bookmark_custom_reaction,

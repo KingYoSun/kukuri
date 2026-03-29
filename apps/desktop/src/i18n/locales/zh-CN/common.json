@@ -28,6 +28,7 @@
     "quoteReposting": "引用转发中",
     "clearReply": "清除回复",
     "replying": "回复中",
+    "sourcePost": "原帖",
     "writePost": "写一条帖子",
     "writeQuoteRepost": "写一条引用转发",
     "writeReply": "写一条回复"
@@ -106,6 +107,13 @@
     "unsupportedOnClient": "此客户端不支持",
     "video": "视频",
     "videoPosterAlt": "视频海报"
+  },
+  "reactions": {
+    "recent": "最近使用",
+    "customResults": "搜索结果",
+    "searchPlaceholder": "搜索回应",
+    "searchHint": "按表情或自定义 key 搜索。",
+    "noResults": "没有匹配的回应。"
   },
   "relationships": {
     "followsYou": "对方关注了你",

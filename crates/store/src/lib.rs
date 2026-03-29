@@ -84,6 +84,7 @@ pub struct BookmarkedCustomReactionRow {
     pub asset_id: String,
     pub owner_pubkey: String,
     pub blob_hash: BlobHash,
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -230,6 +231,10 @@ pub trait ProjectionStore: Send + Sync {
         &self,
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
+    ) -> Result<Vec<ReactionProjectionRow>>;
+    async fn list_recent_reaction_cache_by_author(
+        &self,
+        author_pubkey: &str,
     ) -> Result<Vec<ReactionProjectionRow>>;
     async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()>;
     async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>>;
@@ -1524,16 +1529,38 @@ impl ProjectionStore for SqliteStore {
         rows.into_iter().map(row_to_reaction_projection).collect()
     }
 
+    async fn list_recent_reaction_cache_by_author(
+        &self,
+        author_pubkey: &str,
+    ) -> Result<Vec<ReactionProjectionRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT source_replica_id, target_object_id, reaction_id, author_pubkey, created_at,
+                   updated_at, reaction_key_kind, normalized_reaction_key, emoji,
+                   custom_asset_id, custom_asset_snapshot_json, status, source_key,
+                   source_envelope_id, derived_at, projection_version
+            FROM reaction_cache
+            WHERE author_pubkey = ?1
+            ORDER BY updated_at DESC, reaction_id DESC
+            "#,
+        )
+        .bind(author_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_reaction_projection).collect()
+    }
+
     async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO bookmarked_custom_reactions (
-              asset_id, owner_pubkey, blob_hash, mime, bytes, width, height, bookmarked_at
+              asset_id, owner_pubkey, blob_hash, search_key, mime, bytes, width, height, bookmarked_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(asset_id) DO UPDATE SET
               owner_pubkey = excluded.owner_pubkey,
               blob_hash = excluded.blob_hash,
+              search_key = excluded.search_key,
               mime = excluded.mime,
               bytes = excluded.bytes,
               width = excluded.width,
@@ -1544,6 +1571,7 @@ impl ProjectionStore for SqliteStore {
         .bind(row.asset_id.as_str())
         .bind(row.owner_pubkey.as_str())
         .bind(row.blob_hash.as_str())
+        .bind(row.search_key.as_str())
         .bind(row.mime.as_str())
         .bind(row.bytes as i64)
         .bind(i64::from(row.width))
@@ -1557,7 +1585,7 @@ impl ProjectionStore for SqliteStore {
     async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>> {
         let rows = sqlx::query(
             r#"
-            SELECT asset_id, owner_pubkey, blob_hash, mime, bytes, width, height, bookmarked_at
+            SELECT asset_id, owner_pubkey, blob_hash, search_key, mime, bytes, width, height, bookmarked_at
             FROM bookmarked_custom_reactions
             ORDER BY bookmarked_at DESC, asset_id DESC
             "#,
@@ -1895,6 +1923,27 @@ impl ProjectionStore for MemoryStore {
         Ok(items)
     }
 
+    async fn list_recent_reaction_cache_by_author(
+        &self,
+        author_pubkey: &str,
+    ) -> Result<Vec<ReactionProjectionRow>> {
+        let mut items = self
+            .reaction_projection_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| row.author_pubkey == author_pubkey)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| right.reaction_id.cmp(&left.reaction_id))
+        });
+        Ok(items)
+    }
+
     async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()> {
         self.bookmarked_custom_reactions
             .write()
@@ -2027,6 +2076,11 @@ fn row_to_bookmarked_custom_reaction(
         asset_id: row.get("asset_id"),
         owner_pubkey: row.get("owner_pubkey"),
         blob_hash: BlobHash::new(row.get::<String, _>("blob_hash")),
+        search_key: row
+            .try_get::<String, _>("search_key")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| row.get("asset_id")),
         mime: row.get("mime"),
         bytes: row.get::<i64, _>("bytes") as u64,
         width: row.get::<i64, _>("width") as u32,
@@ -2620,6 +2674,83 @@ mod tests {
             vec!["c".repeat(64)]
         );
         assert!(relationship.followed_by);
+    }
+
+    #[tokio::test]
+    async fn recent_reaction_cache_query_returns_latest_rows_for_author() {
+        let store = SqliteStore::connect_memory().await.expect("sqlite store");
+        let author_pubkey = "a".repeat(64);
+        let target_object_id = EnvelopeId::from("target-object");
+        let source_replica_id = ReplicaId::new("topic::recent-reactions");
+        for row in [
+            ReactionProjectionRow {
+                source_replica_id: source_replica_id.clone(),
+                target_object_id: target_object_id.clone(),
+                reaction_id: EnvelopeId::from("reaction-1"),
+                author_pubkey: author_pubkey.clone(),
+                created_at: 10,
+                updated_at: 10,
+                reaction_key_kind: ReactionKeyKind::Emoji,
+                normalized_reaction_key: "emoji:🔥".into(),
+                emoji: Some("🔥".into()),
+                custom_asset_id: None,
+                custom_asset_snapshot: None,
+                status: ObjectStatus::Active,
+                source_key: "reactions/1".into(),
+                source_envelope_id: EnvelopeId::from("reaction-1"),
+                derived_at: 10,
+                projection_version: 1,
+            },
+            ReactionProjectionRow {
+                source_replica_id: source_replica_id.clone(),
+                target_object_id: target_object_id.clone(),
+                reaction_id: EnvelopeId::from("reaction-2"),
+                author_pubkey: author_pubkey.clone(),
+                created_at: 12,
+                updated_at: 25,
+                reaction_key_kind: ReactionKeyKind::Emoji,
+                normalized_reaction_key: "emoji:😂".into(),
+                emoji: Some("😂".into()),
+                custom_asset_id: None,
+                custom_asset_snapshot: None,
+                status: ObjectStatus::Deleted,
+                source_key: "reactions/2".into(),
+                source_envelope_id: EnvelopeId::from("reaction-2"),
+                derived_at: 12,
+                projection_version: 1,
+            },
+            ReactionProjectionRow {
+                source_replica_id,
+                target_object_id: target_object_id.clone(),
+                reaction_id: EnvelopeId::from("reaction-3"),
+                author_pubkey: "b".repeat(64),
+                created_at: 15,
+                updated_at: 30,
+                reaction_key_kind: ReactionKeyKind::Emoji,
+                normalized_reaction_key: "emoji:🎉".into(),
+                emoji: Some("🎉".into()),
+                custom_asset_id: None,
+                custom_asset_snapshot: None,
+                status: ObjectStatus::Active,
+                source_key: "reactions/3".into(),
+                source_envelope_id: EnvelopeId::from("reaction-3"),
+                derived_at: 15,
+                projection_version: 1,
+            },
+        ] {
+            ProjectionStore::upsert_reaction_cache(&store, row)
+                .await
+                .expect("upsert reaction cache");
+        }
+
+        let recent =
+            ProjectionStore::list_recent_reaction_cache_by_author(&store, author_pubkey.as_str())
+                .await
+                .expect("list recent reaction cache");
+
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].normalized_reaction_key, "emoji:😂");
+        assert_eq!(recent[1].normalized_reaction_key, "emoji:🔥");
     }
 
     #[tokio::test]

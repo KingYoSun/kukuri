@@ -371,6 +371,7 @@ test('floating action button tracks the active section and hides on profile', as
   render(<App api={createDesktopMockApi()} />);
 
   expect(getFloatingActionButton()).toHaveAccessibleName('Publish');
+  expect(getFloatingActionButton()).toHaveClass('shell-fab');
 
   await selectWorkspace(user, 'Live');
   expect(getFloatingActionButton()).toHaveAccessibleName('Start Live');
@@ -387,6 +388,9 @@ test('channel manager opens as a modal from the navigation summary', async () =>
   render(<App api={createDesktopMockApi()} />);
 
   expect(getPrimaryNavigation().querySelector('.shell-nav-accordion-trigger')).toBeNull();
+  const channelButton = screen.getByRole('button', { name: 'Private Channels' });
+  expect(channelButton).toHaveClass('shell-icon-button');
+  expect(channelButton).not.toHaveTextContent('Private Channels');
 
   const dialog = await openChannelManager(user);
   expect(dialog).toBeInTheDocument();
@@ -778,6 +782,8 @@ test('desktop shell can enter reply mode and render reply state', async () => {
   const replyDialog = await screen.findByRole('dialog', { name: 'Reply' });
   expect(within(replyDialog).getByPlaceholderText('Write a reply')).toBeInTheDocument();
   expect(within(replyDialog).getByText('Replying')).toBeInTheDocument();
+  expect(within(replyDialog).getByText('Original post')).toBeInTheDocument();
+  expect(within(replyDialog).getByText('root post')).toBeInTheDocument();
 
   const replyInput = within(replyDialog).getByPlaceholderText('Write a reply');
   await user.type(replyInput, 'reply post');
@@ -791,6 +797,32 @@ test('desktop shell can enter reply mode and render reply state', async () => {
     expect(screen.getAllByText('reply post').length).toBeGreaterThan(0);
   });
   expect(screen.getAllByRole('button', { name: 'Reply' }).length).toBeGreaterThan(0);
+});
+
+test('compose dialog stays width-safe when the source post contains a long token', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const longContent = 'channel_payload_'.repeat(48);
+
+  render(<App api={api} />);
+
+  const publishDialog = await openPublishDialog(user);
+  fireEvent.change(within(publishDialog).getByPlaceholderText('Write a post'), {
+    target: { value: longContent },
+  });
+  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Publish' })).not.toBeInTheDocument();
+  });
+  await waitFor(() => {
+    expect(screen.getByText(longContent)).toBeInTheDocument();
+  });
+
+  await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
+  const replyDialog = await screen.findByRole('dialog', { name: 'Reply' });
+
+  expect(replyDialog).toHaveClass('shell-compose-dialog');
+  expect(within(replyDialog).getAllByText(longContent)[0]).toHaveClass('post-copy-wrap');
 });
 
 test('reply publish reloads thread only once after a successful submit', async () => {
@@ -883,6 +915,8 @@ test('desktop shell can create a quote repost from the composer', async () => {
   const quoteDialog = await screen.findByRole('dialog', { name: 'Quote Repost' });
   const quoteInput = within(quoteDialog).getByPlaceholderText('Write a quote repost');
   expect(within(quoteDialog).getByText('Quote reposting')).toBeInTheDocument();
+  expect(within(quoteDialog).getByText('Original post')).toBeInTheDocument();
+  expect(within(quoteDialog).getByText('source post')).toBeInTheDocument();
   expect(within(quoteDialog).getByLabelText(/attachment/i)).toBeDisabled();
 
   await user.type(quoteInput, 'quoted take');
@@ -902,6 +936,32 @@ test('desktop shell can create a quote repost from the composer', async () => {
     );
   });
   expect(screen.getByText('quoted take')).toBeInTheDocument();
+});
+
+test('reaction popover supports search and recent reactions without legacy management actions', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await publishPost(user, 'reactable post');
+  const postCard = (await screen.findByText('reactable post')).closest('article');
+  if (!(postCard instanceof HTMLElement)) {
+    throw new Error('reactable post card not found');
+  }
+
+  await user.click(within(postCard).getByRole('button', { name: 'React' }));
+  const searchInput = await screen.findByPlaceholderText('Search reactions');
+  expect(screen.queryByRole('button', { name: 'Manage reactions' })).not.toBeInTheDocument();
+
+  await user.type(searchInput, '🎉');
+  await user.click(screen.getByRole('button', { name: '🎉' }));
+
+  await waitFor(() => {
+    expect(within(postCard).getByText('🎉')).toBeInTheDocument();
+  });
+
+  await user.click(within(postCard).getByRole('button', { name: 'React' }));
+  expect(await screen.findByText('Recent')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '🎉' })).toBeInTheDocument();
 });
 
 test('desktop shell can track multiple topics at once', async () => {

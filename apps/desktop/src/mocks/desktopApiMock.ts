@@ -23,6 +23,7 @@ import {
   type Profile,
   type ReactionKeyInput,
   type ReactionStateView,
+  type RecentReactionView,
   type SyncStatus,
   type TimelineScope,
   type TimelineView,
@@ -172,6 +173,39 @@ function reactionStateForPost(post: PostView): ReactionStateView {
   };
 }
 
+function recentReactionFromInput(
+  reactionKey: ReactionKeyInput,
+  updatedAt: number
+): RecentReactionView {
+  return reactionKey.kind === 'emoji'
+    ? {
+        reaction_key_kind: 'emoji',
+        normalized_reaction_key: `emoji:${reactionKey.emoji.trim()}`,
+        emoji: reactionKey.emoji.trim(),
+        custom_asset: null,
+        updated_at: updatedAt,
+      }
+    : {
+        reaction_key_kind: 'custom_asset',
+        normalized_reaction_key: `custom_asset:${reactionKey.asset.asset_id}`,
+        emoji: null,
+        custom_asset: { ...reactionKey.asset },
+        updated_at: updatedAt,
+      };
+}
+
+function pushRecentReaction(
+  current: RecentReactionView[],
+  reactionKey: ReactionKeyInput,
+  updatedAt: number
+): RecentReactionView[] {
+  const next = recentReactionFromInput(reactionKey, updatedAt);
+  return [
+    next,
+    ...current.filter((item) => item.normalized_reaction_key !== next.normalized_reaction_key),
+  ].slice(0, 8);
+}
+
 export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopApi {
   const assistPeerIds = options?.assistPeerIds ?? [];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
@@ -284,6 +318,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   );
   const ownedCustomReactionAssets: CustomReactionAssetView[] = [];
   const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
+  let recentReactions: RecentReactionView[] = [];
 
   const api: DesktopApi = {
     async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
@@ -487,12 +522,19 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       postsByTopic[targetTopicId] = posts.map((candidate) =>
         candidate.object_id === targetObjectId ? nextPost : candidate
       );
+      recentReactions = pushRecentReaction(recentReactions, reactionKey, Date.now());
       return reactionStateForPost(nextPost);
     },
     async listMyCustomReactionAssets() {
       return ownedCustomReactionAssets.map((asset) => ({ ...asset }));
     },
-    async createCustomReactionAsset(upload, cropRect: CustomReactionCropRect) {
+    async listRecentReactions(limit = 8) {
+      return recentReactions.slice(0, limit).map((reaction) => ({
+        ...reaction,
+        custom_asset: reaction.custom_asset ? { ...reaction.custom_asset } : null,
+      }));
+    },
+    async createCustomReactionAsset(upload, cropRect: CustomReactionCropRect, searchKey: string) {
       void upload;
       void cropRect;
       sequence += 1;
@@ -500,6 +542,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         asset_id: `asset-${sequence}`,
         owner_pubkey: syncStatus.local_author_pubkey,
         blob_hash: `blob-${sequence}`,
+        search_key: searchKey.trim() || `asset-${sequence}`,
         mime: 'image/png',
         bytes: 128,
         width: 128,

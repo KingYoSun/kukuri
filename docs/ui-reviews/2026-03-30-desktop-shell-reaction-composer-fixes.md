@@ -1,0 +1,10 @@
+# 2026-03-30 desktop shell reaction composer fixes
+
+- PR: local workspace change for the desktop shell follow-up covering sidebar overflow, `60vw` main lane capping, composer source preview, reaction picker popover, solid action overlays, and FAB contrast. PR identifier is pending.
+- Figma: [kukuri desktop shell reactions and composer review 2026-03-30](https://www.figma.com/design/iA4pA5SehD4uLD7AEpKMDa). `Review/DesktopShellReactionComposerFixes/WorkspaceReview` を `iframe.html?id=review-desktopshellreactioncomposerfixes--workspace-review&viewMode=story` から capture し、icon-only private channel action、`max-inline-size: min(100%, 60vw)` の desktop lane、solid repost/reaction popover、source preview を含む composer modal state、high-contrast FAB を同 file にまとめた。
+- Preview: PR-visible preview should use `Review/DesktopShellReactionComposerFixes/WorkspaceReview`.
+- Storybook review surface: `Review/DesktopShellReactionComposerFixes/WorkspaceReview`
+- Summary: nav rail の private channel action を icon-only にして横崩れを止め、main lane の上限を viewport の 60% に固定した。reply / quote repost composer では元投稿 preview を modal 内に表示し、reaction は inline tray をやめて recent 8 件と検索 input を持つ popover に移した。repost/reaction overlay と FAB は shell background の上でも十分なコントラストを持つ surface に揃えた。
+- Review result: sidebar width、composer context、reaction discovery、floating primary action の 4 点を desktop shell の標準表現として採用。scope/action の視認性を優先し、portal 配下の surface は常に solid panel token で描画する方針を維持する。
+- Exceptions: artifact 作成時点では review story を新設して capture した。manual smoke は未実施。`cargo xtask check` は artifact 作成の turn では再実行していない。
+- Validation: `cd apps/desktop && ./node_modules/.bin/storybook build -o storybook-static` は pass。実装変更本体については prior local validation として `cd apps/desktop && npx pnpm@10.16.1 test`, `cargo test -p kukuri-app-api`, `cargo test -p kukuri-store recent_reaction_cache_query_returns_latest_rows_for_author`, `cargo test -p kukuri-desktop-runtime blank_blob_media_hash_returns_none_without_panicking -- --nocapture` が pass。

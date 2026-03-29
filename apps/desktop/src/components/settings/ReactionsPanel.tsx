@@ -13,7 +13,7 @@ type ReactionsPanelProps = {
   view: ReactionsPanelView;
   creating: boolean;
   mediaObjectUrls?: Record<string, string | null>;
-  onCreateAsset: (file: File, cropRect: CustomReactionCropRect) => void;
+  onCreateAsset: (file: File, cropRect: CustomReactionCropRect, searchKey: string) => void;
   onRemoveBookmark: (assetId: string) => void;
 };
 
@@ -58,6 +58,7 @@ export function ReactionsPanel({
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
   const [draftCrop, setDraftCrop] = useState<CropDraft | null>(null);
+  const [draftSearchKey, setDraftSearchKey] = useState('');
   const [draftError, setDraftError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,6 +92,7 @@ export function ReactionsPanel({
     const nextUrl = URL.createObjectURL(file);
     setDraftPreviewUrl(nextUrl);
     setDraftFile(file);
+    setDraftSearchKey('');
     setDraftError(null);
     try {
       const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
@@ -182,6 +184,19 @@ export function ReactionsPanel({
                   />
                 </Label>
               </div>
+              <Label>
+                <span>{t('reactions.searchKeyLabel')}</span>
+                <Input
+                  value={draftSearchKey}
+                  placeholder={t('reactions.searchKeyPlaceholder')}
+                  onChange={(event) => {
+                    setDraftSearchKey(event.target.value);
+                    if (draftError === t('reactions.searchKeyRequired')) {
+                      setDraftError(null);
+                    }
+                  }}
+                />
+              </Label>
               <div className='reactions-preview-card'>
                 <div className='reactions-preview-thumb' style={cropPreviewStyle} aria-label={t('reactions.preview')} />
                 <small>{t('reactions.previewHint')}</small>
@@ -190,13 +205,22 @@ export function ReactionsPanel({
                 <Button
                   type='button'
                   disabled={creating}
-                  onClick={() =>
-                    onCreateAsset(draftFile, {
-                      x: draftCrop.x,
-                      y: draftCrop.y,
-                      size: draftCrop.size,
-                    })
-                  }
+                  onClick={() => {
+                    const normalizedSearchKey = draftSearchKey.trim();
+                    if (!normalizedSearchKey) {
+                      setDraftError(t('reactions.searchKeyRequired'));
+                      return;
+                    }
+                    onCreateAsset(
+                      draftFile,
+                      {
+                        x: draftCrop.x,
+                        y: draftCrop.y,
+                        size: draftCrop.size,
+                      },
+                      normalizedSearchKey
+                    );
+                  }}
                 >
                   {t('common:actions.save')}
                 </Button>
@@ -211,6 +235,7 @@ export function ReactionsPanel({
                     setDraftFile(null);
                     setDraftPreviewUrl(null);
                     setDraftCrop(null);
+                    setDraftSearchKey('');
                     setDraftError(null);
                   }}
                 >
@@ -235,6 +260,7 @@ export function ReactionsPanel({
                   {asset.asset_id.slice(0, 4)}
                 </div>
               )}
+              <strong>{asset.search_key}</strong>
               <small>{asset.mime}</small>
             </div>
           ))}
@@ -258,6 +284,7 @@ export function ReactionsPanel({
                 />
               ) : null}
               <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>{asset.search_key}</span>
                 <span>{asset.owner_pubkey}</span>
                 <span>{asset.mime}</span>
               </div>
