@@ -84,6 +84,7 @@ export type AuthorRelationshipSummary = {
 export type AuthorDetailView = {
   author: AuthorSocialView | null;
   displayLabel: string;
+  pictureSrc?: string | null;
   summary: AuthorRelationshipSummary | null;
   authorError?: string | null;
 };

@@ -285,7 +285,7 @@ function CoreProductFlowStory({ width }: { width: number }) {
                 </div>
               </Label>
             }
-            channelControl={<div />}
+            channelAction={<Button variant='secondary'>Private Channels</Button>}
             topicList={
               <TopicNavList
                 items={TOPIC_ITEMS}

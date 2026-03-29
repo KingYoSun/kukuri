@@ -255,7 +255,11 @@ fn pnpm_command_spec(
     if pnpm_available {
         node_command_spec(platform, "pnpm", args)
     } else {
-        let mut fallback = vec!["--yes".to_string(), "pnpm@10.16.1".to_string()];
+        let mut fallback = match platform {
+            // `npx --yes` can hang under WSL when it resolves to a Windows node shim.
+            HostPlatform::Unix => vec!["pnpm@10.16.1".to_string()],
+            HostPlatform::Windows => vec!["--yes".to_string(), "pnpm@10.16.1".to_string()],
+        };
         fallback.extend(args);
         node_command_spec(platform, "npx", fallback)
     }

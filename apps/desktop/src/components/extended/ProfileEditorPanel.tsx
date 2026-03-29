@@ -1,4 +1,4 @@
-import type { FormEventHandler } from 'react';
+import type { ChangeEventHandler, FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,12 @@ type ProfileEditorPanelProps = {
   dirty: boolean;
   error: string | null;
   fields: ProfileEditorFields;
+  picturePreviewSrc?: string | null;
+  hasPicture: boolean;
+  pictureInputKey: number;
   onFieldChange: (field: keyof ProfileEditorFields, value: string) => void;
+  onPictureSelect: ChangeEventHandler<HTMLInputElement>;
+  onPictureClear: () => void;
   onBack?: () => void;
   onSave: FormEventHandler<HTMLFormElement>;
   onReset: () => void;
@@ -30,12 +35,17 @@ export function ProfileEditorPanel({
   dirty,
   error,
   fields,
+  picturePreviewSrc,
+  hasPicture,
+  pictureInputKey,
   onFieldChange,
+  onPictureSelect,
+  onPictureClear,
   onBack,
   onSave,
   onReset,
 }: ProfileEditorPanelProps) {
-  const { t } = useTranslation('profile');
+  const { t } = useTranslation(['profile', 'common']);
   const disabled = status === 'loading' || saving;
 
   return (
@@ -84,15 +94,31 @@ export function ProfileEditorPanel({
             disabled={disabled}
           />
         </Label>
-        <Label>
-          <span>{t('editor.picture')}</span>
-          <Input
-            value={fields.picture}
-            onChange={(event) => onFieldChange('picture', event.target.value)}
-            placeholder={t('editor.placeholders.picture')}
-            disabled={disabled}
-          />
-        </Label>
+        <div className='profile-editor-picture-panel'>
+          <Label>
+            <span>{t('editor.picture')}</span>
+            <Input
+              key={pictureInputKey}
+              type='file'
+              accept='image/*'
+              disabled={disabled}
+              onChange={onPictureSelect}
+            />
+          </Label>
+          {picturePreviewSrc ? (
+            <div className='profile-editor-picture-preview'>
+              <img src={picturePreviewSrc} alt={`${authorLabel} avatar`} className='profile-overview-image' />
+            </div>
+          ) : null}
+          <Button
+            variant='secondary'
+            type='button'
+            disabled={!hasPicture || disabled}
+            onClick={onPictureClear}
+          >
+            {t('common:actions.clear', { ns: 'common' })}
+          </Button>
+        </div>
 
         {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
 

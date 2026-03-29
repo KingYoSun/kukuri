@@ -556,21 +556,45 @@ impl Store for SqliteStore {
 
         sqlx::query(
             r#"
-            INSERT INTO profiles (pubkey, name, display_name, about, picture, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO profiles (
+              pubkey, name, display_name, about, picture,
+              picture_blob_hash, picture_mime, picture_bytes, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(pubkey) DO UPDATE SET
               name = excluded.name,
               display_name = excluded.display_name,
               about = excluded.about,
               picture = excluded.picture,
+              picture_blob_hash = excluded.picture_blob_hash,
+              picture_mime = excluded.picture_mime,
+              picture_bytes = excluded.picture_bytes,
               updated_at = excluded.updated_at
             "#,
         )
         .bind(profile.pubkey.as_str())
-        .bind(profile.name)
-        .bind(profile.display_name)
-        .bind(profile.about)
-        .bind(profile.picture)
+        .bind(profile.name.clone())
+        .bind(profile.display_name.clone())
+        .bind(profile.about.clone())
+        .bind(profile.picture.clone())
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.hash.as_str().to_string()),
+        )
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.mime.clone()),
+        )
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.bytes as i64),
+        )
         .bind(profile.updated_at)
         .execute(&self.pool)
         .await?;
@@ -581,7 +605,9 @@ impl Store for SqliteStore {
     async fn get_profile(&self, pubkey: &str) -> Result<Option<Profile>> {
         let row = sqlx::query(
             r#"
-            SELECT pubkey, name, display_name, about, picture, updated_at
+            SELECT
+              pubkey, name, display_name, about, picture,
+              picture_blob_hash, picture_mime, picture_bytes, updated_at
             FROM profiles
             WHERE pubkey = ?1
             "#,
@@ -596,6 +622,21 @@ impl Store for SqliteStore {
             display_name: row.try_get("display_name").ok(),
             about: row.try_get("about").ok(),
             picture: row.try_get("picture").ok(),
+            picture_asset: row
+                .try_get::<String, _>("picture_blob_hash")
+                .ok()
+                .map(|hash| kukuri_core::AssetRef {
+                    hash: kukuri_core::BlobHash::new(hash),
+                    mime: row
+                        .try_get::<String, _>("picture_mime")
+                        .ok()
+                        .unwrap_or_else(|| "application/octet-stream".into()),
+                    bytes: row
+                        .try_get::<i64, _>("picture_bytes")
+                        .ok()
+                        .unwrap_or_default() as u64,
+                    role: kukuri_core::AssetRole::ProfileAvatar,
+                }),
             updated_at: row.get("updated_at"),
         }))
     }
@@ -1056,13 +1097,19 @@ impl ProjectionStore for SqliteStore {
     async fn upsert_profile_cache(&self, profile: Profile) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO profile_cache (pubkey, name, display_name, about, picture, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO profile_cache (
+              pubkey, name, display_name, about, picture,
+              picture_blob_hash, picture_mime, picture_bytes, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(pubkey) DO UPDATE SET
               name = excluded.name,
               display_name = excluded.display_name,
               about = excluded.about,
               picture = excluded.picture,
+              picture_blob_hash = excluded.picture_blob_hash,
+              picture_mime = excluded.picture_mime,
+              picture_bytes = excluded.picture_bytes,
               updated_at = excluded.updated_at
             "#,
         )
@@ -1071,6 +1118,24 @@ impl ProjectionStore for SqliteStore {
         .bind(profile.display_name)
         .bind(profile.about)
         .bind(profile.picture)
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.hash.as_str().to_string()),
+        )
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.mime.clone()),
+        )
+        .bind(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.bytes as i64),
+        )
         .bind(profile.updated_at)
         .execute(&self.pool)
         .await?;
@@ -2367,6 +2432,7 @@ mod tests {
                 display_name: Some("older".into()),
                 about: None,
                 picture: None,
+                picture_asset: None,
                 updated_at: 10,
             })
             .await
@@ -2378,6 +2444,12 @@ mod tests {
                 display_name: Some("newer".into()),
                 about: None,
                 picture: None,
+                picture_asset: Some(kukuri_core::AssetRef {
+                    hash: kukuri_core::BlobHash::new("avatar-newer"),
+                    mime: "image/png".into(),
+                    bytes: 128,
+                    role: kukuri_core::AssetRole::ProfileAvatar,
+                }),
                 updated_at: 20,
             })
             .await
@@ -2390,6 +2462,13 @@ mod tests {
             .expect("profile");
         assert_eq!(profile.name.as_deref(), Some("newer"));
         assert_eq!(profile.display_name.as_deref(), Some("newer"));
+        assert_eq!(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.hash.as_str()),
+            Some("avatar-newer")
+        );
     }
 
     #[tokio::test]

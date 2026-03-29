@@ -24,9 +24,13 @@ const STORY_ARGS = {
     displayName: 'Local Author',
     name: 'local-author',
     about: 'Maintains shell UI migration work.',
-    picture: 'https://example.com/avatar.png',
   },
+  picturePreviewSrc: 'https://example.com/avatar.png',
+  hasPicture: true,
+  pictureInputKey: 0,
   onFieldChange: () => undefined,
+  onPictureSelect: () => undefined,
+  onPictureClear: () => undefined,
   onSave: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
   onReset: () => undefined,
 } satisfies React.ComponentProps<typeof ProfileEditorPanel>;
@@ -42,7 +46,6 @@ function ProfileStory({
     displayName: 'Local Author',
     name: 'local-author',
     about: 'Maintains shell UI migration work.',
-    picture: 'https://example.com/avatar.png',
   });
 
   return (
@@ -53,7 +56,12 @@ function ProfileStory({
       dirty={false}
       error={error}
       fields={fields}
+      picturePreviewSrc='https://example.com/avatar.png'
+      hasPicture={true}
+      pictureInputKey={0}
       onFieldChange={(field, value) => setFields((current) => ({ ...current, [field]: value }))}
+      onPictureSelect={() => undefined}
+      onPictureClear={() => undefined}
       onSave={(event) => event.preventDefault()}
       onReset={() => undefined}
     />

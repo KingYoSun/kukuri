@@ -63,7 +63,7 @@ export function ShellFrame({
           tabIndex={-1}
           aria-label='Primary workspace'
         >
-          {workspace}
+          <div className='shell-main-lane'>{workspace}</div>
         </main>
         {detailPaneStack}
       </div>

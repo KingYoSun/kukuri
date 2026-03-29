@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Reply, Repeat2, SmilePlus } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -12,6 +13,7 @@ import type {
 import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { RelationshipBadge } from './RelationshipBadge';
 import { PostMedia } from './PostMedia';
@@ -80,6 +82,7 @@ export function PostCard({
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const [reactionTrayOpen, setReactionTrayOpen] = useState(false);
+  const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [emojiInput, setEmojiInput] = useState('');
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
@@ -297,24 +300,67 @@ export function PostCard({
             ) : null}
             <Button
               variant='secondary'
+              size='icon'
+              className='post-action-button'
               type='button'
+              aria-label={t('actions.react')}
               onClick={() => setReactionTrayOpen((current) => !current)}
             >
-              {t('actions.react')}
+              <SmilePlus className='size-4' aria-hidden='true' />
             </Button>
-            {canRepost && onRepost ? (
-              <Button variant='secondary' type='button' onClick={() => onRepost(post)}>
-                {t('actions.repost')}
-              </Button>
-            ) : null}
-            {canRepost && onQuoteRepost ? (
-              <Button variant='secondary' type='button' onClick={() => onQuoteRepost(post)}>
-                {t('actions.quoteRepost')}
-              </Button>
+            {canRepost && (onRepost || onQuoteRepost) ? (
+              <Popover open={repostMenuOpen} onOpenChange={setRepostMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    className='post-action-button'
+                    type='button'
+                    aria-label={t('actions.repost')}
+                  >
+                    <Repeat2 className='size-4' aria-hidden='true' />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align='end' className='post-action-popover'>
+                  <div className='post-action-popover-stack'>
+                    {onRepost ? (
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        onClick={() => {
+                          setRepostMenuOpen(false);
+                          onRepost(post);
+                        }}
+                      >
+                        {t('actions.repost')}
+                      </Button>
+                    ) : null}
+                    {onQuoteRepost ? (
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        onClick={() => {
+                          setRepostMenuOpen(false);
+                          onQuoteRepost(post);
+                        }}
+                      >
+                        {t('actions.quoteRepost')}
+                      </Button>
+                    ) : null}
+                  </div>
+                </PopoverContent>
+              </Popover>
             ) : null}
             {canReply ? (
-              <Button variant='secondary' type='button' onClick={() => onReply(post)}>
-                {t('actions.reply')}
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('actions.reply')}
+                onClick={() => onReply(post)}
+              >
+                <Reply className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
           </>

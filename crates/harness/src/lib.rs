@@ -3634,6 +3634,18 @@ mod tests {
         wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
             .await
             .expect("desktop c did not observe public topic connectivity after rotate");
+        runtime_a
+            .follow_author(AuthorRequest {
+                pubkey: c_pubkey.clone(),
+            })
+            .await
+            .expect("a refreshes follow to c");
+        runtime_c
+            .follow_author(AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .expect("c refreshes follow to a");
         warm_author_social_view(&runtime_a, c_pubkey.as_str()).await;
         warm_author_social_view(&runtime_c, a_pubkey.as_str()).await;
         wait_for_mutual_author_view(&runtime_a, c_pubkey.as_str(), topic).await;

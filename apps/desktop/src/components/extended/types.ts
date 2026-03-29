@@ -11,7 +11,6 @@ export type ProfileEditorFields = {
   displayName: string;
   name: string;
   about: string;
-  picture: string;
 };
 
 export type PrivateChannelPendingAction =

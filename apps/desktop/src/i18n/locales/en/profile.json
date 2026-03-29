@@ -5,12 +5,11 @@
     "displayName": "Display Name",
     "loading": "Loading profile…",
     "name": "Name",
-    "picture": "Picture URL",
+    "picture": "Picture",
     "placeholders": {
       "about": "Short bio",
       "displayName": "Visible label",
-      "name": "Canonical name",
-      "picture": "https://..."
+      "name": "Canonical name"
     },
     "reset": "Reset",
     "save": "Save Profile",

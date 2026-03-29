@@ -5,12 +5,11 @@
     "displayName": "表示名",
     "loading": "プロフィールを読み込み中…",
     "name": "名前",
-    "picture": "画像 URL",
+    "picture": "プロフィール画像",
     "placeholders": {
       "about": "短い自己紹介",
       "displayName": "表示名",
-      "name": "正規名",
-      "picture": "https://..."
+      "name": "正規名"
     },
     "reset": "リセット",
     "save": "プロフィールを保存",

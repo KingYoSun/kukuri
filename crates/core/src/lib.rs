@@ -10,7 +10,7 @@ use secp256k1::ecdh::SharedSecret;
 use secp256k1::rand::{RngCore, rng};
 use secp256k1::schnorr::Signature;
 use secp256k1::{Keypair, Parity, PublicKey, SECP256K1, SecretKey, XOnlyPublicKey};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -232,6 +232,7 @@ pub enum AssetRole {
     ImagePreview,
     VideoPoster,
     VideoManifest,
+    ProfileAvatar,
     Attachment,
 }
 
@@ -519,6 +520,12 @@ pub struct Profile {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    #[serde(
+        default,
+        serialize_with = "serialize_profile_asset_ref",
+        deserialize_with = "deserialize_profile_asset_ref"
+    )]
+    pub picture_asset: Option<AssetRef>,
     pub updated_at: i64,
 }
 
@@ -529,6 +536,12 @@ pub struct KukuriProfileEnvelopeContentV1 {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    #[serde(
+        default,
+        serialize_with = "serialize_profile_asset_ref",
+        deserialize_with = "deserialize_profile_asset_ref"
+    )]
+    pub picture_asset: Option<AssetRef>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -538,8 +551,59 @@ pub struct AuthorProfileDocV1 {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    #[serde(
+        default,
+        serialize_with = "serialize_profile_asset_ref",
+        deserialize_with = "deserialize_profile_asset_ref"
+    )]
+    pub picture_asset: Option<AssetRef>,
     pub updated_at: i64,
     pub envelope_id: EnvelopeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct ProfileAssetRefWire {
+    pub hash: BlobHash,
+    pub mime: String,
+    pub bytes: u64,
+    pub role: String,
+}
+
+fn serialize_profile_asset_ref<S>(
+    value: &Option<AssetRef>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let wire = value.as_ref().map(|asset| ProfileAssetRefWire {
+        hash: asset.hash.clone(),
+        mime: asset.mime.clone(),
+        bytes: asset.bytes,
+        role: "profile_avatar".into(),
+    });
+    wire.serialize(serializer)
+}
+
+fn deserialize_profile_asset_ref<'de, D>(deserializer: D) -> Result<Option<AssetRef>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let wire = Option::<ProfileAssetRefWire>::deserialize(deserializer)?;
+    wire.map(|asset| {
+        if asset.role != "profile_avatar" && asset.role != "ProfileAvatar" {
+            return Err(de::Error::custom(
+                "profile picture asset role must be profile_avatar",
+            ));
+        }
+        Ok(AssetRef {
+            hash: asset.hash,
+            mime: asset.mime,
+            bytes: asset.bytes,
+            role: AssetRole::ProfileAvatar,
+        })
+    })
+    .transpose()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2213,6 +2277,7 @@ pub fn parse_profile(envelope: &KukuriEnvelope) -> Result<Option<Profile>> {
         display_name: metadata.display_name,
         about: metadata.about,
         picture: metadata.picture,
+        picture_asset: metadata.picture_asset,
         updated_at: envelope.created_at,
     }))
 }
@@ -2594,6 +2659,12 @@ mod tests {
                 display_name: Some("Alice".into()),
                 about: Some("hello".into()),
                 picture: Some("https://example.com/alice.png".into()),
+                picture_asset: Some(AssetRef {
+                    hash: BlobHash::new("avatar-hash"),
+                    mime: "image/png".into(),
+                    bytes: 42,
+                    role: AssetRole::ProfileAvatar,
+                }),
             },
         )
         .expect("profile envelope");
@@ -2605,6 +2676,13 @@ mod tests {
         assert_eq!(profile.pubkey, keys.public_key());
         assert_eq!(profile.display_name.as_deref(), Some("Alice"));
         assert_eq!(profile.about.as_deref(), Some("hello"));
+        assert_eq!(
+            profile
+                .picture_asset
+                .as_ref()
+                .map(|asset| asset.role.clone()),
+            Some(AssetRole::ProfileAvatar)
+        );
     }
 
     #[test]

@@ -221,7 +221,7 @@ function ShellSurface({
                 </div>
               </Label>
             }
-            channelControl={<ChannelRailControl />}
+            channelAction={<ChannelRailControl />}
             channelSummary='Core Contributors · Friends+'
             topicList={
               <TopicNavList
@@ -493,7 +493,6 @@ function ProfileEditWorkspace() {
     displayName: 'Local Author',
     name: 'local-author',
     about: 'Maintains the desktop shell migration and topic-first review cadence.',
-    picture: '',
   });
 
   return (
@@ -505,7 +504,12 @@ function ProfileEditWorkspace() {
         dirty={true}
         error={null}
         fields={fields}
+        picturePreviewSrc='https://example.com/avatar.png'
+        hasPicture={true}
+        pictureInputKey={0}
         onFieldChange={(field, value) => setFields((current) => ({ ...current, [field]: value }))}
+        onPictureSelect={() => undefined}
+        onPictureClear={() => undefined}
         onBack={() => undefined}
         onSave={(event) => event.preventDefault()}
         onReset={() => undefined}

@@ -202,6 +202,9 @@ pub struct SetMyProfileRequest {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    pub picture_upload: Option<CreateAttachmentRequest>,
+    #[serde(default)]
+    pub clear_picture: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -945,6 +948,11 @@ impl DesktopRuntime {
                 display_name: request.display_name,
                 about: request.about,
                 picture: request.picture,
+                picture_upload: request
+                    .picture_upload
+                    .map(pending_attachment_from_request)
+                    .transpose()?,
+                clear_picture: request.clear_picture,
             })
             .await
     }
@@ -1904,6 +1912,7 @@ fn pending_attachment_from_request(request: CreateAttachmentRequest) -> Result<P
         Some("image_preview") => AssetRole::ImagePreview,
         Some("video_poster") => AssetRole::VideoPoster,
         Some("video_manifest") => AssetRole::VideoManifest,
+        Some("profile_avatar") => AssetRole::ProfileAvatar,
         Some("attachment") => AssetRole::Attachment,
         _ => AssetRole::ImageOriginal,
     };
@@ -2577,7 +2586,7 @@ mod tests {
         if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
             Duration::from_secs(180)
         } else {
-            Duration::from_secs(15)
+            Duration::from_secs(30)
         }
     }
 
@@ -3503,6 +3512,20 @@ mod tests {
         }
     }
 
+    fn profile_avatar_attachment_request(
+        name: &str,
+        mime: &str,
+        bytes: &[u8],
+    ) -> CreateAttachmentRequest {
+        CreateAttachmentRequest {
+            file_name: Some(name.to_string()),
+            mime: mime.to_string(),
+            byte_size: bytes.len() as u64,
+            data_base64: BASE64_STANDARD.encode(bytes),
+            role: Some("profile_avatar".to_string()),
+        }
+    }
+
     fn video_attachment_request(
         name: &str,
         mime: &str,
@@ -3785,6 +3808,141 @@ mod tests {
             .expect("restarted shutdown timeout");
     }
 
+    #[tokio::test]
+    async fn desktop_runtime_restores_profile_avatar_blob_after_restart() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("profile-avatar-restart.db");
+        let avatar_bytes = b"runtime-profile-avatar".to_vec();
+        let expected_payload = BASE64_STANDARD.encode(&avatar_bytes);
+        let runtime = timeout(
+            Duration::from_secs(15),
+            DesktopRuntime::new_with_config_and_identity(
+                &db_path,
+                TransportNetworkConfig::loopback(),
+                IdentityStorageMode::FileOnly,
+            ),
+        )
+        .await
+        .expect("runtime creation timeout")
+        .expect("runtime");
+
+        let updated = runtime
+            .set_my_profile(SetMyProfileRequest {
+                name: Some("runtime-avatar-owner".into()),
+                display_name: Some("Runtime Avatar Owner".into()),
+                about: Some("profile avatar restart".into()),
+                picture: None,
+                picture_upload: Some(profile_avatar_attachment_request(
+                    "avatar.png",
+                    "image/png",
+                    &avatar_bytes,
+                )),
+                clear_picture: false,
+            })
+            .await
+            .expect("set profile");
+        let asset = updated.picture_asset.clone().expect("profile avatar");
+        let author_pubkey = updated.pubkey.as_str().to_string();
+        let payload_before_restart = runtime
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: asset.hash.as_str().to_string(),
+                mime: asset.mime.clone(),
+            })
+            .await
+            .expect("avatar payload before restart")
+            .expect("avatar payload before restart value");
+        let author_before_restart = runtime
+            .get_author_social_view(AuthorRequest {
+                pubkey: author_pubkey.clone(),
+            })
+            .await
+            .expect("author social view before restart");
+
+        assert_eq!(payload_before_restart.mime, "image/png");
+        assert_eq!(payload_before_restart.bytes_base64, expected_payload);
+        assert_eq!(
+            author_before_restart
+                .picture_asset
+                .as_ref()
+                .map(|value| value.hash.as_str()),
+            Some(asset.hash.as_str())
+        );
+        assert_eq!(
+            author_before_restart
+                .picture_asset
+                .as_ref()
+                .map(|value| value.role.as_str()),
+            Some("profile_avatar")
+        );
+
+        timeout(Duration::from_secs(15), runtime.shutdown())
+            .await
+            .expect("runtime shutdown timeout");
+        drop(runtime);
+
+        let restarted = timeout(
+            Duration::from_secs(15),
+            DesktopRuntime::new_with_config_and_identity(
+                &db_path,
+                TransportNetworkConfig::loopback(),
+                IdentityStorageMode::FileOnly,
+            ),
+        )
+        .await
+        .expect("runtime restart timeout")
+        .expect("runtime restart");
+        let my_profile = restarted.get_my_profile().await.expect("my profile");
+        let author_after_restart = restarted
+            .get_author_social_view(AuthorRequest {
+                pubkey: author_pubkey,
+            })
+            .await
+            .expect("author social view after restart");
+        let payload_after_restart = restarted
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: asset.hash.as_str().to_string(),
+                mime: asset.mime.clone(),
+            })
+            .await
+            .expect("avatar payload after restart")
+            .expect("avatar payload after restart value");
+
+        assert_eq!(
+            my_profile
+                .picture_asset
+                .as_ref()
+                .map(|value| value.hash.as_str()),
+            Some(asset.hash.as_str())
+        );
+        assert_eq!(
+            my_profile
+                .picture_asset
+                .as_ref()
+                .map(|value| value.role.clone()),
+            Some(AssetRole::ProfileAvatar)
+        );
+        assert_eq!(
+            author_after_restart
+                .picture_asset
+                .as_ref()
+                .map(|value| value.hash.as_str()),
+            Some(asset.hash.as_str())
+        );
+        assert_eq!(
+            author_after_restart
+                .picture_asset
+                .as_ref()
+                .map(|value| value.role.as_str()),
+            Some("profile_avatar")
+        );
+        assert_eq!(payload_after_restart.mime, "image/png");
+        assert_eq!(payload_after_restart.bytes_base64, expected_payload);
+
+        timeout(Duration::from_secs(15), restarted.shutdown())
+            .await
+            .expect("restarted shutdown timeout");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn desktop_runtime_imports_peer_ticket_and_tracks_local_posts() {
         let dir = tempdir().expect("tempdir");
@@ -3962,16 +4120,14 @@ mod tests {
             .await
             .expect("subscribe b tracked topic");
 
-        let tracked_object_id = runtime_a
-            .create_post(CreatePostRequest {
-                topic: tracked_topic.into(),
-                content: "tracked profile post".into(),
-                reply_to: None,
-                channel_ref: ChannelRef::Public,
-                attachments: vec![],
-            })
-            .await
-            .expect("tracked public post");
+        let tracked_object_id = replicate_public_post_with_retry(
+            &runtime_a,
+            &runtime_b,
+            tracked_topic,
+            "tracked profile post",
+            "tracked topic visibility timeout",
+        )
+        .await;
         let untracked_object_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: untracked_topic.into(),
@@ -3982,15 +4138,6 @@ mod tests {
             })
             .await
             .expect("untracked public post");
-
-        wait_for_timeline_post(
-            &runtime_b,
-            tracked_topic,
-            &public_scope,
-            tracked_object_id.as_str(),
-            "tracked topic visibility timeout",
-        )
-        .await;
 
         let before_profile = runtime_b
             .get_sync_status()

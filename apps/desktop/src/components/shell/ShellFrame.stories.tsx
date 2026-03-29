@@ -62,7 +62,7 @@ function ShellFrameStory() {
                 </div>
               </Label>
             }
-            channelControl={<div />}
+            channelAction={<Button variant='secondary'>Private Channels</Button>}
             topicList={
               <TopicNavList
                 items={topicItems}
