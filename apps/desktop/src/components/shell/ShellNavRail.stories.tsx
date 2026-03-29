@@ -51,16 +51,10 @@ function ShellNavRailStory() {
             </div>
           </Label>
         }
-        channelControl={
-          <div className='shell-main-stack'>
-            <Label>
-              <span>{i18n.t('channels:editor.createChannel')}</span>
-              <Input value='Core Contributors' readOnly />
-            </Label>
-            <Button variant='secondary' type='button'>
-              {i18n.t('channels:actions.createChannel')}
-            </Button>
-          </div>
+        channelAction={
+          <Button variant='secondary' type='button'>
+            {i18n.t('channels:title')}
+          </Button>
         }
         channelSummary='Core Contributors · Friends+'
         topicList={
@@ -91,8 +85,7 @@ const meta = {
     onOpenChange: () => undefined,
     headerContent: null,
     addTopicControl: null,
-    channelControl: null,
-    channelDefaultOpen: false,
+    channelAction: null,
     channelSummary: null,
     topicList: null,
     topicCount: topicItems.length,
@@ -105,7 +98,5 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  args: {
-    channelDefaultOpen: false,
-  },
+  args: {},
 };

@@ -1,10 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openChannelSection(page: Page) {
-  const trigger = page.locator('.shell-nav-accordion-trigger').first();
-  if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
-    await trigger.click();
+async function openChannelManager(page: Page) {
+  const dialog = page.getByRole('dialog', { name: 'Channels' });
+  if (await dialog.isVisible().catch(() => false)) {
+    return dialog;
   }
+  await page.getByRole('button', { name: 'Channels' }).click();
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openComposerDialog(page: Page) {
+  await page.getByTestId('shell-fab').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 test('browser mock hash routes deep link profile, timeline normalization, and settings surfaces', async ({
@@ -17,7 +27,7 @@ test('browser mock hash routes deep link profile, timeline normalization, and se
   await expect(page).toHaveURL(/#\/profile\?topic=/);
 
   await page.goto('/#/channels');
-  await expect(page.locator('.shell-nav-accordion-trigger').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Channels' })).toBeVisible();
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
 
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
@@ -46,6 +56,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.goBack();
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
+  await openComposerDialog(page);
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
 
   await page.getByPlaceholder('Write a post').fill('route history post');
@@ -58,7 +69,9 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.goBack();
   await expect(page).not.toHaveURL(/context=thread/);
+  await openComposerDialog(page);
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.goForward();
   await expect(page).toHaveURL(/context=thread/);
@@ -66,9 +79,9 @@ test('browser mock hash history keeps route state stable without narrow-width ov
 
   await page.goBack();
   await page.getByTestId('shell-nav-trigger').click();
-  await openChannelSection(page);
-  await page.getByPlaceholder('core contributors').fill('Route Room');
-  await page.getByRole('button', { name: 'Create Channel' }).click();
+  const channelDialog = await openChannelManager(page);
+  await channelDialog.getByPlaceholder('core contributors').fill('Route Room');
+  await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-/);
 
   const noOverflow = await page.evaluate(

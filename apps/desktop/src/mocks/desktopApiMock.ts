@@ -108,6 +108,7 @@ function withDefaultAuthorView(
     display_name: null,
     about: null,
     picture: null,
+    picture_asset: null,
     updated_at: null,
     following: false,
     followed_by: false,
@@ -271,6 +272,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     display_name: null,
     about: null,
     picture: null,
+    picture_asset: null,
     updated_at: 0,
     ...options?.myProfile,
   };
@@ -574,12 +576,30 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       return myProfile;
     },
     async setMyProfile(input) {
-      myProfile = { ...myProfile, ...input, updated_at: myProfile.updated_at + 1 };
+      const nextPictureAsset =
+        input.clear_picture
+          ? null
+          : input.picture_upload
+            ? {
+                hash: `profile-avatar-${myProfile.updated_at + 1}`,
+                mime: input.picture_upload.mime,
+                bytes: input.picture_upload.byte_size,
+                role: 'profile_avatar' as const,
+              }
+            : myProfile.picture_asset ?? null;
+      myProfile = {
+        ...myProfile,
+        ...input,
+        picture: input.clear_picture ? null : (input.picture ?? myProfile.picture ?? null),
+        picture_asset: nextPictureAsset,
+        updated_at: myProfile.updated_at + 1,
+      };
       authorSocialViews[myProfile.pubkey] = withDefaultAuthorView(myProfile.pubkey, {
         name: myProfile.name ?? null,
         display_name: myProfile.display_name ?? null,
         about: myProfile.about ?? null,
         picture: myProfile.picture ?? null,
+        picture_asset: myProfile.picture_asset ?? null,
         updated_at: myProfile.updated_at,
       });
       return myProfile;
@@ -617,6 +637,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           display_name: myProfile.display_name ?? null,
           about: myProfile.about ?? null,
           picture: myProfile.picture ?? null,
+          picture_asset: myProfile.picture_asset ?? null,
           updated_at: myProfile.updated_at,
         });
       }

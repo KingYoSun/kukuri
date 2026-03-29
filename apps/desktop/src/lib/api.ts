@@ -104,6 +104,7 @@ export type Profile = {
   display_name?: string | null;
   about?: string | null;
   picture?: string | null;
+  picture_asset?: ProfileAssetView | null;
   updated_at: number;
 };
 
@@ -112,6 +113,15 @@ export type ProfileInput = {
   display_name?: string | null;
   about?: string | null;
   picture?: string | null;
+  picture_upload?: CreateAttachmentInput | null;
+  clear_picture?: boolean;
+};
+
+export type ProfileAssetView = {
+  hash: string;
+  mime: string;
+  bytes: number;
+  role: 'profile_avatar';
 };
 
 export type AuthorSocialView = {
@@ -120,6 +130,7 @@ export type AuthorSocialView = {
   display_name?: string | null;
   about?: string | null;
   picture?: string | null;
+  picture_asset?: ProfileAssetView | null;
   updated_at?: number | null;
   following: boolean;
   followed_by: boolean;

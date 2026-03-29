@@ -19,7 +19,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
-import { PanelLeftOpen, Settings } from 'lucide-react';
+import { PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -36,6 +36,7 @@ import {
 } from '@/components/core/types';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
+import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
 import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
@@ -49,9 +50,11 @@ import {
   type ReactionsPanelView,
 } from '@/components/settings/types';
 import {
+  type ChannelAudienceOption,
   type ExtendedPanelStatus,
   type GameDraftView,
   type InviteOutputLabel,
+  type PrivateChannelListItemView,
   type PrivateChannelPendingAction,
 } from '@/components/extended/types';
 import { ContextPane } from '@/components/shell/ContextPane';
@@ -68,6 +71,14 @@ import {
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
@@ -568,7 +579,24 @@ function profileInputFromProfile(profile: Profile): ProfileInput {
     display_name: profile.display_name ?? '',
     about: profile.about ?? '',
     picture: profile.picture ?? '',
+    picture_upload: null,
+    clear_picture: false,
   };
+}
+
+function resolveProfilePictureSrc(
+  profile:
+    | Pick<Profile, 'picture' | 'picture_asset'>
+    | Pick<AuthorSocialView, 'picture' | 'picture_asset'>
+    | null
+    | undefined,
+  mediaObjectUrls: Record<string, string | null>
+): string | null {
+  const pictureAssetHash = profile?.picture_asset?.hash;
+  if (pictureAssetHash && typeof mediaObjectUrls[pictureAssetHash] === 'string') {
+    return mediaObjectUrls[pictureAssetHash];
+  }
+  return profile?.picture ?? null;
 }
 
 function authorDisplayLabel(
@@ -632,12 +660,6 @@ function strongestRelationshipLabel(relationship: {
     return 'friend of friend';
   }
   return null;
-}
-
-function inviteOutputSummaryLabel(label: InviteOutputLabel): string {
-  return label === 'share'
-    ? translate('channels:actions.share')
-    : translate('channels:actions.join');
 }
 
 function privateTimelineScope(channelId: string | null): TimelineScope {
@@ -1379,10 +1401,42 @@ function DesktopShellPage({
     shellChromeState,
     setField,
   } = useDesktopShellStore();
+  const [composeDialogOpen, setComposeDialogOpen] = useState(false);
+  const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [liveCreateDialogOpen, setLiveCreateDialogOpen] = useState(false);
+  const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
+  const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
+  const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  useEffect(
+    () => () => {
+      if (profileAvatarPreviewUrl) {
+        URL.revokeObjectURL(profileAvatarPreviewUrl);
+      }
+    },
+    [profileAvatarPreviewUrl]
+  );
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'timeline' && composeDialogOpen) {
+      setComposeDialogOpen(false);
+    }
+    if (shellChromeState.activePrimarySection !== 'live' && liveCreateDialogOpen) {
+      setLiveCreateDialogOpen(false);
+    }
+    if (shellChromeState.activePrimarySection !== 'game' && gameCreateDialogOpen) {
+      setGameCreateDialogOpen(false);
+    }
+  }, [
+    composeDialogOpen,
+    gameCreateDialogOpen,
+    liveCreateDialogOpen,
+    shellChromeState.activePrimarySection,
+  ]);
 
   const makeFieldSetter = useCallback(
     function <K extends keyof DesktopShellState>(key: K) {
@@ -1664,6 +1718,41 @@ function DesktopShellPage({
     () => gamePanelStateByTopic[activeTopic] ?? DEFAULT_ASYNC_PANEL_STATE,
     [activeTopic, gamePanelStateByTopic]
   );
+  const channelAudienceOptions = useMemo<ChannelAudienceOption[]>(
+    () => [
+      {
+        value: 'invite_only',
+        label: t('channels:audienceOptions.invite_only'),
+      },
+      {
+        value: 'friend_only',
+        label: t('channels:audienceOptions.friend_only'),
+      },
+      {
+        value: 'friend_plus',
+        label: t('channels:audienceOptions.friend_plus'),
+      },
+    ],
+    [t]
+  );
+  const privateChannelListItems = useMemo<PrivateChannelListItemView[]>(
+    () =>
+      activeJoinedChannels.map((channel) => ({
+        channel,
+        active: channel.channel_id === selectedPrivateChannelId,
+      })),
+    [activeJoinedChannels, selectedPrivateChannelId]
+  );
+  const floatingActionLabel = useMemo(() => {
+    if (shellChromeState.activePrimarySection === 'live') {
+      return t('live:actions.start');
+    }
+    if (shellChromeState.activePrimarySection === 'game') {
+      return t('game:actions.createRoom');
+    }
+    return t('common:actions.publish');
+  }, [shellChromeState.activePrimarySection, t]);
+  const showFloatingActionButton = shellChromeState.activePrimarySection !== 'profile';
   const syncRoute = useCallback((
     mode: 'push' | 'replace' = 'replace',
     overrides?: DesktopShellRouteOverrides
@@ -1773,10 +1862,18 @@ function DesktopShellPage({
       displayName: profileDraft.display_name ?? '',
       name: profileDraft.name ?? '',
       about: profileDraft.about ?? '',
-      picture: profileDraft.picture ?? '',
     }),
     [profileDraft]
   );
+  const profileEditorPictureSrc = profileAvatarPreviewUrl
+    ?? resolveProfilePictureSrc(localProfile, mediaObjectUrls);
+  const profileEditorHasPicture = Boolean(
+    profileAvatarPreviewUrl
+      || profileDraft.clear_picture
+      || profileDraft.picture_upload
+      || localProfile?.picture
+      || localProfile?.picture_asset
+  ) && !profileDraft.clear_picture;
   const communityNodeStatusByBaseUrl = useMemo(
     () =>
       Object.fromEntries(communityNodeStatuses.map((status) => [status.base_url, status])) as Record<
@@ -1830,13 +1927,29 @@ function DesktopShellPage({
         status: 'Available',
       });
     }
+    for (const pictureAsset of [
+      localProfile?.picture_asset ?? null,
+      selectedAuthor?.picture_asset ?? null,
+    ]) {
+      if (pictureAsset) {
+        attachments.set(pictureAsset.hash, {
+          hash: pictureAsset.hash,
+          mime: pictureAsset.mime,
+          bytes: pictureAsset.bytes,
+          role: pictureAsset.role,
+          status: 'Available',
+        });
+      }
+    }
     return [...attachments.values()];
   }, [
     activePublicTimeline,
     activeTimeline,
     bookmarkedReactionAssets,
+    localProfile?.picture_asset,
     ownedReactionAssets,
     profileTimeline,
+    selectedAuthor?.picture_asset,
     selectedAuthorTimeline,
     thread,
   ]);
@@ -2590,15 +2703,10 @@ function DesktopShellPage({
   }
 
   function handleProfileFieldChange(
-    field: 'displayName' | 'name' | 'about' | 'picture',
+    field: 'displayName' | 'name' | 'about',
     value: string
   ) {
-    const nextField: keyof ProfileInput =
-      field === 'displayName'
-        ? 'display_name'
-        : field === 'picture'
-          ? 'picture'
-          : field;
+    const nextField: keyof ProfileInput = field === 'displayName' ? 'display_name' : field;
     setProfileDraft((current) => ({
       ...current,
       [nextField]: value,
@@ -2606,10 +2714,59 @@ function DesktopShellPage({
     setProfileDirty(true);
   }
 
+  async function handleProfileAvatarSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const pictureUpload = await fileToCreateAttachment(file, 'profile_avatar');
+    const nextPreviewUrl = URL.createObjectURL(file);
+    setProfileAvatarPreviewUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      return nextPreviewUrl;
+    });
+    setProfileAvatarInputKey((value) => value + 1);
+    setProfileDraft((current) => ({
+      ...current,
+      picture: null,
+      picture_upload: pictureUpload,
+      clear_picture: false,
+    }));
+    setProfileDirty(true);
+    setProfileError(null);
+  }
+
+  function handleClearProfileAvatar() {
+    setProfileAvatarPreviewUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      return null;
+    });
+    setProfileAvatarInputKey((value) => value + 1);
+    setProfileDraft((current) => ({
+      ...current,
+      picture: null,
+      picture_upload: null,
+      clear_picture: true,
+    }));
+    setProfileDirty(true);
+    setProfileError(null);
+  }
+
   function resetProfileDraft() {
     if (!localProfile) {
       return;
     }
+    setProfileAvatarPreviewUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      return null;
+    });
+    setProfileAvatarInputKey((value) => value + 1);
     setProfileDraft(profileInputFromProfile(localProfile));
     setProfileDirty(false);
     setProfileError(null);
@@ -2643,32 +2800,44 @@ function DesktopShellPage({
     });
   }, [setShellChromeState, syncRoute]);
 
-  function handleSelectPrivateChannel(channelId: string) {
+  function handleSelectPrivateChannel(topicId: string, channelId: string) {
     setSelectedChannelIdByTopic((current) => ({
       ...current,
-      [activeTopic]: channelId,
+      [topicId]: channelId,
     }));
     setTimelineScopeByTopic((current) => ({
       ...current,
-      [activeTopic]: {
+      [topicId]: {
         kind: 'channel',
         channel_id: channelId,
       },
     }));
     setComposeChannelByTopic((current) => ({
       ...current,
-      [activeTopic]: {
+      [topicId]: {
         kind: 'private_channel',
         channel_id: channelId,
       },
     }));
+    setActiveTopic(topicId);
     setShellChromeState((current) => ({
       ...current,
       activePrimarySection: 'timeline',
       navOpen: false,
     }));
     window.requestAnimationFrame(() => {
-      syncRoute('replace');
+      syncRoute('replace', {
+        activeTopic: topicId,
+        primarySection: 'timeline',
+        timelineScope: {
+          kind: 'channel',
+          channel_id: channelId,
+        },
+        composeTarget: {
+          kind: 'private_channel',
+          channel_id: channelId,
+        },
+      });
     });
   }
 
@@ -2677,6 +2846,13 @@ function DesktopShellPage({
     setProfileSaving(true);
     try {
       const profile = await api.setMyProfile(profileDraft);
+      setProfileAvatarPreviewUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current);
+        }
+        return null;
+      });
+      setProfileAvatarInputKey((value) => value + 1);
       setLocalProfile(profile);
       setProfileDraft(profileInputFromProfile(profile));
       setProfileDirty(false);
@@ -3003,6 +3179,7 @@ function DesktopShellPage({
         setComposerError(null);
         setReplyTarget(null);
         setRepostTarget(null);
+        setComposeDialogOpen(false);
         setSelectedThread(null);
         setThread([]);
         setShellChromeState((current) => ({
@@ -3041,6 +3218,7 @@ function DesktopShellPage({
       setDraftMediaItems([]);
       setAttachmentInputKey((value) => value + 1);
       setComposerError(null);
+      setComposeDialogOpen(false);
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: 'timeline',
@@ -3271,6 +3449,7 @@ function DesktopShellPage({
     const threadId = post.root_id ?? post.object_id;
     setRepostTarget(null);
     setReplyTarget(post);
+    setComposeDialogOpen(true);
     setSelectedThread(threadId);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
@@ -3289,6 +3468,24 @@ function DesktopShellPage({
 
   function clearRepost() {
     setRepostTarget(null);
+  }
+
+  function openNewPostDialog() {
+    clearReply();
+    clearRepost();
+    setComposeDialogOpen(true);
+  }
+
+  function openFloatingActionDialog() {
+    if (shellChromeState.activePrimarySection === 'live') {
+      setLiveCreateDialogOpen(true);
+      return;
+    }
+    if (shellChromeState.activePrimarySection === 'game') {
+      setGameCreateDialogOpen(true);
+      return;
+    }
+    openNewPostDialog();
   }
 
   async function handleSimpleRepost(post: PostView) {
@@ -3334,6 +3531,7 @@ function DesktopShellPage({
     setComposerError(null);
     setReplyTarget(null);
     setRepostTarget(post);
+    setComposeDialogOpen(true);
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setAuthorError(null);
@@ -3588,6 +3786,7 @@ function DesktopShellPage({
       setLiveTitle('');
       setLiveDescription('');
       setLiveError(null);
+      setLiveCreateDialogOpen(false);
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: 'live',
@@ -3694,6 +3893,7 @@ function DesktopShellPage({
       setGameDescription('');
       setGameParticipantsInput('');
       setGameError(null);
+      setGameCreateDialogOpen(false);
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: 'game',
@@ -4146,9 +4346,9 @@ function DesktopShellPage({
         ),
         authorPicture:
           post.author_pubkey === syncStatus.local_author_pubkey
-            ? localProfile?.picture ?? null
+            ? resolveProfilePictureSrc(localProfile, mediaObjectUrls)
             : selectedAuthor?.author_pubkey === post.author_pubkey
-              ? selectedAuthor.picture ?? null
+              ? resolveProfilePictureSrc(selectedAuthor, mediaObjectUrls)
               : null,
         relationshipLabel: strongestRelationshipLabel(post),
         audienceChipLabel: post.channel_id
@@ -4197,7 +4397,7 @@ function DesktopShellPage({
     },
     [
       activeJoinedChannels,
-      localProfile?.picture,
+      localProfile,
       locale,
       mediaObjectUrls,
       selectedAuthor,
@@ -4280,6 +4480,7 @@ function DesktopShellPage({
             selectedAuthor.name
           )
         : t('common:fallbacks.authorDetail'),
+      pictureSrc: resolveProfilePictureSrc(selectedAuthor, mediaObjectUrls),
       summary: selectedAuthor
         ? {
             label: strongestRelationshipLabel(selectedAuthor),
@@ -4295,7 +4496,7 @@ function DesktopShellPage({
         : null,
       authorError,
     }),
-    [authorError, selectedAuthor, syncStatus.local_author_pubkey, t]
+    [authorError, mediaObjectUrls, selectedAuthor, syncStatus.local_author_pubkey, t]
   );
   const navRailHeader = (
     <div className='shell-nav-status'>
@@ -4345,78 +4546,19 @@ function DesktopShellPage({
       items={topicNavItems}
       onSelectTopic={(topic) => void handleSelectTopic(topic)}
       onSelectChannel={(topic, channelId) => {
-        if (topic !== activeTopic) {
-          setActiveTopic(topic);
-        }
-        handleSelectPrivateChannel(channelId);
+        handleSelectPrivateChannel(topic, channelId);
       }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
     />
   );
-  const channelControl = (
-    <div className='shell-main-stack'>
-      {activeChannelPanelState.status === 'loading' ? <Notice>{t('channels:loading')}</Notice> : null}
-      {channelError ?? activeChannelPanelState.error ? (
-        <Notice tone='destructive'>{channelError ?? activeChannelPanelState.error}</Notice>
-      ) : null}
-      <form className='composer composer-compact' onSubmit={handleCreatePrivateChannel}>
-        <Label>
-          <span>{t('channels:editor.createChannel')}</span>
-          <Input
-            value={channelLabelInput}
-            onChange={(event) => setChannelLabelInput(event.target.value)}
-            placeholder={t('channels:editor.placeholders.channelLabel')}
-            disabled={channelActionPending !== null}
-          />
-        </Label>
-        <Label>
-          <span>{t('channels:editor.audience')}</span>
-          <Select
-            aria-label={t('channels:editor.audience')}
-            value={channelAudienceInput}
-            disabled={channelActionPending !== null}
-            onChange={(event) => setChannelAudienceInput(event.target.value as ChannelAudienceKind)}
-          >
-            <option value='invite_only'>{t('channels:audienceOptions.invite_only')}</option>
-            <option value='friend_only'>{t('channels:audienceOptions.friend_only')}</option>
-            <option value='friend_plus'>{t('channels:audienceOptions.friend_plus')}</option>
-          </Select>
-        </Label>
-        <div className='discovery-actions'>
-          <Button variant='secondary' type='submit' disabled={channelActionPending !== null}>
-            {t('channels:actions.createChannel')}
-          </Button>
-          <Button
-            variant='secondary'
-            type='button'
-            disabled={channelActionPending !== null || !activePrivateChannel}
-            onClick={() => void handleShareChannelAccess()}
-          >
-            {t('channels:actions.share')}
-          </Button>
-        </div>
-      </form>
-      <form className='composer composer-compact' onSubmit={handleJoinChannelAccess}>
-        <Label>
-          <span>{t('channels:editor.join')}</span>
-          <Textarea
-            value={inviteTokenInput}
-            onChange={(event) => setInviteTokenInput(event.target.value)}
-            placeholder={t('channels:editor.placeholders.inviteToken')}
-            disabled={channelActionPending !== null}
-          />
-        </Label>
-        <Button variant='secondary' type='submit' disabled={channelActionPending !== null}>
-          {t('channels:actions.join')}
-        </Button>
-      </form>
-      {inviteOutput ? (
-        <Notice tone='accent'>
-          <strong>{inviteOutputSummaryLabel(inviteOutputLabel)}</strong>
-          <code className='extended-inline-code'>{inviteOutput}</code>
-        </Notice>
-      ) : null}
-    </div>
+  const channelAction = (
+    <Button
+      variant='secondary'
+      type='button'
+      onClick={() => setChannelDialogOpen(true)}
+    >
+      {t('channels:title')}
+    </Button>
   );
 
   const connectivityPanelView = useMemo<ConnectivityPanelView>(
@@ -4893,7 +5035,7 @@ function DesktopShellPage({
                 </div>
               </Label>
             }
-            channelControl={channelControl}
+            channelAction={channelAction}
             channelSummary={
               activePrivateChannel
                 ? `${activePrivateChannel.label} · ${translateAudienceKindLabel(activePrivateChannel.audience_kind)}`
@@ -4951,42 +5093,7 @@ function DesktopShellPage({
                         {t('common:actions.refresh')}
                       </Button>
                     </div>
-                    <ComposerPanel
-                      value={composer}
-                      onChange={(event) => setComposer(event.target.value)}
-                      onSubmit={handlePublish}
-                      attachmentInputKey={attachmentInputKey}
-                      onAttachmentSelection={(event) => {
-                        void handleAttachmentSelection(event);
-                      }}
-                      draftMediaItems={composerDraftViews}
-                      onRemoveDraftAttachment={handleRemoveDraftAttachment}
-                      composerError={composerError}
-                      audienceLabel={activeComposeAudienceLabel}
-                      replyTarget={
-                        replyTarget
-                          ? {
-                              content: replyTarget.content,
-                              audienceLabel: replyTarget.audience_label,
-                            }
-                          : null
-                      }
-                      repostTarget={
-                        repostTarget
-                          ? {
-                              content: repostTarget.content,
-                              authorLabel: authorDisplayLabel(
-                                repostTarget.author_pubkey,
-                                repostTarget.author_display_name,
-                                repostTarget.author_name
-                              ),
-                            }
-                          : null
-                      }
-                      onClearReply={clearReply}
-                      onClearRepost={clearRepost}
-                      attachmentsDisabled={Boolean(repostTarget)}
-                    />
+                    {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
                   </Card>
                   <Card className='shell-workspace-card'>
                     <TimelineFeed
@@ -5026,36 +5133,6 @@ function DesktopShellPage({
                     (liveError ?? activeLivePanelState.error) ? (
                       <Notice tone='destructive'>{liveError ?? activeLivePanelState.error}</Notice>
                     ) : null}
-                    <form
-                      className='composer composer-compact'
-                      onSubmit={handleCreateLiveSession}
-                      aria-busy={liveCreatePending}
-                    >
-                      <Label>
-                        <span>{t('live:fields.title')}</span>
-                        <Input
-                          value={liveTitle}
-                          onChange={(event) => setLiveTitle(event.target.value)}
-                          placeholder={t('live:fields.placeholders.title')}
-                          disabled={liveCreatePending}
-                        />
-                      </Label>
-                      <Label>
-                        <span>{t('live:fields.description')}</span>
-                        <Textarea
-                          value={liveDescription}
-                          onChange={(event) => setLiveDescription(event.target.value)}
-                          placeholder={t('live:fields.placeholders.description')}
-                          disabled={liveCreatePending}
-                        />
-                      </Label>
-                      <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>{t('common:labels.audience')}: {activeComposeAudienceLabel}</span>
-                      </div>
-                      <Button type='submit' disabled={liveCreatePending}>
-                        {t('live:actions.start')}
-                      </Button>
-                    </form>
                   </Card>
                   <Card className='shell-workspace-card'>
                     {liveSessionListItems.length === 0 && activeLivePanelState.status === 'ready' ? (
@@ -5144,45 +5221,6 @@ function DesktopShellPage({
                     (gameError ?? activeGamePanelState.error) ? (
                       <Notice tone='destructive'>{gameError ?? activeGamePanelState.error}</Notice>
                     ) : null}
-                    <form
-                      className='composer composer-compact'
-                      onSubmit={handleCreateGameRoom}
-                      aria-busy={gameCreatePending}
-                    >
-                      <Label>
-                        <span>{t('game:fields.title')}</span>
-                        <Input
-                          value={gameTitle}
-                          onChange={(event) => setGameTitle(event.target.value)}
-                          placeholder={t('game:fields.placeholders.title')}
-                          disabled={gameCreatePending}
-                        />
-                      </Label>
-                      <Label>
-                        <span>{t('game:fields.description')}</span>
-                        <Textarea
-                          value={gameDescription}
-                          onChange={(event) => setGameDescription(event.target.value)}
-                          placeholder={t('game:fields.placeholders.description')}
-                          disabled={gameCreatePending}
-                        />
-                      </Label>
-                      <Label>
-                        <span>{t('game:fields.participants')}</span>
-                        <Input
-                          value={gameParticipantsInput}
-                          onChange={(event) => setGameParticipantsInput(event.target.value)}
-                          placeholder={t('game:fields.placeholders.participants')}
-                          disabled={gameCreatePending}
-                        />
-                      </Label>
-                      <div className='topic-diagnostic topic-diagnostic-secondary'>
-                        <span>{t('common:labels.audience')}: {activeComposeAudienceLabel}</span>
-                      </div>
-                      <Button type='submit' disabled={gameCreatePending}>
-                        {t('game:actions.createRoom')}
-                      </Button>
-                    </form>
                   </Card>
                   <Card className='shell-workspace-card'>
                     {activeGameRooms.length === 0 && activeGamePanelState.status === 'ready' ? (
@@ -5310,7 +5348,14 @@ function DesktopShellPage({
                       dirty={profileDirty}
                       error={profileError ?? profilePanelState.error}
                       fields={profileEditorFields}
+                      picturePreviewSrc={profileEditorPictureSrc}
+                      hasPicture={profileEditorHasPicture}
+                      pictureInputKey={profileAvatarInputKey}
                       onFieldChange={handleProfileFieldChange}
+                      onPictureSelect={(event) => {
+                        void handleProfileAvatarSelection(event);
+                      }}
+                      onPictureClear={handleClearProfileAvatar}
                       onBack={openProfileOverview}
                       onSave={handleSaveProfile}
                       onReset={resetProfileDraft}
@@ -5319,7 +5364,7 @@ function DesktopShellPage({
                     <ProfileOverviewPanel
                       authorLabel={profileAuthorLabel}
                       about={localProfile?.about ?? null}
-                      picture={localProfile?.picture ?? null}
+                      picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)}
                       status={profilePanelState.status}
                       error={profileError ?? profilePanelState.error}
                       postCount={profileTimelinePostViews.length}
@@ -5365,6 +5410,197 @@ function DesktopShellPage({
           </Button>
         }
       />
+
+      <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('channels:title')}</DialogTitle>
+            <DialogDescription>{activeTopic}</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <PrivateChannelPanel
+              status={activeChannelPanelState.status}
+              error={channelError ?? activeChannelPanelState.error}
+              pendingAction={channelActionPending}
+              channelLabel={channelLabelInput}
+              channelAudience={channelAudienceInput}
+              channelAudienceOptions={channelAudienceOptions}
+              inviteTokenInput={inviteTokenInput}
+              inviteOutput={inviteOutput}
+              inviteOutputLabel={inviteOutputLabel}
+              channels={privateChannelListItems}
+              selectedChannel={activePrivateChannel}
+              onChannelLabelChange={setChannelLabelInput}
+              onChannelAudienceChange={setChannelAudienceInput}
+              onInviteTokenChange={setInviteTokenInput}
+              onCreateChannel={(event) => void handleCreatePrivateChannel(event)}
+              onJoin={(event) => void handleJoinChannelAccess(event)}
+              onSelectChannel={(channelId) => handleSelectPrivateChannel(activeTopic, channelId)}
+              onShare={() => void handleShareChannelAccess()}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={composeDialogOpen} onOpenChange={setComposeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {replyTarget
+                ? t('common:actions.reply')
+                : repostTarget
+                  ? t('common:actions.quoteRepost')
+                  : t('common:actions.publish')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('common:labels.audience')}: {activeComposeAudienceLabel}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <ComposerPanel
+              value={composer}
+              onChange={(event) => setComposer(event.target.value)}
+              onSubmit={handlePublish}
+              attachmentInputKey={attachmentInputKey}
+              onAttachmentSelection={(event) => {
+                void handleAttachmentSelection(event);
+              }}
+              draftMediaItems={composerDraftViews}
+              onRemoveDraftAttachment={handleRemoveDraftAttachment}
+              composerError={composerError}
+              audienceLabel={activeComposeAudienceLabel}
+              replyTarget={
+                replyTarget
+                  ? {
+                      content: replyTarget.content,
+                      audienceLabel: replyTarget.audience_label,
+                    }
+                  : null
+              }
+              repostTarget={
+                repostTarget
+                  ? {
+                      content: repostTarget.content,
+                      authorLabel: authorDisplayLabel(
+                        repostTarget.author_pubkey,
+                        repostTarget.author_display_name,
+                        repostTarget.author_name
+                      ),
+                    }
+                  : null
+              }
+              onClearReply={clearReply}
+              onClearRepost={clearRepost}
+              attachmentsDisabled={Boolean(repostTarget)}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={liveCreateDialogOpen} onOpenChange={setLiveCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('live:actions.start')}</DialogTitle>
+            <DialogDescription>
+              {t('common:labels.audience')}: {activeComposeAudienceLabel}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <form
+              className='composer composer-compact'
+              onSubmit={handleCreateLiveSession}
+              aria-busy={liveCreatePending}
+            >
+              <Label>
+                <span>{t('live:fields.title')}</span>
+                <Input
+                  value={liveTitle}
+                  onChange={(event) => setLiveTitle(event.target.value)}
+                  placeholder={t('live:fields.placeholders.title')}
+                  disabled={liveCreatePending}
+                />
+              </Label>
+              <Label>
+                <span>{t('live:fields.description')}</span>
+                <Textarea
+                  value={liveDescription}
+                  onChange={(event) => setLiveDescription(event.target.value)}
+                  placeholder={t('live:fields.placeholders.description')}
+                  disabled={liveCreatePending}
+                />
+              </Label>
+              {liveError ? <p className='error error-inline'>{liveError}</p> : null}
+              <Button type='submit' disabled={liveCreatePending}>
+                {t('live:actions.start')}
+              </Button>
+            </form>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={gameCreateDialogOpen} onOpenChange={setGameCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('game:actions.createRoom')}</DialogTitle>
+            <DialogDescription>
+              {t('common:labels.audience')}: {activeComposeAudienceLabel}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <form
+              className='composer composer-compact'
+              onSubmit={handleCreateGameRoom}
+              aria-busy={gameCreatePending}
+            >
+              <Label>
+                <span>{t('game:fields.title')}</span>
+                <Input
+                  value={gameTitle}
+                  onChange={(event) => setGameTitle(event.target.value)}
+                  placeholder={t('game:fields.placeholders.title')}
+                  disabled={gameCreatePending}
+                />
+              </Label>
+              <Label>
+                <span>{t('game:fields.description')}</span>
+                <Textarea
+                  value={gameDescription}
+                  onChange={(event) => setGameDescription(event.target.value)}
+                  placeholder={t('game:fields.placeholders.description')}
+                  disabled={gameCreatePending}
+                />
+              </Label>
+              <Label>
+                <span>{t('game:fields.participants')}</span>
+                <Input
+                  value={gameParticipantsInput}
+                  onChange={(event) => setGameParticipantsInput(event.target.value)}
+                  placeholder={t('game:fields.placeholders.participants')}
+                  disabled={gameCreatePending}
+                />
+              </Label>
+              {gameError ? <p className='error error-inline'>{gameError}</p> : null}
+              <Button type='submit' disabled={gameCreatePending}>
+                {t('game:actions.createRoom')}
+              </Button>
+            </form>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      {showFloatingActionButton ? (
+        <Button
+          className='shell-fab'
+          variant='primary'
+          size='icon'
+          type='button'
+          data-testid='shell-fab'
+          aria-label={floatingActionLabel}
+          onClick={openFloatingActionDialog}
+        >
+          <Plus className='size-5' aria-hidden='true' />
+        </Button>
+      ) : null}
 
       <SettingsDrawer
         drawerId={SHELL_SETTINGS_ID}

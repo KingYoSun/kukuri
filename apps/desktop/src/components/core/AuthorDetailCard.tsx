@@ -31,7 +31,7 @@ export function AuthorDetailCard({
               <div className='author-detail-hero'>
                 <AuthorAvatar
                   label={view.displayLabel}
-                  picture={author.picture ?? null}
+                  picture={view.pictureSrc ?? author.picture ?? null}
                   size='sm'
                   testId='author-detail-avatar'
                 />

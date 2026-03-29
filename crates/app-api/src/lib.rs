@@ -177,6 +177,17 @@ pub struct ProfileInput {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    pub picture_upload: Option<PendingAttachment>,
+    #[serde(default)]
+    pub clear_picture: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileAssetView {
+    pub hash: String,
+    pub mime: String,
+    pub bytes: u64,
+    pub role: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +197,7 @@ pub struct AuthorSocialView {
     pub display_name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
+    pub picture_asset: Option<ProfileAssetView>,
     pub updated_at: Option<i64>,
     pub following: bool,
     pub followed_by: bool,
@@ -194,7 +206,7 @@ pub struct AuthorSocialView {
     pub friend_of_friend_via_pubkeys: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingAttachment {
     pub mime: String,
     pub bytes: Vec<u8>,
@@ -536,6 +548,28 @@ impl AppService {
 
     pub async fn set_my_profile(&self, input: ProfileInput) -> Result<Profile> {
         let author_pubkey = Pubkey::from(self.current_author_pubkey());
+        let current_profile = self.get_my_profile().await?;
+        let picture = if input.clear_picture || input.picture_upload.is_some() {
+            normalize_optional_text(input.picture)
+        } else {
+            normalize_optional_text(input.picture).or(current_profile.picture.clone())
+        };
+        let picture_asset = if input.clear_picture {
+            None
+        } else if let Some(upload) = input.picture_upload {
+            let stored = self
+                .blob_service
+                .put_blob(upload.bytes, upload.mime.as_str())
+                .await?;
+            Some(kukuri_core::AssetRef {
+                hash: stored.hash,
+                mime: stored.mime,
+                bytes: stored.bytes,
+                role: AssetRole::ProfileAvatar,
+            })
+        } else {
+            current_profile.picture_asset.clone()
+        };
         let envelope = build_profile_envelope(
             self.keys.as_ref(),
             &KukuriProfileEnvelopeContentV1 {
@@ -543,7 +577,8 @@ impl AppService {
                 name: normalize_optional_text(input.name),
                 display_name: normalize_optional_text(input.display_name),
                 about: normalize_optional_text(input.about),
-                picture: normalize_optional_text(input.picture),
+                picture,
+                picture_asset,
             },
         )?;
         let profile = parse_profile(&envelope)?
@@ -4687,6 +4722,15 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
+fn profile_asset_view_from_ref(asset: Option<&kukuri_core::AssetRef>) -> Option<ProfileAssetView> {
+    asset.map(|asset| ProfileAssetView {
+        hash: asset.hash.as_str().to_string(),
+        mime: asset.mime.clone(),
+        bytes: asset.bytes,
+        role: "profile_avatar".into(),
+    })
+}
+
 fn normalize_repost_commentary(value: Option<String>) -> Option<String> {
     normalize_optional_text(value)
 }
@@ -4717,6 +4761,9 @@ fn author_social_view_from_parts(
         display_name: profile.and_then(|profile| profile.display_name.clone()),
         about: profile.and_then(|profile| profile.about.clone()),
         picture: profile.and_then(|profile| profile.picture.clone()),
+        picture_asset: profile_asset_view_from_ref(
+            profile.and_then(|profile| profile.picture_asset.as_ref()),
+        ),
         updated_at: profile.map(|profile| profile.updated_at),
         following: relationship.is_some_and(|relationship| relationship.following),
         followed_by: relationship.is_some_and(|relationship| relationship.followed_by),
@@ -4826,6 +4873,7 @@ async fn persist_profile_doc(
                     display_name: profile.display_name.clone(),
                     about: profile.about.clone(),
                     picture: profile.picture.clone(),
+                    picture_asset: profile.picture_asset.clone(),
                     updated_at: profile.updated_at,
                     envelope_id: envelope.id.clone(),
                 })?,
@@ -6619,6 +6667,7 @@ fn attachment_role_name(role: &AssetRole) -> &'static str {
         AssetRole::ImagePreview => "image_preview",
         AssetRole::VideoPoster => "video_poster",
         AssetRole::VideoManifest => "video_manifest",
+        AssetRole::ProfileAvatar => "profile_avatar",
         AssetRole::Attachment => "attachment",
     }
 }
@@ -7720,6 +7769,25 @@ mod tests {
             .collect()
     }
 
+    async fn author_profile_doc(
+        docs_sync: &dyn DocsSync,
+        author_pubkey: &str,
+    ) -> Option<AuthorProfileDocV1> {
+        docs_sync
+            .query_replica(
+                &author_replica_id(author_pubkey),
+                DocQuery::Exact(stable_key("profile", "latest")),
+            )
+            .await
+            .expect("profile doc")
+            .into_iter()
+            .next()
+            .map(|record| {
+                serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice())
+                    .expect("decode profile doc")
+            })
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -8424,6 +8492,133 @@ mod tests {
                 .iter()
                 .all(|post| post.object_id != private_object_id)
         );
+    }
+
+    #[tokio::test]
+    async fn set_my_profile_with_avatar_upload_persists_blob_backed_profile_and_author_view() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let avatar_bytes = tiny_png_bytes();
+
+        let updated = app
+            .set_my_profile(ProfileInput {
+                name: Some("avatar-owner".into()),
+                display_name: Some("Avatar Owner".into()),
+                about: Some("blob avatar".into()),
+                picture: None,
+                picture_upload: Some(PendingAttachment {
+                    mime: "image/png".into(),
+                    bytes: avatar_bytes.clone(),
+                    role: AssetRole::ProfileAvatar,
+                }),
+                clear_picture: false,
+            })
+            .await
+            .expect("set profile");
+
+        let asset = updated.picture_asset.clone().expect("profile avatar asset");
+        let stored_profile = store
+            .get_profile(updated.pubkey.as_str())
+            .await
+            .expect("stored profile")
+            .expect("stored profile value");
+        let profile_doc = author_profile_doc(docs_sync.as_ref(), updated.pubkey.as_str())
+            .await
+            .expect("profile doc");
+        let stored_blob = blob_service
+            .fetch_blob(&asset.hash)
+            .await
+            .expect("fetch avatar blob")
+            .expect("avatar blob");
+        let local_profile = app.get_my_profile().await.expect("get my profile");
+        let author_social = app
+            .get_author_social_view(updated.pubkey.as_str())
+            .await
+            .expect("author social view");
+
+        assert_eq!(updated.picture, None);
+        assert_eq!(asset.mime, "image/png");
+        assert_eq!(asset.role, AssetRole::ProfileAvatar);
+        assert_eq!(stored_blob, avatar_bytes);
+        assert_eq!(stored_profile.picture_asset, updated.picture_asset);
+        assert_eq!(profile_doc.picture_asset, updated.picture_asset);
+        assert_eq!(local_profile.picture_asset, updated.picture_asset);
+        assert_eq!(author_social.picture, None);
+        assert_eq!(
+            author_social
+                .picture_asset
+                .as_ref()
+                .map(|value| value.hash.as_str()),
+            Some(asset.hash.as_str())
+        );
+        assert_eq!(
+            author_social
+                .picture_asset
+                .as_ref()
+                .map(|value| value.mime.as_str()),
+            Some("image/png")
+        );
+        assert_eq!(
+            author_social
+                .picture_asset
+                .as_ref()
+                .map(|value| value.role.as_str()),
+            Some("profile_avatar")
+        );
+    }
+
+    #[tokio::test]
+    async fn set_my_profile_keeps_legacy_picture_url_backward_compatible() {
+        let (app, store, docs_sync, _) = local_app_with_memory_services();
+        let legacy_picture = "https://example.com/avatar.png".to_string();
+
+        let updated = app
+            .set_my_profile(ProfileInput {
+                name: Some("legacy-owner".into()),
+                display_name: Some("Legacy Owner".into()),
+                about: Some("legacy avatar".into()),
+                picture: Some(legacy_picture.clone()),
+                picture_upload: None,
+                clear_picture: false,
+            })
+            .await
+            .expect("set profile");
+
+        let stored_profile = store
+            .get_profile(updated.pubkey.as_str())
+            .await
+            .expect("stored profile")
+            .expect("stored profile value");
+        let profile_doc = author_profile_doc(docs_sync.as_ref(), updated.pubkey.as_str())
+            .await
+            .expect("profile doc");
+        let local_profile = app.get_my_profile().await.expect("get my profile");
+        let author_social = app
+            .get_author_social_view(updated.pubkey.as_str())
+            .await
+            .expect("author social view");
+
+        assert_eq!(updated.picture.as_deref(), Some(legacy_picture.as_str()));
+        assert_eq!(updated.picture_asset, None);
+        assert_eq!(
+            stored_profile.picture.as_deref(),
+            Some(legacy_picture.as_str())
+        );
+        assert_eq!(stored_profile.picture_asset, None);
+        assert_eq!(
+            profile_doc.picture.as_deref(),
+            Some(legacy_picture.as_str())
+        );
+        assert_eq!(profile_doc.picture_asset, None);
+        assert_eq!(
+            local_profile.picture.as_deref(),
+            Some(legacy_picture.as_str())
+        );
+        assert_eq!(local_profile.picture_asset, None);
+        assert_eq!(
+            author_social.picture.as_deref(),
+            Some(legacy_picture.as_str())
+        );
+        assert_eq!(author_social.picture_asset, None);
     }
 
     #[tokio::test]

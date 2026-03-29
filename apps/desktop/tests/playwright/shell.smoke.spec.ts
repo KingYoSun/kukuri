@@ -1,4 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+async function openComposerDialog(page: Page) {
+  await page.getByTestId('shell-fab').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+}
 
 test('browser mock wide shell keeps navigation rail beside the workspace', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
@@ -33,6 +38,7 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
     'kukuri:topic:browser'
   );
 
+  await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
   await page.getByRole('button', { name: 'Publish' }).click();
 
@@ -108,7 +114,9 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await page.goto('/');
 
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await openComposerDialog(page);
   await expect(page.getByPlaceholder('Write a post')).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.getByTestId('shell-settings-trigger').click();
   const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
@@ -116,12 +124,17 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await settingsDialog.getByLabel('Language').selectOption('ja');
 
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await page.keyboard.press('Escape');
+  await expect(settingsDialog).toBeHidden();
+  await openComposerDialog(page);
   await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
   await expect(page.getByRole('button', { name: '投稿' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.reload();
 
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await openComposerDialog(page);
   await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
 });
 
@@ -141,6 +154,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
     'kukuri:topic:demo'
   );
 
+  await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('narrow browser mock')).toBeVisible();

@@ -25,7 +25,6 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
     displayName: 'Local Author',
     name: 'local-author',
     about: 'Maintains the desktop shell migration.',
-    picture: 'https://example.com/avatar.png',
   });
   const [channelLabel, setChannelLabel] = useState('Core Contributors');
   const [inviteToken, setInviteToken] = useState('');
@@ -182,16 +181,21 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
         <ProfileEditorPanel
           authorLabel='Local Author'
           status='ready'
-          saving={false}
-          dirty={true}
-          error={null}
-          fields={profileFields}
-          onFieldChange={(field, value) =>
-            setProfileFields((current) => ({ ...current, [field]: value }))
-          }
-          onSave={(event) => event.preventDefault()}
-          onReset={() => undefined}
-        />
+        saving={false}
+        dirty={true}
+        error={null}
+        fields={profileFields}
+        picturePreviewSrc='https://example.com/avatar.png'
+        hasPicture={true}
+        pictureInputKey={0}
+        onFieldChange={(field, value) =>
+          setProfileFields((current) => ({ ...current, [field]: value }))
+        }
+        onPictureSelect={() => undefined}
+        onPictureClear={() => undefined}
+        onSave={(event) => event.preventDefault()}
+        onReset={() => undefined}
+      />
       </div>
     </div>
   );
