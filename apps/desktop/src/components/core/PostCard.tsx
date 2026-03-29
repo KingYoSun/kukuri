@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Reply, Repeat2, SmilePlus } from 'lucide-react';
+import { Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -8,15 +8,16 @@ import type {
   CustomReactionAssetView,
   ReactionKeyInput,
   ReactionKeyView,
+  RecentReactionView,
 } from '@/lib/api';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { RelationshipBadge } from './RelationshipBadge';
 import { PostMedia } from './PostMedia';
+import { ReactionPickerPopover } from './ReactionPickerPopover';
 import { type PostCardView } from './types';
 
 function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
@@ -44,12 +45,10 @@ type PostCardProps = {
   mediaObjectUrls?: Record<string, string | null>;
   ownedReactionAssets?: CustomReactionAssetView[];
   bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
-  onManageReactions?: () => void;
 };
-
-const PRESET_EMOJI_REACTIONS = ['👍', '❤️', '😂', '🎉', '🔥'];
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
   if (reaction.reaction_key_kind === 'emoji' && reaction.emoji?.trim()) {
@@ -75,15 +74,13 @@ export function PostCard({
   mediaObjectUrls = {},
   ownedReactionAssets = [],
   bookmarkedReactionAssets = [],
+  recentReactions = [],
   onToggleReaction,
   onBookmarkCustomReaction,
-  onManageReactions,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
-  const [reactionTrayOpen, setReactionTrayOpen] = useState(false);
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
-  const [emojiInput, setEmojiInput] = useState('');
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
@@ -119,7 +116,9 @@ export function PostCard({
   };
 
   return (
-    <article className={context === 'thread' ? 'post-card post-card-thread' : 'post-card'}>
+    <article
+      className={context === 'thread' ? 'post-card post-card-thread post-layout-safe' : 'post-card post-layout-safe'}
+    >
       <div className='post-meta'>
         <div className='post-meta-author'>
           <AuthorAvatar
@@ -144,10 +143,10 @@ export function PostCard({
       </div>
 
       {readOnly ? (
-        <div className='post-link'>
+        <div className='post-link post-layout-safe'>
           <PostMedia media={view.media} />
 
-          <div className='post-body'>
+          <div className='post-body post-layout-safe'>
             {isPendingText ? (
               <div
                 className='text-skeleton-group'
@@ -158,11 +157,11 @@ export function PostCard({
                 <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
               </div>
             ) : hasPrimaryContent ? (
-              <strong className='post-title'>{post.content}</strong>
+              <strong className='post-title post-copy-wrap'>{post.content}</strong>
             ) : null}
 
             {repostSource ? (
-              <div className='repost-source-card'>
+              <div className='repost-source-card post-layout-safe'>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
                   <span>{isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')}</span>
                   <span>{t('labels.sourceTopic')}</span>
@@ -170,17 +169,17 @@ export function PostCard({
                     {repostSource.source_topic_id}
                   </span>
                 </div>
-                <div className='post-body repost-source-body'>
-                  <strong className='post-title'>{sourceAuthorLabel(repostSource)}</strong>
+                <div className='post-body repost-source-body post-layout-safe'>
+                  <strong className='post-title post-copy-wrap'>{sourceAuthorLabel(repostSource)}</strong>
                   {repostSource.content.trim().length > 0 ? (
-                    <span>{repostSource.content}</span>
+                    <span className='post-copy-wrap'>{repostSource.content}</span>
                   ) : null}
                 </div>
               </div>
             ) : null}
           </div>
 
-          <small>{post.envelope_id}</small>
+          <small className='post-copy-wrap'>{post.envelope_id}</small>
           {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
           {publishedTopicId ? (
             <div className='topic-diagnostic topic-diagnostic-secondary'>
@@ -192,10 +191,10 @@ export function PostCard({
           ) : null}
         </div>
       ) : (
-        <button className='post-link' type='button' onClick={openPrimaryTarget}>
+        <button className='post-link post-layout-safe' type='button' onClick={openPrimaryTarget}>
           <PostMedia media={view.media} />
 
-          <div className='post-body'>
+          <div className='post-body post-layout-safe'>
             {isPendingText ? (
               <div
                 className='text-skeleton-group'
@@ -206,11 +205,11 @@ export function PostCard({
                 <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
               </div>
             ) : hasPrimaryContent ? (
-              <strong className='post-title'>{post.content}</strong>
+              <strong className='post-title post-copy-wrap'>{post.content}</strong>
             ) : null}
 
             {repostSource ? (
-              <div className='repost-source-card'>
+              <div className='repost-source-card post-layout-safe'>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
                   <span>{isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')}</span>
                   <span>{t('labels.sourceTopic')}</span>
@@ -218,28 +217,28 @@ export function PostCard({
                     {repostSource.source_topic_id}
                   </span>
                 </div>
-                <div className='post-body repost-source-body'>
-                  <strong className='post-title'>{sourceAuthorLabel(repostSource)}</strong>
+                <div className='post-body repost-source-body post-layout-safe'>
+                  <strong className='post-title post-copy-wrap'>{sourceAuthorLabel(repostSource)}</strong>
                   {repostSource.content.trim().length > 0 ? (
-                    <span>{repostSource.content}</span>
+                    <span className='post-copy-wrap'>{repostSource.content}</span>
                   ) : null}
                 </div>
               </div>
             ) : null}
           </div>
 
-          <small>{post.envelope_id}</small>
+          <small className='post-copy-wrap'>{post.envelope_id}</small>
           {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
         </button>
       )}
 
       <div className='post-actions'>
         {readOnly ? (
-          publishedTopicId ? (
+          publishedTopicId && onOpenOriginalTopic ? (
             <Button
               variant='secondary'
               type='button'
-              onClick={() => onOpenOriginalTopic?.(publishedTopicId)}
+              onClick={() => onOpenOriginalTopic(publishedTopicId)}
             >
               {t('feed.openOriginalTopic', { ns: 'profile' })}
             </Button>
@@ -298,16 +297,13 @@ export function PostCard({
                 })}
               </div>
             ) : null}
-            <Button
-              variant='secondary'
-              size='icon'
-              className='post-action-button'
-              type='button'
-              aria-label={t('actions.react')}
-              onClick={() => setReactionTrayOpen((current) => !current)}
-            >
-              <SmilePlus className='size-4' aria-hidden='true' />
-            </Button>
+            <ReactionPickerPopover
+              post={post}
+              recentReactions={recentReactions}
+              assets={pickerAssets}
+              mediaObjectUrls={mediaObjectUrls}
+              onToggleReaction={onToggleReaction}
+            />
             {canRepost && (onRepost || onQuoteRepost) ? (
               <Popover open={repostMenuOpen} onOpenChange={setRepostMenuOpen}>
                 <PopoverTrigger asChild>
@@ -366,73 +362,6 @@ export function PostCard({
           </>
         )}
       </div>
-      {!readOnly && reactionTrayOpen ? (
-        <div className='post-reaction-tray'>
-          <div className='post-reaction-picker-row'>
-            {PRESET_EMOJI_REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                className='post-reaction-picker-button'
-                type='button'
-                onClick={() => onToggleReaction?.(post, { kind: 'emoji', emoji })}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-          <form
-            className='post-reaction-picker-row'
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!emojiInput.trim()) {
-                return;
-              }
-              onToggleReaction?.(post, {
-                kind: 'emoji',
-                emoji: emojiInput,
-              });
-              setEmojiInput('');
-            }}
-          >
-            <Input
-              value={emojiInput}
-              placeholder={t('actions.react')}
-              onChange={(event) => setEmojiInput(event.target.value)}
-            />
-            <Button type='submit'>{t('actions.react')}</Button>
-          </form>
-          {pickerAssets.length > 0 ? (
-            <div className='post-reaction-picker-row'>
-              {pickerAssets.map((asset) => {
-                const previewUrl =
-                  typeof mediaObjectUrls[asset.blob_hash] === 'string'
-                    ? mediaObjectUrls[asset.blob_hash]
-                    : null;
-                return (
-                  <button
-                    key={asset.asset_id}
-                    className='post-reaction-picker-button'
-                    type='button'
-                    onClick={() => onToggleReaction?.(post, { kind: 'custom_asset', asset })}
-                    title={asset.asset_id}
-                  >
-                    {previewUrl ? (
-                      <img className='post-reaction-chip-image' src={previewUrl} alt={asset.asset_id} />
-                    ) : (
-                      asset.asset_id.slice(0, 4)
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          <div className='post-actions-inline'>
-            <Button variant='secondary' type='button' onClick={() => onManageReactions?.()}>
-              {t('actions.manageReactions')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </article>
   );
 }

@@ -28,6 +28,7 @@
     "quoteReposting": "引用リポスト中",
     "clearReply": "返信をクリア",
     "replying": "返信中",
+    "sourcePost": "元投稿",
     "writePost": "投稿を書く",
     "writeQuoteRepost": "引用リポストを書く",
     "writeReply": "返信を書く"
@@ -106,6 +107,13 @@
     "unsupportedOnClient": "このクライアントでは未対応です",
     "video": "動画",
     "videoPosterAlt": "動画ポスター"
+  },
+  "reactions": {
+    "recent": "最近使ったもの",
+    "customResults": "検索結果",
+    "searchPlaceholder": "リアクションを検索",
+    "searchHint": "絵文字かカスタムリアクション key で検索します。",
+    "noResults": "一致するリアクションがありません。"
   },
   "relationships": {
     "followsYou": "相手があなたをフォロー",

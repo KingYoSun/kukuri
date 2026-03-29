@@ -49,6 +49,7 @@ export type CustomReactionAssetView = {
   asset_id: string;
   owner_pubkey: string;
   blob_hash: string;
+  search_key: string;
   mime: string;
   bytes: number;
   width: number;
@@ -73,6 +74,10 @@ export type ReactionStateView = {
   source_replica_id: string;
   reaction_summary: ReactionSummaryView[];
   my_reactions: ReactionKeyView[];
+};
+
+export type RecentReactionView = ReactionKeyView & {
+  updated_at: number;
 };
 
 export type ReactionKeyInput =
@@ -398,9 +403,11 @@ export interface DesktopApi {
     channelRef?: ChannelRef | null
   ): Promise<ReactionStateView>;
   listMyCustomReactionAssets(): Promise<CustomReactionAssetView[]>;
+  listRecentReactions(limit?: number): Promise<RecentReactionView[]>;
   createCustomReactionAsset(
     upload: CreateAttachmentInput,
-    cropRect: CustomReactionCropRect
+    cropRect: CustomReactionCropRect,
+    searchKey: string
   ): Promise<CustomReactionAssetView>;
   listBookmarkedCustomReactions(): Promise<BookmarkedCustomReactionView[]>;
   bookmarkCustomReaction(asset: CustomReactionAssetView): Promise<BookmarkedCustomReactionView>;
@@ -600,6 +607,7 @@ export const runtimeApi: DesktopApi = {
                 asset_id: reactionKey.asset.asset_id,
                 owner_pubkey: reactionKey.asset.owner_pubkey,
                 blob_hash: reactionKey.asset.blob_hash,
+                search_key: reactionKey.asset.search_key,
                 mime: reactionKey.asset.mime,
                 bytes: reactionKey.asset.bytes,
                 width: reactionKey.asset.width,
@@ -615,14 +623,25 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<CustomReactionAssetView[]>('list_my_custom_reaction_assets');
   },
-  createCustomReactionAsset: async (upload, cropRect) => {
+  listRecentReactions: async (limit = 8) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.createCustomReactionAsset(upload, cropRect);
+      return window.__KUKURI_DESKTOP__.listRecentReactions(limit);
+    }
+    return invokeDesktop<RecentReactionView[]>('list_recent_reactions', {
+      request: {
+        limit,
+      },
+    });
+  },
+  createCustomReactionAsset: async (upload, cropRect, searchKey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createCustomReactionAsset(upload, cropRect, searchKey);
     }
     return invokeDesktop<CustomReactionAssetView>('create_custom_reaction_asset', {
       request: {
         upload,
         crop_rect: cropRect,
+        search_key: searchKey,
       },
     });
   },
@@ -641,6 +660,7 @@ export const runtimeApi: DesktopApi = {
         asset_id: asset.asset_id,
         owner_pubkey: asset.owner_pubkey,
         blob_hash: asset.blob_hash,
+        search_key: asset.search_key,
         mime: asset.mime,
         bytes: asset.bytes,
         width: asset.width,

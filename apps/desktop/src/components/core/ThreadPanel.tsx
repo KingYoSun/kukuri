@@ -2,6 +2,7 @@ import type {
   BookmarkedCustomReactionView,
   CustomReactionAssetView,
   ReactionKeyInput,
+  RecentReactionView,
 } from '@/lib/api';
 
 import { TimelineFeed } from './TimelineFeed';
@@ -20,9 +21,9 @@ type ThreadPanelProps = {
   mediaObjectUrls?: Record<string, string | null>;
   ownedReactionAssets?: CustomReactionAssetView[];
   bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
-  onManageReactions?: () => void;
 };
 
 export function ThreadPanel({
@@ -38,9 +39,9 @@ export function ThreadPanel({
   mediaObjectUrls,
   ownedReactionAssets,
   bookmarkedReactionAssets,
+  recentReactions,
   onToggleReaction,
   onBookmarkCustomReaction,
-  onManageReactions,
 }: ThreadPanelProps) {
   return (
     <div className='shell-main-stack'>
@@ -59,9 +60,9 @@ export function ThreadPanel({
         mediaObjectUrls={mediaObjectUrls}
         ownedReactionAssets={ownedReactionAssets}
         bookmarkedReactionAssets={bookmarkedReactionAssets}
+        recentReactions={recentReactions}
         onToggleReaction={onToggleReaction}
         onBookmarkCustomReaction={onBookmarkCustomReaction}
-        onManageReactions={onManageReactions}
       />
     </div>
   );

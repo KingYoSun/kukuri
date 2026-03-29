@@ -28,6 +28,7 @@
     "quoteReposting": "Quote reposting",
     "clearReply": "Clear reply",
     "replying": "Replying",
+    "sourcePost": "Original post",
     "writePost": "Write a post",
     "writeQuoteRepost": "Write a quote repost",
     "writeReply": "Write a reply"
@@ -106,6 +107,13 @@
     "unsupportedOnClient": "unsupported on this client",
     "video": "video",
     "videoPosterAlt": "video poster"
+  },
+  "reactions": {
+    "recent": "Recent",
+    "customResults": "Search results",
+    "searchPlaceholder": "Search reactions",
+    "searchHint": "Search by emoji or custom reaction key.",
+    "noResults": "No matching reactions."
   },
   "relationships": {
     "followsYou": "follows you",

@@ -633,6 +633,8 @@ pub struct CustomReactionAssetSnapshotV1 {
     pub asset_id: String,
     pub owner_pubkey: Pubkey,
     pub blob_hash: BlobHash,
+    #[serde(default)]
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -725,6 +727,8 @@ pub struct ReactionDocV1 {
 pub struct KukuriCustomReactionAssetEnvelopeContentV1 {
     pub author_pubkey: Pubkey,
     pub blob_hash: BlobHash,
+    #[serde(default)]
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -736,6 +740,8 @@ pub struct CustomReactionAssetDocV1 {
     pub asset_id: String,
     pub author_pubkey: Pubkey,
     pub blob_hash: BlobHash,
+    #[serde(default)]
+    pub search_key: String,
     pub mime: String,
     pub bytes: u64,
     pub width: u32,
@@ -1237,6 +1243,7 @@ impl KukuriEnvelope {
             asset_id: self.id.as_str().to_string(),
             author_pubkey: self.pubkey.clone(),
             blob_hash: content.blob_hash,
+            search_key: content.search_key,
             mime: content.mime,
             bytes: content.bytes,
             width: content.width,
@@ -1515,6 +1522,7 @@ pub fn build_reaction_envelope(
 pub fn build_custom_reaction_asset_envelope(
     keys: &KukuriKeys,
     blob_hash: BlobHash,
+    search_key: String,
     mime: String,
     bytes: u64,
     width: u32,
@@ -1523,6 +1531,10 @@ pub fn build_custom_reaction_asset_envelope(
     let author_pubkey = keys.public_key();
     if mime.trim().is_empty() {
         bail!("custom reaction asset mime must not be empty");
+    }
+    let search_key = search_key.trim();
+    if search_key.is_empty() {
+        bail!("custom reaction asset search key must not be empty");
     }
     if width == 0 || height == 0 {
         bail!("custom reaction asset dimensions must be non-zero");
@@ -1539,6 +1551,7 @@ pub fn build_custom_reaction_asset_envelope(
         serde_json::to_string(&KukuriCustomReactionAssetEnvelopeContentV1 {
             author_pubkey,
             blob_hash,
+            search_key: search_key.to_string(),
             mime,
             bytes,
             width,
@@ -2923,6 +2936,7 @@ mod tests {
         let envelope = build_custom_reaction_asset_envelope(
             &keys,
             BlobHash::new("blob-asset-1"),
+            "party".into(),
             "image/png".into(),
             128,
             128,
@@ -2943,6 +2957,7 @@ mod tests {
                 asset_id: asset.asset_id.clone(),
                 owner_pubkey: asset.author_pubkey.clone(),
                 blob_hash: asset.blob_hash.clone(),
+                search_key: asset.search_key.clone(),
                 mime: asset.mime.clone(),
                 bytes: asset.bytes,
                 width: asset.width,

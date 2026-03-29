@@ -2,6 +2,7 @@ import type {
   BookmarkedCustomReactionView,
   CustomReactionAssetView,
   ReactionKeyInput,
+  RecentReactionView,
 } from '@/lib/api';
 
 import { PostCard } from './PostCard';
@@ -24,9 +25,9 @@ type TimelineFeedProps = {
   mediaObjectUrls?: Record<string, string | null>;
   ownedReactionAssets?: CustomReactionAssetView[];
   bookmarkedReactionAssets?: BookmarkedCustomReactionView[];
+  recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
-  onManageReactions?: () => void;
 };
 
 export function TimelineFeed({
@@ -46,9 +47,9 @@ export function TimelineFeed({
   mediaObjectUrls = {},
   ownedReactionAssets = [],
   bookmarkedReactionAssets = [],
+  recentReactions = [],
   onToggleReaction,
   onBookmarkCustomReaction,
-  onManageReactions,
 }: TimelineFeedProps) {
   if (posts.length === 0) {
     return <p className='empty'>{emptyCopy}</p>;
@@ -72,9 +73,9 @@ export function TimelineFeed({
             mediaObjectUrls={mediaObjectUrls}
             ownedReactionAssets={ownedReactionAssets}
             bookmarkedReactionAssets={bookmarkedReactionAssets}
+            recentReactions={recentReactions}
             onToggleReaction={onToggleReaction}
             onBookmarkCustomReaction={onBookmarkCustomReaction}
-            onManageReactions={onManageReactions}
           />
         </li>
       ))}

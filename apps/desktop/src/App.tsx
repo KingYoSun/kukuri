@@ -19,7 +19,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
-import { PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -110,6 +110,7 @@ import {
   ProfileInput,
   ReactionKeyInput,
   ReactionStateView,
+  RecentReactionView,
   SyncStatus,
   TimelineScope,
   TopicSyncStatus,
@@ -184,6 +185,7 @@ type DesktopShellState = {
   profileTimeline: PostView[];
   ownedReactionAssets: CustomReactionAssetView[];
   bookmarkedReactionAssets: BookmarkedCustomReactionView[];
+  recentReactions: RecentReactionView[];
   profileDraft: ProfileInput;
   profileDirty: boolean;
   profileError: string | null;
@@ -371,6 +373,7 @@ function createInitialShellState(): DesktopShellState {
     profileTimeline: [],
     ownedReactionAssets: [],
     bookmarkedReactionAssets: [],
+    recentReactions: [],
     profileDraft: {},
     profileDirty: false,
     profileError: null,
@@ -1363,6 +1366,7 @@ function DesktopShellPage({
     profileTimeline,
     ownedReactionAssets,
     bookmarkedReactionAssets,
+    recentReactions,
     profileDraft,
     profileDirty,
     profileError,
@@ -1529,6 +1533,10 @@ function DesktopShellPage({
   );
   const setBookmarkedReactionAssets = useMemo(
     () => makeFieldSetter('bookmarkedReactionAssets'),
+    [makeFieldSetter]
+  );
+  const setRecentReactions = useMemo(
+    () => makeFieldSetter('recentReactions'),
     [makeFieldSetter]
   );
   const setProfileDraft = useMemo(() => makeFieldSetter('profileDraft'), [makeFieldSetter]);
@@ -1901,6 +1909,27 @@ function DesktopShellPage({
   );
   const previewableMediaAttachments = useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
+    const tryAddAttachment = (attachment: AttachmentView | null) => {
+      if (!attachment) {
+        return;
+      }
+      const hash = attachment.hash.trim();
+      const mime = attachment.mime.trim();
+      if (!hash || !mime) {
+        logMediaDebug('warn', 'remote media metadata skipped', {
+          hash: attachment.hash || null,
+          mime: attachment.mime || null,
+          role: attachment.role,
+          status: attachment.status,
+        });
+        return;
+      }
+      attachments.set(hash, {
+        ...attachment,
+        hash,
+        mime,
+      });
+    };
     for (const post of [
       ...activeTimeline,
       ...activePublicTimeline,
@@ -1913,13 +1942,11 @@ function DesktopShellPage({
         selectVideoPoster(post),
         selectVideoManifest(post),
       ]) {
-        if (attachment) {
-          attachments.set(attachment.hash, attachment);
-        }
+        tryAddAttachment(attachment);
       }
     }
     for (const asset of [...ownedReactionAssets, ...bookmarkedReactionAssets]) {
-      attachments.set(asset.blob_hash, {
+      tryAddAttachment({
         hash: asset.blob_hash,
         mime: asset.mime,
         bytes: asset.bytes,
@@ -1931,15 +1958,17 @@ function DesktopShellPage({
       localProfile?.picture_asset ?? null,
       selectedAuthor?.picture_asset ?? null,
     ]) {
-      if (pictureAsset) {
-        attachments.set(pictureAsset.hash, {
-          hash: pictureAsset.hash,
-          mime: pictureAsset.mime,
-          bytes: pictureAsset.bytes,
-          role: pictureAsset.role,
-          status: 'Available',
-        });
-      }
+      tryAddAttachment(
+        pictureAsset
+          ? {
+              hash: pictureAsset.hash,
+              mime: pictureAsset.mime,
+              bytes: pictureAsset.bytes,
+              role: pictureAsset.role,
+              status: 'Available',
+            }
+          : null
+      );
     }
     return [...attachments.values()];
   }, [
@@ -2032,6 +2061,7 @@ function DesktopShellPage({
           authorTimelineResult,
           ownedReactionAssetsResult,
           bookmarkedReactionAssetsResult,
+          recentReactionsResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
@@ -2047,6 +2077,7 @@ function DesktopShellPage({
             : Promise.resolve(null),
           api.listMyCustomReactionAssets(),
           api.listBookmarkedCustomReactions(),
+          api.listRecentReactions(8),
         ]);
         if (requestId !== loadTopicsRequestRef.current) {
           return;
@@ -2174,10 +2205,14 @@ function DesktopShellPage({
           if (bookmarkedReactionAssetsResult.status === 'fulfilled') {
             setBookmarkedReactionAssets(bookmarkedReactionAssetsResult.value);
           }
+          if (recentReactionsResult.status === 'fulfilled') {
+            setRecentReactions(recentReactionsResult.value);
+          }
           setReactionPanelState({
             status:
               ownedReactionAssetsResult.status === 'fulfilled' &&
-              bookmarkedReactionAssetsResult.status === 'fulfilled'
+              bookmarkedReactionAssetsResult.status === 'fulfilled' &&
+              recentReactionsResult.status === 'fulfilled'
                 ? 'ready'
                 : 'error',
             error:
@@ -2191,6 +2226,11 @@ function DesktopShellPage({
                       bookmarkedReactionAssetsResult.reason,
                       translate('common:errors.failedToLoadSettings')
                     )
+                  : recentReactionsResult.status === 'rejected'
+                    ? messageFromError(
+                        recentReactionsResult.reason,
+                        translate('common:errors.failedToLoadSettings')
+                      )
                   : null,
           });
           if (profileResult.status === 'fulfilled') {
@@ -2294,6 +2334,7 @@ function DesktopShellPage({
       setProfileError,
       setProfilePanelState,
       setBookmarkedReactionAssets,
+      setRecentReactions,
       setReactionPanelState,
       setSelectedAuthor,
       setSelectedAuthorTimeline,
@@ -2504,18 +2545,6 @@ function DesktopShellPage({
     }
     syncRoute(open ? 'push' : 'replace', {
       settingsOpen: open,
-    });
-  }, [setShellChromeState, syncRoute]);
-
-  const openReactionSettings = useCallback(() => {
-    setShellChromeState((current) => ({
-      ...current,
-      settingsOpen: true,
-      activeSettingsSection: 'reactions',
-    }));
-    syncRoute('push', {
-      settingsOpen: true,
-      settingsSection: 'reactions',
     });
   }, [setShellChromeState, syncRoute]);
 
@@ -3317,17 +3346,26 @@ function DesktopShellPage({
         post.channel_id ? { kind: 'private_channel', channel_id: post.channel_id } : { kind: 'public' }
       );
       patchReactionState(nextState);
+      try {
+        setRecentReactions(await api.listRecentReactions(8));
+      } catch {
+        // Keep the toggled state even if the quick-reaction history refresh misses.
+      }
       setError(null);
     } catch (reactionError) {
       setError(messageFromError(reactionError, translate('common:errors.failedToPublish')));
     }
   }
 
-  async function handleCreateCustomReactionAsset(file: File, cropRect: CustomReactionCropRect) {
+  async function handleCreateCustomReactionAsset(
+    file: File,
+    cropRect: CustomReactionCropRect,
+    searchKey: string
+  ) {
     setReactionCreatePending(true);
     try {
       const upload = await fileToCreateAttachment(file, 'image_original');
-      const asset = await api.createCustomReactionAsset(upload, cropRect);
+      const asset = await api.createCustomReactionAsset(upload, cropRect, searchKey);
       setOwnedReactionAssets((current) => [asset, ...current.filter((item) => item.asset_id !== asset.asset_id)]);
       setReactionPanelState({
         status: 'ready',
@@ -4423,6 +4461,15 @@ function DesktopShellPage({
     () => thread.map((post) => buildPostCardView(post, 'thread')),
     [buildPostCardView, thread]
   );
+  const composerSourcePreview = useMemo(
+    () =>
+      replyTarget
+        ? buildPostCardView(replyTarget, 'timeline')
+        : repostTarget
+          ? buildPostCardView(repostTarget, 'timeline')
+          : null,
+    [buildPostCardView, replyTarget, repostTarget]
+  );
   const topicNavItems = useMemo<TopicDiagnosticSummary[]>(
     () =>
       trackedTopics.map((topic) => ({
@@ -4553,11 +4600,14 @@ function DesktopShellPage({
   );
   const channelAction = (
     <Button
+      className='shell-icon-button shell-nav-channel-action'
       variant='secondary'
+      size='icon'
       type='button'
+      aria-label={t('channels:title')}
       onClick={() => setChannelDialogOpen(true)}
     >
-      {t('channels:title')}
+      <Lock className='size-4' aria-hidden='true' />
     </Button>
   );
 
@@ -4923,7 +4973,9 @@ function DesktopShellPage({
           view={reactionsPanelView}
           creating={reactionCreatePending}
           mediaObjectUrls={mediaObjectUrls}
-          onCreateAsset={(file, cropRect) => void handleCreateCustomReactionAsset(file, cropRect)}
+          onCreateAsset={(file, cropRect, searchKey) =>
+            void handleCreateCustomReactionAsset(file, cropRect, searchKey)
+          }
           onRemoveBookmark={(assetId) => void handleRemoveBookmarkedCustomReaction(assetId)}
         />
       ),
@@ -4964,9 +5016,9 @@ function DesktopShellPage({
             mediaObjectUrls={mediaObjectUrls}
             ownedReactionAssets={ownedReactionAssets}
             bookmarkedReactionAssets={bookmarkedReactionAssets}
+            recentReactions={recentReactions}
             onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
             onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-            onManageReactions={openReactionSettings}
           />
         </ContextPane>
       ) : null}
@@ -5109,9 +5161,9 @@ function DesktopShellPage({
                       mediaObjectUrls={mediaObjectUrls}
                       ownedReactionAssets={ownedReactionAssets}
                       bookmarkedReactionAssets={bookmarkedReactionAssets}
+                      recentReactions={recentReactions}
                       onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
                       onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                      onManageReactions={openReactionSettings}
                     />
                   </Card>
                 </>
@@ -5443,7 +5495,7 @@ function DesktopShellPage({
       </Dialog>
 
       <Dialog open={composeDialogOpen} onOpenChange={setComposeDialogOpen}>
-        <DialogContent>
+        <DialogContent className='shell-compose-dialog'>
           <DialogHeader>
             <DialogTitle>
               {replyTarget
@@ -5469,6 +5521,7 @@ function DesktopShellPage({
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               composerError={composerError}
               audienceLabel={activeComposeAudienceLabel}
+              sourcePreview={composerSourcePreview}
               replyTarget={
                 replyTarget
                   ? {

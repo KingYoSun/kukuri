@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ComposerDraftPreviewList } from './ComposerDraftPreviewList';
-import { type ComposerDraftMediaView } from './types';
+import { PostCard } from './PostCard';
+import { type ComposerDraftMediaView, type PostCardView } from './types';
 
 type ReplyTargetView = {
   content: string;
@@ -33,6 +34,7 @@ type ComposerPanelProps = {
   audienceLabel: string;
   replyTarget?: ReplyTargetView | null;
   repostTarget?: RepostTargetView | null;
+  sourcePreview?: PostCardView | null;
   onClearReply: () => void;
   onClearRepost?: () => void;
   attachmentsDisabled?: boolean;
@@ -50,6 +52,7 @@ export function ComposerPanel({
   audienceLabel,
   replyTarget,
   repostTarget,
+  sourcePreview,
   onClearReply,
   onClearRepost,
   attachmentsDisabled = false,
@@ -73,6 +76,22 @@ export function ComposerPanel({
           >
             <X className='size-5' aria-hidden='true' />
           </Button>
+        </div>
+      ) : null}
+
+      {sourcePreview ? (
+        <div className='composer-source-preview'>
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>{t('composer.sourcePost')}</span>
+            <span>{sourcePreview.audienceChipLabel ?? sourcePreview.post.audience_label}</span>
+          </div>
+          <PostCard
+            view={sourcePreview}
+            onOpenAuthor={() => undefined}
+            onOpenThread={() => undefined}
+            onReply={() => undefined}
+            readOnly
+          />
         </div>
       ) : null}
 
