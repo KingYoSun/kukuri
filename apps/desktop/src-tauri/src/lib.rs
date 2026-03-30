@@ -4,18 +4,19 @@ use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, BookmarkCustomReactionRequest,
     CommunityNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
     CreateCustomReactionAssetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
-    CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest, DesktopRuntime,
-    DiscoveryConfig, ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
+    CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest,
+    DeleteDirectMessageMessageRequest, DesktopRuntime, DirectMessageRequest, DiscoveryConfig,
+    ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest,
     ExportFriendPlusShareRequest, ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
     GetBlobMediaRequest, GetBlobPreviewRequest, ImportChannelAccessTokenRequest,
     ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest, ImportPeerTicketRequest,
-    ImportPrivateChannelInviteRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
-    ListLiveSessionsRequest, ListProfileTimelineRequest, ListRecentReactionsRequest,
-    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest, ListGameRoomsRequest,
+    ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
+    ListRecentReactionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
     RemoveBookmarkedCustomReactionRequest,
-    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    SetMyProfileRequest, ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
-    resolve_db_path_from_env,
+    RotatePrivateChannelRequest, SendDirectMessageRequest, SetCommunityNodeConfigRequest,
+    SetDiscoverySeedsRequest, SetMyProfileRequest, ToggleReactionRequest,
+    UnsubscribeTopicRequest, UpdateGameRoomRequest, resolve_db_path_from_env,
 };
 use tauri::Manager;
 use tracing::{info, warn};
@@ -403,6 +404,85 @@ async fn get_author_social_view(
 }
 
 #[tauri::command]
+async fn open_direct_message(
+    state: tauri::State<'_, DesktopState>,
+    request: DirectMessageRequest,
+) -> Result<kukuri_app_api::DirectMessageConversationView, String> {
+    state
+        .runtime
+        .open_direct_message(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_direct_messages(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_app_api::DirectMessageConversationView>, String> {
+    state.runtime.list_direct_messages().await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_direct_message_messages(
+    state: tauri::State<'_, DesktopState>,
+    request: ListDirectMessageMessagesRequest,
+) -> Result<kukuri_app_api::DirectMessageTimelineView, String> {
+    state
+        .runtime
+        .list_direct_message_messages(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn send_direct_message(
+    state: tauri::State<'_, DesktopState>,
+    request: SendDirectMessageRequest,
+) -> Result<String, String> {
+    state
+        .runtime
+        .send_direct_message(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn delete_direct_message_message(
+    state: tauri::State<'_, DesktopState>,
+    request: DeleteDirectMessageMessageRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .delete_direct_message_message(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn clear_direct_message(
+    state: tauri::State<'_, DesktopState>,
+    request: DirectMessageRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .clear_direct_message(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_direct_message_status(
+    state: tauri::State<'_, DesktopState>,
+    request: DirectMessageRequest,
+) -> Result<kukuri_app_api::DirectMessageStatusView, String> {
+    state
+        .runtime
+        .get_direct_message_status(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
 async fn get_sync_status(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<kukuri_app_api::SyncStatus, String> {
@@ -752,6 +832,13 @@ pub fn run() {
             follow_author,
             unfollow_author,
             get_author_social_view,
+            open_direct_message,
+            list_direct_messages,
+            list_direct_message_messages,
+            send_direct_message,
+            delete_direct_message_message,
+            clear_direct_message,
+            get_direct_message_status,
             get_sync_status,
             get_discovery_config,
             list_live_sessions,

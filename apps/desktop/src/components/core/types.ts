@@ -86,5 +86,6 @@ export type AuthorDetailView = {
   displayLabel: string;
   pictureSrc?: string | null;
   summary: AuthorRelationshipSummary | null;
+  canMessage?: boolean;
   authorError?: string | null;
 };

@@ -144,6 +144,47 @@ export type AuthorSocialView = {
   friend_of_friend_via_pubkeys: string[];
 };
 
+export type DirectMessageStatusView = {
+  peer_pubkey: string;
+  dm_id: string;
+  mutual: boolean;
+  send_enabled: boolean;
+  peer_count: number;
+  pending_outbox_count: number;
+};
+
+export type DirectMessageMessageView = {
+  dm_id: string;
+  message_id: string;
+  sender_pubkey: string;
+  recipient_pubkey: string;
+  created_at: number;
+  text: string;
+  reply_to_message_id?: string | null;
+  attachments: AttachmentView[];
+  outgoing: boolean;
+  delivered: boolean;
+};
+
+export type DirectMessageConversationView = {
+  dm_id: string;
+  peer_pubkey: string;
+  peer_name?: string | null;
+  peer_display_name?: string | null;
+  peer_picture?: string | null;
+  peer_picture_asset?: ProfileAssetView | null;
+  updated_at: number;
+  last_message_at?: number | null;
+  last_message_id?: string | null;
+  last_message_preview?: string | null;
+  status: DirectMessageStatusView;
+};
+
+export type DirectMessageTimelineView = {
+  items: DirectMessageMessageView[];
+  next_cursor?: TimelineCursor | null;
+};
+
 export type BlobViewStatus = 'Missing' | 'Available' | 'Pinned';
 
 export type AttachmentView = {
@@ -434,6 +475,22 @@ export interface DesktopApi {
   followAuthor(pubkey: string): Promise<AuthorSocialView>;
   unfollowAuthor(pubkey: string): Promise<AuthorSocialView>;
   getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
+  openDirectMessage(pubkey: string): Promise<DirectMessageConversationView>;
+  listDirectMessages(): Promise<DirectMessageConversationView[]>;
+  listDirectMessageMessages(
+    pubkey: string,
+    cursor?: TimelineCursor | null,
+    limit?: number
+  ): Promise<DirectMessageTimelineView>;
+  sendDirectMessage(
+    pubkey: string,
+    text?: string | null,
+    attachments?: CreateAttachmentInput[],
+    replyToMessageId?: string | null
+  ): Promise<string>;
+  deleteDirectMessageMessage(pubkey: string, messageId: string): Promise<void>;
+  clearDirectMessage(pubkey: string): Promise<void>;
+  getDirectMessageStatus(pubkey: string): Promise<DirectMessageStatusView>;
   listLiveSessions(topic: string, scope?: TimelineScope): Promise<LiveSessionView[]>;
   createLiveSession(
     topic: string,
@@ -751,6 +808,77 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.getAuthorSocialView(pubkey);
     }
     return invokeDesktop<AuthorSocialView>('get_author_social_view', {
+      request: { pubkey },
+    });
+  },
+  openDirectMessage: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.openDirectMessage(pubkey);
+    }
+    return invokeDesktop<DirectMessageConversationView>('open_direct_message', {
+      request: { pubkey },
+    });
+  },
+  listDirectMessages: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listDirectMessages();
+    }
+    return invokeDesktop<DirectMessageConversationView[]>('list_direct_messages');
+  },
+  listDirectMessageMessages: async (pubkey, cursor, limit) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listDirectMessageMessages(pubkey, cursor, limit);
+    }
+    return invokeDesktop<DirectMessageTimelineView>('list_direct_message_messages', {
+      request: {
+        pubkey,
+        cursor,
+        limit,
+      },
+    });
+  },
+  sendDirectMessage: async (pubkey, text, attachments = [], replyToMessageId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.sendDirectMessage(
+        pubkey,
+        text,
+        attachments,
+        replyToMessageId
+      );
+    }
+    return invokeDesktop<string>('send_direct_message', {
+      request: {
+        pubkey,
+        text,
+        reply_to_message_id: replyToMessageId,
+        attachments,
+      },
+    });
+  },
+  deleteDirectMessageMessage: async (pubkey, messageId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.deleteDirectMessageMessage(pubkey, messageId);
+    }
+    return invokeDesktop<void>('delete_direct_message_message', {
+      request: {
+        pubkey,
+        message_id: messageId,
+      },
+    });
+  },
+  clearDirectMessage: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.clearDirectMessage(pubkey);
+    }
+    return invokeDesktop<void>('clear_direct_message', {
+      request: { pubkey },
+    });
+  },
+  getDirectMessageStatus: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getDirectMessageStatus(pubkey);
+    }
+    return invokeDesktop<DirectMessageStatusView>('get_direct_message_status', {
       request: { pubkey },
     });
   },

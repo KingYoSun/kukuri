@@ -14,6 +14,10 @@ Accepted
 - `docs/adr/0013-social-graph-foundation-draft.md`
 - `docs/adr/0014-uiux-dev-flow.md`
 - `docs/DESIGN.md`
+- `docs/adr/0020-pairwise-dm-v1.md`
+
+## Note
+- pairwise DM は channel / epoch lifecycle の対象外であり、global pairwise surface として `0020` の contract を優先する。
 
 ## Context
 - 現行 desktop shell では `channel` が `topic` の子である一方、UI 上は `Timeline / Channels / Live / Game / Profile` の並列 workspace として扱われていた。

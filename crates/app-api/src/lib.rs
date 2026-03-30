@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
@@ -10,11 +10,14 @@ use kukuri_blob_service::{BlobService, BlobStatus, MemoryBlobService, StoredBlob
 use kukuri_core::{
     AssetRole, AuthorProfileDocV1, AuthorProfilePostDocV1, AuthorProfileRepostDocV1,
     CanonicalPostHeader, ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState,
-    CreatePrivateChannelInput, CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1, EnvelopeId,
-    FollowEdge, FollowEdgeDocV1, FollowEdgeStatus, FriendOnlyGrantPreview, FriendPlusSharePreview,
-    GAME_MANIFEST_MIME, GameParticipant, GameRoomManifestBlobV1, GameRoomStateDocV1,
-    GameRoomStatus, GameScoreEntry, GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys,
-    KukuriMediaManifestV1, KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
+    CreatePrivateChannelInput, CustomReactionAssetDocV1, CustomReactionAssetSnapshotV1,
+    DirectMessageAttachmentKind, DirectMessageAttachmentManifestV1,
+    DirectMessageEncryptedAttachmentV1, DirectMessageEncryptedBlobRefV1, DirectMessageFrameV1,
+    DirectMessagePayloadV1, EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
+    FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant,
+    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
+    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
+    KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
     KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
     LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectStatus,
     ObjectVisibility, PayloadRef, PrivateChannelEpochHandoffGrantDocV1,
@@ -23,19 +26,21 @@ use kukuri_core::{
     PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, Profile, ProfilePost, ProfileRepost,
     Pubkey, ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId, RepostSourceSnapshotV1,
     TimelineScope, TopicId, author_profile_topic_id, build_custom_reaction_asset_envelope,
-    build_follow_edge_envelope, build_friend_only_grant_token, build_friend_plus_share_token,
-    build_game_session_envelope, build_live_session_envelope, build_media_manifest_envelope,
-    build_post_envelope_with_payload_in_channel,
+    build_direct_message_ack, build_follow_edge_envelope, build_friend_only_grant_token,
+    build_friend_plus_share_token, build_game_session_envelope, build_live_session_envelope,
+    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
     build_private_channel_epoch_handoff_grant_envelope, build_private_channel_invite_token,
     build_private_channel_participant_envelope, build_private_channel_policy_envelope,
     build_profile_envelope, build_profile_post_envelope, build_profile_repost_envelope,
-    build_reaction_envelope, build_repost_envelope, decrypt_private_channel_epoch_handoff_grant,
-    deterministic_reaction_id, encrypt_private_channel_epoch_handoff_grant, generate_keys,
-    parse_custom_reaction_asset, parse_follow_edge, parse_friend_only_grant_token,
-    parse_friend_plus_share_token, parse_private_channel_epoch_handoff_grant,
-    parse_private_channel_invite_token, parse_private_channel_participant,
-    parse_private_channel_policy, parse_profile, parse_profile_post, parse_profile_repost,
-    parse_reaction, timeline_sort_key,
+    build_reaction_envelope, build_repost_envelope, decrypt_direct_message_attachment,
+    decrypt_direct_message_frame, decrypt_private_channel_epoch_handoff_grant,
+    derive_direct_message_topic, deterministic_reaction_id, direct_message_id_for_participants,
+    encrypt_direct_message_attachment, encrypt_direct_message_frame,
+    encrypt_private_channel_epoch_handoff_grant, generate_keys, parse_custom_reaction_asset,
+    parse_follow_edge, parse_friend_only_grant_token, parse_friend_plus_share_token,
+    parse_private_channel_epoch_handoff_grant, parse_private_channel_invite_token,
+    parse_private_channel_participant, parse_private_channel_policy, parse_profile,
+    parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
 };
 use kukuri_docs_sync::{
     DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
@@ -43,8 +48,9 @@ use kukuri_docs_sync::{
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    GameRoomProjectionRow, LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore,
-    ReactionProjectionRow, Store, TimelineCursor,
+    DirectMessageConversationRow, DirectMessageMessageRow, DirectMessageOutboxRow,
+    DirectMessageTombstoneRow, GameRoomProjectionRow, LiveSessionProjectionRow,
+    ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -57,6 +63,10 @@ use tracing::{info, warn};
 
 const REPLICA_SYNC_RESTART_RETRY_SECONDS: i64 = 5;
 const PUBLIC_CHANNEL_ID: &str = "public";
+const DIRECT_MESSAGE_FRAME_MIME: &str = "application/vnd.kukuri.direct-message-frame+json";
+const DIRECT_MESSAGE_ATTACHMENT_MIME: &str =
+    "application/vnd.kukuri.direct-message-attachment+json";
+const DIRECT_MESSAGE_RETRY_INTERVAL_MS: u64 = 2_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
@@ -225,6 +235,45 @@ pub struct PendingAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageStatusView {
+    pub peer_pubkey: String,
+    pub dm_id: String,
+    pub mutual: bool,
+    pub send_enabled: bool,
+    pub peer_count: usize,
+    pub pending_outbox_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageMessageView {
+    pub dm_id: String,
+    pub message_id: String,
+    pub sender_pubkey: String,
+    pub recipient_pubkey: String,
+    pub created_at: i64,
+    pub text: String,
+    pub reply_to_message_id: Option<String>,
+    pub attachments: Vec<AttachmentView>,
+    pub outgoing: bool,
+    pub delivered: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageConversationView {
+    pub dm_id: String,
+    pub peer_pubkey: String,
+    pub peer_name: Option<String>,
+    pub peer_display_name: Option<String>,
+    pub peer_picture: Option<String>,
+    pub peer_picture_asset: Option<ProfileAssetView>,
+    pub updated_at: i64,
+    pub last_message_at: Option<i64>,
+    pub last_message_id: Option<String>,
+    pub last_message_preview: Option<String>,
+    pub status: DirectMessageStatusView,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LiveSessionView {
     pub session_id: String,
     pub host_pubkey: String,
@@ -283,6 +332,12 @@ pub struct UpdateGameRoomInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelineView {
     pub items: Vec<PostView>,
+    pub next_cursor: Option<TimelineCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageTimelineView {
+    pub items: Vec<DirectMessageMessageView>,
     pub next_cursor: Option<TimelineCursor>,
 }
 
@@ -443,6 +498,7 @@ pub struct AppService {
     blob_service: Arc<dyn BlobService>,
     keys: Arc<KukuriKeys>,
     subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     private_channel_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
@@ -516,6 +572,7 @@ impl AppService {
             blob_service,
             keys: Arc::new(keys),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            direct_message_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             private_channel_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
@@ -646,6 +703,217 @@ impl AppService {
             .await?;
         self.rebuild_author_relationships().await?;
         self.build_author_social_view(author_pubkey.as_str()).await
+    }
+
+    pub async fn resume_direct_message_state(&self) -> Result<()> {
+        let mut peers = self
+            .projection_store
+            .list_direct_message_conversations()
+            .await?
+            .into_iter()
+            .map(|row| row.peer_pubkey)
+            .collect::<BTreeSet<_>>();
+        for row in self.projection_store.list_direct_message_outbox().await? {
+            peers.insert(row.peer_pubkey);
+        }
+        for peer_pubkey in peers {
+            self.ensure_author_subscription(peer_pubkey.as_str())
+                .await?;
+            self.rebuild_author_relationships().await?;
+            if self
+                .direct_message_send_enabled(peer_pubkey.as_str())
+                .await?
+            {
+                self.ensure_direct_message_subscription(peer_pubkey.as_str())
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn open_direct_message(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<DirectMessageConversationView> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        self.ensure_author_subscription(peer_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        let existing = self
+            .projection_store
+            .get_direct_message_conversation_by_peer(peer_pubkey.as_str())
+            .await?;
+        let can_send = self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?;
+        if existing.is_none() && !can_send {
+            anyhow::bail!("direct message requires a mutual relationship");
+        }
+        if can_send {
+            self.restart_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
+        }
+        self.ensure_direct_message_conversation_row(peer_pubkey.as_str())
+            .await?;
+        self.direct_message_conversation_view(peer_pubkey.as_str())
+            .await
+    }
+
+    pub async fn list_direct_messages(&self) -> Result<Vec<DirectMessageConversationView>> {
+        let rows = self
+            .projection_store
+            .list_direct_message_conversations()
+            .await?;
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            items.push(
+                self.direct_message_conversation_view(row.peer_pubkey.as_str())
+                    .await?,
+            );
+        }
+        Ok(items)
+    }
+
+    pub async fn list_direct_message_messages(
+        &self,
+        peer_pubkey: &str,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<DirectMessageTimelineView> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let existing = self
+            .projection_store
+            .get_direct_message_conversation_by_peer(peer_pubkey.as_str())
+            .await?;
+        let can_send = self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?;
+        if existing.is_none() && !can_send {
+            anyhow::bail!("direct message requires a mutual relationship");
+        }
+        if can_send {
+            self.ensure_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
+        }
+        self.ensure_direct_message_conversation_row(peer_pubkey.as_str())
+            .await?;
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey.as_str()),
+        );
+        let page = self
+            .projection_store
+            .list_direct_message_messages(dm_id.as_str(), cursor, limit)
+            .await?;
+        let mut items = Vec::with_capacity(page.items.len());
+        for row in page.items {
+            items.push(self.direct_message_message_view(row).await?);
+        }
+        Ok(DirectMessageTimelineView {
+            items,
+            next_cursor: page.next_cursor,
+        })
+    }
+
+    pub async fn send_direct_message(
+        &self,
+        peer_pubkey: &str,
+        text: Option<&str>,
+        reply_to_message_id: Option<&str>,
+        attachments: Vec<PendingAttachment>,
+    ) -> Result<String> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        self.ensure_author_subscription(peer_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        if !self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?
+        {
+            anyhow::bail!("direct message requires a mutual relationship");
+        }
+        self.restart_direct_message_subscription(peer_pubkey.as_str())
+            .await?;
+        self.send_direct_message_internal(
+            peer_pubkey.as_str(),
+            text,
+            reply_to_message_id,
+            attachments,
+        )
+        .await
+    }
+
+    pub async fn delete_direct_message_message(
+        &self,
+        peer_pubkey: &str,
+        message_id: &str,
+    ) -> Result<()> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let message_id = message_id.trim();
+        if message_id.is_empty() {
+            anyhow::bail!("direct message message_id is required");
+        }
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey.as_str()),
+        );
+        self.projection_store
+            .put_direct_message_tombstone(DirectMessageTombstoneRow {
+                dm_id: dm_id.clone(),
+                message_id: message_id.to_string(),
+                deleted_at: Utc::now().timestamp_millis(),
+            })
+            .await?;
+        self.projection_store
+            .delete_direct_message_message_local(dm_id.as_str(), message_id)
+            .await?;
+        self.refresh_direct_message_conversation(peer_pubkey.as_str())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn clear_direct_message(&self, peer_pubkey: &str) -> Result<()> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey.as_str()),
+        );
+        let deleted_at = Utc::now().timestamp_millis();
+        let mut cursor = None;
+        loop {
+            let page = self
+                .projection_store
+                .list_direct_message_messages(dm_id.as_str(), cursor.clone(), 500)
+                .await?;
+            for row in &page.items {
+                self.projection_store
+                    .put_direct_message_tombstone(DirectMessageTombstoneRow {
+                        dm_id: dm_id.clone(),
+                        message_id: row.message_id.clone(),
+                        deleted_at,
+                    })
+                    .await?;
+            }
+            if page.next_cursor.is_none() {
+                break;
+            }
+            cursor = page.next_cursor;
+        }
+        self.projection_store
+            .clear_direct_message_local(dm_id.as_str())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_direct_message_status(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<DirectMessageStatusView> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        self.ensure_author_subscription(peer_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        self.direct_message_status_view(peer_pubkey.as_str()).await
     }
 
     pub async fn list_profile_timeline(
@@ -2947,6 +3215,17 @@ impl AppService {
         for author in existing_authors {
             self.restart_author_subscription(author.as_str()).await?;
         }
+        let existing_direct_messages = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for peer_pubkey in existing_direct_messages {
+            self.restart_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
+        }
         Ok(())
     }
 
@@ -3008,6 +3287,17 @@ impl AppService {
             .collect::<Vec<_>>();
         for author in existing_authors {
             self.restart_author_subscription(author.as_str()).await?;
+        }
+        let existing_direct_messages = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for peer_pubkey in existing_direct_messages {
+            self.restart_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
         }
         Ok(())
     }
@@ -3169,6 +3459,31 @@ impl AppService {
                 .hint_transport
                 .unsubscribe_hints(&TopicId::new(topic_id))
                 .await;
+        }
+        let dm_peers_to_unsubscribe = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let dm_handles = {
+            let mut subscriptions = self.direct_message_subscriptions.lock().await;
+            subscriptions
+                .drain()
+                .map(|(_, handle)| handle)
+                .collect::<Vec<_>>()
+        };
+        for handle in dm_handles {
+            handle.abort();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+        }
+        for peer_pubkey in dm_peers_to_unsubscribe {
+            if let Ok(topic) =
+                derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
+            {
+                let _ = self.hint_transport.unsubscribe_hints(&topic).await;
+            }
         }
         let author_handles = {
             let mut subscriptions = self.author_subscriptions.lock().await;
@@ -4166,6 +4481,771 @@ impl AppService {
             .await
             .insert(author_key, handle);
         Ok(())
+    }
+
+    async fn direct_message_send_enabled(&self, peer_pubkey: &str) -> Result<bool> {
+        Ok(self
+            .projection_store
+            .get_author_relationship(self.current_author_pubkey().as_str(), peer_pubkey)
+            .await?
+            .as_ref()
+            .is_some_and(|relationship| relationship.mutual))
+    }
+
+    async fn direct_message_status_view(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<DirectMessageStatusView> {
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey),
+        );
+        let send_enabled = self.direct_message_send_enabled(peer_pubkey).await?;
+        let peer_count = if send_enabled {
+            self.direct_message_topic_peer_count(peer_pubkey).await?
+        } else {
+            0
+        };
+        let pending_outbox_count = self
+            .projection_store
+            .list_direct_message_outbox()
+            .await?
+            .into_iter()
+            .filter(|row| row.peer_pubkey == peer_pubkey)
+            .count();
+        Ok(DirectMessageStatusView {
+            peer_pubkey: peer_pubkey.to_string(),
+            dm_id,
+            mutual: send_enabled,
+            send_enabled,
+            peer_count,
+            pending_outbox_count,
+        })
+    }
+
+    async fn ensure_direct_message_conversation_row(&self, peer_pubkey: &str) -> Result<()> {
+        if self
+            .projection_store
+            .get_direct_message_conversation_by_peer(peer_pubkey)
+            .await?
+            .is_some()
+        {
+            return Ok(());
+        }
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey),
+        );
+        self.projection_store
+            .upsert_direct_message_conversation(DirectMessageConversationRow {
+                dm_id,
+                peer_pubkey: peer_pubkey.to_string(),
+                updated_at: Utc::now().timestamp_millis(),
+                last_message_at: None,
+                last_message_id: None,
+                last_message_preview: None,
+            })
+            .await
+    }
+
+    async fn refresh_direct_message_conversation(&self, peer_pubkey: &str) -> Result<()> {
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey),
+        );
+        let existing = self
+            .projection_store
+            .get_direct_message_conversation_by_peer(peer_pubkey)
+            .await?;
+        let page = self
+            .projection_store
+            .list_direct_message_messages(dm_id.as_str(), None, 1)
+            .await?;
+        let (updated_at, last_message_at, last_message_id, last_message_preview) =
+            if let Some(message) = page.items.first() {
+                (
+                    message.created_at,
+                    Some(message.created_at),
+                    Some(message.message_id.clone()),
+                    Some(direct_message_preview(message)),
+                )
+            } else if let Some(existing) = existing.as_ref() {
+                (existing.updated_at, None, None, None)
+            } else if self.direct_message_send_enabled(peer_pubkey).await? {
+                (Utc::now().timestamp_millis(), None, None, None)
+            } else {
+                return Ok(());
+            };
+        self.projection_store
+            .upsert_direct_message_conversation(DirectMessageConversationRow {
+                dm_id,
+                peer_pubkey: peer_pubkey.to_string(),
+                updated_at,
+                last_message_at,
+                last_message_id,
+                last_message_preview,
+            })
+            .await
+    }
+
+    async fn direct_message_conversation_view(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<DirectMessageConversationView> {
+        let conversation = self
+            .projection_store
+            .get_direct_message_conversation_by_peer(peer_pubkey)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("direct message conversation is not initialized"))?;
+        let profile = self.store.get_profile(peer_pubkey).await?;
+        let status = self.direct_message_status_view(peer_pubkey).await?;
+        Ok(DirectMessageConversationView {
+            dm_id: conversation.dm_id,
+            peer_pubkey: peer_pubkey.to_string(),
+            peer_name: profile.as_ref().and_then(|value| value.name.clone()),
+            peer_display_name: profile
+                .as_ref()
+                .and_then(|value| value.display_name.clone()),
+            peer_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            peer_picture_asset: profile_asset_view_from_ref(
+                profile
+                    .as_ref()
+                    .and_then(|value| value.picture_asset.as_ref()),
+            ),
+            updated_at: conversation.updated_at,
+            last_message_at: conversation.last_message_at,
+            last_message_id: conversation.last_message_id,
+            last_message_preview: conversation.last_message_preview,
+            status,
+        })
+    }
+
+    async fn direct_message_message_view(
+        &self,
+        row: DirectMessageMessageRow,
+    ) -> Result<DirectMessageMessageView> {
+        Ok(DirectMessageMessageView {
+            dm_id: row.dm_id,
+            message_id: row.message_id,
+            sender_pubkey: row.sender_pubkey,
+            recipient_pubkey: row.recipient_pubkey,
+            created_at: row.created_at,
+            text: row.text.unwrap_or_default(),
+            reply_to_message_id: row.reply_to_message_id,
+            attachments: direct_message_attachment_views(
+                self.blob_service.as_ref(),
+                row.attachment_manifest.as_ref(),
+            )
+            .await?,
+            outgoing: row.outgoing,
+            delivered: row.acked_at.is_some() || !row.outgoing,
+        })
+    }
+
+    async fn ensure_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
+        if !self.direct_message_send_enabled(peer_pubkey).await? {
+            return Ok(());
+        }
+        let mut subscriptions = self.direct_message_subscriptions.lock().await;
+        if subscriptions
+            .get(peer_pubkey)
+            .is_some_and(|handle| !handle.is_finished())
+        {
+            return Ok(());
+        }
+        subscriptions.remove(peer_pubkey);
+        drop(subscriptions);
+        self.spawn_direct_message_subscription(peer_pubkey).await
+    }
+
+    async fn restart_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
+        if let Some(handle) = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .remove(peer_pubkey)
+        {
+            handle.abort();
+        }
+        let topic = derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey))?;
+        self.hint_transport.unsubscribe_hints(&topic).await?;
+        if self.direct_message_send_enabled(peer_pubkey).await? {
+            self.spawn_direct_message_subscription(peer_pubkey).await?;
+        }
+        Ok(())
+    }
+
+    async fn spawn_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
+        let projection_store = Arc::clone(&self.projection_store);
+        let blob_service = Arc::clone(&self.blob_service);
+        let hint_transport = Arc::clone(&self.hint_transport);
+        let transport = Arc::clone(&self.transport);
+        let keys = Arc::clone(&self.keys);
+        let last_sync = Arc::clone(&self.last_sync_ts);
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let local_author_pubkey = self.current_author_pubkey();
+        let topic =
+            derive_direct_message_topic(keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
+        let mut hint_stream = hint_transport.subscribe_hints(&topic).await?;
+        let topic_for_task = topic.clone();
+        let peer_for_task = peer_pubkey.clone();
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+                DIRECT_MESSAGE_RETRY_INTERVAL_MS,
+            ));
+            let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
+                projection_store.as_ref(),
+                hint_transport.as_ref(),
+                transport.as_ref(),
+                local_author_pubkey.as_str(),
+                keys.as_ref(),
+                peer_for_task.as_str(),
+            )
+            .await;
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
+                            projection_store.as_ref(),
+                            hint_transport.as_ref(),
+                            transport.as_ref(),
+                            local_author_pubkey.as_str(),
+                            keys.as_ref(),
+                            peer_for_task.as_str(),
+                        ).await;
+                    }
+                    Some(event) = hint_stream.next() => {
+                        if !matches!(
+                            &event.hint,
+                            GossipHint::DirectMessageFrame { topic_id, .. } | GossipHint::DirectMessageAck { topic_id, .. }
+                            if topic_id.as_str() == topic_for_task.as_str()
+                        ) {
+                            continue;
+                        }
+                        if let Err(error) = blob_service.learn_peer(event.source_peer.as_str()).await {
+                            warn!(
+                                peer_pubkey = %peer_for_task,
+                                source_peer = %event.source_peer,
+                                error = %error,
+                                "failed to learn direct message blob peer"
+                            );
+                        }
+                        match AppService::handle_direct_message_hint_with_services(
+                            projection_store.as_ref(),
+                            blob_service.as_ref(),
+                            hint_transport.as_ref(),
+                            keys.as_ref(),
+                            local_author_pubkey.as_str(),
+                            peer_for_task.as_str(),
+                            &topic_for_task,
+                            &event.hint,
+                        ).await {
+                            Ok(true) => {
+                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            }
+                            Ok(false) => {}
+                            Err(error) => {
+                                warn!(
+                                    peer_pubkey = %peer_for_task,
+                                    error = %error,
+                                    "failed to handle direct message hint"
+                                );
+                            }
+                        }
+                    }
+                    else => {
+                        let _ = hint_transport.unsubscribe_hints(&topic_for_task).await;
+                        break;
+                    }
+                }
+            }
+        });
+        self.direct_message_subscriptions
+            .lock()
+            .await
+            .insert(peer_pubkey, handle);
+        Ok(())
+    }
+
+    async fn handle_direct_message_hint_with_services(
+        projection_store: &dyn ProjectionStore,
+        blob_service: &dyn BlobService,
+        hint_transport: &dyn HintTransport,
+        keys: &KukuriKeys,
+        local_author_pubkey: &str,
+        peer_pubkey: &str,
+        topic: &TopicId,
+        hint: &GossipHint,
+    ) -> Result<bool> {
+        match hint {
+            GossipHint::DirectMessageFrame {
+                dm_id,
+                message_id,
+                frame_hash,
+                ..
+            } => {
+                AppService::ingest_direct_message_frame_with_services(
+                    projection_store,
+                    blob_service,
+                    hint_transport,
+                    keys,
+                    local_author_pubkey,
+                    peer_pubkey,
+                    topic,
+                    dm_id.as_str(),
+                    message_id.as_str(),
+                    frame_hash,
+                )
+                .await
+            }
+            GossipHint::DirectMessageAck { ack, .. } => {
+                ack.verify()?;
+                if ack.sender.as_str() != peer_pubkey
+                    || ack.recipient.as_str() != local_author_pubkey
+                {
+                    return Ok(false);
+                }
+                projection_store
+                    .set_direct_message_acked_at(
+                        ack.dm_id.as_str(),
+                        ack.message_id.as_str(),
+                        ack.acked_at,
+                    )
+                    .await?;
+                projection_store
+                    .remove_direct_message_outbox(ack.dm_id.as_str(), ack.message_id.as_str())
+                    .await?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    async fn ingest_direct_message_frame_with_services(
+        projection_store: &dyn ProjectionStore,
+        blob_service: &dyn BlobService,
+        hint_transport: &dyn HintTransport,
+        keys: &KukuriKeys,
+        local_author_pubkey: &str,
+        peer_pubkey: &str,
+        topic: &TopicId,
+        dm_id: &str,
+        message_id: &str,
+        frame_hash: &kukuri_core::BlobHash,
+    ) -> Result<bool> {
+        let expected_dm_id = direct_message_id_for_participants(
+            &Pubkey::from(local_author_pubkey),
+            &Pubkey::from(peer_pubkey),
+        );
+        if dm_id != expected_dm_id {
+            return Ok(false);
+        }
+        let Some(frame_bytes) = blob_service.fetch_blob(frame_hash).await? else {
+            return Ok(false);
+        };
+        let frame: DirectMessageFrameV1 = serde_json::from_slice(frame_bytes.as_slice())
+            .context("failed to decode direct message frame blob")?;
+        if frame.message_id != message_id || frame.dm_id != dm_id {
+            return Ok(false);
+        }
+        if frame.sender.as_str() != peer_pubkey || frame.recipient.as_str() != local_author_pubkey {
+            return Ok(false);
+        }
+        let payload = decrypt_direct_message_frame(keys, &frame)?;
+        let ack = build_direct_message_ack(
+            keys,
+            dm_id,
+            message_id,
+            &frame.sender,
+            Utc::now().timestamp_millis(),
+        )?;
+        if projection_store
+            .has_direct_message_tombstone(dm_id, message_id)
+            .await?
+        {
+            hint_transport
+                .publish_hint(
+                    topic,
+                    GossipHint::DirectMessageAck {
+                        topic_id: topic.clone(),
+                        ack,
+                    },
+                )
+                .await?;
+            return Ok(false);
+        }
+        if projection_store
+            .get_direct_message_message(dm_id, message_id)
+            .await?
+            .is_some()
+        {
+            hint_transport
+                .publish_hint(
+                    topic,
+                    GossipHint::DirectMessageAck {
+                        topic_id: topic.clone(),
+                        ack,
+                    },
+                )
+                .await?;
+            return Ok(false);
+        }
+        let local_manifest = materialize_direct_message_manifest(
+            blob_service,
+            keys,
+            &frame.sender,
+            frame.message_id.as_str(),
+            payload.attachment_manifest.as_ref(),
+        )
+        .await?;
+        projection_store
+            .put_direct_message_message(DirectMessageMessageRow {
+                dm_id: dm_id.to_string(),
+                message_id: message_id.to_string(),
+                sender_pubkey: frame.sender.as_str().to_string(),
+                recipient_pubkey: frame.recipient.as_str().to_string(),
+                created_at: frame.created_at,
+                text: payload.text,
+                reply_to_message_id: payload.reply_to,
+                attachment_manifest: local_manifest,
+                outgoing: false,
+                acked_at: None,
+            })
+            .await?;
+        projection_store
+            .upsert_direct_message_conversation(DirectMessageConversationRow {
+                dm_id: dm_id.to_string(),
+                peer_pubkey: peer_pubkey.to_string(),
+                updated_at: frame.created_at,
+                last_message_at: Some(frame.created_at),
+                last_message_id: Some(message_id.to_string()),
+                last_message_preview: projection_store
+                    .get_direct_message_message(dm_id, message_id)
+                    .await?
+                    .as_ref()
+                    .map(direct_message_preview),
+            })
+            .await?;
+        hint_transport
+            .publish_hint(
+                topic,
+                GossipHint::DirectMessageAck {
+                    topic_id: topic.clone(),
+                    ack,
+                },
+            )
+            .await?;
+        Ok(true)
+    }
+
+    async fn flush_direct_message_outbox_for_peer_with_services(
+        projection_store: &dyn ProjectionStore,
+        hint_transport: &dyn HintTransport,
+        transport: &dyn Transport,
+        local_author_pubkey: &str,
+        keys: &KukuriKeys,
+        peer_pubkey: &str,
+    ) -> Result<usize> {
+        let relationship = projection_store
+            .get_author_relationship(local_author_pubkey, peer_pubkey)
+            .await?;
+        if !relationship.as_ref().is_some_and(|value| value.mutual) {
+            return Ok(0);
+        }
+        let topic = derive_direct_message_topic(keys, &Pubkey::from(peer_pubkey))?;
+        let peer_count = direct_message_topic_peer_count(transport, &topic).await?;
+        if peer_count == 0 {
+            return Ok(0);
+        }
+        let mut published = 0usize;
+        let attempted_at = Utc::now().timestamp_millis();
+        for row in projection_store.list_direct_message_outbox().await? {
+            if row.peer_pubkey != peer_pubkey {
+                continue;
+            }
+            projection_store
+                .touch_direct_message_outbox_attempt(
+                    row.dm_id.as_str(),
+                    row.message_id.as_str(),
+                    attempted_at,
+                )
+                .await?;
+            hint_transport
+                .publish_hint(
+                    &topic,
+                    GossipHint::DirectMessageFrame {
+                        topic_id: topic.clone(),
+                        dm_id: row.dm_id.clone(),
+                        message_id: row.message_id.clone(),
+                        frame_hash: row.frame_blob_hash.clone(),
+                    },
+                )
+                .await?;
+            published += 1;
+        }
+        Ok(published)
+    }
+
+    async fn direct_message_topic_peer_count(&self, peer_pubkey: &str) -> Result<usize> {
+        let topic = derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey))?;
+        direct_message_topic_peer_count(self.transport.as_ref(), &topic).await
+    }
+
+    async fn send_direct_message_internal(
+        &self,
+        peer_pubkey: &str,
+        text: Option<&str>,
+        reply_to_message_id: Option<&str>,
+        attachments: Vec<PendingAttachment>,
+    ) -> Result<String> {
+        let text = normalize_optional_text(text.map(str::to_string));
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(self.current_author_pubkey()),
+            &Pubkey::from(peer_pubkey),
+        );
+        if text.is_none() && attachments.is_empty() {
+            anyhow::bail!("direct message text or attachment is required");
+        }
+        let message_id = format!(
+            "dm-message-{}-{}",
+            Utc::now().timestamp_millis(),
+            short_id_suffix(self.current_author_pubkey().as_str())
+        );
+        if let Some(reply_to_message_id) = reply_to_message_id
+            && self
+                .projection_store
+                .get_direct_message_message(dm_id.as_str(), reply_to_message_id.trim())
+                .await?
+                .is_none()
+        {
+            anyhow::bail!("direct message reply target was not found");
+        }
+        let (local_manifest, encrypted_manifest) = self
+            .prepare_direct_message_manifests(peer_pubkey, message_id.as_str(), attachments)
+            .await?;
+        let created_at = Utc::now().timestamp_millis();
+        let frame = encrypt_direct_message_frame(
+            self.keys.as_ref(),
+            &Pubkey::from(peer_pubkey),
+            dm_id.as_str(),
+            message_id.as_str(),
+            created_at,
+            &DirectMessagePayloadV1 {
+                text: text.clone(),
+                reply_to: normalize_optional_text(reply_to_message_id.map(str::to_string)),
+                attachment_manifest: encrypted_manifest,
+            },
+        )?;
+        let frame_bytes =
+            serde_json::to_vec(&frame).context("failed to encode direct message frame blob")?;
+        let frame_blob = self
+            .blob_service
+            .put_blob(frame_bytes, DIRECT_MESSAGE_FRAME_MIME)
+            .await?;
+        self.projection_store
+            .put_direct_message_message(DirectMessageMessageRow {
+                dm_id: dm_id.clone(),
+                message_id: message_id.clone(),
+                sender_pubkey: self.current_author_pubkey(),
+                recipient_pubkey: peer_pubkey.to_string(),
+                created_at,
+                text,
+                reply_to_message_id: normalize_optional_text(
+                    reply_to_message_id.map(str::to_string),
+                ),
+                attachment_manifest: local_manifest,
+                outgoing: true,
+                acked_at: None,
+            })
+            .await?;
+        self.projection_store
+            .put_direct_message_outbox(DirectMessageOutboxRow {
+                dm_id: dm_id.clone(),
+                message_id: message_id.clone(),
+                peer_pubkey: peer_pubkey.to_string(),
+                frame_blob_hash: frame_blob.hash,
+                created_at,
+                last_attempt_at: None,
+            })
+            .await?;
+        self.refresh_direct_message_conversation(peer_pubkey)
+            .await?;
+        let _ = Self::flush_direct_message_outbox_for_peer_with_services(
+            self.projection_store.as_ref(),
+            self.hint_transport.as_ref(),
+            self.transport.as_ref(),
+            self.current_author_pubkey().as_str(),
+            self.keys.as_ref(),
+            peer_pubkey,
+        )
+        .await?;
+        Ok(message_id)
+    }
+
+    async fn prepare_direct_message_manifests(
+        &self,
+        peer_pubkey: &str,
+        message_id: &str,
+        attachments: Vec<PendingAttachment>,
+    ) -> Result<(
+        Option<DirectMessageAttachmentManifestV1>,
+        Option<DirectMessageAttachmentManifestV1>,
+    )> {
+        if attachments.is_empty() {
+            return Ok((None, None));
+        }
+        let image = attachments
+            .iter()
+            .find(|attachment| attachment.role == AssetRole::ImageOriginal);
+        let video = attachments
+            .iter()
+            .find(|attachment| attachment.role == AssetRole::VideoManifest);
+        let poster = attachments
+            .iter()
+            .find(|attachment| attachment.role == AssetRole::VideoPoster);
+        match (image, video, poster) {
+            (Some(image), None, None) => {
+                if attachments.len() != 1 || !image.mime.starts_with("image/") {
+                    anyhow::bail!(
+                        "direct message image attachment must be a single image/* payload"
+                    );
+                }
+                let local_blob = self
+                    .blob_service
+                    .put_blob(image.bytes.clone(), image.mime.as_str())
+                    .await?;
+                let encrypted = encrypt_direct_message_attachment(
+                    self.keys.as_ref(),
+                    &Pubkey::from(peer_pubkey),
+                    message_id,
+                    "original",
+                    image.bytes.as_slice(),
+                )?;
+                let encrypted_blob = self
+                    .blob_service
+                    .put_blob(
+                        serde_json::to_vec(&encrypted)
+                            .context("failed to encode encrypted direct message attachment")?,
+                        DIRECT_MESSAGE_ATTACHMENT_MIME,
+                    )
+                    .await?;
+                Ok((
+                    Some(DirectMessageAttachmentManifestV1 {
+                        attachment_id: "attachment-1".into(),
+                        kind: DirectMessageAttachmentKind::Image,
+                        original: DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "original".into(),
+                            hash: local_blob.hash,
+                            mime: image.mime.clone(),
+                            bytes: image.bytes.len() as u64,
+                            nonce_hex: String::new(),
+                        },
+                        poster: None,
+                    }),
+                    Some(DirectMessageAttachmentManifestV1 {
+                        attachment_id: "attachment-1".into(),
+                        kind: DirectMessageAttachmentKind::Image,
+                        original: DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "original".into(),
+                            hash: encrypted_blob.hash,
+                            mime: image.mime.clone(),
+                            bytes: image.bytes.len() as u64,
+                            nonce_hex: encrypted.nonce_hex,
+                        },
+                        poster: None,
+                    }),
+                ))
+            }
+            (None, Some(video), Some(poster)) => {
+                if attachments.len() != 2
+                    || !video.mime.starts_with("video/")
+                    || !poster.mime.starts_with("image/")
+                {
+                    anyhow::bail!(
+                        "direct message video attachment must contain one video/* payload and one image/* poster"
+                    );
+                }
+                let local_video = self
+                    .blob_service
+                    .put_blob(video.bytes.clone(), video.mime.as_str())
+                    .await?;
+                let local_poster = self
+                    .blob_service
+                    .put_blob(poster.bytes.clone(), poster.mime.as_str())
+                    .await?;
+                let encrypted_video = encrypt_direct_message_attachment(
+                    self.keys.as_ref(),
+                    &Pubkey::from(peer_pubkey),
+                    message_id,
+                    "original",
+                    video.bytes.as_slice(),
+                )?;
+                let encrypted_poster = encrypt_direct_message_attachment(
+                    self.keys.as_ref(),
+                    &Pubkey::from(peer_pubkey),
+                    message_id,
+                    "poster",
+                    poster.bytes.as_slice(),
+                )?;
+                let encrypted_video_blob = self
+                    .blob_service
+                    .put_blob(
+                        serde_json::to_vec(&encrypted_video)
+                            .context("failed to encode encrypted direct message video")?,
+                        DIRECT_MESSAGE_ATTACHMENT_MIME,
+                    )
+                    .await?;
+                let encrypted_poster_blob = self
+                    .blob_service
+                    .put_blob(
+                        serde_json::to_vec(&encrypted_poster)
+                            .context("failed to encode encrypted direct message poster")?,
+                        DIRECT_MESSAGE_ATTACHMENT_MIME,
+                    )
+                    .await?;
+                Ok((
+                    Some(DirectMessageAttachmentManifestV1 {
+                        attachment_id: "attachment-1".into(),
+                        kind: DirectMessageAttachmentKind::Video,
+                        original: DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "original".into(),
+                            hash: local_video.hash,
+                            mime: video.mime.clone(),
+                            bytes: video.bytes.len() as u64,
+                            nonce_hex: String::new(),
+                        },
+                        poster: Some(DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "poster".into(),
+                            hash: local_poster.hash,
+                            mime: poster.mime.clone(),
+                            bytes: poster.bytes.len() as u64,
+                            nonce_hex: String::new(),
+                        }),
+                    }),
+                    Some(DirectMessageAttachmentManifestV1 {
+                        attachment_id: "attachment-1".into(),
+                        kind: DirectMessageAttachmentKind::Video,
+                        original: DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "original".into(),
+                            hash: encrypted_video_blob.hash,
+                            mime: video.mime.clone(),
+                            bytes: video.bytes.len() as u64,
+                            nonce_hex: encrypted_video.nonce_hex,
+                        },
+                        poster: Some(DirectMessageEncryptedBlobRefV1 {
+                            blob_id: "poster".into(),
+                            hash: encrypted_poster_blob.hash,
+                            mime: poster.mime.clone(),
+                            bytes: poster.bytes.len() as u64,
+                            nonce_hex: encrypted_poster.nonce_hex,
+                        }),
+                    }),
+                ))
+            }
+            _ => anyhow::bail!(
+                "direct message attachment must be one image or one video with a poster"
+            ),
+        }
     }
 
     async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
@@ -6310,7 +7390,9 @@ fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
         | GossipHint::Presence { topic_id, .. }
         | GossipHint::Typing { topic_id, .. }
         | GossipHint::SessionChanged { topic_id, .. }
-        | GossipHint::LivePresence { topic_id, .. } => topic_id.as_str() == topic,
+        | GossipHint::LivePresence { topic_id, .. }
+        | GossipHint::DirectMessageFrame { topic_id, .. }
+        | GossipHint::DirectMessageAck { topic_id, .. } => topic_id.as_str() == topic,
         GossipHint::ThreadUpdated { .. } | GossipHint::ProfileUpdated { .. } => true,
     }
 }
@@ -6715,6 +7797,141 @@ async fn attachment_views_from_refs(
     Ok(attachments)
 }
 
+async fn direct_message_attachment_views(
+    blob_service: &dyn BlobService,
+    manifest: Option<&DirectMessageAttachmentManifestV1>,
+) -> Result<Vec<AttachmentView>> {
+    let Some(manifest) = manifest else {
+        return Ok(Vec::new());
+    };
+    let mut attachments = Vec::new();
+    attachments.push(AttachmentView {
+        hash: manifest.original.hash.as_str().to_string(),
+        mime: manifest.original.mime.clone(),
+        bytes: manifest.original.bytes,
+        role: match manifest.kind {
+            DirectMessageAttachmentKind::Image => "image_original".into(),
+            DirectMessageAttachmentKind::Video => "video_manifest".into(),
+        },
+        status: best_effort_blob_view_status(blob_service, &manifest.original.hash).await,
+    });
+    if let Some(poster) = manifest.poster.as_ref() {
+        attachments.push(AttachmentView {
+            hash: poster.hash.as_str().to_string(),
+            mime: poster.mime.clone(),
+            bytes: poster.bytes,
+            role: "video_poster".into(),
+            status: best_effort_blob_view_status(blob_service, &poster.hash).await,
+        });
+    }
+    Ok(attachments)
+}
+
+fn direct_message_preview(row: &DirectMessageMessageRow) -> String {
+    if let Some(text) = row
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return text.chars().take(80).collect();
+    }
+    match row
+        .attachment_manifest
+        .as_ref()
+        .map(|manifest| &manifest.kind)
+    {
+        Some(DirectMessageAttachmentKind::Image) => "[Image]".into(),
+        Some(DirectMessageAttachmentKind::Video) => "[Video]".into(),
+        None => String::new(),
+    }
+}
+
+async fn materialize_direct_message_manifest(
+    blob_service: &dyn BlobService,
+    keys: &KukuriKeys,
+    sender_pubkey: &Pubkey,
+    message_id: &str,
+    manifest: Option<&DirectMessageAttachmentManifestV1>,
+) -> Result<Option<DirectMessageAttachmentManifestV1>> {
+    let Some(manifest) = manifest else {
+        return Ok(None);
+    };
+    let original = materialize_direct_message_blob_ref(
+        blob_service,
+        keys,
+        sender_pubkey,
+        message_id,
+        &manifest.original,
+    )
+    .await?;
+    let poster = match manifest.poster.as_ref() {
+        Some(poster) => Some(
+            materialize_direct_message_blob_ref(
+                blob_service,
+                keys,
+                sender_pubkey,
+                message_id,
+                poster,
+            )
+            .await?,
+        ),
+        None => None,
+    };
+    Ok(Some(DirectMessageAttachmentManifestV1 {
+        attachment_id: manifest.attachment_id.clone(),
+        kind: manifest.kind.clone(),
+        original,
+        poster,
+    }))
+}
+
+async fn materialize_direct_message_blob_ref(
+    blob_service: &dyn BlobService,
+    keys: &KukuriKeys,
+    sender_pubkey: &Pubkey,
+    message_id: &str,
+    encrypted_ref: &DirectMessageEncryptedBlobRefV1,
+) -> Result<DirectMessageEncryptedBlobRefV1> {
+    let Some(bytes) = blob_service.fetch_blob(&encrypted_ref.hash).await? else {
+        anyhow::bail!("direct message attachment blob is missing");
+    };
+    let encrypted: DirectMessageEncryptedAttachmentV1 = serde_json::from_slice(bytes.as_slice())
+        .context("failed to decode direct message attachment blob")?;
+    let decrypted = decrypt_direct_message_attachment(keys, sender_pubkey, message_id, &encrypted)?;
+    let local = blob_service
+        .put_blob(decrypted, encrypted_ref.mime.as_str())
+        .await?;
+    Ok(DirectMessageEncryptedBlobRefV1 {
+        blob_id: encrypted_ref.blob_id.clone(),
+        hash: local.hash,
+        mime: encrypted_ref.mime.clone(),
+        bytes: encrypted_ref.bytes,
+        nonce_hex: String::new(),
+    })
+}
+
+async fn direct_message_topic_peer_count(
+    transport: &dyn Transport,
+    topic: &TopicId,
+) -> Result<usize> {
+    let snapshot = transport.peers().await?;
+    let hint_topic = format!("hint/{}", topic.as_str());
+    let topic_peer_count = snapshot
+        .topic_diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.topic == hint_topic || diagnostic.topic == topic.as_str())
+        .map(|diagnostic| diagnostic.peer_count)
+        .unwrap_or(0);
+    if topic_peer_count > 0 {
+        return Ok(topic_peer_count);
+    }
+    if snapshot.connected && snapshot.peer_count > 0 {
+        return Ok(snapshot.peer_count);
+    }
+    Ok(0)
+}
+
 fn blob_view_status(status: BlobStatus) -> BlobViewStatus {
     match status {
         BlobStatus::Missing => BlobViewStatus::Missing,
@@ -6849,7 +8066,7 @@ fn normalize_topic_name(topic: String) -> Option<String> {
     let normalized = topic
         .strip_prefix("hint/")
         .map_or(topic.clone(), ToOwned::to_owned);
-    if normalized.starts_with("private/") {
+    if normalized.starts_with("private/") || normalized.starts_with("kukuri:dm:") {
         None
     } else {
         Some(normalized)
@@ -7878,6 +9095,27 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
+    struct CountingClosingHintTransport {
+        subscribe_count: Arc<TokioMutex<usize>>,
+    }
+
+    #[async_trait]
+    impl HintTransport for CountingClosingHintTransport {
+        async fn subscribe_hints(&self, _topic: &TopicId) -> Result<HintStream> {
+            *self.subscribe_count.lock().await += 1;
+            Ok(Box::pin(futures_util::stream::empty()))
+        }
+
+        async fn unsubscribe_hints(&self, _topic: &TopicId) -> Result<()> {
+            Ok(())
+        }
+
+        async fn publish_hint(&self, _topic: &TopicId, _hint: GossipHint) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Default)]
     struct TrackingHintTransport {
         hints: Arc<TokioMutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
         unsubscribed_topics: Arc<TokioMutex<Vec<String>>>,
@@ -8004,6 +9242,330 @@ mod tests {
         assert_eq!(timeline.items.len(), 1);
         assert_eq!(timeline.items[0].object_id, object_id);
         assert_eq!(timeline.items[0].content, "hello app");
+    }
+
+    #[tokio::test]
+    async fn dm_send_requires_mutual_relationship() {
+        let (app, _, _, _) = local_app_with_memory_services();
+        let peer_keys = generate_keys();
+
+        let error = app
+            .send_direct_message(
+                peer_keys.public_key_hex().as_str(),
+                Some("hello"),
+                None,
+                Vec::new(),
+            )
+            .await
+            .expect_err("direct message send should require mutual relationship");
+
+        assert!(
+            error
+                .to_string()
+                .contains("direct message requires a mutual relationship")
+        );
+    }
+
+    #[tokio::test]
+    async fn dm_reopens_finished_subscription_when_hint_stream_closes() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot {
+            connected: true,
+            peer_count: 1,
+            connected_peers: vec!["peer-b".into()],
+            configured_peers: vec!["peer-b".into()],
+            subscribed_topics: Vec::new(),
+            pending_events: 0,
+            status_detail: "connected".into(),
+            last_error: None,
+            topic_diagnostics: Vec::new(),
+        }));
+        let hint_transport = Arc::new(CountingClosingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store = Arc::new(MemoryStore::default());
+        let keys_local = generate_keys();
+        let keys_peer = generate_keys();
+        let local_pubkey = keys_local.public_key_hex();
+        let peer_pubkey = keys_peer.public_key_hex();
+        let follow_local_to_peer = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_local,
+                &Pubkey::from(peer_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge local->peer"),
+        )
+        .expect("parse follow edge local->peer")
+        .expect("follow edge local->peer");
+        let follow_peer_to_local = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_peer,
+                &Pubkey::from(local_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge peer->local"),
+        )
+        .expect("parse follow edge peer->local")
+        .expect("follow edge peer->local");
+        store
+            .upsert_follow_edge(follow_local_to_peer)
+            .await
+            .expect("seed local->peer follow edge");
+        store
+            .upsert_follow_edge(follow_peer_to_local)
+            .await
+            .expect("seed peer->local follow edge");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport,
+            hint_transport.clone(),
+            docs_sync,
+            blob_service,
+            keys_local,
+        );
+
+        app.open_direct_message(peer_pubkey.as_str())
+            .await
+            .expect("open direct message first time");
+        sleep(Duration::from_millis(50)).await;
+        app.open_direct_message(peer_pubkey.as_str())
+            .await
+            .expect("open direct message second time");
+        sleep(Duration::from_millis(50)).await;
+
+        assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
+    }
+
+    #[tokio::test]
+    async fn dm_restart_resumes_pending_outbox_and_local_delete_prevents_duplicate_reinsert() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let a_pubkey = keys_a.public_key_hex();
+        let b_pubkey = keys_b.public_key_hex();
+        let follow_a_to_b = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_a,
+                &Pubkey::from(b_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge a->b"),
+        )
+        .expect("parse follow edge a->b")
+        .expect("follow edge a->b");
+        let follow_b_to_a = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_b,
+                &Pubkey::from(a_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge b->a"),
+        )
+        .expect("parse follow edge b->a")
+        .expect("follow edge b->a");
+
+        store_a
+            .upsert_follow_edge(follow_a_to_b.clone())
+            .await
+            .expect("seed follow edge a->b in store a");
+        store_a
+            .upsert_follow_edge(follow_b_to_a.clone())
+            .await
+            .expect("seed follow edge b->a in store a");
+        store_b
+            .upsert_follow_edge(follow_a_to_b)
+            .await
+            .expect("seed follow edge a->b in store b");
+        store_b
+            .upsert_follow_edge(follow_b_to_a)
+            .await
+            .expect("seed follow edge b->a in store b");
+
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a.clone(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_b.clone(),
+        );
+
+        app_b
+            .open_direct_message(a_pubkey.as_str())
+            .await
+            .expect("recipient opens direct message");
+
+        let message_id = app_a
+            .send_direct_message(
+                b_pubkey.as_str(),
+                None,
+                None,
+                vec![pending_image_attachment(
+                    "image/png",
+                    tiny_png_bytes().as_slice(),
+                )],
+            )
+            .await
+            .expect("queue direct message while offline");
+        let queued_status = app_a
+            .get_direct_message_status(b_pubkey.as_str())
+            .await
+            .expect("queued status");
+        assert_eq!(queued_status.pending_outbox_count, 1);
+        let queued_outbox = store_a
+            .list_direct_message_outbox()
+            .await
+            .expect("list queued outbox");
+        assert_eq!(queued_outbox.len(), 1);
+        let queued_frame = queued_outbox[0].clone();
+
+        let initial_timeline = app_b
+            .list_direct_message_messages(a_pubkey.as_str(), None, 20)
+            .await
+            .expect("initial recipient timeline");
+        assert!(initial_timeline.items.is_empty());
+
+        drop(app_a);
+
+        let reopened_app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a.clone(),
+        );
+        reopened_app_a
+            .resume_direct_message_state()
+            .await
+            .expect("resume direct message state");
+        assert!(
+            reopened_app_a
+                .direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(b_pubkey.as_str()),
+            "resume should restore the direct message subscription",
+        );
+
+        let topic = derive_direct_message_topic(&keys_a, &Pubkey::from(b_pubkey.as_str()))
+            .expect("derive dm topic");
+        {
+            let mut snapshot = transport.peers.lock().await;
+            snapshot.connected = true;
+            snapshot.peer_count = 1;
+            snapshot.connected_peers = vec!["peer-b".into()];
+            snapshot.topic_diagnostics = vec![TopicPeerSnapshot {
+                topic: format!("hint/{}", topic.as_str()),
+                joined: true,
+                peer_count: 1,
+                connected_peers: vec!["peer-b".into()],
+                configured_peer_ids: vec!["peer-b".into()],
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: "connected".into(),
+                last_error: None,
+            }];
+        }
+        let published = AppService::flush_direct_message_outbox_for_peer_with_services(
+            store_a.as_ref(),
+            hint_transport.as_ref(),
+            transport.as_ref(),
+            a_pubkey.as_str(),
+            &keys_a,
+            b_pubkey.as_str(),
+        )
+        .await
+        .expect("flush queued direct message after restart");
+        assert_eq!(published, 1);
+
+        let delivered = timeout(Duration::from_secs(10), async {
+            loop {
+                let timeline = app_b
+                    .list_direct_message_messages(a_pubkey.as_str(), None, 20)
+                    .await
+                    .expect("recipient timeline");
+                if let Some(message) = timeline
+                    .items
+                    .iter()
+                    .find(|item| item.message_id == message_id)
+                {
+                    break message.clone();
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("wait for delivered direct message");
+        assert_eq!(delivered.text, "");
+        assert_eq!(delivered.attachments.len(), 1);
+        assert_eq!(delivered.attachments[0].role, "image_original");
+        assert_eq!(delivered.attachments[0].mime, "image/png");
+        assert!(!delivered.outgoing);
+        assert!(delivered.delivered);
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let status = reopened_app_a
+                    .get_direct_message_status(b_pubkey.as_str())
+                    .await
+                    .expect("sender status");
+                if status.pending_outbox_count == 0 {
+                    break;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("ack clears outbox");
+
+        app_b
+            .delete_direct_message_message(a_pubkey.as_str(), message_id.as_str())
+            .await
+            .expect("delete direct message locally");
+        let after_delete = app_b
+            .list_direct_message_messages(a_pubkey.as_str(), None, 20)
+            .await
+            .expect("timeline after delete");
+        assert!(after_delete.items.is_empty());
+
+        hint_transport
+            .publish_hint(
+                &topic,
+                GossipHint::DirectMessageFrame {
+                    topic_id: topic.clone(),
+                    dm_id: queued_frame.dm_id.clone(),
+                    message_id: queued_frame.message_id.clone(),
+                    frame_hash: queued_frame.frame_blob_hash.clone(),
+                },
+            )
+            .await
+            .expect("republish duplicate direct message frame");
+        sleep(Duration::from_millis(200)).await;
+
+        let after_duplicate = app_b
+            .list_direct_message_messages(a_pubkey.as_str(), None, 20)
+            .await
+            .expect("timeline after duplicate frame");
+        assert!(after_duplicate.items.is_empty());
     }
 
     #[tokio::test]
@@ -9778,6 +11340,32 @@ mod tests {
         assert_eq!(status.subscribed_topics, vec!["kukuri:topic:demo"]);
         assert_eq!(status.topic_diagnostics.len(), 1);
         assert_eq!(status.topic_diagnostics[0].topic, "kukuri:topic:demo");
+    }
+
+    #[tokio::test]
+    async fn direct_message_peer_count_falls_back_to_connected_peers_when_topic_diagnostic_is_missing()
+     {
+        let transport = StaticTransport::new(PeerSnapshot {
+            connected: true,
+            peer_count: 1,
+            connected_peers: vec!["peer-a".into()],
+            configured_peers: vec!["peer-a".into()],
+            subscribed_topics: vec!["kukuri:topic:demo".into()],
+            pending_events: 0,
+            status_detail: "Connected".into(),
+            last_error: None,
+            topic_diagnostics: Vec::new(),
+        });
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let topic = derive_direct_message_topic(&keys_a, &keys_b.public_key())
+            .expect("direct message topic");
+
+        let peer_count = direct_message_topic_peer_count(&transport, &topic)
+            .await
+            .expect("direct message peer count");
+
+        assert_eq!(peer_count, 1);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

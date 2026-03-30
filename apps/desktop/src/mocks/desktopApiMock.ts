@@ -11,6 +11,10 @@ import {
   type CustomReactionAssetView,
   type CustomReactionCropRect,
   type DesktopApi,
+  type DirectMessageConversationView,
+  type DirectMessageMessageView,
+  type DirectMessageStatusView,
+  type DirectMessageTimelineView,
   type DiscoveryConfig,
   type FriendOnlyGrantPreview,
   type FriendPlusSharePreview,
@@ -316,9 +320,50 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       withDefaultAuthorView(pubkey, view),
     ])
   );
+  const directMessageMessagesByPeer: Record<string, DirectMessageMessageView[]> = {};
+  const openedDirectMessagePeers = new Set<string>();
   const ownedCustomReactionAssets: CustomReactionAssetView[] = [];
   const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
   let recentReactions: RecentReactionView[] = [];
+
+  function directMessageStatusFor(pubkey: string): DirectMessageStatusView {
+    const author = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+    return {
+      peer_pubkey: pubkey,
+      dm_id: [syncStatus.local_author_pubkey, pubkey].sort().join(':'),
+      mutual: author.mutual,
+      send_enabled: author.mutual,
+      peer_count: author.mutual ? 1 : 0,
+      pending_outbox_count: 0,
+    };
+  }
+
+  function directMessageConversationFor(pubkey: string): DirectMessageConversationView {
+    const messages = directMessageMessagesByPeer[pubkey] ?? [];
+    const latest = [...messages].sort(
+      (left, right) => right.created_at - left.created_at || right.message_id.localeCompare(left.message_id)
+    )[0];
+    const author = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+    return {
+      dm_id: directMessageStatusFor(pubkey).dm_id,
+      peer_pubkey: pubkey,
+      peer_name: author.name ?? null,
+      peer_display_name: author.display_name ?? null,
+      peer_picture: author.picture ?? null,
+      peer_picture_asset: author.picture_asset ?? null,
+      updated_at: latest?.created_at ?? 0,
+      last_message_at: latest?.created_at ?? null,
+      last_message_id: latest?.message_id ?? null,
+      last_message_preview:
+        latest?.text?.trim() ||
+        (latest?.attachments.some((attachment) => attachment.role === 'video_manifest')
+          ? '[Video]'
+          : latest?.attachments.length
+            ? '[Image]'
+            : null),
+      status: directMessageStatusFor(pubkey),
+    };
+  }
 
   const api: DesktopApi = {
     async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
@@ -685,6 +730,81 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         });
       }
       return withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+    },
+    async openDirectMessage(pubkey) {
+      const status = directMessageStatusFor(pubkey);
+      if (!status.send_enabled && !openedDirectMessagePeers.has(pubkey)) {
+        throw new Error('direct message requires a mutual relationship');
+      }
+      openedDirectMessagePeers.add(pubkey);
+      return directMessageConversationFor(pubkey);
+    },
+    async listDirectMessages() {
+      return [...openedDirectMessagePeers]
+        .map((pubkey) => directMessageConversationFor(pubkey))
+        .sort(
+          (left, right) =>
+            (right.last_message_at ?? right.updated_at) - (left.last_message_at ?? left.updated_at) ||
+            left.peer_pubkey.localeCompare(right.peer_pubkey)
+        );
+    },
+    async listDirectMessageMessages(pubkey) {
+      return {
+        items: [...(directMessageMessagesByPeer[pubkey] ?? [])].sort(
+          (left, right) => right.created_at - left.created_at || right.message_id.localeCompare(left.message_id)
+        ),
+        next_cursor: null,
+      } satisfies DirectMessageTimelineView;
+    },
+    async sendDirectMessage(pubkey, text, attachments = [], replyToMessageId) {
+      const status = directMessageStatusFor(pubkey);
+      if (!status.send_enabled) {
+        throw new Error('direct message requires a mutual relationship');
+      }
+      if (!text?.trim() && attachments.length === 0) {
+        throw new Error('direct message requires text or attachment');
+      }
+      openedDirectMessagePeers.add(pubkey);
+      sequence += 1;
+      const messageId = `dm-${sequence}`;
+      const messageAttachments: AttachmentView[] = attachments.map((attachment, index) => ({
+        hash: `${messageId}-attachment-${index}`,
+        mime: attachment.mime,
+        bytes: attachment.byte_size,
+        role: attachment.role ?? 'image_original',
+        status: 'Available',
+      }));
+      const nextMessage: DirectMessageMessageView = {
+        dm_id: status.dm_id,
+        message_id: messageId,
+        sender_pubkey: syncStatus.local_author_pubkey,
+        recipient_pubkey: pubkey,
+        created_at: Date.now(),
+        text: text?.trim() ?? '',
+        reply_to_message_id: replyToMessageId ?? null,
+        attachments: messageAttachments,
+        outgoing: true,
+        delivered: true,
+      };
+      directMessageMessagesByPeer[pubkey] = [
+        nextMessage,
+        ...(directMessageMessagesByPeer[pubkey] ?? []).filter(
+          (message) => message.message_id !== nextMessage.message_id
+        ),
+      ];
+      return messageId;
+    },
+    async deleteDirectMessageMessage(pubkey, messageId) {
+      directMessageMessagesByPeer[pubkey] = (directMessageMessagesByPeer[pubkey] ?? []).filter(
+        (message) => message.message_id !== messageId
+      );
+    },
+    async clearDirectMessage(pubkey) {
+      directMessageMessagesByPeer[pubkey] = [];
+      openedDirectMessagePeers.add(pubkey);
+    },
+    async getDirectMessageStatus(pubkey) {
+      return directMessageStatusFor(pubkey);
     },
     async listLiveSessions(topic, scope: TimelineScope = { kind: 'public' }) {
       return filterChannelScopedItems(
