@@ -16,7 +16,10 @@ use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
 use kukuri_cn_user_api::{
     UserApiConfig, app_router as user_api_app_router, build_state as build_user_api_state,
 };
-use kukuri_core::{ChannelRef, GameRoomStatus, KukuriKeys, TimelineScope};
+use kukuri_core::{
+    ChannelAudienceKind, ChannelId, ChannelRef, CreatePrivateChannelInput, GameRoomStatus,
+    KukuriKeys, TimelineScope, TopicId,
+};
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreateAttachmentRequest,
     CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest,
@@ -87,10 +90,29 @@ pub enum ScenarioStep {
     SelectTopic {
         topic: String,
     },
+    SelectPublicTimeline,
+    CreatePrivateChannel {
+        label: String,
+    },
+    SelectPrivateChannel {
+        label: String,
+    },
     CreatePost {
         content: String,
     },
     AssertTimelineContains {
+        text: String,
+    },
+    BookmarkPost {
+        content: String,
+    },
+    AssertBookmarkListContains {
+        text: String,
+    },
+    AssertBookmarkListMissing {
+        text: String,
+    },
+    RemoveBookmark {
         text: String,
     },
     CreateLiveSession {
@@ -160,6 +182,8 @@ struct ScenarioRuntime {
     network: FakeNetwork,
     app: Option<AppService>,
     current_topic: Option<String>,
+    current_channel_id: Option<String>,
+    private_channels: BTreeMap<String, String>,
 }
 
 impl ScenarioRuntime {
@@ -180,6 +204,21 @@ impl ScenarioRuntime {
         self.app
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("desktop app is not running"))
+    }
+
+    fn topic_or_default(&self, default_topic: &str) -> String {
+        self.current_topic
+            .clone()
+            .unwrap_or_else(|| default_topic.to_string())
+    }
+
+    fn current_scope(&self) -> TimelineScope {
+        match self.current_channel_id.as_ref() {
+            Some(channel_id) => TimelineScope::Channel {
+                channel_id: ChannelId::new(channel_id.clone()),
+            },
+            None => TimelineScope::Public,
+        }
     }
 }
 
@@ -317,6 +356,8 @@ async fn run_desktop_smoke_scenario(
         network: FakeNetwork::default(),
         app: None,
         current_topic: None,
+        current_channel_id: None,
+        private_channels: BTreeMap::new(),
     };
     let overall_timeout = Duration::from_millis(scenario.timeouts.overall_ms);
     let step_timeout = Duration::from_millis(scenario.timeouts.step_ms);
@@ -330,23 +371,84 @@ async fn run_desktop_smoke_scenario(
                 ScenarioStep::LaunchDesktop => runtime.launch().await?,
                 ScenarioStep::SelectTopic { topic } => {
                     runtime.current_topic = Some(topic.clone());
-                    let _ = runtime.app()?.list_timeline(topic, None, 50).await?;
+                    runtime.current_channel_id = None;
+                    let _ = runtime
+                        .app()?
+                        .list_timeline_scoped(topic, TimelineScope::Public, None, 50)
+                        .await?;
+                }
+                ScenarioStep::SelectPublicTimeline => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    runtime.current_channel_id = None;
+                    let _ = runtime
+                        .app()?
+                        .list_timeline_scoped(&topic, TimelineScope::Public, None, 50)
+                        .await?;
+                }
+                ScenarioStep::CreatePrivateChannel { label } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let channel = runtime
+                        .app()?
+                        .create_private_channel(CreatePrivateChannelInput {
+                            topic_id: TopicId::new(topic.clone()),
+                            label: label.clone(),
+                            audience_kind: ChannelAudienceKind::InviteOnly,
+                        })
+                        .await?;
+                    runtime
+                        .private_channels
+                        .insert(label.clone(), channel.channel_id.clone());
+                }
+                ScenarioStep::SelectPrivateChannel { label } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let channel_id = runtime
+                        .private_channels
+                        .get(label.as_str())
+                        .cloned()
+                        .with_context(|| format!("private channel not found for label: {label}"))?;
+                    runtime.current_channel_id = Some(channel_id.clone());
+                    let _ = runtime
+                        .app()?
+                        .list_timeline_scoped(
+                            &topic,
+                            TimelineScope::Channel {
+                                channel_id: ChannelId::new(channel_id),
+                            },
+                            None,
+                            50,
+                        )
+                        .await?;
                 }
                 ScenarioStep::CreatePost { content } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
-                    runtime.app()?.create_post(&topic, content, None).await?;
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    match runtime.current_channel_id.clone() {
+                        Some(channel_id) => {
+                            runtime
+                                .app()?
+                                .create_post_in_channel(
+                                    &topic,
+                                    ChannelRef::PrivateChannel {
+                                        channel_id: ChannelId::new(channel_id),
+                                    },
+                                    content,
+                                    None,
+                                )
+                                .await?;
+                        }
+                        None => {
+                            runtime.app()?.create_post(&topic, content, None).await?;
+                        }
+                    }
                 }
                 ScenarioStep::AssertTimelineContains { text } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let scope = runtime.current_scope();
                     let assertion = timeout(step_timeout, async {
                         loop {
-                            let timeline = runtime.app()?.list_timeline(&topic, None, 50).await?;
+                            let timeline = runtime
+                                .app()?
+                                .list_timeline_scoped(&topic, scope.clone(), None, 50)
+                                .await?;
                             if timeline.items.iter().any(|item| item.content == *text) {
                                 return Ok::<(), anyhow::Error>(());
                             }
@@ -355,11 +457,57 @@ async fn run_desktop_smoke_scenario(
                     });
                     assertion.await.context("assertion timeout")??;
                 }
+                ScenarioStep::BookmarkPost { content } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let timeline = runtime
+                        .app()?
+                        .list_timeline_scoped(&topic, runtime.current_scope(), None, 50)
+                        .await?;
+                    let post = timeline
+                        .items
+                        .iter()
+                        .find(|item| item.content == *content)
+                        .with_context(|| format!("bookmark target not found in timeline: {content}"))?;
+                    runtime
+                        .app()?
+                        .bookmark_post(&topic, post.object_id.as_str())
+                        .await?;
+                }
+                ScenarioStep::AssertBookmarkListContains { text } => {
+                    let expected = text.clone();
+                    let assertion = timeout(step_timeout, async {
+                        loop {
+                            let bookmarks = runtime.app()?.list_bookmarked_posts().await?;
+                            if bookmarks
+                                .iter()
+                                .any(|item| item.post.content == expected)
+                            {
+                                return Ok::<(), anyhow::Error>(());
+                            }
+                            sleep(Duration::from_millis(50)).await;
+                        }
+                    });
+                    assertion.await.context("assertion timeout")??;
+                }
+                ScenarioStep::AssertBookmarkListMissing { text } => {
+                    let bookmarks = runtime.app()?.list_bookmarked_posts().await?;
+                    if bookmarks.iter().any(|item| item.post.content == *text) {
+                        anyhow::bail!("bookmark still present: {text}");
+                    }
+                }
+                ScenarioStep::RemoveBookmark { text } => {
+                    let bookmarks = runtime.app()?.list_bookmarked_posts().await?;
+                    let bookmarked = bookmarks
+                        .iter()
+                        .find(|item| item.post.content == *text)
+                        .with_context(|| format!("bookmarked post not found: {text}"))?;
+                    runtime
+                        .app()?
+                        .remove_bookmarked_post(bookmarked.post.object_id.as_str())
+                        .await?;
+                }
                 ScenarioStep::CreateLiveSession { title, description } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     runtime
                         .app()?
                         .create_live_session(
@@ -372,10 +520,7 @@ async fn run_desktop_smoke_scenario(
                         .await?;
                 }
                 ScenarioStep::JoinLiveSession { title } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let session = runtime
                         .app()?
                         .list_live_sessions(&topic)
@@ -389,10 +534,7 @@ async fn run_desktop_smoke_scenario(
                         .await?;
                 }
                 ScenarioStep::AssertLiveViewerCount { title, viewer_count } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let expected = *viewer_count;
                     let target = title.clone();
                     let assertion = timeout(step_timeout, async {
@@ -427,10 +569,7 @@ async fn run_desktop_smoke_scenario(
                     }
                 }
                 ScenarioStep::EndLiveSession { title } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let session = runtime
                         .app()?
                         .list_live_sessions(&topic)
@@ -448,10 +587,7 @@ async fn run_desktop_smoke_scenario(
                     description,
                     participants,
                 } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     runtime
                         .app()?
                         .create_game_room(
@@ -470,10 +606,7 @@ async fn run_desktop_smoke_scenario(
                     phase_label,
                     scores,
                 } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let room = runtime
                         .app()?
                         .list_game_rooms(&topic)
@@ -511,10 +644,7 @@ async fn run_desktop_smoke_scenario(
                         .await?;
                 }
                 ScenarioStep::AssertGameScore { title, label, score } => {
-                    let topic = runtime
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| scenario.fixtures.topic.clone());
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
                     let expected_title = title.clone();
                     let expected_label = label.clone();
                     let expected_score = *score;
@@ -3680,8 +3810,15 @@ fn step_name(step: &ScenarioStep) -> &'static str {
     match step {
         ScenarioStep::LaunchDesktop => "launch_desktop",
         ScenarioStep::SelectTopic { .. } => "select_topic",
+        ScenarioStep::SelectPublicTimeline => "select_public_timeline",
+        ScenarioStep::CreatePrivateChannel { .. } => "create_private_channel",
+        ScenarioStep::SelectPrivateChannel { .. } => "select_private_channel",
         ScenarioStep::CreatePost { .. } => "create_post",
         ScenarioStep::AssertTimelineContains { .. } => "assert_timeline_contains",
+        ScenarioStep::BookmarkPost { .. } => "bookmark_post",
+        ScenarioStep::AssertBookmarkListContains { .. } => "assert_bookmark_list_contains",
+        ScenarioStep::AssertBookmarkListMissing { .. } => "assert_bookmark_list_missing",
+        ScenarioStep::RemoveBookmark { .. } => "remove_bookmark",
         ScenarioStep::CreateLiveSession { .. } => "create_live_session",
         ScenarioStep::JoinLiveSession { .. } => "join_live_session",
         ScenarioStep::AssertLiveViewerCount { .. } => "assert_live_viewer_count",
@@ -3947,6 +4084,25 @@ mod tests {
             .join("kukuri")
             .join("desktop-smoke-game-room");
         let result = run_named_scenario(root, "desktop_smoke_game_room_persist", &artifacts)
+            .await
+            .expect("scenario");
+
+        assert_eq!(result.status, HarnessStatus::Pass);
+        assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test]
+    async fn desktop_smoke_bookmark_workflow() {
+        disable_keyring_for_tests();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("desktop-smoke-bookmark-workflow");
+        let result = run_named_scenario(root, "desktop_smoke_bookmark_workflow", &artifacts)
             .await
             .expect("scenario");
 

@@ -14,12 +14,12 @@ use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
-    ChannelAccessTokenExport, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView,
-    DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
-    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
-    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
-    TimelineView, UpdateGameRoomInput,
+    BookmarkedPostView, ChannelAccessTokenExport, ChannelAccessTokenPreview,
+    CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
+    CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
+    DirectMessageTimelineView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
+    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
+    RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -147,6 +147,17 @@ pub struct BookmarkCustomReactionRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoveBookmarkedCustomReactionRequest {
     pub asset_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkPostRequest {
+    pub topic: String,
+    pub object_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoveBookmarkedPostRequest {
+    pub object_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -947,6 +958,22 @@ impl DesktopRuntime {
     ) -> Result<()> {
         self.app_service
             .remove_bookmarked_custom_reaction(request.asset_id.as_str())
+            .await
+    }
+
+    pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
+        self.app_service.list_bookmarked_posts().await
+    }
+
+    pub async fn bookmark_post(&self, request: BookmarkPostRequest) -> Result<BookmarkedPostView> {
+        self.app_service
+            .bookmark_post(request.topic.as_str(), request.object_id.as_str())
+            .await
+    }
+
+    pub async fn remove_bookmarked_post(&self, request: RemoveBookmarkedPostRequest) -> Result<()> {
+        self.app_service
+            .remove_bookmarked_post(request.object_id.as_str())
             .await
     }
 
@@ -2679,6 +2706,8 @@ mod tests {
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use image::{AnimationDecoder, Delay, Frame, GenericImageView, ImageFormat, Rgba, RgbaImage};
     use iroh::address_lookup::EndpointInfo;
+    use kukuri_core::AuthorProfilePostDocV1;
+    use kukuri_docs_sync::author_replica_id;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -2960,38 +2989,6 @@ mod tests {
                     .map(|value| format_sync_snapshot(&value, topic))
                     .unwrap_or_else(|| "failed to read sync status".to_string());
                 bail!("direct topic readiness timeout; {status}");
-            }
-        }
-    }
-
-    async fn wait_for_direct_topic_peer_count(
-        runtime: &DesktopRuntime,
-        topic: &str,
-        expected: usize,
-        timeout_label: &str,
-    ) {
-        match timeout(runtime_replication_timeout(), async {
-            let mut stable_ready_polls = 0usize;
-            loop {
-                let status = runtime.get_sync_status().await.expect("sync status");
-                let ready = topic_has_direct_peer(&status, topic, expected);
-                if ready {
-                    stable_ready_polls += 1;
-                    if stable_ready_polls >= 3 {
-                        return;
-                    }
-                } else {
-                    stable_ready_polls = 0;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        })
-        .await
-        {
-            Ok(()) => {}
-            Err(_) => {
-                let status = runtime.get_sync_status().await.expect("sync status");
-                panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
             }
         }
     }
@@ -3289,6 +3286,72 @@ mod tests {
                     .unwrap_or_default();
                 panic!(
                     "{timeout_label}: {}; visible_items={visible_items:?}",
+                    format_sync_snapshot(&status, "")
+                );
+            }
+        }
+    }
+
+    async fn wait_for_profile_post_doc(
+        runtime: &DesktopRuntime,
+        author_pubkey: &str,
+        object_id: &str,
+        timeout_label: &str,
+    ) {
+        let author_replica = author_replica_id(author_pubkey);
+        match timeout(runtime_replication_timeout(), async {
+            loop {
+                let _ = runtime
+                    .list_profile_timeline(ListProfileTimelineRequest {
+                        pubkey: author_pubkey.to_string(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("profile timeline");
+                let current = runtime.iroh_stack.current.lock().await;
+                let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+                drop(current);
+                let docs = docs_sync
+                    .query_replica(&author_replica, DocQuery::Prefix("profile/posts/".into()))
+                    .await
+                    .expect("profile post docs");
+                if docs.into_iter().any(|record| {
+                    serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice())
+                        .map(|doc| doc.object_id.as_str() == object_id)
+                        .unwrap_or(false)
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                let current = runtime.iroh_stack.current.lock().await;
+                let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+                drop(current);
+                let visible_doc_ids = docs_sync
+                    .query_replica(&author_replica, DocQuery::Prefix("profile/posts/".into()))
+                    .await
+                    .ok()
+                    .map(|docs| {
+                        docs.into_iter()
+                            .filter_map(|record| {
+                                serde_json::from_slice::<AuthorProfilePostDocV1>(
+                                    record.value.as_slice(),
+                                )
+                                .ok()
+                                .map(|doc| doc.object_id.as_str().to_string())
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "{timeout_label}: {}; visible_doc_ids={visible_doc_ids:?}",
                     format_sync_snapshot(&status, "")
                 );
             }
@@ -4197,6 +4260,22 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("profile-runtime-a.db");
         let db_b = dir.path().join("profile-runtime-b.db");
+        let shared_keys = KukuriKeys::generate();
+        let shared_secret = shared_keys.export_secret_hex();
+        fs::write(
+            db_a.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key a");
+        fs::write(db_a.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend a");
+        fs::write(
+            db_b.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key b");
+        fs::write(db_b.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend b");
         let runtime_a = DesktopRuntime::new_with_config_and_identity(
             &db_a,
             TransportNetworkConfig::loopback(),
@@ -4240,6 +4319,14 @@ mod tests {
             .await
             .expect("status a")
             .local_author_pubkey;
+        assert_eq!(
+            author_pubkey,
+            runtime_b
+                .get_sync_status()
+                .await
+                .expect("status b")
+                .local_author_pubkey
+        );
         let tracked_topic = "kukuri:topic:desktop-profile-demo";
         let untracked_topic = "kukuri:topic:desktop-profile-relay";
         let public_scope = TimelineScope::Public;
@@ -4253,15 +4340,6 @@ mod tests {
             })
             .await
             .expect("subscribe a tracked topic");
-        let _ = runtime_a
-            .list_timeline(ListTimelineRequest {
-                topic: untracked_topic.into(),
-                scope: public_scope.clone(),
-                cursor: None,
-                limit: Some(20),
-            })
-            .await
-            .expect("subscribe a untracked topic");
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: tracked_topic.into(),
@@ -4271,18 +4349,18 @@ mod tests {
             })
             .await
             .expect("subscribe b tracked topic");
-        wait_for_direct_topic_peer_count(
+        wait_for_connected_topic_peer_count(
             &runtime_a,
             tracked_topic,
             1,
-            "profile tracked topic direct readiness timeout a",
+            "profile tracked topic readiness timeout a",
         )
         .await;
-        wait_for_direct_topic_peer_count(
+        wait_for_connected_topic_peer_count(
             &runtime_b,
             tracked_topic,
             1,
-            "profile tracked topic direct readiness timeout b",
+            "profile tracked topic readiness timeout b",
         )
         .await;
 
@@ -4304,6 +4382,13 @@ mod tests {
             })
             .await
             .expect("untracked public post");
+        wait_for_profile_post_doc(
+            &runtime_b,
+            author_pubkey.as_str(),
+            untracked_object_id.as_str(),
+            "profile post doc visibility timeout",
+        )
+        .await;
 
         let before_profile = runtime_b
             .get_sync_status()

@@ -48,9 +48,10 @@ use kukuri_docs_sync::{
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
-    DirectMessageConversationRow, DirectMessageMessageRow, DirectMessageOutboxRow,
-    DirectMessageTombstoneRow, GameRoomProjectionRow, LiveSessionProjectionRow,
-    ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
+    BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
+    DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
+    LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow,
+    Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -146,6 +147,12 @@ pub struct CustomReactionAssetView {
 }
 
 pub type BookmarkedCustomReactionView = CustomReactionAssetView;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkedPostView {
+    pub bookmarked_at: i64,
+    pub post: PostView,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateCustomReactionAssetInput {
@@ -1239,6 +1246,80 @@ impl AppService {
     pub async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()> {
         self.projection_store
             .remove_bookmarked_custom_reaction(asset_id)
+            .await
+    }
+
+    pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
+        let rows = self.projection_store.list_bookmarked_posts().await?;
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            items.push(self.bookmarked_post_view_from_row(row).await?);
+        }
+        Ok(items)
+    }
+
+    pub async fn bookmark_post(
+        &self,
+        topic_id: &str,
+        source_object_id: &str,
+    ) -> Result<BookmarkedPostView> {
+        self.ensure_topic_subscription(topic_id).await?;
+        let source_object_id = EnvelopeId::from(source_object_id);
+        let projection = self
+            .projection_store
+            .get_object_projection(&source_object_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("bookmark target was not found"))?;
+        if projection.topic_id != topic_id {
+            anyhow::bail!("bookmark target topic does not match");
+        }
+        if !matches!(
+            projection.object_kind.as_str(),
+            "post" | "comment" | "repost"
+        ) {
+            anyhow::bail!("bookmark target must be a timeline post");
+        }
+        let attachments = if projection.object_kind == "repost" {
+            Vec::new()
+        } else {
+            fetch_post_object_for_projection(
+                self.docs_sync.as_ref(),
+                &projection.source_replica_id,
+                projection.source_key.as_str(),
+            )
+            .await?
+            .map(|post_object| post_object.attachments)
+            .unwrap_or_default()
+        };
+        let row = BookmarkedPostRow {
+            source_object_id: projection.object_id.clone(),
+            source_envelope_id: projection.source_envelope_id.clone(),
+            source_replica_id: projection.source_replica_id.clone(),
+            topic_id: projection.topic_id.clone(),
+            channel_id: projection.channel_id.clone(),
+            author_pubkey: projection.author_pubkey.clone(),
+            created_at: projection.created_at,
+            object_kind: projection.object_kind.clone(),
+            payload_ref: projection.payload_ref.clone(),
+            content: projection
+                .content
+                .clone()
+                .or_else(|| content_from_payload_ref(&projection.payload_ref)),
+            attachments,
+            reply_to_object_id: projection.reply_to_object_id.clone(),
+            root_object_id: projection.root_object_id.clone(),
+            repost_of: projection.repost_of.clone(),
+            bookmarked_at: Utc::now().timestamp_millis(),
+        };
+        self.projection_store
+            .put_bookmarked_post(row.clone())
+            .await?;
+        self.bookmarked_post_view_from_row(row).await
+    }
+
+    pub async fn remove_bookmarked_post(&self, source_object_id: &str) -> Result<()> {
+        self.projection_store
+            .remove_bookmarked_post(&EnvelopeId::from(source_object_id))
             .await
     }
 
@@ -5711,6 +5792,76 @@ impl AppService {
         })
     }
 
+    async fn bookmarked_post_view_from_row(
+        &self,
+        row: BookmarkedPostRow,
+    ) -> Result<BookmarkedPostView> {
+        let profile = self.store.get_profile(row.author_pubkey.as_str()).await?;
+        let relationship = self
+            .projection_store
+            .get_author_relationship(
+                self.current_author_pubkey().as_str(),
+                row.author_pubkey.as_str(),
+            )
+            .await?;
+        let content_status = if row.object_kind == "repost" {
+            BlobViewStatus::Available
+        } else {
+            blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?
+        };
+        let attachments = if row.object_kind == "repost" {
+            Vec::new()
+        } else {
+            attachment_views_from_refs(self.blob_service.as_ref(), &row.attachments).await?
+        };
+        let repost_commentary = normalize_repost_commentary(row.content.clone());
+        let repost_of = match row.repost_of.clone() {
+            Some(snapshot) => Some(self.repost_snapshot_to_view(snapshot).await?),
+            None => None,
+        };
+        let audience_label = self
+            .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
+            .await;
+        let reaction_state = self
+            .reaction_state_for_target(&row.source_replica_id, &row.source_object_id)
+            .await?;
+
+        Ok(BookmarkedPostView {
+            bookmarked_at: row.bookmarked_at,
+            post: PostView {
+                object_id: row.source_object_id.as_str().to_string(),
+                envelope_id: row.source_envelope_id.as_str().to_string(),
+                author_pubkey: row.author_pubkey.clone(),
+                author_name: profile.as_ref().and_then(|profile| profile.name.clone()),
+                author_display_name: profile
+                    .as_ref()
+                    .and_then(|profile| profile.display_name.clone()),
+                following: relationship.as_ref().is_some_and(|value| value.following),
+                followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
+                mutual: relationship.as_ref().is_some_and(|value| value.mutual),
+                friend_of_friend: relationship
+                    .as_ref()
+                    .is_some_and(|value| value.friend_of_friend),
+                object_kind: row.object_kind.clone(),
+                content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+                content_status,
+                attachments,
+                created_at: row.created_at,
+                reply_to: row.reply_to_object_id.map(|id| id.0),
+                root_id: row.root_object_id.map(|id| id.0),
+                published_topic_id: Some(row.topic_id.clone()),
+                origin_topic_id: Some(row.topic_id.clone()),
+                repost_of,
+                repost_commentary: repost_commentary.clone(),
+                is_threadable: row.object_kind != "repost" || repost_commentary.is_some(),
+                channel_id: channel_id_for_view(row.channel_id.as_str()),
+                audience_label,
+                reaction_summary: reaction_state.reaction_summary,
+                my_reactions: reaction_state.my_reactions,
+            },
+        })
+    }
+
     async fn profile_post_to_view(&self, profile_post: ProfilePost) -> Result<PostView> {
         let profile = self
             .store
@@ -9924,6 +10075,220 @@ mod tests {
         assert_eq!(bookmarks[0].search_key, "bookmark");
     }
 
+    #[tokio::test]
+    async fn local_bookmarked_posts_restore_after_restart() {
+        let dir = tempdir().expect("tempdir");
+        let database_path = dir.path().join("bookmark-post-store.sqlite");
+        let store = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("sqlite store"),
+        );
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            generate_keys(),
+        );
+        let topic = "kukuri:topic:bookmark-restore";
+        let object_id = app
+            .create_post(topic, "saved for restart", None)
+            .await
+            .expect("create post");
+
+        let bookmarked = app
+            .bookmark_post(topic, object_id.as_str())
+            .await
+            .expect("bookmark post");
+        assert_eq!(bookmarked.post.object_id, object_id);
+
+        drop(app);
+        store.close().await;
+
+        let reopened = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("reopen sqlite store"),
+        );
+        let reopened_app = AppService::new_with_services(
+            reopened.clone(),
+            reopened.clone(),
+            transport,
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            generate_keys(),
+        );
+        let bookmarks = reopened_app
+            .list_bookmarked_posts()
+            .await
+            .expect("list bookmarked posts after restart");
+
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].post.object_id, object_id);
+        assert_eq!(bookmarks[0].post.content, "saved for restart");
+        assert!(bookmarks[0].bookmarked_at > 0);
+    }
+
+    #[tokio::test]
+    async fn bookmark_private_post_remains_local_only_and_readable_after_access_loss() {
+        let (app, store, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:bookmark-private";
+        let channel = app
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "quiet room".into(),
+                audience_kind: ChannelAudienceKind::InviteOnly,
+            })
+            .await
+            .expect("create private channel");
+        let channel_ref = ChannelRef::PrivateChannel {
+            channel_id: ChannelId::new(channel.channel_id.clone()),
+        };
+        let object_id = app
+            .create_post_in_channel(topic, channel_ref, "private bookmark body", None)
+            .await
+            .expect("create private post");
+
+        app.bookmark_post(topic, object_id.as_str())
+            .await
+            .expect("bookmark private post");
+        app.joined_private_channels.lock().await.clear();
+        ProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+            .await
+            .expect("clear object projections");
+
+        let bookmarks = app
+            .list_bookmarked_posts()
+            .await
+            .expect("list bookmarked private posts");
+
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].post.object_id, object_id);
+        assert_eq!(bookmarks[0].post.content, "private bookmark body");
+        assert_eq!(
+            bookmarks[0].post.channel_id.as_deref(),
+            Some(channel.channel_id.as_str())
+        );
+        assert_eq!(bookmarks[0].post.audience_label, "Private channel");
+    }
+
+    #[tokio::test]
+    async fn unbookmark_removes_only_local_bookmark_record() {
+        let (app, store, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:bookmark-remove";
+        let object_id = app
+            .create_post(topic, "still on timeline", None)
+            .await
+            .expect("create post");
+
+        app.bookmark_post(topic, object_id.as_str())
+            .await
+            .expect("bookmark post");
+        app.remove_bookmarked_post(object_id.as_str())
+            .await
+            .expect("remove bookmark");
+
+        let bookmarks = app.list_bookmarked_posts().await.expect("list bookmarks");
+        let timeline = app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("list timeline");
+        let projection = ProjectionStore::get_object_projection(
+            store.as_ref(),
+            &EnvelopeId::from(object_id.clone()),
+        )
+        .await
+        .expect("get projection");
+
+        assert!(bookmarks.is_empty());
+        assert!(
+            timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == object_id)
+        );
+        assert!(projection.is_some());
+    }
+
+    #[tokio::test]
+    async fn bookmarked_posts_are_sorted_by_bookmarked_at_desc() {
+        let (app, _, _, _) = local_app_with_memory_services();
+        let topic = "kukuri:topic:bookmark-order";
+        let first_id = app
+            .create_post(topic, "first saved", None)
+            .await
+            .expect("create first post");
+        app.bookmark_post(topic, first_id.as_str())
+            .await
+            .expect("bookmark first post");
+        sleep(Duration::from_millis(5)).await;
+        let second_id = app
+            .create_post(topic, "second saved", None)
+            .await
+            .expect("create second post");
+        app.bookmark_post(topic, second_id.as_str())
+            .await
+            .expect("bookmark second post");
+
+        let bookmarks = app.list_bookmarked_posts().await.expect("list bookmarks");
+
+        assert_eq!(bookmarks.len(), 2);
+        assert_eq!(bookmarks[0].post.object_id, second_id);
+        assert_eq!(bookmarks[1].post.object_id, first_id);
+        assert!(bookmarks[0].bookmarked_at >= bookmarks[1].bookmarked_at);
+    }
+
+    #[tokio::test]
+    async fn bookmarked_repost_renders_from_saved_snapshot_without_source_timeline_hydration() {
+        let (app, store, _, _) = local_app_with_memory_services();
+        let source_topic = "kukuri:topic:bookmark-source";
+        let target_topic = "kukuri:topic:bookmark-target";
+        let source_object_id = app
+            .create_post(source_topic, "source body", None)
+            .await
+            .expect("create source post");
+        let repost_id = app
+            .create_repost(
+                target_topic,
+                source_topic,
+                source_object_id.as_str(),
+                Some("keep this"),
+            )
+            .await
+            .expect("create repost");
+
+        app.bookmark_post(target_topic, repost_id.as_str())
+            .await
+            .expect("bookmark repost");
+        ProjectionStore::rebuild_object_projections(store.as_ref(), Vec::new())
+            .await
+            .expect("clear projections");
+
+        let bookmarks = app
+            .list_bookmarked_posts()
+            .await
+            .expect("list bookmarked reposts");
+
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].post.object_id, repost_id);
+        assert_eq!(bookmarks[0].post.content, "keep this");
+        let repost_of = bookmarks[0]
+            .post
+            .repost_of
+            .as_ref()
+            .expect("repost snapshot");
+        assert_eq!(repost_of.source_object_id, source_object_id);
+        assert_eq!(repost_of.source_topic_id, source_topic);
+        assert_eq!(repost_of.content, "source body");
+    }
+
     #[test]
     fn legacy_custom_reaction_records_fall_back_to_asset_id_for_search_key() {
         let owner_pubkey = "b".repeat(64);
@@ -11802,6 +12167,84 @@ mod tests {
                 .iter()
                 .any(|value| value == topic)
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bookmarks_do_not_sync_between_apps() {
+        let dir = tempdir().expect("tempdir");
+        let stack_a = TestIrohStack::new(&dir.path().join("bookmark-a")).await;
+        let stack_b = TestIrohStack::new(&dir.path().join("bookmark-b")).await;
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let app_a = app_with_iroh_services(store_a, &stack_a);
+        let app_b = app_with_iroh_services(store_b.clone(), &stack_b);
+
+        let ticket_a = app_a
+            .peer_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = app_b
+            .peer_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        app_a
+            .import_peer_ticket(&ticket_b)
+            .await
+            .expect("import b into a");
+        app_b
+            .import_peer_ticket(&ticket_a)
+            .await
+            .expect("import a into b");
+
+        let topic = "kukuri:topic:bookmark-local-only";
+        let _ = app_b
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("app b should subscribe to topic");
+
+        let object_id = app_a
+            .create_post(topic, "bookmark should stay local", None)
+            .await
+            .expect("app a should create post");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                let timeline = app_b
+                    .list_timeline(topic, None, 20)
+                    .await
+                    .expect("timeline should load");
+                if timeline
+                    .items
+                    .iter()
+                    .any(|post| post.object_id == object_id)
+                {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("timeline sync timeout");
+
+        app_a
+            .bookmark_post(topic, object_id.as_str())
+            .await
+            .expect("bookmark post on app a");
+
+        let bookmarks_a = app_a
+            .list_bookmarked_posts()
+            .await
+            .expect("list bookmarks on app a");
+        let bookmarks_b = app_b
+            .list_bookmarked_posts()
+            .await
+            .expect("list bookmarks on app b");
+
+        assert_eq!(bookmarks_a.len(), 1);
+        assert_eq!(bookmarks_a[0].post.object_id, object_id);
+        assert!(bookmarks_b.is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

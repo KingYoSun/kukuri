@@ -3,6 +3,7 @@ import {
   type AuthorSocialView,
   type BlobMediaPayload,
   type BookmarkedCustomReactionView,
+  type BookmarkedPostView,
   type ChannelAccessTokenExport,
   type ChannelAccessTokenPreview,
   type ChannelAudienceKind,
@@ -84,6 +85,24 @@ function withGameRoomDefaults(room: GameRoomView): GameRoomView {
     channel_id: room.channel_id ?? null,
     audience_label: room.audience_label ?? (room.channel_id ? 'Private channel' : 'Public'),
     scores: room.scores.map((score) => ({ ...score })),
+  };
+}
+
+function cloneBookmarkedPost(view: BookmarkedPostView): BookmarkedPostView {
+  return {
+    bookmarked_at: view.bookmarked_at,
+    post: withSocialPostDefaults({
+      ...view.post,
+      attachments: view.post.attachments.map((attachment) => ({ ...attachment })),
+      repost_of: view.post.repost_of
+        ? {
+            ...view.post.repost_of,
+            attachments: view.post.repost_of.attachments.map((attachment) => ({ ...attachment })),
+          }
+        : null,
+      reaction_summary: [...(view.post.reaction_summary ?? [])],
+      my_reactions: [...(view.post.my_reactions ?? [])],
+    }),
   };
 }
 
@@ -324,6 +343,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   const openedDirectMessagePeers = new Set<string>();
   const ownedCustomReactionAssets: CustomReactionAssetView[] = [];
   const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
+  const bookmarkedPosts: BookmarkedPostView[] = [];
   let recentReactions: RecentReactionView[] = [];
 
   function directMessageStatusFor(pubkey: string): DirectMessageStatusView {
@@ -614,6 +634,45 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       const index = bookmarkedCustomReactionAssets.findIndex((asset) => asset.asset_id === assetId);
       if (index >= 0) {
         bookmarkedCustomReactionAssets.splice(index, 1);
+      }
+    },
+    async listBookmarkedPosts() {
+      return bookmarkedPosts.map((item) => cloneBookmarkedPost(item));
+    },
+    async bookmarkPost(topic, objectId) {
+      const existing = bookmarkedPosts.find((item) => item.post.object_id === objectId);
+      if (existing) {
+        return cloneBookmarkedPost(existing);
+      }
+      const post = (postsByTopic[topic] ?? []).find((candidate) => candidate.object_id === objectId);
+      if (!post) {
+        throw new Error('bookmark target was not found');
+      }
+      const bookmarked: BookmarkedPostView = {
+        bookmarked_at: Date.now(),
+        post: withSocialPostDefaults({
+          ...post,
+          attachments: post.attachments.map((attachment) => ({ ...attachment })),
+          repost_of: post.repost_of
+            ? {
+                ...post.repost_of,
+                attachments: post.repost_of.attachments.map((attachment) => ({ ...attachment })),
+              }
+            : null,
+        }),
+      };
+      bookmarkedPosts.unshift(bookmarked);
+      bookmarkedPosts.sort(
+        (left, right) =>
+          right.bookmarked_at - left.bookmarked_at ||
+          right.post.object_id.localeCompare(left.post.object_id)
+      );
+      return cloneBookmarkedPost(bookmarked);
+    },
+    async removeBookmarkedPost(objectId) {
+      const index = bookmarkedPosts.findIndex((item) => item.post.object_id === objectId);
+      if (index >= 0) {
+        bookmarkedPosts.splice(index, 1);
       }
     },
     async listTimeline(topic, _cursor, _limit, scope: TimelineScope = { kind: 'public' }) {

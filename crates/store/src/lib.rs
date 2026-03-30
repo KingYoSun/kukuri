@@ -6,8 +6,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, CustomReactionAssetSnapshotV1, DirectMessageAttachmentManifestV1, EnvelopeId,
-    FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry, KukuriEnvelope,
+    AssetRef, BlobHash, CustomReactionAssetSnapshotV1, DirectMessageAttachmentManifestV1,
+    EnvelopeId, FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry, KukuriEnvelope,
     LiveSessionStatus, ObjectStatus, PayloadRef, Profile, ReactionKeyKind, ReplicaId,
     RepostSourceSnapshotV1, ThreadRef, parse_follow_edge, parse_profile,
 };
@@ -89,6 +89,25 @@ pub struct BookmarkedCustomReactionRow {
     pub bytes: u64,
     pub width: u32,
     pub height: u32,
+    pub bookmarked_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkedPostRow {
+    pub source_object_id: EnvelopeId,
+    pub source_envelope_id: EnvelopeId,
+    pub source_replica_id: ReplicaId,
+    pub topic_id: String,
+    pub channel_id: String,
+    pub author_pubkey: String,
+    pub created_at: i64,
+    pub object_kind: String,
+    pub payload_ref: PayloadRef,
+    pub content: Option<String>,
+    pub attachments: Vec<AssetRef>,
+    pub reply_to_object_id: Option<EnvelopeId>,
+    pub root_object_id: Option<EnvelopeId>,
+    pub repost_of: Option<RepostSourceSnapshotV1>,
     pub bookmarked_at: i64,
 }
 
@@ -280,6 +299,9 @@ pub trait ProjectionStore: Send + Sync {
     async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()>;
     async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>>;
     async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()>;
+    async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()>;
+    async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>>;
+    async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()>;
     async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
@@ -840,6 +862,7 @@ pub struct MemoryStore {
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
     reaction_projection_rows: Arc<RwLock<MemoryReactionProjectionRows>>,
     bookmarked_custom_reactions: Arc<RwLock<HashMap<String, BookmarkedCustomReactionRow>>>,
+    bookmarked_posts: Arc<RwLock<HashMap<String, BookmarkedPostRow>>>,
     direct_message_conversations: Arc<RwLock<HashMap<String, DirectMessageConversationRow>>>,
     direct_message_rows: Arc<RwLock<MemoryDirectMessageRows>>,
     direct_message_outbox_rows: Arc<RwLock<MemoryDirectMessageOutboxRows>>,
@@ -1715,6 +1738,110 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO bookmarked_posts (
+              source_object_id,
+              source_envelope_id,
+              source_replica_id,
+              topic_id,
+              channel_id,
+              author_pubkey,
+              created_at,
+              object_kind,
+              payload_ref_json,
+              content,
+              attachments_json,
+              reply_to_object_id,
+              root_object_id,
+              repost_of_json,
+              bookmarked_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            ON CONFLICT(source_object_id) DO UPDATE SET
+              source_envelope_id = excluded.source_envelope_id,
+              source_replica_id = excluded.source_replica_id,
+              topic_id = excluded.topic_id,
+              channel_id = excluded.channel_id,
+              author_pubkey = excluded.author_pubkey,
+              created_at = excluded.created_at,
+              object_kind = excluded.object_kind,
+              payload_ref_json = excluded.payload_ref_json,
+              content = excluded.content,
+              attachments_json = excluded.attachments_json,
+              reply_to_object_id = excluded.reply_to_object_id,
+              root_object_id = excluded.root_object_id,
+              repost_of_json = excluded.repost_of_json,
+              bookmarked_at = excluded.bookmarked_at
+            "#,
+        )
+        .bind(row.source_object_id.as_str())
+        .bind(row.source_envelope_id.as_str())
+        .bind(row.source_replica_id.as_str())
+        .bind(row.topic_id.as_str())
+        .bind(row.channel_id.as_str())
+        .bind(row.author_pubkey.as_str())
+        .bind(row.created_at)
+        .bind(row.object_kind.as_str())
+        .bind(serde_json::to_string(&row.payload_ref)?)
+        .bind(row.content.as_deref())
+        .bind(serde_json::to_string(&row.attachments)?)
+        .bind(row.reply_to_object_id.as_ref().map(EnvelopeId::as_str))
+        .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
+        .bind(
+            row.repost_of
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+        )
+        .bind(row.bookmarked_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+              source_object_id,
+              source_envelope_id,
+              source_replica_id,
+              topic_id,
+              channel_id,
+              author_pubkey,
+              created_at,
+              object_kind,
+              payload_ref_json,
+              content,
+              attachments_json,
+              reply_to_object_id,
+              root_object_id,
+              repost_of_json,
+              bookmarked_at
+            FROM bookmarked_posts
+            ORDER BY bookmarked_at DESC, source_object_id DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_bookmarked_post).collect()
+    }
+
+    async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM bookmarked_posts
+            WHERE source_object_id = ?1
+            "#,
+        )
+        .bind(source_object_id.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
@@ -2491,6 +2618,39 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn put_bookmarked_post(&self, row: BookmarkedPostRow) -> Result<()> {
+        self.bookmarked_posts
+            .write()
+            .await
+            .insert(row.source_object_id.as_str().to_string(), row);
+        Ok(())
+    }
+
+    async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostRow>> {
+        let mut items = self
+            .bookmarked_posts
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .bookmarked_at
+                .cmp(&left.bookmarked_at)
+                .then_with(|| right.source_object_id.cmp(&left.source_object_id))
+        });
+        Ok(items)
+    }
+
+    async fn remove_bookmarked_post(&self, source_object_id: &EnvelopeId) -> Result<()> {
+        self.bookmarked_posts
+            .write()
+            .await
+            .remove(source_object_id.as_str());
+        Ok(())
+    }
+
     async fn upsert_direct_message_conversation(
         &self,
         row: DirectMessageConversationRow,
@@ -2852,6 +3012,37 @@ fn row_to_bookmarked_custom_reaction(
         bytes: row.get::<i64, _>("bytes") as u64,
         width: row.get::<i64, _>("width") as u32,
         height: row.get::<i64, _>("height") as u32,
+        bookmarked_at: row.get("bookmarked_at"),
+    })
+}
+
+fn row_to_bookmarked_post(row: sqlx::sqlite::SqliteRow) -> Result<BookmarkedPostRow> {
+    Ok(BookmarkedPostRow {
+        source_object_id: row.get::<String, _>("source_object_id").into(),
+        source_envelope_id: row.get::<String, _>("source_envelope_id").into(),
+        source_replica_id: ReplicaId::new(row.get::<String, _>("source_replica_id")),
+        topic_id: row.get("topic_id"),
+        channel_id: row.get("channel_id"),
+        author_pubkey: row.get("author_pubkey"),
+        created_at: row.get("created_at"),
+        object_kind: row.get("object_kind"),
+        payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
+        content: row.try_get("content").ok(),
+        attachments: serde_json::from_str(row.get::<String, _>("attachments_json").as_str())?,
+        reply_to_object_id: row
+            .try_get::<String, _>("reply_to_object_id")
+            .ok()
+            .map(EnvelopeId::from),
+        root_object_id: row
+            .try_get::<String, _>("root_object_id")
+            .ok()
+            .map(EnvelopeId::from),
+        repost_of: row
+            .try_get::<String, _>("repost_of_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?,
         bookmarked_at: row.get("bookmarked_at"),
     })
 }
