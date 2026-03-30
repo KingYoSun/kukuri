@@ -48,6 +48,9 @@ type PostCardProps = {
   recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  showBookmarkAction?: boolean;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (post: PostCardView['post']) => void;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -77,6 +80,9 @@ export function PostCard({
   recentReactions = [],
   onToggleReaction,
   onBookmarkCustomReaction,
+  showBookmarkAction = false,
+  isBookmarked = false,
+  onToggleBookmark,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
@@ -357,6 +363,15 @@ export function PostCard({
                 onClick={() => onReply(post)}
               >
                 <Reply className='size-4' aria-hidden='true' />
+              </Button>
+            ) : null}
+            {showBookmarkAction && onToggleBookmark ? (
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => onToggleBookmark(post)}
+              >
+                {isBookmarked ? t('common:actions.removeBookmark') : t('common:actions.bookmark')}
               </Button>
             ) : null}
           </>

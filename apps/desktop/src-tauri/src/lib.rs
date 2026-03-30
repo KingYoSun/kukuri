@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, BookmarkCustomReactionRequest,
+    BookmarkPostRequest,
     CommunityNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
     CreateCustomReactionAssetRequest, CreateGameRoomRequest, CreateLiveSessionRequest,
     CreatePostRequest, CreatePrivateChannelRequest, CreateRepostRequest,
@@ -13,7 +14,7 @@ use kukuri_desktop_runtime::{
     ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest, ListGameRoomsRequest,
     ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
     ListRecentReactionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    RemoveBookmarkedCustomReactionRequest,
+    RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
     RotatePrivateChannelRequest, SendDirectMessageRequest, SetCommunityNodeConfigRequest,
     SetDiscoverySeedsRequest, SetMyProfileRequest, ToggleReactionRequest,
     UnsubscribeTopicRequest, UpdateGameRoomRequest, resolve_db_path_from_env,
@@ -180,6 +181,41 @@ async fn remove_bookmarked_custom_reaction(
     state
         .runtime
         .remove_bookmarked_custom_reaction(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_bookmarked_posts(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_app_api::BookmarkedPostView>, String> {
+    state
+        .runtime
+        .list_bookmarked_posts()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn bookmark_post(
+    state: tauri::State<'_, DesktopState>,
+    request: BookmarkPostRequest,
+) -> Result<kukuri_app_api::BookmarkedPostView, String> {
+    state
+        .runtime
+        .bookmark_post(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn remove_bookmarked_post(
+    state: tauri::State<'_, DesktopState>,
+    request: RemoveBookmarkedPostRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .remove_bookmarked_post(request)
         .await
         .map_err(map_error)
 }
@@ -812,6 +848,9 @@ pub fn run() {
             list_bookmarked_custom_reactions,
             bookmark_custom_reaction,
             remove_bookmarked_custom_reaction,
+            list_bookmarked_posts,
+            bookmark_post,
+            remove_bookmarked_post,
             create_private_channel,
             export_private_channel_invite,
             import_private_channel_invite,

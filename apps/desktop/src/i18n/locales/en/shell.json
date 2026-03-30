@@ -64,11 +64,16 @@
     "activeTopicBar": "Active topic bar"
   },
   "workspace": {
+    "bookmarks": "Bookmarks",
     "composeTarget": "Compose Target",
+    "feed": "Feed",
+    "noBookmarks": "No bookmarked posts yet.",
     "noPosts": "No posts yet for this topic.",
     "noPublicPosts": "No public posts from you in this topic yet.",
     "refresh": "Refresh",
+    "savedCount": "{{count}} saved",
     "tabs": "Workspaces",
+    "timelineViews": "Timeline views",
     "viewScope": "View Scope"
   }
 }

@@ -64,11 +64,16 @@
     "activeTopicBar": "アクティブトピックバー"
   },
   "workspace": {
+    "bookmarks": "ブックマーク",
     "composeTarget": "投稿先",
+    "feed": "フィード",
+    "noBookmarks": "まだブックマークした投稿がありません。",
     "noPosts": "このトピックにはまだ投稿がありません。",
     "noPublicPosts": "このトピックにはまだ自分の公開投稿がありません。",
     "refresh": "更新",
+    "savedCount": "{{count}} 件保存済み",
     "tabs": "ワークスペース",
+    "timelineViews": "タイムライン表示",
     "viewScope": "表示範囲"
   }
 }

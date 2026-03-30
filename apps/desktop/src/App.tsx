@@ -68,6 +68,7 @@ import {
   type ProfileWorkspaceMode,
   type SettingsSection,
   type ShellChromeState,
+  type TimelineWorkspaceView,
 } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -92,6 +93,7 @@ import {
   AttachmentView,
   BlobMediaPayload,
   BookmarkedCustomReactionView,
+  BookmarkedPostView,
   ChannelAudienceKind,
   ChannelRef,
   CustomReactionAssetView,
@@ -189,6 +191,7 @@ type DesktopShellState = {
   profileTimeline: PostView[];
   ownedReactionAssets: CustomReactionAssetView[];
   bookmarkedReactionAssets: BookmarkedCustomReactionView[];
+  bookmarkedPosts: BookmarkedPostView[];
   recentReactions: RecentReactionView[];
   profileDraft: ProfileInput;
   profileDirty: boolean;
@@ -263,6 +266,7 @@ type DesktopShellRouteOverrides = {
   settingsOpen?: boolean;
   settingsSection?: SettingsSection;
   timelineScope?: TimelineScope;
+  timelineView?: TimelineWorkspaceView;
 };
 
 type OpenThreadOptions = {
@@ -389,6 +393,7 @@ function createInitialShellState(): DesktopShellState {
     profileTimeline: [],
     ownedReactionAssets: [],
     bookmarkedReactionAssets: [],
+    bookmarkedPosts: [],
     recentReactions: [],
     profileDraft: {},
     profileDirty: false,
@@ -443,6 +448,7 @@ function createInitialShellState(): DesktopShellState {
     error: null,
     shellChromeState: {
       activePrimarySection: 'timeline',
+      timelineView: 'feed',
       activeSettingsSection: 'connectivity',
       profileMode: 'overview',
       navOpen: false,
@@ -1404,6 +1410,7 @@ function DesktopShellPage({
     profileTimeline,
     ownedReactionAssets,
     bookmarkedReactionAssets,
+    bookmarkedPosts,
     recentReactions,
     profileDraft,
     profileDirty,
@@ -1459,6 +1466,8 @@ function DesktopShellPage({
   const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
   const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
+  const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
+  const previousTimelineViewRef = useRef(shellChromeState.timelineView);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -1474,7 +1483,18 @@ function DesktopShellPage({
   );
 
   useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'timeline' && composeDialogOpen) {
+    const previousPrimarySection = previousPrimarySectionRef.current;
+    const previousTimelineView = previousTimelineViewRef.current;
+    const enteredBookmarkTimeline =
+      previousPrimarySection === 'timeline' &&
+      shellChromeState.activePrimarySection === 'timeline' &&
+      previousTimelineView !== 'bookmarks' &&
+      shellChromeState.timelineView === 'bookmarks';
+
+    if (
+      (shellChromeState.activePrimarySection !== 'timeline' || enteredBookmarkTimeline) &&
+      composeDialogOpen
+    ) {
       setComposeDialogOpen(false);
     }
     if (shellChromeState.activePrimarySection !== 'live' && liveCreateDialogOpen) {
@@ -1483,11 +1503,14 @@ function DesktopShellPage({
     if (shellChromeState.activePrimarySection !== 'game' && gameCreateDialogOpen) {
       setGameCreateDialogOpen(false);
     }
+    previousPrimarySectionRef.current = shellChromeState.activePrimarySection;
+    previousTimelineViewRef.current = shellChromeState.timelineView;
   }, [
     composeDialogOpen,
     gameCreateDialogOpen,
     liveCreateDialogOpen,
     shellChromeState.activePrimarySection,
+    shellChromeState.timelineView,
   ]);
 
   const makeFieldSetter = useCallback(
@@ -1583,6 +1606,7 @@ function DesktopShellPage({
     () => makeFieldSetter('bookmarkedReactionAssets'),
     [makeFieldSetter]
   );
+  const setBookmarkedPosts = useMemo(() => makeFieldSetter('bookmarkedPosts'), [makeFieldSetter]);
   const setRecentReactions = useMemo(
     () => makeFieldSetter('recentReactions'),
     [makeFieldSetter]
@@ -1869,7 +1893,12 @@ function DesktopShellPage({
     }
     return t('common:actions.publish');
   }, [shellChromeState.activePrimarySection, t]);
-  const showFloatingActionButton = shellChromeState.activePrimarySection !== 'profile';
+  const showFloatingActionButton =
+    shellChromeState.activePrimarySection !== 'profile' &&
+    !(
+      shellChromeState.activePrimarySection === 'timeline' &&
+      shellChromeState.timelineView === 'bookmarks'
+    );
   const syncRoute = useCallback((
     mode: 'push' | 'replace' = 'replace',
     overrides?: DesktopShellRouteOverrides
@@ -1880,6 +1909,7 @@ function DesktopShellPage({
     const nextTopic = overrides?.activeTopic ?? activeTopic;
     const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
     const resolvedPrimarySection = nextPrimarySection;
+    const nextTimelineView = overrides?.timelineView ?? shellChromeState.timelineView;
     const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
     const nextSelectedThread = hasOverride('selectedThread')
       ? overrides?.selectedThread ?? null
@@ -1911,8 +1941,14 @@ function DesktopShellPage({
     }
 
     search.set('topic', nextTopic);
-    if (nextSelectedChannelId) {
+    if (
+      nextSelectedChannelId &&
+      !(resolvedPrimarySection === 'timeline' && nextTimelineView === 'bookmarks')
+    ) {
       search.set('channel', nextSelectedChannelId);
+    }
+    if (resolvedPrimarySection === 'timeline' && nextTimelineView === 'bookmarks') {
+      search.set('timelineView', 'bookmarks');
     }
     if (nextDirectMessagePaneOpen) {
       search.set('context', 'dm');
@@ -1957,6 +1993,7 @@ function DesktopShellPage({
     selectedThread,
     selectedChannelIdByTopic,
     shellChromeState.activePrimarySection,
+    shellChromeState.timelineView,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileMode,
     shellChromeState.settingsOpen,
@@ -2199,6 +2236,7 @@ function DesktopShellPage({
           directMessageStatusResult,
           ownedReactionAssetsResult,
           bookmarkedReactionAssetsResult,
+          bookmarkedPostsResult,
           recentReactionsResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
@@ -2221,6 +2259,7 @@ function DesktopShellPage({
             : Promise.resolve(null),
           api.listMyCustomReactionAssets(),
           api.listBookmarkedCustomReactions(),
+          api.listBookmarkedPosts(),
           api.listRecentReactions(8),
         ]);
         if (requestId !== loadTopicsRequestRef.current) {
@@ -2349,6 +2388,9 @@ function DesktopShellPage({
           }
           if (bookmarkedReactionAssetsResult.status === 'fulfilled') {
             setBookmarkedReactionAssets(bookmarkedReactionAssetsResult.value);
+          }
+          if (bookmarkedPostsResult.status === 'fulfilled') {
+            setBookmarkedPosts(bookmarkedPostsResult.value);
           }
           if (recentReactionsResult.status === 'fulfilled') {
             setRecentReactions(recentReactionsResult.value);
@@ -2518,6 +2560,7 @@ function DesktopShellPage({
       setProfileError,
       setProfilePanelState,
       setBookmarkedReactionAssets,
+      setBookmarkedPosts,
       setRecentReactions,
       setReactionPanelState,
       setSelectedAuthor,
@@ -2763,6 +2806,39 @@ function DesktopShellPage({
       profileMode: section === 'profile' ? 'overview' : undefined,
       selectedAuthorPubkey: null,
       selectedThread: null,
+    });
+  }
+
+  function focusTimelineView(view: TimelineWorkspaceView) {
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+      timelineView: view,
+      navOpen: false,
+    }));
+    if (view === 'bookmarks') {
+      setSelectedThread(null);
+      setThread([]);
+      setReplyTarget(null);
+      setRepostTarget(null);
+      setSelectedAuthorPubkey(null);
+      setSelectedAuthor(null);
+      setSelectedAuthorTimeline([]);
+      setAuthorError(null);
+      setDirectMessagePaneOpen(false);
+      setSelectedDirectMessagePeerPubkey(null);
+      setDirectMessageError(null);
+    }
+    window.requestAnimationFrame(() => {
+      primarySectionRefs.current.timeline?.focus();
+    });
+    syncRoute('push', {
+      primarySection: 'timeline',
+      timelineView: view,
+      selectedAuthorPubkey: view === 'bookmarks' ? null : undefined,
+      selectedThread: view === 'bookmarks' ? null : undefined,
+      directMessagePaneOpen: view === 'bookmarks' ? false : undefined,
+      selectedDirectMessagePeerPubkey: view === 'bookmarks' ? null : undefined,
     });
   }
 
@@ -3835,6 +3911,31 @@ function DesktopShellPage({
     }
   }
 
+  async function handleToggleBookmarkedPost(post: PostView) {
+    const topicId = publishedTopicIdForPost(post);
+    if (!topicId) {
+      setError(translate('common:errors.failedToUpdateBookmark'));
+      return;
+    }
+    try {
+      if (bookmarkedPostIds.has(post.object_id)) {
+        await api.removeBookmarkedPost(post.object_id);
+        setBookmarkedPosts((current) =>
+          current.filter((item) => item.post.object_id !== post.object_id)
+        );
+      } else {
+        const bookmarked = await api.bookmarkPost(topicId, post.object_id);
+        setBookmarkedPosts((current) => [
+          bookmarked,
+          ...current.filter((item) => item.post.object_id !== bookmarked.post.object_id),
+        ]);
+      }
+      setError(null);
+    } catch (bookmarkError) {
+      setError(messageFromError(bookmarkError, translate('common:errors.failedToUpdateBookmark')));
+    }
+  }
+
   const openThread = useCallback(async (threadId: string, options?: OpenThreadOptions) => {
     const topic = options?.topic ?? activeTopic;
     try {
@@ -4470,6 +4571,7 @@ function DesktopShellPage({
     const params = new URLSearchParams(location.search);
     const requestedTopic = params.get('topic')?.trim() ?? null;
     const requestedChannelParam = params.get('channel')?.trim() ?? null;
+    const requestedTimelineView = params.get('timelineView');
     const requestedTimelineScopeValue = params.get('timelineScope');
     const requestedComposeTargetValue = params.get('composeTarget');
     const requestedSettingsSection = params.get('settings');
@@ -4497,27 +4599,35 @@ function DesktopShellPage({
       shouldNormalize = true;
     }
 
+    const nextTimelineView =
+      routeSection === 'timeline' && requestedTimelineView === 'bookmarks' ? 'bookmarks' : 'feed';
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
     const currentSelectedChannelIdForTopic = selectedChannelIdByTopic[nextTopic] ?? null;
-    let nextSelectedChannelId = requestedChannelParam;
-    if (!nextSelectedChannelId) {
-      const legacyRequestedChannel = [requestedComposeTargetValue, requestedTimelineScopeValue]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => {
-          if (value.startsWith('channel:')) {
-            return value.slice('channel:'.length);
-          }
-          return null;
-        })
-        .find((value): value is string => value !== null);
-      if (legacyRequestedChannel) {
-        nextSelectedChannelId = legacyRequestedChannel;
+    let nextSelectedChannelId = currentSelectedChannelIdForTopic;
+    if (nextTimelineView !== 'bookmarks') {
+      nextSelectedChannelId = requestedChannelParam;
+      if (!nextSelectedChannelId) {
+        const legacyRequestedChannel = [requestedComposeTargetValue, requestedTimelineScopeValue]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => {
+            if (value.startsWith('channel:')) {
+              return value.slice('channel:'.length);
+            }
+            return null;
+          })
+          .find((value): value is string => value !== null);
+        if (legacyRequestedChannel) {
+          nextSelectedChannelId = legacyRequestedChannel;
+        }
       }
+    } else if (requestedChannelParam) {
+      shouldNormalize = true;
     }
     if (requestedTimelineScopeValue || requestedComposeTargetValue) {
       shouldNormalize = true;
     }
     if (
+      nextTimelineView !== 'bookmarks' &&
       nextSelectedChannelId &&
       !joinedChannelsForTopic.some((channel) => channel.channel_id === nextSelectedChannelId)
     ) {
@@ -4550,6 +4660,7 @@ function DesktopShellPage({
 
     if (
       shellChromeState.activePrimarySection !== routeSection ||
+      shellChromeState.timelineView !== nextTimelineView ||
       shellChromeState.activeSettingsSection !== nextSettingsSection ||
       shellChromeState.settingsOpen !== nextSettingsOpen ||
       shellChromeState.profileMode !== nextProfileMode
@@ -4557,12 +4668,19 @@ function DesktopShellPage({
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: routeSection,
+        timelineView: nextTimelineView,
         activeSettingsSection: nextSettingsSection,
         settingsOpen: nextSettingsOpen,
         profileMode: nextProfileMode,
       }));
     }
 
+    if (requestedTimelineView && requestedTimelineView !== 'bookmarks') {
+      shouldNormalize = true;
+    }
+    if (requestedTimelineView && routeSection !== 'timeline') {
+      shouldNormalize = true;
+    }
     if (requestedSettingsSection && !isSettingsSection(requestedSettingsSection)) {
       shouldNormalize = true;
     }
@@ -4573,7 +4691,31 @@ function DesktopShellPage({
       shouldNormalize = true;
     }
 
-    if (requestedContext === 'dm') {
+    if (nextTimelineView === 'bookmarks') {
+      if (requestedContext) {
+        shouldNormalize = true;
+      }
+      if (selectedThread) {
+        setSelectedThread(null);
+        setThread([]);
+        setReplyTarget(null);
+        setRepostTarget(null);
+      }
+      if (selectedAuthorPubkey) {
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
+      if (directMessagePaneOpen) {
+        setDirectMessagePaneOpen(false);
+      }
+      if (selectedDirectMessagePeerPubkey) {
+        setSelectedDirectMessagePeerPubkey(null);
+      }
+      setDirectMessageError(null);
+    }
+
+    if (nextTimelineView !== 'bookmarks' && requestedContext === 'dm') {
       if (requestedThreadId || requestedAuthorPubkey) {
         shouldNormalize = true;
       }
@@ -4610,7 +4752,7 @@ function DesktopShellPage({
           normalizeOnError: true,
         });
       }
-    } else if (requestedContext === 'thread') {
+    } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'thread') {
       const threadReadyForNestedAuthor =
         requestedThreadId !== null &&
         requestedThreadId.length > 0 &&
@@ -4666,7 +4808,7 @@ function DesktopShellPage({
           threadId: requestedThreadId,
         });
       }
-    } else if (requestedContext === 'author') {
+    } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'author') {
       if (requestedThreadId) {
         shouldNormalize = true;
       }
@@ -4696,7 +4838,7 @@ function DesktopShellPage({
           normalizeOnError: true,
         });
       }
-    } else if (requestedContext) {
+    } else if (nextTimelineView !== 'bookmarks' && requestedContext) {
       shouldNormalize = true;
       if (selectedThread || selectedAuthorPubkey) {
         setSelectedThread(null);
@@ -4773,6 +4915,7 @@ function DesktopShellPage({
     setThread,
     setTimelineScopeByTopic,
     shellChromeState.activePrimarySection,
+    shellChromeState.timelineView,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileMode,
     shellChromeState.settingsOpen,
@@ -4941,6 +5084,14 @@ function DesktopShellPage({
   const activeTimelinePostViews = useMemo(
     () => activeTimeline.map((post) => buildPostCardView(post, 'timeline')),
     [activeTimeline, buildPostCardView]
+  );
+  const bookmarkedPostIds = useMemo(
+    () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
+    [bookmarkedPosts]
+  );
+  const bookmarkedTimelinePostViews = useMemo(
+    () => bookmarkedPosts.map((item) => buildPostCardView(item.post, 'timeline')),
+    [bookmarkedPosts, buildPostCardView]
   );
   const profileTimelinePostViews = useMemo(
     () => profileTimeline.map((post) => buildPostCardView(post, 'timeline')),
@@ -5409,6 +5560,13 @@ function DesktopShellPage({
         ...item,
         label: t(`shell:primarySections.${item.id}`),
       })),
+    [t]
+  );
+  const timelineViewItems = useMemo<Array<{ id: TimelineWorkspaceView; label: string }>>(
+    () => [
+      { id: 'feed', label: t('shell:workspace.feed') },
+      { id: 'bookmarks', label: t('shell:workspace.bookmarks') },
+    ],
     [t]
   );
   const settingsSectionCopy = useMemo(
@@ -5913,19 +6071,45 @@ function DesktopShellPage({
                   <Card className='shell-workspace-card'>
                     <div className='shell-workspace-header'>
                       <div className='shell-workspace-summary'>
-                        <span className='relationship-badge'>
-                          {t('common:audience.viewing', {
-                            audience: audienceLabelForTimelineScope(
-                              activeTimelineScope,
-                              activeJoinedChannels
-                            ),
-                          })}
-                        </span>
-                        <span className='relationship-badge relationship-badge-direct'>
-                          {t('common:audience.posting', {
-                            audience: activeComposeAudienceLabel,
-                          })}
-                        </span>
+                        <div className='shell-workspace-tabs' role='tablist' aria-label={t('shell:workspace.timelineViews')}>
+                          {timelineViewItems.map((item) => (
+                            <button
+                              key={item.id}
+                              className={`shell-tab${
+                                shellChromeState.timelineView === item.id ? ' shell-tab-active' : ''
+                              }`}
+                              role='tab'
+                              type='button'
+                              aria-selected={shellChromeState.timelineView === item.id}
+                              onClick={() => focusTimelineView(item.id)}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                        {shellChromeState.timelineView === 'feed' ? (
+                          <>
+                            <span className='relationship-badge'>
+                              {t('common:audience.viewing', {
+                                audience: audienceLabelForTimelineScope(
+                                  activeTimelineScope,
+                                  activeJoinedChannels
+                                ),
+                              })}
+                            </span>
+                            <span className='relationship-badge relationship-badge-direct'>
+                              {t('common:audience.posting', {
+                                audience: activeComposeAudienceLabel,
+                              })}
+                            </span>
+                          </>
+                        ) : (
+                          <span className='relationship-badge'>
+                            {t('shell:workspace.savedCount', {
+                              count: bookmarkedTimelinePostViews.length,
+                            })}
+                          </span>
+                        )}
                       </div>
                       <Button
                         variant='secondary'
@@ -5938,23 +6122,49 @@ function DesktopShellPage({
                     {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
                   </Card>
                   <Card className='shell-workspace-card'>
-                    <TimelineFeed
-                      posts={activeTimelinePostViews}
-                      emptyCopy={t('shell:workspace.noPosts')}
-                      onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                      onOpenThread={(threadId) => void openThread(threadId)}
-                      onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                      onReply={beginReply}
-                      onRepost={(post) => void handleSimpleRepost(post)}
-                      onQuoteRepost={beginQuoteRepost}
-                      localAuthorPubkey={syncStatus.local_author_pubkey}
-                      mediaObjectUrls={mediaObjectUrls}
-                      ownedReactionAssets={ownedReactionAssets}
-                      bookmarkedReactionAssets={bookmarkedReactionAssets}
-                      recentReactions={recentReactions}
-                      onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-                      onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                    />
+                    {shellChromeState.timelineView === 'feed' ? (
+                      <TimelineFeed
+                        posts={activeTimelinePostViews}
+                        emptyCopy={t('shell:workspace.noPosts')}
+                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                        onOpenThread={(threadId) => void openThread(threadId)}
+                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                        onReply={beginReply}
+                        onRepost={(post) => void handleSimpleRepost(post)}
+                        onQuoteRepost={beginQuoteRepost}
+                        localAuthorPubkey={syncStatus.local_author_pubkey}
+                        mediaObjectUrls={mediaObjectUrls}
+                        ownedReactionAssets={ownedReactionAssets}
+                        bookmarkedReactionAssets={bookmarkedReactionAssets}
+                        recentReactions={recentReactions}
+                        onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+                        onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                        showBookmarkAction={true}
+                        bookmarkedPostIds={bookmarkedPostIds}
+                        onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                      />
+                    ) : (
+                      <TimelineFeed
+                        posts={bookmarkedTimelinePostViews}
+                        emptyCopy={t('shell:workspace.noBookmarks')}
+                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                        onOpenThread={(threadId) => void openThread(threadId)}
+                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                        onReply={beginReply}
+                        onRepost={(post) => void handleSimpleRepost(post)}
+                        onQuoteRepost={beginQuoteRepost}
+                        localAuthorPubkey={syncStatus.local_author_pubkey}
+                        mediaObjectUrls={mediaObjectUrls}
+                        ownedReactionAssets={ownedReactionAssets}
+                        bookmarkedReactionAssets={bookmarkedReactionAssets}
+                        recentReactions={recentReactions}
+                        onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+                        onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                        showBookmarkAction={true}
+                        bookmarkedPostIds={bookmarkedPostIds}
+                        onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                      />
+                    )}
                   </Card>
                 </>
               ) : null}

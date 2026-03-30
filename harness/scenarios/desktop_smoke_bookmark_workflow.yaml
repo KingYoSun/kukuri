@@ -1,0 +1,41 @@
+name: desktop_smoke_bookmark_workflow
+fixtures:
+  seed: 12345
+  topic: kukuri:topic:demo
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:demo
+  - action: create_post
+    content: public bookmark candidate
+  - action: bookmark_post
+    content: public bookmark candidate
+  - action: create_private_channel
+    label: quiet room
+  - action: select_private_channel
+    label: quiet room
+  - action: create_post
+    content: private bookmark candidate
+  - action: bookmark_post
+    content: private bookmark candidate
+  - action: assert_bookmark_list_contains
+    text: public bookmark candidate
+  - action: assert_bookmark_list_contains
+    text: private bookmark candidate
+  - action: remove_bookmark
+    text: private bookmark candidate
+  - action: assert_bookmark_list_missing
+    text: private bookmark candidate
+  - action: select_public_timeline
+  - action: assert_timeline_contains
+    text: public bookmark candidate
+  - action: remove_bookmark
+    text: public bookmark candidate
+  - action: assert_bookmark_list_missing
+    text: public bookmark candidate
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

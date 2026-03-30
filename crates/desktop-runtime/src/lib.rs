@@ -14,12 +14,12 @@ use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
-    ChannelAccessTokenExport, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView,
-    DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
-    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
-    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
-    TimelineView, UpdateGameRoomInput,
+    BookmarkedPostView, ChannelAccessTokenExport, ChannelAccessTokenPreview,
+    CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
+    CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
+    DirectMessageTimelineView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
+    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
+    RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -147,6 +147,17 @@ pub struct BookmarkCustomReactionRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoveBookmarkedCustomReactionRequest {
     pub asset_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkPostRequest {
+    pub topic: String,
+    pub object_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoveBookmarkedPostRequest {
+    pub object_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -947,6 +958,22 @@ impl DesktopRuntime {
     ) -> Result<()> {
         self.app_service
             .remove_bookmarked_custom_reaction(request.asset_id.as_str())
+            .await
+    }
+
+    pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
+        self.app_service.list_bookmarked_posts().await
+    }
+
+    pub async fn bookmark_post(&self, request: BookmarkPostRequest) -> Result<BookmarkedPostView> {
+        self.app_service
+            .bookmark_post(request.topic.as_str(), request.object_id.as_str())
+            .await
+    }
+
+    pub async fn remove_bookmarked_post(&self, request: RemoveBookmarkedPostRequest) -> Result<()> {
+        self.app_service
+            .remove_bookmarked_post(request.object_id.as_str())
             .await
     }
 

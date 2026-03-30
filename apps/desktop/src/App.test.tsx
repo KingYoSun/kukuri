@@ -230,6 +230,10 @@ function getWorkspaceTabs() {
   return screen.getByRole('tablist', { name: 'Workspaces' });
 }
 
+function getTimelineViewTabs() {
+  return screen.getByRole('tablist', { name: 'Timeline views' });
+}
+
 async function selectWorkspace(
   user: ReturnType<typeof userEvent.setup>,
   label: 'Timeline' | 'Live' | 'Game' | 'Profile'
@@ -237,6 +241,19 @@ async function selectWorkspace(
   await user.click(within(getWorkspaceTabs()).getByRole('tab', { name: label }));
   await waitFor(() => {
     expect(within(getWorkspaceTabs()).getByRole('tab', { name: label })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+}
+
+async function selectTimelineView(
+  user: ReturnType<typeof userEvent.setup>,
+  label: 'Feed' | 'Bookmarks'
+) {
+  await user.click(within(getTimelineViewTabs()).getByRole('tab', { name: label }));
+  await waitFor(() => {
+    expect(within(getTimelineViewTabs()).getByRole('tab', { name: label })).toHaveAttribute(
       'aria-selected',
       'true'
     );
@@ -379,6 +396,10 @@ test('floating action button tracks the active section and hides on profile', as
   await selectWorkspace(user, 'Game');
   expect(getFloatingActionButton()).toHaveAccessibleName('Create Room');
 
+  await selectWorkspace(user, 'Timeline');
+  await selectTimelineView(user, 'Bookmarks');
+  expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
+
   await selectWorkspace(user, 'Profile');
   expect(screen.queryByTestId('shell-fab')).not.toBeInTheDocument();
 });
@@ -414,6 +435,127 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   expect(
     screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
   ).not.toBeInTheDocument();
+});
+
+test('invalid timelineView normalizes to the feed route', async () => {
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=invalid');
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(within(getTimelineViewTabs()).getByRole('tab', { name: 'Feed' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+});
+
+test('bookmark page route closes detail context and normalizes timeline-specific params', async () => {
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks&channel=channel-1&context=thread&threadId=post-thread-open',
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'post-thread-open',
+            envelope_id: 'envelope-thread-open',
+            author_pubkey: 'b'.repeat(64),
+            author_name: 'bob',
+            author_display_name: null,
+            following: false,
+            followed_by: false,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'thread should close',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks');
+  });
+  expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
+  expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
+});
+
+test('bookmarking from the timeline syncs with the bookmark page and remove updates both views', async () => {
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'bookmark-me',
+              envelope_id: 'envelope-bookmark-me',
+              author_pubkey: 'a'.repeat(64),
+              author_name: 'alice',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'save this post',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'bookmark-me',
+              audience_label: 'Public',
+            },
+          ],
+        },
+      })}
+    />
+  );
+
+  const timelinePost = await screen.findByText('save this post');
+  const timelineCard = timelinePost.closest('article');
+  if (!(timelineCard instanceof HTMLElement)) {
+    throw new Error('timeline card not found');
+  }
+
+  await user.click(within(timelineCard).getByRole('button', { name: 'Bookmark' }));
+  await waitFor(() => {
+    expect(within(timelineCard).getByRole('button', { name: 'Remove bookmark' })).toBeInTheDocument();
+  });
+
+  await selectTimelineView(user, 'Bookmarks');
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&timelineView=bookmarks');
+  });
+  expect(await screen.findByText('save this post')).toBeInTheDocument();
+
+  const bookmarkedCard = screen.getByText('save this post').closest('article');
+  if (!(bookmarkedCard instanceof HTMLElement)) {
+    throw new Error('bookmarked card not found');
+  }
+  await user.click(within(bookmarkedCard).getByRole('button', { name: 'Remove bookmark' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
+  });
+
+  await selectTimelineView(user, 'Feed');
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  });
+  const restoredTimelinePost = await screen.findByText('save this post');
+  const restoredTimelineCard = restoredTimelinePost.closest('article');
+  if (!(restoredTimelineCard instanceof HTMLElement)) {
+    throw new Error('restored timeline card not found');
+  }
+  expect(within(restoredTimelineCard).getByRole('button', { name: 'Bookmark' })).toBeInTheDocument();
 });
 
 test('thread context restores from the hash route and loads the requested thread for the active topic', async () => {

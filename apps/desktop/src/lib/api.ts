@@ -58,6 +58,11 @@ export type CustomReactionAssetView = {
 
 export type BookmarkedCustomReactionView = CustomReactionAssetView;
 
+export type BookmarkedPostView = {
+  bookmarked_at: number;
+  post: PostView;
+};
+
 export type ReactionKeyView = {
   reaction_key_kind: 'emoji' | 'custom_asset' | string;
   normalized_reaction_key: string;
@@ -453,6 +458,9 @@ export interface DesktopApi {
   listBookmarkedCustomReactions(): Promise<BookmarkedCustomReactionView[]>;
   bookmarkCustomReaction(asset: CustomReactionAssetView): Promise<BookmarkedCustomReactionView>;
   removeBookmarkedCustomReaction(assetId: string): Promise<void>;
+  listBookmarkedPosts(): Promise<BookmarkedPostView[]>;
+  bookmarkPost(topic: string, objectId: string): Promise<BookmarkedPostView>;
+  removeBookmarkedPost(objectId: string): Promise<void>;
   listTimeline(
     topic: string,
     cursor?: TimelineCursor | null,
@@ -732,6 +740,33 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<void>('remove_bookmarked_custom_reaction', {
       request: {
         asset_id: assetId,
+      },
+    });
+  },
+  listBookmarkedPosts: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listBookmarkedPosts();
+    }
+    return invokeDesktop<BookmarkedPostView[]>('list_bookmarked_posts');
+  },
+  bookmarkPost: async (topic, objectId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.bookmarkPost(topic, objectId);
+    }
+    return invokeDesktop<BookmarkedPostView>('bookmark_post', {
+      request: {
+        topic,
+        object_id: objectId,
+      },
+    });
+  },
+  removeBookmarkedPost: async (objectId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.removeBookmarkedPost(objectId);
+    }
+    return invokeDesktop<void>('remove_bookmarked_post', {
+      request: {
+        object_id: objectId,
       },
     });
   },

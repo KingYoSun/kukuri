@@ -28,6 +28,9 @@ type TimelineFeedProps = {
   recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  showBookmarkAction?: boolean;
+  bookmarkedPostIds?: Set<string>;
+  onToggleBookmark?: (post: PostCardView['post']) => void;
 };
 
 export function TimelineFeed({
@@ -50,6 +53,9 @@ export function TimelineFeed({
   recentReactions = [],
   onToggleReaction,
   onBookmarkCustomReaction,
+  showBookmarkAction = false,
+  bookmarkedPostIds,
+  onToggleBookmark,
 }: TimelineFeedProps) {
   if (posts.length === 0) {
     return <p className='empty'>{emptyCopy}</p>;
@@ -76,6 +82,9 @@ export function TimelineFeed({
             recentReactions={recentReactions}
             onToggleReaction={onToggleReaction}
             onBookmarkCustomReaction={onBookmarkCustomReaction}
+            showBookmarkAction={showBookmarkAction}
+            isBookmarked={bookmarkedPostIds?.has(view.post.object_id) ?? false}
+            onToggleBookmark={onToggleBookmark}
           />
         </li>
       ))}
