@@ -4280,15 +4280,6 @@ mod tests {
             })
             .await
             .expect("subscribe a tracked topic");
-        let _ = runtime_a
-            .list_timeline(ListTimelineRequest {
-                topic: untracked_topic.into(),
-                scope: public_scope.clone(),
-                cursor: None,
-                limit: Some(20),
-            })
-            .await
-            .expect("subscribe a untracked topic");
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
                 topic: tracked_topic.into(),
