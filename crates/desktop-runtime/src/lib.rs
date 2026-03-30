@@ -28,14 +28,13 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, AuthorProfilePostDocV1, BlobHash, ChannelAudienceKind, ChannelRef,
-    CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview,
-    FriendPlusSharePreview, GameRoomStatus, GossipHint, KukuriKeys, PrivateChannelInvitePreview,
-    Profile, ReactionKeyV1, ReplicaId, TimelineScope, TopicId,
+    AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
+    CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview, FriendPlusSharePreview,
+    GameRoomStatus, GossipHint, KukuriKeys, PrivateChannelInvitePreview, Profile, ReactionKeyV1,
+    ReplicaId, TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
-    author_replica_id,
 };
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
@@ -2707,6 +2706,8 @@ mod tests {
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use image::{AnimationDecoder, Delay, Frame, GenericImageView, ImageFormat, Rgba, RgbaImage};
     use iroh::address_lookup::EndpointInfo;
+    use kukuri_core::AuthorProfilePostDocV1;
+    use kukuri_docs_sync::author_replica_id;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
     use std::sync::atomic::{AtomicUsize, Ordering};
