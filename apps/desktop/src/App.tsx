@@ -5579,7 +5579,7 @@ function DesktopShellPage({
                           </div>
                           <div className='post-actions'>
                             <Button
-                              variant={selected ? 'default' : 'secondary'}
+                              variant={selected ? 'primary' : 'secondary'}
                               type='button'
                               onClick={() => void openDirectMessagePane(conversation.peer_pubkey)}
                             >
