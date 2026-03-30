@@ -6,10 +6,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use kukuri_core::{
-    BlobHash, CustomReactionAssetSnapshotV1, EnvelopeId, FollowEdge, FollowEdgeStatus,
-    GameRoomStatus, GameScoreEntry, KukuriEnvelope, LiveSessionStatus, ObjectStatus, PayloadRef,
-    Profile, ReactionKeyKind, ReplicaId, RepostSourceSnapshotV1, ThreadRef, parse_follow_edge,
-    parse_profile,
+    BlobHash, CustomReactionAssetSnapshotV1, DirectMessageAttachmentManifestV1, EnvelopeId,
+    FollowEdge, FollowEdgeStatus, GameRoomStatus, GameScoreEntry, KukuriEnvelope,
+    LiveSessionStatus, ObjectStatus, PayloadRef, Profile, ReactionKeyKind, ReplicaId,
+    RepostSourceSnapshotV1, ThreadRef, parse_follow_edge, parse_profile,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha384};
@@ -143,6 +143,47 @@ pub struct AuthorRelationshipProjectionRow {
     pub derived_at: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageConversationRow {
+    pub dm_id: String,
+    pub peer_pubkey: String,
+    pub updated_at: i64,
+    pub last_message_at: Option<i64>,
+    pub last_message_id: Option<String>,
+    pub last_message_preview: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageMessageRow {
+    pub dm_id: String,
+    pub message_id: String,
+    pub sender_pubkey: String,
+    pub recipient_pubkey: String,
+    pub created_at: i64,
+    pub text: Option<String>,
+    pub reply_to_message_id: Option<String>,
+    pub attachment_manifest: Option<DirectMessageAttachmentManifestV1>,
+    pub outgoing: bool,
+    pub acked_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageOutboxRow {
+    pub dm_id: String,
+    pub message_id: String,
+    pub peer_pubkey: String,
+    pub frame_blob_hash: BlobHash,
+    pub created_at: i64,
+    pub last_attempt_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageTombstoneRow {
+    pub dm_id: String,
+    pub message_id: String,
+    pub deleted_at: i64,
+}
+
 type LivePresenceKey = (String, String, String);
 type LivePresenceValue = (String, String, i64, i64);
 
@@ -239,6 +280,63 @@ pub trait ProjectionStore: Send + Sync {
     async fn put_bookmarked_custom_reaction(&self, row: BookmarkedCustomReactionRow) -> Result<()>;
     async fn list_bookmarked_custom_reactions(&self) -> Result<Vec<BookmarkedCustomReactionRow>>;
     async fn remove_bookmarked_custom_reaction(&self, asset_id: &str) -> Result<()>;
+    async fn upsert_direct_message_conversation(
+        &self,
+        row: DirectMessageConversationRow,
+    ) -> Result<()>;
+    async fn get_direct_message_conversation_by_peer(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<Option<DirectMessageConversationRow>>;
+    async fn get_direct_message_conversation_by_dm_id(
+        &self,
+        dm_id: &str,
+    ) -> Result<Option<DirectMessageConversationRow>>;
+    async fn list_direct_message_conversations(&self) -> Result<Vec<DirectMessageConversationRow>>;
+    async fn put_direct_message_message(&self, row: DirectMessageMessageRow) -> Result<()>;
+    async fn get_direct_message_message(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageMessageRow>>;
+    async fn list_direct_message_messages(
+        &self,
+        dm_id: &str,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<DirectMessageMessageRow>>;
+    async fn set_direct_message_acked_at(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        acked_at: i64,
+    ) -> Result<()>;
+    async fn put_direct_message_outbox(&self, row: DirectMessageOutboxRow) -> Result<()>;
+    async fn get_direct_message_outbox(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageOutboxRow>>;
+    async fn list_direct_message_outbox(&self) -> Result<Vec<DirectMessageOutboxRow>>;
+    async fn touch_direct_message_outbox_attempt(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        attempted_at: i64,
+    ) -> Result<()>;
+    async fn remove_direct_message_outbox(&self, dm_id: &str, message_id: &str) -> Result<()>;
+    async fn put_direct_message_tombstone(&self, row: DirectMessageTombstoneRow) -> Result<()>;
+    async fn list_direct_message_tombstones(
+        &self,
+        dm_id: &str,
+    ) -> Result<Vec<DirectMessageTombstoneRow>>;
+    async fn has_direct_message_tombstone(&self, dm_id: &str, message_id: &str) -> Result<bool>;
+    async fn delete_direct_message_message_local(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<()>;
+    async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()>;
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
 }
 
@@ -722,6 +820,9 @@ impl Store for SqliteStore {
 }
 
 type MemoryReactionProjectionRows = HashMap<(String, String, String), ReactionProjectionRow>;
+type MemoryDirectMessageRows = HashMap<(String, String), DirectMessageMessageRow>;
+type MemoryDirectMessageOutboxRows = HashMap<(String, String), DirectMessageOutboxRow>;
+type MemoryDirectMessageTombstones = HashMap<(String, String), DirectMessageTombstoneRow>;
 
 #[derive(Clone, Default)]
 pub struct MemoryStore {
@@ -739,6 +840,10 @@ pub struct MemoryStore {
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
     reaction_projection_rows: Arc<RwLock<MemoryReactionProjectionRows>>,
     bookmarked_custom_reactions: Arc<RwLock<HashMap<String, BookmarkedCustomReactionRow>>>,
+    direct_message_conversations: Arc<RwLock<HashMap<String, DirectMessageConversationRow>>>,
+    direct_message_rows: Arc<RwLock<MemoryDirectMessageRows>>,
+    direct_message_outbox_rows: Arc<RwLock<MemoryDirectMessageOutboxRows>>,
+    direct_message_tombstones: Arc<RwLock<MemoryDirectMessageTombstones>>,
 }
 
 #[async_trait]
@@ -1610,6 +1715,415 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn upsert_direct_message_conversation(
+        &self,
+        row: DirectMessageConversationRow,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO dm_conversations (
+              dm_id, peer_pubkey, updated_at, last_message_at, last_message_id, last_message_preview
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(dm_id) DO UPDATE SET
+              peer_pubkey = excluded.peer_pubkey,
+              updated_at = excluded.updated_at,
+              last_message_at = excluded.last_message_at,
+              last_message_id = excluded.last_message_id,
+              last_message_preview = excluded.last_message_preview
+            "#,
+        )
+        .bind(row.dm_id.as_str())
+        .bind(row.peer_pubkey.as_str())
+        .bind(row.updated_at)
+        .bind(row.last_message_at)
+        .bind(row.last_message_id.as_deref())
+        .bind(row.last_message_preview.as_deref())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_direct_message_conversation_by_peer(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<Option<DirectMessageConversationRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT dm_id, peer_pubkey, updated_at, last_message_at, last_message_id, last_message_preview
+            FROM dm_conversations
+            WHERE peer_pubkey = ?1
+            "#,
+        )
+        .bind(peer_pubkey)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_direct_message_conversation).transpose()
+    }
+
+    async fn get_direct_message_conversation_by_dm_id(
+        &self,
+        dm_id: &str,
+    ) -> Result<Option<DirectMessageConversationRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT dm_id, peer_pubkey, updated_at, last_message_at, last_message_id, last_message_preview
+            FROM dm_conversations
+            WHERE dm_id = ?1
+            "#,
+        )
+        .bind(dm_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_direct_message_conversation).transpose()
+    }
+
+    async fn list_direct_message_conversations(&self) -> Result<Vec<DirectMessageConversationRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT dm_id, peer_pubkey, updated_at, last_message_at, last_message_id, last_message_preview
+            FROM dm_conversations
+            ORDER BY updated_at DESC, dm_id DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(row_to_direct_message_conversation)
+            .collect()
+    }
+
+    async fn put_direct_message_message(&self, row: DirectMessageMessageRow) -> Result<()> {
+        let tombstoned = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT 1
+            FROM dm_message_tombstones
+            WHERE dm_id = ?1 AND message_id = ?2
+            LIMIT 1
+            "#,
+        )
+        .bind(row.dm_id.as_str())
+        .bind(row.message_id.as_str())
+        .fetch_optional(&self.pool)
+        .await?
+        .is_some();
+        if tombstoned {
+            return Ok(());
+        }
+        let attachment_manifest_json = row
+            .attachment_manifest
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+        sqlx::query(
+            r#"
+            INSERT INTO dm_messages (
+              dm_id, message_id, sender_pubkey, recipient_pubkey, created_at, text,
+              reply_to_message_id, attachment_manifest_json, outgoing, acked_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(dm_id, message_id) DO UPDATE SET
+              sender_pubkey = excluded.sender_pubkey,
+              recipient_pubkey = excluded.recipient_pubkey,
+              created_at = excluded.created_at,
+              text = excluded.text,
+              reply_to_message_id = excluded.reply_to_message_id,
+              attachment_manifest_json = excluded.attachment_manifest_json,
+              outgoing = excluded.outgoing,
+              acked_at = excluded.acked_at
+            "#,
+        )
+        .bind(row.dm_id.as_str())
+        .bind(row.message_id.as_str())
+        .bind(row.sender_pubkey.as_str())
+        .bind(row.recipient_pubkey.as_str())
+        .bind(row.created_at)
+        .bind(row.text.as_deref())
+        .bind(row.reply_to_message_id.as_deref())
+        .bind(attachment_manifest_json.as_deref())
+        .bind(if row.outgoing { 1_i64 } else { 0_i64 })
+        .bind(row.acked_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_direct_message_message(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageMessageRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT dm_id, message_id, sender_pubkey, recipient_pubkey, created_at, text,
+                   reply_to_message_id, attachment_manifest_json, outgoing, acked_at
+            FROM dm_messages
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_direct_message_message).transpose()
+    }
+
+    async fn list_direct_message_messages(
+        &self,
+        dm_id: &str,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<DirectMessageMessageRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT dm_id, message_id, sender_pubkey, recipient_pubkey, created_at, text,
+                   reply_to_message_id, attachment_manifest_json, outgoing, acked_at
+            FROM dm_messages
+            WHERE dm_id = ?1
+              AND (
+                ?2 IS NULL
+                OR created_at < ?2
+                OR (created_at = ?2 AND message_id < ?3)
+              )
+            ORDER BY created_at DESC, message_id DESC
+            LIMIT ?4
+            "#,
+        )
+        .bind(dm_id)
+        .bind(cursor.as_ref().map(|value| value.created_at))
+        .bind(cursor.as_ref().map(|value| value.object_id.as_str()))
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+        direct_message_page_from_rows(rows, limit)
+    }
+
+    async fn set_direct_message_acked_at(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        acked_at: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE dm_messages
+            SET acked_at = ?3
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .bind(acked_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn put_direct_message_outbox(&self, row: DirectMessageOutboxRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO dm_outbox (
+              dm_id, message_id, peer_pubkey, frame_blob_hash, created_at, last_attempt_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(dm_id, message_id) DO UPDATE SET
+              peer_pubkey = excluded.peer_pubkey,
+              frame_blob_hash = excluded.frame_blob_hash,
+              created_at = excluded.created_at,
+              last_attempt_at = excluded.last_attempt_at
+            "#,
+        )
+        .bind(row.dm_id.as_str())
+        .bind(row.message_id.as_str())
+        .bind(row.peer_pubkey.as_str())
+        .bind(row.frame_blob_hash.as_str())
+        .bind(row.created_at)
+        .bind(row.last_attempt_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_direct_message_outbox(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageOutboxRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT dm_id, message_id, peer_pubkey, frame_blob_hash, created_at, last_attempt_at
+            FROM dm_outbox
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_direct_message_outbox).transpose()
+    }
+
+    async fn list_direct_message_outbox(&self) -> Result<Vec<DirectMessageOutboxRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT dm_id, message_id, peer_pubkey, frame_blob_hash, created_at, last_attempt_at
+            FROM dm_outbox
+            ORDER BY created_at ASC, message_id ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_direct_message_outbox).collect()
+    }
+
+    async fn touch_direct_message_outbox_attempt(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        attempted_at: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE dm_outbox
+            SET last_attempt_at = ?3
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .bind(attempted_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn remove_direct_message_outbox(&self, dm_id: &str, message_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM dm_outbox
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn put_direct_message_tombstone(&self, row: DirectMessageTombstoneRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO dm_message_tombstones (dm_id, message_id, deleted_at)
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(dm_id, message_id) DO UPDATE SET
+              deleted_at = excluded.deleted_at
+            "#,
+        )
+        .bind(row.dm_id.as_str())
+        .bind(row.message_id.as_str())
+        .bind(row.deleted_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_direct_message_tombstones(
+        &self,
+        dm_id: &str,
+    ) -> Result<Vec<DirectMessageTombstoneRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT dm_id, message_id, deleted_at
+            FROM dm_message_tombstones
+            WHERE dm_id = ?1
+            ORDER BY deleted_at DESC, message_id DESC
+            "#,
+        )
+        .bind(dm_id)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(row_to_direct_message_tombstone)
+            .collect()
+    }
+
+    async fn has_direct_message_tombstone(&self, dm_id: &str, message_id: &str) -> Result<bool> {
+        let exists = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT 1
+            FROM dm_message_tombstones
+            WHERE dm_id = ?1 AND message_id = ?2
+            LIMIT 1
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .is_some();
+        Ok(exists)
+    }
+
+    async fn delete_direct_message_message_local(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM dm_messages
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            r#"
+            DELETE FROM dm_outbox
+            WHERE dm_id = ?1 AND message_id = ?2
+            "#,
+        )
+        .bind(dm_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM dm_messages
+            WHERE dm_id = ?1
+            "#,
+        )
+        .bind(dm_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            r#"
+            DELETE FROM dm_outbox
+            WHERE dm_id = ?1
+            "#,
+        )
+        .bind(dm_id)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            r#"
+            DELETE FROM dm_conversations
+            WHERE dm_id = ?1
+            "#,
+        )
+        .bind(dm_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         sqlx::query("DELETE FROM object_thread_cache")
             .execute(&self.pool)
@@ -1977,6 +2491,259 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn upsert_direct_message_conversation(
+        &self,
+        row: DirectMessageConversationRow,
+    ) -> Result<()> {
+        self.direct_message_conversations
+            .write()
+            .await
+            .insert(row.dm_id.clone(), row);
+        Ok(())
+    }
+
+    async fn get_direct_message_conversation_by_peer(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<Option<DirectMessageConversationRow>> {
+        Ok(self
+            .direct_message_conversations
+            .read()
+            .await
+            .values()
+            .find(|row| row.peer_pubkey == peer_pubkey)
+            .cloned())
+    }
+
+    async fn get_direct_message_conversation_by_dm_id(
+        &self,
+        dm_id: &str,
+    ) -> Result<Option<DirectMessageConversationRow>> {
+        Ok(self
+            .direct_message_conversations
+            .read()
+            .await
+            .get(dm_id)
+            .cloned())
+    }
+
+    async fn list_direct_message_conversations(&self) -> Result<Vec<DirectMessageConversationRow>> {
+        let mut items = self
+            .direct_message_conversations
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| right.dm_id.cmp(&left.dm_id))
+        });
+        Ok(items)
+    }
+
+    async fn put_direct_message_message(&self, row: DirectMessageMessageRow) -> Result<()> {
+        if self
+            .direct_message_tombstones
+            .read()
+            .await
+            .contains_key(&(row.dm_id.clone(), row.message_id.clone()))
+        {
+            return Ok(());
+        }
+        self.direct_message_rows
+            .write()
+            .await
+            .insert((row.dm_id.clone(), row.message_id.clone()), row);
+        Ok(())
+    }
+
+    async fn get_direct_message_message(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageMessageRow>> {
+        Ok(self
+            .direct_message_rows
+            .read()
+            .await
+            .get(&(dm_id.to_string(), message_id.to_string()))
+            .cloned())
+    }
+
+    async fn list_direct_message_messages(
+        &self,
+        dm_id: &str,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<DirectMessageMessageRow>> {
+        let mut items = self
+            .direct_message_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| row.dm_id == dm_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.message_id.cmp(&left.message_id))
+        });
+        Ok(apply_desc_direct_message_cursor(items, cursor, limit))
+    }
+
+    async fn set_direct_message_acked_at(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        acked_at: i64,
+    ) -> Result<()> {
+        if let Some(row) = self
+            .direct_message_rows
+            .write()
+            .await
+            .get_mut(&(dm_id.to_string(), message_id.to_string()))
+        {
+            row.acked_at = Some(acked_at);
+        }
+        Ok(())
+    }
+
+    async fn put_direct_message_outbox(&self, row: DirectMessageOutboxRow) -> Result<()> {
+        self.direct_message_outbox_rows
+            .write()
+            .await
+            .insert((row.dm_id.clone(), row.message_id.clone()), row);
+        Ok(())
+    }
+
+    async fn get_direct_message_outbox(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<Option<DirectMessageOutboxRow>> {
+        Ok(self
+            .direct_message_outbox_rows
+            .read()
+            .await
+            .get(&(dm_id.to_string(), message_id.to_string()))
+            .cloned())
+    }
+
+    async fn list_direct_message_outbox(&self) -> Result<Vec<DirectMessageOutboxRow>> {
+        let mut items = self
+            .direct_message_outbox_rows
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then_with(|| left.message_id.cmp(&right.message_id))
+        });
+        Ok(items)
+    }
+
+    async fn touch_direct_message_outbox_attempt(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+        attempted_at: i64,
+    ) -> Result<()> {
+        if let Some(row) = self
+            .direct_message_outbox_rows
+            .write()
+            .await
+            .get_mut(&(dm_id.to_string(), message_id.to_string()))
+        {
+            row.last_attempt_at = Some(attempted_at);
+        }
+        Ok(())
+    }
+
+    async fn remove_direct_message_outbox(&self, dm_id: &str, message_id: &str) -> Result<()> {
+        self.direct_message_outbox_rows
+            .write()
+            .await
+            .remove(&(dm_id.to_string(), message_id.to_string()));
+        Ok(())
+    }
+
+    async fn put_direct_message_tombstone(&self, row: DirectMessageTombstoneRow) -> Result<()> {
+        self.direct_message_tombstones
+            .write()
+            .await
+            .insert((row.dm_id.clone(), row.message_id.clone()), row);
+        Ok(())
+    }
+
+    async fn list_direct_message_tombstones(
+        &self,
+        dm_id: &str,
+    ) -> Result<Vec<DirectMessageTombstoneRow>> {
+        let mut items = self
+            .direct_message_tombstones
+            .read()
+            .await
+            .values()
+            .filter(|row| row.dm_id == dm_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .deleted_at
+                .cmp(&left.deleted_at)
+                .then_with(|| right.message_id.cmp(&left.message_id))
+        });
+        Ok(items)
+    }
+
+    async fn has_direct_message_tombstone(&self, dm_id: &str, message_id: &str) -> Result<bool> {
+        Ok(self
+            .direct_message_tombstones
+            .read()
+            .await
+            .contains_key(&(dm_id.to_string(), message_id.to_string())))
+    }
+
+    async fn delete_direct_message_message_local(
+        &self,
+        dm_id: &str,
+        message_id: &str,
+    ) -> Result<()> {
+        self.direct_message_rows
+            .write()
+            .await
+            .remove(&(dm_id.to_string(), message_id.to_string()));
+        self.direct_message_outbox_rows
+            .write()
+            .await
+            .remove(&(dm_id.to_string(), message_id.to_string()));
+        Ok(())
+    }
+
+    async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()> {
+        self.direct_message_rows
+            .write()
+            .await
+            .retain(|(row_dm_id, _), _| row_dm_id != dm_id);
+        self.direct_message_outbox_rows
+            .write()
+            .await
+            .retain(|(row_dm_id, _), _| row_dm_id != dm_id);
+        self.direct_message_conversations
+            .write()
+            .await
+            .remove(dm_id);
+        Ok(())
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
@@ -2086,6 +2853,79 @@ fn row_to_bookmarked_custom_reaction(
         width: row.get::<i64, _>("width") as u32,
         height: row.get::<i64, _>("height") as u32,
         bookmarked_at: row.get("bookmarked_at"),
+    })
+}
+
+fn row_to_direct_message_conversation(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<DirectMessageConversationRow> {
+    Ok(DirectMessageConversationRow {
+        dm_id: row.get("dm_id"),
+        peer_pubkey: row.get("peer_pubkey"),
+        updated_at: row.get("updated_at"),
+        last_message_at: row.try_get("last_message_at").ok(),
+        last_message_id: row.try_get("last_message_id").ok(),
+        last_message_preview: row.try_get("last_message_preview").ok(),
+    })
+}
+
+fn row_to_direct_message_message(row: sqlx::sqlite::SqliteRow) -> Result<DirectMessageMessageRow> {
+    Ok(DirectMessageMessageRow {
+        dm_id: row.get("dm_id"),
+        message_id: row.get("message_id"),
+        sender_pubkey: row.get("sender_pubkey"),
+        recipient_pubkey: row.get("recipient_pubkey"),
+        created_at: row.get("created_at"),
+        text: row.try_get("text").ok(),
+        reply_to_message_id: row.try_get("reply_to_message_id").ok(),
+        attachment_manifest: row
+            .try_get::<String, _>("attachment_manifest_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?,
+        outgoing: row.get::<i64, _>("outgoing") != 0,
+        acked_at: row.try_get("acked_at").ok(),
+    })
+}
+
+fn direct_message_page_from_rows(
+    rows: Vec<sqlx::sqlite::SqliteRow>,
+    limit: usize,
+) -> Result<Page<DirectMessageMessageRow>> {
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        items.push(row_to_direct_message_message(row)?);
+    }
+    let next_cursor = if items.len() == limit {
+        items.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: EnvelopeId::from(row.message_id.clone()),
+        })
+    } else {
+        None
+    };
+    Ok(Page { items, next_cursor })
+}
+
+fn row_to_direct_message_outbox(row: sqlx::sqlite::SqliteRow) -> Result<DirectMessageOutboxRow> {
+    Ok(DirectMessageOutboxRow {
+        dm_id: row.get("dm_id"),
+        message_id: row.get("message_id"),
+        peer_pubkey: row.get("peer_pubkey"),
+        frame_blob_hash: BlobHash::new(row.get::<String, _>("frame_blob_hash")),
+        created_at: row.get("created_at"),
+        last_attempt_at: row.try_get("last_attempt_at").ok(),
+    })
+}
+
+fn row_to_direct_message_tombstone(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<DirectMessageTombstoneRow> {
+    Ok(DirectMessageTombstoneRow {
+        dm_id: row.get("dm_id"),
+        message_id: row.get("message_id"),
+        deleted_at: row.get("deleted_at"),
     })
 }
 
@@ -2362,6 +3202,36 @@ fn apply_desc_projection_cursor(
         filtered.last().map(|row| TimelineCursor {
             created_at: row.created_at,
             object_id: row.object_id.clone(),
+        })
+    } else {
+        None
+    };
+    Page {
+        items: std::mem::take(&mut filtered),
+        next_cursor,
+    }
+}
+
+fn apply_desc_direct_message_cursor(
+    items: Vec<DirectMessageMessageRow>,
+    cursor: Option<TimelineCursor>,
+    limit: usize,
+) -> Page<DirectMessageMessageRow> {
+    let mut filtered = items
+        .into_iter()
+        .filter(|row| {
+            cursor.as_ref().is_none_or(|cursor| {
+                row.created_at < cursor.created_at
+                    || (row.created_at == cursor.created_at
+                        && row.message_id.as_str() < cursor.object_id.as_str())
+            })
+        })
+        .take(limit)
+        .collect::<Vec<_>>();
+    let next_cursor = if filtered.len() == limit {
+        filtered.last().map(|row| TimelineCursor {
+            created_at: row.created_at,
+            object_id: EnvelopeId::from(row.message_id.clone()),
         })
     } else {
         None
@@ -2751,6 +3621,137 @@ mod tests {
         assert_eq!(recent.len(), 2);
         assert_eq!(recent[0].normalized_reaction_key, "emoji:😂");
         assert_eq!(recent[1].normalized_reaction_key, "emoji:🔥");
+    }
+
+    #[tokio::test]
+    async fn direct_message_local_delete_prevents_duplicate_reinsert() {
+        let store = SqliteStore::connect_memory().await.expect("sqlite store");
+        let dm_id = "dm-test";
+        let message = DirectMessageMessageRow {
+            dm_id: dm_id.into(),
+            message_id: "message-1".into(),
+            sender_pubkey: "a".repeat(64),
+            recipient_pubkey: "b".repeat(64),
+            created_at: 10,
+            text: Some("hello".into()),
+            reply_to_message_id: None,
+            attachment_manifest: None,
+            outgoing: false,
+            acked_at: None,
+        };
+
+        ProjectionStore::put_direct_message_message(&store, message.clone())
+            .await
+            .expect("insert message");
+        ProjectionStore::put_direct_message_tombstone(
+            &store,
+            DirectMessageTombstoneRow {
+                dm_id: dm_id.into(),
+                message_id: "message-1".into(),
+                deleted_at: 20,
+            },
+        )
+        .await
+        .expect("insert tombstone");
+        ProjectionStore::delete_direct_message_message_local(&store, dm_id, "message-1")
+            .await
+            .expect("delete local message");
+        ProjectionStore::put_direct_message_message(&store, message)
+            .await
+            .expect("reinsert ignored");
+
+        let page = ProjectionStore::list_direct_message_messages(&store, dm_id, None, 20)
+            .await
+            .expect("list messages");
+        assert!(page.items.is_empty());
+        assert!(
+            ProjectionStore::has_direct_message_tombstone(&store, dm_id, "message-1")
+                .await
+                .expect("has tombstone")
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_message_delete_clears_outbox_but_keeps_tombstone() {
+        let store = SqliteStore::connect_memory().await.expect("sqlite store");
+        let dm_id = "dm-test";
+        ProjectionStore::upsert_direct_message_conversation(
+            &store,
+            DirectMessageConversationRow {
+                dm_id: dm_id.into(),
+                peer_pubkey: "b".repeat(64),
+                updated_at: 10,
+                last_message_at: Some(10),
+                last_message_id: Some("message-1".into()),
+                last_message_preview: Some("queued".into()),
+            },
+        )
+        .await
+        .expect("upsert conversation");
+        ProjectionStore::put_direct_message_message(
+            &store,
+            DirectMessageMessageRow {
+                dm_id: dm_id.into(),
+                message_id: "message-1".into(),
+                sender_pubkey: "a".repeat(64),
+                recipient_pubkey: "b".repeat(64),
+                created_at: 10,
+                text: Some("queued".into()),
+                reply_to_message_id: None,
+                attachment_manifest: None,
+                outgoing: true,
+                acked_at: None,
+            },
+        )
+        .await
+        .expect("put message");
+        ProjectionStore::put_direct_message_outbox(
+            &store,
+            DirectMessageOutboxRow {
+                dm_id: dm_id.into(),
+                message_id: "message-1".into(),
+                peer_pubkey: "b".repeat(64),
+                frame_blob_hash: BlobHash::new("frame-hash"),
+                created_at: 10,
+                last_attempt_at: None,
+            },
+        )
+        .await
+        .expect("put outbox");
+        ProjectionStore::put_direct_message_tombstone(
+            &store,
+            DirectMessageTombstoneRow {
+                dm_id: dm_id.into(),
+                message_id: "message-1".into(),
+                deleted_at: 20,
+            },
+        )
+        .await
+        .expect("put tombstone");
+        ProjectionStore::delete_direct_message_message_local(&store, dm_id, "message-1")
+            .await
+            .expect("delete message");
+        ProjectionStore::clear_direct_message_local(&store, dm_id)
+            .await
+            .expect("clear conversation");
+
+        assert!(
+            ProjectionStore::get_direct_message_outbox(&store, dm_id, "message-1")
+                .await
+                .expect("get outbox")
+                .is_none()
+        );
+        assert!(
+            ProjectionStore::get_direct_message_conversation_by_dm_id(&store, dm_id)
+                .await
+                .expect("get conversation")
+                .is_none()
+        );
+        assert!(
+            ProjectionStore::has_direct_message_tombstone(&store, dm_id, "message-1")
+                .await
+                .expect("has tombstone")
+        );
     }
 
     #[tokio::test]

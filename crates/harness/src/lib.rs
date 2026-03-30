@@ -5,9 +5,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use kukuri_app_api::{
-    AppService, CreateGameRoomInput, CreateLiveSessionInput, GameScoreView, SyncStatus,
-    UpdateGameRoomInput,
+    AppService, CreateGameRoomInput, CreateLiveSessionInput, DirectMessageMessageView,
+    DirectMessageStatusView, GameScoreView, SyncStatus, UpdateGameRoomInput,
 };
 use kukuri_cn_core::{JwtConfig, TestDatabase};
 use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
@@ -16,11 +18,13 @@ use kukuri_cn_user_api::{
 };
 use kukuri_core::{ChannelRef, GameRoomStatus, KukuriKeys, TimelineScope};
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreateGameRoomRequest,
-    CreateLiveSessionRequest, CreatePostRequest, CreatePrivateChannelRequest, DesktopRuntime,
-    ExportPrivateChannelInviteRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreateAttachmentRequest,
+    CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest,
+    CreatePrivateChannelRequest, DeleteDirectMessageMessageRequest, DesktopRuntime,
+    DirectMessageRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
+    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest,
     ListGameRoomsRequest, ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest,
-    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, SendDirectMessageRequest,
     SetCommunityNodeConfigRequest,
 };
 use kukuri_store::SqliteStore;
@@ -38,6 +42,7 @@ pub enum ScenarioKind {
     CommunityNodePublicConnectivity,
     CommunityNodeMultiDeviceConnectivity,
     PrivateChannelInviteConnectivity,
+    PairwiseDirectMessageConnectivity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -289,6 +294,9 @@ pub async fn run_scenario(
         }
         ScenarioKind::PrivateChannelInviteConnectivity => {
             run_private_channel_invite_connectivity(scenario, artifacts_dir).await
+        }
+        ScenarioKind::PairwiseDirectMessageConnectivity => {
+            run_pairwise_direct_message_connectivity(scenario, artifacts_dir).await
         }
     }
 }
@@ -1954,6 +1962,446 @@ async fn run_private_channel_invite_connectivity(
     .context("scenario exceeded overall timeout")?
 }
 
+async fn run_pairwise_direct_message_connectivity(
+    scenario: &ScenarioSpec,
+    artifacts_dir: &Path,
+) -> Result<HarnessResult> {
+    unsafe { std::env::set_var("KUKURI_DISABLE_KEYRING", "1") };
+
+    let db_a = artifacts_dir.join("pairwise-dm-a.db");
+    let db_b = artifacts_dir.join("pairwise-dm-b.db");
+    cleanup_runtime_artifacts(&db_a)?;
+    cleanup_runtime_artifacts(&db_b)?;
+
+    let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+        .await
+        .context("failed to launch desktop a for direct-message scenario")?;
+    let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+        .await
+        .context("failed to launch desktop b for direct-message scenario")?;
+    let overall_timeout =
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_millis(scenario.timeouts.overall_ms).max(Duration::from_secs(600))
+        } else {
+            Duration::from_millis(scenario.timeouts.overall_ms)
+        };
+    let step_timeout = ci_timeout_floor(
+        Duration::from_millis(scenario.timeouts.step_ms),
+        Duration::from_secs(180),
+    );
+
+    timeout(overall_timeout, async move {
+        let mut steps = Vec::new();
+        let topic = scenario.fixtures.topic.as_str();
+        let public_scope = TimelineScope::Public;
+        let mut runtime_a = runtime_a;
+        let mut runtime_b = runtime_b;
+
+        let started_at = Instant::now();
+        let ticket_a = runtime_a
+            .local_peer_ticket()
+            .await
+            .context("failed to export ticket for desktop a")?
+            .context("missing ticket for desktop a")?;
+        let ticket_b = runtime_b
+            .local_peer_ticket()
+            .await
+            .context("failed to export ticket for desktop b")?
+            .context("missing ticket for desktop b")?;
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
+            .await
+            .context("failed to import desktop b ticket into desktop a")?;
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
+            .await
+            .context("failed to import desktop a ticket into desktop b")?;
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to subscribe desktop a to public topic")?;
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to subscribe desktop b to public topic")?;
+        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
+            .await
+            .context("desktop a did not observe public topic connectivity")?;
+        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
+            .await
+            .context("desktop b did not observe public topic connectivity")?;
+        push_named_step(&mut steps, "connect", started_at);
+
+        let started_at = Instant::now();
+        let a_pubkey = runtime_a
+            .get_sync_status()
+            .await
+            .context("status a")?
+            .local_author_pubkey;
+        let b_pubkey = runtime_b
+            .get_sync_status()
+            .await
+            .context("status b")?
+            .local_author_pubkey;
+        wait_for_author_social_view(&runtime_a, b_pubkey.as_str(), step_timeout)
+            .await
+            .context("desktop a did not warm author social view for desktop b")?;
+        wait_for_author_social_view(&runtime_b, a_pubkey.as_str(), step_timeout)
+            .await
+            .context("desktop b did not warm author social view for desktop a")?;
+        runtime_a
+            .follow_author(kukuri_desktop_runtime::AuthorRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .context("desktop a failed to follow desktop b")?;
+        runtime_b
+            .follow_author(kukuri_desktop_runtime::AuthorRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to follow desktop a")?;
+        wait_for_mutual_author_view_result(&runtime_a, b_pubkey.as_str(), topic, step_timeout)
+            .await
+            .context("desktop a did not observe mutual relationship")?;
+        wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
+            .await
+            .context("desktop b did not observe mutual relationship")?;
+        runtime_a
+            .open_direct_message(DirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .context("desktop a failed to open direct message")?;
+        runtime_b
+            .open_direct_message(DirectMessageRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to open direct message")?;
+        push_named_step(&mut steps, "mutual_open_dm", started_at);
+
+        let started_at = Instant::now();
+        let image_bytes = b"pairwise-dm-image";
+        let image_message_id = runtime_a
+            .send_direct_message(SendDirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+                text: Some("image caption".to_string()),
+                reply_to_message_id: None,
+                attachments: vec![image_attachment_request(
+                    "pairwise-dm-image.png",
+                    "image/png",
+                    image_bytes,
+                )],
+            })
+            .await
+            .context("desktop a failed to send image direct message")?;
+        let delivered_image = wait_for_direct_message_result(
+            &runtime_b,
+            a_pubkey.as_str(),
+            image_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive image direct message")?;
+        assert_eq!(delivered_image.text, "image caption");
+        assert_eq!(delivered_image.attachments.len(), 1);
+        assert_eq!(delivered_image.attachments[0].role, "image_original");
+        assert_eq!(delivered_image.attachments[0].mime, "image/png");
+        let image_payload = runtime_b
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: delivered_image.attachments[0].hash.clone(),
+                mime: delivered_image.attachments[0].mime.clone(),
+            })
+            .await
+            .context("desktop b failed to load image attachment payload")?
+            .context("desktop b missing image attachment payload")?;
+        assert_eq!(image_payload.mime, "image/png");
+        assert_eq!(
+            image_payload.bytes_base64,
+            BASE64_STANDARD.encode(image_bytes)
+        );
+        wait_for_direct_message_outbox_count(&runtime_a, b_pubkey.as_str(), 0, step_timeout)
+            .await
+            .context("desktop a image direct message outbox did not drain")?;
+        push_named_step(&mut steps, "image_delivery", started_at);
+
+        let started_at = Instant::now();
+        shutdown_runtime(runtime_b, "desktop b direct-message restart pre-shutdown")
+            .await
+            .context("failed to shut down desktop b before offline direct message")?;
+        let queued_video_message_id = runtime_a
+            .send_direct_message(SendDirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+                text: Some("offline video".to_string()),
+                reply_to_message_id: None,
+                attachments: vec![
+                    video_attachment_request(
+                        "pairwise-dm-video.mp4",
+                        "video/mp4",
+                        b"pairwise-dm-video",
+                        "video_manifest",
+                    ),
+                    video_attachment_request(
+                        "pairwise-dm-video-poster.jpg",
+                        "image/jpeg",
+                        b"pairwise-dm-video-poster",
+                        "video_poster",
+                    ),
+                ],
+            })
+            .await
+            .context("desktop a failed to queue offline video direct message")?;
+        let queued_status =
+            wait_for_direct_message_outbox_count(&runtime_a, b_pubkey.as_str(), 1, step_timeout)
+                .await
+                .context("desktop a did not retain queued video direct message in outbox")?;
+        assert_eq!(queued_status.pending_outbox_count, 1);
+        shutdown_runtime(runtime_a, "desktop a direct-message outbox restart")
+            .await
+            .context("failed to shut down desktop a before outbox restart")?;
+        runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+            .await
+            .context("failed to restart desktop b for direct-message scenario")?;
+        runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+            .await
+            .context("failed to restart desktop a for direct-message scenario")?;
+        let ticket_a_after_restart = runtime_a
+            .local_peer_ticket()
+            .await
+            .context("failed to export restarted desktop a ticket")?
+            .context("missing restarted desktop a ticket")?;
+        let ticket_b_after_restart = runtime_b
+            .local_peer_ticket()
+            .await
+            .context("failed to export restarted desktop b ticket")?
+            .context("missing restarted desktop b ticket")?;
+        runtime_a
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b_after_restart,
+            })
+            .await
+            .context("failed to import restarted desktop b ticket into desktop a")?;
+        runtime_b
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a_after_restart,
+            })
+            .await
+            .context("failed to import desktop a ticket into restarted desktop b")?;
+        let _ = runtime_a
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to refresh desktop a public topic after restart")?;
+        let _ = runtime_b
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("failed to refresh desktop b public topic after restart")?;
+        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
+            .await
+            .context("desktop a did not reconnect to public topic after restart")?;
+        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
+            .await
+            .context("desktop b did not reconnect to public topic after restart")?;
+        wait_for_author_social_view(&runtime_a, b_pubkey.as_str(), step_timeout)
+            .await
+            .context("desktop a did not rewarm author social view after restart")?;
+        wait_for_author_social_view(&runtime_b, a_pubkey.as_str(), step_timeout)
+            .await
+            .context("desktop b did not rewarm author social view after restart")?;
+        wait_for_mutual_author_view_result(&runtime_a, b_pubkey.as_str(), topic, step_timeout)
+            .await
+            .context("desktop a did not restore mutual relationship after restart")?;
+        wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
+            .await
+            .context("desktop b did not restore mutual relationship after restart")?;
+        runtime_a
+            .open_direct_message(DirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .context("desktop a failed to reopen direct message after restart")?;
+        runtime_b
+            .open_direct_message(DirectMessageRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to reopen direct message after restart")?;
+        let delivered_video = wait_for_direct_message_result(
+            &runtime_b,
+            a_pubkey.as_str(),
+            queued_video_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive queued video direct message after restart")?;
+        assert_eq!(delivered_video.text, "offline video");
+        assert_eq!(delivered_video.attachments.len(), 2);
+        let manifest = delivered_video
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_manifest")
+            .context("missing delivered video manifest attachment")?;
+        let poster = delivered_video
+            .attachments
+            .iter()
+            .find(|attachment| attachment.role == "video_poster")
+            .context("missing delivered video poster attachment")?;
+        let manifest_payload = runtime_b
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: manifest.hash.clone(),
+                mime: manifest.mime.clone(),
+            })
+            .await
+            .context("desktop b failed to load video manifest payload")?
+            .context("desktop b missing video manifest payload")?;
+        assert_eq!(manifest_payload.mime, "video/mp4");
+        assert_eq!(
+            manifest_payload.bytes_base64,
+            BASE64_STANDARD.encode(b"pairwise-dm-video")
+        );
+        let poster_payload = runtime_b
+            .get_blob_media_payload(GetBlobMediaRequest {
+                hash: poster.hash.clone(),
+                mime: poster.mime.clone(),
+            })
+            .await
+            .context("desktop b failed to load video poster payload")?
+            .context("desktop b missing video poster payload")?;
+        assert_eq!(poster_payload.mime, "image/jpeg");
+        assert_eq!(
+            poster_payload.bytes_base64,
+            BASE64_STANDARD.encode(b"pairwise-dm-video-poster")
+        );
+        wait_for_direct_message_outbox_count(&runtime_a, b_pubkey.as_str(), 0, step_timeout)
+            .await
+            .context("desktop a queued video direct message outbox did not drain")?;
+        push_named_step(&mut steps, "offline_video_delivery", started_at);
+
+        let started_at = Instant::now();
+        runtime_b
+            .delete_direct_message_message(DeleteDirectMessageMessageRequest {
+                pubkey: a_pubkey.clone(),
+                message_id: queued_video_message_id.clone(),
+            })
+            .await
+            .context("desktop b failed to delete video direct message locally")?;
+        wait_for_direct_message_absence(
+            &runtime_b,
+            a_pubkey.as_str(),
+            queued_video_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b local delete did not remove video direct message")?;
+        let sender_timeline = runtime_a
+            .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                pubkey: b_pubkey.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("desktop a failed to list sender direct messages after recipient delete")?;
+        assert!(
+            sender_timeline
+                .items
+                .iter()
+                .any(|message| message.message_id == queued_video_message_id),
+            "recipient local delete should not remove sender history",
+        );
+        shutdown_runtime(
+            runtime_b,
+            "desktop b direct-message delete persistence restart",
+        )
+        .await
+        .context("failed to shut down desktop b before delete persistence restart")?;
+        runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+            .await
+            .context("failed to restart desktop b after local delete")?;
+        runtime_b
+            .open_direct_message(DirectMessageRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to reopen direct message after delete restart")?;
+        let restored_timeline = runtime_b
+            .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                pubkey: a_pubkey.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .context("desktop b failed to list restored direct message timeline")?;
+        assert!(
+            restored_timeline
+                .items
+                .iter()
+                .any(|message| message.message_id == image_message_id),
+            "desktop b should retain the earlier image direct message",
+        );
+        assert!(
+            restored_timeline
+                .items
+                .iter()
+                .all(|message| message.message_id != queued_video_message_id),
+            "desktop b should persist the local delete across restart",
+        );
+        push_named_step(&mut steps, "local_delete_persisted", started_at);
+
+        let metrics_snapshot = if scenario.artifacts.metrics_snapshot {
+            Some(
+                runtime_a
+                    .get_sync_status()
+                    .await
+                    .context("failed to collect final direct-message sync status")?,
+            )
+        } else {
+            None
+        };
+        shutdown_runtime(runtime_a, "desktop a final shutdown")
+            .await
+            .context("desktop a final shutdown timed out")?;
+        shutdown_runtime(runtime_b, "desktop b final shutdown")
+            .await
+            .context("desktop b final shutdown timed out")?;
+
+        let result = HarnessResult {
+            status: HarnessStatus::Pass,
+            scenario: scenario.name.clone(),
+            steps,
+            artifacts: vec![artifacts_dir.join("result.json").display().to_string()],
+            metrics_snapshot,
+        };
+        write_result_artifact(Path::new("."), artifacts_dir, &result)?;
+        Ok::<HarnessResult, anyhow::Error>(result)
+    })
+    .await
+    .context("scenario exceeded overall timeout")?
+}
+
 async fn shutdown_runtime(runtime: DesktopRuntime, label: &str) -> Result<()> {
     timeout(Duration::from_secs(30), runtime.shutdown())
         .await
@@ -2329,6 +2777,206 @@ async fn wait_for_direct_topic_peer_count(
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             anyhow::bail!("direct topic connected-peer assertion timeout; {snapshot}");
         }
+    }
+}
+
+async fn wait_for_author_social_view(
+    runtime: &DesktopRuntime,
+    author_pubkey: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        loop {
+            if runtime
+                .get_author_social_view(kukuri_desktop_runtime::AuthorRequest {
+                    pubkey: author_pubkey.to_string(),
+                })
+                .await
+                .is_ok()
+            {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("author social view warmup timeout for {author_pubkey}"),
+    }
+}
+
+async fn wait_for_mutual_author_view_result(
+    runtime: &DesktopRuntime,
+    author_pubkey: &str,
+    topic: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        loop {
+            let view = runtime
+                .get_author_social_view(kukuri_desktop_runtime::AuthorRequest {
+                    pubkey: author_pubkey.to_string(),
+                })
+                .await
+                .context("author social view")?;
+            if view.mutual {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let social_view = runtime
+                .get_author_social_view(kukuri_desktop_runtime::AuthorRequest {
+                    pubkey: author_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .map(|value| {
+                    format!(
+                        "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                        value.following,
+                        value.followed_by,
+                        value.mutual,
+                        value.friend_of_friend,
+                        value.friend_of_friend_via_pubkeys
+                    )
+                })
+                .unwrap_or_else(|| "social_view=unavailable".to_string());
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!(
+                "mutual relationship timeout for {author_pubkey}; {social_view}, {snapshot}"
+            );
+        }
+    }
+}
+
+async fn wait_for_direct_message_result(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    message_id: &str,
+    step_timeout: Duration,
+) -> Result<DirectMessageMessageView> {
+    match timeout(step_timeout, async {
+        loop {
+            let timeline = runtime
+                .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                    pubkey: peer_pubkey.to_string(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("list direct message timeline")?;
+            if let Some(message) = timeline
+                .items
+                .into_iter()
+                .find(|item| item.message_id == message_id)
+            {
+                return Ok::<DirectMessageMessageView, anyhow::Error>(message);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("direct message delivery timeout for {message_id}"),
+    }
+}
+
+async fn wait_for_direct_message_absence(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    message_id: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        loop {
+            let timeline = runtime
+                .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                    pubkey: peer_pubkey.to_string(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("list direct message timeline")?;
+            if timeline
+                .items
+                .iter()
+                .all(|item| item.message_id != message_id)
+            {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("direct message delete timeout for {message_id}"),
+    }
+}
+
+async fn wait_for_direct_message_outbox_count(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<DirectMessageStatusView> {
+    match timeout(step_timeout, async {
+        loop {
+            let status = runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message status")?;
+            if status.pending_outbox_count == expected {
+                return Ok::<DirectMessageStatusView, anyhow::Error>(status);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!(
+            "direct message outbox count timeout for {peer_pubkey}; expected={expected}"
+        ),
+    }
+}
+
+fn image_attachment_request(name: &str, mime: &str, bytes: &[u8]) -> CreateAttachmentRequest {
+    CreateAttachmentRequest {
+        file_name: Some(name.to_string()),
+        mime: mime.to_string(),
+        byte_size: bytes.len() as u64,
+        data_base64: BASE64_STANDARD.encode(bytes),
+        role: Some("image_original".to_string()),
+    }
+}
+
+fn video_attachment_request(
+    name: &str,
+    mime: &str,
+    bytes: &[u8],
+    role: &str,
+) -> CreateAttachmentRequest {
+    CreateAttachmentRequest {
+        file_name: Some(name.to_string()),
+        mime: mime.to_string(),
+        byte_size: bytes.len() as u64,
+        data_base64: BASE64_STANDARD.encode(bytes),
+        role: Some(role.to_string()),
     }
 }
 
@@ -3320,6 +3968,29 @@ mod tests {
         let result = run_named_scenario(root, "private_channel_invite_connectivity", &artifacts)
             .await
             .expect("scenario");
+
+        assert_eq!(result.status, HarnessStatus::Pass);
+        assert!(artifacts.join("result.json").exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pairwise_dm_offline_text_image_video_delivery_and_local_delete() {
+        disable_keyring_for_tests();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .expect("workspace root");
+        let artifacts = root
+            .join("test-results")
+            .join("kukuri")
+            .join("pairwise-dm-connectivity");
+        let result = run_named_scenario(
+            root,
+            "pairwise_dm_offline_text_image_video_delivery_and_local_delete",
+            &artifacts,
+        )
+        .await
+        .expect("scenario");
 
         assert_eq!(result.status, HarnessStatus::Pass);
         assert!(artifacts.join("result.json").exists());

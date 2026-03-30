@@ -15,8 +15,9 @@ use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat};
 use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
     ChannelAccessTokenExport, ChannelAccessTokenPreview, CreateCustomReactionAssetInput,
-    CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView, GameRoomView,
-    GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
+    CreateGameRoomInput, CreateLiveSessionInput, CustomReactionAssetView,
+    DirectMessageConversationView, DirectMessageStatusView, DirectMessageTimelineView,
+    GameRoomView, GameScoreView, JoinedPrivateChannelView, LiveSessionView, PendingAttachment,
     PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
     TimelineView, UpdateGameRoomInput,
 };
@@ -202,6 +203,33 @@ pub struct GetBlobMediaRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorRequest {
     pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageRequest {
+    pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListDirectMessageMessagesRequest {
+    pub pubkey: String,
+    pub cursor: Option<TimelineCursor>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendDirectMessageRequest {
+    pub pubkey: String,
+    pub text: Option<String>,
+    pub reply_to_message_id: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<CreateAttachmentRequest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteDirectMessageMessageRequest {
+    pub pubkey: String,
+    pub message_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -767,6 +795,7 @@ impl DesktopRuntime {
                 .await?;
         }
         app_service.warm_social_graph().await?;
+        app_service.resume_direct_message_state().await?;
 
         Ok(Self {
             app_service,
@@ -991,6 +1020,72 @@ impl DesktopRuntime {
     pub async fn get_author_social_view(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
         self.app_service
             .get_author_social_view(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn open_direct_message(
+        &self,
+        request: DirectMessageRequest,
+    ) -> Result<DirectMessageConversationView> {
+        self.app_service
+            .open_direct_message(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn list_direct_messages(&self) -> Result<Vec<DirectMessageConversationView>> {
+        self.app_service.list_direct_messages().await
+    }
+
+    pub async fn list_direct_message_messages(
+        &self,
+        request: ListDirectMessageMessagesRequest,
+    ) -> Result<DirectMessageTimelineView> {
+        self.app_service
+            .list_direct_message_messages(
+                request.pubkey.as_str(),
+                request.cursor,
+                request.limit.unwrap_or(50),
+            )
+            .await
+    }
+
+    pub async fn send_direct_message(&self, request: SendDirectMessageRequest) -> Result<String> {
+        let attachments = request
+            .attachments
+            .into_iter()
+            .map(pending_attachment_from_request)
+            .collect::<Result<Vec<_>>>()?;
+        self.app_service
+            .send_direct_message(
+                request.pubkey.as_str(),
+                request.text.as_deref(),
+                request.reply_to_message_id.as_deref(),
+                attachments,
+            )
+            .await
+    }
+
+    pub async fn delete_direct_message_message(
+        &self,
+        request: DeleteDirectMessageMessageRequest,
+    ) -> Result<()> {
+        self.app_service
+            .delete_direct_message_message(request.pubkey.as_str(), request.message_id.as_str())
+            .await
+    }
+
+    pub async fn clear_direct_message(&self, request: DirectMessageRequest) -> Result<()> {
+        self.app_service
+            .clear_direct_message(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn get_direct_message_status(
+        &self,
+        request: DirectMessageRequest,
+    ) -> Result<DirectMessageStatusView> {
+        self.app_service
+            .get_direct_message_status(request.pubkey.as_str())
             .await
     }
 

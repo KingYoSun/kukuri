@@ -1,0 +1,12 @@
+name: pairwise_dm_offline_text_image_video_delivery_and_local_delete
+kind: pairwise_direct_message_connectivity
+fixtures:
+  seed: 20
+  topic: kukuri:topic:pairwise-dm-connectivity
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 180000
+  step_ms: 60000

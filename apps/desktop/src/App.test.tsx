@@ -282,7 +282,7 @@ async function openGameCreateDialog(user: ReturnType<typeof userEvent.setup>) {
   return await screen.findByRole('dialog', { name: 'Create Room' });
 }
 
-function getDetailPane(name: 'Thread' | 'Author') {
+function getDetailPane(name: 'Thread' | 'Author' | 'Messages') {
   return screen.getByRole('complementary', { name });
 }
 
@@ -2154,6 +2154,64 @@ test('author detail shows via authors and follow action updates relationship', a
     expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
   });
   expect(screen.getAllByText('following').length).toBeGreaterThan(0);
+});
+
+test('author detail mutual action opens the direct message pane and sends a local message', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        {
+          object_id: 'post-author-dm',
+          envelope_id: 'envelope-author-dm',
+          author_pubkey: authorPubkey,
+          author_name: 'bob',
+          author_display_name: null,
+          following: true,
+          followed_by: true,
+          mutual: true,
+          friend_of_friend: false,
+          object_kind: 'post',
+          content: 'open dm',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 1,
+          reply_to: null,
+          root_id: 'post-author-dm',
+          audience_label: 'Public',
+        },
+      ],
+    },
+    authorSocialViews: {
+      [authorPubkey]: {
+        name: 'bob',
+        following: true,
+        followed_by: true,
+        mutual: true,
+      },
+    },
+  });
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+  await waitFor(() => {
+    expect(getDetailPane('Author')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Message' }));
+
+  await waitFor(() => {
+    expect(getDetailPane('Messages')).toBeInTheDocument();
+  });
+
+  await user.type(screen.getByPlaceholderText('Write a message'), 'hello dm');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+
+  await waitFor(() => {
+    expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
+  });
 });
 
 test('author detail shows profile topic posts and can open an untracked origin topic', async () => {

@@ -15,6 +15,10 @@ Accepted
 - `docs/adr/0010-kukuri-protocol-v1-boundary-definition.md`
 - `docs/adr/0011-kukuri-protocol-v1-draft.md`
 - `docs/adr/0013-social-graph-foundation-draft.md`
+- `docs/adr/0020-pairwise-dm-v1.md`
+
+## Note
+- pairwise DM は `private channel audience v1` の一部ではない。1on1 / local-only transcript / local-only delete / account-key E2E を持つ別データプレーンとして `0020` で扱う。
 
 ## Feature Data Classification
 

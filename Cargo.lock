@@ -2813,6 +2813,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64",
  "kukuri-app-api",
  "kukuri-cn-core",
  "kukuri-cn-iroh-relay",

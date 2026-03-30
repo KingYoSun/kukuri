@@ -10,17 +10,25 @@ type AuthorDetailCardProps = {
   view: AuthorDetailView;
   localAuthorPubkey: string;
   onToggleRelationship: (authorPubkey: string, following: boolean) => void;
+  onOpenDirectMessage?: (authorPubkey: string) => void;
 };
 
 export function AuthorDetailCard({
   view,
   localAuthorPubkey,
   onToggleRelationship,
+  onOpenDirectMessage,
 }: AuthorDetailCardProps) {
   const { t } = useTranslation(['common']);
   const author = view.author;
   const relationshipLabel = view.summary?.label ?? null;
   const showFollowAction = author?.author_pubkey !== localAuthorPubkey;
+  const showMessageAction = Boolean(
+    author &&
+      author.author_pubkey !== localAuthorPubkey &&
+      view.canMessage &&
+      onOpenDirectMessage
+  );
 
   return (
     <Card className='author-detail'>
@@ -55,20 +63,31 @@ export function AuthorDetailCard({
             </div>
           ) : null}
 
-          {relationshipLabel || showFollowAction ? (
+          {relationshipLabel || showFollowAction || showMessageAction ? (
             <div className='author-detail-actions'>
               {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : <span />}
-              {showFollowAction ? (
-                <button
-                  className='button button-secondary'
-                  type='button'
-                  onClick={() => onToggleRelationship(author.author_pubkey, author.following)}
-                >
-                  {view.summary?.followActionLabel === 'Unfollow'
-                    ? t('actions.unfollow')
-                    : t('actions.follow')}
-                </button>
-              ) : null}
+              <div className='post-actions'>
+                {showMessageAction ? (
+                  <button
+                    className='button button-secondary'
+                    type='button'
+                    onClick={() => onOpenDirectMessage?.(author.author_pubkey)}
+                  >
+                    {t('actions.message', { defaultValue: 'Message' })}
+                  </button>
+                ) : null}
+                {showFollowAction ? (
+                  <button
+                    className='button button-secondary'
+                    type='button'
+                    onClick={() => onToggleRelationship(author.author_pubkey, author.following)}
+                  >
+                    {view.summary?.followActionLabel === 'Unfollow'
+                      ? t('actions.unfollow')
+                      : t('actions.follow')}
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </>
