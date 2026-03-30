@@ -28,13 +28,14 @@ use kukuri_cn_core::{
     build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_core::{
-    AssetRole, BlobHash, ChannelAudienceKind, ChannelRef, CreatePrivateChannelInput,
-    CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview, FriendPlusSharePreview, GameRoomStatus,
-    GossipHint, KukuriKeys, PrivateChannelInvitePreview, Profile, ReactionKeyV1, ReplicaId,
-    TimelineScope, TopicId,
+    AssetRole, AuthorProfilePostDocV1, BlobHash, ChannelAudienceKind, ChannelRef,
+    CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview,
+    FriendPlusSharePreview, GameRoomStatus, GossipHint, KukuriKeys, PrivateChannelInvitePreview,
+    Profile, ReactionKeyV1, ReplicaId, TimelineScope, TopicId,
 };
 use kukuri_docs_sync::{
     DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
+    author_replica_id,
 };
 use kukuri_store::{SqliteStore, TimelineCursor};
 use kukuri_transport::{
@@ -3290,6 +3291,72 @@ mod tests {
         }
     }
 
+    async fn wait_for_profile_post_doc(
+        runtime: &DesktopRuntime,
+        author_pubkey: &str,
+        object_id: &str,
+        timeout_label: &str,
+    ) {
+        let author_replica = author_replica_id(author_pubkey);
+        match timeout(runtime_replication_timeout(), async {
+            loop {
+                let _ = runtime
+                    .list_profile_timeline(ListProfileTimelineRequest {
+                        pubkey: author_pubkey.to_string(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("profile timeline");
+                let current = runtime.iroh_stack.current.lock().await;
+                let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+                drop(current);
+                let docs = docs_sync
+                    .query_replica(&author_replica, DocQuery::Prefix("profile/posts/".into()))
+                    .await
+                    .expect("profile post docs");
+                if docs.into_iter().any(|record| {
+                    serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice())
+                        .map(|doc| doc.object_id.as_str() == object_id)
+                        .unwrap_or(false)
+                }) {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => {
+                let status = runtime.get_sync_status().await.expect("sync status");
+                let current = runtime.iroh_stack.current.lock().await;
+                let docs_sync = current.as_ref().expect("current stack").docs_sync.clone();
+                drop(current);
+                let visible_doc_ids = docs_sync
+                    .query_replica(&author_replica, DocQuery::Prefix("profile/posts/".into()))
+                    .await
+                    .ok()
+                    .map(|docs| {
+                        docs.into_iter()
+                            .filter_map(|record| {
+                                serde_json::from_slice::<AuthorProfilePostDocV1>(
+                                    record.value.as_slice(),
+                                )
+                                .ok()
+                                .map(|doc| doc.object_id.as_str().to_string())
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                panic!(
+                    "{timeout_label}: {}; visible_doc_ids={visible_doc_ids:?}",
+                    format_sync_snapshot(&status, "")
+                );
+            }
+        }
+    }
+
     fn public_replication_retry_schedule(
         step_timeout: Duration,
         same_author_shared_identity: bool,
@@ -4314,6 +4381,13 @@ mod tests {
             })
             .await
             .expect("untracked public post");
+        wait_for_profile_post_doc(
+            &runtime_b,
+            author_pubkey.as_str(),
+            untracked_object_id.as_str(),
+            "profile post doc visibility timeout",
+        )
+        .await;
 
         let before_profile = runtime_b
             .get_sync_status()
