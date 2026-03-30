@@ -4767,6 +4767,7 @@ impl AppService {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_direct_message_hint_with_services(
         projection_store: &dyn ProjectionStore,
         blob_service: &dyn BlobService,
@@ -4821,6 +4822,7 @@ impl AppService {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn ingest_direct_message_frame_with_services(
         projection_store: &dyn ProjectionStore,
         blob_service: &dyn BlobService,
