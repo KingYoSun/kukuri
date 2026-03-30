@@ -2991,38 +2991,6 @@ mod tests {
         }
     }
 
-    async fn wait_for_direct_topic_peer_count(
-        runtime: &DesktopRuntime,
-        topic: &str,
-        expected: usize,
-        timeout_label: &str,
-    ) {
-        match timeout(runtime_replication_timeout(), async {
-            let mut stable_ready_polls = 0usize;
-            loop {
-                let status = runtime.get_sync_status().await.expect("sync status");
-                let ready = topic_has_direct_peer(&status, topic, expected);
-                if ready {
-                    stable_ready_polls += 1;
-                    if stable_ready_polls >= 3 {
-                        return;
-                    }
-                } else {
-                    stable_ready_polls = 0;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        })
-        .await
-        {
-            Ok(()) => {}
-            Err(_) => {
-                let status = runtime.get_sync_status().await.expect("sync status");
-                panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
-            }
-        }
-    }
-
     async fn wait_for_connected_peer_count(
         runtime: &DesktopRuntime,
         expected: usize,
@@ -4224,6 +4192,22 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("profile-runtime-a.db");
         let db_b = dir.path().join("profile-runtime-b.db");
+        let shared_keys = KukuriKeys::generate();
+        let shared_secret = shared_keys.export_secret_hex();
+        fs::write(
+            db_a.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key a");
+        fs::write(db_a.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend a");
+        fs::write(
+            db_b.with_extension("identity-key"),
+            shared_secret.as_bytes(),
+        )
+        .expect("persist shared identity key b");
+        fs::write(db_b.with_extension("identity-store"), b"file")
+            .expect("persist shared identity backend b");
         let runtime_a = DesktopRuntime::new_with_config_and_identity(
             &db_a,
             TransportNetworkConfig::loopback(),
@@ -4267,6 +4251,14 @@ mod tests {
             .await
             .expect("status a")
             .local_author_pubkey;
+        assert_eq!(
+            author_pubkey,
+            runtime_b
+                .get_sync_status()
+                .await
+                .expect("status b")
+                .local_author_pubkey
+        );
         let tracked_topic = "kukuri:topic:desktop-profile-demo";
         let untracked_topic = "kukuri:topic:desktop-profile-relay";
         let public_scope = TimelineScope::Public;
@@ -4289,18 +4281,18 @@ mod tests {
             })
             .await
             .expect("subscribe b tracked topic");
-        wait_for_direct_topic_peer_count(
+        wait_for_connected_topic_peer_count(
             &runtime_a,
             tracked_topic,
             1,
-            "profile tracked topic direct readiness timeout a",
+            "profile tracked topic readiness timeout a",
         )
         .await;
-        wait_for_direct_topic_peer_count(
+        wait_for_connected_topic_peer_count(
             &runtime_b,
             tracked_topic,
             1,
-            "profile tracked topic direct readiness timeout b",
+            "profile tracked topic readiness timeout b",
         )
         .await;
 
