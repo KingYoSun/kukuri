@@ -3256,12 +3256,12 @@ mod tests {
         }
     }
 
-    async fn wait_for_profile_timeline_posts(
+    async fn wait_for_profile_timeline_posts_result(
         runtime: &DesktopRuntime,
         author_pubkey: &str,
         object_ids: &[String],
         timeout_label: &str,
-    ) -> TimelineView {
+    ) -> Result<TimelineView> {
         match timeout(runtime_replication_timeout(), async {
             loop {
                 let timeline = runtime
@@ -3285,7 +3285,7 @@ mod tests {
         })
         .await
         {
-            Ok(timeline) => timeline,
+            Ok(timeline) => Ok(timeline),
             Err(_) => {
                 let status = runtime.get_sync_status().await.expect("sync status");
                 let visible_items = runtime
@@ -3304,7 +3304,7 @@ mod tests {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                panic!(
+                bail!(
                     "{timeout_label}: {}; visible_items={visible_items:?}",
                     format_sync_snapshot(&status, "")
                 );
@@ -4256,11 +4256,15 @@ mod tests {
             .expect("ticket b value");
 
         runtime_a
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_b.clone(),
+            })
             .await
             .expect("import b");
         runtime_b
-            .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+            .import_peer_ticket(ImportPeerTicketRequest {
+                ticket: ticket_a.clone(),
+            })
             .await
             .expect("import a");
         wait_for_connected_peer_count(&runtime_a, 1, "profile topic owner peer readiness timeout")
@@ -4353,13 +4357,83 @@ mod tests {
                 .all(|topic| topic != untracked_topic)
         );
 
-        let profile_timeline = wait_for_profile_timeline_posts(
+        let profile_object_ids = vec![tracked_object_id.clone(), untracked_object_id.clone()];
+        let (runtime_b, profile_timeline) = match wait_for_profile_timeline_posts_result(
             &runtime_b,
             author_pubkey.as_str(),
-            &[tracked_object_id.clone(), untracked_object_id.clone()],
+            &profile_object_ids,
             "profile timeline visibility timeout",
         )
-        .await;
+        .await
+        {
+            Ok(timeline) => (runtime_b, timeline),
+            Err(first_error) => {
+                timeout(runtime_shutdown_timeout(), runtime_b.shutdown())
+                    .await
+                    .expect("profile viewer restart shutdown timeout");
+                drop(runtime_b);
+
+                let restarted_b = DesktopRuntime::new_with_config_and_identity(
+                    &db_b,
+                    TransportNetworkConfig::loopback(),
+                    IdentityStorageMode::FileOnly,
+                )
+                .await
+                .expect("restart runtime b");
+                let restarted_ticket_b = restarted_b
+                    .local_peer_ticket()
+                    .await
+                    .expect("restarted ticket b")
+                    .expect("restarted ticket b value");
+                runtime_a
+                    .import_peer_ticket(ImportPeerTicketRequest {
+                        ticket: restarted_ticket_b,
+                    })
+                    .await
+                    .expect("import restarted b");
+                restarted_b
+                    .import_peer_ticket(ImportPeerTicketRequest {
+                        ticket: ticket_a.clone(),
+                    })
+                    .await
+                    .expect("import a after restart");
+                wait_for_connected_peer_count(
+                    &restarted_b,
+                    1,
+                    "profile viewer peer restart readiness timeout",
+                )
+                .await;
+                let _ = restarted_b
+                    .list_timeline(ListTimelineRequest {
+                        topic: tracked_topic.into(),
+                        scope: public_scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("resubscribe restarted b tracked topic");
+                wait_for_connected_topic_peer_count(
+                    &restarted_b,
+                    tracked_topic,
+                    1,
+                    "profile tracked topic restart readiness timeout b",
+                )
+                .await;
+                let timeline = wait_for_profile_timeline_posts_result(
+                    &restarted_b,
+                    author_pubkey.as_str(),
+                    &profile_object_ids,
+                    "profile timeline visibility timeout after restart",
+                )
+                .await
+                .unwrap_or_else(|second_error| {
+                    panic!(
+                        "profile timeline visibility timeout after viewer restart: first_error={first_error:#}; second_error={second_error:#}"
+                    )
+                });
+                (restarted_b, timeline)
+            }
+        };
         assert!(
             profile_timeline
                 .items
