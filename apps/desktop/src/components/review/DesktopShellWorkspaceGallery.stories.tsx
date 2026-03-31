@@ -474,6 +474,7 @@ function ProfileOverviewWorkspace() {
         error={null}
         postCount={PROFILE_TIMELINE_POSTS.length}
         onEdit={() => undefined}
+        onManageConnections={() => undefined}
       />
       <Card className='shell-workspace-card'>
         <TimelineFeed

@@ -16,11 +16,34 @@
     "title": "マイプロフィール"
   },
   "overview": {
+    "connections": "フォローとミュートを管理",
     "edit": "プロフィールを編集",
     "loading": "プロフィールを読み込み中…",
     "noBio": "まだプロフィール文が公開されていません。",
     "postCount": "公開投稿",
     "title": "プロフィール"
+  },
+  "connections": {
+    "back": "プロフィールに戻る",
+    "empty": {
+      "followed": "この端末で把握している follower はまだいません。",
+      "following": "まだ誰もフォローしていません。",
+      "muted": "ミュート中の著者はいません。"
+    },
+    "loading": "フォローとミュートを読み込み中…",
+    "mutedBadge": "ミュート中",
+    "notes": {
+      "followed": "Followed はこの端末で観測済みの follower のみを表示します。",
+      "following": "Following には現在フォロー中の著者だけを表示します。",
+      "muted": "Muted はローカル専用で、他の端末には共有されません。"
+    },
+    "tabs": {
+      "followed": "Followed",
+      "following": "Following",
+      "muted": "Muted"
+    },
+    "tabsLabel": "ソーシャル一覧",
+    "title": "フォローとミュート"
   },
   "feed": {
     "noAuthorPosts": "この著者にはまだ公開投稿がありません。",

@@ -30,6 +30,7 @@ import {
   type ReactionStateView,
   type RecentReactionView,
   type SyncStatus,
+  type SocialConnectionKind,
   type TimelineScope,
   type TimelineView,
 } from '@/lib/api';
@@ -139,7 +140,16 @@ function withDefaultAuthorView(
     mutual: false,
     friend_of_friend: false,
     friend_of_friend_via_pubkeys: [],
+    muted: false,
     ...view,
+  };
+}
+
+function cloneAuthorView(view: AuthorSocialView): AuthorSocialView {
+  return {
+    ...view,
+    picture_asset: view.picture_asset ? { ...view.picture_asset } : null,
+    friend_of_friend_via_pubkeys: [...view.friend_of_friend_via_pubkeys],
   };
 }
 
@@ -179,6 +189,33 @@ function filterChannelScopedItems<T extends { channel_id?: string | null }>(
     return items.filter((item) => !item.channel_id || joinedIds.has(item.channel_id));
   }
   return items.filter((item) => !item.channel_id);
+}
+
+function compareAuthorViews(left: AuthorSocialView, right: AuthorSocialView) {
+  const normalize = (value?: string | null) => value?.trim().toLocaleLowerCase() ?? '';
+  const leftDisplay = normalize(left.display_name);
+  const rightDisplay = normalize(right.display_name);
+  if (leftDisplay !== rightDisplay) {
+    if (!leftDisplay) {
+      return 1;
+    }
+    if (!rightDisplay) {
+      return -1;
+    }
+    return leftDisplay.localeCompare(rightDisplay);
+  }
+  const leftName = normalize(left.name);
+  const rightName = normalize(right.name);
+  if (leftName !== rightName) {
+    if (!leftName) {
+      return 1;
+    }
+    if (!rightName) {
+      return -1;
+    }
+    return leftName.localeCompare(rightName);
+  }
+  return left.author_pubkey.localeCompare(right.author_pubkey);
 }
 
 function normalizedReactionKey(reactionKey: ReactionKeyInput): string {
@@ -345,6 +382,56 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
   const bookmarkedPosts: BookmarkedPostView[] = [];
   let recentReactions: RecentReactionView[] = [];
+
+  function mutedAuthorPubkeys() {
+    return new Set(
+      Object.values(authorSocialViews)
+        .filter((view) => view.muted)
+        .map((view) => view.author_pubkey)
+    );
+  }
+
+  function withCurrentRelationship(post: PostView): PostView {
+    const author = authorSocialViews[post.author_pubkey];
+    if (!author) {
+      return withSocialPostDefaults(post);
+    }
+    return withSocialPostDefaults({
+      ...post,
+      following: author.following ?? post.following,
+      followed_by: author.followed_by ?? post.followed_by,
+      mutual: author.mutual ?? post.mutual,
+      friend_of_friend: author.friend_of_friend ?? post.friend_of_friend,
+    });
+  }
+
+  function isVisiblePost(post: PostView): boolean {
+    const muted = mutedAuthorPubkeys();
+    return (
+      !muted.has(post.author_pubkey) &&
+      !(post.repost_of && muted.has(post.repost_of.source_author_pubkey))
+    );
+  }
+
+  function visibleTimelineItems(items: PostView[]): PostView[] {
+    return items.map(withCurrentRelationship).filter(isVisiblePost);
+  }
+
+  function listConnections(kind: SocialConnectionKind): AuthorSocialView[] {
+    const items = Object.values(authorSocialViews)
+      .filter((view) => {
+        if (kind === 'following') {
+          return view.following;
+        }
+        if (kind === 'followed') {
+          return view.followed_by;
+        }
+        return view.muted;
+      })
+      .map(cloneAuthorView);
+    items.sort(compareAuthorViews);
+    return items;
+  }
 
   function directMessageStatusFor(pubkey: string): DirectMessageStatusView {
     const author = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
@@ -637,7 +724,14 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       }
     },
     async listBookmarkedPosts() {
-      return bookmarkedPosts.map((item) => cloneBookmarkedPost(item));
+      return bookmarkedPosts
+        .filter((item) => isVisiblePost(item.post))
+        .map((item) =>
+          cloneBookmarkedPost({
+            ...item,
+            post: withCurrentRelationship(item.post),
+          })
+        );
     },
     async bookmarkPost(topic, objectId) {
       const existing = bookmarkedPosts.find((item) => item.post.object_id === objectId);
@@ -695,10 +789,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         });
       }
       return {
-        items: filterChannelScopedItems(
-          postsByTopic[topic] ?? [],
-          scope,
-          joinedChannelsByTopic[topic] ?? []
+        items: visibleTimelineItems(
+          filterChannelScopedItems(postsByTopic[topic] ?? [], scope, joinedChannelsByTopic[topic] ?? [])
         ),
         next_cursor: null,
       };
@@ -706,13 +798,15 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     async listThread(topic, threadId) {
       const posts = postsByTopic[topic] ?? [];
       return {
-        items: posts.filter((post) => post.root_id === threadId || post.object_id === threadId),
+        items: visibleTimelineItems(
+          posts.filter((post) => post.root_id === threadId || post.object_id === threadId)
+        ),
         next_cursor: null,
       };
     },
     async listProfileTimeline(pubkey) {
       return {
-        items: [...(authorProfileTimelines[pubkey] ?? [])],
+        items: visibleTimelineItems([...(authorProfileTimelines[pubkey] ?? [])]),
         next_cursor: null,
       };
     },
@@ -755,40 +849,41 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       const existing = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
       const next = { ...existing, following: true, mutual: existing.followed_by };
       authorSocialViews[pubkey] = next;
-      for (const topic of Object.keys(postsByTopic)) {
-        postsByTopic[topic] = postsByTopic[topic].map((post) =>
-          post.author_pubkey === pubkey
-            ? { ...post, following: true, mutual: next.mutual, friend_of_friend: false }
-            : post
-        );
-      }
-      return next;
+      return cloneAuthorView(next);
     },
     async unfollowAuthor(pubkey) {
       const existing = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
       const next = { ...existing, following: false, mutual: false };
       authorSocialViews[pubkey] = next;
-      for (const topic of Object.keys(postsByTopic)) {
-        postsByTopic[topic] = postsByTopic[topic].map((post) =>
-          post.author_pubkey === pubkey
-            ? { ...post, following: false, mutual: false }
-            : post
-        );
-      }
-      return next;
+      return cloneAuthorView(next);
     },
     async getAuthorSocialView(pubkey) {
       if (pubkey === myProfile.pubkey) {
-        return withDefaultAuthorView(myProfile.pubkey, {
+        return cloneAuthorView(withDefaultAuthorView(myProfile.pubkey, {
           name: myProfile.name ?? null,
           display_name: myProfile.display_name ?? null,
           about: myProfile.about ?? null,
           picture: myProfile.picture ?? null,
           picture_asset: myProfile.picture_asset ?? null,
           updated_at: myProfile.updated_at,
-        });
+        }));
       }
-      return withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+      return cloneAuthorView(withDefaultAuthorView(pubkey, authorSocialViews[pubkey]));
+    },
+    async muteAuthor(pubkey) {
+      const existing = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+      const next = { ...existing, muted: true };
+      authorSocialViews[pubkey] = next;
+      return cloneAuthorView(next);
+    },
+    async unmuteAuthor(pubkey) {
+      const existing = withDefaultAuthorView(pubkey, authorSocialViews[pubkey]);
+      const next = { ...existing, muted: false };
+      authorSocialViews[pubkey] = next;
+      return cloneAuthorView(next);
+    },
+    async listSocialConnections(kind) {
+      return listConnections(kind);
     },
     async openDirectMessage(pubkey) {
       const status = directMessageStatusFor(pubkey);
@@ -866,11 +961,12 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       return directMessageStatusFor(pubkey);
     },
     async listLiveSessions(topic, scope: TimelineScope = { kind: 'public' }) {
+      const muted = mutedAuthorPubkeys();
       return filterChannelScopedItems(
         liveSessionsByTopic[topic] ?? [],
         scope,
         joinedChannelsByTopic[topic] ?? []
-      );
+      ).filter((session) => !muted.has(session.host_pubkey));
     },
     async createLiveSession(topic, title, description, channelRef = { kind: 'public' }) {
       sequence += 1;
@@ -920,11 +1016,12 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       );
     },
     async listGameRooms(topic, scope: TimelineScope = { kind: 'public' }) {
+      const muted = mutedAuthorPubkeys();
       return filterChannelScopedItems(
         gameRoomsByTopic[topic] ?? [],
         scope,
         joinedChannelsByTopic[topic] ?? []
-      );
+      ).filter((room) => !muted.has(room.host_pubkey));
     },
     async createGameRoom(topic, title, description, participants, channelRef = { kind: 'public' }) {
       sequence += 1;

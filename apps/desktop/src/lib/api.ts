@@ -147,7 +147,10 @@ export type AuthorSocialView = {
   mutual: boolean;
   friend_of_friend: boolean;
   friend_of_friend_via_pubkeys: string[];
+  muted: boolean;
 };
+
+export type SocialConnectionKind = 'following' | 'followed' | 'muted';
 
 export type DirectMessageStatusView = {
   peer_pubkey: string;
@@ -483,6 +486,9 @@ export interface DesktopApi {
   followAuthor(pubkey: string): Promise<AuthorSocialView>;
   unfollowAuthor(pubkey: string): Promise<AuthorSocialView>;
   getAuthorSocialView(pubkey: string): Promise<AuthorSocialView>;
+  muteAuthor(pubkey: string): Promise<AuthorSocialView>;
+  unmuteAuthor(pubkey: string): Promise<AuthorSocialView>;
+  listSocialConnections(kind: SocialConnectionKind): Promise<AuthorSocialView[]>;
   openDirectMessage(pubkey: string): Promise<DirectMessageConversationView>;
   listDirectMessages(): Promise<DirectMessageConversationView[]>;
   listDirectMessageMessages(
@@ -844,6 +850,30 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<AuthorSocialView>('get_author_social_view', {
       request: { pubkey },
+    });
+  },
+  muteAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.muteAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('mute_author', {
+      request: { pubkey },
+    });
+  },
+  unmuteAuthor: async (pubkey) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.unmuteAuthor(pubkey);
+    }
+    return invokeDesktop<AuthorSocialView>('unmute_author', {
+      request: { pubkey },
+    });
+  },
+  listSocialConnections: async (kind) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listSocialConnections(kind);
+    }
+    return invokeDesktop<AuthorSocialView[]>('list_social_connections', {
+      request: { kind },
     });
   },
   openDirectMessage: async (pubkey) => {

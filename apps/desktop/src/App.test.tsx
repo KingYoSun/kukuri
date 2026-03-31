@@ -234,6 +234,10 @@ function getTimelineViewTabs() {
   return screen.getByRole('tablist', { name: 'Timeline views' });
 }
 
+function getSocialConnectionsTabs() {
+  return screen.getByRole('tablist', { name: 'Social connections' });
+}
+
 async function selectWorkspace(
   user: ReturnType<typeof userEvent.setup>,
   label: 'Timeline' | 'Live' | 'Game' | 'Profile'
@@ -626,6 +630,63 @@ test('profile edit route restores the editor and keeps overview as the default p
 
   expect(screen.getByPlaceholderText('Visible label')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Back to profile' })).toBeInTheDocument();
+});
+
+test('profile connections route restores the requested view', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  renderAtHash(
+    '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted',
+    createDesktopMockApi({
+      authorSocialViews: {
+        [authorPubkey]: {
+          name: 'bob',
+          muted: true,
+        },
+      },
+    })
+  );
+
+  const tabs = await screen.findByRole('tablist', { name: 'Social connections' });
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Muted' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(window.location.hash).toBe(
+      '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=muted'
+    );
+  });
+  expect(
+    screen.getAllByText('Muted is local-only and is not shared with other devices.').length
+  ).toBeGreaterThan(0);
+  expect(screen.getByText(authorPubkey)).toBeInTheDocument();
+});
+
+test('invalid profile connections view normalizes to following', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  renderAtHash(
+    '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=invalid',
+    createDesktopMockApi({
+      authorSocialViews: {
+        [authorPubkey]: {
+          name: 'bob',
+          following: true,
+        },
+      },
+    })
+  );
+
+  const tabs = await screen.findByRole('tablist', { name: 'Social connections' });
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Following' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(window.location.hash).toBe(
+      '#/profile?topic=kukuri%3Atopic%3Ademo&profileMode=connections&connectionsView=following'
+    );
+  });
+  expect(screen.getByText(authorPubkey)).toBeInTheDocument();
 });
 
 test('invalid nested author route keeps the thread pane and normalizes only the author param', async () => {
@@ -2244,6 +2305,259 @@ test('post card shows friend of friend badge and author name fallback', async ()
   expect(screen.getByText('friend of friend')).toBeInTheDocument();
 });
 
+test('profile social management updates follow and mute lists and muted authors disappear from content surfaces', async () => {
+  const mutedAuthorPubkey = 'b'.repeat(64);
+  const visibleAuthorPubkey = 'c'.repeat(64);
+  const user = userEvent.setup();
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-muted-author',
+              envelope_id: 'envelope-muted-author',
+              author_pubkey: mutedAuthorPubkey,
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: true,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'mute this post',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 2,
+              reply_to: null,
+              root_id: 'post-muted-author',
+              audience_label: 'Public',
+            },
+            {
+              object_id: 'post-visible-author',
+              envelope_id: 'envelope-visible-author',
+              author_pubkey: visibleAuthorPubkey,
+              author_name: 'carol',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'keep this post',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-visible-author',
+              audience_label: 'Public',
+            },
+          ],
+        },
+        seedLiveSessions: {
+          'kukuri:topic:demo': [
+            {
+              session_id: 'live-muted',
+              host_pubkey: mutedAuthorPubkey,
+              title: 'Muted Live',
+              description: 'muted host session',
+              status: 'Live',
+              started_at: 2,
+              ended_at: null,
+              viewer_count: 0,
+              joined_by_me: false,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+            {
+              session_id: 'live-visible',
+              host_pubkey: visibleAuthorPubkey,
+              title: 'Visible Live',
+              description: 'visible host session',
+              status: 'Live',
+              started_at: 1,
+              ended_at: null,
+              viewer_count: 0,
+              joined_by_me: false,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+        seedGameRooms: {
+          'kukuri:topic:demo': [
+            {
+              room_id: 'room-muted',
+              host_pubkey: mutedAuthorPubkey,
+              title: 'Muted Room',
+              description: 'muted host room',
+              status: 'Waiting',
+              phase_label: null,
+              scores: [
+                {
+                  participant_id: 'participant-bob',
+                  label: 'Bob',
+                  score: 0,
+                },
+                {
+                  participant_id: 'participant-carol',
+                  label: 'Carol',
+                  score: 0,
+                },
+              ],
+              updated_at: 2,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+            {
+              room_id: 'room-visible',
+              host_pubkey: visibleAuthorPubkey,
+              title: 'Visible Room',
+              description: 'visible host room',
+              status: 'Waiting',
+              phase_label: null,
+              scores: [
+                {
+                  participant_id: 'participant-dave',
+                  label: 'Dave',
+                  score: 0,
+                },
+                {
+                  participant_id: 'participant-erin',
+                  label: 'Erin',
+                  score: 0,
+                },
+              ],
+              updated_at: 1,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          [mutedAuthorPubkey]: {
+            name: 'bob',
+            followed_by: true,
+          },
+          [visibleAuthorPubkey]: {
+            name: 'carol',
+          },
+        },
+      })}
+    />
+  );
+
+  const mutedPostCard = (await screen.findByText('mute this post')).closest('article');
+  if (!(mutedPostCard instanceof HTMLElement)) {
+    throw new Error('muted author post card not found');
+  }
+  await user.click(within(mutedPostCard).getByRole('button', { name: 'Bookmark' }));
+  await waitFor(() => {
+    expect(within(mutedPostCard).getByRole('button', { name: 'Remove bookmark' })).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Profile');
+  await user.click(screen.getByRole('button', { name: 'Manage Follows & Mutes' }));
+
+  const tabs = getSocialConnectionsTabs();
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Following' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  expect(screen.getByText('You are not following anyone yet.')).toBeInTheDocument();
+
+  await user.click(within(tabs).getByRole('tab', { name: 'Followed' }));
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Followed' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  expect(
+    screen.getAllByText('Followed shows only followers already observed on this device.').length
+  ).toBeGreaterThan(0);
+
+  let bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
+  if (!(bobConnectionCard instanceof HTMLElement)) {
+    throw new Error('followed author card not found');
+  }
+  await user.click(within(bobConnectionCard).getByRole('button', { name: 'Follow' }));
+  await waitFor(() => {
+    const refreshedCard = screen.getByText(mutedAuthorPubkey).closest('article');
+    expect(refreshedCard).toBeInstanceOf(HTMLElement);
+    expect(
+      within(refreshedCard as HTMLElement).getByRole('button', { name: 'Unfollow' })
+    ).toBeInTheDocument();
+  });
+
+  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
+  if (!(bobConnectionCard instanceof HTMLElement)) {
+    throw new Error('refreshed followed author card not found');
+  }
+  await user.click(within(bobConnectionCard).getByRole('button', { name: 'Mute' }));
+  await waitFor(() => {
+    const refreshedCard = screen.getByText(mutedAuthorPubkey).closest('article');
+    expect(refreshedCard).toBeInstanceOf(HTMLElement);
+    expect(within(refreshedCard as HTMLElement).getByText('Muted')).toBeInTheDocument();
+    expect(
+      within(refreshedCard as HTMLElement).getByRole('button', { name: 'Unmute' })
+    ).toBeInTheDocument();
+  });
+
+  await user.click(within(tabs).getByRole('tab', { name: 'Following' }));
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Following' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
+  if (!(bobConnectionCard instanceof HTMLElement)) {
+    throw new Error('following author card not found');
+  }
+  expect(within(bobConnectionCard).getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
+
+  await user.click(within(tabs).getByRole('tab', { name: 'Muted' }));
+  await waitFor(() => {
+    expect(within(tabs).getByRole('tab', { name: 'Muted' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
+  if (!(bobConnectionCard instanceof HTMLElement)) {
+    throw new Error('muted author card not found');
+  }
+  expect(within(bobConnectionCard).getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+  expect(within(bobConnectionCard).getByText('Muted')).toBeInTheDocument();
+
+  await selectWorkspace(user, 'Timeline');
+  await waitFor(() => {
+    expect(screen.queryByText('mute this post')).not.toBeInTheDocument();
+  });
+  expect(screen.getByText('keep this post')).toBeInTheDocument();
+
+  await selectTimelineView(user, 'Bookmarks');
+  await waitFor(() => {
+    expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
+  });
+
+  await selectWorkspace(user, 'Live');
+  await waitFor(() => {
+    expect(screen.queryByText('Muted Live')).not.toBeInTheDocument();
+  });
+  expect(screen.getByText('Visible Live')).toBeInTheDocument();
+
+  await selectWorkspace(user, 'Game');
+  await waitFor(() => {
+    expect(screen.queryByText('Muted Room')).not.toBeInTheDocument();
+  });
+  expect(screen.getByText('Visible Room')).toBeInTheDocument();
+});
+
 test('author detail shows via authors and follow action updates relationship', async () => {
   const authorPubkey = 'b'.repeat(64);
   const viaA = 'c'.repeat(64);
@@ -2296,6 +2610,58 @@ test('author detail shows via authors and follow action updates relationship', a
     expect(screen.getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
   });
   expect(screen.getAllByText('following').length).toBeGreaterThan(0);
+});
+
+test('author detail mute toggle updates the selected author state', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-author-mute',
+              envelope_id: 'envelope-author-mute',
+              author_pubkey: authorPubkey,
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'author mute target',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-author-mute',
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          [authorPubkey]: {
+            name: 'bob',
+            about: 'author detail stays visible while muted',
+          },
+        },
+      })}
+    />
+  );
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+
+  const authorPane = await screen.findByRole('complementary', { name: 'Author' });
+  expect(within(authorPane).getByRole('button', { name: 'Mute' })).toBeInTheDocument();
+
+  await user.click(within(authorPane).getByRole('button', { name: 'Mute' }));
+
+  await waitFor(() => {
+    expect(within(authorPane).getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+  });
+  expect(within(authorPane).getByText('author detail stays visible while muted')).toBeInTheDocument();
 });
 
 test('author detail mutual action opens the direct message pane and sends a local message', async () => {

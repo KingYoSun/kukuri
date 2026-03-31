@@ -163,6 +163,12 @@ pub struct AuthorRelationshipProjectionRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MutedAuthorRow {
+    pub author_pubkey: String,
+    pub muted_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMessageConversationRow {
     pub dm_id: String,
     pub peer_pubkey: String,
@@ -268,6 +274,10 @@ pub trait ProjectionStore: Send + Sync {
         local_author_pubkey: &str,
         rows: Vec<AuthorRelationshipProjectionRow>,
     ) -> Result<()>;
+    async fn put_muted_author(&self, row: MutedAuthorRow) -> Result<()>;
+    async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>>;
+    async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>>;
+    async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()>;
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
@@ -858,6 +868,7 @@ pub struct MemoryStore {
     game_room_rows: Arc<RwLock<HashMap<String, GameRoomProjectionRow>>>,
     author_relationship_rows:
         Arc<RwLock<HashMap<(String, String), AuthorRelationshipProjectionRow>>>,
+    muted_authors: Arc<RwLock<HashMap<String, MutedAuthorRow>>>,
     live_presence: Arc<RwLock<HashMap<LivePresenceKey, LivePresenceValue>>>,
     blob_statuses: Arc<RwLock<HashMap<String, BlobCacheStatus>>>,
     reaction_projection_rows: Arc<RwLock<MemoryReactionProjectionRows>>,
@@ -1479,6 +1490,62 @@ impl ProjectionStore for SqliteStore {
             .await?;
         }
 
+        Ok(())
+    }
+
+    async fn put_muted_author(&self, row: MutedAuthorRow) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO muted_authors (author_pubkey, muted_at)
+            VALUES (?1, ?2)
+            ON CONFLICT(author_pubkey) DO UPDATE SET
+              muted_at = excluded.muted_at
+            "#,
+        )
+        .bind(row.author_pubkey.as_str())
+        .bind(row.muted_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>> {
+        let row = sqlx::query(
+            r#"
+            SELECT author_pubkey, muted_at
+            FROM muted_authors
+            WHERE author_pubkey = ?1
+            "#,
+        )
+        .bind(author_pubkey)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_muted_author).transpose()
+    }
+
+    async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT author_pubkey, muted_at
+            FROM muted_authors
+            ORDER BY muted_at DESC, author_pubkey ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_muted_author).collect()
+    }
+
+    async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM muted_authors
+            WHERE author_pubkey = ?1
+            "#,
+        )
+        .bind(author_pubkey)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -2461,6 +2528,40 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn put_muted_author(&self, row: MutedAuthorRow) -> Result<()> {
+        self.muted_authors
+            .write()
+            .await
+            .insert(row.author_pubkey.clone(), row);
+        Ok(())
+    }
+
+    async fn get_muted_author(&self, author_pubkey: &str) -> Result<Option<MutedAuthorRow>> {
+        Ok(self.muted_authors.read().await.get(author_pubkey).cloned())
+    }
+
+    async fn list_muted_authors(&self) -> Result<Vec<MutedAuthorRow>> {
+        let mut items = self
+            .muted_authors
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .muted_at
+                .cmp(&left.muted_at)
+                .then_with(|| left.author_pubkey.cmp(&right.author_pubkey))
+        });
+        Ok(items)
+    }
+
+    async fn remove_muted_author(&self, author_pubkey: &str) -> Result<()> {
+        self.muted_authors.write().await.remove(author_pubkey);
+        Ok(())
+    }
+
     async fn upsert_live_presence(
         &self,
         topic_id: &str,
@@ -3191,6 +3292,13 @@ fn row_to_author_relationship_projection(
     })
 }
 
+fn row_to_muted_author(row: sqlx::sqlite::SqliteRow) -> Result<MutedAuthorRow> {
+    Ok(MutedAuthorRow {
+        author_pubkey: row.get("author_pubkey"),
+        muted_at: row.get("muted_at"),
+    })
+}
+
 fn follow_edge_status_name(status: &FollowEdgeStatus) -> &'static str {
     match status {
         FollowEdgeStatus::Active => "active",
@@ -3735,6 +3843,55 @@ mod tests {
             vec!["c".repeat(64)]
         );
         assert!(relationship.followed_by);
+    }
+
+    #[tokio::test]
+    async fn muted_authors_restore_after_restart() {
+        let tempdir = tempdir().expect("tempdir");
+        let db_path = tempdir.path().join("store.db");
+        let author_pubkey = "b".repeat(64);
+
+        {
+            let store = SqliteStore::connect_file(&db_path)
+                .await
+                .expect("open sqlite store");
+            ProjectionStore::put_muted_author(
+                &store,
+                MutedAuthorRow {
+                    author_pubkey: author_pubkey.clone(),
+                    muted_at: 42,
+                },
+            )
+            .await
+            .expect("store muted author");
+            store.close().await;
+        }
+
+        let reopened = SqliteStore::connect_file(&db_path)
+            .await
+            .expect("reopen sqlite store");
+        let muted = ProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
+            .await
+            .expect("get muted author")
+            .expect("muted author exists");
+        assert_eq!(muted.author_pubkey, author_pubkey);
+        assert_eq!(muted.muted_at, 42);
+        assert_eq!(
+            ProjectionStore::list_muted_authors(&reopened)
+                .await
+                .expect("list muted authors"),
+            vec![muted.clone()]
+        );
+
+        ProjectionStore::remove_muted_author(&reopened, author_pubkey.as_str())
+            .await
+            .expect("remove muted author");
+        assert!(
+            ProjectionStore::get_muted_author(&reopened, author_pubkey.as_str())
+                .await
+                .expect("get muted author after delete")
+                .is_none()
+        );
     }
 
     #[tokio::test]

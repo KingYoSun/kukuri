@@ -13,8 +13,9 @@ use kukuri_desktop_runtime::{
     ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest, ImportPeerTicketRequest,
     ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest, ListGameRoomsRequest,
     ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
-    ListRecentReactionsRequest, ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest,
-    RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
+    ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
+    ListTimelineRequest, LiveSessionCommandRequest, RemoveBookmarkedCustomReactionRequest,
+    RemoveBookmarkedPostRequest,
     RotatePrivateChannelRequest, SendDirectMessageRequest, SetCommunityNodeConfigRequest,
     SetDiscoverySeedsRequest, SetMyProfileRequest, ToggleReactionRequest,
     UnsubscribeTopicRequest, UpdateGameRoomRequest, resolve_db_path_from_env,
@@ -435,6 +436,34 @@ async fn get_author_social_view(
     state
         .runtime
         .get_author_social_view(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn mute_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, String> {
+    state.runtime.mute_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn unmute_author(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorRequest,
+) -> Result<kukuri_app_api::AuthorSocialView, String> {
+    state.runtime.unmute_author(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn list_social_connections(
+    state: tauri::State<'_, DesktopState>,
+    request: ListSocialConnectionsRequest,
+) -> Result<Vec<kukuri_app_api::AuthorSocialView>, String> {
+    state
+        .runtime
+        .list_social_connections(request)
         .await
         .map_err(map_error)
 }
@@ -871,6 +900,9 @@ pub fn run() {
             follow_author,
             unfollow_author,
             get_author_social_view,
+            mute_author,
+            unmute_author,
+            list_social_connections,
             open_direct_message,
             list_direct_messages,
             list_direct_message_messages,

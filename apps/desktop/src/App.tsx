@@ -37,6 +37,7 @@ import {
 } from '@/components/core/types';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
+import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
 import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
 import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
@@ -65,6 +66,7 @@ import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import {
   type PrimarySection,
+  type ProfileConnectionsView,
   type ProfileWorkspaceMode,
   type SettingsSection,
   type ShellChromeState,
@@ -154,6 +156,8 @@ type AsyncPanelState = {
   error: string | null;
 };
 
+type SocialConnectionsState = Record<ProfileConnectionsView, AuthorSocialView[]>;
+
 type DesktopShellState = {
   trackedTopics: string[];
   activeTopic: string;
@@ -189,6 +193,8 @@ type DesktopShellState = {
   syncStatus: SyncStatus;
   localProfile: Profile | null;
   profileTimeline: PostView[];
+  socialConnections: SocialConnectionsState;
+  socialConnectionsPanelState: AsyncPanelState;
   ownedReactionAssets: CustomReactionAssetView[];
   bookmarkedReactionAssets: BookmarkedCustomReactionView[];
   bookmarkedPosts: BookmarkedPostView[];
@@ -259,6 +265,7 @@ type DesktopShellRouteOverrides = {
   composeTarget?: ChannelRef;
   primarySection?: PrimarySection;
   profileMode?: ProfileWorkspaceMode;
+  profileConnectionsView?: ProfileConnectionsView;
   selectedAuthorPubkey?: string | null;
   directMessagePaneOpen?: boolean;
   selectedDirectMessagePeerPubkey?: string | null;
@@ -314,6 +321,11 @@ const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
 };
 const DEFAULT_COMMUNITY_NODE_CONFIG: CommunityNodeConfig = {
   nodes: [],
+};
+const DEFAULT_SOCIAL_CONNECTIONS: SocialConnectionsState = {
+  following: [],
+  followed: [],
+  muted: [],
 };
 const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
@@ -391,6 +403,8 @@ function createInitialShellState(): DesktopShellState {
     syncStatus: DEFAULT_SYNC_STATUS,
     localProfile: null,
     profileTimeline: [],
+    socialConnections: DEFAULT_SOCIAL_CONNECTIONS,
+    socialConnectionsPanelState: DEFAULT_ASYNC_PANEL_STATE,
     ownedReactionAssets: [],
     bookmarkedReactionAssets: [],
     bookmarkedPosts: [],
@@ -451,6 +465,7 @@ function createInitialShellState(): DesktopShellState {
       timelineView: 'feed',
       activeSettingsSection: 'connectivity',
       profileMode: 'overview',
+      profileConnectionsView: 'following',
       navOpen: false,
       settingsOpen: false,
     },
@@ -551,6 +566,10 @@ function isSettingsSection(value: string | null): value is SettingsSection {
     value === 'community-node' ||
     value === 'reactions'
   );
+}
+
+function isProfileConnectionsView(value: string | null): value is ProfileConnectionsView {
+  return value === 'following' || value === 'followed' || value === 'muted';
 }
 
 const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
@@ -1408,6 +1427,8 @@ function DesktopShellPage({
     syncStatus,
     localProfile,
     profileTimeline,
+    socialConnections,
+    socialConnectionsPanelState,
     ownedReactionAssets,
     bookmarkedReactionAssets,
     bookmarkedPosts,
@@ -1598,6 +1619,14 @@ function DesktopShellPage({
   const setSyncStatus = useMemo(() => makeFieldSetter('syncStatus'), [makeFieldSetter]);
   const setLocalProfile = useMemo(() => makeFieldSetter('localProfile'), [makeFieldSetter]);
   const setProfileTimeline = useMemo(() => makeFieldSetter('profileTimeline'), [makeFieldSetter]);
+  const setSocialConnections = useMemo(
+    () => makeFieldSetter('socialConnections'),
+    [makeFieldSetter]
+  );
+  const setSocialConnectionsPanelState = useMemo(
+    () => makeFieldSetter('socialConnectionsPanelState'),
+    [makeFieldSetter]
+  );
   const setOwnedReactionAssets = useMemo(
     () => makeFieldSetter('ownedReactionAssets'),
     [makeFieldSetter]
@@ -1817,6 +1846,8 @@ function DesktopShellPage({
     return audienceLabelForChannelRef(activeComposeChannel, activeJoinedChannels);
   }, [activeComposeChannel, activeJoinedChannels, replyTarget, repostTarget]);
   const profileMode = shellChromeState.profileMode;
+  const profileConnectionsView = shellChromeState.profileConnectionsView;
+  const activeSocialConnections = socialConnections[profileConnectionsView] ?? [];
   const activePrivateChannel = useMemo(
     () =>
       selectedPrivateChannelId
@@ -1911,6 +1942,8 @@ function DesktopShellPage({
     const resolvedPrimarySection = nextPrimarySection;
     const nextTimelineView = overrides?.timelineView ?? shellChromeState.timelineView;
     const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
+    const nextProfileConnectionsView =
+      overrides?.profileConnectionsView ?? shellChromeState.profileConnectionsView;
     const nextSelectedThread = hasOverride('selectedThread')
       ? overrides?.selectedThread ?? null
       : selectedThread;
@@ -1968,6 +2001,10 @@ function DesktopShellPage({
     if (resolvedPrimarySection === 'profile' && nextProfileMode === 'edit') {
       search.set('profileMode', 'edit');
     }
+    if (resolvedPrimarySection === 'profile' && nextProfileMode === 'connections') {
+      search.set('profileMode', 'connections');
+      search.set('connectionsView', nextProfileConnectionsView);
+    }
     if (nextSettingsOpen) {
       search.set('settings', nextSettingsSection);
     }
@@ -1996,6 +2033,7 @@ function DesktopShellPage({
     shellChromeState.timelineView,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileMode,
+    shellChromeState.profileConnectionsView,
     shellChromeState.settingsOpen,
   ]);
   const liveSessionListItems = useMemo(
@@ -2238,6 +2276,9 @@ function DesktopShellPage({
           bookmarkedReactionAssetsResult,
           bookmarkedPostsResult,
           recentReactionsResult,
+          followingConnectionsResult,
+          followedConnectionsResult,
+          mutedConnectionsResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
@@ -2261,6 +2302,9 @@ function DesktopShellPage({
           api.listBookmarkedCustomReactions(),
           api.listBookmarkedPosts(),
           api.listRecentReactions(8),
+          api.listSocialConnections('following'),
+          api.listSocialConnections('followed'),
+          api.listSocialConnections('muted'),
         ]);
         if (requestId !== loadTopicsRequestRef.current) {
           return;
@@ -2394,6 +2438,43 @@ function DesktopShellPage({
           }
           if (recentReactionsResult.status === 'fulfilled') {
             setRecentReactions(recentReactionsResult.value);
+          }
+          if (
+            followingConnectionsResult.status === 'fulfilled' &&
+            followedConnectionsResult.status === 'fulfilled' &&
+            mutedConnectionsResult.status === 'fulfilled'
+          ) {
+            setSocialConnections({
+              following: followingConnectionsResult.value,
+              followed: followedConnectionsResult.value,
+              muted: mutedConnectionsResult.value,
+            });
+            setSocialConnectionsPanelState({
+              status: 'ready',
+              error: null,
+            });
+          } else {
+            setSocialConnections(DEFAULT_SOCIAL_CONNECTIONS);
+            setSocialConnectionsPanelState({
+              status: 'error',
+              error:
+                followingConnectionsResult.status === 'rejected'
+                  ? messageFromError(
+                      followingConnectionsResult.reason,
+                      translate('common:errors.failedToLoadSocialConnections')
+                    )
+                  : followedConnectionsResult.status === 'rejected'
+                    ? messageFromError(
+                        followedConnectionsResult.reason,
+                        translate('common:errors.failedToLoadSocialConnections')
+                      )
+                    : mutedConnectionsResult.status === 'rejected'
+                      ? messageFromError(
+                          mutedConnectionsResult.reason,
+                          translate('common:errors.failedToLoadSocialConnections')
+                        )
+                      : null,
+            });
           }
           setReactionPanelState({
             status:
@@ -2563,6 +2644,8 @@ function DesktopShellPage({
       setBookmarkedPosts,
       setRecentReactions,
       setReactionPanelState,
+      setSocialConnections,
+      setSocialConnectionsPanelState,
       setSelectedAuthor,
       setSelectedAuthorTimeline,
       setSyncStatus,
@@ -2791,6 +2874,7 @@ function DesktopShellPage({
       ...current,
       activePrimarySection: section,
       profileMode: section === 'profile' ? 'overview' : current.profileMode,
+      profileConnectionsView: section === 'profile' ? 'following' : current.profileConnectionsView,
       navOpen: false,
     }));
     setSelectedThread(null);
@@ -2804,6 +2888,7 @@ function DesktopShellPage({
     syncRoute('push', {
       primarySection: section,
       profileMode: section === 'profile' ? 'overview' : undefined,
+      profileConnectionsView: section === 'profile' ? 'following' : undefined,
       selectedAuthorPubkey: null,
       selectedThread: null,
     });
@@ -3238,6 +3323,23 @@ function DesktopShellPage({
       profileMode: 'edit',
     });
   }, [setShellChromeState, syncRoute]);
+
+  const openProfileConnections = useCallback(
+    (view: ProfileConnectionsView = 'following') => {
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'profile',
+        profileMode: 'connections',
+        profileConnectionsView: view,
+      }));
+      syncRoute('push', {
+        primarySection: 'profile',
+        profileMode: 'connections',
+        profileConnectionsView: view,
+      });
+    },
+    [setShellChromeState, syncRoute]
+  );
 
   function handleSelectPrivateChannel(topicId: string, channelId: string) {
     setSelectedChannelIdByTopic((current) => ({
@@ -4176,15 +4278,35 @@ function DesktopShellPage({
       const nextView = following
         ? await api.unfollowAuthor(authorPubkey)
         : await api.followAuthor(authorPubkey);
-      setSelectedAuthorPubkey(authorPubkey);
-      setSelectedAuthor(nextView);
-      setAuthorError(null);
+      if (selectedAuthorPubkey === authorPubkey) {
+        setSelectedAuthor(nextView);
+        setAuthorError(null);
+      }
       await loadTopics(trackedTopics, activeTopic, selectedThread);
     } catch (relationshipError) {
       setAuthorError(
         relationshipError instanceof Error
           ? relationshipError.message
           : translate('common:errors.failedToUpdateFollowState')
+      );
+    }
+  }
+
+  async function handleMuteAction(authorPubkey: string, muted: boolean) {
+    try {
+      const nextView = muted
+        ? await api.unmuteAuthor(authorPubkey)
+        : await api.muteAuthor(authorPubkey);
+      if (selectedAuthorPubkey === authorPubkey) {
+        setSelectedAuthor(nextView);
+        setAuthorError(null);
+      }
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (muteError) {
+      setAuthorError(
+        muteError instanceof Error
+          ? muteError.message
+          : translate('common:errors.failedToUpdateMuteState')
       );
     }
   }
@@ -4577,6 +4699,7 @@ function DesktopShellPage({
     const requestedSettingsSection = params.get('settings');
     const requestedContext = params.get('context');
     const requestedProfileMode = params.get('profileMode');
+    const requestedConnectionsView = params.get('connectionsView');
     const requestedThreadId = params.get('threadId');
     const requestedAuthorPubkey = params.get('authorPubkey');
     const requestedPeerPubkey = params.get('peerPubkey');
@@ -4656,14 +4779,27 @@ function DesktopShellPage({
       ? requestedSettingsSection
       : shellChromeState.activeSettingsSection;
     const nextProfileMode =
-      routeSection === 'profile' && requestedProfileMode === 'edit' ? 'edit' : 'overview';
+      routeSection === 'profile'
+        ? requestedProfileMode === 'edit'
+          ? 'edit'
+          : requestedProfileMode === 'connections'
+            ? 'connections'
+            : 'overview'
+        : 'overview';
+    const nextProfileConnectionsView =
+      routeSection === 'profile' && requestedProfileMode === 'connections'
+        ? isProfileConnectionsView(requestedConnectionsView)
+          ? requestedConnectionsView
+          : 'following'
+        : shellChromeState.profileConnectionsView;
 
     if (
       shellChromeState.activePrimarySection !== routeSection ||
       shellChromeState.timelineView !== nextTimelineView ||
       shellChromeState.activeSettingsSection !== nextSettingsSection ||
       shellChromeState.settingsOpen !== nextSettingsOpen ||
-      shellChromeState.profileMode !== nextProfileMode
+      shellChromeState.profileMode !== nextProfileMode ||
+      shellChromeState.profileConnectionsView !== nextProfileConnectionsView
     ) {
       setShellChromeState((current) => ({
         ...current,
@@ -4672,6 +4808,7 @@ function DesktopShellPage({
         activeSettingsSection: nextSettingsSection,
         settingsOpen: nextSettingsOpen,
         profileMode: nextProfileMode,
+        profileConnectionsView: nextProfileConnectionsView,
       }));
     }
 
@@ -4684,10 +4821,21 @@ function DesktopShellPage({
     if (requestedSettingsSection && !isSettingsSection(requestedSettingsSection)) {
       shouldNormalize = true;
     }
-    if (requestedProfileMode && requestedProfileMode !== 'edit') {
+    if (
+      requestedProfileMode &&
+      requestedProfileMode !== 'edit' &&
+      requestedProfileMode !== 'connections'
+    ) {
       shouldNormalize = true;
     }
     if (requestedProfileMode && routeSection !== 'profile') {
+      shouldNormalize = true;
+    }
+    if (
+      requestedConnectionsView &&
+      (requestedProfileMode !== 'connections' ||
+        !isProfileConnectionsView(requestedConnectionsView))
+    ) {
       shouldNormalize = true;
     }
 
@@ -4918,6 +5066,7 @@ function DesktopShellPage({
     shellChromeState.timelineView,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileMode,
+    shellChromeState.profileConnectionsView,
     shellChromeState.settingsOpen,
     syncRoute,
     thread.length,
@@ -5194,10 +5343,12 @@ function DesktopShellPage({
             followedBy: selectedAuthor.followed_by,
             mutual: selectedAuthor.mutual,
             friendOfFriend: selectedAuthor.friend_of_friend,
+            muted: selectedAuthor.muted,
             viaPubkeys: selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
             isSelf: selectedAuthor.author_pubkey === syncStatus.local_author_pubkey,
             canFollow: selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey,
             followActionLabel: selectedAuthor.following ? 'Unfollow' : 'Follow',
+            muteActionLabel: selectedAuthor.muted ? 'Unmute' : 'Mute',
           }
         : null,
       canMessage: Boolean(
@@ -5989,6 +6140,7 @@ function DesktopShellPage({
               onToggleRelationship={(authorPubkey, following) =>
                 void handleRelationshipAction(authorPubkey, following)
               }
+              onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
               onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
             />
             <Card className='shell-workspace-card'>
@@ -6412,6 +6564,22 @@ function DesktopShellPage({
                       onSave={handleSaveProfile}
                       onReset={resetProfileDraft}
                     />
+                  ) : profileMode === 'connections' ? (
+                    <ProfileConnectionsPanel
+                      activeView={profileConnectionsView}
+                      items={activeSocialConnections}
+                      localAuthorPubkey={syncStatus.local_author_pubkey}
+                      status={socialConnectionsPanelState.status}
+                      error={socialConnectionsPanelState.error}
+                      onSelectView={openProfileConnections}
+                      onToggleRelationship={(authorPubkey, following) =>
+                        void handleRelationshipAction(authorPubkey, following)
+                      }
+                      onToggleMute={(authorPubkey, muted) =>
+                        void handleMuteAction(authorPubkey, muted)
+                      }
+                      onBack={openProfileOverview}
+                    />
                   ) : (
                     <ProfileOverviewPanel
                       authorLabel={profileAuthorLabel}
@@ -6421,20 +6589,23 @@ function DesktopShellPage({
                       error={profileError ?? profilePanelState.error}
                       postCount={profileTimelinePostViews.length}
                       onEdit={openProfileEditor}
+                      onManageConnections={() => openProfileConnections('following')}
                     />
                   )}
-                  <Card className='shell-workspace-card'>
-                    <TimelineFeed
-                      posts={profileTimelinePostViews}
-                      emptyCopy={t('profile:feed.noOwnPosts')}
-                      onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                      onOpenThread={(threadId) => void openThread(threadId)}
-                      onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                      onReply={beginReply}
-                      readOnly={true}
-                      onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
-                    />
-                  </Card>
+                  {profileMode !== 'connections' ? (
+                    <Card className='shell-workspace-card'>
+                      <TimelineFeed
+                        posts={profileTimelinePostViews}
+                        emptyCopy={t('profile:feed.noOwnPosts')}
+                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                        onOpenThread={(threadId) => void openThread(threadId)}
+                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
+                        onReply={beginReply}
+                        readOnly={true}
+                        onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
+                      />
+                    </Card>
+                  ) : null}
                 </>
               ) : null}
             </section>

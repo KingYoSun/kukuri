@@ -16,11 +16,34 @@
     "title": "My Profile"
   },
   "overview": {
+    "connections": "Manage Follows & Mutes",
     "edit": "Edit Profile",
     "loading": "Loading profile…",
     "noBio": "No profile bio published yet.",
     "postCount": "Public posts",
     "title": "Profile"
+  },
+  "connections": {
+    "back": "Back to profile",
+    "empty": {
+      "followed": "No local-known followers yet.",
+      "following": "You are not following anyone yet.",
+      "muted": "No muted authors yet."
+    },
+    "loading": "Loading follows and mutes…",
+    "mutedBadge": "Muted",
+    "notes": {
+      "followed": "Followed shows only followers already observed on this device.",
+      "following": "Following lists authors you actively follow.",
+      "muted": "Muted is local-only and is not shared with other devices."
+    },
+    "tabs": {
+      "followed": "Followed",
+      "following": "Following",
+      "muted": "Muted"
+    },
+    "tabsLabel": "Social connections",
+    "title": "Follow & Mute"
   },
   "feed": {
     "noAuthorPosts": "No public posts from this author yet.",

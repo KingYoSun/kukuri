@@ -234,6 +234,7 @@ export function createStoryAuthorDetailView(): AuthorDetailView {
       mutual: true,
       friend_of_friend: false,
       friend_of_friend_via_pubkeys: [],
+      muted: false,
     },
     displayLabel: 'bob',
     summary: {
@@ -242,10 +243,12 @@ export function createStoryAuthorDetailView(): AuthorDetailView {
       followedBy: true,
       mutual: true,
       friendOfFriend: false,
+      muted: false,
       viaPubkeys: [],
       isSelf: false,
       canFollow: true,
       followActionLabel: 'Unfollow',
+      muteActionLabel: 'Mute',
     },
     authorError: null,
   };
