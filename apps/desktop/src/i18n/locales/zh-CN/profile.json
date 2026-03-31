@@ -16,11 +16,34 @@
     "title": "我的资料"
   },
   "overview": {
+    "connections": "管理关注与静音",
     "edit": "编辑资料",
     "loading": "正在加载资料…",
     "noBio": "尚未发布个人简介。",
     "postCount": "公开帖子",
     "title": "资料"
+  },
+  "connections": {
+    "back": "返回资料",
+    "empty": {
+      "followed": "这个设备上还没有已知的关注者。",
+      "following": "你还没有关注任何人。",
+      "muted": "还没有静音任何作者。"
+    },
+    "loading": "正在加载关注与静音…",
+    "mutedBadge": "已静音",
+    "notes": {
+      "followed": "Followed 只显示这个设备上已经观测到的关注者。",
+      "following": "Following 仅显示你当前关注的作者。",
+      "muted": "Muted 仅保存在本地，不会同步到其他设备。"
+    },
+    "tabs": {
+      "followed": "Followed",
+      "following": "Following",
+      "muted": "Muted"
+    },
+    "tabsLabel": "社交列表",
+    "title": "关注与静音"
   },
   "feed": {
     "noAuthorPosts": "这位作者还没有公开帖子。",

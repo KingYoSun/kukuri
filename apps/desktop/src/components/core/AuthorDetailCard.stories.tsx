@@ -21,6 +21,7 @@ const meta = {
     view: authorDetailView,
     localAuthorPubkey: 'f'.repeat(64),
     onToggleRelationship: () => undefined,
+    onToggleMute: () => undefined,
   },
 } satisfies Meta<typeof AuthorDetailCard>;
 

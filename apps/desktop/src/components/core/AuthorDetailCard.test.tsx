@@ -26,6 +26,7 @@ test('author detail marks long unbroken values as wrappable content', () => {
       }}
       localAuthorPubkey={'f'.repeat(64)}
       onToggleRelationship={vi.fn()}
+      onToggleMute={vi.fn()}
     />
   );
 
@@ -41,5 +42,6 @@ test('author detail marks long unbroken values as wrappable content', () => {
   expect(screen.queryByText('following: yes')).not.toBeInTheDocument();
   expect(screen.queryByText('followed by: yes')).not.toBeInTheDocument();
   const followButton = screen.getByRole('button', { name: 'Unfollow' });
+  expect(screen.getByRole('button', { name: 'Mute' })).toBeInTheDocument();
   expect(screen.getByText('mutual').closest('.author-detail-actions')).toContainElement(followButton);
 });

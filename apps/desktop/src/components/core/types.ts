@@ -75,10 +75,12 @@ export type AuthorRelationshipSummary = {
   followedBy: boolean;
   mutual: boolean;
   friendOfFriend: boolean;
+  muted: boolean;
   viaPubkeys: string[];
   isSelf: boolean;
   canFollow: boolean;
   followActionLabel: 'Follow' | 'Unfollow';
+  muteActionLabel: 'Mute' | 'Unmute';
 };
 
 export type AuthorDetailView = {

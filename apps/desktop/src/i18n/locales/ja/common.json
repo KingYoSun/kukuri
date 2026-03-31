@@ -12,6 +12,7 @@
     "importPeer": "ピアを追加",
     "join": "参加",
     "leave": "退出",
+    "mute": "ミュート",
     "publish": "投稿",
     "quoteRepost": "引用リポスト",
     "react": "リアクション",
@@ -23,6 +24,7 @@
     "reset": "リセット",
     "rotate": "ローテーション",
     "save": "保存",
+    "unmute": "ミュート解除",
     "unfollow": "フォロー解除"
   },
   "composer": {
@@ -55,6 +57,7 @@
     "failedToLoadLiveSessions": "ライブセッションの読み込みに失敗しました",
     "failedToLoadPrivateChannels": "プライベートチャンネルの読み込みに失敗しました",
     "failedToLoadProfile": "プロフィールの読み込みに失敗しました",
+    "failedToLoadSocialConnections": "ソーシャル一覧の読み込みに失敗しました",
     "failedToLoadSettings": "設定の読み込みに失敗しました",
     "failedToLoadThread": "スレッドの読み込みに失敗しました",
     "failedToLoadTopic": "トピックの読み込みに失敗しました",
@@ -65,6 +68,7 @@
     "failedToUpdateCommunityNodes": "コミュニティノードの更新に失敗しました",
     "failedToUpdateDiscoverySeeds": "ディスカバリーシードの更新に失敗しました",
     "failedToUpdateFollowState": "フォロー状態の更新に失敗しました",
+    "failedToUpdateMuteState": "ミュート状態の更新に失敗しました",
     "quoteRepostRequiresCommentary": "引用リポストにはコメントが必要です",
     "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}"
   },

@@ -19,7 +19,7 @@ use kukuri_app_api::{
     CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
     DirectMessageTimelineView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
     LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
-    RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput,
+    RecentReactionView, SocialConnectionKind, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -214,6 +214,11 @@ pub struct GetBlobMediaRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorRequest {
     pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListSocialConnectionsRequest {
+    pub kind: SocialConnectionKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1048,6 +1053,23 @@ impl DesktopRuntime {
         self.app_service
             .get_author_social_view(request.pubkey.as_str())
             .await
+    }
+
+    pub async fn mute_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service.mute_author(request.pubkey.as_str()).await
+    }
+
+    pub async fn unmute_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
+        self.app_service
+            .unmute_author(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn list_social_connections(
+        &self,
+        request: ListSocialConnectionsRequest,
+    ) -> Result<Vec<AuthorSocialView>> {
+        self.app_service.list_social_connections(request.kind).await
     }
 
     pub async fn open_direct_message(

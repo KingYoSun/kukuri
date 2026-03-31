@@ -50,8 +50,8 @@ use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
     DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow,
-    Store, TimelineCursor,
+    LiveSessionProjectionRow, MutedAuthorRow, ObjectProjectionRow, Page, ProjectionStore,
+    ReactionProjectionRow, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -232,6 +232,16 @@ pub struct AuthorSocialView {
     pub mutual: bool,
     pub friend_of_friend: bool,
     pub friend_of_friend_via_pubkeys: Vec<String>,
+    #[serde(default)]
+    pub muted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SocialConnectionKind {
+    Following,
+    Followed,
+    Muted,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -712,6 +722,71 @@ impl AppService {
         self.build_author_social_view(author_pubkey.as_str()).await
     }
 
+    pub async fn mute_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        let author_pubkey = normalize_author_pubkey(pubkey)?;
+        self.ensure_author_subscription(author_pubkey.as_str())
+            .await?;
+        self.projection_store
+            .put_muted_author(MutedAuthorRow {
+                author_pubkey: author_pubkey.clone(),
+                muted_at: Utc::now().timestamp_millis(),
+            })
+            .await?;
+        self.build_author_social_view(author_pubkey.as_str()).await
+    }
+
+    pub async fn unmute_author(&self, pubkey: &str) -> Result<AuthorSocialView> {
+        let author_pubkey = normalize_author_pubkey(pubkey)?;
+        self.ensure_author_subscription(author_pubkey.as_str())
+            .await?;
+        self.projection_store
+            .remove_muted_author(author_pubkey.as_str())
+            .await?;
+        self.build_author_social_view(author_pubkey.as_str()).await
+    }
+
+    pub async fn list_social_connections(
+        &self,
+        kind: SocialConnectionKind,
+    ) -> Result<Vec<AuthorSocialView>> {
+        self.rebuild_author_relationships().await?;
+        let local_author_pubkey = self.current_author_pubkey();
+        let pubkeys = match kind {
+            SocialConnectionKind::Following => self
+                .store
+                .list_follow_edges_by_subject(local_author_pubkey.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == FollowEdgeStatus::Active)
+                .map(|edge| edge.target_pubkey.as_str().to_string())
+                .collect::<BTreeSet<_>>(),
+            SocialConnectionKind::Followed => self
+                .store
+                .list_follow_edges_by_target(local_author_pubkey.as_str())
+                .await?
+                .into_iter()
+                .filter(|edge| edge.status == FollowEdgeStatus::Active)
+                .map(|edge| edge.subject_pubkey.as_str().to_string())
+                .collect::<BTreeSet<_>>(),
+            SocialConnectionKind::Muted => self
+                .projection_store
+                .list_muted_authors()
+                .await?
+                .into_iter()
+                .map(|row| row.author_pubkey)
+                .collect::<BTreeSet<_>>(),
+        };
+        let mut items = Vec::with_capacity(pubkeys.len());
+        for author_pubkey in pubkeys {
+            items.push(
+                self.build_author_social_view(author_pubkey.as_str())
+                    .await?,
+            );
+        }
+        items.sort_by(author_social_view_sort_key);
+        Ok(items)
+    }
+
     pub async fn resume_direct_message_state(&self) -> Result<()> {
         let mut peers = self
             .projection_store
@@ -950,6 +1025,8 @@ impl AppService {
                 .cmp(&left.created_at())
                 .then_with(|| right.object_id().cmp(left.object_id()))
         });
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        items.retain(|item| !profile_timeline_item_is_muted(item, &muted_author_pubkeys));
         let page = profile_timeline_page(items, cursor, limit);
         let mut views = Vec::with_capacity(page.items.len());
         for item in page.items {
@@ -1250,7 +1327,14 @@ impl AppService {
     }
 
     pub async fn list_bookmarked_posts(&self) -> Result<Vec<BookmarkedPostView>> {
-        let rows = self.projection_store.list_bookmarked_posts().await?;
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let rows = self
+            .projection_store
+            .list_bookmarked_posts()
+            .await?
+            .into_iter()
+            .filter(|row| !bookmarked_post_row_is_muted(row, &muted_author_pubkeys))
+            .collect::<Vec<_>>();
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             items.push(self.bookmarked_post_view_from_row(row).await?);
@@ -1673,12 +1757,14 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let mut page = filtered_timeline_page(
             self.projection_store.as_ref(),
             topic_id,
             cursor.clone(),
             limit,
             &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
+            &muted_author_pubkeys,
         )
         .await?;
         if page.items.is_empty()
@@ -1698,6 +1784,7 @@ impl AppService {
                 cursor,
                 limit,
                 &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
+                &muted_author_pubkeys,
             )
             .await?;
         }
@@ -1720,6 +1807,7 @@ impl AppService {
     ) -> Result<TimelineView> {
         self.ensure_scope_subscriptions(topic_id, &TimelineScope::AllJoined)
             .await?;
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let thread_root = EnvelopeId::from(thread_id);
         let mut page = filtered_thread_page(
             self.projection_store.as_ref(),
@@ -1728,6 +1816,7 @@ impl AppService {
             cursor.clone(),
             limit,
             None,
+            &muted_author_pubkeys,
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
@@ -1752,6 +1841,7 @@ impl AppService {
                 cursor,
                 limit,
                 root_channel.as_deref(),
+                &muted_author_pubkeys,
             )
             .await?;
         }
@@ -1776,6 +1866,7 @@ impl AppService {
         scope: TimelineScope,
     ) -> Result<Vec<LiveSessionView>> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         self.projection_store
             .clear_expired_live_presence(Utc::now().timestamp_millis())
             .await?;
@@ -1786,7 +1877,10 @@ impl AppService {
                 .await?,
             &allowed,
             |row| row.channel_id.as_str(),
-        );
+        )
+        .into_iter()
+        .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+        .collect::<Vec<_>>();
         let needs_refresh = rows
             .iter()
             .any(|row| row.status == LiveSessionStatus::Live && row.viewer_count == 0);
@@ -1803,7 +1897,10 @@ impl AppService {
                     .await?,
                 &allowed,
                 |row| row.channel_id.as_str(),
-            );
+            )
+            .into_iter()
+            .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+            .collect();
         }
         self.cleanup_ended_live_presence_tasks(&rows).await;
         let joined_sessions = self.live_presence_tasks.lock().await;
@@ -2085,6 +2182,7 @@ impl AppService {
         scope: TimelineScope,
     ) -> Result<Vec<GameRoomView>> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
+        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let allowed = self.allowed_channel_ids_for_scope(topic_id, &scope).await?;
         let mut rows = filter_channel_rows(
             self.projection_store
@@ -2092,7 +2190,10 @@ impl AppService {
                 .await?,
             &allowed,
             |row| row.channel_id.as_str(),
-        );
+        )
+        .into_iter()
+        .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+        .collect::<Vec<_>>();
         if rows.is_empty() {
             self.hydrate_scope_projection(topic_id, &scope).await?;
             rows = filter_channel_rows(
@@ -2101,7 +2202,10 @@ impl AppService {
                     .await?,
                 &allowed,
                 |row| row.channel_id.as_str(),
-            );
+            )
+            .into_iter()
+            .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+            .collect();
         }
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
@@ -4451,10 +4555,16 @@ impl AppService {
             .projection_store
             .get_author_relationship(self.current_author_pubkey().as_str(), author_pubkey)
             .await?;
+        let muted = self
+            .projection_store
+            .get_muted_author(author_pubkey)
+            .await?
+            .is_some();
         Ok(author_social_view_from_parts(
             author_pubkey,
             profile.as_ref(),
             relationship.as_ref(),
+            muted,
         ))
     }
 
@@ -4465,6 +4575,16 @@ impl AppService {
             self.current_author_pubkey().as_str(),
         )
         .await
+    }
+
+    async fn current_muted_author_pubkeys(&self) -> Result<BTreeSet<String>> {
+        Ok(self
+            .projection_store
+            .list_muted_authors()
+            .await?
+            .into_iter()
+            .map(|row| row.author_pubkey)
+            .collect())
     }
 
     async fn ensure_author_subscriptions_for_rows(
@@ -6029,6 +6149,7 @@ fn author_social_view_from_parts(
     author_pubkey: &str,
     profile: Option<&Profile>,
     relationship: Option<&AuthorRelationshipProjectionRow>,
+    muted: bool,
 ) -> AuthorSocialView {
     AuthorSocialView {
         author_pubkey: author_pubkey.to_string(),
@@ -6047,7 +6168,29 @@ fn author_social_view_from_parts(
         friend_of_friend_via_pubkeys: relationship
             .map(|relationship| relationship.friend_of_friend_via_pubkeys.clone())
             .unwrap_or_default(),
+        muted,
     }
+}
+
+fn author_social_view_sort_key(
+    left: &AuthorSocialView,
+    right: &AuthorSocialView,
+) -> std::cmp::Ordering {
+    fn key(value: Option<&str>) -> (u8, String) {
+        let normalized = value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+        match normalized {
+            Some(value) => (0, value),
+            None => (1, String::new()),
+        }
+    }
+
+    key(left.display_name.as_deref())
+        .cmp(&key(right.display_name.as_deref()))
+        .then_with(|| key(left.name.as_deref()).cmp(&key(right.name.as_deref())))
+        .then_with(|| left.author_pubkey.cmp(&right.author_pubkey))
 }
 
 async fn rebuild_author_relationships_with_services(
@@ -7596,6 +7739,7 @@ async fn filtered_timeline_page(
     cursor: Option<TimelineCursor>,
     limit: usize,
     allowed_channels: &BTreeSet<String>,
+    muted_author_pubkeys: &BTreeSet<String>,
 ) -> Result<Page<ObjectProjectionRow>> {
     if limit == 0 {
         return Ok(Page {
@@ -7616,7 +7760,9 @@ async fn filtered_timeline_page(
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if allowed_channels.contains(row.channel_id.as_str()) {
+            if allowed_channels.contains(row.channel_id.as_str())
+                && !object_projection_row_is_muted(&row, muted_author_pubkeys)
+            {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });
@@ -7637,6 +7783,7 @@ async fn filtered_thread_page(
     cursor: Option<TimelineCursor>,
     limit: usize,
     allowed_channel: Option<&str>,
+    muted_author_pubkeys: &BTreeSet<String>,
 ) -> Result<Page<ObjectProjectionRow>> {
     if limit == 0 {
         return Ok(Page {
@@ -7658,7 +7805,9 @@ async fn filtered_thread_page(
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id) {
+            if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id)
+                && !object_projection_row_is_muted(&row, muted_author_pubkeys)
+            {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });
@@ -7680,6 +7829,41 @@ fn filter_channel_rows<T>(
     rows.into_iter()
         .filter(|row| allowed_channels.contains(channel_id(row)))
         .collect()
+}
+
+fn object_projection_row_is_muted(
+    row: &ObjectProjectionRow,
+    muted_author_pubkeys: &BTreeSet<String>,
+) -> bool {
+    muted_author_pubkeys.contains(row.author_pubkey.as_str())
+        || row.repost_of.as_ref().is_some_and(|snapshot| {
+            muted_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
+        })
+}
+
+fn bookmarked_post_row_is_muted(
+    row: &BookmarkedPostRow,
+    muted_author_pubkeys: &BTreeSet<String>,
+) -> bool {
+    muted_author_pubkeys.contains(row.author_pubkey.as_str())
+        || row.repost_of.as_ref().is_some_and(|snapshot| {
+            muted_author_pubkeys.contains(snapshot.source_author_pubkey.as_str())
+        })
+}
+
+fn profile_timeline_item_is_muted(
+    item: &ProfileTimelineItem,
+    muted_author_pubkeys: &BTreeSet<String>,
+) -> bool {
+    match item {
+        ProfileTimelineItem::Post(post) => {
+            muted_author_pubkeys.contains(post.author_pubkey.as_str())
+        }
+        ProfileTimelineItem::Repost(repost) => {
+            muted_author_pubkeys.contains(repost.author_pubkey.as_str())
+                || muted_author_pubkeys.contains(repost.repost_of.source_author_pubkey.as_str())
+        }
+    }
 }
 
 async fn fetch_post_object_for_projection(
@@ -9172,6 +9356,50 @@ mod tests {
         (app, store, docs_sync, blob_service)
     }
 
+    fn shared_apps_with_memory_services() -> (
+        AppService,
+        KukuriKeys,
+        AppService,
+        KukuriKeys,
+        Arc<MemoryStore>,
+        Arc<MemoryDocsSync>,
+        Arc<MemoryBlobService>,
+    ) {
+        let store = Arc::new(MemoryStore::default());
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let local_keys = generate_keys();
+        let remote_keys = generate_keys();
+        let local_app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            local_keys.clone(),
+        );
+        let remote_app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport,
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            remote_keys.clone(),
+        );
+        (
+            local_app,
+            local_keys,
+            remote_app,
+            remote_keys,
+            store,
+            docs_sync,
+            blob_service,
+        )
+    }
+
     async fn author_profile_post_docs(
         docs_sync: &dyn DocsSync,
         author_pubkey: &str,
@@ -10287,6 +10515,309 @@ mod tests {
         assert_eq!(repost_of.source_object_id, source_object_id);
         assert_eq!(repost_of.source_topic_id, source_topic);
         assert_eq!(repost_of.content, "source body");
+    }
+
+    #[tokio::test]
+    async fn mute_author_restores_after_restart() {
+        let dir = tempdir().expect("tempdir");
+        let database_path = dir.path().join("mute-restart.sqlite");
+        let store = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("connect sqlite store"),
+        );
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let keys = generate_keys();
+        let author_pubkey = generate_keys().public_key_hex();
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            Arc::new(NoopHintTransport),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys.clone(),
+        );
+        let muted = app
+            .mute_author(author_pubkey.as_str())
+            .await
+            .expect("mute author");
+        assert!(muted.muted);
+
+        drop(app);
+        store.close().await;
+
+        let reopened = Arc::new(
+            SqliteStore::connect_file(&database_path)
+                .await
+                .expect("reopen sqlite store"),
+        );
+        let reopened_app = AppService::new_with_services(
+            reopened.clone(),
+            reopened.clone(),
+            transport,
+            Arc::new(NoopHintTransport),
+            docs_sync,
+            blob_service,
+            keys,
+        );
+
+        let restored = reopened_app
+            .get_author_social_view(author_pubkey.as_str())
+            .await
+            .expect("get author after restart");
+        let muted_authors = reopened_app
+            .list_social_connections(SocialConnectionKind::Muted)
+            .await
+            .expect("list muted authors");
+
+        assert!(restored.muted);
+        assert_eq!(muted_authors.len(), 1);
+        assert_eq!(muted_authors[0].author_pubkey, author_pubkey);
+        assert!(muted_authors[0].muted);
+    }
+
+    #[tokio::test]
+    async fn muted_author_is_filtered_from_timeline_thread_profile_and_bookmarks() {
+        let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let topic = "kukuri:topic:mute-filter";
+        let remote_pubkey = remote_keys.public_key_hex();
+        let root_id = remote_app
+            .create_post(topic, "muted root", None)
+            .await
+            .expect("create root post");
+        let reply_id = remote_app
+            .create_post(topic, "muted reply", Some(root_id.as_str()))
+            .await
+            .expect("create reply post");
+
+        let timeline_before = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline before mute");
+        let thread_before = local_app
+            .list_thread(topic, root_id.as_str(), None, 20)
+            .await
+            .expect("thread before mute");
+        let profile_before = local_app
+            .list_profile_timeline(remote_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile before mute");
+
+        local_app
+            .bookmark_post(topic, root_id.as_str())
+            .await
+            .expect("bookmark muted author post");
+        let bookmarks_before = local_app
+            .list_bookmarked_posts()
+            .await
+            .expect("bookmarks before mute");
+
+        assert!(
+            timeline_before
+                .items
+                .iter()
+                .any(|post| post.object_id == root_id)
+        );
+        assert!(
+            timeline_before
+                .items
+                .iter()
+                .any(|post| post.object_id == reply_id)
+        );
+        assert!(
+            thread_before
+                .items
+                .iter()
+                .any(|post| post.object_id == root_id)
+        );
+        assert!(
+            thread_before
+                .items
+                .iter()
+                .any(|post| post.object_id == reply_id)
+        );
+        assert!(
+            profile_before
+                .items
+                .iter()
+                .any(|post| post.object_id == root_id)
+        );
+        assert_eq!(bookmarks_before.len(), 1);
+        assert_eq!(bookmarks_before[0].post.object_id, root_id);
+
+        local_app
+            .mute_author(remote_pubkey.as_str())
+            .await
+            .expect("mute remote author");
+
+        let timeline_after = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline after mute");
+        let thread_after = local_app
+            .list_thread(topic, root_id.as_str(), None, 20)
+            .await
+            .expect("thread after mute");
+        let profile_after = local_app
+            .list_profile_timeline(remote_pubkey.as_str(), None, 20)
+            .await
+            .expect("profile after mute");
+        let bookmarks_after = local_app
+            .list_bookmarked_posts()
+            .await
+            .expect("bookmarks after mute");
+
+        assert!(timeline_after.items.is_empty());
+        assert!(thread_after.items.is_empty());
+        assert!(profile_after.items.is_empty());
+        assert!(bookmarks_after.is_empty());
+    }
+
+    #[tokio::test]
+    async fn repost_of_muted_author_is_hidden() {
+        let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let topic = "kukuri:topic:mute-repost";
+        let remote_pubkey = remote_keys.public_key_hex();
+        let source_id = remote_app
+            .create_post(topic, "muted source", None)
+            .await
+            .expect("create muted source post");
+        let visible_local_id = local_app
+            .create_post(topic, "visible local post", None)
+            .await
+            .expect("create visible local post");
+        let repost_id = local_app
+            .create_repost(topic, topic, source_id.as_str(), Some("quote muted source"))
+            .await
+            .expect("create quote repost");
+
+        let timeline_before = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline before mute");
+        assert!(
+            timeline_before
+                .items
+                .iter()
+                .any(|post| post.object_id == repost_id)
+        );
+
+        local_app
+            .mute_author(remote_pubkey.as_str())
+            .await
+            .expect("mute source author");
+
+        let timeline_after = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline after mute");
+
+        assert!(
+            timeline_after
+                .items
+                .iter()
+                .all(|post| post.object_id != source_id)
+        );
+        assert!(
+            timeline_after
+                .items
+                .iter()
+                .all(|post| post.object_id != repost_id)
+        );
+        assert!(
+            timeline_after
+                .items
+                .iter()
+                .any(|post| post.object_id == visible_local_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn list_social_connections_followed_is_local_known_only() {
+        let (local_app, local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let local_pubkey = local_keys.public_key_hex();
+        let remote_pubkey = remote_keys.public_key_hex();
+        let unseen_pubkey = generate_keys().public_key_hex();
+
+        remote_app
+            .follow_author(local_pubkey.as_str())
+            .await
+            .expect("remote follows local");
+
+        let followed = local_app
+            .list_social_connections(SocialConnectionKind::Followed)
+            .await
+            .expect("list followed authors");
+
+        assert_eq!(followed.len(), 1);
+        assert_eq!(followed[0].author_pubkey, remote_pubkey);
+        assert!(followed[0].followed_by);
+        assert!(
+            followed
+                .iter()
+                .all(|author| author.author_pubkey != unseen_pubkey)
+        );
+    }
+
+    #[tokio::test]
+    async fn unmute_restores_visibility() {
+        let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let topic = "kukuri:topic:unmute-restore";
+        let remote_pubkey = remote_keys.public_key_hex();
+        let object_id = remote_app
+            .create_post(topic, "restored after unmute", None)
+            .await
+            .expect("create remote post");
+
+        let timeline_before = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline before mute");
+        assert!(
+            timeline_before
+                .items
+                .iter()
+                .any(|post| post.object_id == object_id)
+        );
+
+        local_app
+            .mute_author(remote_pubkey.as_str())
+            .await
+            .expect("mute remote author");
+        let muted_timeline = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline while muted");
+        assert!(
+            muted_timeline
+                .items
+                .iter()
+                .all(|post| post.object_id != object_id)
+        );
+
+        local_app
+            .unmute_author(remote_pubkey.as_str())
+            .await
+            .expect("unmute remote author");
+        let restored_timeline = local_app
+            .list_timeline(topic, None, 20)
+            .await
+            .expect("timeline after unmute");
+
+        assert!(
+            restored_timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == object_id)
+        );
     }
 
     #[test]
@@ -13534,6 +14065,128 @@ mod tests {
             .await
             .expect_err("ended room update should fail");
         assert!(error.to_string().contains("ended game room"));
+    }
+
+    #[tokio::test]
+    async fn muted_author_is_filtered_from_live_and_game_lists() {
+        let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let topic = "kukuri:topic:mute-live-game";
+        let remote_pubkey = remote_keys.public_key_hex();
+
+        let session_id = remote_app
+            .create_live_session(
+                topic,
+                CreateLiveSessionInput {
+                    title: "muted live".into(),
+                    description: "hidden".into(),
+                },
+            )
+            .await
+            .expect("create live session");
+        let room_id = remote_app
+            .create_game_room(
+                topic,
+                CreateGameRoomInput {
+                    title: "muted room".into(),
+                    description: "hidden".into(),
+                    participants: vec!["Alice".into(), "Bob".into()],
+                },
+            )
+            .await
+            .expect("create game room");
+
+        let live_before = local_app
+            .list_live_sessions(topic)
+            .await
+            .expect("list live sessions before mute");
+        let games_before = local_app
+            .list_game_rooms(topic)
+            .await
+            .expect("list game rooms before mute");
+        assert!(
+            live_before
+                .iter()
+                .any(|session| session.session_id == session_id)
+        );
+        assert!(games_before.iter().any(|room| room.room_id == room_id));
+
+        local_app
+            .mute_author(remote_pubkey.as_str())
+            .await
+            .expect("mute live/game host");
+
+        let live_after = local_app
+            .list_live_sessions(topic)
+            .await
+            .expect("list live sessions after mute");
+        let games_after = local_app
+            .list_game_rooms(topic)
+            .await
+            .expect("list game rooms after mute");
+
+        assert!(
+            live_after
+                .iter()
+                .all(|session| session.session_id != session_id)
+        );
+        assert!(games_after.iter().all(|room| room.room_id != room_id));
+    }
+
+    #[tokio::test]
+    async fn mute_does_not_change_follow_mutual_or_friend_gating() {
+        let (local_app, local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+            shared_apps_with_memory_services();
+        let topic = "kukuri:topic:mute-friend-gating";
+        let local_pubkey = local_keys.public_key_hex();
+        let remote_pubkey = remote_keys.public_key_hex();
+
+        local_app
+            .follow_author(remote_pubkey.as_str())
+            .await
+            .expect("local follows remote");
+        remote_app
+            .follow_author(local_pubkey.as_str())
+            .await
+            .expect("remote follows local");
+
+        local_app
+            .mute_author(remote_pubkey.as_str())
+            .await
+            .expect("mute mutual author");
+
+        let social_view = local_app
+            .get_author_social_view(remote_pubkey.as_str())
+            .await
+            .expect("load muted mutual author");
+        let dm_status = local_app
+            .get_direct_message_status(remote_pubkey.as_str())
+            .await
+            .expect("get direct message status");
+        let channel = local_app
+            .create_private_channel(CreatePrivateChannelInput {
+                topic_id: TopicId::new(topic),
+                label: "friends".into(),
+                audience_kind: ChannelAudienceKind::FriendOnly,
+            })
+            .await
+            .expect("create friend-only channel");
+        let grant = local_app
+            .export_friend_only_grant(topic, channel.channel_id.as_str(), None)
+            .await
+            .expect("export friend-only grant after mute");
+        let preview = remote_app
+            .import_friend_only_grant(grant.as_str())
+            .await
+            .expect("import friend-only grant after mute");
+
+        assert!(social_view.following);
+        assert!(social_view.followed_by);
+        assert!(social_view.mutual);
+        assert!(social_view.muted);
+        assert!(dm_status.mutual);
+        assert!(dm_status.send_enabled);
+        assert_eq!(preview.channel_id.as_str(), channel.channel_id);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

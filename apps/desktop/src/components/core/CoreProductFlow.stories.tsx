@@ -365,6 +365,7 @@ function CoreProductFlowStory({ width }: { width: number }) {
                 view={AUTHOR_VIEW}
                 localAuthorPubkey={'f'.repeat(64)}
                 onToggleRelationship={() => undefined}
+                onToggleMute={() => undefined}
               />
             </ContextPane>
           </>

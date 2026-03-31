@@ -12,6 +12,7 @@ type ProfileOverviewPanelProps = {
   error: string | null;
   postCount: number;
   onEdit: () => void;
+  onManageConnections: () => void;
 };
 
 export function ProfileOverviewPanel({
@@ -22,6 +23,7 @@ export function ProfileOverviewPanel({
   error,
   postCount,
   onEdit,
+  onManageConnections,
 }: ProfileOverviewPanelProps) {
   const { t } = useTranslation('profile');
 
@@ -41,9 +43,14 @@ export function ProfileOverviewPanel({
             <small>{authorLabel}</small>
           </div>
         </div>
-        <Button variant='secondary' type='button' onClick={onEdit}>
-          {t('overview.edit')}
-        </Button>
+        <div className='post-actions'>
+          <Button variant='secondary' type='button' onClick={onManageConnections}>
+            {t('overview.connections')}
+          </Button>
+          <Button variant='secondary' type='button' onClick={onEdit}>
+            {t('overview.edit')}
+          </Button>
+        </div>
       </CardHeader>
 
       {status === 'loading' ? <Notice>{t('overview.loading')}</Notice> : null}

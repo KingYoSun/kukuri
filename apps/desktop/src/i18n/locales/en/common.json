@@ -12,6 +12,7 @@
     "importPeer": "Import Peer",
     "join": "Join",
     "leave": "Leave",
+    "mute": "Mute",
     "publish": "Publish",
     "quoteRepost": "Quote Repost",
     "react": "React",
@@ -23,6 +24,7 @@
     "reset": "Reset",
     "rotate": "Rotate",
     "save": "Save",
+    "unmute": "Unmute",
     "unfollow": "Unfollow"
   },
   "composer": {
@@ -55,6 +57,7 @@
     "failedToLoadLiveSessions": "failed to load live sessions",
     "failedToLoadPrivateChannels": "failed to load private channels",
     "failedToLoadProfile": "failed to load profile",
+    "failedToLoadSocialConnections": "failed to load social connections",
     "failedToLoadSettings": "failed to load settings",
     "failedToLoadThread": "failed to load thread",
     "failedToLoadTopic": "failed to load topic",
@@ -65,6 +68,7 @@
     "failedToUpdateCommunityNodes": "failed to update community nodes",
     "failedToUpdateDiscoverySeeds": "failed to update discovery seeds",
     "failedToUpdateFollowState": "failed to update follow state",
+    "failedToUpdateMuteState": "failed to update mute state",
     "quoteRepostRequiresCommentary": "quote repost requires commentary",
     "unsupportedAttachmentType": "unsupported attachment type: {{name}}"
   },
