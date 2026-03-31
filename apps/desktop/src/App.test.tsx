@@ -2392,7 +2392,7 @@ test('profile social management updates follow and mute lists and muted authors 
               host_pubkey: mutedAuthorPubkey,
               title: 'Muted Room',
               description: 'muted host room',
-              status: 'Open',
+              status: 'Waiting',
               phase_label: null,
               scores: [
                 {
@@ -2415,7 +2415,7 @@ test('profile social management updates follow and mute lists and muted authors 
               host_pubkey: visibleAuthorPubkey,
               title: 'Visible Room',
               description: 'visible host room',
-              status: 'Open',
+              status: 'Waiting',
               phase_label: null,
               scores: [
                 {

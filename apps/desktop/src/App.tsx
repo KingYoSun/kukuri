@@ -119,7 +119,6 @@ import {
   ReactionKeyInput,
   ReactionStateView,
   RecentReactionView,
-  SocialConnectionKind,
   SyncStatus,
   TimelineScope,
   TopicSyncStatus,
