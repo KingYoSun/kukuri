@@ -971,6 +971,7 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to create live session on desktop a")?;
+            wait_for_live_session(&runtime_a, topic, session_id.as_str(), step_timeout).await?;
             let mut live_session_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_session(
@@ -1046,6 +1047,7 @@ async fn run_community_node_connectivity(
                 })
                 .await
                 .context("failed to end live session on desktop a")?;
+            wait_for_live_ended(&runtime_a, topic, session_id.as_str(), step_timeout).await?;
             let mut live_ended_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_ended(
@@ -3517,6 +3519,30 @@ async fn refresh_public_pair(
             scope: TimelineScope::Public,
             cursor: None,
             limit: Some(20),
+        })
+        .await;
+    let _ = runtime_a
+        .list_live_sessions(ListLiveSessionsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+        })
+        .await;
+    let _ = runtime_b
+        .list_live_sessions(ListLiveSessionsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+        })
+        .await;
+    let _ = runtime_a
+        .list_game_rooms(ListGameRoomsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+        })
+        .await;
+    let _ = runtime_b
+        .list_game_rooms(ListGameRoomsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
         })
         .await;
     wait_for_topic_peer_count(runtime_a, topic, 1, step_timeout).await?;
