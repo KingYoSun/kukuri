@@ -718,6 +718,8 @@ impl AppService {
         let author_pubkey = normalize_author_pubkey(pubkey)?;
         self.ensure_author_subscription(author_pubkey.as_str())
             .await?;
+        self.maybe_restart_author_subscription(author_pubkey.as_str())
+            .await;
         self.rebuild_author_relationships().await?;
         self.build_author_social_view(author_pubkey.as_str()).await
     }
@@ -4630,6 +4632,32 @@ impl AppService {
             handle.abort();
         }
         self.spawn_author_subscription(author_pubkey.as_str()).await
+    }
+
+    async fn maybe_restart_author_subscription(&self, author_pubkey: &str) {
+        let Ok(author_pubkey) = normalize_author_pubkey(author_pubkey) else {
+            return;
+        };
+        let key = format!("author-subscription:{author_pubkey}");
+        let now = Utc::now().timestamp();
+        {
+            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
+            if next_due_at > now {
+                return;
+            }
+            deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
+        }
+        if let Err(error) = self
+            .restart_author_subscription(author_pubkey.as_str())
+            .await
+        {
+            warn!(
+                author_pubkey = %author_pubkey,
+                error = %error,
+                "failed to restart author subscription"
+            );
+        }
     }
 
     async fn spawn_author_subscription(&self, author_pubkey: &str) -> Result<()> {
