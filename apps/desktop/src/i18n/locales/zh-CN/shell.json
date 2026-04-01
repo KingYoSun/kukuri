@@ -27,6 +27,7 @@
   "primarySections": {
     "game": "游戏",
     "live": "直播",
+    "messages": "消息",
     "profile": "资料",
     "timeline": "时间线"
   },

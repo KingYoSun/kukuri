@@ -68,8 +68,10 @@ export function AuthorDetailCard({
 
           {relationshipLabel || showFollowAction || showMuteAction || showMessageAction ? (
             <div className='author-detail-actions'>
-              {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : <span />}
-              <div className='post-actions'>
+              <div className='author-detail-action-meta'>
+                {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : null}
+              </div>
+              <div className='author-detail-action-buttons'>
                 {showMessageAction ? (
                   <button
                     className='button button-secondary'

@@ -16,9 +16,11 @@
     "title": "我的资料"
   },
   "overview": {
-    "connections": "管理关注与静音",
     "edit": "编辑资料",
+    "followedCount": "{{count}} 位关注者",
+    "followingCount": "已关注 {{count}} 位",
     "loading": "正在加载资料…",
+    "mutedCount": "已静音 {{count}} 位",
     "noBio": "尚未发布个人简介。",
     "postCount": "公开帖子",
     "title": "资料"
@@ -32,11 +34,6 @@
     },
     "loading": "正在加载关注与静音…",
     "mutedBadge": "已静音",
-    "notes": {
-      "followed": "Followed 只显示这个设备上已经观测到的关注者。",
-      "following": "Following 仅显示你当前关注的作者。",
-      "muted": "Muted 仅保存在本地，不会同步到其他设备。"
-    },
     "tabs": {
       "followed": "Followed",
       "following": "Following",

@@ -11,6 +11,7 @@
     "importPeer": "导入 Peer",
     "join": "加入",
     "leave": "离开",
+    "message": "消息",
     "mute": "静音",
     "publish": "发布",
     "quoteRepost": "引用转发",

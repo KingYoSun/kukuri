@@ -19,7 +19,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
-import { Lock, MessageSquare, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
@@ -157,6 +157,7 @@ type AsyncPanelState = {
 };
 
 type SocialConnectionsState = Record<ProfileConnectionsView, AuthorSocialView[]>;
+type KnownAuthorsByPubkey = Record<string, AuthorSocialView>;
 
 type DesktopShellState = {
   trackedTopics: string[];
@@ -193,6 +194,7 @@ type DesktopShellState = {
   syncStatus: SyncStatus;
   localProfile: Profile | null;
   profileTimeline: PostView[];
+  knownAuthorsByPubkey: KnownAuthorsByPubkey;
   socialConnections: SocialConnectionsState;
   socialConnectionsPanelState: AsyncPanelState;
   ownedReactionAssets: CustomReactionAssetView[];
@@ -403,6 +405,7 @@ function createInitialShellState(): DesktopShellState {
     syncStatus: DEFAULT_SYNC_STATUS,
     localProfile: null,
     profileTimeline: [],
+    knownAuthorsByPubkey: {},
     socialConnections: DEFAULT_SOCIAL_CONNECTIONS,
     socialConnectionsPanelState: DEFAULT_ASYNC_PANEL_STATE,
     ownedReactionAssets: [],
@@ -521,6 +524,10 @@ const PRIMARY_SECTION_ITEMS: Array<{
     label: 'Game',
   },
   {
+    id: 'messages',
+    label: 'Messages',
+  },
+  {
     id: 'profile',
     label: 'Profile',
   },
@@ -576,6 +583,7 @@ const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
   timeline: '/timeline',
   live: '/live',
   game: '/game',
+  messages: '/messages',
   profile: '/profile',
 };
 
@@ -726,6 +734,66 @@ function strongestRelationshipLabel(relationship: {
     return 'friend of friend';
   }
   return null;
+}
+
+function mergeAuthorView(
+  current: AuthorSocialView | null | undefined,
+  incoming: Partial<AuthorSocialView> & { author_pubkey: string }
+): AuthorSocialView {
+  return {
+    author_pubkey: incoming.author_pubkey,
+    name: incoming.name ?? current?.name ?? null,
+    display_name: incoming.display_name ?? current?.display_name ?? null,
+    about: incoming.about ?? current?.about ?? null,
+    picture: incoming.picture ?? current?.picture ?? null,
+    picture_asset: incoming.picture_asset ?? current?.picture_asset ?? null,
+    updated_at: incoming.updated_at ?? current?.updated_at ?? null,
+    following: incoming.following ?? current?.following ?? false,
+    followed_by: incoming.followed_by ?? current?.followed_by ?? false,
+    mutual: incoming.mutual ?? current?.mutual ?? false,
+    friend_of_friend: incoming.friend_of_friend ?? current?.friend_of_friend ?? false,
+    friend_of_friend_via_pubkeys:
+      incoming.friend_of_friend_via_pubkeys ?? current?.friend_of_friend_via_pubkeys ?? [],
+    muted: incoming.muted ?? current?.muted ?? false,
+  };
+}
+
+function mergeKnownAuthors(
+  current: KnownAuthorsByPubkey,
+  incoming: Array<(Partial<AuthorSocialView> & { author_pubkey: string }) | null | undefined>
+): KnownAuthorsByPubkey {
+  let next = current;
+  for (const view of incoming) {
+    if (!view) {
+      continue;
+    }
+    const merged = mergeAuthorView(next[view.author_pubkey], view);
+    if (next === current) {
+      next = { ...current };
+    }
+    next[view.author_pubkey] = merged;
+  }
+  return next;
+}
+
+function authorViewFromDirectMessageConversation(
+  conversation: DirectMessageConversationView
+): AuthorSocialView {
+  return {
+    author_pubkey: conversation.peer_pubkey,
+    name: conversation.peer_name ?? null,
+    display_name: conversation.peer_display_name ?? null,
+    about: null,
+    picture: conversation.peer_picture ?? null,
+    picture_asset: conversation.peer_picture_asset ?? null,
+    updated_at: null,
+    following: false,
+    followed_by: false,
+    mutual: conversation.status.mutual,
+    friend_of_friend: false,
+    friend_of_friend_via_pubkeys: [],
+    muted: false,
+  };
 }
 
 function privateTimelineScope(channelId: string | null): TimelineScope {
@@ -1427,6 +1495,7 @@ function DesktopShellPage({
     syncStatus,
     localProfile,
     profileTimeline,
+    knownAuthorsByPubkey,
     socialConnections,
     socialConnectionsPanelState,
     ownedReactionAssets,
@@ -1619,6 +1688,10 @@ function DesktopShellPage({
   const setSyncStatus = useMemo(() => makeFieldSetter('syncStatus'), [makeFieldSetter]);
   const setLocalProfile = useMemo(() => makeFieldSetter('localProfile'), [makeFieldSetter]);
   const setProfileTimeline = useMemo(() => makeFieldSetter('profileTimeline'), [makeFieldSetter]);
+  const setKnownAuthorsByPubkey = useMemo(
+    () => makeFieldSetter('knownAuthorsByPubkey'),
+    [makeFieldSetter]
+  );
   const setSocialConnections = useMemo(
     () => makeFieldSetter('socialConnections'),
     [makeFieldSetter]
@@ -1787,6 +1860,7 @@ function DesktopShellPage({
     timeline: null,
     live: null,
     game: null,
+    messages: null,
     profile: null,
   });
   const location = useLocation();
@@ -1847,7 +1921,21 @@ function DesktopShellPage({
   }, [activeComposeChannel, activeJoinedChannels, replyTarget, repostTarget]);
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
-  const activeSocialConnections = socialConnections[profileConnectionsView] ?? [];
+  const activeSocialConnections = useMemo(
+    () => socialConnections[profileConnectionsView] ?? [],
+    [profileConnectionsView, socialConnections]
+  );
+  const activeSocialConnectionViews = useMemo(
+    () =>
+      activeSocialConnections.map((author) => {
+        const knownAuthor = knownAuthorsByPubkey[author.author_pubkey] ?? author;
+        return {
+          ...author,
+          picture_src: resolveProfilePictureSrc(knownAuthor, mediaObjectUrls),
+        };
+      }),
+    [activeSocialConnections, knownAuthorsByPubkey, mediaObjectUrls]
+  );
   const activePrivateChannel = useMemo(
     () =>
       selectedPrivateChannelId
@@ -1926,6 +2014,7 @@ function DesktopShellPage({
   }, [shellChromeState.activePrimarySection, t]);
   const showFloatingActionButton =
     shellChromeState.activePrimarySection !== 'profile' &&
+    shellChromeState.activePrimarySection !== 'messages' &&
     !(
       shellChromeState.activePrimarySection === 'timeline' &&
       shellChromeState.timelineView === 'bookmarks'
@@ -1950,9 +2039,6 @@ function DesktopShellPage({
     const nextSelectedAuthorPubkey = hasOverride('selectedAuthorPubkey')
       ? overrides?.selectedAuthorPubkey ?? null
       : selectedAuthorPubkey;
-    const nextDirectMessagePaneOpen = hasOverride('directMessagePaneOpen')
-      ? overrides?.directMessagePaneOpen ?? false
-      : directMessagePaneOpen;
     const nextSelectedDirectMessagePeerPubkey = hasOverride('selectedDirectMessagePeerPubkey')
       ? overrides?.selectedDirectMessagePeerPubkey ?? null
       : selectedDirectMessagePeerPubkey;
@@ -1975,6 +2061,7 @@ function DesktopShellPage({
 
     search.set('topic', nextTopic);
     if (
+      resolvedPrimarySection !== 'messages' &&
       nextSelectedChannelId &&
       !(resolvedPrimarySection === 'timeline' && nextTimelineView === 'bookmarks')
     ) {
@@ -1983,8 +2070,7 @@ function DesktopShellPage({
     if (resolvedPrimarySection === 'timeline' && nextTimelineView === 'bookmarks') {
       search.set('timelineView', 'bookmarks');
     }
-    if (nextDirectMessagePaneOpen) {
-      search.set('context', 'dm');
+    if (resolvedPrimarySection === 'messages') {
       if (nextSelectedDirectMessagePeerPubkey) {
         search.set('peerPubkey', nextSelectedDirectMessagePeerPubkey);
       }
@@ -2024,7 +2110,6 @@ function DesktopShellPage({
     location.pathname,
     location.search,
     navigate,
-    directMessagePaneOpen,
     selectedDirectMessagePeerPubkey,
     selectedAuthorPubkey,
     selectedThread,
@@ -2162,7 +2247,7 @@ function DesktopShellPage({
     }
     for (const pictureAsset of [
       localProfile?.picture_asset ?? null,
-      selectedAuthor?.picture_asset ?? null,
+      ...Object.values(knownAuthorsByPubkey).map((author) => author.picture_asset ?? null),
     ]) {
       tryAddAttachment(
         pictureAsset
@@ -2181,11 +2266,11 @@ function DesktopShellPage({
     activePublicTimeline,
     activeTimeline,
     bookmarkedReactionAssets,
+    knownAuthorsByPubkey,
     localProfile?.picture_asset,
     ownedReactionAssets,
     profileTimeline,
     selectedDirectMessageTimeline,
-    selectedAuthor?.picture_asset,
     selectedAuthorTimeline,
     thread,
   ]);
@@ -2406,6 +2491,9 @@ function DesktopShellPage({
             return next;
           });
           setDirectMessages(directMessagesView);
+          setKnownAuthorsByPubkey((current) =>
+            mergeKnownAuthors(current, directMessagesView.map(authorViewFromDirectMessageConversation))
+          );
           setSyncStatus(status);
           if (discoveryResult.status === 'fulfilled') {
             setDiscoveryConfig(discoveryResult.value);
@@ -2449,6 +2537,13 @@ function DesktopShellPage({
               followed: followedConnectionsResult.value,
               muted: mutedConnectionsResult.value,
             });
+            setKnownAuthorsByPubkey((current) =>
+              mergeKnownAuthors(current, [
+                ...followingConnectionsResult.value,
+                ...followedConnectionsResult.value,
+                ...mutedConnectionsResult.value,
+              ])
+            );
             setSocialConnectionsPanelState({
               status: 'ready',
               error: null,
@@ -2548,6 +2643,11 @@ function DesktopShellPage({
             setSelectedAuthor(authorViewResult.value);
             setSelectedAuthorTimeline(authorTimelineResult.value?.items ?? []);
             setAuthorError(null);
+            if (authorViewResult.value) {
+              setKnownAuthorsByPubkey((current) =>
+                mergeKnownAuthors(current, [authorViewResult.value])
+              );
+            }
           } else {
             setSelectedAuthorTimeline([]);
             setAuthorError(
@@ -2635,6 +2735,7 @@ function DesktopShellPage({
       setLiveSessionsByTopic,
       setLocalPeerTicket,
       setLocalProfile,
+      setKnownAuthorsByPubkey,
       setOwnedReactionAssets,
       setProfileTimeline,
       setProfileDraft,
@@ -2882,6 +2983,9 @@ function DesktopShellPage({
     setSelectedAuthorPubkey(null);
     setSelectedAuthor(null);
     setAuthorError(null);
+    setDirectMessagePaneOpen(section === 'messages');
+    setSelectedDirectMessagePeerPubkey(null);
+    setDirectMessageError(null);
     window.requestAnimationFrame(() => {
       primarySectionRefs.current[section]?.focus();
     });
@@ -2890,6 +2994,7 @@ function DesktopShellPage({
       profileMode: section === 'profile' ? 'overview' : undefined,
       profileConnectionsView: section === 'profile' ? 'following' : undefined,
       selectedAuthorPubkey: null,
+      selectedDirectMessagePeerPubkey: null,
       selectedThread: null,
     });
   }
@@ -2922,7 +3027,6 @@ function DesktopShellPage({
       timelineView: view,
       selectedAuthorPubkey: view === 'bookmarks' ? null : undefined,
       selectedThread: view === 'bookmarks' ? null : undefined,
-      directMessagePaneOpen: view === 'bookmarks' ? false : undefined,
       selectedDirectMessagePeerPubkey: view === 'bookmarks' ? null : undefined,
     });
   }
@@ -2962,21 +3066,6 @@ function DesktopShellPage({
     syncRoute,
   ]);
 
-  const closeDirectMessagePane = useCallback(() => {
-    setDirectMessagePaneOpen(false);
-    setSelectedDirectMessagePeerPubkey(null);
-    setDirectMessageError(null);
-    syncRoute('replace', {
-      directMessagePaneOpen: false,
-      selectedDirectMessagePeerPubkey: null,
-    });
-  }, [
-    setDirectMessageError,
-    setDirectMessagePaneOpen,
-    setSelectedDirectMessagePeerPubkey,
-    syncRoute,
-  ]);
-
   const openDirectMessageList = useCallback((historyMode: 'push' | 'replace' = 'push') => {
     setReplyTarget(null);
     setRepostTarget(null);
@@ -2986,11 +3075,16 @@ function DesktopShellPage({
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
     setAuthorError(null);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'messages',
+      navOpen: false,
+    }));
     setDirectMessagePaneOpen(true);
     setSelectedDirectMessagePeerPubkey(null);
     setDirectMessageError(null);
     syncRoute(historyMode, {
-      directMessagePaneOpen: true,
+      primarySection: 'messages',
       selectedAuthorPubkey: null,
       selectedDirectMessagePeerPubkey: null,
       selectedThread: null,
@@ -3001,6 +3095,7 @@ function DesktopShellPage({
     setDirectMessagePaneOpen,
     setReplyTarget,
     setRepostTarget,
+    setShellChromeState,
     setSelectedAuthor,
     setSelectedAuthorPubkey,
     setSelectedAuthorTimeline,
@@ -3040,11 +3135,19 @@ function DesktopShellPage({
         ...current,
         [peerPubkey]: status,
       }));
+      setKnownAuthorsByPubkey((current) =>
+        mergeKnownAuthors(current, [authorViewFromDirectMessageConversation(conversation)])
+      );
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'messages',
+        navOpen: false,
+      }));
       setDirectMessagePaneOpen(true);
       setSelectedDirectMessagePeerPubkey(peerPubkey);
       setDirectMessageError(null);
       syncRoute(options?.historyMode ?? 'push', {
-        directMessagePaneOpen: true,
+        primarySection: 'messages',
         selectedAuthorPubkey: null,
         selectedDirectMessagePeerPubkey: peerPubkey,
         selectedThread: null,
@@ -3053,10 +3156,10 @@ function DesktopShellPage({
       const nextError = messageFromError(openError, 'failed to open direct message');
       setDirectMessageError(nextError);
       if (options?.normalizeOnError) {
-        setDirectMessagePaneOpen(false);
+        setDirectMessagePaneOpen(true);
         setSelectedDirectMessagePeerPubkey(null);
         syncRoute('replace', {
-          directMessagePaneOpen: false,
+          primarySection: 'messages',
           selectedDirectMessagePeerPubkey: null,
         });
       }
@@ -3069,8 +3172,10 @@ function DesktopShellPage({
     setDirectMessages,
     setDirectMessageStatusByPeer,
     setDirectMessageTimelineByPeer,
+    setKnownAuthorsByPubkey,
     setReplyTarget,
     setRepostTarget,
+    setShellChromeState,
     setSelectedAuthor,
     setSelectedAuthorPubkey,
     setSelectedAuthorTimeline,
@@ -3088,11 +3193,6 @@ function DesktopShellPage({
       if (shellChromeState.settingsOpen) {
         event.preventDefault();
         setSettingsOpen(false, true);
-        return;
-      }
-      if (directMessagePaneOpen) {
-        event.preventDefault();
-        closeDirectMessagePane();
         return;
       }
       if (selectedAuthorPubkey) {
@@ -3117,9 +3217,7 @@ function DesktopShellPage({
     };
   }, [
     closeAuthorPane,
-    closeDirectMessagePane,
     closeThreadPane,
-    directMessagePaneOpen,
     setNavOpen,
     setSettingsOpen,
     shellChromeState.navOpen,
@@ -4224,6 +4322,7 @@ function DesktopShellPage({
       const nextThreadId = options?.fromThread ? (options.threadId ?? selectedThread) : null;
       setSelectedAuthorPubkey(authorPubkey);
       setSelectedAuthor(socialView);
+      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [socialView]));
       setSelectedAuthorTimeline([]);
       setAuthorError(null);
       setDirectMessagePaneOpen(false);
@@ -4234,7 +4333,6 @@ function DesktopShellPage({
         setThread([]);
       }
       syncRoute(options?.historyMode ?? 'push', {
-        directMessagePaneOpen: false,
         selectedThread: nextThreadId,
         selectedAuthorPubkey: authorPubkey,
       });
@@ -4261,6 +4359,7 @@ function DesktopShellPage({
   }, [
     api,
     setAuthorError,
+    setKnownAuthorsByPubkey,
     setSelectedAuthor,
     setSelectedAuthorTimeline,
     setSelectedAuthorPubkey,
@@ -4278,6 +4377,7 @@ function DesktopShellPage({
       const nextView = following
         ? await api.unfollowAuthor(authorPubkey)
         : await api.followAuthor(authorPubkey);
+      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [nextView]));
       if (selectedAuthorPubkey === authorPubkey) {
         setSelectedAuthor(nextView);
         setAuthorError(null);
@@ -4297,6 +4397,7 @@ function DesktopShellPage({
       const nextView = muted
         ? await api.unmuteAuthor(authorPubkey)
         : await api.muteAuthor(authorPubkey);
+      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [nextView]));
       if (selectedAuthorPubkey === authorPubkey) {
         setSelectedAuthor(nextView);
         setAuthorError(null);
@@ -4774,6 +4875,20 @@ function DesktopShellPage({
       shouldReload = true;
     }
 
+    if (requestedContext === 'dm' && routeSection !== 'messages') {
+      window.requestAnimationFrame(() => {
+        syncRoute('replace', {
+          activeTopic: nextTopic,
+          primarySection: 'messages',
+          selectedAuthorPubkey: null,
+          selectedDirectMessagePeerPubkey:
+            requestedPeerPubkey && isHex64(requestedPeerPubkey) ? requestedPeerPubkey : null,
+          selectedThread: null,
+        });
+      });
+      return;
+    }
+
     const nextSettingsOpen = isSettingsSection(requestedSettingsSection);
     const nextSettingsSection = isSettingsSection(requestedSettingsSection)
       ? requestedSettingsSection
@@ -4838,6 +4953,9 @@ function DesktopShellPage({
     ) {
       shouldNormalize = true;
     }
+    if (routeSection === 'messages' && requestedContext) {
+      shouldNormalize = true;
+    }
 
     if (nextTimelineView === 'bookmarks') {
       if (requestedContext) {
@@ -4862,8 +4980,7 @@ function DesktopShellPage({
       }
       setDirectMessageError(null);
     }
-
-    if (nextTimelineView !== 'bookmarks' && requestedContext === 'dm') {
+    if (routeSection === 'messages') {
       if (requestedThreadId || requestedAuthorPubkey) {
         shouldNormalize = true;
       }
@@ -5158,6 +5275,10 @@ function DesktopShellPage({
         post.object_kind === 'repost' && !isQuoteRepost(post) && post.repost_of
           ? post.repost_of.source_topic_id
           : publishedTopicId;
+      const knownAuthor =
+        post.author_pubkey === syncStatus.local_author_pubkey
+          ? localProfile
+          : knownAuthorsByPubkey[post.author_pubkey] ?? null;
 
       return {
         post,
@@ -5168,11 +5289,9 @@ function DesktopShellPage({
           post.author_name
         ),
         authorPicture:
-          post.author_pubkey === syncStatus.local_author_pubkey
-            ? resolveProfilePictureSrc(localProfile, mediaObjectUrls)
-            : selectedAuthor?.author_pubkey === post.author_pubkey
-              ? resolveProfilePictureSrc(selectedAuthor, mediaObjectUrls)
-              : null,
+          post.author_pubkey === syncStatus.local_author_pubkey || knownAuthor
+            ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
+            : null,
         relationshipLabel: strongestRelationshipLabel(post),
         audienceChipLabel: post.channel_id
           ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??
@@ -5220,10 +5339,10 @@ function DesktopShellPage({
     },
     [
       activeJoinedChannels,
+      knownAuthorsByPubkey,
       localProfile,
       locale,
       mediaObjectUrls,
-      selectedAuthor,
       setUnsupportedVideoManifests,
       syncStatus.local_author_pubkey,
       unsupportedVideoManifests,
@@ -5325,40 +5444,47 @@ function DesktopShellPage({
     }),
     [selectedThread, t, thread.length]
   );
+  const resolvedSelectedAuthor = useMemo(
+    () =>
+      selectedAuthor
+        ? knownAuthorsByPubkey[selectedAuthor.author_pubkey] ?? selectedAuthor
+        : null,
+    [knownAuthorsByPubkey, selectedAuthor]
+  );
   const authorDetailView = useMemo<AuthorDetailView>(
     () => ({
-      author: selectedAuthor,
-      displayLabel: selectedAuthor
+      author: resolvedSelectedAuthor,
+      displayLabel: resolvedSelectedAuthor
         ? authorDisplayLabel(
-            selectedAuthor.author_pubkey,
-            selectedAuthor.display_name,
-            selectedAuthor.name
+            resolvedSelectedAuthor.author_pubkey,
+            resolvedSelectedAuthor.display_name,
+            resolvedSelectedAuthor.name
           )
         : t('common:fallbacks.authorDetail'),
-      pictureSrc: resolveProfilePictureSrc(selectedAuthor, mediaObjectUrls),
-      summary: selectedAuthor
+      pictureSrc: resolveProfilePictureSrc(resolvedSelectedAuthor, mediaObjectUrls),
+      summary: resolvedSelectedAuthor
         ? {
-            label: strongestRelationshipLabel(selectedAuthor),
-            following: selectedAuthor.following,
-            followedBy: selectedAuthor.followed_by,
-            mutual: selectedAuthor.mutual,
-            friendOfFriend: selectedAuthor.friend_of_friend,
-            muted: selectedAuthor.muted,
-            viaPubkeys: selectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
-            isSelf: selectedAuthor.author_pubkey === syncStatus.local_author_pubkey,
-            canFollow: selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey,
-            followActionLabel: selectedAuthor.following ? 'Unfollow' : 'Follow',
-            muteActionLabel: selectedAuthor.muted ? 'Unmute' : 'Mute',
+            label: strongestRelationshipLabel(resolvedSelectedAuthor),
+            following: resolvedSelectedAuthor.following,
+            followedBy: resolvedSelectedAuthor.followed_by,
+            mutual: resolvedSelectedAuthor.mutual,
+            friendOfFriend: resolvedSelectedAuthor.friend_of_friend,
+            muted: resolvedSelectedAuthor.muted,
+            viaPubkeys: resolvedSelectedAuthor.friend_of_friend_via_pubkeys.map(shortPubkey),
+            isSelf: resolvedSelectedAuthor.author_pubkey === syncStatus.local_author_pubkey,
+            canFollow: resolvedSelectedAuthor.author_pubkey !== syncStatus.local_author_pubkey,
+            followActionLabel: resolvedSelectedAuthor.following ? 'Unfollow' : 'Follow',
+            muteActionLabel: resolvedSelectedAuthor.muted ? 'Unmute' : 'Mute',
           }
         : null,
       canMessage: Boolean(
-        selectedAuthor &&
-          selectedAuthor.author_pubkey !== syncStatus.local_author_pubkey &&
-          selectedAuthor.mutual
+        resolvedSelectedAuthor &&
+          resolvedSelectedAuthor.author_pubkey !== syncStatus.local_author_pubkey &&
+          resolvedSelectedAuthor.mutual
       ),
       authorError,
     }),
-    [authorError, mediaObjectUrls, selectedAuthor, syncStatus.local_author_pubkey, t]
+    [authorError, mediaObjectUrls, resolvedSelectedAuthor, syncStatus.local_author_pubkey, t]
   );
   const navRailHeader = (
     <div className='shell-nav-status'>
@@ -5414,17 +5540,7 @@ function DesktopShellPage({
     />
   );
   const channelAction = (
-    <div className='post-actions'>
-      <Button
-        className='shell-icon-button shell-nav-channel-action'
-        variant='secondary'
-        size='icon'
-        type='button'
-        aria-label='Messages'
-        onClick={() => openDirectMessageList()}
-      >
-        <MessageSquare className='size-4' aria-hidden='true' />
-      </Button>
+    <div className='shell-nav-channel-actions'>
       <Button
         className='shell-icon-button shell-nav-channel-action'
         variant='secondary'
@@ -5821,272 +5937,244 @@ function DesktopShellPage({
     localProfile?.display_name,
     localProfile?.name
   );
-  const detailPaneStack = (
+  const messagesWorkspace = (
     <>
-      {directMessagePaneOpen ? (
-        <ContextPane
-          paneId={`${SHELL_CONTEXT_ID}-direct-message`}
-          title='Messages'
-          summary={
-            selectedDirectMessageConversation
-              ? authorDisplayLabel(
-                  selectedDirectMessageConversation.peer_pubkey,
-                  selectedDirectMessageConversation.peer_display_name,
-                  selectedDirectMessageConversation.peer_name
-                )
-              : 'Direct messages'
-          }
-          showBackdrop={true}
-          stackIndex={0}
-          onClose={closeDirectMessagePane}
-        >
-          <div className='shell-main-stack'>
-            <Card className='shell-workspace-card'>
-              <div className='panel-header'>
-                <div>
-                  <h3>Messages</h3>
-                  <small>{formatCount(directMessages.length)} conversations</small>
-                </div>
-                {selectedDirectMessagePeerPubkey ? (
-                  <Button
-                    variant='secondary'
-                    type='button'
-                    onClick={() => openDirectMessageList('replace')}
-                  >
-                    All
-                  </Button>
-                ) : null}
-              </div>
-              {directMessageError ? <Notice tone='destructive'>{directMessageError}</Notice> : null}
-              {directMessages.length === 0 ? (
-                <p className='empty'>No direct messages yet.</p>
-              ) : (
-                <ul className='post-list'>
-                  {directMessages.map((conversation) => {
-                    const label = authorDisplayLabel(
-                      conversation.peer_pubkey,
-                      conversation.peer_display_name,
-                      conversation.peer_name
-                    );
-                    const selected =
-                      conversation.peer_pubkey === selectedDirectMessagePeerPubkey;
-                    return (
-                      <li key={conversation.peer_pubkey}>
-                        <article className='post-card'>
-                          <div className='post-meta'>
-                            <span>{label}</span>
-                            <span>
-                              {conversation.last_message_at
-                                ? formatLocalizedTime(conversation.last_message_at, locale)
-                                : t('common:fallbacks.noEvents')}
-                            </span>
-                          </div>
-                          <div className='post-body'>
-                            <strong className='post-title'>
-                              {conversation.last_message_preview ?? t('common:fallbacks.none')}
-                            </strong>
-                          </div>
-                          <div className='post-actions'>
-                            <Button
-                              variant={selected ? 'primary' : 'secondary'}
-                              type='button'
-                              onClick={() => void openDirectMessagePane(conversation.peer_pubkey)}
-                            >
-                              Open
-                            </Button>
-                          </div>
-                        </article>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-
-            {selectedDirectMessagePeerPubkey ? (
-              <>
-                <Card className='shell-workspace-card'>
-                  <div className='shell-workspace-header'>
-                    <div className='shell-workspace-summary'>
-                      <span className='relationship-badge'>
-                        {selectedDirectMessageConversation
-                          ? authorDisplayLabel(
-                              selectedDirectMessageConversation.peer_pubkey,
-                              selectedDirectMessageConversation.peer_display_name,
-                              selectedDirectMessageConversation.peer_name
-                            )
-                          : selectedDirectMessagePeerPubkey}
+      <Card className='shell-workspace-card'>
+        <div className='panel-header'>
+          <div>
+            <h3>Messages</h3>
+            <small>{formatCount(directMessages.length)} conversations</small>
+          </div>
+          {selectedDirectMessagePeerPubkey ? (
+            <Button variant='secondary' type='button' onClick={() => openDirectMessageList('replace')}>
+              All
+            </Button>
+          ) : null}
+        </div>
+        {directMessageError ? <Notice tone='destructive'>{directMessageError}</Notice> : null}
+        {directMessages.length === 0 ? (
+          <p className='empty'>No direct messages yet.</p>
+        ) : (
+          <ul className='post-list'>
+            {directMessages.map((conversation) => {
+              const label = authorDisplayLabel(
+                conversation.peer_pubkey,
+                conversation.peer_display_name,
+                conversation.peer_name
+              );
+              const selected = conversation.peer_pubkey === selectedDirectMessagePeerPubkey;
+              return (
+                <li key={conversation.peer_pubkey}>
+                  <article className='post-card'>
+                    <div className='post-meta'>
+                      <span>{label}</span>
+                      <span>
+                        {conversation.last_message_at
+                          ? formatLocalizedTime(conversation.last_message_at, locale)
+                          : t('common:fallbacks.noEvents')}
                       </span>
-                      {selectedDirectMessageStatus ? (
-                        <span className='relationship-badge relationship-badge-direct'>
-                          {selectedDirectMessageStatus.send_enabled
-                            ? `peers ${formatCount(selectedDirectMessageStatus.peer_count)}`
-                            : 'send disabled'}
-                        </span>
-                      ) : null}
+                    </div>
+                    <div className='post-body'>
+                      <strong className='post-title'>
+                        {conversation.last_message_preview ?? t('common:fallbacks.none')}
+                      </strong>
                     </div>
                     <div className='post-actions'>
                       <Button
-                        variant='secondary'
+                        variant={selected ? 'primary' : 'secondary'}
                         type='button'
-                        onClick={() =>
-                          void openDirectMessagePane(selectedDirectMessagePeerPubkey, {
-                            historyMode: 'replace',
-                          })
-                        }
+                        onClick={() => void openDirectMessagePane(conversation.peer_pubkey)}
                       >
-                        {t('common:actions.refresh')}
-                      </Button>
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        disabled={selectedDirectMessageTimeline.length === 0}
-                        onClick={() => void handleClearDirectMessage(selectedDirectMessagePeerPubkey)}
-                      >
-                        {t('common:actions.clear')}
+                        Open
                       </Button>
                     </div>
-                  </div>
-                </Card>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
 
-                <Card className='shell-workspace-card'>
-                  {selectedDirectMessageTimeline.length === 0 ? (
-                    <p className='empty'>No messages yet.</p>
-                  ) : (
-                    <ul className='post-list'>
-                      {selectedDirectMessageTimeline.map((message) => {
-                        const image = selectPrimaryImageAttachment(message.attachments);
-                        const poster = selectVideoPosterAttachment(message.attachments);
-                        const video = selectVideoManifestAttachment(message.attachments);
-                        const imageSrc = image ? mediaObjectUrls[image.hash] ?? null : null;
-                        const posterSrc = poster ? mediaObjectUrls[poster.hash] ?? null : null;
-                        const videoSrc = video ? mediaObjectUrls[video.hash] ?? null : null;
-                        const videoUnsupported = Boolean(
-                          video && unsupportedVideoManifests[video.hash]
-                        );
-                        return (
-                          <li key={message.message_id}>
-                            <article className='post-card'>
-                              <div className='post-meta'>
-                                <span>
-                                  {message.outgoing ? 'You' : 'Peer'}
-                                </span>
-                                <span>{formatLocalizedTime(message.created_at, locale)}</span>
-                                <span className='reply-chip'>
-                                  {message.delivered ? 'Delivered' : 'Pending'}
-                                </span>
-                              </div>
-                              {message.text ? (
-                                <div className='post-body'>
-                                  <strong className='post-title'>{message.text}</strong>
-                                </div>
-                              ) : null}
-                              {image ? (
-                                imageSrc ? (
-                                  <div className='draft-preview-frame'>
-                                    <img
-                                      className='draft-preview-image'
-                                      src={imageSrc}
-                                      alt={t('common:media.imageAlt')}
-                                    />
-                                  </div>
-                                ) : (
-                                  <small>{t('common:media.syncingImage')}</small>
-                                )
-                              ) : null}
-                              {video ? (
-                                videoSrc && !videoUnsupported ? (
-                                  <video
-                                    className='post-card-video'
-                                    controls
-                                    playsInline
-                                    poster={posterSrc ?? undefined}
-                                    src={videoSrc}
-                                  />
-                                ) : posterSrc ? (
-                                  <div className='draft-preview-frame'>
-                                    <img
-                                      className='draft-preview-image'
-                                      src={posterSrc}
-                                      alt={t('common:media.videoPosterAlt')}
-                                    />
-                                  </div>
-                                ) : (
-                                  <small>{t('common:media.syncingPoster')}</small>
-                                )
-                              ) : null}
-                              <div className='post-actions'>
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  onClick={() =>
-                                    void handleDeleteDirectMessageMessage(
-                                      selectedDirectMessagePeerPubkey,
-                                      message.message_id
-                                    )
-                                  }
-                                >
-                                  {t('common:actions.clear')}
-                                </Button>
-                              </div>
-                            </article>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </Card>
+      {selectedDirectMessagePeerPubkey ? (
+        <>
+          <Card className='shell-workspace-card'>
+            <div className='shell-workspace-header'>
+              <div className='shell-workspace-summary'>
+                <span className='relationship-badge'>
+                  {selectedDirectMessageConversation
+                    ? authorDisplayLabel(
+                        selectedDirectMessageConversation.peer_pubkey,
+                        selectedDirectMessageConversation.peer_display_name,
+                        selectedDirectMessageConversation.peer_name
+                      )
+                    : selectedDirectMessagePeerPubkey}
+                </span>
+                {selectedDirectMessageStatus ? (
+                  <span className='relationship-badge relationship-badge-direct'>
+                    {selectedDirectMessageStatus.send_enabled
+                      ? `peers ${formatCount(selectedDirectMessageStatus.peer_count)}`
+                      : 'send disabled'}
+                  </span>
+                ) : null}
+              </div>
+              <div className='post-actions'>
+                <Button
+                  variant='secondary'
+                  type='button'
+                  onClick={() =>
+                    void openDirectMessagePane(selectedDirectMessagePeerPubkey, {
+                      historyMode: 'replace',
+                    })
+                  }
+                >
+                  {t('common:actions.refresh')}
+                </Button>
+                <Button
+                  variant='secondary'
+                  type='button'
+                  disabled={selectedDirectMessageTimeline.length === 0}
+                  onClick={() => void handleClearDirectMessage(selectedDirectMessagePeerPubkey)}
+                >
+                  {t('common:actions.clear')}
+                </Button>
+              </div>
+            </div>
+          </Card>
 
-                <Card className='shell-workspace-card'>
-                  {selectedDirectMessageStatus && !selectedDirectMessageStatus.send_enabled ? (
-                    <Notice tone='warning'>
-                      Direct message send is disabled until the relationship is mutual again.
-                    </Notice>
-                  ) : null}
-                  <form className='composer' onSubmit={(event) => void handleSendDirectMessage(event)}>
-                    <Textarea
-                      value={directMessageComposer}
-                      onChange={(event) => setDirectMessageComposer(event.target.value)}
-                      placeholder='Write a message'
-                      disabled={directMessageSending || !selectedDirectMessageStatus?.send_enabled}
-                    />
-                    <Label className='file-field file-field-compact'>
-                      <span>{t('common:fallbacks.attachment')}</span>
-                      <Input
-                        key={directMessageAttachmentInputKey}
-                        aria-label={t('common:fallbacks.attachment')}
-                        type='file'
-                        accept='image/*,video/*'
-                        disabled={
-                          directMessageSending || !selectedDirectMessageStatus?.send_enabled
-                        }
-                        onChange={(event) => {
-                          void handleDirectMessageAttachmentSelection(event);
-                        }}
-                      />
-                    </Label>
-                    <ComposerDraftPreviewList
-                      items={directMessageDraftViews}
-                      onRemove={handleRemoveDirectMessageDraftAttachment}
-                    />
-                    <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>
-                        pending outbox {formatCount(selectedDirectMessageStatus?.pending_outbox_count ?? 0)}
-                      </span>
-                    </div>
-                    <Button
-                      type='submit'
-                      disabled={directMessageSending || !selectedDirectMessageStatus?.send_enabled}
-                    >
-                      {directMessageSending ? 'Sending...' : 'Send'}
-                    </Button>
-                  </form>
-                </Card>
-              </>
+          <Card className='shell-workspace-card'>
+            {selectedDirectMessageTimeline.length === 0 ? (
+              <p className='empty'>No messages yet.</p>
+            ) : (
+              <ul className='post-list'>
+                {selectedDirectMessageTimeline.map((message) => {
+                  const image = selectPrimaryImageAttachment(message.attachments);
+                  const poster = selectVideoPosterAttachment(message.attachments);
+                  const video = selectVideoManifestAttachment(message.attachments);
+                  const imageSrc = image ? mediaObjectUrls[image.hash] ?? null : null;
+                  const posterSrc = poster ? mediaObjectUrls[poster.hash] ?? null : null;
+                  const videoSrc = video ? mediaObjectUrls[video.hash] ?? null : null;
+                  const videoUnsupported = Boolean(video && unsupportedVideoManifests[video.hash]);
+                  return (
+                    <li key={message.message_id}>
+                      <article className='post-card'>
+                        <div className='post-meta'>
+                          <span>{message.outgoing ? 'You' : 'Peer'}</span>
+                          <span>{formatLocalizedTime(message.created_at, locale)}</span>
+                          <span className='reply-chip'>
+                            {message.delivered ? 'Delivered' : 'Pending'}
+                          </span>
+                        </div>
+                        {message.text ? (
+                          <div className='post-body'>
+                            <strong className='post-title'>{message.text}</strong>
+                          </div>
+                        ) : null}
+                        {image ? (
+                          imageSrc ? (
+                            <div className='draft-preview-frame'>
+                              <img
+                                className='draft-preview-image'
+                                src={imageSrc}
+                                alt={t('common:media.imageAlt')}
+                              />
+                            </div>
+                          ) : (
+                            <small>{t('common:media.syncingImage')}</small>
+                          )
+                        ) : null}
+                        {video ? (
+                          videoSrc && !videoUnsupported ? (
+                            <video
+                              className='post-card-video'
+                              controls
+                              playsInline
+                              poster={posterSrc ?? undefined}
+                              src={videoSrc}
+                            />
+                          ) : posterSrc ? (
+                            <div className='draft-preview-frame'>
+                              <img
+                                className='draft-preview-image'
+                                src={posterSrc}
+                                alt={t('common:media.videoPosterAlt')}
+                              />
+                            </div>
+                          ) : (
+                            <small>{t('common:media.syncingPoster')}</small>
+                          )
+                        ) : null}
+                        <div className='post-actions'>
+                          <Button
+                            variant='secondary'
+                            type='button'
+                            onClick={() =>
+                              void handleDeleteDirectMessageMessage(
+                                selectedDirectMessagePeerPubkey,
+                                message.message_id
+                              )
+                            }
+                          >
+                            {t('common:actions.clear')}
+                          </Button>
+                        </div>
+                      </article>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+
+          <Card className='shell-workspace-card'>
+            {selectedDirectMessageStatus && !selectedDirectMessageStatus.send_enabled ? (
+              <Notice tone='warning'>
+                Direct message send is disabled until the relationship is mutual again.
+              </Notice>
             ) : null}
-          </div>
-        </ContextPane>
+            <form className='composer' onSubmit={(event) => void handleSendDirectMessage(event)}>
+              <Textarea
+                value={directMessageComposer}
+                onChange={(event) => setDirectMessageComposer(event.target.value)}
+                placeholder='Write a message'
+                disabled={directMessageSending || !selectedDirectMessageStatus?.send_enabled}
+              />
+              <Label className='file-field file-field-compact'>
+                <span>{t('common:fallbacks.attachment')}</span>
+                <Input
+                  key={directMessageAttachmentInputKey}
+                  aria-label={t('common:fallbacks.attachment')}
+                  type='file'
+                  accept='image/*,video/*'
+                  disabled={directMessageSending || !selectedDirectMessageStatus?.send_enabled}
+                  onChange={(event) => {
+                    void handleDirectMessageAttachmentSelection(event);
+                  }}
+                />
+              </Label>
+              <ComposerDraftPreviewList
+                items={directMessageDraftViews}
+                onRemove={handleRemoveDirectMessageDraftAttachment}
+              />
+              <div className='topic-diagnostic topic-diagnostic-secondary'>
+                <span>
+                  pending outbox {formatCount(selectedDirectMessageStatus?.pending_outbox_count ?? 0)}
+                </span>
+              </div>
+              <Button
+                type='submit'
+                disabled={directMessageSending || !selectedDirectMessageStatus?.send_enabled}
+              >
+                {directMessageSending ? 'Sending...' : 'Send'}
+              </Button>
+            </form>
+          </Card>
+        </>
       ) : null}
+    </>
+  );
+  const detailPaneStack = (
+    <>
       {selectedThread ? (
         <ContextPane
           paneId={`${SHELL_CONTEXT_ID}-thread`}
@@ -6542,6 +6630,8 @@ function DesktopShellPage({
                 </>
               ) : null}
 
+              {shellChromeState.activePrimarySection === 'messages' ? messagesWorkspace : null}
+
               {shellChromeState.activePrimarySection === 'profile' ? (
                 <>
                   {profileMode === 'edit' ? (
@@ -6567,7 +6657,7 @@ function DesktopShellPage({
                   ) : profileMode === 'connections' ? (
                     <ProfileConnectionsPanel
                       activeView={profileConnectionsView}
-                      items={activeSocialConnections}
+                      items={activeSocialConnectionViews}
                       localAuthorPubkey={syncStatus.local_author_pubkey}
                       status={socialConnectionsPanelState.status}
                       error={socialConnectionsPanelState.error}
@@ -6588,8 +6678,13 @@ function DesktopShellPage({
                       status={profilePanelState.status}
                       error={profileError ?? profilePanelState.error}
                       postCount={profileTimelinePostViews.length}
+                      followingCount={socialConnections.following.length}
+                      followedCount={socialConnections.followed.length}
+                      mutedCount={socialConnections.muted.length}
                       onEdit={openProfileEditor}
-                      onManageConnections={() => openProfileConnections('following')}
+                      onOpenFollowing={() => openProfileConnections('following')}
+                      onOpenFollowed={() => openProfileConnections('followed')}
+                      onOpenMuted={() => openProfileConnections('muted')}
                     />
                   )}
                   {profileMode !== 'connections' ? (
@@ -6612,9 +6707,7 @@ function DesktopShellPage({
           </div>
         }
         detailPaneStack={detailPaneStack}
-        detailPaneCount={
-          (directMessagePaneOpen ? 1 : 0) + (selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)
-        }
+        detailPaneCount={(selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)}
         mobileFooter={
           <Button
             ref={navTriggerRef}

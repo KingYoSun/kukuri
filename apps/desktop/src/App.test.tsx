@@ -240,7 +240,7 @@ function getSocialConnectionsTabs() {
 
 async function selectWorkspace(
   user: ReturnType<typeof userEvent.setup>,
-  label: 'Timeline' | 'Live' | 'Game' | 'Profile'
+  label: 'Timeline' | 'Live' | 'Game' | 'Messages' | 'Profile'
 ) {
   await user.click(within(getWorkspaceTabs()).getByRole('tab', { name: label }));
   await waitFor(() => {
@@ -303,7 +303,7 @@ async function openGameCreateDialog(user: ReturnType<typeof userEvent.setup>) {
   return await screen.findByRole('dialog', { name: 'Create Room' });
 }
 
-function getDetailPane(name: 'Thread' | 'Author' | 'Messages') {
+function getDetailPane(name: 'Thread' | 'Author') {
   return screen.getByRole('complementary', { name });
 }
 
@@ -350,6 +350,11 @@ test.each([
     path: '#/game',
     workspaceLabel: 'Game',
     expectedControl: () => screen.getByRole('button', { name: 'Create Room' }),
+  },
+  {
+    path: '#/messages',
+    workspaceLabel: 'Messages',
+    expectedControl: () => screen.getByText('No direct messages yet.'),
   },
   {
     path: '#/profile',
@@ -657,8 +662,8 @@ test('profile connections route restores the requested view', async () => {
     );
   });
   expect(
-    screen.getAllByText('Muted is local-only and is not shared with other devices.').length
-  ).toBeGreaterThan(0);
+    screen.queryByText('Muted is local-only and is not shared with other devices.')
+  ).not.toBeInTheDocument();
   expect(screen.getByText(authorPubkey)).toBeInTheDocument();
 });
 
@@ -2458,7 +2463,7 @@ test('profile social management updates follow and mute lists and muted authors 
   });
 
   await selectWorkspace(user, 'Profile');
-  await user.click(screen.getByRole('button', { name: 'Manage Follows & Mutes' }));
+  await user.click(screen.getByRole('button', { name: '0 Following' }));
 
   const tabs = getSocialConnectionsTabs();
   await waitFor(() => {
@@ -2477,8 +2482,8 @@ test('profile social management updates follow and mute lists and muted authors 
     );
   });
   expect(
-    screen.getAllByText('Followed shows only followers already observed on this device.').length
-  ).toBeGreaterThan(0);
+    screen.queryByText('Followed shows only followers already observed on this device.')
+  ).not.toBeInTheDocument();
 
   let bobConnectionCard = screen.getByText(mutedAuthorPubkey).closest('article');
   if (!(bobConnectionCard instanceof HTMLElement)) {
@@ -2664,7 +2669,7 @@ test('author detail mute toggle updates the selected author state', async () => 
   expect(within(authorPane).getByText('author detail stays visible while muted')).toBeInTheDocument();
 });
 
-test('author detail mutual action opens the direct message pane and sends a local message', async () => {
+test('author detail mutual action opens the messages workspace and sends a local message', async () => {
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({
     seedPosts: {
@@ -2711,7 +2716,13 @@ test('author detail mutual action opens the direct message pane and sends a loca
   await user.click(screen.getByRole('button', { name: 'Message' }));
 
   await waitFor(() => {
-    expect(getDetailPane('Messages')).toBeInTheDocument();
+    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(window.location.hash).toBe(
+      `#/messages?topic=kukuri%3Atopic%3Ademo&peerPubkey=${authorPubkey}`
+    );
   });
 
   await user.type(screen.getByPlaceholderText('Write a message'), 'hello dm');
@@ -2719,6 +2730,121 @@ test('author detail mutual action opens the direct message pane and sends a loca
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
+  });
+});
+
+test('author avatar blob stays visible on the timeline after the author pane closes', async () => {
+  installObjectUrlMocks();
+
+  const authorPubkey = 'b'.repeat(64);
+  const user = userEvent.setup();
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-author-avatar',
+              envelope_id: 'envelope-author-avatar',
+              author_pubkey: authorPubkey,
+              author_name: 'bob',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'avatar persistence',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-author-avatar',
+              audience_label: 'Public',
+            },
+          ],
+        },
+        authorSocialViews: {
+          [authorPubkey]: {
+            name: 'bob',
+            picture_asset: {
+              hash: 'avatar-hash',
+              mime: 'image/png',
+              bytes: 64,
+              role: 'profile_avatar',
+            },
+          },
+        },
+      })}
+    />
+  );
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+
+  const timelineAvatars = await screen.findAllByTestId('post-author-avatar-author-avatar');
+  await waitFor(() => {
+    expect(
+      timelineAvatars.some((avatar) => avatar.querySelector('img')?.getAttribute('src') === 'blob:mock-1')
+    ).toBe(true);
+  });
+
+  const authorPane = getDetailPane('Author');
+  await user.click(within(authorPane).getByRole('button', { name: 'Close Author' }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
+    expect(
+      screen
+        .getAllByTestId('post-author-avatar-author-avatar')
+        .some((avatar) => avatar.querySelector('img')?.getAttribute('src') === 'blob:mock-1')
+    ).toBe(true);
+  });
+});
+
+test('profile overview connection count buttons open the requested connections tab', async () => {
+  const followedPubkey = 'b'.repeat(64);
+  const mutedPubkey = 'c'.repeat(64);
+  const user = userEvent.setup();
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        authorSocialViews: {
+          [followedPubkey]: {
+            name: 'bob',
+            followed_by: true,
+          },
+          [mutedPubkey]: {
+            name: 'carol',
+            muted: true,
+          },
+        },
+      })}
+    />
+  );
+
+  await selectWorkspace(user, 'Profile');
+  await user.click(screen.getByRole('button', { name: '1 Followers' }));
+
+  await waitFor(() => {
+    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Followed' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  expect(
+    screen.queryByText('Followed shows only followers already observed on this device.')
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Back to profile' }));
+  await user.click(screen.getByRole('button', { name: '1 Muted' }));
+
+  await waitFor(() => {
+    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Muted' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
   });
 });
 

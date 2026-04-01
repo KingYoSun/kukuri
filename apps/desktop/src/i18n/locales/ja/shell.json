@@ -27,6 +27,7 @@
   "primarySections": {
     "game": "ゲーム",
     "live": "ライブ",
+    "messages": "メッセージ",
     "profile": "プロフィール",
     "timeline": "タイムライン"
   },

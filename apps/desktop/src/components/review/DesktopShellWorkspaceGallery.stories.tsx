@@ -473,8 +473,13 @@ function ProfileOverviewWorkspace() {
         status='ready'
         error={null}
         postCount={PROFILE_TIMELINE_POSTS.length}
+        followingCount={12}
+        followedCount={8}
+        mutedCount={1}
         onEdit={() => undefined}
-        onManageConnections={() => undefined}
+        onOpenFollowing={() => undefined}
+        onOpenFollowed={() => undefined}
+        onOpenMuted={() => undefined}
       />
       <Card className='shell-workspace-card'>
         <TimelineFeed
