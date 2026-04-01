@@ -1921,7 +1921,10 @@ function DesktopShellPage({
   }, [activeComposeChannel, activeJoinedChannels, replyTarget, repostTarget]);
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
-  const activeSocialConnections = socialConnections[profileConnectionsView] ?? [];
+  const activeSocialConnections = useMemo(
+    () => socialConnections[profileConnectionsView] ?? [],
+    [profileConnectionsView, socialConnections]
+  );
   const activeSocialConnectionViews = useMemo(
     () =>
       activeSocialConnections.map((author) => {
