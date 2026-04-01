@@ -11,8 +11,13 @@ type ProfileOverviewPanelProps = {
   status: 'loading' | 'ready' | 'error';
   error: string | null;
   postCount: number;
+  followingCount: number;
+  followedCount: number;
+  mutedCount: number;
   onEdit: () => void;
-  onManageConnections: () => void;
+  onOpenFollowing: () => void;
+  onOpenFollowed: () => void;
+  onOpenMuted: () => void;
 };
 
 export function ProfileOverviewPanel({
@@ -22,8 +27,13 @@ export function ProfileOverviewPanel({
   status,
   error,
   postCount,
+  followingCount,
+  followedCount,
+  mutedCount,
   onEdit,
-  onManageConnections,
+  onOpenFollowing,
+  onOpenFollowed,
+  onOpenMuted,
 }: ProfileOverviewPanelProps) {
   const { t } = useTranslation('profile');
 
@@ -44,9 +54,6 @@ export function ProfileOverviewPanel({
           </div>
         </div>
         <div className='post-actions'>
-          <Button variant='secondary' type='button' onClick={onManageConnections}>
-            {t('overview.connections')}
-          </Button>
           <Button variant='secondary' type='button' onClick={onEdit}>
             {t('overview.edit')}
           </Button>
@@ -57,6 +64,17 @@ export function ProfileOverviewPanel({
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
       <div className='shell-main-stack'>
+        <div className='profile-overview-connections'>
+          <Button variant='secondary' type='button' onClick={onOpenFollowing}>
+            {t('overview.followingCount', { count: followingCount })}
+          </Button>
+          <Button variant='secondary' type='button' onClick={onOpenFollowed}>
+            {t('overview.followedCount', { count: followedCount })}
+          </Button>
+          <Button variant='secondary' type='button' onClick={onOpenMuted}>
+            {t('overview.mutedCount', { count: mutedCount })}
+          </Button>
+        </div>
         <p className='lede'>{about?.trim() || t('overview.noBio')}</p>
         <div className='topic-diagnostic topic-diagnostic-secondary'>
           <span>{t('overview.postCount')}</span>

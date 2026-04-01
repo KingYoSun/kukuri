@@ -323,3 +323,27 @@ test('read-only post card hides reaction affordances and keeps the original topi
   await user.click(screen.getByRole('button', { name: 'Open original topic' }));
   expect(onOpenOriginalTopic).toHaveBeenCalledWith('kukuri:topic:source');
 });
+
+test('post card renders bookmark as an icon-only action with an accessible label', async () => {
+  const user = userEvent.setup();
+  const onToggleBookmark = vi.fn();
+
+  render(
+    <PostCard
+      view={createView()}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      showBookmarkAction
+      isBookmarked
+      onToggleBookmark={onToggleBookmark}
+    />
+  );
+
+  const bookmarkButton = screen.getByRole('button', { name: 'Remove bookmark' });
+  expect(bookmarkButton).toHaveAttribute('aria-pressed', 'true');
+  expect(bookmarkButton).not.toHaveTextContent(/bookmark/i);
+
+  await user.click(bookmarkButton);
+  expect(onToggleBookmark).toHaveBeenCalledWith(createView().post);
+});

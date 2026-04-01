@@ -16,9 +16,11 @@
     "title": "My Profile"
   },
   "overview": {
-    "connections": "Manage Follows & Mutes",
     "edit": "Edit Profile",
+    "followedCount": "{{count}} Followers",
+    "followingCount": "{{count}} Following",
     "loading": "Loading profile…",
+    "mutedCount": "{{count}} Muted",
     "noBio": "No profile bio published yet.",
     "postCount": "Public posts",
     "title": "Profile"
@@ -32,11 +34,6 @@
     },
     "loading": "Loading follows and mutes…",
     "mutedBadge": "Muted",
-    "notes": {
-      "followed": "Followed shows only followers already observed on this device.",
-      "following": "Following lists authors you actively follow.",
-      "muted": "Muted is local-only and is not shared with other devices."
-    },
     "tabs": {
       "followed": "Followed",
       "following": "Following",

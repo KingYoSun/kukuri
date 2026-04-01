@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Reply, Repeat2 } from 'lucide-react';
+import { BookCopy, Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -367,11 +367,17 @@ export function PostCard({
             ) : null}
             {showBookmarkAction && onToggleBookmark ? (
               <Button
-                variant='secondary'
+                variant={isBookmarked ? 'primary' : 'secondary'}
+                size='icon'
+                className='post-action-button'
                 type='button'
+                aria-label={
+                  isBookmarked ? t('common:actions.removeBookmark') : t('common:actions.bookmark')
+                }
+                aria-pressed={isBookmarked}
                 onClick={() => onToggleBookmark(post)}
               >
-                {isBookmarked ? t('common:actions.removeBookmark') : t('common:actions.bookmark')}
+                <BookCopy className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
           </>

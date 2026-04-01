@@ -11,7 +11,7 @@ import type { AuthorSocialView } from '@/lib/api';
 
 type ProfileConnectionsPanelProps = {
   activeView: ProfileConnectionsView;
-  items: AuthorSocialView[];
+  items: Array<AuthorSocialView & { picture_src?: string | null }>;
   localAuthorPubkey: string;
   status: ExtendedPanelStatus;
   error: string | null;
@@ -55,20 +55,11 @@ export function ProfileConnectionsPanel({
   onBack,
 }: ProfileConnectionsPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
-  const noteKey =
-    activeView === 'followed'
-      ? 'connections.notes.followed'
-      : activeView === 'muted'
-        ? 'connections.notes.muted'
-        : 'connections.notes.following';
 
   return (
     <Card className='panel-subsection'>
       <CardHeader>
-        <div>
-          <h3>{t('connections.title')}</h3>
-          <small>{t(noteKey)}</small>
-        </div>
+        <h3>{t('connections.title')}</h3>
         <Button variant='secondary' type='button' onClick={onBack}>
           {t('connections.back')}
         </Button>
@@ -91,7 +82,6 @@ export function ProfileConnectionsPanel({
 
       {status === 'loading' ? <Notice>{t('connections.loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
-      {status === 'ready' ? <Notice>{t(noteKey)}</Notice> : null}
 
       {status === 'ready' && items.length === 0 ? (
         <p className='empty-state'>{t(`connections.empty.${activeView}`)}</p>
@@ -113,7 +103,7 @@ export function ProfileConnectionsPanel({
                   </div>
                   <div className='post-body'>
                     <div className='author-detail-hero'>
-                      <AuthorAvatar label={label} picture={author.picture ?? null} size='sm' />
+                      <AuthorAvatar label={label} picture={author.picture_src ?? author.picture ?? null} size='sm' />
                       <div className='author-detail-copy-stack'>
                         <strong className='post-title'>{label}</strong>
                         <p className='author-detail-copy author-detail-break'>

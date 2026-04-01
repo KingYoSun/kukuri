@@ -27,6 +27,7 @@
   "primarySections": {
     "game": "Game",
     "live": "Live",
+    "messages": "Messages",
     "profile": "Profile",
     "timeline": "Timeline"
   },
