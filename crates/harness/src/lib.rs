@@ -921,12 +921,20 @@ async fn run_community_node_connectivity(
 
         if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
             let started_at = Instant::now();
-            wait_for_author_social_view(&runtime_a, sync_b.local_author_pubkey.as_str(), step_timeout)
-                .await
-                .context("desktop a did not warm author social view for desktop b")?;
-            wait_for_author_social_view(&runtime_b, sync_a.local_author_pubkey.as_str(), step_timeout)
-                .await
-                .context("desktop b did not warm author social view for desktop a")?;
+            wait_for_author_social_view(
+                &runtime_a,
+                sync_b.local_author_pubkey.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("desktop a did not warm author social view for desktop b")?;
+            wait_for_author_social_view(
+                &runtime_b,
+                sync_a.local_author_pubkey.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("desktop b did not warm author social view for desktop a")?;
             runtime_a
                 .follow_author(AuthorRequest {
                     pubkey: sync_b.local_author_pubkey.clone(),

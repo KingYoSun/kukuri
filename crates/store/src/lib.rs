@@ -3916,9 +3916,13 @@ mod tests {
         });
 
         for _ in 0..32 {
-            ProjectionStore::rebuild_author_relationships(&writer, local_author.as_str(), rows.clone())
-                .await
-                .expect("rebuild relationships");
+            ProjectionStore::rebuild_author_relationships(
+                &writer,
+                local_author.as_str(),
+                rows.clone(),
+            )
+            .await
+            .expect("rebuild relationships");
             if saw_gap.load(Ordering::SeqCst) {
                 break;
             }
