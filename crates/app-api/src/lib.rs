@@ -10304,7 +10304,10 @@ mod tests {
             blob_service.as_ref(),
             remote_doc_event(
                 &topic_replica_id(topic.as_str()),
-                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
             ),
         )
         .await;
@@ -10355,7 +10358,10 @@ mod tests {
             blob_service.as_ref(),
             remote_doc_event(
                 &topic_replica_id(topic.as_str()),
-                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
             ),
         )
         .await;
@@ -10365,7 +10371,10 @@ mod tests {
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].kind, NotificationKind::Mention);
         let expected_preview = format!("hello @{}", app.current_author_pubkey());
-        assert_eq!(notifications[0].preview_text.as_deref(), Some(expected_preview.as_str()));
+        assert_eq!(
+            notifications[0].preview_text.as_deref(),
+            Some(expected_preview.as_str())
+        );
     }
 
     #[tokio::test]
@@ -10404,7 +10413,10 @@ mod tests {
             blob_service.as_ref(),
             remote_doc_event(
                 &topic_replica_id(topic.as_str()),
-                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
             ),
         )
         .await;
@@ -10413,7 +10425,10 @@ mod tests {
         let notifications = app.list_notifications().await.expect("list notifications");
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].kind, NotificationKind::Repost);
-        assert_eq!(notifications[0].preview_text.as_deref(), Some("source post"));
+        assert_eq!(
+            notifications[0].preview_text.as_deref(),
+            Some("source post")
+        );
     }
 
     #[tokio::test]
@@ -10456,7 +10471,10 @@ mod tests {
             blob_service.as_ref(),
             remote_doc_event(
                 &topic_replica_id(topic.as_str()),
-                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
             ),
         )
         .await;
@@ -10483,8 +10501,9 @@ mod tests {
             &Pubkey::from(remote_pubkey.as_str()),
         );
         let message_id = "dm-message-remote-1";
-        let topic = derive_direct_message_topic(local_keys.as_ref(), &Pubkey::from(remote_pubkey.as_str()))
-            .expect("derive dm topic");
+        let topic =
+            derive_direct_message_topic(local_keys.as_ref(), &Pubkey::from(remote_pubkey.as_str()))
+                .expect("derive dm topic");
         let frame = encrypt_direct_message_frame(
             &remote_keys,
             &Pubkey::from(local_author_pubkey.as_str()),
@@ -10534,8 +10553,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn incoming_follow_edge_to_local_author_creates_followed_notification_for_observed_author(
-    ) {
+    async fn incoming_follow_edge_to_local_author_creates_followed_notification_for_observed_author()
+     {
         let (app, store, docs_sync, _) = local_app_with_memory_services();
         let local_author_pubkey = app.current_author_pubkey();
         let remote_keys = generate_keys();
@@ -10605,7 +10624,10 @@ mod tests {
             .expect("overlap reply object");
         let event = remote_doc_event(
             &topic_replica_id(topic.as_str()),
-            stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+            stable_key(
+                "objects",
+                &format!("{}/state", remote_object.object_id.as_str()),
+            ),
         );
 
         assert!(
@@ -10721,7 +10743,10 @@ mod tests {
                 blob_service.as_ref(),
                 remote_doc_event(
                     &topic_replica_id(topic.as_str()),
-                    stable_key("objects", &format!("{}/state", new_object.object_id.as_str())),
+                    stable_key(
+                        "objects",
+                        &format!("{}/state", new_object.object_id.as_str())
+                    ),
                 ),
             )
             .await
