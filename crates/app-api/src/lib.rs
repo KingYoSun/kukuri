@@ -15766,7 +15766,7 @@ mod tests {
     async fn live_presence_expires_without_heartbeat() {
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
-        let app = AppService::new(store, transport.clone());
+        let app = AppService::new(store.clone(), transport.clone());
         let topic = "kukuri:topic:presence-expiry";
         let session_id = app
             .create_live_session(
@@ -15778,6 +15778,17 @@ mod tests {
             )
             .await
             .expect("create live session");
+
+        let sessions = app
+            .list_live_sessions(topic)
+            .await
+            .expect("list live sessions before presence");
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session.session_id == session_id),
+            "live session should be visible before presence is published"
+        );
 
         transport
             .publish_hint(
@@ -15794,10 +15805,10 @@ mod tests {
 
         timeout(Duration::from_secs(2), async {
             loop {
-                let sessions = app
-                    .list_live_sessions(topic)
+                let sessions = store
+                    .list_topic_live_sessions(topic)
                     .await
-                    .expect("list live sessions");
+                    .expect("list cached live sessions");
                 if sessions
                     .iter()
                     .any(|session| session.session_id == session_id && session.viewer_count == 1)
