@@ -10,6 +10,7 @@ import {
   AttachmentView,
   BlobViewStatus,
   CreateAttachmentInput,
+  DesktopApi,
   PostView,
 } from './lib/api';
 
@@ -2730,6 +2731,87 @@ test('author detail mutual action opens the messages workspace and sends a local
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
+  });
+});
+
+test('messages workspace keeps the last successful DM state when status refresh fails', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  let failNextStatusRefresh = false;
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        {
+          object_id: 'post-author-dm-refresh',
+          envelope_id: 'envelope-author-dm-refresh',
+          author_pubkey: authorPubkey,
+          author_name: 'bob',
+          author_display_name: null,
+          following: true,
+          followed_by: true,
+          mutual: true,
+          friend_of_friend: false,
+          object_kind: 'post',
+          content: 'open dm refresh',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 1,
+          reply_to: null,
+          root_id: 'post-author-dm-refresh',
+          audience_label: 'Public',
+        },
+      ],
+    },
+    authorSocialViews: {
+      [authorPubkey]: {
+        name: 'bob',
+        following: true,
+        followed_by: true,
+        mutual: true,
+      },
+    },
+  });
+  const api: DesktopApi = {
+    ...baseApi,
+    async getDirectMessageStatus(pubkey) {
+      if (failNextStatusRefresh) {
+        failNextStatusRefresh = false;
+        throw new Error('temporary dm status failure');
+      }
+      return baseApi.getDirectMessageStatus(pubkey);
+    },
+  };
+  const user = userEvent.setup();
+
+  render(<App api={api} />);
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+  await waitFor(() => {
+    expect(getDetailPane('Author')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: 'Message' }));
+  await waitFor(() => {
+    expect(within(getWorkspaceTabs()).getByRole('tab', { name: 'Messages' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  await user.type(screen.getByPlaceholderText('Write a message'), 'hello dm');
+  await user.click(screen.getByRole('button', { name: 'Send' }));
+
+  await waitFor(() => {
+    expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
+  });
+
+  failNextStatusRefresh = true;
+  await new Promise((resolve) => window.setTimeout(resolve, 2300));
+
+  await waitFor(() => {
+    expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
+    expect(screen.getByText('temporary dm status failure')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Direct message send is disabled until the relationship is mutual again.')
+    ).not.toBeInTheDocument();
   });
 });
 

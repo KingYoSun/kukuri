@@ -2666,34 +2666,36 @@ function DesktopShellPage({
             setDirectMessageError(null);
           } else if (!currentSelectedDirectMessagePeerPubkey) {
             setDirectMessageError(null);
-          } else if (
-            directMessageTimelineResult.status === 'fulfilled' &&
-            directMessageStatusResult.status === 'fulfilled'
-          ) {
-            setDirectMessageTimelineByPeer((current) => ({
-              ...current,
-              [currentSelectedDirectMessagePeerPubkey]: directMessageTimelineResult.value?.items ?? [],
-            }));
-            setDirectMessageStatusByPeer((current) => ({
-              ...current,
-              [currentSelectedDirectMessagePeerPubkey]: directMessageStatusResult.value!,
-            }));
-            setDirectMessageError(null);
           } else {
-            setDirectMessageTimelineByPeer((current) => ({
-              ...current,
-              [currentSelectedDirectMessagePeerPubkey]: [],
-            }));
-            setDirectMessageError(
-              messageFromError(
-                directMessageTimelineResult.status === 'rejected'
-                  ? directMessageTimelineResult.reason
-                  : directMessageStatusResult.status === 'rejected'
-                    ? directMessageStatusResult.reason
-                    : null,
-                'failed to load direct messages'
-              )
-            );
+            if (directMessageTimelineResult.status === 'fulfilled') {
+              setDirectMessageTimelineByPeer((current) => ({
+                ...current,
+                [currentSelectedDirectMessagePeerPubkey]: directMessageTimelineResult.value?.items ?? [],
+              }));
+            }
+            if (directMessageStatusResult.status === 'fulfilled') {
+              setDirectMessageStatusByPeer((current) => ({
+                ...current,
+                [currentSelectedDirectMessagePeerPubkey]: directMessageStatusResult.value!,
+              }));
+            }
+            if (
+              directMessageTimelineResult.status === 'fulfilled' &&
+              directMessageStatusResult.status === 'fulfilled'
+            ) {
+              setDirectMessageError(null);
+            } else {
+              setDirectMessageError(
+                messageFromError(
+                  directMessageTimelineResult.status === 'rejected'
+                    ? directMessageTimelineResult.reason
+                    : directMessageStatusResult.status === 'rejected'
+                      ? directMessageStatusResult.reason
+                      : null,
+                  'failed to load direct messages'
+                )
+              );
+            }
           }
           if (threadView) {
             setThread(threadView.items);

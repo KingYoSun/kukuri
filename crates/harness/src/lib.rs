@@ -21,8 +21,8 @@ use kukuri_core::{
     KukuriKeys, TimelineScope, TopicId,
 };
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeTargetRequest, CreateAttachmentRequest,
-    CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest,
+    AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,
+    CreateAttachmentRequest, CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest,
     CreatePrivateChannelRequest, DeleteDirectMessageMessageRequest, DesktopRuntime,
     DirectMessageRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest,
@@ -918,6 +918,91 @@ async fn run_community_node_connectivity(
             .await
             .context("desktop b did not observe initial community-node topic peer connectivity")?;
         push_named_step(&mut steps, "community_node_connectivity", started_at);
+
+        if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
+            let started_at = Instant::now();
+            wait_for_author_social_view(
+                &runtime_a,
+                sync_b.local_author_pubkey.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("desktop a did not warm author social view for desktop b")?;
+            wait_for_author_social_view(
+                &runtime_b,
+                sync_a.local_author_pubkey.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("desktop b did not warm author social view for desktop a")?;
+            runtime_a
+                .follow_author(AuthorRequest {
+                    pubkey: sync_b.local_author_pubkey.clone(),
+                })
+                .await
+                .context("desktop a failed to follow desktop b for direct message")?;
+            runtime_b
+                .follow_author(AuthorRequest {
+                    pubkey: sync_a.local_author_pubkey.clone(),
+                })
+                .await
+                .context("desktop b failed to follow desktop a for direct message")?;
+            wait_for_mutual_author_view_result(
+                &runtime_a,
+                sync_b.local_author_pubkey.as_str(),
+                topic,
+                step_timeout,
+            )
+            .await
+            .context("desktop a did not observe mutual relationship for direct message")?;
+            wait_for_mutual_author_view_result(
+                &runtime_b,
+                sync_a.local_author_pubkey.as_str(),
+                topic,
+                step_timeout,
+            )
+            .await
+            .context("desktop b did not observe mutual relationship for direct message")?;
+            runtime_a
+                .open_direct_message(DirectMessageRequest {
+                    pubkey: sync_b.local_author_pubkey.clone(),
+                })
+                .await
+                .context("desktop a failed to open direct message in community-node lane")?;
+            runtime_b
+                .open_direct_message(DirectMessageRequest {
+                    pubkey: sync_a.local_author_pubkey.clone(),
+                })
+                .await
+                .context("desktop b failed to open direct message in community-node lane")?;
+            let message_id = runtime_a
+                .send_direct_message(SendDirectMessageRequest {
+                    pubkey: sync_b.local_author_pubkey.clone(),
+                    text: Some("community node direct message".to_string()),
+                    reply_to_message_id: None,
+                    attachments: Vec::new(),
+                })
+                .await
+                .context("desktop a failed to send direct message in community-node lane")?;
+            let delivered = wait_for_direct_message_result(
+                &runtime_b,
+                sync_a.local_author_pubkey.as_str(),
+                message_id.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("desktop b did not receive direct message in community-node lane")?;
+            assert_eq!(delivered.text, "community node direct message");
+            wait_for_direct_message_outbox_count(
+                &runtime_a,
+                sync_b.local_author_pubkey.as_str(),
+                0,
+                step_timeout,
+            )
+            .await
+            .context("desktop a direct message outbox did not drain in community-node lane")?;
+            push_named_step(&mut steps, "direct_message", started_at);
+        }
 
         let started_at = Instant::now();
         let post_id = replicate_public_post_with_retry(
