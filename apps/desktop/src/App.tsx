@@ -4887,6 +4887,9 @@ function DesktopShellPage({
     let nextTopic = activeTopic;
     let shouldReload = false;
     let shouldNormalize = false;
+    let normalizedSelectedThread: string | null = selectedThread;
+    let normalizedSelectedAuthorPubkey: string | null = selectedAuthorPubkey;
+    let normalizedSelectedDirectMessagePeerPubkey: string | null = selectedDirectMessagePeerPubkey;
 
     if (requestedTopic) {
       if (trackedTopics.includes(requestedTopic)) {
@@ -5037,6 +5040,9 @@ function DesktopShellPage({
     }
 
     if (nextTimelineView === 'bookmarks') {
+      normalizedSelectedThread = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
       if (requestedContext) {
         shouldNormalize = true;
       }
@@ -5060,6 +5066,7 @@ function DesktopShellPage({
       setDirectMessageError(null);
     }
     if (routeSection === 'messages') {
+      normalizedSelectedThread = null;
       if (requestedThreadId) {
         shouldNormalize = true;
       }
@@ -5073,12 +5080,14 @@ function DesktopShellPage({
         setDirectMessagePaneOpen(true);
       }
       if (!requestedPeerPubkey) {
+        normalizedSelectedDirectMessagePeerPubkey = null;
         if (selectedDirectMessagePeerPubkey) {
           setSelectedDirectMessagePeerPubkey(null);
         }
         setDirectMessageError(null);
       } else if (!isHex64(requestedPeerPubkey)) {
         shouldNormalize = true;
+        normalizedSelectedDirectMessagePeerPubkey = null;
         if (selectedDirectMessagePeerPubkey) {
           setSelectedDirectMessagePeerPubkey(null);
         }
@@ -5086,6 +5095,7 @@ function DesktopShellPage({
         requestedPeerPubkey !== selectedDirectMessagePeerPubkey ||
         !directMessagePaneOpen
       ) {
+        normalizedSelectedDirectMessagePeerPubkey = requestedPeerPubkey;
         void openDirectMessagePane(requestedPeerPubkey, {
           historyMode: 'replace',
           normalizeOnError: true,
@@ -5095,8 +5105,11 @@ function DesktopShellPage({
               ? requestedAuthorPubkey
               : null,
         });
+      } else {
+        normalizedSelectedDirectMessagePeerPubkey = requestedPeerPubkey;
       }
       if (!requestedAuthorPubkey) {
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -5104,6 +5117,7 @@ function DesktopShellPage({
         }
       } else if (!isHex64(requestedAuthorPubkey)) {
         shouldNormalize = true;
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -5114,6 +5128,7 @@ function DesktopShellPage({
         !selectedAuthor ||
         (requestedPeerPubkey ?? null) !== (selectedDirectMessagePeerPubkey ?? null)
       ) {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
         void openAuthorDetail(requestedAuthorPubkey, {
           historyMode: 'replace',
           normalizeOnError: true,
@@ -5121,8 +5136,11 @@ function DesktopShellPage({
           directMessagePeerPubkey:
             requestedPeerPubkey && isHex64(requestedPeerPubkey) ? requestedPeerPubkey : null,
         });
+      } else {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
       }
     } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'thread') {
+      normalizedSelectedDirectMessagePeerPubkey = null;
       const threadReadyForNestedAuthor =
         requestedThreadId !== null &&
         requestedThreadId.length > 0 &&
@@ -5131,6 +5149,8 @@ function DesktopShellPage({
 
       if (!requestedThreadId) {
         shouldNormalize = true;
+        normalizedSelectedThread = null;
+        normalizedSelectedAuthorPubkey = null;
         if (selectedThread || selectedAuthorPubkey) {
           setSelectedThread(null);
           setThread([]);
@@ -5141,13 +5161,17 @@ function DesktopShellPage({
           setAuthorError(null);
         }
       } else if (requestedThreadId !== selectedThread || thread.length === 0) {
+        normalizedSelectedThread = requestedThreadId;
         void openThread(requestedThreadId, {
           historyMode: 'replace',
           normalizeOnEmpty: true,
           topic: nextTopic,
         });
+      } else {
+        normalizedSelectedThread = requestedThreadId;
       }
       if (!requestedAuthorPubkey) {
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -5155,12 +5179,14 @@ function DesktopShellPage({
         }
       } else if (!isHex64(requestedAuthorPubkey)) {
         shouldNormalize = true;
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);
         }
       } else if (!threadReadyForNestedAuthor) {
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -5171,14 +5197,19 @@ function DesktopShellPage({
         !selectedAuthor ||
         requestedThreadId !== selectedThread
       ) {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
         void openAuthorDetail(requestedAuthorPubkey, {
           fromThread: true,
           historyMode: 'replace',
           normalizeOnError: true,
           threadId: requestedThreadId,
         });
+      } else {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
       }
     } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'author') {
+      normalizedSelectedThread = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
       if (requestedThreadId) {
         shouldNormalize = true;
       }
@@ -5190,6 +5221,7 @@ function DesktopShellPage({
       }
       if (!requestedAuthorPubkey) {
         shouldNormalize = true;
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -5197,19 +5229,26 @@ function DesktopShellPage({
         }
       } else if (!isHex64(requestedAuthorPubkey)) {
         shouldNormalize = true;
+        normalizedSelectedAuthorPubkey = null;
         if (selectedAuthorPubkey) {
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);
         }
       } else if (requestedAuthorPubkey !== selectedAuthorPubkey || !selectedAuthor) {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
         void openAuthorDetail(requestedAuthorPubkey, {
           historyMode: 'replace',
           normalizeOnError: true,
         });
+      } else {
+        normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
       }
     } else if (nextTimelineView !== 'bookmarks' && requestedContext) {
       shouldNormalize = true;
+      normalizedSelectedThread = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
       if (selectedThread || selectedAuthorPubkey) {
         setSelectedThread(null);
         setThread([]);
@@ -5228,6 +5267,9 @@ function DesktopShellPage({
       if (requestedThreadId || requestedAuthorPubkey || requestedPeerPubkey) {
         shouldNormalize = true;
       }
+      normalizedSelectedThread = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
       if (selectedThread || selectedAuthorPubkey || directMessagePaneOpen || selectedDirectMessagePeerPubkey) {
         setSelectedThread(null);
         setThread([]);
@@ -5248,7 +5290,20 @@ function DesktopShellPage({
 
     if (shouldNormalize) {
       window.requestAnimationFrame(() => {
-        syncRoute('replace');
+        syncRoute('replace', {
+          activeTopic: nextTopic,
+          composeTarget: privateComposeTarget(nextSelectedChannelId),
+          primarySection: routeSection,
+          profileConnectionsView: nextProfileConnectionsView,
+          profileMode: nextProfileMode,
+          selectedAuthorPubkey: normalizedSelectedAuthorPubkey,
+          selectedDirectMessagePeerPubkey: normalizedSelectedDirectMessagePeerPubkey,
+          selectedThread: normalizedSelectedThread,
+          settingsOpen: nextSettingsOpen,
+          settingsSection: nextSettingsSection,
+          timelineScope: privateTimelineScope(nextSelectedChannelId),
+          timelineView: nextTimelineView,
+        });
       });
     }
   }, [
