@@ -1,0 +1,9 @@
+# 2026-04-04 desktop dm author pane and auto-subscribe
+
+- PR: local workspace change for DM UX follow-up covering mutual auto-subscribe delivery, shared author identity rendering in Messages, and Messages route restoration for the Author pane. PR identifier is pending.
+- Figma: pending HTML capture URL for the Messages workspace author-pane review. This implementation turn did not generate a new dedicated Figma capture before validation.
+- Preview: PR-visible preview should cover Messages conversation list, active DM header, DM timeline header, and Author pane open/close from `#/messages?...&peerPubkey=...&authorPubkey=...`.
+- Summary: mutual peer DM delivery now auto-subscribes from the social graph instead of only from opened conversations, so the recipient sees the first message in the conversation list without pre-opening the DM. Messages author rendering now reuses the same avatar + author-button structure as timeline posts, the `You` / `Peer` labels are removed in favor of resolved author identity labels, and clicking an author inside Messages opens the existing Author right pane without dropping the current DM context.
+- Review result: adopt shared author identity rendering across posts and Messages, keep the existing Author pane as the single profile surface, and preserve `messages` route context so DM selection and author detail can coexist in the shell state.
+- Exceptions: the Figma review capture is still pending. Validation in this turn used automated checks only; no additional manual desktop smoke outside Playwright was run.
+- Validation: `cd apps/desktop && npx pnpm@10.16.1 exec vitest run src/App.test.tsx` passed. `cd apps/desktop && npx pnpm@10.16.1 exec playwright test tests/playwright/shell.smoke.spec.ts -g "open an author from messages"` passed. `cargo test -p kukuri-app-api dm_ -- --nocapture` passed. `cargo test -p kukuri-harness pairwise_dm_offline_text_image_video_delivery_and_local_delete -- --nocapture` passed.

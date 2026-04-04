@@ -22,6 +22,7 @@ import { createStore } from 'zustand/vanilla';
 import { Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
+import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
 import { ThreadPanel } from '@/components/core/ThreadPanel';
@@ -294,6 +295,8 @@ type OpenAuthorOptions = {
   historyMode?: 'push' | 'replace';
   normalizeOnError?: boolean;
   threadId?: string | null;
+  preserveDirectMessageContext?: boolean;
+  directMessagePeerPubkey?: string | null;
 };
 
 type DesktopShellStoreApi = ReturnType<typeof createDesktopShellStore>;
@@ -1978,6 +1981,44 @@ function DesktopShellPage({
         : null,
     [directMessageStatusByPeer, selectedDirectMessageConversation, selectedDirectMessagePeerPubkey]
   );
+  const localDirectMessageAuthorPicture = useMemo(
+    () => resolveProfilePictureSrc(localProfile, mediaObjectUrls),
+    [localProfile, mediaObjectUrls]
+  );
+  const selectedDirectMessagePeerAuthor = useMemo(() => {
+    if (!selectedDirectMessagePeerPubkey) {
+      return null;
+    }
+    const conversationAuthor = selectedDirectMessageConversation
+      ? authorViewFromDirectMessageConversation(selectedDirectMessageConversation)
+      : null;
+    const knownAuthor = knownAuthorsByPubkey[selectedDirectMessagePeerPubkey] ?? null;
+    return conversationAuthor
+      ? mergeAuthorView(knownAuthor, conversationAuthor)
+      : knownAuthor;
+  }, [
+    knownAuthorsByPubkey,
+    selectedDirectMessageConversation,
+    selectedDirectMessagePeerPubkey,
+  ]);
+  const selectedDirectMessagePeerLabel = useMemo(() => {
+    if (!selectedDirectMessagePeerPubkey) {
+      return null;
+    }
+    return authorDisplayLabel(
+      selectedDirectMessagePeerPubkey,
+      selectedDirectMessagePeerAuthor?.display_name ?? selectedDirectMessageConversation?.peer_display_name,
+      selectedDirectMessagePeerAuthor?.name ?? selectedDirectMessageConversation?.peer_name
+    );
+  }, [
+    selectedDirectMessageConversation,
+    selectedDirectMessagePeerAuthor,
+    selectedDirectMessagePeerPubkey,
+  ]);
+  const selectedDirectMessagePeerPicture = useMemo(
+    () => resolveProfilePictureSrc(selectedDirectMessagePeerAuthor, mediaObjectUrls),
+    [mediaObjectUrls, selectedDirectMessagePeerAuthor]
+  );
   const channelAudienceOptions = useMemo<ChannelAudienceOption[]>(
     () => [
       {
@@ -2073,6 +2114,9 @@ function DesktopShellPage({
     if (resolvedPrimarySection === 'messages') {
       if (nextSelectedDirectMessagePeerPubkey) {
         search.set('peerPubkey', nextSelectedDirectMessagePeerPubkey);
+      }
+      if (nextSelectedAuthorPubkey) {
+        search.set('authorPubkey', nextSelectedAuthorPubkey);
       }
     } else if (nextSelectedThread) {
       search.set('context', 'thread');
@@ -3109,7 +3153,12 @@ function DesktopShellPage({
 
   const openDirectMessagePane = useCallback(async (
     peerPubkey: string,
-    options?: { historyMode?: 'push' | 'replace'; normalizeOnError?: boolean }
+    options?: {
+      historyMode?: 'push' | 'replace';
+      normalizeOnError?: boolean;
+      preserveAuthorPane?: boolean;
+      preservedAuthorPubkey?: string | null;
+    }
   ) => {
     try {
       const [conversation, timeline, status] = await Promise.all([
@@ -3117,14 +3166,22 @@ function DesktopShellPage({
         api.listDirectMessageMessages(peerPubkey, null, 100),
         api.getDirectMessageStatus(peerPubkey),
       ]);
+      const preserveSelectedAuthor =
+        options?.preserveAuthorPane ??
+        (selectedDirectMessagePeerPubkey === peerPubkey && selectedAuthorPubkey !== null);
+      const nextSelectedAuthorPubkey = preserveSelectedAuthor
+        ? options?.preservedAuthorPubkey ?? selectedAuthorPubkey
+        : null;
       setReplyTarget(null);
       setRepostTarget(null);
       setSelectedThread(null);
       setThread([]);
-      setSelectedAuthorPubkey(null);
-      setSelectedAuthor(null);
-      setSelectedAuthorTimeline([]);
-      setAuthorError(null);
+      if (!preserveSelectedAuthor) {
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setSelectedAuthorTimeline([]);
+        setAuthorError(null);
+      }
       setDirectMessages((current) => {
         const remaining = current.filter((entry) => entry.peer_pubkey !== conversation.peer_pubkey);
         return [conversation, ...remaining];
@@ -3150,7 +3207,7 @@ function DesktopShellPage({
       setDirectMessageError(null);
       syncRoute(options?.historyMode ?? 'push', {
         primarySection: 'messages',
-        selectedAuthorPubkey: null,
+        selectedAuthorPubkey: nextSelectedAuthorPubkey,
         selectedDirectMessagePeerPubkey: peerPubkey,
         selectedThread: null,
       });
@@ -3184,6 +3241,8 @@ function DesktopShellPage({
     setSelectedDirectMessagePeerPubkey,
     setSelectedThread,
     setThread,
+    selectedAuthorPubkey,
+    selectedDirectMessagePeerPubkey,
     syncRoute,
   ]);
 
@@ -4322,21 +4381,34 @@ function DesktopShellPage({
     try {
       const socialView = await api.getAuthorSocialView(authorPubkey);
       const nextThreadId = options?.fromThread ? (options.threadId ?? selectedThread) : null;
+      const nextDirectMessagePeerPubkey = options?.preserveDirectMessageContext
+        ? options.directMessagePeerPubkey ?? selectedDirectMessagePeerPubkey ?? null
+        : null;
       setSelectedAuthorPubkey(authorPubkey);
       setSelectedAuthor(socialView);
       setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [socialView]));
       setSelectedAuthorTimeline([]);
       setAuthorError(null);
-      setDirectMessagePaneOpen(false);
-      setSelectedDirectMessagePeerPubkey(null);
-      setDirectMessageError(null);
+      if (options?.preserveDirectMessageContext) {
+        setDirectMessagePaneOpen(true);
+        setSelectedDirectMessagePeerPubkey(nextDirectMessagePeerPubkey);
+        setDirectMessageError(null);
+      } else {
+        setDirectMessagePaneOpen(false);
+        setSelectedDirectMessagePeerPubkey(null);
+        setDirectMessageError(null);
+      }
       if (!options?.fromThread) {
         setSelectedThread(null);
         setThread([]);
       }
       syncRoute(options?.historyMode ?? 'push', {
+        primarySection: options?.preserveDirectMessageContext ? 'messages' : undefined,
         selectedThread: nextThreadId,
         selectedAuthorPubkey: authorPubkey,
+        selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
+          ? nextDirectMessagePeerPubkey
+          : undefined,
       });
     } catch (detailError) {
       const nextError =
@@ -4353,8 +4425,12 @@ function DesktopShellPage({
           setThread([]);
         }
         syncRoute('replace', {
+          primarySection: options?.preserveDirectMessageContext ? 'messages' : undefined,
           selectedThread: options?.fromThread ? (options.threadId ?? selectedThread) : null,
           selectedAuthorPubkey: null,
+          selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
+            ? options.directMessagePeerPubkey ?? selectedDirectMessagePeerPubkey ?? null
+            : undefined,
         });
       }
     }
@@ -4370,6 +4446,7 @@ function DesktopShellPage({
     setSelectedDirectMessagePeerPubkey,
     setSelectedThread,
     setThread,
+    selectedDirectMessagePeerPubkey,
     selectedThread,
     syncRoute,
   ]);
@@ -4983,7 +5060,7 @@ function DesktopShellPage({
       setDirectMessageError(null);
     }
     if (routeSection === 'messages') {
-      if (requestedThreadId || requestedAuthorPubkey) {
+      if (requestedThreadId) {
         shouldNormalize = true;
       }
       if (selectedThread) {
@@ -4991,11 +5068,6 @@ function DesktopShellPage({
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
-      }
-      if (selectedAuthorPubkey) {
-        setSelectedAuthorPubkey(null);
-        setSelectedAuthor(null);
-        setAuthorError(null);
       }
       if (!directMessagePaneOpen) {
         setDirectMessagePaneOpen(true);
@@ -5017,6 +5089,37 @@ function DesktopShellPage({
         void openDirectMessagePane(requestedPeerPubkey, {
           historyMode: 'replace',
           normalizeOnError: true,
+          preserveAuthorPane: requestedAuthorPubkey !== null && isHex64(requestedAuthorPubkey),
+          preservedAuthorPubkey:
+            requestedAuthorPubkey && isHex64(requestedAuthorPubkey)
+              ? requestedAuthorPubkey
+              : null,
+        });
+      }
+      if (!requestedAuthorPubkey) {
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
+      } else if (!isHex64(requestedAuthorPubkey)) {
+        shouldNormalize = true;
+        if (selectedAuthorPubkey) {
+          setSelectedAuthorPubkey(null);
+          setSelectedAuthor(null);
+          setAuthorError(null);
+        }
+      } else if (
+        requestedAuthorPubkey !== selectedAuthorPubkey ||
+        !selectedAuthor ||
+        (requestedPeerPubkey ?? null) !== (selectedDirectMessagePeerPubkey ?? null)
+      ) {
+        void openAuthorDetail(requestedAuthorPubkey, {
+          historyMode: 'replace',
+          normalizeOnError: true,
+          preserveDirectMessageContext: true,
+          directMessagePeerPubkey:
+            requestedPeerPubkey && isHex64(requestedPeerPubkey) ? requestedPeerPubkey : null,
         });
       }
     } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'thread') {
@@ -5964,12 +6067,27 @@ function DesktopShellPage({
                 conversation.peer_display_name,
                 conversation.peer_name
               );
+              const knownAuthor =
+                knownAuthorsByPubkey[conversation.peer_pubkey] ??
+                authorViewFromDirectMessageConversation(conversation);
+              const picture = resolveProfilePictureSrc(knownAuthor, mediaObjectUrls);
               const selected = conversation.peer_pubkey === selectedDirectMessagePeerPubkey;
               return (
                 <li key={conversation.peer_pubkey}>
                   <article className='post-card'>
                     <div className='post-meta'>
-                      <span>{label}</span>
+                      <AuthorIdentityButton
+                        label={label}
+                        picture={picture}
+                        avatarTestId={`dm-conversation-avatar-${conversation.peer_pubkey}`}
+                        onClick={() =>
+                          void openAuthorDetail(conversation.peer_pubkey, {
+                            historyMode: 'push',
+                            preserveDirectMessageContext: true,
+                            directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
+                          })
+                        }
+                      />
                       <span>
                         {conversation.last_message_at
                           ? formatLocalizedTime(conversation.last_message_at, locale)
@@ -6003,15 +6121,20 @@ function DesktopShellPage({
           <Card className='shell-workspace-card'>
             <div className='shell-workspace-header'>
               <div className='shell-workspace-summary'>
-                <span className='relationship-badge'>
-                  {selectedDirectMessageConversation
-                    ? authorDisplayLabel(
-                        selectedDirectMessageConversation.peer_pubkey,
-                        selectedDirectMessageConversation.peer_display_name,
-                        selectedDirectMessageConversation.peer_name
-                      )
-                    : selectedDirectMessagePeerPubkey}
-                </span>
+                <AuthorIdentityButton
+                  label={selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey}
+                  picture={selectedDirectMessagePeerPicture}
+                  avatarSize='lg'
+                  avatarTestId='dm-active-header-avatar'
+                  className='relationship-badge'
+                  onClick={() =>
+                    void openAuthorDetail(selectedDirectMessagePeerPubkey, {
+                      historyMode: 'push',
+                      preserveDirectMessageContext: true,
+                      directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
+                    })
+                  }
+                />
                 {selectedDirectMessageStatus ? (
                   <span className='relationship-badge relationship-badge-direct'>
                     {selectedDirectMessageStatus.send_enabled
@@ -6057,11 +6180,31 @@ function DesktopShellPage({
                   const posterSrc = poster ? mediaObjectUrls[poster.hash] ?? null : null;
                   const videoSrc = video ? mediaObjectUrls[video.hash] ?? null : null;
                   const videoUnsupported = Boolean(video && unsupportedVideoManifests[video.hash]);
+                  const authorPubkey = message.outgoing
+                    ? syncStatus.local_author_pubkey
+                    : selectedDirectMessagePeerPubkey;
+                  const authorLabel = message.outgoing
+                    ? profileAuthorLabel
+                    : selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey;
+                  const authorPicture = message.outgoing
+                    ? localDirectMessageAuthorPicture
+                    : selectedDirectMessagePeerPicture;
                   return (
                     <li key={message.message_id}>
                       <article className='post-card'>
                         <div className='post-meta'>
-                          <span>{message.outgoing ? 'You' : 'Peer'}</span>
+                          <AuthorIdentityButton
+                            label={authorLabel}
+                            picture={authorPicture}
+                            avatarTestId={`dm-message-avatar-${message.message_id}`}
+                            onClick={() =>
+                              void openAuthorDetail(authorPubkey, {
+                                historyMode: 'push',
+                                preserveDirectMessageContext: true,
+                                directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
+                              })
+                            }
+                          />
                           <span>{formatLocalizedTime(message.created_at, locale)}</span>
                           <span className='reply-chip'>
                             {message.delivered ? 'Delivered' : 'Pending'}
