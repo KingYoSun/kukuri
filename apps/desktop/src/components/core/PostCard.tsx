@@ -11,10 +11,10 @@ import type {
   RecentReactionView,
 } from '@/lib/api';
 
-import { AuthorAvatar } from './AuthorAvatar';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
+import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { RelationshipBadge } from './RelationshipBadge';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
@@ -126,21 +126,12 @@ export function PostCard({
       className={context === 'thread' ? 'post-card post-card-thread post-layout-safe' : 'post-card post-layout-safe'}
     >
       <div className='post-meta'>
-        <div className='post-meta-author'>
-          <AuthorAvatar
-            label={view.authorLabel}
-            picture={view.authorPicture ?? null}
-            size='sm'
-            testId={`${post.object_id}-author-avatar`}
-          />
-          <button
-            className='author-link'
-            type='button'
-            onClick={() => onOpenAuthor(post.author_pubkey)}
-          >
-            {view.authorLabel}
-          </button>
-        </div>
+        <AuthorIdentityButton
+          label={view.authorLabel}
+          picture={view.authorPicture ?? null}
+          avatarTestId={`${post.object_id}-author-avatar`}
+          onClick={() => onOpenAuthor(post.author_pubkey)}
+        />
         <div className='post-meta-trailing'>
           <RelationshipBadge label={view.relationshipLabel} />
           <span className='post-meta-chip'>{audienceChipLabel}</span>

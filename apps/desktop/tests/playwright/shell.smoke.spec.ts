@@ -91,6 +91,31 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(nodeCard).toBeVisible();
 });
 
+test('browser mock shell can open an author from messages without leaving the dm workspace', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'browser peer' }).first().click();
+  const authorPane = page.getByRole('complementary', { name: 'Author' });
+  await expect(authorPane).toBeVisible();
+
+  await authorPane.getByRole('button', { name: 'Message' }).click();
+  await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
+
+  const workspace = page.locator('main[aria-label="Primary workspace"]');
+  await workspace.getByRole('button', { name: 'browser peer' }).first().click();
+  await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
+  await expect(page).toHaveURL(/authorPubkey=/);
+
+  await page.getByRole('button', { name: 'Close Author' }).click();
+  await expect(page.getByRole('complementary', { name: 'Author' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Messages' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/messages\?topic=.*peerPubkey=/);
+});
+
 test('browser mock shell persists appearance theme changes across reloads', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');

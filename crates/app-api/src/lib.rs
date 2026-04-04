@@ -800,18 +800,18 @@ impl AppService {
         for row in self.projection_store.list_direct_message_outbox().await? {
             peers.insert(row.peer_pubkey);
         }
+        peers.extend(
+            current_mutual_direct_message_peers_with_services(
+                self.store.as_ref(),
+                self.current_author_pubkey().as_str(),
+            )
+            .await?,
+        );
         for peer_pubkey in peers {
             self.ensure_author_subscription(peer_pubkey.as_str())
                 .await?;
-            self.rebuild_author_relationships().await?;
-            if self
-                .direct_message_send_enabled(peer_pubkey.as_str())
-                .await?
-            {
-                self.ensure_direct_message_subscription(peer_pubkey.as_str())
-                    .await?;
-            }
         }
+        self.rebuild_author_relationships().await?;
         Ok(())
     }
 
@@ -834,7 +834,7 @@ impl AppService {
             anyhow::bail!("direct message requires a mutual relationship");
         }
         if can_send {
-            self.restart_direct_message_subscription(peer_pubkey.as_str())
+            self.ensure_direct_message_subscription(peer_pubkey.as_str())
                 .await?;
         }
         self.ensure_direct_message_conversation_row(peer_pubkey.as_str())
@@ -916,7 +916,7 @@ impl AppService {
         {
             anyhow::bail!("direct message requires a mutual relationship");
         }
-        self.restart_direct_message_subscription(peer_pubkey.as_str())
+        self.ensure_direct_message_subscription(peer_pubkey.as_str())
             .await?;
         self.send_direct_message_internal(
             peer_pubkey.as_str(),
@@ -3402,17 +3402,7 @@ impl AppService {
         for author in existing_authors {
             self.restart_author_subscription(author.as_str()).await?;
         }
-        let existing_direct_messages = self
-            .direct_message_subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for peer_pubkey in existing_direct_messages {
-            self.restart_direct_message_subscription(peer_pubkey.as_str())
-                .await?;
-        }
+        self.restart_direct_message_subscriptions().await?;
         Ok(())
     }
 
@@ -3475,17 +3465,7 @@ impl AppService {
         for author in existing_authors {
             self.restart_author_subscription(author.as_str()).await?;
         }
-        let existing_direct_messages = self
-            .direct_message_subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for peer_pubkey in existing_direct_messages {
-            self.restart_direct_message_subscription(peer_pubkey.as_str())
-                .await?;
-        }
+        self.restart_direct_message_subscriptions().await?;
         Ok(())
     }
 
@@ -4576,7 +4556,28 @@ impl AppService {
             self.projection_store.as_ref(),
             self.current_author_pubkey().as_str(),
         )
-        .await
+        .await?;
+        self.reconcile_direct_message_subscriptions().await
+    }
+
+    async fn restart_direct_message_subscriptions(&self) -> Result<()> {
+        let existing_peers = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for peer_pubkey in existing_peers {
+            stop_direct_message_subscription_with_services(
+                self.direct_message_subscriptions.as_ref(),
+                self.hint_transport.as_ref(),
+                self.keys.as_ref(),
+                peer_pubkey.as_str(),
+            )
+            .await?;
+        }
+        self.reconcile_direct_message_subscriptions().await
     }
 
     async fn current_muted_author_pubkeys(&self) -> Result<BTreeSet<String>> {
@@ -4664,7 +4665,12 @@ impl AppService {
         let store = Arc::clone(&self.store);
         let projection_store = Arc::clone(&self.projection_store);
         let docs_sync = Arc::clone(&self.docs_sync);
+        let blob_service = Arc::clone(&self.blob_service);
+        let hint_transport = Arc::clone(&self.hint_transport);
+        let transport = Arc::clone(&self.transport);
+        let keys = Arc::clone(&self.keys);
         let last_sync = Arc::clone(&self.last_sync_ts);
+        let direct_message_subscriptions = Arc::clone(&self.direct_message_subscriptions);
         let author_key = normalize_author_pubkey(author_pubkey)?;
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
@@ -4679,6 +4685,18 @@ impl AppService {
         .await?;
         if initial_count > 0 {
             *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+            schedule_direct_message_reconcile_with_services(
+                Arc::clone(&store),
+                Arc::clone(&projection_store),
+                Arc::clone(&blob_service),
+                Arc::clone(&hint_transport),
+                Arc::clone(&transport),
+                Arc::clone(&keys),
+                Arc::clone(&last_sync),
+                Arc::clone(&direct_message_subscriptions),
+                local_author_pubkey.clone(),
+                author_key.clone(),
+            )
         }
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
@@ -4699,6 +4717,18 @@ impl AppService {
                         && count > 0
                         {
                             *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                            schedule_direct_message_reconcile_with_services(
+                                Arc::clone(&store),
+                                Arc::clone(&projection_store),
+                                Arc::clone(&blob_service),
+                                Arc::clone(&hint_transport),
+                                Arc::clone(&transport),
+                                Arc::clone(&keys),
+                                Arc::clone(&last_sync),
+                                Arc::clone(&direct_message_subscriptions),
+                                local_author_pubkey.clone(),
+                                author_key_for_task.clone(),
+                            );
                         }
                     }
                     else => break,
@@ -4719,6 +4749,21 @@ impl AppService {
             .await?
             .as_ref()
             .is_some_and(|relationship| relationship.mutual))
+    }
+
+    async fn reconcile_direct_message_subscriptions(&self) -> Result<()> {
+        reconcile_direct_message_subscriptions_with_services(
+            self.store.as_ref(),
+            Arc::clone(&self.projection_store),
+            Arc::clone(&self.blob_service),
+            Arc::clone(&self.hint_transport),
+            Arc::clone(&self.transport),
+            Arc::clone(&self.keys),
+            Arc::clone(&self.last_sync_ts),
+            Arc::clone(&self.direct_message_subscriptions),
+            self.current_author_pubkey().as_str(),
+        )
+        .await
     }
 
     async fn direct_message_status_view(
@@ -4875,56 +4920,57 @@ impl AppService {
         if !self.direct_message_send_enabled(peer_pubkey).await? {
             return Ok(());
         }
-        let mut subscriptions = self.direct_message_subscriptions.lock().await;
-        if subscriptions
-            .get(peer_pubkey)
-            .is_some_and(|handle| !handle.is_finished())
-        {
-            return Ok(());
-        }
-        subscriptions.remove(peer_pubkey);
-        drop(subscriptions);
-        self.spawn_direct_message_subscription(peer_pubkey).await
+        Self::spawn_direct_message_subscription_with_services(
+            Arc::clone(&self.direct_message_subscriptions),
+            Arc::clone(&self.projection_store),
+            Arc::clone(&self.blob_service),
+            Arc::clone(&self.hint_transport),
+            Arc::clone(&self.transport),
+            Arc::clone(&self.keys),
+            Arc::clone(&self.last_sync_ts),
+            self.current_author_pubkey().as_str(),
+            peer_pubkey,
+        )
+        .await
     }
 
-    async fn restart_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
-        if let Some(handle) = self
-            .direct_message_subscriptions
-            .lock()
-            .await
-            .remove(peer_pubkey)
-        {
-            handle.abort();
-        }
-        let topic = derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey))?;
-        self.hint_transport.unsubscribe_hints(&topic).await?;
-        if self.direct_message_send_enabled(peer_pubkey).await? {
-            self.spawn_direct_message_subscription(peer_pubkey).await?;
-        }
-        Ok(())
-    }
-
-    async fn spawn_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
-        let projection_store = Arc::clone(&self.projection_store);
-        let blob_service = Arc::clone(&self.blob_service);
-        let hint_transport = Arc::clone(&self.hint_transport);
-        let transport = Arc::clone(&self.transport);
-        let keys = Arc::clone(&self.keys);
-        let last_sync = Arc::clone(&self.last_sync_ts);
+    #[allow(clippy::too_many_arguments)]
+    async fn spawn_direct_message_subscription_with_services(
+        direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+        projection_store: Arc<dyn ProjectionStore>,
+        blob_service: Arc<dyn BlobService>,
+        hint_transport: Arc<dyn HintTransport>,
+        transport: Arc<dyn Transport>,
+        keys: Arc<KukuriKeys>,
+        last_sync: Arc<Mutex<Option<i64>>>,
+        local_author_pubkey: &str,
+        peer_pubkey: &str,
+    ) -> Result<()> {
         let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
-        let local_author_pubkey = self.current_author_pubkey();
+        {
+            let mut subscriptions = direct_message_subscriptions.lock().await;
+            if subscriptions
+                .get(peer_pubkey.as_str())
+                .is_some_and(|handle| !handle.is_finished())
+            {
+                return Ok(());
+            }
+            subscriptions.remove(peer_pubkey.as_str());
+        }
         let topic =
             derive_direct_message_topic(keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
         let mut hint_stream = hint_transport.subscribe_hints(&topic).await?;
         let topic_for_task = topic.clone();
         let peer_for_task = peer_pubkey.clone();
+        let local_author_pubkey = local_author_pubkey.to_string();
+        let task_hint_transport = Arc::clone(&hint_transport);
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(
                 DIRECT_MESSAGE_RETRY_INTERVAL_MS,
             ));
             let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
                 projection_store.as_ref(),
-                hint_transport.as_ref(),
+                task_hint_transport.as_ref(),
                 transport.as_ref(),
                 local_author_pubkey.as_str(),
                 keys.as_ref(),
@@ -4936,7 +4982,7 @@ impl AppService {
                     _ = interval.tick() => {
                         let _ = AppService::flush_direct_message_outbox_for_peer_with_services(
                             projection_store.as_ref(),
-                            hint_transport.as_ref(),
+                            task_hint_transport.as_ref(),
                             transport.as_ref(),
                             local_author_pubkey.as_str(),
                             keys.as_ref(),
@@ -4962,7 +5008,7 @@ impl AppService {
                         match AppService::handle_direct_message_hint_with_services(
                             projection_store.as_ref(),
                             blob_service.as_ref(),
-                            hint_transport.as_ref(),
+                            task_hint_transport.as_ref(),
                             keys.as_ref(),
                             local_author_pubkey.as_str(),
                             peer_for_task.as_str(),
@@ -4983,16 +5029,36 @@ impl AppService {
                         }
                     }
                     else => {
-                        let _ = hint_transport.unsubscribe_hints(&topic_for_task).await;
+                        let _ = task_hint_transport.unsubscribe_hints(&topic_for_task).await;
                         break;
                     }
                 }
             }
         });
-        self.direct_message_subscriptions
-            .lock()
-            .await
-            .insert(peer_pubkey, handle);
+        let mut pending_handle = Some(handle);
+        let should_abort_new_handle = {
+            let mut subscriptions = direct_message_subscriptions.lock().await;
+            if subscriptions
+                .get(peer_pubkey.as_str())
+                .is_some_and(|existing| !existing.is_finished())
+            {
+                true
+            } else {
+                subscriptions.insert(
+                    peer_pubkey.clone(),
+                    pending_handle
+                        .take()
+                        .expect("direct message subscription handle must be pending"),
+                );
+                false
+            }
+        };
+        if should_abort_new_handle {
+            pending_handle
+                .expect("direct message subscription handle must remain pending")
+                .abort();
+            hint_transport.unsubscribe_hints(&topic).await?;
+        }
         Ok(())
     }
 
@@ -5185,23 +5251,23 @@ impl AppService {
         }
         let topic = derive_direct_message_topic(keys, &Pubkey::from(peer_pubkey))?;
         let peer_count = direct_message_topic_peer_count(transport, &topic).await?;
-        if peer_count == 0 {
-            return Ok(0);
-        }
+        let topic_has_connected_peer = peer_count > 0;
         let mut published = 0usize;
         let attempted_at = Utc::now().timestamp_millis();
         for row in projection_store.list_direct_message_outbox().await? {
             if row.peer_pubkey != peer_pubkey {
                 continue;
             }
-            projection_store
-                .touch_direct_message_outbox_attempt(
-                    row.dm_id.as_str(),
-                    row.message_id.as_str(),
-                    attempted_at,
-                )
-                .await?;
-            hint_transport
+            if topic_has_connected_peer {
+                projection_store
+                    .touch_direct_message_outbox_attempt(
+                        row.dm_id.as_str(),
+                        row.message_id.as_str(),
+                        attempted_at,
+                    )
+                    .await?;
+            }
+            let publish_result = hint_transport
                 .publish_hint(
                     &topic,
                     GossipHint::DirectMessageFrame {
@@ -5211,7 +5277,13 @@ impl AppService {
                         frame_hash: row.frame_blob_hash.clone(),
                     },
                 )
-                .await?;
+                .await;
+            if let Err(error) = publish_result {
+                if topic_has_connected_peer {
+                    return Err(error);
+                }
+                continue;
+            }
             published += 1;
         }
         Ok(published)
@@ -6219,6 +6291,133 @@ fn author_social_view_sort_key(
         .cmp(&key(right.display_name.as_deref()))
         .then_with(|| key(left.name.as_deref()).cmp(&key(right.name.as_deref())))
         .then_with(|| left.author_pubkey.cmp(&right.author_pubkey))
+}
+
+async fn current_mutual_direct_message_peers_with_services(
+    store: &dyn Store,
+    local_author_pubkey: &str,
+) -> Result<BTreeSet<String>> {
+    let following = store
+        .list_follow_edges_by_subject(local_author_pubkey)
+        .await?
+        .into_iter()
+        .filter(|edge| edge.status == FollowEdgeStatus::Active)
+        .map(|edge| edge.target_pubkey.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    let followed_by = store
+        .list_follow_edges_by_target(local_author_pubkey)
+        .await?
+        .into_iter()
+        .filter(|edge| edge.status == FollowEdgeStatus::Active)
+        .map(|edge| edge.subject_pubkey.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    Ok(following.intersection(&followed_by).cloned().collect())
+}
+
+async fn stop_direct_message_subscription_with_services(
+    direct_message_subscriptions: &Mutex<HashMap<String, JoinHandle<()>>>,
+    hint_transport: &dyn HintTransport,
+    keys: &KukuriKeys,
+    peer_pubkey: &str,
+) -> Result<()> {
+    let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+    if let Some(handle) = direct_message_subscriptions
+        .lock()
+        .await
+        .remove(peer_pubkey.as_str())
+    {
+        handle.abort();
+    }
+    let topic = derive_direct_message_topic(keys, &Pubkey::from(peer_pubkey.as_str()))?;
+    hint_transport.unsubscribe_hints(&topic).await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn schedule_direct_message_reconcile_with_services(
+    store: Arc<dyn Store>,
+    projection_store: Arc<dyn ProjectionStore>,
+    blob_service: Arc<dyn BlobService>,
+    hint_transport: Arc<dyn HintTransport>,
+    transport: Arc<dyn Transport>,
+    keys: Arc<KukuriKeys>,
+    last_sync: Arc<Mutex<Option<i64>>>,
+    direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    local_author_pubkey: String,
+    author_pubkey: String,
+) {
+    tokio::spawn(async move {
+        if let Err(error) = reconcile_direct_message_subscriptions_with_services(
+            store.as_ref(),
+            projection_store,
+            blob_service,
+            hint_transport,
+            transport,
+            keys,
+            last_sync,
+            direct_message_subscriptions,
+            local_author_pubkey.as_str(),
+        )
+        .await
+        {
+            warn!(
+                author_pubkey = %author_pubkey,
+                error = %error,
+                "failed to reconcile direct message subscriptions after author update"
+            );
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn reconcile_direct_message_subscriptions_with_services(
+    store: &dyn Store,
+    projection_store: Arc<dyn ProjectionStore>,
+    blob_service: Arc<dyn BlobService>,
+    hint_transport: Arc<dyn HintTransport>,
+    transport: Arc<dyn Transport>,
+    keys: Arc<KukuriKeys>,
+    last_sync: Arc<Mutex<Option<i64>>>,
+    direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    local_author_pubkey: &str,
+) -> Result<()> {
+    let desired_peers =
+        current_mutual_direct_message_peers_with_services(store, local_author_pubkey).await?;
+    let current_entries = {
+        let subscriptions = direct_message_subscriptions.lock().await;
+        subscriptions
+            .iter()
+            .map(|(peer_pubkey, handle)| (peer_pubkey.clone(), handle.is_finished()))
+            .collect::<Vec<_>>()
+    };
+
+    for (peer_pubkey, finished) in &current_entries {
+        if *finished || !desired_peers.contains(peer_pubkey) {
+            stop_direct_message_subscription_with_services(
+                direct_message_subscriptions.as_ref(),
+                hint_transport.as_ref(),
+                keys.as_ref(),
+                peer_pubkey.as_str(),
+            )
+            .await?;
+        }
+    }
+
+    for peer_pubkey in desired_peers {
+        AppService::spawn_direct_message_subscription_with_services(
+            Arc::clone(&direct_message_subscriptions),
+            Arc::clone(&projection_store),
+            Arc::clone(&blob_service),
+            Arc::clone(&hint_transport),
+            Arc::clone(&transport),
+            Arc::clone(&keys),
+            Arc::clone(&last_sync),
+            local_author_pubkey,
+            peer_pubkey.as_str(),
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn rebuild_author_relationships_with_services(
@@ -9529,6 +9728,7 @@ mod tests {
     #[derive(Clone, Default)]
     struct TrackingHintTransport {
         hints: Arc<TokioMutex<HashMap<String, broadcast::Sender<HintEnvelope>>>>,
+        subscribe_count: Arc<TokioMutex<usize>>,
         unsubscribed_topics: Arc<TokioMutex<Vec<String>>>,
     }
 
@@ -9545,6 +9745,7 @@ mod tests {
     #[async_trait]
     impl HintTransport for TrackingHintTransport {
         async fn subscribe_hints(&self, topic: &TopicId) -> Result<HintStream> {
+            *self.subscribe_count.lock().await += 1;
             let sender = self.hint_sender(topic).await;
             let stream = BroadcastStream::new(sender.subscribe())
                 .filter_map(|item| async move { item.ok() });
@@ -9798,7 +9999,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dm_reopens_finished_subscription_when_hint_stream_closes() {
+    async fn dm_open_does_not_duplicate_active_subscription_when_mutual_auto_subscribe_is_enabled()
+    {
         let transport = Arc::new(StaticTransport::new(PeerSnapshot {
             connected: true,
             peer_count: 1,
@@ -9866,7 +10068,400 @@ mod tests {
             .expect("open direct message second time");
         sleep(Duration::from_millis(50)).await;
 
+        assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+    }
+
+    #[tokio::test]
+    async fn dm_import_peer_ticket_restarts_active_mutual_subscription() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store = Arc::new(MemoryStore::default());
+        let keys_local = generate_keys();
+        let keys_peer = generate_keys();
+        let local_pubkey = keys_local.public_key_hex();
+        let peer_pubkey = keys_peer.public_key_hex();
+        let follow_local_to_peer = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_local,
+                &Pubkey::from(peer_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge local->peer"),
+        )
+        .expect("parse follow edge local->peer")
+        .expect("follow edge local->peer");
+        let follow_peer_to_local = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_peer,
+                &Pubkey::from(local_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge peer->local"),
+        )
+        .expect("parse follow edge peer->local")
+        .expect("follow edge peer->local");
+        store
+            .upsert_follow_edge(follow_local_to_peer)
+            .await
+            .expect("seed local->peer follow edge");
+        store
+            .upsert_follow_edge(follow_peer_to_local)
+            .await
+            .expect("seed peer->local follow edge");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport,
+            hint_transport.clone(),
+            docs_sync,
+            blob_service,
+            keys_local,
+        );
+
+        app.open_direct_message(peer_pubkey.as_str())
+            .await
+            .expect("open direct message");
+        sleep(Duration::from_millis(50)).await;
+
+        let topic =
+            derive_direct_message_topic(app.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
+                .expect("derive dm topic");
+        assert!(
+            app.direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(peer_pubkey.as_str()),
+            "open should create an active direct message subscription"
+        );
+        assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+
+        app.import_peer_ticket("peer-ticket")
+            .await
+            .expect("import peer ticket");
+        sleep(Duration::from_millis(50)).await;
+
         assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
+        assert_eq!(
+            hint_transport.unsubscribed_topics.lock().await.as_slice(),
+            &[topic.as_str().to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn dm_first_message_appears_in_recipient_conversation_list_without_opening_dm() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let a_pubkey = keys_a.public_key_hex();
+        let b_pubkey = keys_b.public_key_hex();
+        let follow_a_to_b = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_a,
+                &Pubkey::from(b_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge a->b"),
+        )
+        .expect("parse follow edge a->b")
+        .expect("follow edge a->b");
+        let follow_b_to_a = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_b,
+                &Pubkey::from(a_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge b->a"),
+        )
+        .expect("parse follow edge b->a")
+        .expect("follow edge b->a");
+
+        store_a
+            .upsert_follow_edge(follow_a_to_b.clone())
+            .await
+            .expect("seed follow edge a->b in store a");
+        store_a
+            .upsert_follow_edge(follow_b_to_a.clone())
+            .await
+            .expect("seed follow edge b->a in store a");
+        store_b
+            .upsert_follow_edge(follow_a_to_b)
+            .await
+            .expect("seed follow edge a->b in store b");
+        store_b
+            .upsert_follow_edge(follow_b_to_a)
+            .await
+            .expect("seed follow edge b->a in store b");
+
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a,
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a.clone(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b,
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync,
+            blob_service,
+            keys_b.clone(),
+        );
+
+        app_a
+            .rebuild_author_relationships()
+            .await
+            .expect("rebuild relationships for app a");
+        app_b
+            .rebuild_author_relationships()
+            .await
+            .expect("rebuild relationships for app b");
+        assert!(
+            app_b
+                .direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(a_pubkey.as_str()),
+            "recipient should subscribe to mutual dm topics before opening the dm",
+        );
+
+        let message_id = app_a
+            .send_direct_message(b_pubkey.as_str(), Some("hello from a"), None, Vec::new())
+            .await
+            .expect("send direct message");
+
+        let conversation = timeout(Duration::from_secs(10), async {
+            loop {
+                let conversations = app_b
+                    .list_direct_messages()
+                    .await
+                    .expect("list recipient direct messages");
+                if let Some(conversation) = conversations.into_iter().find(|item| {
+                    item.peer_pubkey == a_pubkey
+                        && item.last_message_id.as_deref() == Some(message_id.as_str())
+                }) {
+                    break conversation;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("wait for recipient conversation list update");
+        assert_eq!(
+            conversation.last_message_preview.as_deref(),
+            Some("hello from a")
+        );
+
+        let delivered = app_b
+            .list_direct_message_messages(a_pubkey.as_str(), None, 20)
+            .await
+            .expect("list recipient direct message timeline");
+        assert!(
+            delivered
+                .items
+                .iter()
+                .any(|message| message.message_id == message_id),
+            "recipient should see the delivered message after the conversation appears",
+        );
+    }
+
+    #[tokio::test]
+    async fn dm_outbox_retry_stops_when_mutual_is_lost_and_resumes_when_it_returns() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store = Arc::new(MemoryStore::default());
+        let keys_local = generate_keys();
+        let keys_peer = generate_keys();
+        let local_pubkey = keys_local.public_key_hex();
+        let peer_pubkey = keys_peer.public_key_hex();
+        let follow_local_to_peer = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_local,
+                &Pubkey::from(peer_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge local->peer"),
+        )
+        .expect("parse follow edge local->peer")
+        .expect("follow edge local->peer");
+        let follow_peer_to_local_active = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_peer,
+                &Pubkey::from(local_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge peer->local active"),
+        )
+        .expect("parse follow edge peer->local active")
+        .expect("follow edge peer->local active");
+        let follow_peer_to_local_inactive = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_peer,
+                &Pubkey::from(local_pubkey.as_str()),
+                FollowEdgeStatus::Revoked,
+            )
+            .expect("build follow edge peer->local inactive"),
+        )
+        .expect("parse follow edge peer->local inactive")
+        .expect("follow edge peer->local inactive");
+
+        store
+            .upsert_follow_edge(follow_local_to_peer)
+            .await
+            .expect("seed follow edge local->peer");
+        store
+            .upsert_follow_edge(follow_peer_to_local_active.clone())
+            .await
+            .expect("seed follow edge peer->local");
+
+        let app = AppService::new_with_services(
+            store.clone(),
+            store.clone(),
+            transport.clone(),
+            hint_transport,
+            docs_sync,
+            blob_service,
+            keys_local.clone(),
+        );
+
+        app.rebuild_author_relationships()
+            .await
+            .expect("seed relationship projection");
+        assert!(
+            app.direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(peer_pubkey.as_str()),
+            "mutual peer should start with an active dm subscription",
+        );
+
+        let topic = derive_direct_message_topic(&keys_local, &Pubkey::from(peer_pubkey.as_str()))
+            .expect("derive dm topic");
+        let message_id = app
+            .send_direct_message(
+                peer_pubkey.as_str(),
+                Some("queued while disconnected"),
+                None,
+                Vec::new(),
+            )
+            .await
+            .expect("queue direct message while disconnected");
+        let queued_outbox = store
+            .list_direct_message_outbox()
+            .await
+            .expect("list queued outbox");
+        assert_eq!(queued_outbox.len(), 1);
+        assert_eq!(queued_outbox[0].message_id, message_id);
+        assert_eq!(queued_outbox[0].last_attempt_at, None);
+
+        store
+            .upsert_follow_edge(follow_peer_to_local_inactive)
+            .await
+            .expect("drop peer->local follow edge");
+        app.rebuild_author_relationships()
+            .await
+            .expect("rebuild relationships after mutual loss");
+        assert!(
+            !app.direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(peer_pubkey.as_str()),
+            "subscription should stop when mutual relationship is lost",
+        );
+        let disabled_status = app
+            .get_direct_message_status(peer_pubkey.as_str())
+            .await
+            .expect("status after mutual loss");
+        assert!(!disabled_status.send_enabled);
+        assert_eq!(disabled_status.pending_outbox_count, 1);
+
+        {
+            let mut snapshot = transport.peers.lock().await;
+            snapshot.connected = true;
+            snapshot.peer_count = 1;
+            snapshot.connected_peers = vec!["peer-b".into()];
+            snapshot.topic_diagnostics = vec![TopicPeerSnapshot {
+                topic: format!("hint/{}", topic.as_str()),
+                joined: true,
+                peer_count: 1,
+                connected_peers: vec!["peer-b".into()],
+                configured_peer_ids: vec!["peer-b".into()],
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: "connected".into(),
+                last_error: None,
+            }];
+        }
+        sleep(Duration::from_millis(
+            DIRECT_MESSAGE_RETRY_INTERVAL_MS + 250,
+        ))
+        .await;
+        let stopped_outbox = store
+            .list_direct_message_outbox()
+            .await
+            .expect("list outbox while retry is stopped");
+        assert_eq!(stopped_outbox[0].last_attempt_at, None);
+
+        let follow_peer_to_local_restored = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_peer,
+                &Pubkey::from(local_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge peer->local restored"),
+        )
+        .expect("parse follow edge peer->local restored")
+        .expect("follow edge peer->local restored");
+        store
+            .upsert_follow_edge(follow_peer_to_local_restored)
+            .await
+            .expect("restore peer->local follow edge");
+        app.rebuild_author_relationships()
+            .await
+            .expect("rebuild relationships after mutual restore");
+        assert!(
+            app.direct_message_subscriptions
+                .lock()
+                .await
+                .contains_key(peer_pubkey.as_str()),
+            "subscription should resume when mutual relationship returns",
+        );
+        let restored_status = app
+            .get_direct_message_status(peer_pubkey.as_str())
+            .await
+            .expect("status after mutual restore");
+        assert!(restored_status.send_enabled);
+
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let outbox = store
+                    .list_direct_message_outbox()
+                    .await
+                    .expect("list outbox after mutual restore");
+                if outbox
+                    .iter()
+                    .any(|row| row.message_id == message_id && row.last_attempt_at.is_some())
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("wait for queued retry to resume after mutual restore");
     }
 
     #[tokio::test]
@@ -10016,7 +10611,7 @@ mod tests {
                 last_error: None,
             }];
         }
-        let published = AppService::flush_direct_message_outbox_for_peer_with_services(
+        let _published = AppService::flush_direct_message_outbox_for_peer_with_services(
             store_a.as_ref(),
             hint_transport.as_ref(),
             transport.as_ref(),
@@ -10026,7 +10621,6 @@ mod tests {
         )
         .await
         .expect("flush queued direct message after restart");
-        assert_eq!(published, 1);
 
         let delivered = timeout(Duration::from_secs(10), async {
             loop {

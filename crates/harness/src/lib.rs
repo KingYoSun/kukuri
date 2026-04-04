@@ -8,8 +8,9 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use kukuri_app_api::{
-    AppService, CreateGameRoomInput, CreateLiveSessionInput, DirectMessageMessageView,
-    DirectMessageStatusView, GameScoreView, SyncStatus, UpdateGameRoomInput,
+    AppService, CreateGameRoomInput, CreateLiveSessionInput, DirectMessageConversationView,
+    DirectMessageMessageView, DirectMessageStatusView, GameScoreView, SyncStatus,
+    UpdateGameRoomInput,
 };
 use kukuri_cn_core::{JwtConfig, TestDatabase};
 use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
@@ -2298,19 +2299,7 @@ async fn run_pairwise_direct_message_connectivity(
         wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
             .await
             .context("desktop b did not observe mutual relationship")?;
-        runtime_a
-            .open_direct_message(DirectMessageRequest {
-                pubkey: b_pubkey.clone(),
-            })
-            .await
-            .context("desktop a failed to open direct message")?;
-        runtime_b
-            .open_direct_message(DirectMessageRequest {
-                pubkey: a_pubkey.clone(),
-            })
-            .await
-            .context("desktop b failed to open direct message")?;
-        push_named_step(&mut steps, "mutual_open_dm", started_at);
+        push_named_step(&mut steps, "mutual_ready", started_at);
 
         let started_at = Instant::now();
         let image_bytes = b"pairwise-dm-image";
@@ -2327,6 +2316,18 @@ async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("desktop a failed to send image direct message")?;
+        let delivered_image_conversation = wait_for_direct_message_conversation_result(
+            &runtime_b,
+            a_pubkey.as_str(),
+            image_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not surface image direct message in the conversation list")?;
+        assert_eq!(
+            delivered_image_conversation.last_message_id.as_deref(),
+            Some(image_message_id.as_str())
+        );
         let delivered_image = wait_for_direct_message_result(
             &runtime_b,
             a_pubkey.as_str(),
@@ -2455,18 +2456,20 @@ async fn run_pairwise_direct_message_connectivity(
         wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
             .await
             .context("desktop b did not restore mutual relationship after restart")?;
-        runtime_a
-            .open_direct_message(DirectMessageRequest {
-                pubkey: b_pubkey.clone(),
-            })
-            .await
-            .context("desktop a failed to reopen direct message after restart")?;
-        runtime_b
-            .open_direct_message(DirectMessageRequest {
-                pubkey: a_pubkey.clone(),
-            })
-            .await
-            .context("desktop b failed to reopen direct message after restart")?;
+        let delivered_video_conversation = wait_for_direct_message_conversation_result(
+            &runtime_b,
+            a_pubkey.as_str(),
+            queued_video_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context(
+            "desktop b did not surface queued video direct message in the conversation list after restart",
+        )?;
+        assert_eq!(
+            delivered_video_conversation.last_message_id.as_deref(),
+            Some(queued_video_message_id.as_str())
+        );
         let delivered_video = wait_for_direct_message_result(
             &runtime_b,
             a_pubkey.as_str(),
@@ -3107,6 +3110,34 @@ async fn wait_for_direct_message_result(
     {
         Ok(result) => result,
         Err(_) => anyhow::bail!("direct message delivery timeout for {message_id}"),
+    }
+}
+
+async fn wait_for_direct_message_conversation_result(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    message_id: &str,
+    step_timeout: Duration,
+) -> Result<DirectMessageConversationView> {
+    match timeout(step_timeout, async {
+        loop {
+            let conversations = runtime
+                .list_direct_messages()
+                .await
+                .context("list direct messages")?;
+            if let Some(conversation) = conversations.into_iter().find(|item| {
+                item.peer_pubkey == peer_pubkey
+                    && item.last_message_id.as_deref() == Some(message_id)
+            }) {
+                return Ok::<DirectMessageConversationView, anyhow::Error>(conversation);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("direct message conversation timeout for {message_id}"),
     }
 }
 
