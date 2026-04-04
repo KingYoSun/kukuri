@@ -4685,8 +4685,8 @@ impl AppService {
         .await?;
         if initial_count > 0 {
             *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
-            reconcile_direct_message_subscriptions_with_services(
-                store.as_ref(),
+            schedule_direct_message_reconcile_with_services(
+                Arc::clone(&store),
                 Arc::clone(&projection_store),
                 Arc::clone(&blob_service),
                 Arc::clone(&hint_transport),
@@ -4694,9 +4694,9 @@ impl AppService {
                 Arc::clone(&keys),
                 Arc::clone(&last_sync),
                 Arc::clone(&direct_message_subscriptions),
-                local_author_pubkey.as_str(),
+                local_author_pubkey.clone(),
+                author_key.clone(),
             )
-            .await?;
         }
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
@@ -4717,8 +4717,8 @@ impl AppService {
                         && count > 0
                         {
                             *last_sync.lock().await = Some(Utc::now().timestamp_millis());
-                            if let Err(error) = reconcile_direct_message_subscriptions_with_services(
-                                store.as_ref(),
+                            schedule_direct_message_reconcile_with_services(
+                                Arc::clone(&store),
                                 Arc::clone(&projection_store),
                                 Arc::clone(&blob_service),
                                 Arc::clone(&hint_transport),
@@ -4726,14 +4726,9 @@ impl AppService {
                                 Arc::clone(&keys),
                                 Arc::clone(&last_sync),
                                 Arc::clone(&direct_message_subscriptions),
-                                local_author_pubkey.as_str(),
-                            ).await {
-                                warn!(
-                                    author_pubkey = %author_key_for_task,
-                                    error = %error,
-                                    "failed to reconcile direct message subscriptions after author update"
-                                );
-                            }
+                                local_author_pubkey.clone(),
+                                author_key_for_task.clone(),
+                            );
                         }
                     }
                     else => break,
@@ -6336,6 +6331,42 @@ async fn stop_direct_message_subscription_with_services(
     let topic = derive_direct_message_topic(keys, &Pubkey::from(peer_pubkey.as_str()))?;
     hint_transport.unsubscribe_hints(&topic).await?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn schedule_direct_message_reconcile_with_services(
+    store: Arc<dyn Store>,
+    projection_store: Arc<dyn ProjectionStore>,
+    blob_service: Arc<dyn BlobService>,
+    hint_transport: Arc<dyn HintTransport>,
+    transport: Arc<dyn Transport>,
+    keys: Arc<KukuriKeys>,
+    last_sync: Arc<Mutex<Option<i64>>>,
+    direct_message_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    local_author_pubkey: String,
+    author_pubkey: String,
+) {
+    tokio::spawn(async move {
+        if let Err(error) = reconcile_direct_message_subscriptions_with_services(
+            store.as_ref(),
+            projection_store,
+            blob_service,
+            hint_transport,
+            transport,
+            keys,
+            last_sync,
+            direct_message_subscriptions,
+            local_author_pubkey.as_str(),
+        )
+        .await
+        {
+            warn!(
+                author_pubkey = %author_pubkey,
+                error = %error,
+                "failed to reconcile direct message subscriptions after author update"
+            );
+        }
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
