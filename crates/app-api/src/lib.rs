@@ -10095,8 +10095,9 @@ mod tests {
             .expect("open direct message");
         sleep(Duration::from_millis(50)).await;
 
-        let topic = derive_direct_message_topic(app.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
-            .expect("derive dm topic");
+        let topic =
+            derive_direct_message_topic(app.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))
+                .expect("derive dm topic");
         assert!(
             app.direct_message_subscriptions
                 .lock()
