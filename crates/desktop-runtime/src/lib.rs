@@ -18,8 +18,9 @@ use kukuri_app_api::{
     CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
     CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
     DirectMessageTimelineView, GameRoomView, GameScoreView, JoinedPrivateChannelView,
-    LiveSessionView, PendingAttachment, PrivateChannelCapability, ProfileInput, ReactionStateView,
-    RecentReactionView, SocialConnectionKind, SyncStatus, TimelineView, UpdateGameRoomInput,
+    LiveSessionView, NotificationStatusView, NotificationView, PendingAttachment,
+    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView,
+    SocialConnectionKind, SyncStatus, TimelineView, UpdateGameRoomInput,
 };
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_cn_core::{
@@ -224,6 +225,11 @@ pub struct ListSocialConnectionsRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMessageRequest {
     pub pubkey: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationIdRequest {
+    pub notification_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1070,6 +1076,27 @@ impl DesktopRuntime {
         request: ListSocialConnectionsRequest,
     ) -> Result<Vec<AuthorSocialView>> {
         self.app_service.list_social_connections(request.kind).await
+    }
+
+    pub async fn list_notifications(&self) -> Result<Vec<NotificationView>> {
+        self.app_service.list_notifications().await
+    }
+
+    pub async fn mark_notification_read(
+        &self,
+        request: NotificationIdRequest,
+    ) -> Result<NotificationStatusView> {
+        self.app_service
+            .mark_notification_read(request.notification_id.as_str())
+            .await
+    }
+
+    pub async fn mark_all_notifications_read(&self) -> Result<NotificationStatusView> {
+        self.app_service.mark_all_notifications_read().await
+    }
+
+    pub async fn get_notification_status(&self) -> Result<NotificationStatusView> {
+        self.app_service.get_notification_status().await
     }
 
     pub async fn open_direct_message(

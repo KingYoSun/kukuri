@@ -14,8 +14,8 @@ use kukuri_desktop_runtime::{
     ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest, ListGameRoomsRequest,
     ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest, ListProfileTimelineRequest,
     ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,
-    ListTimelineRequest, LiveSessionCommandRequest, RemoveBookmarkedCustomReactionRequest,
-    RemoveBookmarkedPostRequest,
+    ListTimelineRequest, LiveSessionCommandRequest, NotificationIdRequest,
+    RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
     RotatePrivateChannelRequest, SendDirectMessageRequest, SetCommunityNodeConfigRequest,
     SetDiscoverySeedsRequest, SetMyProfileRequest, ToggleReactionRequest,
     UnsubscribeTopicRequest, UpdateGameRoomRequest, resolve_db_path_from_env,
@@ -469,6 +469,47 @@ async fn list_social_connections(
 }
 
 #[tauri::command]
+async fn list_notifications(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_app_api::NotificationView>, String> {
+    state.runtime.list_notifications().await.map_err(map_error)
+}
+
+#[tauri::command]
+async fn mark_notification_read(
+    state: tauri::State<'_, DesktopState>,
+    request: NotificationIdRequest,
+) -> Result<kukuri_app_api::NotificationStatusView, String> {
+    state
+        .runtime
+        .mark_notification_read(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn mark_all_notifications_read(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<kukuri_app_api::NotificationStatusView, String> {
+    state
+        .runtime
+        .mark_all_notifications_read()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+async fn get_notification_status(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<kukuri_app_api::NotificationStatusView, String> {
+    state
+        .runtime
+        .get_notification_status()
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
 async fn open_direct_message(
     state: tauri::State<'_, DesktopState>,
     request: DirectMessageRequest,
@@ -903,6 +944,10 @@ pub fn run() {
             mute_author,
             unmute_author,
             list_social_connections,
+            list_notifications,
+            mark_notification_read,
+            mark_all_notifications_read,
+            get_notification_status,
             open_direct_message,
             list_direct_messages,
             list_direct_message_messages,

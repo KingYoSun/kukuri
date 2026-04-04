@@ -209,6 +209,36 @@ pub struct DirectMessageTombstoneRow {
     pub deleted_at: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationKind {
+    Mention,
+    Reply,
+    Repost,
+    QuoteRepost,
+    DirectMessage,
+    Followed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationRow {
+    pub notification_id: String,
+    pub recipient_pubkey: String,
+    pub kind: NotificationKind,
+    pub actor_pubkey: String,
+    pub source_envelope_id: Option<EnvelopeId>,
+    pub source_replica_id: Option<ReplicaId>,
+    pub topic_id: Option<String>,
+    pub channel_id: Option<String>,
+    pub object_id: Option<EnvelopeId>,
+    pub dm_id: Option<String>,
+    pub message_id: Option<String>,
+    pub preview_text: Option<String>,
+    pub created_at: i64,
+    pub received_at: i64,
+    pub read_at: Option<i64>,
+}
+
 type LivePresenceKey = (String, String, String);
 type LivePresenceValue = (String, String, i64, i64);
 
@@ -369,6 +399,11 @@ pub trait ProjectionStore: Send + Sync {
         message_id: &str,
     ) -> Result<()>;
     async fn clear_direct_message_local(&self, dm_id: &str) -> Result<()>;
+    async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool>;
+    async fn list_notifications(&self) -> Result<Vec<NotificationRow>>;
+    async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()>;
+    async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()>;
+    async fn count_unread_notifications(&self) -> Result<usize>;
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()>;
 }
 
@@ -855,6 +890,7 @@ type MemoryReactionProjectionRows = HashMap<(String, String, String), ReactionPr
 type MemoryDirectMessageRows = HashMap<(String, String), DirectMessageMessageRow>;
 type MemoryDirectMessageOutboxRows = HashMap<(String, String), DirectMessageOutboxRow>;
 type MemoryDirectMessageTombstones = HashMap<(String, String), DirectMessageTombstoneRow>;
+type MemoryNotificationRows = HashMap<String, NotificationRow>;
 
 #[derive(Clone, Default)]
 pub struct MemoryStore {
@@ -878,6 +914,7 @@ pub struct MemoryStore {
     direct_message_rows: Arc<RwLock<MemoryDirectMessageRows>>,
     direct_message_outbox_rows: Arc<RwLock<MemoryDirectMessageOutboxRows>>,
     direct_message_tombstones: Arc<RwLock<MemoryDirectMessageTombstones>>,
+    notification_rows: Arc<RwLock<MemoryNotificationRows>>,
 }
 
 #[async_trait]
@@ -2321,6 +2358,119 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool> {
+        let result = sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO notifications (
+              notification_id,
+              recipient_pubkey,
+              kind,
+              actor_pubkey,
+              source_envelope_id,
+              source_replica_id,
+              topic_id,
+              channel_id,
+              object_id,
+              dm_id,
+              message_id,
+              preview_text,
+              created_at,
+              received_at,
+              read_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            "#,
+        )
+        .bind(row.notification_id.as_str())
+        .bind(row.recipient_pubkey.as_str())
+        .bind(notification_kind_name(&row.kind))
+        .bind(row.actor_pubkey.as_str())
+        .bind(row.source_envelope_id.as_ref().map(EnvelopeId::as_str))
+        .bind(row.source_replica_id.as_ref().map(ReplicaId::as_str))
+        .bind(row.topic_id.as_deref())
+        .bind(row.channel_id.as_deref())
+        .bind(row.object_id.as_ref().map(EnvelopeId::as_str))
+        .bind(row.dm_id.as_deref())
+        .bind(row.message_id.as_deref())
+        .bind(row.preview_text.as_deref())
+        .bind(row.created_at)
+        .bind(row.received_at)
+        .bind(row.read_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list_notifications(&self) -> Result<Vec<NotificationRow>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+              notification_id,
+              recipient_pubkey,
+              kind,
+              actor_pubkey,
+              source_envelope_id,
+              source_replica_id,
+              topic_id,
+              channel_id,
+              object_id,
+              dm_id,
+              message_id,
+              preview_text,
+              created_at,
+              received_at,
+              read_at
+            FROM notifications
+            ORDER BY received_at DESC, notification_id DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_notification).collect()
+    }
+
+    async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE notifications
+            SET read_at = COALESCE(read_at, ?2)
+            WHERE notification_id = ?1
+            "#,
+        )
+        .bind(notification_id)
+        .bind(read_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE notifications
+            SET read_at = COALESCE(read_at, ?1)
+            WHERE read_at IS NULL
+            "#,
+        )
+        .bind(read_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn count_unread_notifications(&self) -> Result<usize> {
+        let count = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT COUNT(*)
+            FROM notifications
+            WHERE read_at IS NULL
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count as usize)
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         sqlx::query("DELETE FROM object_thread_cache")
             .execute(&self.pool)
@@ -3008,6 +3158,61 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn put_notification_if_absent(&self, row: NotificationRow) -> Result<bool> {
+        let mut notifications = self.notification_rows.write().await;
+        if notifications.contains_key(row.notification_id.as_str()) {
+            return Ok(false);
+        }
+        notifications.insert(row.notification_id.clone(), row);
+        Ok(true)
+    }
+
+    async fn list_notifications(&self) -> Result<Vec<NotificationRow>> {
+        let mut items = self
+            .notification_rows
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .received_at
+                .cmp(&left.received_at)
+                .then_with(|| right.notification_id.cmp(&left.notification_id))
+        });
+        Ok(items)
+    }
+
+    async fn mark_notification_read(&self, notification_id: &str, read_at: i64) -> Result<()> {
+        if let Some(row) = self
+            .notification_rows
+            .write()
+            .await
+            .get_mut(notification_id)
+        {
+            row.read_at.get_or_insert(read_at);
+        }
+        Ok(())
+    }
+
+    async fn mark_all_notifications_read(&self, read_at: i64) -> Result<()> {
+        for row in self.notification_rows.write().await.values_mut() {
+            row.read_at.get_or_insert(read_at);
+        }
+        Ok(())
+    }
+
+    async fn count_unread_notifications(&self) -> Result<usize> {
+        Ok(self
+            .notification_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| row.read_at.is_none())
+            .count())
+    }
+
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
         let mut guard = self.object_projection_rows.write().await;
         guard.clear();
@@ -3184,6 +3389,53 @@ fn row_to_direct_message_message(row: sqlx::sqlite::SqliteRow) -> Result<DirectM
     })
 }
 
+fn row_to_notification(row: sqlx::sqlite::SqliteRow) -> Result<NotificationRow> {
+    Ok(NotificationRow {
+        notification_id: row.get("notification_id"),
+        recipient_pubkey: row.get("recipient_pubkey"),
+        kind: parse_notification_kind(row.get::<String, _>("kind").as_str())?,
+        actor_pubkey: row.get("actor_pubkey"),
+        source_envelope_id: row
+            .try_get::<String, _>("source_envelope_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(EnvelopeId::from),
+        source_replica_id: row
+            .try_get::<String, _>("source_replica_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(ReplicaId::new),
+        topic_id: row
+            .try_get::<String, _>("topic_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        channel_id: row
+            .try_get::<String, _>("channel_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        object_id: row
+            .try_get::<String, _>("object_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(EnvelopeId::from),
+        dm_id: row
+            .try_get::<String, _>("dm_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        message_id: row
+            .try_get::<String, _>("message_id")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        preview_text: row
+            .try_get::<String, _>("preview_text")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        created_at: row.get("created_at"),
+        received_at: row.get("received_at"),
+        read_at: row.try_get("read_at").ok(),
+    })
+}
+
 fn direct_message_page_from_rows(
     rows: Vec<sqlx::sqlite::SqliteRow>,
     limit: usize,
@@ -3348,6 +3600,29 @@ fn parse_reaction_key_kind(value: &str) -> Result<ReactionKeyKind> {
         "emoji" => Ok(ReactionKeyKind::Emoji),
         "custom_asset" => Ok(ReactionKeyKind::CustomAsset),
         _ => anyhow::bail!("unknown reaction key kind: {value}"),
+    }
+}
+
+fn notification_kind_name(kind: &NotificationKind) -> &'static str {
+    match kind {
+        NotificationKind::Mention => "mention",
+        NotificationKind::Reply => "reply",
+        NotificationKind::Repost => "repost",
+        NotificationKind::QuoteRepost => "quote_repost",
+        NotificationKind::DirectMessage => "direct_message",
+        NotificationKind::Followed => "followed",
+    }
+}
+
+fn parse_notification_kind(value: &str) -> Result<NotificationKind> {
+    match value {
+        "mention" => Ok(NotificationKind::Mention),
+        "reply" => Ok(NotificationKind::Reply),
+        "repost" => Ok(NotificationKind::Repost),
+        "quote_repost" => Ok(NotificationKind::QuoteRepost),
+        "direct_message" => Ok(NotificationKind::DirectMessage),
+        "followed" => Ok(NotificationKind::Followed),
+        _ => anyhow::bail!("unknown notification kind: {value}"),
     }
 }
 

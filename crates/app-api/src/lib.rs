@@ -43,15 +43,16 @@ use kukuri_core::{
     parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
 };
 use kukuri_docs_sync::{
-    DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id, private_channel_epoch_replica_id,
-    private_channel_hint_topic, private_channel_replica_id, stable_key, topic_replica_id,
+    DocEvent, DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id,
+    private_channel_epoch_replica_id, private_channel_hint_topic, private_channel_replica_id,
+    stable_key, topic_replica_id,
 };
 use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
     BookmarkedPostRow, DirectMessageConversationRow, DirectMessageMessageRow,
     DirectMessageOutboxRow, DirectMessageTombstoneRow, GameRoomProjectionRow,
-    LiveSessionProjectionRow, MutedAuthorRow, ObjectProjectionRow, Page, ProjectionStore,
-    ReactionProjectionRow, Store, TimelineCursor,
+    LiveSessionProjectionRow, MutedAuthorRow, NotificationKind, NotificationRow,
+    ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 use kukuri_transport::{
     ConnectMode, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
@@ -68,6 +69,7 @@ const DIRECT_MESSAGE_FRAME_MIME: &str = "application/vnd.kukuri.direct-message-f
 const DIRECT_MESSAGE_ATTACHMENT_MIME: &str =
     "application/vnd.kukuri.direct-message-attachment+json";
 const DIRECT_MESSAGE_RETRY_INTERVAL_MS: u64 = 2_000;
+const NOTIFICATION_PREVIEW_LIMIT: usize = 80;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostView {
@@ -288,6 +290,33 @@ pub struct DirectMessageConversationView {
     pub last_message_id: Option<String>,
     pub last_message_preview: Option<String>,
     pub status: DirectMessageStatusView,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationView {
+    pub notification_id: String,
+    pub kind: NotificationKind,
+    pub actor_pubkey: String,
+    pub actor_name: Option<String>,
+    pub actor_display_name: Option<String>,
+    pub actor_picture: Option<String>,
+    pub actor_picture_asset: Option<ProfileAssetView>,
+    pub source_envelope_id: Option<String>,
+    pub source_replica_id: Option<String>,
+    pub topic_id: Option<String>,
+    pub channel_id: Option<String>,
+    pub object_id: Option<String>,
+    pub dm_id: Option<String>,
+    pub message_id: Option<String>,
+    pub preview_text: Option<String>,
+    pub created_at: i64,
+    pub received_at: i64,
+    pub read_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationStatusView {
+    pub unread_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -552,6 +581,22 @@ enum PrivateChannelOwnerAction {
     Share,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NotificationCandidate {
+    kind: NotificationKind,
+    actor_pubkey: String,
+    source_envelope_id: Option<EnvelopeId>,
+    source_replica_id: Option<ReplicaId>,
+    topic_id: Option<String>,
+    channel_id: Option<String>,
+    object_id: Option<EnvelopeId>,
+    dm_id: Option<String>,
+    message_id: Option<String>,
+    preview_text: Option<String>,
+    created_at: i64,
+    received_at: i64,
+}
+
 impl AppService {
     pub fn new<S, T>(store: Arc<S>, transport: Arc<T>) -> Self
     where
@@ -787,6 +832,35 @@ impl AppService {
         }
         items.sort_by(author_social_view_sort_key);
         Ok(items)
+    }
+
+    pub async fn list_notifications(&self) -> Result<Vec<NotificationView>> {
+        let mut items = Vec::new();
+        for row in self.projection_store.list_notifications().await? {
+            items.push(self.notification_view_from_row(row).await?);
+        }
+        Ok(items)
+    }
+
+    pub async fn mark_notification_read(
+        &self,
+        notification_id: &str,
+    ) -> Result<NotificationStatusView> {
+        self.projection_store
+            .mark_notification_read(notification_id, Utc::now().timestamp_millis())
+            .await?;
+        self.notification_status_view().await
+    }
+
+    pub async fn mark_all_notifications_read(&self) -> Result<NotificationStatusView> {
+        self.projection_store
+            .mark_all_notifications_read(Utc::now().timestamp_millis())
+            .await?;
+        self.notification_status_view().await
+    }
+
+    pub async fn get_notification_status(&self) -> Result<NotificationStatusView> {
+        self.notification_status_view().await
     }
 
     pub async fn resume_direct_message_state(&self) -> Result<()> {
@@ -4251,6 +4325,7 @@ impl AppService {
         let last_sync = Arc::clone(&self.last_sync_ts);
         let topic = topic_id.to_string();
         let storage_channel_id = channel_storage_id(channel_id.as_ref());
+        let local_author_pubkey = self.current_author_pubkey();
         docs_sync.open_replica(&replica).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
@@ -4278,6 +4353,26 @@ impl AppService {
                                     error = %error,
                                     "failed to learn blob peer from docs sync event"
                                 );
+                            }
+                            match AppService::maybe_create_notification_for_remote_object_event(
+                                projection_store.as_ref(),
+                                docs_sync.as_ref(),
+                                blob_service.as_ref(),
+                                local_author_pubkey.as_str(),
+                                &event,
+                            ).await {
+                                Ok(true) => {
+                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                }
+                                Ok(false) => {}
+                                Err(error) => {
+                                    warn!(
+                                        topic = %topic,
+                                        key = %event.key,
+                                        error = %error,
+                                        "failed to create notification from remote object event"
+                                    );
+                                }
                             }
                             if let Ok(count) = hydrate_subscription_state_with_services(
                                 docs_sync.as_ref(),
@@ -4707,6 +4802,29 @@ impl AppService {
                         if event.is_err() {
                             continue;
                         }
+                        if let Ok(event) = event.as_ref() {
+                            match AppService::maybe_create_notification_for_remote_follow_event(
+                                store.as_ref(),
+                                projection_store.as_ref(),
+                                docs_sync.as_ref(),
+                                local_author_pubkey.as_str(),
+                                author_key_for_task.as_str(),
+                                event,
+                            ).await {
+                                Ok(true) => {
+                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                }
+                                Ok(false) => {}
+                                Err(error) => {
+                                    warn!(
+                                        author_pubkey = %author_key_for_task,
+                                        key = %event.key,
+                                        error = %error,
+                                        "failed to create notification from remote follow event"
+                                    );
+                                }
+                            }
+                        }
                         if let Ok(count) = hydrate_author_state_with_services(
                             docs_sync.as_ref(),
                             store.as_ref(),
@@ -4916,6 +5034,46 @@ impl AppService {
         })
     }
 
+    async fn notification_view_from_row(&self, row: NotificationRow) -> Result<NotificationView> {
+        let profile = self.store.get_profile(row.actor_pubkey.as_str()).await?;
+        Ok(NotificationView {
+            notification_id: row.notification_id,
+            kind: row.kind,
+            actor_pubkey: row.actor_pubkey,
+            actor_name: profile.as_ref().and_then(|value| value.name.clone()),
+            actor_display_name: profile
+                .as_ref()
+                .and_then(|value| value.display_name.clone()),
+            actor_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            actor_picture_asset: profile_asset_view_from_ref(
+                profile
+                    .as_ref()
+                    .and_then(|value| value.picture_asset.as_ref()),
+            ),
+            source_envelope_id: row
+                .source_envelope_id
+                .map(|value| value.as_str().to_string()),
+            source_replica_id: row
+                .source_replica_id
+                .map(|value| value.as_str().to_string()),
+            topic_id: row.topic_id,
+            channel_id: row.channel_id,
+            object_id: row.object_id.map(|value| value.as_str().to_string()),
+            dm_id: row.dm_id,
+            message_id: row.message_id,
+            preview_text: row.preview_text,
+            created_at: row.created_at,
+            received_at: row.received_at,
+            read_at: row.read_at,
+        })
+    }
+
+    async fn notification_status_view(&self) -> Result<NotificationStatusView> {
+        Ok(NotificationStatusView {
+            unread_count: self.projection_store.count_unread_notifications().await?,
+        })
+    }
+
     async fn ensure_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
         if !self.direct_message_send_enabled(peer_pubkey).await? {
             return Ok(());
@@ -5117,6 +5275,86 @@ impl AppService {
         }
     }
 
+    async fn maybe_create_notification_for_remote_object_event(
+        projection_store: &dyn ProjectionStore,
+        docs_sync: &dyn DocsSync,
+        blob_service: &dyn BlobService,
+        local_author_pubkey: &str,
+        event: &DocEvent,
+    ) -> Result<bool> {
+        let Some(candidate) = notification_candidate_from_object_event(
+            projection_store,
+            docs_sync,
+            blob_service,
+            local_author_pubkey,
+            event,
+        )
+        .await?
+        else {
+            return Ok(false);
+        };
+        Self::put_notification_candidate(projection_store, local_author_pubkey, candidate).await
+    }
+
+    async fn maybe_create_notification_for_remote_follow_event(
+        store: &dyn Store,
+        projection_store: &dyn ProjectionStore,
+        docs_sync: &dyn DocsSync,
+        local_author_pubkey: &str,
+        author_pubkey: &str,
+        event: &DocEvent,
+    ) -> Result<bool> {
+        let Some(candidate) = notification_candidate_from_follow_event(
+            store,
+            docs_sync,
+            local_author_pubkey,
+            author_pubkey,
+            event,
+        )
+        .await?
+        else {
+            return Ok(false);
+        };
+        Self::put_notification_candidate(projection_store, local_author_pubkey, candidate).await
+    }
+
+    async fn put_notification_candidate(
+        projection_store: &dyn ProjectionStore,
+        recipient_pubkey: &str,
+        candidate: NotificationCandidate,
+    ) -> Result<bool> {
+        let notification_id = if let (Some(dm_id), Some(message_id)) =
+            (candidate.dm_id.as_deref(), candidate.message_id.as_deref())
+        {
+            direct_message_notification_id(recipient_pubkey, &candidate.kind, dm_id, message_id)
+        } else {
+            let source_envelope_id = candidate
+                .source_envelope_id
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("notification is missing source envelope id"))?;
+            document_notification_id(recipient_pubkey, &candidate.kind, source_envelope_id)
+        };
+        projection_store
+            .put_notification_if_absent(NotificationRow {
+                notification_id,
+                recipient_pubkey: recipient_pubkey.to_string(),
+                kind: candidate.kind,
+                actor_pubkey: candidate.actor_pubkey,
+                source_envelope_id: candidate.source_envelope_id,
+                source_replica_id: candidate.source_replica_id,
+                topic_id: candidate.topic_id,
+                channel_id: candidate.channel_id,
+                object_id: candidate.object_id,
+                dm_id: candidate.dm_id,
+                message_id: candidate.message_id,
+                preview_text: candidate.preview_text,
+                created_at: candidate.created_at,
+                received_at: candidate.received_at,
+                read_at: None,
+            })
+            .await
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn ingest_direct_message_frame_with_services(
         projection_store: &dyn ProjectionStore,
@@ -5195,19 +5433,21 @@ impl AppService {
             payload.attachment_manifest.as_ref(),
         )
         .await?;
+        let message_row = DirectMessageMessageRow {
+            dm_id: dm_id.to_string(),
+            message_id: message_id.to_string(),
+            sender_pubkey: frame.sender.as_str().to_string(),
+            recipient_pubkey: frame.recipient.as_str().to_string(),
+            created_at: frame.created_at,
+            text: payload.text,
+            reply_to_message_id: payload.reply_to,
+            attachment_manifest: local_manifest,
+            outgoing: false,
+            acked_at: None,
+        };
+        let preview_text = notification_preview_text(Some(direct_message_preview(&message_row)));
         projection_store
-            .put_direct_message_message(DirectMessageMessageRow {
-                dm_id: dm_id.to_string(),
-                message_id: message_id.to_string(),
-                sender_pubkey: frame.sender.as_str().to_string(),
-                recipient_pubkey: frame.recipient.as_str().to_string(),
-                created_at: frame.created_at,
-                text: payload.text,
-                reply_to_message_id: payload.reply_to,
-                attachment_manifest: local_manifest,
-                outgoing: false,
-                acked_at: None,
-            })
+            .put_direct_message_message(message_row)
             .await?;
         projection_store
             .upsert_direct_message_conversation(DirectMessageConversationRow {
@@ -5216,13 +5456,28 @@ impl AppService {
                 updated_at: frame.created_at,
                 last_message_at: Some(frame.created_at),
                 last_message_id: Some(message_id.to_string()),
-                last_message_preview: projection_store
-                    .get_direct_message_message(dm_id, message_id)
-                    .await?
-                    .as_ref()
-                    .map(direct_message_preview),
+                last_message_preview: preview_text.clone(),
             })
             .await?;
+        Self::put_notification_candidate(
+            projection_store,
+            local_author_pubkey,
+            NotificationCandidate {
+                kind: NotificationKind::DirectMessage,
+                actor_pubkey: peer_pubkey.to_string(),
+                source_envelope_id: None,
+                source_replica_id: None,
+                topic_id: None,
+                channel_id: None,
+                object_id: None,
+                dm_id: Some(dm_id.to_string()),
+                message_id: Some(message_id.to_string()),
+                preview_text,
+                created_at: frame.created_at,
+                received_at: Utc::now().timestamp_millis(),
+            },
+        )
+        .await?;
         hint_transport
             .publish_hint(
                 topic,
@@ -6235,6 +6490,267 @@ fn content_from_payload_ref(payload_ref: &PayloadRef) -> Option<String> {
         PayloadRef::InlineText { text } => Some(text.clone()),
         PayloadRef::BlobText { .. } => None,
     }
+}
+
+async fn notification_candidate_from_object_event(
+    projection_store: &dyn ProjectionStore,
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    local_author_pubkey: &str,
+    event: &DocEvent,
+) -> Result<Option<NotificationCandidate>> {
+    if event.source_peer.is_none()
+        || !event.key.starts_with("objects/")
+        || !event.key.ends_with("/state")
+    {
+        return Ok(None);
+    }
+    let Some(record) = docs_sync
+        .query_replica(&event.replica_id, DocQuery::Exact(event.key.clone()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+    if header.author.as_str() == local_author_pubkey
+        || projection_store
+            .get_object_projection(&header.object_id)
+            .await?
+            .is_some()
+    {
+        return Ok(None);
+    }
+    let content = notification_text_from_payload_ref(blob_service, &header.payload_ref).await;
+    let repost_commentary = if header.object_kind == "repost" {
+        normalize_repost_commentary(content.clone())
+    } else {
+        None
+    };
+    let reply_preview = if header.object_kind == "repost" {
+        repost_commentary.clone().or(content.clone())
+    } else {
+        content.clone()
+    };
+    if let Some(reply_to_object_id) = header.reply_to.as_ref()
+        && projection_store
+            .get_object_projection(reply_to_object_id)
+            .await?
+            .as_ref()
+            .is_some_and(|row| row.author_pubkey == local_author_pubkey)
+    {
+        return Ok(Some(NotificationCandidate {
+            kind: NotificationKind::Reply,
+            actor_pubkey: header.author.as_str().to_string(),
+            source_envelope_id: Some(header.envelope_id.clone()),
+            source_replica_id: Some(event.replica_id.clone()),
+            topic_id: Some(header.topic_id.as_str().to_string()),
+            channel_id: header
+                .channel_id
+                .as_ref()
+                .map(|value| value.as_str().to_string()),
+            object_id: Some(header.object_id.clone()),
+            dm_id: None,
+            message_id: None,
+            preview_text: notification_preview_text(reply_preview),
+            created_at: header.created_at,
+            received_at: Utc::now().timestamp_millis(),
+        }));
+    }
+    if header.channel_id.is_none()
+        && let Some(repost_of) = header.repost_of.as_ref()
+        && repost_of.source_author_pubkey.as_str() == local_author_pubkey
+    {
+        let (kind, preview_source) = if repost_commentary.is_some() {
+            (NotificationKind::QuoteRepost, repost_commentary)
+        } else {
+            (
+                NotificationKind::Repost,
+                normalize_optional_text(Some(repost_of.content.clone())),
+            )
+        };
+        return Ok(Some(NotificationCandidate {
+            kind,
+            actor_pubkey: header.author.as_str().to_string(),
+            source_envelope_id: Some(header.envelope_id.clone()),
+            source_replica_id: Some(event.replica_id.clone()),
+            topic_id: Some(header.topic_id.as_str().to_string()),
+            channel_id: None,
+            object_id: Some(header.object_id.clone()),
+            dm_id: None,
+            message_id: None,
+            preview_text: notification_preview_text(preview_source),
+            created_at: header.created_at,
+            received_at: Utc::now().timestamp_millis(),
+        }));
+    }
+    let mention_source = if header.object_kind == "repost" {
+        repost_commentary
+    } else {
+        normalize_optional_text(content)
+    };
+    if mention_source
+        .as_deref()
+        .is_some_and(|text| text_contains_pubkey_mention(text, local_author_pubkey))
+    {
+        return Ok(Some(NotificationCandidate {
+            kind: NotificationKind::Mention,
+            actor_pubkey: header.author.as_str().to_string(),
+            source_envelope_id: Some(header.envelope_id.clone()),
+            source_replica_id: Some(event.replica_id.clone()),
+            topic_id: Some(header.topic_id.as_str().to_string()),
+            channel_id: header
+                .channel_id
+                .as_ref()
+                .map(|value| value.as_str().to_string()),
+            object_id: Some(header.object_id.clone()),
+            dm_id: None,
+            message_id: None,
+            preview_text: notification_preview_text(mention_source),
+            created_at: header.created_at,
+            received_at: Utc::now().timestamp_millis(),
+        }));
+    }
+    Ok(None)
+}
+
+async fn notification_candidate_from_follow_event(
+    store: &dyn Store,
+    docs_sync: &dyn DocsSync,
+    local_author_pubkey: &str,
+    author_pubkey: &str,
+    event: &DocEvent,
+) -> Result<Option<NotificationCandidate>> {
+    if event.source_peer.is_none() || !event.key.starts_with("graph/follows/") {
+        return Ok(None);
+    }
+    let Some(record) = docs_sync
+        .query_replica(&event.replica_id, DocQuery::Exact(event.key.clone()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    let doc: FollowEdgeDocV1 = serde_json::from_slice(&record.value)?;
+    if doc.subject_pubkey.as_str() != author_pubkey {
+        return Ok(None);
+    }
+    let Some(envelope) =
+        fetch_author_envelope_by_id(docs_sync, &event.replica_id, &doc.envelope_id).await?
+    else {
+        return Ok(None);
+    };
+    let Some(edge) = parse_follow_edge(&envelope)? else {
+        return Ok(None);
+    };
+    if edge.subject_pubkey.as_str() == local_author_pubkey
+        || edge.target_pubkey.as_str() != local_author_pubkey
+        || edge.status != FollowEdgeStatus::Active
+        || store.get_envelope(&edge.envelope_id).await?.is_some()
+    {
+        return Ok(None);
+    }
+    Ok(Some(NotificationCandidate {
+        kind: NotificationKind::Followed,
+        actor_pubkey: edge.subject_pubkey.as_str().to_string(),
+        source_envelope_id: Some(edge.envelope_id.clone()),
+        source_replica_id: Some(event.replica_id.clone()),
+        topic_id: None,
+        channel_id: None,
+        object_id: None,
+        dm_id: None,
+        message_id: None,
+        preview_text: None,
+        created_at: edge.updated_at,
+        received_at: Utc::now().timestamp_millis(),
+    }))
+}
+
+async fn notification_text_from_payload_ref(
+    blob_service: &dyn BlobService,
+    payload_ref: &PayloadRef,
+) -> Option<String> {
+    match payload_ref {
+        PayloadRef::InlineText { text } => Some(text.clone()),
+        PayloadRef::BlobText { hash, .. } => fetch_projection_blob_text(blob_service, hash).await,
+    }
+}
+
+fn notification_preview_text(value: Option<String>) -> Option<String> {
+    normalize_optional_text(value)
+        .map(|text| text.chars().take(NOTIFICATION_PREVIEW_LIMIT).collect())
+}
+
+fn notification_kind_key(kind: &NotificationKind) -> &'static str {
+    match kind {
+        NotificationKind::Mention => "mention",
+        NotificationKind::Reply => "reply",
+        NotificationKind::Repost => "repost",
+        NotificationKind::QuoteRepost => "quote_repost",
+        NotificationKind::DirectMessage => "direct_message",
+        NotificationKind::Followed => "followed",
+    }
+}
+
+fn document_notification_id(
+    recipient_pubkey: &str,
+    kind: &NotificationKind,
+    source_envelope_id: &EnvelopeId,
+) -> String {
+    format!(
+        "notification:{recipient_pubkey}:{}:{}",
+        notification_kind_key(kind),
+        source_envelope_id.as_str()
+    )
+}
+
+fn direct_message_notification_id(
+    recipient_pubkey: &str,
+    kind: &NotificationKind,
+    dm_id: &str,
+    message_id: &str,
+) -> String {
+    format!(
+        "notification:{recipient_pubkey}:{}:{dm_id}:{message_id}",
+        notification_kind_key(kind)
+    )
+}
+
+fn text_contains_pubkey_mention(text: &str, pubkey: &str) -> bool {
+    let bytes = text.as_bytes();
+    let pubkey_bytes = pubkey.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index] == b'@' {
+            let start = index + 1;
+            let end = start + 64;
+            if end <= bytes.len() {
+                let candidate = &bytes[start..end];
+                let next_is_hex = bytes
+                    .get(end)
+                    .is_some_and(|value| char::from(*value).is_ascii_hexdigit());
+                if !next_is_hex
+                    && candidate.len() == 64
+                    && candidate
+                        .iter()
+                        .all(|value| char::from(*value).is_ascii_hexdigit())
+                    && candidate.len() == pubkey_bytes.len()
+                    && candidate
+                        .iter()
+                        .zip(pubkey_bytes.iter())
+                        .all(|(left, right)| {
+                            char::from(*left).eq_ignore_ascii_case(&char::from(*right))
+                        })
+                {
+                    return true;
+                }
+            }
+        }
+        index += 1;
+    }
+    false
 }
 
 fn normalize_author_pubkey(pubkey: &str) -> Result<String> {
@@ -9686,6 +10202,53 @@ mod tests {
             })
     }
 
+    fn remote_doc_event(replica_id: &ReplicaId, key: String) -> DocEvent {
+        DocEvent {
+            replica_id: replica_id.clone(),
+            key,
+            content_hash: "remote-content-hash".into(),
+            source_peer: Some("remote-peer".into()),
+        }
+    }
+
+    async fn create_remote_object_notification(
+        app: &AppService,
+        projection_store: &dyn ProjectionStore,
+        docs_sync: &dyn DocsSync,
+        blob_service: &dyn BlobService,
+        event: DocEvent,
+    ) -> bool {
+        AppService::maybe_create_notification_for_remote_object_event(
+            projection_store,
+            docs_sync,
+            blob_service,
+            app.current_author_pubkey().as_str(),
+            &event,
+        )
+        .await
+        .expect("create remote object notification")
+    }
+
+    async fn create_remote_follow_notification(
+        app: &AppService,
+        store: &dyn Store,
+        projection_store: &dyn ProjectionStore,
+        docs_sync: &dyn DocsSync,
+        author_pubkey: &str,
+        event: DocEvent,
+    ) -> bool {
+        AppService::maybe_create_notification_for_remote_follow_event(
+            store,
+            projection_store,
+            docs_sync,
+            app.current_author_pubkey().as_str(),
+            author_pubkey,
+            &event,
+        )
+        .await
+        .expect("create remote follow notification")
+    }
+
     #[derive(Clone)]
     struct NoopHintTransport;
 
@@ -9702,6 +10265,574 @@ mod tests {
         async fn publish_hint(&self, _topic: &TopicId, _hint: GossipHint) -> Result<()> {
             Ok(())
         }
+    }
+
+    #[tokio::test]
+    async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-reply");
+        let local_object_id = app
+            .create_post(topic.as_str(), "local root", None)
+            .await
+            .expect("create local post");
+        let local_envelope = store
+            .get_envelope(&EnvelopeId::from(local_object_id))
+            .await
+            .expect("load local envelope")
+            .expect("local envelope");
+        let remote_keys = generate_keys();
+        let remote_envelope = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: "remote reply".into(),
+            },
+            Vec::new(),
+            Some(&local_envelope),
+        )
+        .await;
+        let remote_object = remote_envelope
+            .to_post_object()
+            .expect("parse remote reply")
+            .expect("remote reply object");
+        let created = create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                &topic_replica_id(topic.as_str()),
+                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+            ),
+        )
+        .await;
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::Reply);
+        assert_eq!(
+            notifications[0].object_id.as_deref(),
+            Some(remote_object.object_id.as_str())
+        );
+        assert_eq!(
+            app.get_notification_status()
+                .await
+                .expect("notification status")
+                .unread_count,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn public_or_private_post_with_pubkey_mention_creates_mention_notification() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-mention");
+        let remote_keys = generate_keys();
+        let remote_envelope = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: format!("hello @{}", app.current_author_pubkey()),
+            },
+            Vec::new(),
+            None,
+        )
+        .await;
+        let remote_object = remote_envelope
+            .to_post_object()
+            .expect("parse remote mention")
+            .expect("remote mention object");
+
+        let created = create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                &topic_replica_id(topic.as_str()),
+                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+            ),
+        )
+        .await;
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::Mention);
+        let expected_preview = format!("hello @{}", app.current_author_pubkey());
+        assert_eq!(notifications[0].preview_text.as_deref(), Some(expected_preview.as_str()));
+    }
+
+    #[tokio::test]
+    async fn simple_repost_of_local_post_creates_repost_notification() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-repost");
+        let source_object_id = app
+            .create_post(topic.as_str(), "source post", None)
+            .await
+            .expect("create source post");
+        let remote_keys = generate_keys();
+        let repost_source = app
+            .resolve_repost_source(topic.as_str(), source_object_id.as_str())
+            .await
+            .expect("resolve repost source");
+        let remote_envelope =
+            build_repost_envelope(&remote_keys, &topic, repost_source.repost_of, None)
+                .expect("build simple repost");
+        let remote_object = remote_envelope
+            .to_post_object()
+            .expect("parse simple repost")
+            .expect("simple repost object");
+        persist_post_object(
+            docs_sync.as_ref(),
+            &topic_replica_id(topic.as_str()),
+            remote_object.clone(),
+            remote_envelope,
+        )
+        .await
+        .expect("persist simple repost");
+
+        let created = create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                &topic_replica_id(topic.as_str()),
+                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+            ),
+        )
+        .await;
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::Repost);
+        assert_eq!(notifications[0].preview_text.as_deref(), Some("source post"));
+    }
+
+    #[tokio::test]
+    async fn quote_repost_of_local_post_creates_quote_notification() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-quote");
+        let source_object_id = app
+            .create_post(topic.as_str(), "quoted source", None)
+            .await
+            .expect("create source post");
+        let remote_keys = generate_keys();
+        let repost_source = app
+            .resolve_repost_source(topic.as_str(), source_object_id.as_str())
+            .await
+            .expect("resolve repost source");
+        let remote_envelope = build_repost_envelope(
+            &remote_keys,
+            &topic,
+            repost_source.repost_of,
+            Some("quote commentary"),
+        )
+        .expect("build quote repost");
+        let remote_object = remote_envelope
+            .to_post_object()
+            .expect("parse quote repost")
+            .expect("quote repost object");
+        persist_post_object(
+            docs_sync.as_ref(),
+            &topic_replica_id(topic.as_str()),
+            remote_object.clone(),
+            remote_envelope,
+        )
+        .await
+        .expect("persist quote repost");
+
+        let created = create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                &topic_replica_id(topic.as_str()),
+                stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+            ),
+        )
+        .await;
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::QuoteRepost);
+        assert_eq!(
+            notifications[0].preview_text.as_deref(),
+            Some("quote commentary")
+        );
+    }
+
+    #[tokio::test]
+    async fn incoming_dm_frame_creates_single_direct_message_notification_after_store() {
+        let (app, store, _, blob_service) = local_app_with_memory_services();
+        let local_keys = app.keys.clone();
+        let local_author_pubkey = app.current_author_pubkey();
+        let remote_keys = generate_keys();
+        let remote_pubkey = remote_keys.public_key_hex();
+        let dm_id = direct_message_id_for_participants(
+            &Pubkey::from(local_author_pubkey.as_str()),
+            &Pubkey::from(remote_pubkey.as_str()),
+        );
+        let message_id = "dm-message-remote-1";
+        let topic = derive_direct_message_topic(local_keys.as_ref(), &Pubkey::from(remote_pubkey.as_str()))
+            .expect("derive dm topic");
+        let frame = encrypt_direct_message_frame(
+            &remote_keys,
+            &Pubkey::from(local_author_pubkey.as_str()),
+            dm_id.as_str(),
+            message_id,
+            1234,
+            &DirectMessagePayloadV1 {
+                text: Some("hello from remote".into()),
+                reply_to: None,
+                attachment_manifest: None,
+            },
+        )
+        .expect("encrypt dm frame");
+        let frame_blob = blob_service
+            .put_blob(
+                serde_json::to_vec(&frame).expect("encode dm frame"),
+                DIRECT_MESSAGE_FRAME_MIME,
+            )
+            .await
+            .expect("store frame blob");
+
+        let created = AppService::ingest_direct_message_frame_with_services(
+            store.as_ref(),
+            blob_service.as_ref(),
+            &NoopHintTransport,
+            local_keys.as_ref(),
+            local_author_pubkey.as_str(),
+            remote_pubkey.as_str(),
+            &topic,
+            dm_id.as_str(),
+            message_id,
+            &frame_blob.hash,
+        )
+        .await
+        .expect("ingest direct message frame");
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::DirectMessage);
+        assert_eq!(notifications[0].dm_id.as_deref(), Some(dm_id.as_str()));
+        assert_eq!(notifications[0].message_id.as_deref(), Some(message_id));
+        assert_eq!(
+            notifications[0].preview_text.as_deref(),
+            Some("hello from remote")
+        );
+    }
+
+    #[tokio::test]
+    async fn incoming_follow_edge_to_local_author_creates_followed_notification_for_observed_author(
+    ) {
+        let (app, store, docs_sync, _) = local_app_with_memory_services();
+        let local_author_pubkey = app.current_author_pubkey();
+        let remote_keys = generate_keys();
+        let remote_pubkey = remote_keys.public_key_hex();
+        let envelope = build_follow_edge_envelope(
+            &remote_keys,
+            &Pubkey::from(local_author_pubkey.as_str()),
+            FollowEdgeStatus::Active,
+        )
+        .expect("build follow edge");
+        let edge = parse_follow_edge(&envelope)
+            .expect("parse follow edge")
+            .expect("follow edge");
+        persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
+            .await
+            .expect("persist follow edge doc");
+
+        let created = create_remote_follow_notification(
+            &app,
+            store.as_ref(),
+            store.as_ref(),
+            docs_sync.as_ref(),
+            remote_pubkey.as_str(),
+            remote_doc_event(
+                &author_replica_id(remote_pubkey.as_str()),
+                stable_key("graph/follows", local_author_pubkey.as_str()),
+            ),
+        )
+        .await;
+
+        assert!(created);
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::Followed);
+        assert_eq!(notifications[0].actor_pubkey, remote_pubkey);
+    }
+
+    #[tokio::test]
+    async fn notification_overlap_uses_precedence_and_does_not_double_insert() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-overlap");
+        let local_object_id = app
+            .create_post(topic.as_str(), "local root", None)
+            .await
+            .expect("create local post");
+        let local_envelope = store
+            .get_envelope(&EnvelopeId::from(local_object_id))
+            .await
+            .expect("load local envelope")
+            .expect("local envelope");
+        let remote_keys = generate_keys();
+        let remote_envelope = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: format!("reply to @{}", app.current_author_pubkey()),
+            },
+            Vec::new(),
+            Some(&local_envelope),
+        )
+        .await;
+        let remote_object = remote_envelope
+            .to_post_object()
+            .expect("parse overlap reply")
+            .expect("overlap reply object");
+        let event = remote_doc_event(
+            &topic_replica_id(topic.as_str()),
+            stable_key("objects", &format!("{}/state", remote_object.object_id.as_str())),
+        );
+
+        assert!(
+            create_remote_object_notification(
+                &app,
+                store.as_ref(),
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                event.clone(),
+            )
+            .await
+        );
+        assert!(
+            !create_remote_object_notification(
+                &app,
+                store.as_ref(),
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                event,
+            )
+            .await
+        );
+
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].kind, NotificationKind::Reply);
+    }
+
+    #[tokio::test]
+    async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notifications() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-hydration");
+        let local_object_id = app
+            .create_post(topic.as_str(), "local root", None)
+            .await
+            .expect("create local post");
+        let local_envelope = store
+            .get_envelope(&EnvelopeId::from(local_object_id))
+            .await
+            .expect("load local envelope")
+            .expect("local envelope");
+        let remote_keys = generate_keys();
+
+        let existing_reply = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: "existing remote reply".into(),
+            },
+            Vec::new(),
+            Some(&local_envelope),
+        )
+        .await;
+        let existing_object = existing_reply
+            .to_post_object()
+            .expect("parse existing reply")
+            .expect("existing reply object");
+        hydrate_subscription_state_with_services(
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            store.as_ref(),
+            topic.as_str(),
+            &topic_replica_id(topic.as_str()),
+        )
+        .await
+        .expect("hydrate topic state");
+        assert!(
+            app.list_notifications()
+                .await
+                .expect("list notifications")
+                .is_empty()
+        );
+        assert!(
+            !create_remote_object_notification(
+                &app,
+                store.as_ref(),
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                remote_doc_event(
+                    &topic_replica_id(topic.as_str()),
+                    stable_key(
+                        "objects",
+                        &format!("{}/state", existing_object.object_id.as_str())
+                    ),
+                ),
+            )
+            .await
+        );
+
+        let new_reply = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: "new remote reply".into(),
+            },
+            Vec::new(),
+            Some(&local_envelope),
+        )
+        .await;
+        let new_object = new_reply
+            .to_post_object()
+            .expect("parse new reply")
+            .expect("new reply object");
+        assert!(
+            create_remote_object_notification(
+                &app,
+                store.as_ref(),
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                remote_doc_event(
+                    &topic_replica_id(topic.as_str()),
+                    stable_key("objects", &format!("{}/state", new_object.object_id.as_str())),
+                ),
+            )
+            .await
+        );
+        hydrate_subscription_state_with_services(
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            store.as_ref(),
+            topic.as_str(),
+            &topic_replica_id(topic.as_str()),
+        )
+        .await
+        .expect("rehydrate topic state");
+        assert_eq!(
+            app.list_notifications()
+                .await
+                .expect("list notifications")
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn mark_notification_read_and_mark_all_read_update_unread_count() {
+        let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+        let topic = TopicId::new("notifications-read");
+        let remote_keys = generate_keys();
+        let mention_envelope = persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText {
+                text: format!("hello @{}", app.current_author_pubkey()),
+            },
+            Vec::new(),
+            None,
+        )
+        .await;
+        let mention_object = mention_envelope
+            .to_post_object()
+            .expect("parse mention")
+            .expect("mention object");
+        assert!(
+            create_remote_object_notification(
+                &app,
+                store.as_ref(),
+                docs_sync.as_ref(),
+                blob_service.as_ref(),
+                remote_doc_event(
+                    &topic_replica_id(topic.as_str()),
+                    stable_key(
+                        "objects",
+                        &format!("{}/state", mention_object.object_id.as_str())
+                    ),
+                ),
+            )
+            .await
+        );
+
+        let local_author_pubkey = app.current_author_pubkey();
+        let follower_keys = generate_keys();
+        let follower_pubkey = follower_keys.public_key_hex();
+        let follow_envelope = build_follow_edge_envelope(
+            &follower_keys,
+            &Pubkey::from(local_author_pubkey.as_str()),
+            FollowEdgeStatus::Active,
+        )
+        .expect("build follow edge");
+        let follow_edge = parse_follow_edge(&follow_envelope)
+            .expect("parse follow edge")
+            .expect("follow edge");
+        persist_follow_edge_doc(docs_sync.as_ref(), &follow_edge, &follow_envelope)
+            .await
+            .expect("persist follow edge");
+        assert!(
+            create_remote_follow_notification(
+                &app,
+                store.as_ref(),
+                store.as_ref(),
+                docs_sync.as_ref(),
+                follower_pubkey.as_str(),
+                remote_doc_event(
+                    &author_replica_id(follower_pubkey.as_str()),
+                    stable_key("graph/follows", local_author_pubkey.as_str()),
+                ),
+            )
+            .await
+        );
+
+        let notifications = app.list_notifications().await.expect("list notifications");
+        assert_eq!(notifications.len(), 2);
+        assert_eq!(
+            app.get_notification_status()
+                .await
+                .expect("notification status")
+                .unread_count,
+            2
+        );
+
+        let status = app
+            .mark_notification_read(notifications[0].notification_id.as_str())
+            .await
+            .expect("mark notification read");
+        assert_eq!(status.unread_count, 1);
+
+        let status = app
+            .mark_all_notifications_read()
+            .await
+            .expect("mark all notifications read");
+        assert_eq!(status.unread_count, 0);
     }
 
     #[derive(Clone, Default)]
