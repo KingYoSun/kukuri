@@ -1961,6 +1961,8 @@ impl AppService {
             .iter()
             .any(|row| row.status == LiveSessionStatus::Live && row.viewer_count == 0);
         if rows.is_empty() || needs_refresh {
+            self.maybe_restart_scope_subscription(topic_id, &scope)
+                .await;
             self.maybe_restart_scope_replica_sync(topic_id, &scope)
                 .await;
             self.hydrate_scope_projection(topic_id, &scope).await?;
@@ -6181,6 +6183,46 @@ impl AppService {
                 error = %error,
                 "failed to restart private channel subscription"
             );
+        }
+    }
+
+    async fn maybe_restart_topic_subscription(&self, topic_id: &str) {
+        let key = format!("topic-subscription:{topic_id}");
+        let now = Utc::now().timestamp();
+        {
+            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
+            let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
+            if next_due_at > now {
+                return;
+            }
+            deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
+        }
+        if let Err(error) = self.restart_topic_subscription(topic_id).await {
+            warn!(
+                topic = %topic_id,
+                error = %error,
+                "failed to restart topic subscription"
+            );
+        }
+    }
+
+    async fn maybe_restart_scope_subscription(&self, topic_id: &str, scope: &TimelineScope) {
+        self.maybe_restart_topic_subscription(topic_id).await;
+        match scope {
+            TimelineScope::Public => {}
+            TimelineScope::AllJoined => {
+                for state in self.joined_private_channel_states_for_topic(topic_id).await {
+                    self.maybe_restart_private_channel_subscription(
+                        topic_id,
+                        state.channel_id.as_str(),
+                    )
+                    .await;
+                }
+            }
+            TimelineScope::Channel { channel_id } => {
+                self.maybe_restart_private_channel_subscription(topic_id, channel_id.as_str())
+                    .await;
+            }
         }
     }
 
