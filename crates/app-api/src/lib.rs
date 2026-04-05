@@ -924,6 +924,11 @@ impl AppService {
             .await?;
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
+            // Re-establish DM subscriptions for mutual peers when the conversation list is polled
+            // after a restart. This keeps queued outbox delivery progressing even if the UI only
+            // reopens the conversation list first.
+            self.ensure_direct_message_subscription(row.peer_pubkey.as_str())
+                .await?;
             items.push(
                 self.direct_message_conversation_view(row.peer_pubkey.as_str())
                     .await?,
@@ -11889,6 +11894,175 @@ mod tests {
             .await
             .expect("timeline after duplicate frame");
         assert!(after_duplicate.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn dm_restart_surfaces_queued_message_in_conversation_list_without_reopening_dm() {
+        let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+        let hint_transport = Arc::new(TrackingHintTransport::default());
+        let docs_sync = Arc::new(MemoryDocsSync::default());
+        let blob_service = Arc::new(MemoryBlobService::default());
+        let store_a = Arc::new(MemoryStore::default());
+        let store_b = Arc::new(MemoryStore::default());
+        let keys_a = generate_keys();
+        let keys_b = generate_keys();
+        let a_pubkey = keys_a.public_key_hex();
+        let b_pubkey = keys_b.public_key_hex();
+        let follow_a_to_b = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_a,
+                &Pubkey::from(b_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge a->b"),
+        )
+        .expect("parse follow edge a->b")
+        .expect("follow edge a->b");
+        let follow_b_to_a = parse_follow_edge(
+            &build_follow_edge_envelope(
+                &keys_b,
+                &Pubkey::from(a_pubkey.as_str()),
+                FollowEdgeStatus::Active,
+            )
+            .expect("build follow edge b->a"),
+        )
+        .expect("parse follow edge b->a")
+        .expect("follow edge b->a");
+
+        store_a
+            .upsert_follow_edge(follow_a_to_b.clone())
+            .await
+            .expect("seed follow edge a->b in store a");
+        store_a
+            .upsert_follow_edge(follow_b_to_a.clone())
+            .await
+            .expect("seed follow edge b->a in store a");
+        store_b
+            .upsert_follow_edge(follow_a_to_b)
+            .await
+            .expect("seed follow edge a->b in store b");
+        store_b
+            .upsert_follow_edge(follow_b_to_a)
+            .await
+            .expect("seed follow edge b->a in store b");
+
+        let app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a.clone(),
+        );
+        let app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_b.clone(),
+        );
+
+        app_b
+            .open_direct_message(a_pubkey.as_str())
+            .await
+            .expect("recipient opens direct message before restart");
+
+        let message_id = app_a
+            .send_direct_message(
+                b_pubkey.as_str(),
+                Some("offline video"),
+                None,
+                vec![
+                    pending_video_attachment(
+                        AssetRole::VideoManifest,
+                        "video/mp4",
+                        b"restart-video",
+                    ),
+                    pending_video_attachment(
+                        AssetRole::VideoPoster,
+                        "image/jpeg",
+                        b"restart-video-poster",
+                    ),
+                ],
+            )
+            .await
+            .expect("queue direct message while offline");
+
+        drop(app_a);
+        drop(app_b);
+
+        let reopened_app_b = AppService::new_with_services(
+            store_b.clone(),
+            store_b.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_b.clone(),
+        );
+        reopened_app_b
+            .resume_direct_message_state()
+            .await
+            .expect("resume recipient direct message state");
+
+        let reopened_app_a = AppService::new_with_services(
+            store_a.clone(),
+            store_a.clone(),
+            transport.clone(),
+            hint_transport.clone(),
+            docs_sync.clone(),
+            blob_service.clone(),
+            keys_a.clone(),
+        );
+        reopened_app_a
+            .resume_direct_message_state()
+            .await
+            .expect("resume sender direct message state");
+
+        let topic = derive_direct_message_topic(&keys_a, &Pubkey::from(b_pubkey.as_str()))
+            .expect("derive dm topic");
+        {
+            let mut snapshot = transport.peers.lock().await;
+            snapshot.connected = true;
+            snapshot.peer_count = 1;
+            snapshot.connected_peers = vec!["peer-b".into()];
+            snapshot.topic_diagnostics = vec![TopicPeerSnapshot {
+                topic: format!("hint/{}", topic.as_str()),
+                joined: true,
+                peer_count: 1,
+                connected_peers: vec!["peer-b".into()],
+                configured_peer_ids: vec!["peer-b".into()],
+                missing_peer_ids: Vec::new(),
+                last_received_at: None,
+                status_detail: "connected".into(),
+                last_error: None,
+            }];
+        }
+
+        let conversation = timeout(Duration::from_secs(10), async {
+            loop {
+                let conversations = reopened_app_b
+                    .list_direct_messages()
+                    .await
+                    .expect("list recipient direct messages after restart");
+                if let Some(conversation) = conversations.into_iter().find(|item| {
+                    item.peer_pubkey == a_pubkey
+                        && item.last_message_id.as_deref() == Some(message_id.as_str())
+                }) {
+                    break conversation;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("wait for recipient conversation list update after restart");
+        assert_eq!(
+            conversation.last_message_preview.as_deref(),
+            Some("offline video")
+        );
     }
 
     #[tokio::test]
