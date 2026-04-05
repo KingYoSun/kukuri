@@ -4069,13 +4069,19 @@ mod tests {
         FreezePrivateChannelRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
         RotatePrivateChannelRequest,
     };
-    use std::sync::Once;
+    use std::sync::{Once, OnceLock};
+    use tokio::sync::{Mutex, MutexGuard};
 
     fn disable_keyring_for_tests() {
         static ONCE: Once = Once::new();
         ONCE.call_once(|| unsafe {
             std::env::set_var("KUKURI_DISABLE_KEYRING", "1");
         });
+    }
+
+    async fn acquire_scenario_test_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().await
     }
 
     fn social_graph_propagation_timeout() -> Duration {
@@ -4242,6 +4248,7 @@ mod tests {
     #[tokio::test]
     async fn desktop_smoke_post_persist() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4261,6 +4268,7 @@ mod tests {
     #[tokio::test]
     async fn desktop_smoke_live_session_persist() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4280,6 +4288,7 @@ mod tests {
     #[tokio::test]
     async fn desktop_smoke_game_room_persist() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4299,6 +4308,7 @@ mod tests {
     #[tokio::test]
     async fn desktop_smoke_bookmark_workflow() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4318,6 +4328,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn private_channel_invite_connectivity() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4337,6 +4348,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn pairwise_dm_offline_text_image_video_delivery_and_local_delete() {
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4364,6 +4376,7 @@ mod tests {
             return;
         }
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
@@ -4738,6 +4751,7 @@ mod tests {
             return;
         }
         disable_keyring_for_tests();
+        let _serial = acquire_scenario_test_lock().await;
         let dir = tempfile::tempdir().expect("tempdir");
         let db_a = dir.path().join("friend-plus-harness-a.db");
         let db_b = dir.path().join("friend-plus-harness-b.db");
