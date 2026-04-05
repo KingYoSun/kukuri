@@ -188,6 +188,39 @@ export type DirectMessageConversationView = {
   status: DirectMessageStatusView;
 };
 
+export type NotificationKind =
+  | 'mention'
+  | 'reply'
+  | 'repost'
+  | 'quote_repost'
+  | 'direct_message'
+  | 'followed';
+
+export type NotificationView = {
+  notification_id: string;
+  kind: NotificationKind;
+  actor_pubkey: string;
+  actor_name?: string | null;
+  actor_display_name?: string | null;
+  actor_picture?: string | null;
+  actor_picture_asset?: ProfileAssetView | null;
+  source_envelope_id?: string | null;
+  source_replica_id?: string | null;
+  topic_id?: string | null;
+  channel_id?: string | null;
+  object_id?: string | null;
+  dm_id?: string | null;
+  message_id?: string | null;
+  preview_text?: string | null;
+  created_at: number;
+  received_at: number;
+  read_at?: number | null;
+};
+
+export type NotificationStatusView = {
+  unread_count: number;
+};
+
 export type DirectMessageTimelineView = {
   items: DirectMessageMessageView[];
   next_cursor?: TimelineCursor | null;
@@ -489,6 +522,10 @@ export interface DesktopApi {
   muteAuthor(pubkey: string): Promise<AuthorSocialView>;
   unmuteAuthor(pubkey: string): Promise<AuthorSocialView>;
   listSocialConnections(kind: SocialConnectionKind): Promise<AuthorSocialView[]>;
+  listNotifications(): Promise<NotificationView[]>;
+  markNotificationRead(notificationId: string): Promise<NotificationStatusView>;
+  markAllNotificationsRead(): Promise<NotificationStatusView>;
+  getNotificationStatus(): Promise<NotificationStatusView>;
   openDirectMessage(pubkey: string): Promise<DirectMessageConversationView>;
   listDirectMessages(): Promise<DirectMessageConversationView[]>;
   listDirectMessageMessages(
@@ -875,6 +912,32 @@ export const runtimeApi: DesktopApi = {
     return invokeDesktop<AuthorSocialView[]>('list_social_connections', {
       request: { kind },
     });
+  },
+  listNotifications: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listNotifications();
+    }
+    return invokeDesktop<NotificationView[]>('list_notifications');
+  },
+  markNotificationRead: async (notificationId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.markNotificationRead(notificationId);
+    }
+    return invokeDesktop<NotificationStatusView>('mark_notification_read', {
+      request: { notification_id: notificationId },
+    });
+  },
+  markAllNotificationsRead: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.markAllNotificationsRead();
+    }
+    return invokeDesktop<NotificationStatusView>('mark_all_notifications_read');
+  },
+  getNotificationStatus: async () => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.getNotificationStatus();
+    }
+    return invokeDesktop<NotificationStatusView>('get_notification_status');
   },
   openDirectMessage: async (pubkey) => {
     if (window.__KUKURI_DESKTOP__) {

@@ -23,6 +23,8 @@ import {
   type GameScoreView,
   type JoinedPrivateChannelView,
   type LiveSessionView,
+  type NotificationStatusView,
+  type NotificationView,
   type PostView,
   type PrivateChannelInvitePreview,
   type Profile,
@@ -43,6 +45,7 @@ export type DesktopMockApiOptions = {
   authorProfileTimelines?: Record<string, TimelineView['items']>;
   seedLiveSessions?: Record<string, LiveSessionView[]>;
   seedGameRooms?: Record<string, GameRoomView[]>;
+  notifications?: NotificationView[];
   myProfile?: Partial<Profile>;
   authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
   myProfileError?: string | null;
@@ -150,6 +153,13 @@ function cloneAuthorView(view: AuthorSocialView): AuthorSocialView {
     ...view,
     picture_asset: view.picture_asset ? { ...view.picture_asset } : null,
     friend_of_friend_via_pubkeys: [...view.friend_of_friend_via_pubkeys],
+  };
+}
+
+function cloneNotification(view: NotificationView): NotificationView {
+  return {
+    ...view,
+    actor_picture_asset: view.actor_picture_asset ? { ...view.actor_picture_asset } : null,
   };
 }
 
@@ -381,6 +391,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   const ownedCustomReactionAssets: CustomReactionAssetView[] = [];
   const bookmarkedCustomReactionAssets: BookmarkedCustomReactionView[] = [];
   const bookmarkedPosts: BookmarkedPostView[] = [];
+  let notifications: NotificationView[] = (options?.notifications ?? []).map(cloneNotification);
   let recentReactions: RecentReactionView[] = [];
 
   function mutedAuthorPubkeys() {
@@ -884,6 +895,33 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     },
     async listSocialConnections(kind) {
       return listConnections(kind);
+    },
+    async listNotifications() {
+      return notifications.map(cloneNotification);
+    },
+    async markNotificationRead(notificationId) {
+      notifications = notifications.map((notification) =>
+        notification.notification_id === notificationId && !notification.read_at
+          ? { ...notification, read_at: Date.now() }
+          : notification
+      );
+      return {
+        unread_count: notifications.filter((notification) => !notification.read_at).length,
+      } satisfies NotificationStatusView;
+    },
+    async markAllNotificationsRead() {
+      const readAt = Date.now();
+      notifications = notifications.map((notification) =>
+        notification.read_at ? notification : { ...notification, read_at: readAt }
+      );
+      return {
+        unread_count: 0,
+      } satisfies NotificationStatusView;
+    },
+    async getNotificationStatus() {
+      return {
+        unread_count: notifications.filter((notification) => !notification.read_at).length,
+      } satisfies NotificationStatusView;
     },
     async openDirectMessage(pubkey) {
       const status = directMessageStatusFor(pubkey);

@@ -1048,7 +1048,15 @@ async fn run_community_node_connectivity(
                 public_replication_retry_schedule(step_timeout, false);
 
             let started_at = Instant::now();
-            let session_id = runtime_a
+            let (live_owner, live_viewer, live_owner_label, live_viewer_label) =
+                select_public_feature_pair(
+                    &runtime_a,
+                    &runtime_b,
+                    topic,
+                    public_feature_timeout,
+                )
+                .await?;
+            let session_id = live_owner
                 .create_live_session(kukuri_desktop_runtime::CreateLiveSessionRequest {
                     topic: topic.to_string(),
                     channel_ref: ChannelRef::Public,
@@ -1056,12 +1064,12 @@ async fn run_community_node_connectivity(
                     description: "live session".to_string(),
                 })
                 .await
-                .context("failed to create live session on desktop a")?;
-            wait_for_live_session(&runtime_a, topic, session_id.as_str(), step_timeout).await?;
+                .with_context(|| format!("failed to create live session on {live_owner_label}"))?;
+            wait_for_live_session(live_owner, topic, session_id.as_str(), step_timeout).await?;
             let mut live_session_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_session(
-                    &runtime_b,
+                    live_viewer,
                     topic,
                     session_id.as_str(),
                     public_feature_timeout,
@@ -1086,19 +1094,21 @@ async fn run_community_node_connectivity(
                 }
             }
             if let Some(error) = live_session_error {
-                anyhow::bail!("desktop b did not receive community live session: {error}");
+                anyhow::bail!(
+                    "{live_viewer_label} did not receive community live session from {live_owner_label}: {error}"
+                );
             }
-            runtime_b
+            live_viewer
                 .join_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
                     topic: topic.to_string(),
                     session_id: session_id.clone(),
                 })
                 .await
-                .context("failed to join live session on desktop b")?;
+                .with_context(|| format!("failed to join live session on {live_viewer_label}"))?;
             let mut live_viewer_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_viewer_count(
-                    &runtime_a,
+                    live_owner,
                     topic,
                     session_id.as_str(),
                     1,
@@ -1124,20 +1134,22 @@ async fn run_community_node_connectivity(
                 }
             }
             if let Some(error) = live_viewer_error {
-                anyhow::bail!("desktop a did not observe community live viewer count: {error}");
+                anyhow::bail!(
+                    "{live_owner_label} did not observe community live viewer count from {live_viewer_label}: {error}"
+                );
             }
-            runtime_a
+            live_owner
                 .end_live_session(kukuri_desktop_runtime::LiveSessionCommandRequest {
                     topic: topic.to_string(),
                     session_id: session_id.clone(),
                 })
                 .await
-                .context("failed to end live session on desktop a")?;
-            wait_for_live_ended(&runtime_a, topic, session_id.as_str(), step_timeout).await?;
+                .with_context(|| format!("failed to end live session on {live_owner_label}"))?;
+            wait_for_live_ended(live_owner, topic, session_id.as_str(), step_timeout).await?;
             let mut live_ended_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_ended(
-                    &runtime_b,
+                    live_viewer,
                     topic,
                     session_id.as_str(),
                     public_feature_timeout,
@@ -1162,12 +1174,22 @@ async fn run_community_node_connectivity(
                 }
             }
             if let Some(error) = live_ended_error {
-                anyhow::bail!("desktop b did not observe ended community live session: {error}");
+                anyhow::bail!(
+                    "{live_viewer_label} did not observe ended community live session from {live_owner_label}: {error}"
+                );
             }
             push_named_step(&mut steps, "live", started_at);
 
             let started_at = Instant::now();
-            let room_id = runtime_a
+            let (game_owner, game_observer, game_owner_label, game_observer_label) =
+                select_public_feature_pair(
+                    &runtime_a,
+                    &runtime_b,
+                    topic,
+                    public_feature_timeout,
+                )
+                .await?;
+            let room_id = game_owner
                 .create_game_room(kukuri_desktop_runtime::CreateGameRoomRequest {
                     topic: topic.to_string(),
                     channel_ref: ChannelRef::Public,
@@ -1176,13 +1198,13 @@ async fn run_community_node_connectivity(
                     participants: vec!["Alice".to_string(), "Bob".to_string()],
                 })
                 .await
-                .context("failed to create game room on desktop a")?;
-            let room_a =
-                wait_for_game_room(&runtime_a, topic, room_id.as_str(), step_timeout).await?;
+                .with_context(|| format!("failed to create game room on {game_owner_label}"))?;
+            let room_owner =
+                wait_for_game_room(game_owner, topic, room_id.as_str(), step_timeout).await?;
             let mut game_room_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_game_room(
-                    &runtime_b,
+                    game_observer,
                     topic,
                     room_id.as_str(),
                     public_feature_timeout,
@@ -1207,9 +1229,11 @@ async fn run_community_node_connectivity(
                 }
             }
             if let Some(error) = game_room_error {
-                anyhow::bail!("desktop b did not receive community game room: {error}");
+                anyhow::bail!(
+                    "{game_observer_label} did not receive community game room from {game_owner_label}: {error}"
+                );
             }
-            let scores = room_a
+            let scores = room_owner
                 .scores
                 .iter()
                 .map(|entry| {
@@ -1225,7 +1249,7 @@ async fn run_community_node_connectivity(
                     }
                 })
                 .collect();
-            runtime_a
+            game_owner
                 .update_game_room(kukuri_desktop_runtime::UpdateGameRoomRequest {
                     topic: topic.to_string(),
                     room_id: room_id.clone(),
@@ -1234,11 +1258,11 @@ async fn run_community_node_connectivity(
                     scores,
                 })
                 .await
-                .context("failed to update game room on desktop a")?;
+                .with_context(|| format!("failed to update game room on {game_owner_label}"))?;
             let mut game_score_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_game_score(
-                    &runtime_b,
+                    game_observer,
                     topic,
                     room_id.as_str(),
                     "Alice",
@@ -1265,7 +1289,9 @@ async fn run_community_node_connectivity(
                 }
             }
             if let Some(error) = game_score_error {
-                anyhow::bail!("desktop b did not observe community game score: {error}");
+                anyhow::bail!(
+                    "{game_observer_label} did not observe community game score from {game_owner_label}: {error}"
+                );
             }
             push_named_step(&mut steps, "game", started_at);
         }
@@ -3664,6 +3690,43 @@ async fn refresh_public_pair(
     wait_for_topic_peer_count(runtime_a, topic, 1, step_timeout).await?;
     wait_for_topic_peer_count(runtime_b, topic, 1, step_timeout).await?;
     Ok(())
+}
+
+async fn select_public_feature_pair<'a>(
+    runtime_a: &'a DesktopRuntime,
+    runtime_b: &'a DesktopRuntime,
+    topic: &str,
+    step_timeout: Duration,
+) -> Result<(
+    &'a DesktopRuntime,
+    &'a DesktopRuntime,
+    &'static str,
+    &'static str,
+)> {
+    refresh_public_pair(runtime_a, runtime_b, topic, step_timeout).await?;
+    let publisher_status = runtime_a
+        .get_sync_status()
+        .await
+        .context("desktop a sync status for public feature selection")?;
+    let subscriber_status = runtime_b
+        .get_sync_status()
+        .await
+        .context("desktop b sync status for public feature selection")?;
+    let publish_from_b = should_publish_from_direct_connected_subscriber(
+        &publisher_status,
+        &subscriber_status,
+        topic,
+        1,
+        PublicReplicationDirection::PreferDirectConnectedSubscriber,
+    );
+    if publish_from_b {
+        wait_for_direct_topic_peer_count(runtime_b, topic, 1, step_timeout)
+            .await
+            .context("desktop b did not observe direct public topic connectivity")?;
+        Ok((runtime_b, runtime_a, "desktop b", "desktop a"))
+    } else {
+        Ok((runtime_a, runtime_b, "desktop a", "desktop b"))
+    }
 }
 
 async fn wait_for_live_session(
