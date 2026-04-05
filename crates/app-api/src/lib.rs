@@ -11083,6 +11083,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn dm_status_stays_enabled_during_concurrent_relationship_rebuilds() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let tempdir = tempdir().expect("tempdir");
         let database_path = tempdir.path().join("dm-status.db");
         let app_store = Arc::new(
@@ -14384,6 +14385,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn invalid_ticket_updates_sync_status_error_reason() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let store = Arc::new(MemoryStore::default());
         let transport = Arc::new(
             IrohGossipTransport::bind_local()
@@ -14409,12 +14411,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn missing_gossip_but_docs_sync_recovers_post() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         assert_docs_sync_recovers_post_without_hints("kukuri:topic:missing-gossip", "docs recover")
             .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn gossip_loss_does_not_lose_durable_post() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         assert_docs_sync_recovers_post_without_hints(
             "kukuri:topic:gossip-loss",
             "durable docs payload",
@@ -14748,6 +14752,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_post_between_apps() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("post-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("post-b")).await;
@@ -14818,6 +14823,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bookmarks_do_not_sync_between_apps() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("bookmark-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("bookmark-b")).await;
@@ -14896,6 +14902,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_image_post_between_apps() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("image-post-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("image-post-b")).await;
@@ -14973,6 +14980,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn remote_video_manifest_payload_available_after_sync() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("video-post-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("video-post-b")).await;
@@ -15071,6 +15079,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("rebind-b")).await;
@@ -15159,6 +15168,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn seeded_dht_syncs_post_between_apps_without_ticket_import() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let testnet = Testnet::new(5).expect("testnet");
         let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-dht-a"), &testnet).await;
@@ -15241,6 +15251,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn seeded_dht_rebuilds_existing_topic_subscription_after_seed_update() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let testnet = Testnet::new(5).expect("testnet");
         let stack_a =
@@ -15331,6 +15342,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let testnet = Testnet::new(5).expect("testnet");
         let stack_a =
@@ -15427,6 +15439,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_image_post_from_docs() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("late-image-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("late-image-b")).await;
@@ -15510,6 +15523,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_video_media_payload() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("late-video-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("late-video-b")).await;
@@ -15802,6 +15816,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn iroh_transport_syncs_multiple_topics_bidirectionally() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("multi-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("multi-b")).await;
@@ -15881,6 +15896,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_live_session_manifest() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("live-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("live-b")).await;
@@ -16036,6 +16052,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn game_room_score_update_replicates() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("game-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("game-b")).await;
@@ -16455,6 +16472,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("friend-only-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("friend-only-b")).await;
@@ -17253,6 +17271,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
+        let _guard = iroh_integration_test_lock().lock_owned().await;
         let dir = tempdir().expect("tempdir");
         let stack_a = TestIrohStack::new(&dir.path().join("author-a")).await;
         let stack_b = TestIrohStack::new(&dir.path().join("author-b")).await;

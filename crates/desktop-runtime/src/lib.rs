@@ -2757,9 +2757,11 @@ mod tests {
     use iroh::address_lookup::EndpointInfo;
     use pkarr::errors::{ConcurrencyError, PublishError};
     use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
+    use std::sync::OnceLock;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::tempdir;
     use tokio::net::TcpListener;
+    use tokio::sync::{Mutex, MutexGuard};
     use tokio::time::{Duration, sleep, timeout};
 
     fn social_graph_propagation_timeout() -> Duration {
@@ -2792,6 +2794,11 @@ mod tests {
         } else {
             Duration::from_secs(15)
         }
+    }
+
+    async fn acquire_async_test_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().await
     }
 
     fn png_source_bytes() -> Vec<u8> {
@@ -3519,6 +3526,107 @@ mod tests {
         );
     }
 
+    async fn replicate_private_post_with_retry(
+        publisher: &DesktopRuntime,
+        subscribers: &[&DesktopRuntime],
+        topic: &str,
+        scope: &TimelineScope,
+        channel_ref: &ChannelRef,
+        content_prefix: &str,
+        timeout_label: &str,
+    ) -> String {
+        let (attempts, attempt_timeout) =
+            public_replication_retry_schedule(runtime_replication_timeout(), false);
+        let mut last_error = None;
+
+        for attempt in 1..=attempts {
+            let attempt_result = async {
+                let object_id = publisher
+                    .create_post(CreatePostRequest {
+                        topic: topic.to_string(),
+                        content: format!("{content_prefix} #{attempt}"),
+                        reply_to: None,
+                        channel_ref: channel_ref.clone(),
+                        attachments: Vec::new(),
+                    })
+                    .await
+                    .context("failed to create private post")?;
+                wait_for_timeline_post_result(
+                    publisher,
+                    topic,
+                    scope,
+                    object_id.as_str(),
+                    attempt_timeout,
+                )
+                .await
+                .context("publisher did not observe private post locally")?;
+                for subscriber in subscribers {
+                    wait_for_timeline_post_result(
+                        subscriber,
+                        topic,
+                        scope,
+                        object_id.as_str(),
+                        attempt_timeout,
+                    )
+                    .await
+                    .context("subscriber did not observe replicated private post")?;
+                }
+                Ok::<String, anyhow::Error>(object_id)
+            }
+            .await;
+
+            match attempt_result {
+                Ok(object_id) => return object_id,
+                Err(error) if attempt < attempts => {
+                    last_error = Some(format!("{error:#}"));
+                    sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    last_error = Some(format!("{error:#}"));
+                    break;
+                }
+            }
+        }
+
+        let publisher_status = publisher
+            .get_sync_status()
+            .await
+            .expect("publisher sync status");
+        let mut subscriber_details = Vec::with_capacity(subscribers.len());
+        for (index, subscriber) in subscribers.iter().enumerate() {
+            let status = subscriber
+                .get_sync_status()
+                .await
+                .expect("subscriber sync status");
+            let visible_items = subscriber
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: scope.clone(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .ok()
+                .map(|timeline| {
+                    timeline
+                        .items
+                        .into_iter()
+                        .map(|post| post.object_id)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            subscriber_details.push(format!(
+                "subscriber[{index}] {} visible_items={visible_items:?}",
+                format_sync_snapshot(&status, topic)
+            ));
+        }
+        panic!(
+            "{timeout_label}; last_error={last_error:?}; publisher=({}); {}",
+            format_sync_snapshot(&publisher_status, topic),
+            subscriber_details.join(" | "),
+        );
+    }
+
     fn sync_status_with_topic(
         topic: &str,
         connected_peers: &[&str],
@@ -3916,6 +4024,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_runtime_persists_posts_and_author_identity_after_restart() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("kukuri.db");
         let runtime = timeout(
@@ -4006,6 +4115,7 @@ mod tests {
 
     #[tokio::test]
     async fn desktop_runtime_restores_profile_avatar_blob_after_restart() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("profile-avatar-restart.db");
         let avatar_bytes = b"runtime-profile-avatar".to_vec();
@@ -4141,6 +4251,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn desktop_runtime_imports_peer_ticket_and_tracks_local_posts() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("a.db");
         let db_b = dir.path().join("b.db");
@@ -4238,6 +4349,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("profile-runtime-a.db");
         let db_b = dir.path().join("profile-runtime-b.db");
@@ -4519,6 +4631,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn private_channel_invite_restores_after_restart_without_reimport() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("private-runtime-a.db");
         let db_b = dir.path().join("private-runtime-b.db");
@@ -4999,6 +5112,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn friend_only_channel_restore_keeps_archived_epoch_history() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("friend-only-runtime-a.db");
         let db_b = dir.path().join("friend-only-runtime-b.db");
@@ -5307,6 +5421,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("friend-plus-runtime-a.db");
         let db_b = dir.path().join("friend-plus-runtime-b.db");
@@ -5614,22 +5729,14 @@ mod tests {
             Some(b_pubkey.as_str())
         );
         assert_eq!(joined_c_before_history.participant_count, 3);
-        let old_post_id = runtime_a
-            .create_post(CreatePostRequest {
-                topic: topic.into(),
-                content: "friend-plus history".into(),
-                reply_to: None,
-                channel_ref: private_ref.clone(),
-                attachments: vec![],
-            })
-            .await
-            .expect("create friend-plus history post");
-        wait_for_timeline_post(
-            &runtime_b,
+        let old_post_id = replicate_private_post_with_retry(
+            &runtime_a,
+            &[&runtime_b, &runtime_c],
             topic,
             &private_scope,
-            old_post_id.as_str(),
-            "friend-plus sponsor history propagation timeout",
+            &private_ref,
+            "friend-plus history",
+            "friend-plus history propagation timeout",
         )
         .await;
 
@@ -5649,14 +5756,6 @@ mod tests {
                 .all(|post| post.object_id != old_post_id),
             "friend-plus post leaked into public timeline"
         );
-        wait_for_timeline_post(
-            &runtime_c,
-            topic,
-            &private_scope,
-            old_post_id.as_str(),
-            "friend-plus history propagation timeout",
-        )
-        .await;
 
         let joined_before_restart = runtime_c
             .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
@@ -6039,6 +6138,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn set_discovery_seeds_reapplies_runtime_without_restart() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("seeded-a.db");
         let db_b = dir.path().join("seeded-b.db");
@@ -6137,6 +6237,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn restart_restores_seeded_dht_config_and_endpoint_identity() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("restart-seeded-a.db");
         let db_b = dir.path().join("restart-seeded-b.db");
@@ -6244,6 +6345,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn invalid_seed_entry_rejected_without_mutating_runtime() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("invalid-seed.db");
         let testnet = Testnet::new(5).expect("testnet");
@@ -6267,6 +6369,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_timeline_from_docs() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("late-a.db");
         let db_b = dir.path().join("late-b.db");
@@ -6335,6 +6438,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_image_post_from_docs() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("late-image-a.db");
         let db_b = dir.path().join("late-image-b.db");
@@ -6415,6 +6519,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn late_joiner_backfills_video_media_payload() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("late-video-a.db");
         let db_b = dir.path().join("late-video-b.db");
@@ -6521,6 +6626,7 @@ mod tests {
 
     #[tokio::test]
     async fn blob_media_payload_roundtrip() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("blob-media-roundtrip.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6578,6 +6684,7 @@ mod tests {
 
     #[tokio::test]
     async fn blank_blob_media_hash_returns_none_without_panicking() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("blank-blob-media-hash.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6601,6 +6708,7 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_deletion_does_not_lose_shared_state() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("delete-sqlite.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6669,6 +6777,7 @@ mod tests {
 
     #[tokio::test]
     async fn restart_restores_from_docs_blobs_without_sqlite_seed() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-no-seed.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6720,6 +6829,7 @@ mod tests {
 
     #[tokio::test]
     async fn restart_restores_image_post_preview() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-image.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6783,6 +6893,7 @@ mod tests {
 
     #[tokio::test]
     async fn restart_restores_video_media_payload() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-video.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6872,6 +6983,7 @@ mod tests {
 
     #[tokio::test]
     async fn restart_restores_live_session_manifest() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-live.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -6934,6 +7046,7 @@ mod tests {
 
     #[tokio::test]
     async fn restart_restores_game_room_manifest() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("restart-game.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -7138,6 +7251,7 @@ mod tests {
 
     #[tokio::test]
     async fn community_node_status_does_not_require_restart_when_connectivity_is_active() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("community-status.db");
         let test_timeout = Duration::from_secs(15);
@@ -7220,6 +7334,7 @@ mod tests {
 
     #[tokio::test]
     async fn community_node_connectivity_assist_preserves_manual_ticket_peers() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_a = dir.path().join("assist-a.db");
         let db_b = dir.path().join("assist-b.db");
@@ -7296,6 +7411,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn community_node_connectivity_assist_syncs_public_timeline_without_manual_tickets() {
+        let _serial = acquire_async_test_lock().await;
         let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
             .await
             .expect("relay server");
@@ -7471,14 +7587,11 @@ mod tests {
         // relying only on relay-assisted connectivity. Prefer the direct-connected side as the
         // publisher so this test exercises the assist-only receiver path instead of depending on
         // the slower assist-only publisher path being healthy on every CI host.
-        let (publisher, subscriber) = if topic_has_direct_peer(&status_a, topic, 1)
-            && !topic_has_direct_peer(&status_b, topic, 1)
+        let publisher_a_has_direct_peer = topic_has_direct_peer(&status_a, topic, 1);
+        let publisher_b_has_direct_peer = topic_has_direct_peer(&status_b, topic, 1);
+        let (publisher, subscriber) = if publisher_a_has_direct_peer && !publisher_b_has_direct_peer
         {
             (&runtime_a, &runtime_b)
-        } else if topic_has_direct_peer(&status_b, topic, 1)
-            && !topic_has_direct_peer(&status_a, topic, 1)
-        {
-            (&runtime_b, &runtime_a)
         } else {
             (&runtime_b, &runtime_a)
         };
@@ -7501,6 +7614,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_identity() {
+        let _serial = acquire_async_test_lock().await;
         let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
             .await
             .expect("relay server");
@@ -7694,6 +7808,7 @@ mod tests {
 
     #[tokio::test]
     async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("community-heartbeat-refresh.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
@@ -7778,6 +7893,7 @@ mod tests {
 
     #[tokio::test]
     async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_empty() {
+        let _serial = acquire_async_test_lock().await;
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("community-metadata-retry.db");
         let runtime = DesktopRuntime::new_with_config_and_identity(
