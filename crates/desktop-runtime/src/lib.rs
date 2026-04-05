@@ -7459,9 +7459,32 @@ mod tests {
         )
         .await;
 
+        let status_a = runtime_a
+            .get_sync_status()
+            .await
+            .expect("status a after readiness");
+        let status_b = runtime_b
+            .get_sync_status()
+            .await
+            .expect("status b after readiness");
+        // Community-node assist can yield one runtime with a direct topic peer and the other
+        // relying only on relay-assisted connectivity. Prefer the direct-connected side as the
+        // publisher so this test exercises the assist-only receiver path instead of depending on
+        // the slower assist-only publisher path being healthy on every CI host.
+        let (publisher, subscriber) = if topic_has_direct_peer(&status_a, topic, 1)
+            && !topic_has_direct_peer(&status_b, topic, 1)
+        {
+            (&runtime_a, &runtime_b)
+        } else if topic_has_direct_peer(&status_b, topic, 1)
+            && !topic_has_direct_peer(&status_a, topic, 1)
+        {
+            (&runtime_b, &runtime_a)
+        } else {
+            (&runtime_b, &runtime_a)
+        };
         let _object_id = replicate_public_post_with_retry(
-            &runtime_b,
-            &runtime_a,
+            publisher,
+            subscriber,
             topic,
             "community relay hello",
             "community-node assist post sync timeout",
