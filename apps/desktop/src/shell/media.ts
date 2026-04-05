@@ -1,0 +1,414 @@
+import {
+  type AttachmentView,
+  type BlobMediaPayload,
+} from '@/lib/api';
+import {
+  blobToCreateAttachment,
+  fileToCreateAttachment,
+} from '@/lib/attachments';
+
+import {
+  type DraftMediaItem,
+  MEDIA_DEBUG_STORAGE_KEY,
+  VIDEO_POSTER_TIMEOUT_MS,
+} from './store';
+
+export type MediaDebugValue = boolean | number | string | null | undefined;
+export type MediaDebugFields = Record<string, MediaDebugValue>;
+
+export function selectPrimaryImage(post: { attachments: AttachmentView[] }): AttachmentView | null {
+  return selectPrimaryImageAttachment(post.attachments);
+}
+
+export function selectVideoPoster(post: { attachments: AttachmentView[] }): AttachmentView | null {
+  return selectVideoPosterAttachment(post.attachments);
+}
+
+export function selectVideoManifest(post: { attachments: AttachmentView[] }): AttachmentView | null {
+  return selectVideoManifestAttachment(post.attachments);
+}
+
+export function selectPrimaryImageAttachment(
+  attachments: AttachmentView[]
+): AttachmentView | null {
+  return attachments.find((attachment) => attachment.role === 'image_original') ?? null;
+}
+
+export function selectVideoPosterAttachment(
+  attachments: AttachmentView[]
+): AttachmentView | null {
+  return attachments.find((attachment) => attachment.role === 'video_poster') ?? null;
+}
+
+export function selectVideoManifestAttachment(
+  attachments: AttachmentView[]
+): AttachmentView | null {
+  return (
+    attachments.find(
+      (attachment) =>
+        attachment.role === 'video_manifest' || attachment.mime.startsWith('video/')
+    ) ?? null
+  );
+}
+
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+export function createObjectUrlFromPayload(payload: BlobMediaPayload): string {
+  const bytes = base64ToBytes(payload.bytes_base64);
+  const normalizedBytes = new Uint8Array(bytes.length);
+  normalizedBytes.set(bytes);
+  return URL.createObjectURL(new Blob([normalizedBytes], { type: payload.mime }));
+}
+
+function isMediaDebugEnabled(): boolean {
+  if (import.meta.env.MODE === 'test') {
+    return false;
+  }
+
+  if (import.meta.env.DEV) {
+    return true;
+  }
+
+  try {
+    return window.localStorage.getItem(MEDIA_DEBUG_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function logMediaDebug(
+  level: 'info' | 'warn',
+  event: string,
+  fields: MediaDebugFields
+): void {
+  if (!isMediaDebugEnabled()) {
+    return;
+  }
+
+  const logger = level === 'warn' ? console.warn : console.info;
+  logger(`[kukuri.media] ${event}`, fields);
+}
+
+export function mediaElementDebugFields(media: HTMLMediaElement): MediaDebugFields {
+  return {
+    current_src: media.currentSrc || media.getAttribute('src') || null,
+    current_time: Number.isFinite(media.currentTime) ? media.currentTime : null,
+    duration: Number.isFinite(media.duration) ? media.duration : null,
+    ended: media.ended,
+    error_code: media.error?.code ?? null,
+    network_state: media.networkState,
+    paused: media.paused,
+    ready_state: media.readyState,
+  };
+}
+
+function attachVideoDebugListeners(
+  video: HTMLVideoElement,
+  phase: string,
+  fields: MediaDebugFields
+): () => void {
+  const eventNames = [
+    'loadstart',
+    'loadedmetadata',
+    'loadeddata',
+    'canplay',
+    'durationchange',
+    'seeked',
+    'playing',
+    'error',
+  ] as const;
+  const removeListeners = eventNames.map((eventName) => {
+    const handler = () => {
+      logMediaDebug(eventName === 'error' ? 'warn' : 'info', `${phase} ${eventName}`, {
+        ...fields,
+        ...mediaElementDebugFields(video),
+        video_height: video.videoHeight || null,
+        video_width: video.videoWidth || null,
+      });
+    };
+    video.addEventListener(eventName, handler);
+    return () => {
+      video.removeEventListener(eventName, handler);
+    };
+  });
+
+  return () => {
+    for (const removeListener of removeListeners) {
+      removeListener();
+    }
+  };
+}
+
+function posterFileName(fileName: string): string {
+  const extensionIndex = fileName.lastIndexOf('.');
+  const baseName = extensionIndex >= 0 ? fileName.slice(0, extensionIndex) : fileName;
+  return `${baseName}.poster.jpg`;
+}
+
+function attachHiddenVideo(video: HTMLVideoElement) {
+  video.setAttribute('aria-hidden', 'true');
+  video.style.position = 'fixed';
+  video.style.left = '-9999px';
+  video.style.top = '0';
+  video.style.width = '1px';
+  video.style.height = '1px';
+  video.style.opacity = '0';
+  video.style.pointerEvents = 'none';
+  document.body.appendChild(video);
+}
+
+async function waitForPosterFrame(video: HTMLVideoElement): Promise<void> {
+  return await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      video.removeEventListener('loadeddata', resolveIfReady);
+      video.removeEventListener('canplay', resolveIfReady);
+      video.removeEventListener('seeked', resolveIfReady);
+      video.removeEventListener('timeupdate', resolveIfReady);
+      video.removeEventListener('loadedmetadata', handleMetadata);
+      video.removeEventListener('error', fail);
+    };
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const fail = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new Error('failed to generate video poster'));
+    };
+
+    const resolveIfReady = () => {
+      if (
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
+        finish();
+      }
+    };
+
+    const handleMetadata = () => {
+      resolveIfReady();
+      if (settled) {
+        return;
+      }
+
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const seekTarget = duration > 0 ? Math.min(duration / 2, 0.1) : 0.1;
+      if (seekTarget > 0) {
+        try {
+          video.currentTime = seekTarget;
+        } catch {
+          // Some platforms reject seek before decode warms up.
+        }
+      }
+
+      try {
+        const playAttempt = video.play();
+        if (playAttempt && typeof playAttempt.then === 'function') {
+          void playAttempt.then(() => {
+            video.pause();
+            resolveIfReady();
+          });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    video.addEventListener('loadeddata', resolveIfReady);
+    video.addEventListener('canplay', resolveIfReady);
+    video.addEventListener('seeked', resolveIfReady);
+    video.addEventListener('timeupdate', resolveIfReady);
+    video.addEventListener('loadedmetadata', handleMetadata);
+    video.addEventListener('error', fail, { once: true });
+    resolveIfReady();
+  });
+}
+
+export async function generateVideoPoster(file: File): Promise<File> {
+  const videoObjectUrl = URL.createObjectURL(file);
+  logMediaDebug('info', 'poster generation start', {
+    file_name: file.name,
+    mime: file.type || null,
+    size: file.size,
+    video_object_url: videoObjectUrl,
+  });
+
+  try {
+    return await new Promise<File>((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      let finished = false;
+      const removeDebugListeners = attachVideoDebugListeners(video, 'poster', {
+        file_name: file.name,
+        mime: file.type || null,
+        size: file.size,
+      });
+
+      const fail = () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        logMediaDebug('warn', 'poster generation failed', {
+          file_name: file.name,
+          mime: file.type || null,
+          size: file.size,
+          ...mediaElementDebugFields(video),
+          video_height: video.videoHeight || null,
+          video_width: video.videoWidth || null,
+        });
+        reject(new Error('failed to generate video poster'));
+      };
+
+      const timeoutId = window.setTimeout(fail, VIDEO_POSTER_TIMEOUT_MS);
+
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        removeDebugListeners();
+        try {
+          video.pause();
+        } catch {
+          // ignore
+        }
+        video.removeAttribute('src');
+        try {
+          video.load();
+        } catch {
+          // ignore
+        }
+        video.remove();
+      };
+
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      attachHiddenVideo(video);
+
+      video.src = videoObjectUrl;
+      video.load();
+
+      void waitForPosterFrame(video)
+        .then(() => {
+          if (finished) {
+            return;
+          }
+
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+          if (!width || !height) {
+            cleanup();
+            fail();
+            return;
+          }
+
+          logMediaDebug('info', 'poster frame ready', {
+            file_name: file.name,
+            height,
+            mime: file.type || null,
+            size: file.size,
+            width,
+            ...mediaElementDebugFields(video),
+          });
+
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext('2d');
+          if (!context) {
+            cleanup();
+            fail();
+            return;
+          }
+
+          context.drawImage(video, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (finished) {
+                return;
+              }
+              cleanup();
+              if (!blob) {
+                fail();
+                return;
+              }
+              finished = true;
+              logMediaDebug('info', 'poster generation complete', {
+                blob_size: blob.size,
+                file_name: file.name,
+                mime: file.type || null,
+                poster_file_name: posterFileName(file.name),
+                size: file.size,
+              });
+              resolve(
+                new File([blob], posterFileName(file.name), {
+                  type: 'image/jpeg',
+                })
+              );
+            },
+            'image/jpeg',
+            0.85
+          );
+        })
+        .catch((error: unknown) => {
+          logMediaDebug('warn', 'poster generation exception', {
+            error: error instanceof Error ? error.message : 'unknown error',
+            file_name: file.name,
+            mime: file.type || null,
+            size: file.size,
+          });
+          cleanup();
+          fail();
+        });
+    });
+  } finally {
+    URL.revokeObjectURL(videoObjectUrl);
+  }
+}
+
+export async function buildImageDraftItem(
+  file: File,
+  nextDraftId: () => string
+): Promise<DraftMediaItem> {
+  const attachment = await fileToCreateAttachment(file, 'image_original');
+  return {
+    id: nextDraftId(),
+    source_name: file.name,
+    preview_url: URL.createObjectURL(file),
+    attachments: [attachment],
+  };
+}
+
+export async function buildVideoDraftItem(
+  file: File,
+  nextDraftId: () => string
+): Promise<DraftMediaItem> {
+  const posterFile = await generateVideoPoster(file);
+  return {
+    id: nextDraftId(),
+    source_name: file.name,
+    preview_url: URL.createObjectURL(posterFile),
+    attachments: [
+      await fileToCreateAttachment(file, 'video_manifest'),
+      await blobToCreateAttachment(posterFile, posterFile.name, 'video_poster'),
+    ],
+  };
+}

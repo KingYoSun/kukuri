@@ -12,9 +12,9 @@
 
 | path | current LOC | primary responsibilities | risk | target modules | wave | status |
 | --- | ---: | --- | --- | --- | --- | --- |
-| `apps/desktop/src/App.tsx` | 7166 | shell bootstrap、route normalization、zustand store、UI orchestration、media helper | 高 | `shell/store.ts`, `shell/routes.ts`, `shell/selectors.ts`, `shell/media.ts`, `shell/DesktopShellPage.tsx` | 1 | planned |
-| `apps/desktop/src/App.test.tsx` | 3252 | shell integration regression、media helper、theme/routing regression | 中 | thin `App` smoke + route/store/media/orchestration test split | 1 | planned |
-| `apps/desktop/src-tauri/src/lib.rs` | 1017 | Tauri entrypoint、command 実装、state、tracing | 高 | `commands/{posts,reactions,profile,direct_messages,live_game,community_node}.rs`, `tracing.rs`, `state.rs` | 1 | planned |
+| `apps/desktop/src/App.tsx` | 35 | theme persistence、shell provider、`HashRouter` bootstrap | 低 | `shell/store.ts`, `shell/routes.ts`, `shell/selectors.ts`, `shell/media.ts`, `shell/DesktopShellPage.tsx` | 1 | landed |
+| `apps/desktop/src/App.test.tsx` | 42 | thin app bootstrap smoke、theme/routing boot regression | 低 | thin `App` smoke + route/store/media/orchestration test split | 1 | landed |
+| `apps/desktop/src-tauri/src/lib.rs` | 96 | Tauri entrypoint、`setup`、state wire-up、command registration | 低 | `commands/{posts,reactions,profile,direct_messages,live_game,community_node}.rs`, `tracing.rs`, `state.rs` | 1 | landed |
 | `crates/app-api/src/lib.rs` | 17181 | DTO/view、`AppService`、social/timeline/direct message/reaction/notification/live/game/private channel/sync/media、tests | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | planned |
 | `crates/desktop-runtime/src/lib.rs` | 7859 | request DTO、runtime façade、community-node/discovery、iroh stack reload、attachment/path helper、tests | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | planned |
 | `crates/store/src/lib.rs` | 4528 | store model、traits、SQLite 実装、memory 実装、row mapping、pagination、tests | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | planned |
@@ -106,7 +106,7 @@
 ## Wave Plan
 
 ### Wave 1
-- status: planned
+- status: landed
 - goal: UI edge と Tauri edge を先に薄くし、`App.tsx` と `src-tauri/lib.rs` を facade 化する。
 - included files:
   - `apps/desktop/src/App.tsx`
@@ -224,7 +224,7 @@
 
 | wave | status | note |
 | --- | --- | --- |
-| 1 | planned | edge shell / Tauri edge を facade 化する |
+| 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
 | 2 | planned | runtime / app-api の orchestration root を分割する |
 | 3 | planned | store / harness の backend root を分割する |
 | 4 | planned | core / transport の domain root を分割する |
@@ -239,6 +239,43 @@
   - Wave 1 から着手し、`App.tsx`, `App.test.tsx`, `apps/desktop/src-tauri/src/lib.rs` の facade 化を進める
   - 各 PR で wave status、moved files、root LOC before/after、validation run を追記する
   - campaign の追加 scope は新しい monolith を見つけた場合でも、まず watchlist へ入り、既存 wave を崩さない
+
+### 2026-04-05 Wave 1 landed
+- PR: local Wave 1 slice completed
+- files moved:
+  - `apps/desktop/src/App.tsx` -> `apps/desktop/src/shell/DesktopShellPage.tsx`
+  - `apps/desktop/src/App.test.tsx` -> `apps/desktop/src/shell/DesktopShellPage.test.tsx`
+  - added `apps/desktop/src/shell/DesktopShellPage.tsx`
+  - added `apps/desktop/src/shell/DesktopShellPage.test.tsx`
+  - added `apps/desktop/src/shell/store.ts`
+  - added `apps/desktop/src/shell/routes.ts`
+  - added `apps/desktop/src/shell/selectors.ts`
+  - added `apps/desktop/src/shell/media.ts`
+  - added `apps/desktop/src/shell/useDesktopShellData.ts`
+  - added `apps/desktop/src/shell/useDesktopShellRouting.ts`
+  - added `apps/desktop/src/shell/useDesktopShellActions.ts`
+  - added `apps/desktop/src/shell/useDesktopShellViewModels.ts`
+  - added `apps/desktop/src/App.tsx`
+  - added `apps/desktop/src/App.test.tsx`
+  - added `apps/desktop/src/shell/routes.test.tsx`
+  - added `apps/desktop/src/shell/media.test.tsx`
+  - added `apps/desktop/src-tauri/src/state.rs`
+  - added `apps/desktop/src-tauri/src/tracing.rs`
+  - added `apps/desktop/src-tauri/src/commands/{mod,posts,reactions,profile,direct_messages,live_game,community_node}.rs`
+- root LOC before/after:
+  - `apps/desktop/src/App.tsx`: `7166 -> 35`
+  - `apps/desktop/src/App.test.tsx`: `3252 -> 42`
+  - `apps/desktop/src-tauri/src/lib.rs`: `1017 -> 96`
+- validation run:
+  - `cd apps/desktop && npx pnpm@10.16.1 exec eslint . --max-warnings 0` passed
+  - `cd apps/desktop && npx pnpm@10.16.1 exec tsc --noEmit` passed
+  - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed
+  - `cargo xtask desktop-ui-check` passed
+  - `cargo xtask check` passed
+  - `cargo xtask e2e-smoke` passed (`scenario=desktop_smoke_post_persist`, `steps=6`)
+- follow-ups:
+  - Wave 2 として `crates/desktop-runtime/src/lib.rs` と `crates/app-api/src/lib.rs` の façade 化に進む
+  - Wave 1 で追加した shell module 境界を基準に、runtime/app-api 側でも feature 単位の test 再配置を同じ PR に含める
 
 ## Exit Criteria
 - `App.tsx` と各 crate root `lib.rs` が implementation body ではなく facade になっている。
