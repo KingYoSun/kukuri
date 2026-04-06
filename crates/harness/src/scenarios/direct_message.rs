@@ -119,6 +119,24 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
         wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
             .await
             .context("desktop b did not observe mutual relationship")?;
+        runtime_a
+            .open_direct_message(DirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .context("desktop a failed to open direct message")?;
+        runtime_b
+            .open_direct_message(DirectMessageRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to open direct message")?;
+        wait_for_direct_message_peer_count(&runtime_a, b_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop a did not observe direct-message connectivity")?;
+        wait_for_direct_message_peer_count(&runtime_b, a_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop b did not observe direct-message connectivity")?;
         push_named_step(&mut steps, "mutual_ready", started_at);
 
         let started_at = Instant::now();
@@ -276,6 +294,32 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
         wait_for_mutual_author_view_result(&runtime_b, a_pubkey.as_str(), topic, step_timeout)
             .await
             .context("desktop b did not restore mutual relationship after restart")?;
+        runtime_a
+            .open_direct_message(DirectMessageRequest {
+                pubkey: b_pubkey.clone(),
+            })
+            .await
+            .context("desktop a failed to reopen direct message after restart")?;
+        runtime_b
+            .open_direct_message(DirectMessageRequest {
+                pubkey: a_pubkey.clone(),
+            })
+            .await
+            .context("desktop b failed to reopen direct message after restart")?;
+        wait_for_direct_message_peer_count(&runtime_a, b_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop a did not restore direct-message connectivity after restart")?;
+        wait_for_direct_message_peer_count(&runtime_b, a_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop b did not restore direct-message connectivity after restart")?;
+        let delivered_video = wait_for_direct_message_result(
+            &runtime_b,
+            a_pubkey.as_str(),
+            queued_video_message_id.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktop b did not receive queued video direct message after restart")?;
         let delivered_video_conversation = wait_for_direct_message_conversation_result(
             &runtime_b,
             a_pubkey.as_str(),
@@ -290,14 +334,6 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             delivered_video_conversation.last_message_id.as_deref(),
             Some(queued_video_message_id.as_str())
         );
-        let delivered_video = wait_for_direct_message_result(
-            &runtime_b,
-            a_pubkey.as_str(),
-            queued_video_message_id.as_str(),
-            step_timeout,
-        )
-        .await
-        .context("desktop b did not receive queued video direct message after restart")?;
         assert_eq!(delivered_video.text, "offline video");
         assert_eq!(delivered_video.attachments.len(), 2);
         let manifest = delivered_video

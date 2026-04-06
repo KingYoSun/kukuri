@@ -474,6 +474,35 @@ pub(crate) async fn wait_for_direct_message_outbox_count(
     }
 }
 
+pub(crate) async fn wait_for_direct_message_peer_count(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<DirectMessageStatusView> {
+    match timeout(step_timeout, async {
+        loop {
+            let status = runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message status")?;
+            if status.peer_count >= expected {
+                return Ok::<DirectMessageStatusView, anyhow::Error>(status);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!(
+            "direct message peer count timeout for {peer_pubkey}; expected>={expected}"
+        ),
+    }
+}
+
 pub(crate) fn image_attachment_request(
     name: &str,
     mime: &str,
