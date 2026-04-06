@@ -214,6 +214,13 @@ impl AppService {
         self.ensure_author_subscription(peer_pubkey.as_str())
             .await?;
         self.rebuild_author_relationships().await?;
+        if self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?
+        {
+            self.ensure_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
+        }
         self.direct_message_status_view(peer_pubkey.as_str()).await
     }
 }
