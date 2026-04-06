@@ -161,7 +161,7 @@
   - Wave 2 で runtime/app-api の feature 境界が安定していること
 
 ### Wave 4
-- status: in_progress
+- status: landed
 - goal: domain core と transport core を最後に薄くし、repo-wide module map を完成させる。
 - included files:
   - `crates/core/src/lib.rs`
@@ -179,12 +179,12 @@
   - Wave 2-3 で downstream caller 側の整理が済んでいること
 
 ### Wave 5
-- status: planned
+- status: landed
 - goal: watchlist と residual implementation root を処理し、campaign を閉じる。
 - included files:
   - `crates/docs-sync/src/lib.rs`
   - `crates/cn-core/src/lib.rs`
-  - 前 wave 後も implementation root が残る file
+  - watchlist review の結果、`blob-service` / `cn-user-api` / `cn-iroh-relay` は split 対象へ昇格させない
 - PR slices:
   - watchlist file の要否判定と必要時の module split
   - facade root に残った一時 helper / `pub use` / transitional shim の cleanup
@@ -228,8 +228,8 @@
 | 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
 | 2 | in_progress | runtime / app-api の façade split は適用済み。validation と test 再配置の収束を継続中 |
 | 3 | landed | `store` / `harness` の facade split、tests 再配置、Wave 3 validation が完了 |
-| 4 | in_progress | `core` / `transport` の facade split は適用済み。full validation gate の収束を継続中 |
-| 5 | planned | watchlist と residual root を閉じる |
+| 4 | landed | `core` / `transport` の facade split と final validation gate が完了 |
+| 5 | landed | `docs-sync` / `cn-core` の facade split と campaign closeout が完了 |
 
 ### 2026-04-05 Initial Plan Lock
 - PR: N/A
@@ -322,8 +322,8 @@
   - `cargo test -p kukuri-harness` の途中 rerunで `pairwise_dm_offline_text_image_video_delivery_and_local_delete` が 1 回 flake したが、targeted rerun と final full rerun はともに pass
   - Wave 4 で `core` / `transport` の root facade 化に進む
 
-### 2026-04-06 Wave 4 split applied
-- PR: local Wave 4 split in progress
+### 2026-04-06 Wave 4 landed
+- PR: local Wave 4 split completed
 - files moved:
   - `crates/core/src/lib.rs` -> `crates/core/src/{ids,crypto,envelope,posts,profile,reactions,private_channels,direct_messages,media,live,game}.rs`
   - added `crates/core/src/tests/{mod,envelope,posts,profile,reactions,private_channels,direct_messages,media_live_game}.rs`
@@ -345,10 +345,38 @@
   - `cargo test -p kukuri-harness --lib private_channel_invite_connectivity -- --nocapture` passed on targeted rerun
   - `cargo xtask test` rerun failed once in `kukuri-desktop-runtime` only: `friend_plus_channel_restore_accepts_fresh_share_after_restart`
   - `cargo test -p kukuri-desktop-runtime friend_plus_channel_restore_accepts_fresh_share_after_restart -- --nocapture` passed on targeted rerun
+  - `cargo xtask cn-test` passed
+  - `cargo xtask scenario community_node_public_connectivity` passed (`status=pass`, `steps=12`)
+  - `cargo xtask scenario community_node_multi_device_connectivity` passed (`status=pass`, `steps=9`)
+  - `cargo xtask check` passed on final rerun
+  - `cargo xtask test` passed on final rerun
 - follow-ups:
-  - `cargo xtask test` は restore/connectivity 系の long-run flake が残るため、Wave 4 closeout 前に final full rerun を再実施する
-  - `cargo xtask cn-test` と `cargo xtask scenario community_node_public_connectivity`, `cargo xtask scenario community_node_multi_device_connectivity` は未完了
-  - Wave 4 closeout 時に final validation の pass/fail をこの節へ追記して `landed` に更新する
+  - Wave 5 で `docs-sync` / `cn-core` の residual implementation root を facade 化して campaign closeout に進む
+
+### 2026-04-06 Wave 5 landed
+- PR: local Wave 5 split completed
+- files moved:
+  - `crates/docs-sync/src/lib.rs` -> `crates/docs-sync/src/{types,access,node,iroh_sync,memory,replicas}.rs`
+  - added `crates/docs-sync/src/tests/{mod,iroh_sync,memory,access,relay}.rs`
+  - `crates/cn-core/src/lib.rs` -> `crates/cn-core/src/{models,errors,config,database,rollout,auth,consents,bootstrap,normalize}.rs`
+  - added `crates/cn-core/src/tests/{mod,config,normalize}.rs`
+- root LOC before/after:
+  - `crates/docs-sync/src/lib.rs`: `1342 -> 18`
+  - `crates/cn-core/src/lib.rs`: `1195 -> 42`
+- validation run:
+  - contract change: none (`kukuri_docs_sync::{...}` / `kukuri_cn_core::{...}` surface、serialized shape、community-node HTTP contract は維持)
+  - `cargo test -p kukuri-docs-sync` passed (`6 passed`)
+  - `cargo test -p kukuri-cn-core` passed (`5 unit + 1 integration`)
+  - `cargo check -p kukuri-blob-service -p kukuri-app-api -p kukuri-desktop-runtime -p kukuri-cn-user-api -p kukuri-cn-cli -p kukuri-harness` passed
+  - `cargo test -p kukuri-app-api -p kukuri-desktop-runtime` passed (`95 passed`; `40 passed`)
+  - `cargo test -p kukuri-harness private_channel_invite_connectivity -- --nocapture` passed
+  - `cargo xtask cn-test` passed
+  - `cargo xtask scenario community_node_public_connectivity` passed (`status=pass`, `steps=12`)
+  - `cargo xtask scenario community_node_multi_device_connectivity` passed (`status=pass`, `steps=9`)
+  - `cargo xtask check` passed
+  - `cargo xtask test` passed
+- follow-ups:
+  - `blob-service`, `cn-user-api`, `cn-iroh-relay` は watchlist review の結果、service/adapter root として据え置き。別 campaign が必要になった時点で再評価する
 
 ## Exit Criteria
 - `App.tsx` と各 crate root `lib.rs` が implementation body ではなく facade になっている。
