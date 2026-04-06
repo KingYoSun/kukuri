@@ -15,8 +15,8 @@
 | `apps/desktop/src/App.tsx` | 35 | theme persistence、shell provider、`HashRouter` bootstrap | 低 | `shell/store.ts`, `shell/routes.ts`, `shell/selectors.ts`, `shell/media.ts`, `shell/DesktopShellPage.tsx` | 1 | landed |
 | `apps/desktop/src/App.test.tsx` | 42 | thin app bootstrap smoke、theme/routing boot regression | 低 | thin `App` smoke + route/store/media/orchestration test split | 1 | landed |
 | `apps/desktop/src-tauri/src/lib.rs` | 96 | Tauri entrypoint、`setup`、state wire-up、command registration | 低 | `commands/{posts,reactions,profile,direct_messages,live_game,community_node}.rs`, `tracing.rs`, `state.rs` | 1 | landed |
-| `crates/app-api/src/lib.rs` | 17181 | DTO/view、`AppService`、social/timeline/direct message/reaction/notification/live/game/private channel/sync/media、tests | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | planned |
-| `crates/desktop-runtime/src/lib.rs` | 7859 | request DTO、runtime façade、community-node/discovery、iroh stack reload、attachment/path helper、tests | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | planned |
+| `crates/app-api/src/lib.rs` | 15 | façade re-export (`AppService`, `views::*`) | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | in_progress |
+| `crates/desktop-runtime/src/lib.rs` | 37 | façade re-export (`DesktopRuntime`, request/config/status type) | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | in_progress |
 | `crates/store/src/lib.rs` | 4528 | store model、traits、SQLite 実装、memory 実装、row mapping、pagination、tests | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | planned |
 | `crates/harness/src/lib.rs` | 5163 | scenario spec、runtime bring-up、wait helper、artifact 出力、desktop/community-node/private-channel/direct-message scenario | 高 | `scenario.rs`, `runtime.rs`, `waiters.rs`, `artifacts.rs`, `scenarios/{desktop_smoke,community_node,private_channel,direct_message}.rs` | 3 | planned |
 | `crates/core/src/lib.rs` | 3761 | id/value type、crypto、envelope builder/parser、posts/profile/reactions/private channel/direct message/media | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs` | 4 | planned |
@@ -124,7 +124,7 @@
   - なし。campaign の先頭 wave とする
 
 ### Wave 2
-- status: planned
+- status: in_progress
 - goal: runtime と app service の feature 本体を分離し、UI edge から下の orchestration root を薄くする。
 - included files:
   - `crates/desktop-runtime/src/lib.rs`
@@ -225,7 +225,7 @@
 | wave | status | note |
 | --- | --- | --- |
 | 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
-| 2 | planned | runtime / app-api の orchestration root を分割する |
+| 2 | in_progress | runtime / app-api の façade split は適用済み。validation と test 再配置の収束を継続中 |
 | 3 | planned | store / harness の backend root を分割する |
 | 4 | planned | core / transport の domain root を分割する |
 | 5 | planned | watchlist と residual root を閉じる |
@@ -258,6 +258,29 @@
   - added `apps/desktop/src/App.tsx`
   - added `apps/desktop/src/App.test.tsx`
   - added `apps/desktop/src/shell/routes.test.tsx`
+
+### 2026-04-06 Wave 2 split applied
+- PR: local Wave 2 split in progress
+- files moved:
+  - `crates/desktop-runtime/src/lib.rs` -> `crates/desktop-runtime/src/{requests,attachments,paths,discovery,community_node,stack,runtime}.rs`
+  - added `crates/desktop-runtime/src/tests/mod.rs`
+  - `crates/app-api/src/lib.rs` -> `crates/app-api/src/{views,service,social,timeline,direct_messages,reactions,notifications,live,game,private_channels,sync,media}.rs`
+  - added `crates/app-api/src/tests/{mod,social,notifications,direct_messages,reactions,timeline,sync,media,live,game,private_channels}.rs`
+- root LOC before/after:
+  - `crates/desktop-runtime/src/lib.rs`: `7998 -> 37`
+  - `crates/app-api/src/lib.rs`: `17374 -> 15`
+- validation run:
+  - `cargo test -p kukuri-app-api` passed (`94 passed`; `src/tests/*` split後も green)
+  - `cargo test -p kukuri-desktop-runtime` passed (`40 passed`)
+  - `cargo check -p kukuri-app-api -p kukuri-desktop-runtime` passed
+  - `cargo xtask check` passed
+  - `cargo xtask cn-test` passed
+  - `cargo xtask scenario community_node_public_connectivity` passed (`status=pass`, `steps=12`)
+  - `cargo xtask scenario community_node_multi_device_connectivity` passed (`status=pass`, `steps=9`)
+  - `cargo xtask test` failed twice in `kukuri-harness` only: `tests::pairwise_dm_offline_text_image_video_delivery_and_local_delete`
+  - `cargo test -p kukuri-harness --lib pairwise_dm_offline_text_image_video_delivery_and_local_delete -- --nocapture` passed on targeted rerun
+- follow-ups:
+  - `cargo xtask test` は `kukuri-harness` の DM offline scenario が不安定で、Wave 2 closeout にはこの flake の切り分けまたは安定化が残る
   - added `apps/desktop/src/shell/media.test.tsx`
   - added `apps/desktop/src-tauri/src/state.rs`
   - added `apps/desktop/src-tauri/src/tracing.rs`
