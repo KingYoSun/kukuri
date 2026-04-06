@@ -17,8 +17,8 @@
 | `apps/desktop/src-tauri/src/lib.rs` | 96 | Tauri entrypoint、`setup`、state wire-up、command registration | 低 | `commands/{posts,reactions,profile,direct_messages,live_game,community_node}.rs`, `tracing.rs`, `state.rs` | 1 | landed |
 | `crates/app-api/src/lib.rs` | 15 | façade re-export (`AppService`, `views::*`) | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | in_progress |
 | `crates/desktop-runtime/src/lib.rs` | 37 | façade re-export (`DesktopRuntime`, request/config/status type) | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | in_progress |
-| `crates/store/src/lib.rs` | 4528 | store model、traits、SQLite 実装、memory 実装、row mapping、pagination、tests | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | planned |
-| `crates/harness/src/lib.rs` | 5163 | scenario spec、runtime bring-up、wait helper、artifact 出力、desktop/community-node/private-channel/direct-message scenario | 高 | `scenario.rs`, `runtime.rs`, `waiters.rs`, `artifacts.rs`, `scenarios/{desktop_smoke,community_node,private_channel,direct_message}.rs` | 3 | planned |
+| `crates/store/src/lib.rs` | 20 | facade re-export (`SqliteStore`, `MemoryStore`, model/trait surface) | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | landed |
+| `crates/harness/src/lib.rs` | 62 | façade re-export、scenario dispatch、internal prelude | 高 | `scenario.rs`, `runtime.rs`, `waiters.rs`, `artifacts.rs`, `scenarios/{desktop_smoke,community_node,private_channel,direct_message}.rs` | 3 | landed |
 | `crates/core/src/lib.rs` | 3761 | id/value type、crypto、envelope builder/parser、posts/profile/reactions/private channel/direct message/media | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs` | 4 | planned |
 | `crates/transport/src/lib.rs` | 2980 | transport traits、config、fake transport、iroh transport、discovery、ticket、diagnostics | 中 | `traits.rs`, `config.rs`, `fake.rs`, `iroh.rs`, `discovery.rs`, `tickets.rs`, `diagnostics.rs` | 4 | planned |
 
@@ -142,7 +142,7 @@
   - Wave 1 で UI/Tauri edge の module 境界が先に固定されていること
 
 ### Wave 3
-- status: planned
+- status: landed
 - goal: persistence と scenario harness の巨大 root を分割し、app-api/runtime split 後の依存先を整える。
 - included files:
   - `crates/store/src/lib.rs`
@@ -226,7 +226,7 @@
 | --- | --- | --- |
 | 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
 | 2 | in_progress | runtime / app-api の façade split は適用済み。validation と test 再配置の収束を継続中 |
-| 3 | planned | store / harness の backend root を分割する |
+| 3 | landed | `store` / `harness` の facade split、tests 再配置、Wave 3 validation が完了 |
 | 4 | planned | core / transport の domain root を分割する |
 | 5 | planned | watchlist と residual root を閉じる |
 
@@ -299,6 +299,27 @@
 - follow-ups:
   - Wave 2 として `crates/desktop-runtime/src/lib.rs` と `crates/app-api/src/lib.rs` の façade 化に進む
   - Wave 1 で追加した shell module 境界を基準に、runtime/app-api 側でも feature 単位の test 再配置を同じ PR に含める
+
+### 2026-04-06 Wave 3 landed
+- PR: local Wave 3 split completed
+- files moved:
+  - `crates/store/src/lib.rs` -> `crates/store/src/{models,traits,pagination,row_mapping,sqlite,memory}.rs`
+  - added `crates/store/src/tests/{mod,sqlite_store,sqlite_projection,direct_messages,migrations}.rs`
+  - `crates/harness/src/lib.rs` -> `crates/harness/src/{scenario,runtime,waiters,artifacts}.rs`
+  - added `crates/harness/src/scenarios/{mod,desktop_smoke,community_node,private_channel,direct_message}.rs`
+  - added `crates/harness/src/tests/{mod,desktop_smoke,direct_messages,private_channels,waiters}.rs`
+- root LOC before/after:
+  - `crates/store/src/lib.rs`: `4528 -> 20`
+  - `crates/harness/src/lib.rs`: `5163 -> 62`
+- validation run:
+  - `cargo test -p kukuri-store` passed (`12 passed`; test split後も green)
+  - `cargo test -p kukuri-harness` passed (`10 passed`; test split後の full rerun green)
+  - `cargo xtask e2e-smoke` passed (`scenario=desktop_smoke_post_persist`, `status=pass`, `steps=6`)
+  - `cargo xtask scenario community_node_public_connectivity` passed (`status=pass`, `steps=12`)
+  - `cargo xtask scenario community_node_multi_device_connectivity` passed (`status=pass`, `steps=9`)
+- follow-ups:
+  - `cargo test -p kukuri-harness` の途中 rerunで `pairwise_dm_offline_text_image_video_delivery_and_local_delete` が 1 回 flake したが、targeted rerun と final full rerun はともに pass
+  - Wave 4 で `core` / `transport` の root facade 化に進む
 
 ## Exit Criteria
 - `App.tsx` と各 crate root `lib.rs` が implementation body ではなく facade になっている。
