@@ -19,8 +19,8 @@
 | `crates/desktop-runtime/src/lib.rs` | 37 | façade re-export (`DesktopRuntime`, request/config/status type) | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | in_progress |
 | `crates/store/src/lib.rs` | 20 | facade re-export (`SqliteStore`, `MemoryStore`, model/trait surface) | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | landed |
 | `crates/harness/src/lib.rs` | 62 | façade re-export、scenario dispatch、internal prelude | 高 | `scenario.rs`, `runtime.rs`, `waiters.rs`, `artifacts.rs`, `scenarios/{desktop_smoke,community_node,private_channel,direct_message}.rs` | 3 | landed |
-| `crates/core/src/lib.rs` | 3761 | id/value type、crypto、envelope builder/parser、posts/profile/reactions/private channel/direct message/media | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs` | 4 | planned |
-| `crates/transport/src/lib.rs` | 2980 | transport traits、config、fake transport、iroh transport、discovery、ticket、diagnostics | 中 | `traits.rs`, `config.rs`, `fake.rs`, `iroh.rs`, `discovery.rs`, `tickets.rs`, `diagnostics.rs` | 4 | planned |
+| `crates/core/src/lib.rs` | 26 | facade re-export (`ids`, `crypto`, `envelope`, domain modules) | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs`, `live.rs`, `game.rs`, `tests/*` | 4 | in_progress |
+| `crates/transport/src/lib.rs` | 14 | facade re-export (`traits`, `config`, `fake`, `iroh`, helper modules) | 中 | `traits.rs`, `config.rs`, `tickets.rs`, `diagnostics.rs`, `discovery.rs`, `fake.rs`, `iroh.rs` | 4 | in_progress |
 
 ### Watchlist
 
@@ -93,7 +93,7 @@
 - value object と id 型は `ids.rs` に分ける。
 - key/sign/encrypt/decrypt helper は `crypto.rs` に分ける。
 - common envelope type と sign/parse 基盤は `envelope.rs` に分ける。
-- post/profile/reaction/private channel/direct message/media はそれぞれ domain module へ分ける。
+- post/profile/reaction/private channel/direct message/media/live/game はそれぞれ domain module へ分ける。
 - crate root は `pub use` に徹し、domain contract の入口だけを保つ。
 
 ### `crates/transport/src/lib.rs`
@@ -101,6 +101,7 @@
 - network/discovery/relay config は `config.rs` に分ける。
 - fake transport は `fake.rs`、iroh transport 実装は `iroh.rs` に分ける。
 - DHT/static-peer discovery helper は `discovery.rs` に分ける。
+- `prepare_endpoint_for_discovery` は `discovery.rs` に置き、`build_endpoint_builder` / `sync_endpoint_relay_config` は `iroh.rs` に残す。
 - ticket encode/parse は `tickets.rs`、status/detail 生成は `diagnostics.rs` に分ける。
 
 ## Wave Plan
@@ -160,14 +161,14 @@
   - Wave 2 で runtime/app-api の feature 境界が安定していること
 
 ### Wave 4
-- status: planned
+- status: in_progress
 - goal: domain core と transport core を最後に薄くし、repo-wide module map を完成させる。
 - included files:
   - `crates/core/src/lib.rs`
   - `crates/transport/src/lib.rs`
 - PR slices:
   - `core` ids/crypto/envelope split
-  - `core` posts/profile/reactions/private_channels/direct_messages/media split
+  - `core` posts/profile/reactions/private_channels/direct_messages/media/live/game split
   - `transport` traits/config/tickets/discovery split
   - `transport` fake/iroh/diagnostics split
 - exit criteria:
@@ -227,7 +228,7 @@
 | 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
 | 2 | in_progress | runtime / app-api の façade split は適用済み。validation と test 再配置の収束を継続中 |
 | 3 | landed | `store` / `harness` の facade split、tests 再配置、Wave 3 validation が完了 |
-| 4 | planned | core / transport の domain root を分割する |
+| 4 | in_progress | `core` / `transport` の facade split は適用済み。full validation gate の収束を継続中 |
 | 5 | planned | watchlist と residual root を閉じる |
 
 ### 2026-04-05 Initial Plan Lock
@@ -320,6 +321,34 @@
 - follow-ups:
   - `cargo test -p kukuri-harness` の途中 rerunで `pairwise_dm_offline_text_image_video_delivery_and_local_delete` が 1 回 flake したが、targeted rerun と final full rerun はともに pass
   - Wave 4 で `core` / `transport` の root facade 化に進む
+
+### 2026-04-06 Wave 4 split applied
+- PR: local Wave 4 split in progress
+- files moved:
+  - `crates/core/src/lib.rs` -> `crates/core/src/{ids,crypto,envelope,posts,profile,reactions,private_channels,direct_messages,media,live,game}.rs`
+  - added `crates/core/src/tests/{mod,envelope,posts,profile,reactions,private_channels,direct_messages,media_live_game}.rs`
+  - `crates/transport/src/lib.rs` -> `crates/transport/src/{traits,config,tickets,diagnostics,discovery,fake,iroh}.rs`
+- root LOC before/after:
+  - `crates/core/src/lib.rs`: `3761 -> 26`
+  - `crates/transport/src/lib.rs`: `2980 -> 14`
+- validation run:
+  - contract change: none (`pub use` surface、serialized shape、ticket/discovery helper 名は維持)
+  - `cargo test -p kukuri-core` passed (`22 passed`)
+  - `cargo test -p kukuri-transport` passed (`20 passed`)
+  - `cargo check -p kukuri-docs-sync -p kukuri-desktop-runtime -p kukuri-app-api` passed
+  - `cargo xtask check` passed
+  - `cargo xtask test` failed once in `kukuri-harness` (`pairwise_dm_offline_text_image_video_delivery_and_local_delete`, `private_channel_invite_connectivity`)
+  - added `service::tests::direct_messages::dm_status_restarts_mutual_subscription_when_handle_is_missing` and updated `get_direct_message_status` to re-establish mutual DM subscriptions during status polling
+  - `cargo test -p kukuri-app-api dm_import_peer_ticket_restarts_active_mutual_subscription -- --nocapture` passed
+  - `cargo test -p kukuri-app-api dm_status_restarts_mutual_subscription_when_handle_is_missing -- --nocapture` passed
+  - `cargo test -p kukuri-harness --lib pairwise_dm_offline_text_image_video_delivery_and_local_delete -- --nocapture` passed after the DM subscription fix
+  - `cargo test -p kukuri-harness --lib private_channel_invite_connectivity -- --nocapture` passed on targeted rerun
+  - `cargo xtask test` rerun failed once in `kukuri-desktop-runtime` only: `friend_plus_channel_restore_accepts_fresh_share_after_restart`
+  - `cargo test -p kukuri-desktop-runtime friend_plus_channel_restore_accepts_fresh_share_after_restart -- --nocapture` passed on targeted rerun
+- follow-ups:
+  - `cargo xtask test` は restore/connectivity 系の long-run flake が残るため、Wave 4 closeout 前に final full rerun を再実施する
+  - `cargo xtask cn-test` と `cargo xtask scenario community_node_public_connectivity`, `cargo xtask scenario community_node_multi_device_connectivity` は未完了
+  - Wave 4 closeout 時に final validation の pass/fail をこの節へ追記して `landed` に更新する
 
 ## Exit Criteria
 - `App.tsx` と各 crate root `lib.rs` が implementation body ではなく facade になっている。

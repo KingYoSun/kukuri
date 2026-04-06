@@ -294,6 +294,86 @@ async fn dm_import_peer_ticket_restarts_active_mutual_subscription() {
 }
 
 #[tokio::test]
+async fn dm_status_restarts_mutual_subscription_when_handle_is_missing() {
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let hint_transport = Arc::new(TrackingHintTransport::default());
+    let docs_sync = Arc::new(MemoryDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let store = Arc::new(MemoryStore::default());
+    let keys_local = generate_keys();
+    let keys_peer = generate_keys();
+    let local_pubkey = keys_local.public_key_hex();
+    let peer_pubkey = keys_peer.public_key_hex();
+    let follow_local_to_peer = parse_follow_edge(
+        &build_follow_edge_envelope(
+            &keys_local,
+            &Pubkey::from(peer_pubkey.as_str()),
+            FollowEdgeStatus::Active,
+        )
+        .expect("build follow edge local->peer"),
+    )
+    .expect("parse follow edge local->peer")
+    .expect("follow edge local->peer");
+    let follow_peer_to_local = parse_follow_edge(
+        &build_follow_edge_envelope(
+            &keys_peer,
+            &Pubkey::from(local_pubkey.as_str()),
+            FollowEdgeStatus::Active,
+        )
+        .expect("build follow edge peer->local"),
+    )
+    .expect("parse follow edge peer->local")
+    .expect("follow edge peer->local");
+    store
+        .upsert_follow_edge(follow_local_to_peer)
+        .await
+        .expect("seed local->peer follow edge");
+    store
+        .upsert_follow_edge(follow_peer_to_local)
+        .await
+        .expect("seed peer->local follow edge");
+
+    let app = AppService::new_with_services(
+        store.clone(),
+        store.clone(),
+        transport,
+        hint_transport.clone(),
+        docs_sync,
+        blob_service,
+        keys_local,
+    );
+
+    app.open_direct_message(peer_pubkey.as_str())
+        .await
+        .expect("open direct message");
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+
+    if let Some(handle) = app
+        .direct_message_subscriptions
+        .lock()
+        .await
+        .remove(peer_pubkey.as_str())
+    {
+        handle.abort();
+    }
+
+    let status = app
+        .get_direct_message_status(peer_pubkey.as_str())
+        .await
+        .expect("status should rebuild subscription");
+
+    assert!(status.mutual);
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
+    assert!(
+        app.direct_message_subscriptions
+            .lock()
+            .await
+            .contains_key(peer_pubkey.as_str()),
+        "status poll should restore the missing mutual direct-message subscription"
+    );
+}
+
+#[tokio::test]
 async fn dm_first_message_appears_in_recipient_conversation_list_without_opening_dm() {
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
