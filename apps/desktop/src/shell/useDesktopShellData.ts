@@ -87,8 +87,6 @@ export function useDesktopShellData({
     mediaObjectUrls,
     localProfile,
     knownAuthorsByPubkey,
-    directMessagePaneOpen,
-    selectedDirectMessagePeerPubkey,
     profileTimeline,
     selectedAuthorTimeline,
     thread,
