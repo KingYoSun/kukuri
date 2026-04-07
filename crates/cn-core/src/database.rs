@@ -1,0 +1,231 @@
+use anyhow::{Context, Result, bail};
+use sqlx::Executor;
+use sqlx::postgres::{PgPool, PgPoolOptions};
+use url::Url;
+use uuid::Uuid;
+
+use crate::DatabaseInitMode;
+use crate::config::{COMMUNITY_NODE_AUTH_SERVICE_NAME, DATABASE_PREPARE_HINT};
+use crate::rollout::ensure_default_auth_rollout;
+
+pub async fn connect_postgres(database_url: &str) -> Result<PgPool> {
+    PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url)
+        .await
+        .with_context(|| "failed to connect to Postgres")
+}
+
+pub async fn migrate_postgres(pool: &PgPool) -> Result<()> {
+    sqlx::migrate!("./migrations").run(pool).await?;
+    Ok(())
+}
+
+pub async fn initialize_database(pool: &PgPool) -> Result<()> {
+    migrate_postgres(pool).await?;
+    seed_default_policies(pool).await?;
+    ensure_default_auth_rollout(pool).await?;
+    Ok(())
+}
+
+pub async fn initialize_database_for_runtime(
+    pool: &PgPool,
+    init_mode: DatabaseInitMode,
+) -> Result<()> {
+    match init_mode {
+        DatabaseInitMode::RequireReady => ensure_database_ready(pool).await,
+        DatabaseInitMode::Prepare => initialize_database(pool).await,
+    }
+}
+
+pub async fn ensure_database_ready(pool: &PgPool) -> Result<()> {
+    for (schema, table) in [
+        ("cn_auth", "auth_challenges"),
+        ("cn_user", "subscriber_accounts"),
+        ("cn_user", "policy_consents"),
+        ("cn_admin", "policies"),
+        ("cn_admin", "service_configs"),
+        ("cn_bootstrap", "bootstrap_nodes"),
+        ("cn_bootstrap", "peer_registrations"),
+    ] {
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = $1
+                  AND table_name = $2
+            )",
+        )
+        .bind(schema)
+        .bind(table)
+        .fetch_one(pool)
+        .await?;
+        if !exists {
+            bail!(
+                "community-node database is not ready: missing `{schema}.{table}`; {DATABASE_PREPARE_HINT}"
+            );
+        }
+    }
+
+    let policy_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cn_admin.policies")
+        .fetch_one(pool)
+        .await?;
+    if policy_count == 0 {
+        bail!(
+            "community-node database is not ready: required policy seed is missing; {DATABASE_PREPARE_HINT}"
+        );
+    }
+
+    let rollout_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+            SELECT 1
+            FROM cn_admin.service_configs
+            WHERE service_name = $1
+        )",
+    )
+    .bind(COMMUNITY_NODE_AUTH_SERVICE_NAME)
+    .fetch_one(pool)
+    .await?;
+    if !rollout_exists {
+        bail!(
+            "community-node database is not ready: auth rollout seed is missing; {DATABASE_PREPARE_HINT}"
+        );
+    }
+
+    Ok(())
+}
+
+pub async fn seed_default_policies(pool: &PgPool) -> Result<()> {
+    for (slug, title, body) in [
+        (
+            "terms_of_service",
+            "Terms of Service",
+            "You must follow the community node terms of service.",
+        ),
+        (
+            "privacy_policy",
+            "Privacy Policy",
+            "You must acknowledge the community node privacy policy.",
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO cn_admin.policies (policy_slug, policy_version, title, body_markdown, required)
+             VALUES ($1, 1, $2, $3, TRUE)
+             ON CONFLICT (policy_slug) DO UPDATE
+             SET title = EXCLUDED.title,
+                 body_markdown = EXCLUDED.body_markdown,
+                 required = EXCLUDED.required,
+                 updated_at = NOW()",
+        )
+        .bind(slug)
+        .bind(title)
+        .bind(body)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn ensure_active_subscriber<'e, E>(executor: E, pubkey: &str) -> Result<()>
+where
+    E: Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        "INSERT INTO cn_user.subscriber_accounts
+            (subscriber_pubkey, status, last_authenticated_at)
+         VALUES ($1, 'active', NOW())
+         ON CONFLICT (subscriber_pubkey) DO UPDATE
+         SET status = 'active',
+             last_authenticated_at = NOW()",
+    )
+    .bind(pubkey)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct TestDatabase {
+    admin_database_url: String,
+    pub database_name: String,
+    pub database_url: String,
+}
+
+impl TestDatabase {
+    pub async fn create(admin_database_url: &str, prefix: &str) -> Result<Self> {
+        let sanitized_prefix = prefix
+            .chars()
+            .map(|ch| match ch {
+                'a'..='z' | '0'..='9' => ch,
+                'A'..='Z' => ch.to_ascii_lowercase(),
+                _ => '_',
+            })
+            .collect::<String>();
+        let sanitized_prefix = sanitized_prefix.trim_matches('_');
+        let prefix = if sanitized_prefix.is_empty() {
+            "cn_test"
+        } else {
+            sanitized_prefix
+        };
+        let suffix = Uuid::new_v4().simple().to_string();
+        let mut database_name = format!("{prefix}_{suffix}");
+        database_name.truncate(63);
+
+        let admin_pool = connect_postgres(admin_database_url)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to connect to admin Postgres while creating test database `{database_name}`"
+                )
+            })?;
+        let create_sql = format!("CREATE DATABASE \"{}\"", database_name.replace('"', "\"\""));
+        admin_pool
+            .execute(create_sql.as_str())
+            .await
+            .with_context(|| format!("failed to create test database `{database_name}`"))?;
+
+        let mut parsed =
+            Url::parse(admin_database_url).context("failed to parse admin database url")?;
+        parsed.set_path(format!("/{database_name}").as_str());
+        Ok(Self {
+            admin_database_url: admin_database_url.to_string(),
+            database_name,
+            database_url: parsed.to_string(),
+        })
+    }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        let admin_pool = connect_postgres(self.admin_database_url.as_str())
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to connect to admin Postgres while cleaning up test database `{}`",
+                    self.database_name
+                )
+            })?;
+        sqlx::query(
+            "SELECT pg_terminate_backend(pid)
+             FROM pg_stat_activity
+             WHERE datname = $1
+               AND pid <> pg_backend_pid()",
+        )
+        .bind(&self.database_name)
+        .execute(&admin_pool)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to terminate active connections for test database `{}`",
+                self.database_name
+            )
+        })?;
+        let drop_sql = format!(
+            "DROP DATABASE IF EXISTS \"{}\"",
+            self.database_name.replace('"', "\"\"")
+        );
+        admin_pool
+            .execute(drop_sql.as_str())
+            .await
+            .with_context(|| format!("failed to drop test database `{}`", self.database_name))?;
+        Ok(())
+    }
+}

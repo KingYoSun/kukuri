@@ -2730,7 +2730,9 @@ test('author detail mutual action opens the messages workspace and sends a local
     expect(screen.getByPlaceholderText('Write a message')).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
   });
-  await user.type(screen.getByPlaceholderText('Write a message'), 'hello dm');
+  fireEvent.change(screen.getByPlaceholderText('Write a message'), {
+    target: { value: 'hello dm' },
+  });
   await user.click(screen.getByRole('button', { name: 'Send' }));
 
   await waitFor(() => {
@@ -3008,7 +3010,9 @@ test('messages workspace keeps the last successful DM state when status refresh 
     expect(screen.getByPlaceholderText('Write a message')).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
   });
-  await user.type(screen.getByPlaceholderText('Write a message'), 'hello dm');
+  fireEvent.change(screen.getByPlaceholderText('Write a message'), {
+    target: { value: 'hello dm' },
+  });
   await user.click(screen.getByRole('button', { name: 'Send' }));
 
   await waitFor(() => {

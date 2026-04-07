@@ -10,6 +10,7 @@ import {
 } from '@/components/extended/types';
 import {
   type ProfileConnectionsView,
+  type SettingsSection,
   type ShellChromeState,
 } from '@/components/shell/types';
 import {
@@ -205,6 +206,50 @@ export const DEFAULT_SOCIAL_CONNECTIONS: SocialConnectionsState = {
   muted: [],
 };
 
+const DEFAULT_SETTINGS_SECTION: SettingsSection = 'connectivity';
+
+function parseInitialSettingsSection(): {
+  activeSettingsSection: SettingsSection;
+  settingsOpen: boolean;
+} {
+  if (typeof window === 'undefined') {
+    return {
+      activeSettingsSection: DEFAULT_SETTINGS_SECTION,
+      settingsOpen: false,
+    };
+  }
+
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const searchIndex = hash.indexOf('?');
+  if (searchIndex === -1) {
+    return {
+      activeSettingsSection: DEFAULT_SETTINGS_SECTION,
+      settingsOpen: false,
+    };
+  }
+
+  const requestedSection = new URLSearchParams(hash.slice(searchIndex + 1)).get('settings');
+  if (
+    requestedSection !== 'appearance' &&
+    requestedSection !== 'connectivity' &&
+    requestedSection !== 'discovery' &&
+    requestedSection !== 'community-node' &&
+    requestedSection !== 'reactions'
+  ) {
+    return {
+      activeSettingsSection: DEFAULT_SETTINGS_SECTION,
+      settingsOpen: false,
+    };
+  }
+
+  return {
+    activeSettingsSection: requestedSection,
+    settingsOpen: true,
+  };
+}
+
 export const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
   peer_count: 0,
@@ -230,6 +275,7 @@ export const DEFAULT_SYNC_STATUS: SyncStatus = {
 };
 
 export function createInitialShellState(): DesktopShellState {
+  const initialSettingsState = parseInitialSettingsSection();
   return {
     trackedTopics: [DEFAULT_TOPIC],
     activeTopic: DEFAULT_TOPIC,
@@ -342,11 +388,11 @@ export function createInitialShellState(): DesktopShellState {
     shellChromeState: {
       activePrimarySection: 'timeline',
       timelineView: 'feed',
-      activeSettingsSection: 'connectivity',
+      activeSettingsSection: initialSettingsState.activeSettingsSection,
       profileMode: 'overview',
       profileConnectionsView: 'following',
       navOpen: false,
-      settingsOpen: false,
+      settingsOpen: initialSettingsState.settingsOpen,
     },
   };
 }

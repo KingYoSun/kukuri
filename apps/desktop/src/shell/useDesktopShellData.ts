@@ -87,8 +87,6 @@ export function useDesktopShellData({
     mediaObjectUrls,
     localProfile,
     knownAuthorsByPubkey,
-    directMessagePaneOpen,
-    selectedDirectMessagePeerPubkey,
     profileTimeline,
     selectedAuthorTimeline,
     thread,
@@ -361,6 +359,13 @@ export function useDesktopShellData({
         if (requestId !== loadTopicsRequestRef.current) {
           return;
         }
+        const latestState = storeApi.getState();
+        const matchesSelectedAuthorContext =
+          latestState.selectedAuthorPubkey === currentSelectedAuthorPubkey;
+        const matchesDirectMessageContext =
+          latestState.directMessagePaneOpen === currentDirectMessagePaneOpen &&
+          latestState.selectedDirectMessagePeerPubkey === currentSelectedDirectMessagePeerPubkey;
+        const matchesThreadContext = latestState.selectedThread === currentThread;
 
         startTransition(() => {
           setTimelinesByTopic(
@@ -600,75 +605,82 @@ export function useDesktopShellData({
               error: nextProfileError,
             });
           }
-          if (!currentSelectedAuthorPubkey) {
-            setSelectedAuthor(null);
-            setSelectedAuthorTimeline([]);
-            setAuthorError(null);
-          } else if (
-            authorViewResult.status === 'fulfilled' &&
-            authorTimelineResult.status === 'fulfilled'
-          ) {
-            setSelectedAuthor(authorViewResult.value);
-            setSelectedAuthorTimeline(authorTimelineResult.value?.items ?? []);
-            setAuthorError(null);
-            if (authorViewResult.value) {
-              setKnownAuthorsByPubkey((current) =>
-                mergeKnownAuthors(current, [authorViewResult.value])
-              );
-            }
-          } else {
-            setSelectedAuthorTimeline([]);
-            setAuthorError(
-              messageFromError(
-                authorViewResult.status === 'rejected'
-                  ? authorViewResult.reason
-                  : authorTimelineResult.status === 'rejected'
-                    ? authorTimelineResult.reason
-                    : null,
-                translate('common:errors.failedToLoadAuthor')
-              )
-            );
-          }
-          if (!currentDirectMessagePaneOpen) {
-            setSelectedDirectMessagePeerPubkey(null);
-            setDirectMessageError(null);
-          } else if (!currentSelectedDirectMessagePeerPubkey) {
-            setDirectMessageError(null);
-          } else {
-            if (directMessageTimelineResult.status === 'fulfilled') {
-              setDirectMessageTimelineByPeer((current) => ({
-                ...current,
-                [currentSelectedDirectMessagePeerPubkey]: directMessageTimelineResult.value?.items ?? [],
-              }));
-            }
-            if (directMessageStatusResult.status === 'fulfilled') {
-              setDirectMessageStatusByPeer((current) => ({
-                ...current,
-                [currentSelectedDirectMessagePeerPubkey]: directMessageStatusResult.value!,
-              }));
-            }
-            if (
-              directMessageTimelineResult.status === 'fulfilled' &&
-              directMessageStatusResult.status === 'fulfilled'
+          if (matchesSelectedAuthorContext) {
+            if (!currentSelectedAuthorPubkey) {
+              setSelectedAuthor(null);
+              setSelectedAuthorTimeline([]);
+              setAuthorError(null);
+            } else if (
+              authorViewResult.status === 'fulfilled' &&
+              authorTimelineResult.status === 'fulfilled'
             ) {
-              setDirectMessageError(null);
+              setSelectedAuthor(authorViewResult.value);
+              setSelectedAuthorTimeline(authorTimelineResult.value?.items ?? []);
+              setAuthorError(null);
+              if (authorViewResult.value) {
+                setKnownAuthorsByPubkey((current) =>
+                  mergeKnownAuthors(current, [authorViewResult.value])
+                );
+              }
             } else {
-              setDirectMessageError(
+              setSelectedAuthorTimeline([]);
+              setAuthorError(
                 messageFromError(
-                  directMessageTimelineResult.status === 'rejected'
-                    ? directMessageTimelineResult.reason
-                    : directMessageStatusResult.status === 'rejected'
-                      ? directMessageStatusResult.reason
+                  authorViewResult.status === 'rejected'
+                    ? authorViewResult.reason
+                    : authorTimelineResult.status === 'rejected'
+                      ? authorTimelineResult.reason
                       : null,
-                  'failed to load direct messages'
+                  translate('common:errors.failedToLoadAuthor')
                 )
               );
             }
           }
-          if (threadView) {
-            setThread(threadView.items);
-          } else if (!currentThread) {
-            setThread([]);
+          if (matchesDirectMessageContext) {
+            if (!currentDirectMessagePaneOpen) {
+              setSelectedDirectMessagePeerPubkey(null);
+              setDirectMessageError(null);
+            } else if (!currentSelectedDirectMessagePeerPubkey) {
+              setDirectMessageError(null);
+            } else {
+              if (directMessageTimelineResult.status === 'fulfilled') {
+                setDirectMessageTimelineByPeer((current) => ({
+                  ...current,
+                  [currentSelectedDirectMessagePeerPubkey]:
+                    directMessageTimelineResult.value?.items ?? [],
+                }));
+              }
+              if (directMessageStatusResult.status === 'fulfilled') {
+                setDirectMessageStatusByPeer((current) => ({
+                  ...current,
+                  [currentSelectedDirectMessagePeerPubkey]: directMessageStatusResult.value!,
+                }));
+              }
+              if (
+                directMessageTimelineResult.status === 'fulfilled' &&
+                directMessageStatusResult.status === 'fulfilled'
+              ) {
+                setDirectMessageError(null);
+              } else {
+                setDirectMessageError(
+                  messageFromError(
+                    directMessageTimelineResult.status === 'rejected'
+                      ? directMessageTimelineResult.reason
+                      : directMessageStatusResult.status === 'rejected'
+                        ? directMessageStatusResult.reason
+                        : null,
+                    'failed to load direct messages'
+                  )
+                );
+              }
+            }
+          }
+          if (matchesThreadContext) {
+            if (threadView) {
+              setThread(threadView.items);
+            } else if (!currentThread) {
+              setThread([]);
+            }
           }
           setError(null);
         });
@@ -750,10 +762,8 @@ export function useDesktopShellData({
     };
   }, [
     activeTopic,
-    directMessagePaneOpen,
     loadTopics,
     selectedAuthorPubkey,
-    selectedDirectMessagePeerPubkey,
     selectedThread,
     trackedTopics,
   ]);
