@@ -7,6 +7,7 @@
 - この文書は TODO メモではなく、`対象 inventory + 目標モジュール境界 + wave 順序 + validation gate + status update rule` を先に固定する設計書兼 progress tracker とする。
 - broad cleanup は許容するが、new feature 追加は scope 外とする。
 - public contract は原則維持し、serialized shape、Tauri command 名、route/search param、cross-crate public API に変更が入る場合だけこの文書へ明示追記する。
+- 2026-04-07 rerun 時点で file split と validation gate は Wave 5 対象まで完了し、campaign closeout を landed と判断する。
 
 ## Current Snapshot
 
@@ -15,19 +16,19 @@
 | `apps/desktop/src/App.tsx` | 35 | theme persistence、shell provider、`HashRouter` bootstrap | 低 | `shell/store.ts`, `shell/routes.ts`, `shell/selectors.ts`, `shell/media.ts`, `shell/DesktopShellPage.tsx` | 1 | landed |
 | `apps/desktop/src/App.test.tsx` | 42 | thin app bootstrap smoke、theme/routing boot regression | 低 | thin `App` smoke + route/store/media/orchestration test split | 1 | landed |
 | `apps/desktop/src-tauri/src/lib.rs` | 96 | Tauri entrypoint、`setup`、state wire-up、command registration | 低 | `commands/{posts,reactions,profile,direct_messages,live_game,community_node}.rs`, `tracing.rs`, `state.rs` | 1 | landed |
-| `crates/app-api/src/lib.rs` | 15 | façade re-export (`AppService`, `views::*`) | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | in_progress |
-| `crates/desktop-runtime/src/lib.rs` | 37 | façade re-export (`DesktopRuntime`, request/config/status type) | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | in_progress |
+| `crates/app-api/src/lib.rs` | 15 | façade re-export (`AppService`, `views::*`) | 非常に高 | `views.rs`, `service.rs`, `social.rs`, `timeline.rs`, `direct_messages.rs`, `reactions.rs`, `notifications.rs`, `live.rs`, `game.rs`, `private_channels.rs`, `sync.rs`, `media.rs`, `tests/*` | 2 | landed |
+| `crates/desktop-runtime/src/lib.rs` | 36 | façade re-export (`DesktopRuntime`, request/config/status type) | 非常に高 | `requests.rs`, `runtime.rs`, `community_node.rs`, `discovery.rs`, `stack.rs`, `attachments.rs`, `paths.rs` | 2 | landed |
 | `crates/store/src/lib.rs` | 20 | facade re-export (`SqliteStore`, `MemoryStore`, model/trait surface) | 高 | `models.rs`, `traits.rs`, `sqlite.rs`, `memory.rs`, `row_mapping.rs`, `pagination.rs`, `tests/*` | 3 | landed |
 | `crates/harness/src/lib.rs` | 62 | façade re-export、scenario dispatch、internal prelude | 高 | `scenario.rs`, `runtime.rs`, `waiters.rs`, `artifacts.rs`, `scenarios/{desktop_smoke,community_node,private_channel,direct_message}.rs` | 3 | landed |
-| `crates/core/src/lib.rs` | 26 | facade re-export (`ids`, `crypto`, `envelope`, domain modules) | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs`, `live.rs`, `game.rs`, `tests/*` | 4 | in_progress |
-| `crates/transport/src/lib.rs` | 14 | facade re-export (`traits`, `config`, `fake`, `iroh`, helper modules) | 中 | `traits.rs`, `config.rs`, `tickets.rs`, `diagnostics.rs`, `discovery.rs`, `fake.rs`, `iroh.rs` | 4 | in_progress |
+| `crates/core/src/lib.rs` | 26 | facade re-export (`ids`, `crypto`, `envelope`, domain modules) | 中 | `ids.rs`, `crypto.rs`, `envelope.rs`, `posts.rs`, `profile.rs`, `reactions.rs`, `private_channels.rs`, `direct_messages.rs`, `media.rs`, `live.rs`, `game.rs`, `tests/*` | 4 | landed |
+| `crates/transport/src/lib.rs` | 14 | facade re-export (`traits`, `config`, `fake`, `iroh`, helper modules) | 中 | `traits.rs`, `config.rs`, `tickets.rs`, `diagnostics.rs`, `discovery.rs`, `fake.rs`, `iroh.rs` | 4 | landed |
 
 ### Watchlist
 
 | path | current LOC | primary responsibilities | reason to watch | expected wave | status |
 | --- | ---: | --- | --- | --- | --- |
-| `crates/docs-sync/src/lib.rs` | 1342 | `DocsSync` trait、iroh/memory 実装、replica id helper、private replica access | wave 2-4 で周辺 crate の split 後に implementation root が残る可能性がある | 5 | planned |
-| `crates/cn-core/src/lib.rs` | 1195 | community-node auth/bootstrap/policy shared type、DB init、URL/auth helper | community-node path の再編後に shared utility の再集中が残る可能性がある | 5 | planned |
+| `crates/docs-sync/src/lib.rs` | 18 | façade re-export (`DocsSync`, `IrohDocsSync`, `MemoryDocsSync`, replica helper) | Wave 5 watchlist review で residual implementation root を解消済み | 5 | landed |
+| `crates/cn-core/src/lib.rs` | 42 | façade re-export (auth/bootstrap/config/db/normalize/rollout shared API) | Wave 5 watchlist review で residual implementation root を解消済み | 5 | landed |
 
 ## Refactor Rules
 - PR は subsystem wave 単位で切る。repo-wide mechanical split は行わない。
@@ -125,7 +126,7 @@
   - なし。campaign の先頭 wave とする
 
 ### Wave 2
-- status: in_progress
+- status: landed
 - goal: runtime と app service の feature 本体を分離し、UI edge から下の orchestration root を薄くする。
 - included files:
   - `crates/desktop-runtime/src/lib.rs`
@@ -226,10 +227,10 @@
 | wave | status | note |
 | --- | --- | --- |
 | 1 | landed | `App.tsx`, `App.test.tsx`, `src-tauri/lib.rs` の facade 化と shell/Tauri split、Wave 1 validation が完了 |
-| 2 | in_progress | runtime / app-api の façade split は適用済み。validation と test 再配置の収束を継続中 |
+| 2 | landed | runtime / app-api の façade split と private-channel regression flake 修正、validation rerun が完了 |
 | 3 | landed | `store` / `harness` の facade split、tests 再配置、Wave 3 validation が完了 |
 | 4 | landed | `core` / `transport` の facade split と final validation gate が完了 |
-| 5 | landed | `docs-sync` / `cn-core` の facade split と campaign closeout が完了 |
+| 5 | landed | `docs-sync` / `cn-core` の facade split と campaign closeout validation が完了 |
 
 ### 2026-04-05 Initial Plan Lock
 - PR: N/A
@@ -353,7 +354,7 @@
 - follow-ups:
   - Wave 5 で `docs-sync` / `cn-core` の residual implementation root を facade 化して campaign closeout に進む
 
-### 2026-04-06 Wave 5 landed
+### 2026-04-06 Wave 5 split applied
 - PR: local Wave 5 split completed
 - files moved:
   - `crates/docs-sync/src/lib.rs` -> `crates/docs-sync/src/{types,access,node,iroh_sync,memory,replicas}.rs`
@@ -377,6 +378,24 @@
   - `cargo xtask test` passed
 - follow-ups:
   - `blob-service`, `cn-user-api`, `cn-iroh-relay` は watchlist review の結果、service/adapter root として据え置き。別 campaign が必要になった時点で再評価する
+
+### 2026-04-07 Audit sync
+- PR: N/A (`docs/progress/2026-04-05-monolith-modularization.md` audit update only)
+- files moved: none
+- root LOC before/after:
+  - `crates/desktop-runtime/src/lib.rs`: `37 -> 36` (snapshot resync only)
+  - `crates/docs-sync/src/lib.rs`: `1342 -> 18` (watchlist snapshot resync only)
+  - `crates/cn-core/src/lib.rs`: `1195 -> 42` (watchlist snapshot resync only)
+- validation run:
+  - `cargo test -p kukuri-docs-sync` passed (`6 passed`)
+  - `cargo test -p kukuri-cn-core` passed (`5 unit + 1 integration`)
+  - `cargo xtask check` passed
+  - initial `cargo xtask test` failed in `kukuri-app-api`: `service::tests::private_channels::friend_plus_share_freeze_rotate_and_new_epoch_visibility`
+  - targeted rerun `cargo test -p kukuri-app-api friend_plus_share_freeze_rotate_and_new_epoch_visibility -- --nocapture` passed
+  - stale share rejection test helper added after isolating an eventual-consistency timeout on rotated old-epoch replica sync
+  - rerun `cargo xtask test` passed end-to-end (`app-api`, `desktop-runtime`, `harness`, `apps/desktop` Vitest all green)
+- follow-ups:
+  - none; Wave 2 / Wave 5 blockers cleared by flake fix and full validation rerun
 
 ## Exit Criteria
 - `App.tsx` と各 crate root `lib.rs` が implementation body ではなく facade になっている。
