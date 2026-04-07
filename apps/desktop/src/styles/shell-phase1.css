@@ -842,6 +842,21 @@
   gap: 1rem;
 }
 
+.shell-nav-notification-action {
+  margin-bottom: 0.5rem;
+}
+
+.shell-notification-button {
+  width: 100%;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.shell-notification-button-badge {
+  min-width: 2.75rem;
+  justify-content: center;
+}
+
 .shell-nav-status {
   display: flex;
   justify-content: space-between;
@@ -1272,6 +1287,104 @@
   gap: 0.8rem;
   scroll-margin-top: 6rem;
   outline: none;
+}
+
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.notification-item {
+  width: 100%;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--surface-panel-muted);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.notification-item:hover,
+.notification-item:focus-visible {
+  border-color: var(--border-accent);
+  background: var(--surface-active);
+}
+
+.notification-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.notification-item[data-unread='true'] {
+  border-color: var(--border-accent);
+}
+
+.notification-item-header,
+.notification-item-author,
+.notification-item-badges {
+  display: flex;
+  align-items: center;
+}
+
+.notification-item-header {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.notification-item-author {
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.notification-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.notification-item-author-label,
+.notification-item-preview,
+.notification-item-context,
+.notification-item-time {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.notification-item-author-label {
+  font-weight: 700;
+  color: var(--foreground-strong);
+}
+
+.notification-item-badges {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.notification-item-time,
+.notification-item-context {
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+
+.notification-item-body {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.notification-item-preview {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.5;
 }
 
 .shell-inline-actions {

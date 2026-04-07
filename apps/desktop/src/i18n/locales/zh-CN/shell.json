@@ -12,6 +12,7 @@
     "channel": "频道",
     "channelsGroup": "频道",
     "close": "关闭导航",
+    "notificationsButton": "通知",
     "open": "打开导航",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "主导航",
@@ -28,8 +29,39 @@
     "game": "游戏",
     "live": "直播",
     "messages": "消息",
+    "notifications": "通知",
     "profile": "资料",
     "timeline": "时间线"
+  },
+  "notifications": {
+    "context": {
+      "authorActivity": "作者动态",
+      "directMessage": "私信",
+      "topic": "主题：{{topic}}",
+      "topicChannel": "主题：{{topic}} / 频道：{{channel}}"
+    },
+    "empty": "还没有通知。",
+    "errors": {
+      "failedAutoRead": "无法将通知标记为已读。",
+      "failedToLoad": "无法加载通知。"
+    },
+    "kinds": {
+      "direct_message": "私信",
+      "followed": "关注",
+      "mention": "提及",
+      "quote_repost": "引用转发",
+      "reply": "回复",
+      "repost": "转发"
+    },
+    "loading": "正在加载通知...",
+    "preview": {
+      "followed": "开始关注你了。",
+      "noContent": "打开来源事件。",
+      "noMessage": "打开会话。"
+    },
+    "summary": "{{count}} 条 / 未读 {{unread}} 条",
+    "title": "通知",
+    "unread": "未读"
   },
   "settingsDrawer": {
     "close": "关闭设置和诊断",

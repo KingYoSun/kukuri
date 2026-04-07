@@ -1736,6 +1736,21 @@ impl AppService {
         &self,
         row: NotificationRow,
     ) -> Result<NotificationView> {
+        let object_id = row.object_id.clone();
+        let thread_root_object_id = if let Some(object_id) = object_id.as_ref() {
+            self.projection_store
+                .get_object_projection(object_id)
+                .await?
+                .map(|projection| {
+                    projection
+                        .root_object_id
+                        .unwrap_or(projection.object_id)
+                        .as_str()
+                        .to_string()
+                })
+        } else {
+            None
+        };
         let profile = self.store.get_profile(row.actor_pubkey.as_str()).await?;
         Ok(NotificationView {
             notification_id: row.notification_id,
@@ -1759,7 +1774,8 @@ impl AppService {
                 .map(|value| value.as_str().to_string()),
             topic_id: row.topic_id,
             channel_id: row.channel_id,
-            object_id: row.object_id.map(|value| value.as_str().to_string()),
+            object_id: object_id.map(|value| value.as_str().to_string()),
+            thread_root_object_id,
             dm_id: row.dm_id,
             message_id: row.message_id,
             preview_text: row.preview_text,

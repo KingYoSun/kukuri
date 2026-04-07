@@ -88,6 +88,7 @@ export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
   game: '/game',
   messages: '/messages',
   profile: '/profile',
+  notifications: '/notifications',
 };
 
 export function isSettingsSection(value: string | null): value is SettingsSection {
@@ -152,6 +153,7 @@ export function buildShellUrl(options: BuildShellUrlOptions): string {
 
   if (
     options.primarySection !== 'messages' &&
+    options.primarySection !== 'notifications' &&
     options.selectedChannelId &&
     !(options.primarySection === 'timeline' && options.timelineView === 'bookmarks')
   ) {
@@ -169,13 +171,13 @@ export function buildShellUrl(options: BuildShellUrlOptions): string {
     if (options.selectedAuthorPubkey) {
       search.set('authorPubkey', options.selectedAuthorPubkey);
     }
-  } else if (options.selectedThread) {
+  } else if (options.primarySection !== 'notifications' && options.selectedThread) {
     search.set('context', 'thread');
     search.set('threadId', options.selectedThread);
     if (options.selectedAuthorPubkey) {
       search.set('authorPubkey', options.selectedAuthorPubkey);
     }
-  } else if (options.selectedAuthorPubkey) {
+  } else if (options.primarySection !== 'notifications' && options.selectedAuthorPubkey) {
     search.set('context', 'author');
     search.set('authorPubkey', options.selectedAuthorPubkey);
   }

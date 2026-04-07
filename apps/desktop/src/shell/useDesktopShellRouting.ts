@@ -170,6 +170,7 @@ export function useDesktopShellRouting({
       search.set('topic', nextTopic);
       if (
         nextPrimarySection !== 'messages' &&
+        nextPrimarySection !== 'notifications' &&
         nextSelectedChannelId &&
         !(nextPrimarySection === 'timeline' && nextTimelineView === 'bookmarks')
       ) {
@@ -185,13 +186,13 @@ export function useDesktopShellRouting({
         if (nextSelectedAuthorPubkey) {
           search.set('authorPubkey', nextSelectedAuthorPubkey);
         }
-      } else if (nextSelectedThread) {
+      } else if (nextPrimarySection !== 'notifications' && nextSelectedThread) {
         search.set('context', 'thread');
         search.set('threadId', nextSelectedThread);
         if (nextSelectedAuthorPubkey) {
           search.set('authorPubkey', nextSelectedAuthorPubkey);
         }
-      } else if (nextSelectedAuthorPubkey) {
+      } else if (nextPrimarySection !== 'notifications' && nextSelectedAuthorPubkey) {
         search.set('context', 'author');
         search.set('authorPubkey', nextSelectedAuthorPubkey);
       }
@@ -394,6 +395,8 @@ export function useDesktopShellRouting({
           });
           syncRoute('replace', {
             activeTopic: topic,
+            primarySection: 'timeline',
+            timelineView: 'feed',
             directMessagePaneOpen: false,
             selectedAuthorPubkey: null,
             selectedThread: null,
@@ -402,6 +405,12 @@ export function useDesktopShellRouting({
         }
         startTransition(() => {
           setActiveTopic(topic);
+          setShellChromeState((current) => ({
+            ...current,
+            activePrimarySection: 'timeline',
+            timelineView: 'feed',
+            navOpen: false,
+          }));
           setSelectedThread(threadId);
           setThread(threadView.items);
           setSelectedAuthorPubkey(null);
@@ -414,6 +423,8 @@ export function useDesktopShellRouting({
         });
         syncRoute(options?.historyMode ?? 'push', {
           activeTopic: topic,
+          primarySection: 'timeline',
+          timelineView: 'feed',
           directMessagePaneOpen: false,
           selectedAuthorPubkey: null,
           selectedThread: threadId,
@@ -437,6 +448,8 @@ export function useDesktopShellRouting({
           });
           syncRoute('replace', {
             activeTopic: topic,
+            primarySection: 'timeline',
+            timelineView: 'feed',
             directMessagePaneOpen: false,
             selectedAuthorPubkey: null,
             selectedThread: null,
@@ -456,6 +469,7 @@ export function useDesktopShellRouting({
       setSelectedAuthorPubkey,
       setSelectedDirectMessagePeerPubkey,
       setSelectedThread,
+      setShellChromeState,
       setThread,
       syncRoute,
       translate,
@@ -489,7 +503,8 @@ export function useDesktopShellRouting({
           setThread([]);
         }
         syncRoute(options?.historyMode ?? 'push', {
-          primarySection: options?.preserveDirectMessageContext ? 'messages' : undefined,
+          primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
+          timelineView: options?.preserveDirectMessageContext ? undefined : 'feed',
           selectedThread: nextThreadId,
           selectedAuthorPubkey: authorPubkey,
           selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
@@ -511,7 +526,8 @@ export function useDesktopShellRouting({
             setThread([]);
           }
           syncRoute('replace', {
-            primarySection: options?.preserveDirectMessageContext ? 'messages' : undefined,
+            primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
+            timelineView: options?.preserveDirectMessageContext ? undefined : 'feed',
             selectedThread: options?.fromThread ? (options.threadId ?? selectedThread) : null,
             selectedAuthorPubkey: null,
             selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
@@ -872,8 +888,10 @@ export function useDesktopShellRouting({
       routeSection === 'timeline' && requestedTimelineView === 'bookmarks' ? 'bookmarks' : 'feed';
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
     const currentSelectedChannelIdForTopic = selectedChannelIdByTopic[nextTopic] ?? null;
+    const allowChannelRouteParam =
+      routeSection !== 'messages' && routeSection !== 'notifications';
     let nextSelectedChannelId = currentSelectedChannelIdForTopic;
-    if (nextTimelineView !== 'bookmarks') {
+    if (allowChannelRouteParam && nextTimelineView !== 'bookmarks') {
       nextSelectedChannelId = requestedChannelParam;
       if (!nextSelectedChannelId) {
         const legacyRequestedChannel = [requestedComposeTargetValue, requestedTimelineScopeValue]
@@ -1001,6 +1019,19 @@ export function useDesktopShellRouting({
     if (routeSection === 'messages' && requestedContext) {
       shouldNormalize = true;
     }
+    if (
+      routeSection === 'notifications' &&
+      (requestedTimelineView ||
+        requestedChannelParam ||
+        requestedContext ||
+        requestedProfileMode ||
+        requestedConnectionsView ||
+        requestedThreadId ||
+        requestedAuthorPubkey ||
+        requestedPeerPubkey)
+    ) {
+      shouldNormalize = true;
+    }
 
     if (nextTimelineView === 'bookmarks') {
       normalizedSelectedThread = null;
@@ -1101,6 +1132,26 @@ export function useDesktopShellRouting({
         });
       } else {
         normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
+      }
+    } else if (routeSection === 'notifications') {
+      normalizedSelectedThread = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
+      if (selectedThread) {
+        setSelectedThread(null);
+        setThread([]);
+        setReplyTarget(null);
+        setRepostTarget(null);
+      }
+      if (selectedAuthorPubkey) {
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
+      if (directMessagePaneOpen || selectedDirectMessagePeerPubkey) {
+        setDirectMessagePaneOpen(false);
+        setSelectedDirectMessagePeerPubkey(null);
+        setDirectMessageError(null);
       }
     } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'thread') {
       normalizedSelectedDirectMessagePeerPubkey = null;

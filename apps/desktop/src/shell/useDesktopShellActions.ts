@@ -13,6 +13,7 @@ import type {
   DirectMessageMessageView,
   GameScoreView,
   JoinedPrivateChannelView,
+  NotificationView,
   PostView,
   ProfileInput,
   ReactionKeyInput,
@@ -62,6 +63,17 @@ type UseDesktopShellActionsArgs = {
       preservedAuthorPubkey?: string | null;
     }
   ) => Promise<void>;
+  openAuthorDetail: (
+    authorPubkey: string,
+    options?: {
+      fromThread?: boolean;
+      historyMode?: 'push' | 'replace';
+      normalizeOnError?: boolean;
+      threadId?: string | null;
+      preserveDirectMessageContext?: boolean;
+      directMessagePeerPubkey?: string | null;
+    }
+  ) => Promise<void>;
   openThread: (threadId: string, options?: OpenThreadOptions) => Promise<void>;
   setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
   setLiveCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -84,6 +96,7 @@ export function useDesktopShellActions({
   loadTopics,
   syncRoute,
   openDirectMessagePane,
+  openAuthorDetail,
   openThread,
   setComposeDialogOpen,
   setLiveCreateDialogOpen,
@@ -186,6 +199,10 @@ export function useDesktopShellActions({
   const setSelectedAuthor = useDesktopShellFieldSetter('selectedAuthor');
   const setSelectedAuthorTimeline = useDesktopShellFieldSetter('selectedAuthorTimeline');
   const setAuthorError = useDesktopShellFieldSetter('authorError');
+  const setDirectMessagePaneOpen = useDesktopShellFieldSetter('directMessagePaneOpen');
+  const setSelectedDirectMessagePeerPubkey = useDesktopShellFieldSetter(
+    'selectedDirectMessagePeerPubkey'
+  );
   const setDirectMessages = useDesktopShellFieldSetter('directMessages');
   const setDirectMessageTimelineByPeer = useDesktopShellFieldSetter('directMessageTimelineByPeer');
   const setDirectMessageComposer = useDesktopShellFieldSetter('directMessageComposer');
@@ -230,6 +247,13 @@ export function useDesktopShellActions({
     setSelectedAuthor(null);
     setSelectedAuthorTimeline([]);
     setAuthorError(null);
+  }
+
+  function clearAuxiliaryPanels() {
+    clearThreadContext();
+    setDirectMessagePaneOpen(false);
+    setSelectedDirectMessagePeerPubkey(null);
+    setDirectMessageError(null);
   }
 
   function directMessagePreviewFromAttachments(attachments: AttachmentView[]) {
@@ -953,6 +977,86 @@ export function useDesktopShellActions({
     }
   }
 
+  async function handleOpenNotification(notification: NotificationView) {
+    if (notification.kind === 'direct_message') {
+      await openDirectMessagePane(notification.actor_pubkey, {
+        historyMode: 'push',
+      });
+      return;
+    }
+
+    if (notification.kind === 'followed') {
+      clearAuxiliaryPanels();
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'timeline',
+        timelineView: 'feed',
+        navOpen: false,
+      }));
+      syncRoute('push', {
+        primarySection: 'timeline',
+        timelineView: 'feed',
+        selectedAuthorPubkey: null,
+        selectedDirectMessagePeerPubkey: null,
+        selectedThread: null,
+      });
+      await openAuthorDetail(notification.actor_pubkey, {
+        historyMode: 'replace',
+      });
+      return;
+    }
+
+    const targetTopic = notification.topic_id?.trim() || activeTopic;
+    const nextTopics = trackedTopics.includes(targetTopic)
+      ? trackedTopics
+      : [...trackedTopics, targetTopic];
+    const nextChannelId = notification.channel_id ?? null;
+    const threadTargetId = notification.thread_root_object_id ?? notification.object_id ?? null;
+
+    setTrackedTopics(nextTopics);
+    setActiveTopic(targetTopic);
+    setSelectedChannelIdByTopic((current) => ({
+      ...current,
+      [targetTopic]: nextChannelId,
+    }));
+    setTimelineScopeByTopic((current) => ({
+      ...current,
+      [targetTopic]: privateTimelineScope(nextChannelId),
+    }));
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [targetTopic]: privateComposeTarget(nextChannelId),
+    }));
+    clearAuxiliaryPanels();
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+      timelineView: 'feed',
+      navOpen: false,
+    }));
+
+    await loadTopics(nextTopics, targetTopic, threadTargetId);
+
+    if (threadTargetId) {
+      await openThread(threadTargetId, {
+        historyMode: 'replace',
+        topic: targetTopic,
+      });
+      return;
+    }
+
+    syncRoute('replace', {
+      activeTopic: targetTopic,
+      composeTarget: privateComposeTarget(nextChannelId),
+      primarySection: 'timeline',
+      selectedAuthorPubkey: null,
+      selectedDirectMessagePeerPubkey: null,
+      selectedThread: null,
+      timelineScope: privateTimelineScope(nextChannelId),
+      timelineView: 'feed',
+    });
+  }
+
   function patchReactionState(reactionState: Parameters<typeof patchReactionStateIntoPosts>[1]) {
     setTimelinesByTopic((current) =>
       Object.fromEntries(
@@ -1608,6 +1712,7 @@ export function useDesktopShellActions({
     handleSendDirectMessage,
     handleDeleteDirectMessageMessage,
     handleClearDirectMessage,
+    handleOpenNotification,
     handleToggleReaction,
     handleCreateCustomReactionAsset,
     handleBookmarkCustomReaction,

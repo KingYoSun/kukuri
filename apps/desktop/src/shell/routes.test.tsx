@@ -105,6 +105,18 @@ test('bookmark page route closes detail context and normalizes timeline-specific
   expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
 });
 
+test('notifications route keeps topic context and strips unrelated nested params', async () => {
+  renderAtHash(
+    '#/notifications?topic=kukuri%3Atopic%3Ademo&channel=channel-1&timelineView=bookmarks&context=thread&threadId=post-thread-open&authorPubkey=bad&peerPubkey=bad'
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+  expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
+});
+
 test('thread context restores from the hash route and loads the requested thread for the active topic', async () => {
   renderAtHash(
     '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open',

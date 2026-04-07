@@ -9,7 +9,7 @@ async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
         .await
         .expect("create local post");
     let local_envelope = store
-        .get_envelope(&EnvelopeId::from(local_object_id))
+        .get_envelope(&EnvelopeId::from(local_object_id.as_str()))
         .await
         .expect("load local envelope")
         .expect("local envelope");
@@ -46,6 +46,12 @@ async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
     .await;
 
     assert!(created);
+    ProjectionStore::put_object_projection(
+        store.as_ref(),
+        projection_row_from_header(&remote_object, None, &topic_replica_id(topic.as_str())),
+    )
+    .await
+    .expect("put remote projection");
     let notifications = app.list_notifications().await.expect("list notifications");
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].kind, NotificationKind::Reply);
@@ -54,11 +60,77 @@ async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
         Some(remote_object.object_id.as_str())
     );
     assert_eq!(
+        notifications[0].thread_root_object_id.as_deref(),
+        Some(local_object_id.as_str())
+    );
+    assert_eq!(
         app.get_notification_status()
             .await
             .expect("notification status")
             .unread_count,
         1
+    );
+}
+
+#[tokio::test]
+async fn object_notification_view_exposes_thread_root_object_id_for_click_through() {
+    let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+    let topic = TopicId::new("notifications-thread-root");
+    let local_object_id = app
+        .create_post(topic.as_str(), "local root", None)
+        .await
+        .expect("create local post");
+    let local_envelope = store
+        .get_envelope(&EnvelopeId::from(local_object_id.as_str()))
+        .await
+        .expect("load local envelope")
+        .expect("local envelope");
+    let remote_keys = generate_keys();
+    let remote_envelope = persist_test_post(
+        docs_sync.as_ref(),
+        None,
+        &remote_keys,
+        &topic,
+        PayloadRef::InlineText {
+            text: "thread root follow-up".into(),
+        },
+        Vec::new(),
+        Some(&local_envelope),
+    )
+    .await;
+    let remote_object = remote_envelope
+        .to_post_object()
+        .expect("parse remote reply")
+        .expect("remote reply object");
+
+    assert!(
+        create_remote_object_notification(
+            &app,
+            store.as_ref(),
+            docs_sync.as_ref(),
+            blob_service.as_ref(),
+            remote_doc_event(
+                &topic_replica_id(topic.as_str()),
+                stable_key(
+                    "objects",
+                    &format!("{}/state", remote_object.object_id.as_str()),
+                ),
+            ),
+        )
+        .await
+    );
+    ProjectionStore::put_object_projection(
+        store.as_ref(),
+        projection_row_from_header(&remote_object, None, &topic_replica_id(topic.as_str())),
+    )
+    .await
+    .expect("put remote projection");
+
+    let notifications = app.list_notifications().await.expect("list notifications");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(
+        notifications[0].thread_root_object_id.as_deref(),
+        Some(local_object_id.as_str())
     );
 }
 

@@ -246,6 +246,7 @@ export function useDesktopShellViewModels({
   const showFloatingActionButton =
     shellChromeState.activePrimarySection !== 'profile' &&
     shellChromeState.activePrimarySection !== 'messages' &&
+    shellChromeState.activePrimarySection !== 'notifications' &&
     !(
       shellChromeState.activePrimarySection === 'timeline' &&
       shellChromeState.timelineView === 'bookmarks'

@@ -240,6 +240,7 @@ pub struct NotificationView {
     pub topic_id: Option<String>,
     pub channel_id: Option<String>,
     pub object_id: Option<String>,
+    pub thread_root_object_id: Option<String>,
     pub dm_id: Option<String>,
     pub message_id: Option<String>,
     pub preview_text: Option<String>,
