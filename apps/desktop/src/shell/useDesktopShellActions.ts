@@ -27,6 +27,7 @@ import {
   type GameEditorDraft,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
+  useDesktopShellStoreApi,
 } from '@/shell/store';
 import {
   canCreateRepostFromPost,
@@ -98,6 +99,7 @@ export function useDesktopShellActions({
   buildImageDraftItem,
   buildVideoDraftItem,
 }: UseDesktopShellActionsArgs) {
+  const storeApi = useDesktopShellStoreApi();
   const state = useDesktopShellStore();
   const nextActiveTopic = state.activeTopic;
   const nextSelectedChannelId = state.selectedChannelIdByTopic[nextActiveTopic] ?? null;
@@ -123,9 +125,6 @@ export function useDesktopShellActions({
     channelLabelInput,
     channelAudienceInput,
     inviteTokenInput,
-    directMessageComposer,
-    directMessageDraftMediaItems,
-    selectedDirectMessagePeerPubkey,
     gameDrafts,
     liveTitle,
     liveDescription,
@@ -138,7 +137,6 @@ export function useDesktopShellActions({
     localProfile,
     profileDraft,
     selectedAuthorPubkey,
-    selectedAuthor,
     shellChromeState,
   } = state;
   const activePrivateChannel =
@@ -832,32 +830,35 @@ export function useDesktopShellActions({
 
   async function handleSendDirectMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedDirectMessagePeerPubkey) {
+    const currentState = storeApi.getState();
+    const peerPubkey = currentState.selectedDirectMessagePeerPubkey;
+    if (!peerPubkey) {
       return;
     }
-    const trimmedComposer = directMessageComposer.trim();
-    const attachments = directMessageDraftMediaItems.flatMap((item) => item.attachments);
+    const composerField = event.currentTarget.querySelector('textarea');
+    const composerValue = composerField?.value ?? currentState.directMessageComposer;
+    const trimmedComposer = composerValue.trim();
+    const attachments = currentState.directMessageDraftMediaItems.flatMap(
+      (item) => item.attachments
+    );
     if (!trimmedComposer && attachments.length === 0) {
       return;
     }
     setDirectMessageSending(true);
     try {
       const messageId = await api.sendDirectMessage(
-        selectedDirectMessagePeerPubkey,
+        peerPubkey,
         trimmedComposer || null,
         attachments,
         null
       );
       const existingConversation =
-        state.directMessages.find(
-          (conversation) => conversation.peer_pubkey === selectedDirectMessagePeerPubkey
-        ) ?? null;
-      const existingStatus =
-        existingConversation?.status ??
-        state.directMessageStatusByPeer[selectedDirectMessagePeerPubkey] ??
+        currentState.directMessages.find((conversation) => conversation.peer_pubkey === peerPubkey) ??
         null;
+      const existingStatus =
+        existingConversation?.status ?? currentState.directMessageStatusByPeer[peerPubkey] ?? null;
       const knownPeerAuthor =
-        state.knownAuthorsByPubkey[selectedDirectMessagePeerPubkey] ?? selectedAuthor ?? null;
+        currentState.knownAuthorsByPubkey[peerPubkey] ?? currentState.selectedAuthor ?? null;
       const createdAt = Date.now();
       const optimisticAttachments: AttachmentView[] = attachments.map((attachment, index) => ({
         hash: `${messageId}-attachment-${index}`,
@@ -870,10 +871,10 @@ export function useDesktopShellActions({
         dm_id:
           existingConversation?.dm_id ??
           existingStatus?.dm_id ??
-          [state.syncStatus.local_author_pubkey, selectedDirectMessagePeerPubkey].sort().join(':'),
+          [currentState.syncStatus.local_author_pubkey, peerPubkey].sort().join(':'),
         message_id: messageId,
-        sender_pubkey: state.syncStatus.local_author_pubkey,
-        recipient_pubkey: selectedDirectMessagePeerPubkey,
+        sender_pubkey: currentState.syncStatus.local_author_pubkey,
+        recipient_pubkey: peerPubkey,
         created_at: createdAt,
         text: trimmedComposer,
         reply_to_message_id: null,
@@ -883,7 +884,7 @@ export function useDesktopShellActions({
       } satisfies DirectMessageMessageView;
       const optimisticConversation = {
         dm_id: optimisticMessage.dm_id,
-        peer_pubkey: selectedDirectMessagePeerPubkey,
+        peer_pubkey: peerPubkey,
         peer_name: knownPeerAuthor?.name ?? existingConversation?.peer_name ?? null,
         peer_display_name:
           knownPeerAuthor?.display_name ?? existingConversation?.peer_display_name ?? null,
@@ -898,7 +899,7 @@ export function useDesktopShellActions({
         status:
           existingStatus ??
           existingConversation?.status ?? {
-            peer_pubkey: selectedDirectMessagePeerPubkey,
+            peer_pubkey: peerPubkey,
             dm_id: optimisticMessage.dm_id,
             mutual: true,
             send_enabled: true,
@@ -908,16 +909,16 @@ export function useDesktopShellActions({
       } satisfies DirectMessageConversationView;
       setDirectMessageTimelineByPeer((current) => ({
         ...current,
-        [selectedDirectMessagePeerPubkey]: [
+        [peerPubkey]: [
           optimisticMessage,
-          ...(current[selectedDirectMessagePeerPubkey] ?? []).filter(
+          ...(current[peerPubkey] ?? []).filter(
             (message) => message.message_id !== messageId
           ),
         ],
       }));
       setDirectMessages((current) => {
         const remaining = current.filter(
-          (conversation) => conversation.peer_pubkey !== selectedDirectMessagePeerPubkey
+          (conversation) => conversation.peer_pubkey !== peerPubkey
         );
         return [optimisticConversation, ...remaining];
       });
@@ -926,7 +927,7 @@ export function useDesktopShellActions({
       setDirectMessageDraftMediaItems([]);
       setDirectMessageAttachmentInputKey((value) => value + 1);
       setDirectMessageError(null);
-      await openDirectMessagePane(selectedDirectMessagePeerPubkey, { historyMode: 'replace' });
+      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
     } catch (sendError) {
       setDirectMessageError(messageFromError(sendError, 'failed to send direct message'));
     } finally {
