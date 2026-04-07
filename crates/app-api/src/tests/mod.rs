@@ -300,6 +300,8 @@ async fn wait_for_friend_plus_share_import(
     step_timeout: Duration,
 ) -> kukuri_core::FriendPlusSharePreview {
     let preview = kukuri_core::parse_friend_plus_share_token(token).expect("parse share token");
+    let last_retryable_error = Arc::new(TokioMutex::new(None::<String>));
+    let retry_error_slot = Arc::clone(&last_retryable_error);
     match timeout(step_timeout, async {
         loop {
             match app.import_friend_plus_share(token).await {
@@ -307,6 +309,7 @@ async fn wait_for_friend_plus_share_import(
                 Err(error)
                     if is_retryable_friend_plus_share_import_error(error.to_string().as_str()) =>
                 {
+                    *retry_error_slot.lock().await = Some(error.to_string());
                     sleep(Duration::from_millis(100)).await;
                 }
                 Err(error) => panic!("friend-plus share import failed: {error:#}"),
@@ -317,6 +320,11 @@ async fn wait_for_friend_plus_share_import(
     {
         Ok(preview) => preview,
         Err(_) => {
+            let last_error = last_retryable_error
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
             let social_view = app
                 .get_author_social_view(preview.sponsor_pubkey.as_str())
                 .await
@@ -337,8 +345,72 @@ async fn wait_for_friend_plus_share_import(
                 .map(|status| format_sync_snapshot(&status, preview.topic_id.as_str()))
                 .unwrap_or_else(|_| "failed to read sync status".to_string());
             panic!(
-                "friend-plus share import timeout; sponsor_pubkey={}, {social_view}, {snapshot}",
-                preview.sponsor_pubkey.as_str()
+                "friend-plus share import timeout; sponsor_pubkey={}, last_retryable_error={}, {social_view}, {snapshot}",
+                preview.sponsor_pubkey.as_str(),
+                last_error
+            );
+        }
+    }
+}
+
+async fn wait_for_friend_plus_share_rejection(
+    app: &AppService,
+    token: &str,
+    step_timeout: Duration,
+) -> String {
+    let preview = kukuri_core::parse_friend_plus_share_token(token).expect("parse share token");
+    let last_retryable_error = Arc::new(TokioMutex::new(None::<String>));
+    let retry_error_slot = Arc::clone(&last_retryable_error);
+    match timeout(step_timeout, async {
+        loop {
+            let error = app
+                .import_friend_plus_share(token)
+                .await
+                .expect_err("friend-plus share should be rejected");
+            let message = error.to_string();
+            if message.contains("no longer open") {
+                return message;
+            }
+            if message.contains("timed out waiting for friend-plus channel replica sync") {
+                *retry_error_slot.lock().await = Some(message);
+                sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+            panic!("unexpected friend-plus share rejection error: {message}");
+        }
+    })
+    .await
+    {
+        Ok(message) => message,
+        Err(_) => {
+            let last_error = last_retryable_error
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let social_view = app
+                .get_author_social_view(preview.sponsor_pubkey.as_str())
+                .await
+                .map(|value| {
+                    format!(
+                        "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                        value.following,
+                        value.followed_by,
+                        value.mutual,
+                        value.friend_of_friend,
+                        value.friend_of_friend_via_pubkeys
+                    )
+                })
+                .unwrap_or_else(|_| "social_view=unavailable".to_string());
+            let snapshot = app
+                .get_sync_status()
+                .await
+                .map(|status| format_sync_snapshot(&status, preview.topic_id.as_str()))
+                .unwrap_or_else(|_| "failed to read sync status".to_string());
+            panic!(
+                "friend-plus share rejection timeout; sponsor_pubkey={}, last_retryable_error={}, {social_view}, {snapshot}",
+                preview.sponsor_pubkey.as_str(),
+                last_error
             );
         }
     }

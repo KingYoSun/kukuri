@@ -342,14 +342,50 @@ pub(crate) async fn run_community_node_connectivity(
             })
             .await
             .context("failed to create scenario reply on desktop b")?;
-        wait_for_thread_object(
-            &runtime_a,
-            topic,
-            post_id.as_str(),
-            reply_id.as_str(),
-            step_timeout,
-        )
-        .await?;
+        let (reply_thread_attempts, reply_thread_timeout) =
+            public_replication_retry_schedule(
+                step_timeout,
+                identity_mode == CommunityNodeIdentityMode::SharedIdentity,
+            );
+        let mut reply_thread_error = None;
+        for attempt in 1..=reply_thread_attempts {
+            match wait_for_thread_object(
+                &runtime_a,
+                topic,
+                post_id.as_str(),
+                reply_id.as_str(),
+                reply_thread_timeout,
+            )
+            .await
+            {
+                Ok(()) => {
+                    reply_thread_error = None;
+                    break;
+                }
+                Err(error) if attempt < reply_thread_attempts => {
+                    reply_thread_error = Some(format!("{error:#}"));
+                    refresh_public_pair(&runtime_a, &runtime_b, topic, reply_thread_timeout)
+                        .await
+                        .context("failed to refresh public topic after reply-thread timeout")?;
+                    let _ = runtime_a
+                        .list_thread(ListThreadRequest {
+                            topic: topic.to_string(),
+                            thread_id: post_id.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    reply_thread_error = Some(format!("{error:#}"));
+                    break;
+                }
+            }
+        }
+        if let Some(error) = reply_thread_error {
+            anyhow::bail!("desktop a did not receive community reply in thread: {error}");
+        }
         push_named_step(&mut steps, "reply_thread", started_at);
 
         if identity_mode == CommunityNodeIdentityMode::DistinctUsers {

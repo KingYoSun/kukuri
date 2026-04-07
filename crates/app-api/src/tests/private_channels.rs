@@ -750,7 +750,11 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         .import_friend_plus_share(stale_share_for_d.as_str())
         .await
         .expect_err("frozen share should fail");
-    assert!(freeze_error.to_string().contains("no longer open"));
+    let freeze_error_message = freeze_error.to_string();
+    assert!(
+        freeze_error_message.contains("no longer open"),
+        "unexpected frozen share error: {freeze_error_message}"
+    );
 
     let rotated = app_a
         .rotate_private_channel(topic, channel.channel_id.as_str())
@@ -871,11 +875,13 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
             .any(|epoch_id| epoch_id == &preview_c.epoch_id)
     );
 
-    let old_share_error = app_d
-        .import_friend_plus_share(stale_share_for_d.as_str())
-        .await
-        .expect_err("old share should still fail after rotate");
-    assert!(old_share_error.to_string().contains("no longer open"));
+    let old_share_error_message =
+        wait_for_friend_plus_share_rejection(&app_d, stale_share_for_d.as_str(), rotation_timeout)
+            .await;
+    assert!(
+        old_share_error_message.contains("no longer open"),
+        "unexpected old share error after rotate: {old_share_error_message}"
+    );
 
     let new_post_id = app_b
         .create_post_in_channel(topic, private_ref.clone(), "friends+ new", None)
