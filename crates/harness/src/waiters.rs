@@ -384,6 +384,47 @@ pub(crate) async fn wait_for_direct_message_result(
     }
 }
 
+pub(crate) async fn wait_for_direct_message_result_with_sender_refresh(
+    sender_runtime: &DesktopRuntime,
+    sender_peer_pubkey: &str,
+    receiver_runtime: &DesktopRuntime,
+    receiver_peer_pubkey: &str,
+    message_id: &str,
+    step_timeout: Duration,
+) -> Result<DirectMessageMessageView> {
+    match timeout(step_timeout, async {
+        loop {
+            let _ = sender_runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: sender_peer_pubkey.to_string(),
+                })
+                .await
+                .context("sender direct message status")?;
+            let timeline = receiver_runtime
+                .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                    pubkey: receiver_peer_pubkey.to_string(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("list direct message timeline")?;
+            if let Some(message) = timeline
+                .items
+                .into_iter()
+                .find(|item| item.message_id == message_id)
+            {
+                return Ok::<DirectMessageMessageView, anyhow::Error>(message);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("direct message delivery timeout for {message_id}"),
+    }
+}
+
 pub(crate) async fn wait_for_direct_message_conversation_result(
     runtime: &DesktopRuntime,
     peer_pubkey: &str,

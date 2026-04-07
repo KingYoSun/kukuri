@@ -303,7 +303,9 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("desktop b failed to reopen direct message after restart")?;
-        let delivered_video = wait_for_direct_message_result(
+        let delivered_video = wait_for_direct_message_result_with_sender_refresh(
+            &runtime_a,
+            b_pubkey.as_str(),
             &runtime_b,
             a_pubkey.as_str(),
             queued_video_message_id.as_str(),
