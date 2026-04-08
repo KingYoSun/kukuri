@@ -425,6 +425,53 @@ pub(crate) async fn wait_for_direct_message_result_with_sender_refresh(
     }
 }
 
+pub(crate) async fn wait_for_direct_message_peer_ready(
+    runtime: &DesktopRuntime,
+    peer_pubkey: &str,
+    expected_peer_count: usize,
+    step_timeout: Duration,
+) -> Result<DirectMessageStatusView> {
+    match timeout(step_timeout, async {
+        loop {
+            let status = runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message status")?;
+            if status.send_enabled && status.peer_count >= expected_peer_count {
+                return Ok::<DirectMessageStatusView, anyhow::Error>(status);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot = runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .map(|status| {
+                    format!(
+                        "send_enabled={}, mutual={}, peer_count={}, pending_outbox_count={}",
+                        status.send_enabled,
+                        status.mutual,
+                        status.peer_count,
+                        status.pending_outbox_count
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_status=unavailable".to_string());
+            anyhow::bail!(
+                "direct message peer readiness timeout for {peer_pubkey}; {snapshot}"
+            );
+        }
+    }
+}
+
 pub(crate) async fn wait_for_direct_message_conversation_result(
     runtime: &DesktopRuntime,
     peer_pubkey: &str,
