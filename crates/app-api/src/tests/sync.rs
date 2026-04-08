@@ -1,5 +1,78 @@
 use super::*;
 
+async fn relay_sync_diagnostics(
+    app_a: &AppService,
+    app_b: &AppService,
+    stack_a: &TestIrohStack,
+    stack_b: &TestIrohStack,
+    topic: &str,
+) -> String {
+    let snapshot_a = app_a
+        .get_sync_status()
+        .await
+        .map(|status| format_sync_snapshot(&status, topic))
+        .unwrap_or_else(|error| format!("failed to read sync status a: {error}"));
+    let snapshot_b = app_b
+        .get_sync_status()
+        .await
+        .map(|status| format_sync_snapshot(&status, topic))
+        .unwrap_or_else(|error| format!("failed to read sync status b: {error}"));
+    let timeline_a = app_a
+        .list_timeline(topic, None, 20)
+        .await
+        .map(|timeline| {
+            timeline
+                .items
+                .into_iter()
+                .map(|post| post.object_id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|error| vec![format!("timeline a error: {error}")]);
+    let timeline_b = app_b
+        .list_timeline(topic, None, 20)
+        .await
+        .map(|timeline| {
+            timeline
+                .items
+                .into_iter()
+                .map(|post| post.object_id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|error| vec![format!("timeline b error: {error}")]);
+    let notifications_a = app_a
+        .list_notifications()
+        .await
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| {
+                    format!(
+                        "{}:{:?}:{}",
+                        item.notification_id,
+                        item.kind,
+                        item.object_id.unwrap_or_else(|| "-".into())
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|error| vec![format!("notifications a error: {error}")]);
+    let remote_info_a = stack_a
+        ._node
+        .endpoint()
+        .remote_info(stack_b._node.endpoint().id())
+        .await
+        .is_some();
+    let remote_info_b = stack_b
+        ._node
+        .endpoint()
+        .remote_info(stack_a._node.endpoint().id())
+        .await
+        .is_some();
+    format!(
+        "snapshot_a={snapshot_a}; snapshot_b={snapshot_b}; remote_info_a={remote_info_a}; remote_info_b={remote_info_b}; timeline_a={timeline_a:?}; timeline_b={timeline_b:?}; notifications_a={notifications_a:?}"
+    )
+}
+
 #[tokio::test]
 async fn tracking_multiple_topics_updates_sync_status() {
     let store = Arc::new(MemoryStore::default());
@@ -785,6 +858,138 @@ async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
             .await
             .expect("preview")
             .is_some()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn relay_backed_iroh_transport_syncs_repost_and_notification() {
+    if std::env::var_os("GITHUB_ACTIONS").is_some() {
+        return;
+    }
+    let _guard = iroh_integration_test_lock().lock_owned().await;
+    let (_relay_map, relay_url, _relay_guard) = iroh::test_utils::run_relay_server()
+        .await
+        .expect("run relay server");
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url.to_string()],
+    }
+    .normalized();
+    let dir = tempdir().expect("tempdir");
+    let stack_a =
+        TestIrohStack::new_with_relay(&dir.path().join("relay-repost-a"), relay_config.clone())
+            .await;
+    let stack_b =
+        TestIrohStack::new_with_relay(&dir.path().join("relay-repost-b"), relay_config).await;
+    let store_a = Arc::new(MemoryStore::default());
+    let store_b = Arc::new(MemoryStore::default());
+    let app_a = app_with_iroh_services(store_a, &stack_a);
+    let app_b = app_with_iroh_services(store_b, &stack_b);
+    let topic = "kukuri:topic:relay-repost";
+
+    app_a
+        .set_discovery_seeds(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![SeedPeer {
+                endpoint_id: stack_b._node.endpoint().id().to_string(),
+                addr_hint: None,
+            }],
+            Vec::new(),
+        )
+        .await
+        .expect("configure discovery a");
+    app_b
+        .set_discovery_seeds(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![SeedPeer {
+                endpoint_id: stack_a._node.endpoint().id().to_string(),
+                addr_hint: None,
+            }],
+            Vec::new(),
+        )
+        .await
+        .expect("configure discovery b");
+
+    let _ = app_a
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe a timeline");
+    let _ = app_b
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe b timeline");
+    wait_for_topic_peer_count(&app_a, topic, 1).await;
+    wait_for_topic_peer_count(&app_b, topic, 1).await;
+
+    let source_id = app_a
+        .create_post(topic, "relay source post", None)
+        .await
+        .expect("create source post");
+    if let Err(error) = timeout(p2p_replication_timeout(), async {
+        loop {
+            let timeline = app_b
+                .list_timeline(topic, None, 20)
+                .await
+                .expect("timeline b");
+            if timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == source_id)
+            {
+                return;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        panic!(
+            "relay-backed source propagation timeout: {error:?}; {}",
+            relay_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
+        );
+    }
+
+    let repost_id = app_b
+        .create_repost(topic, topic, source_id.as_str(), None)
+        .await
+        .expect("create repost");
+    if let Err(error) = timeout(p2p_replication_timeout(), async {
+        loop {
+            let timeline = app_a
+                .list_timeline(topic, None, 20)
+                .await
+                .expect("timeline a");
+            let notifications = app_a.list_notifications().await.expect("notifications a");
+            let has_repost = timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == repost_id);
+            let has_notification = notifications.iter().any(|item| {
+                item.kind == NotificationKind::Repost
+                    && item.object_id.as_deref() == Some(repost_id.as_str())
+            });
+            if has_repost && has_notification {
+                return;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        panic!(
+            "relay-backed repost propagation timeout: {error:?}; {}",
+            relay_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
+        );
+    }
+
+    assert_eq!(
+        app_a
+            .get_notification_status()
+            .await
+            .expect("notification status")
+            .unread_count,
+        1
     );
 }
 
