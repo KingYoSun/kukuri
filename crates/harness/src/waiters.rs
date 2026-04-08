@@ -439,7 +439,18 @@ pub(crate) async fn wait_for_direct_message_peer_ready(
                 })
                 .await
                 .context("direct message status")?;
-            if status.send_enabled && status.peer_count >= expected_peer_count {
+            let topic_status = runtime
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message topic status")?;
+            let topic_ready = topic_status.as_ref().is_some_and(|topic_status| {
+                topic_status.joined
+                    && topic_status.peer_count >= expected_peer_count
+                    && topic_status.connected_peers.len() >= expected_peer_count.min(1)
+            });
+            if status.send_enabled && topic_ready {
                 return Ok::<DirectMessageStatusView, anyhow::Error>(status);
             }
             sleep(Duration::from_millis(100)).await;
@@ -465,7 +476,28 @@ pub(crate) async fn wait_for_direct_message_peer_ready(
                     )
                 })
                 .unwrap_or_else(|| "direct_message_status=unavailable".to_string());
-            anyhow::bail!("direct message peer readiness timeout for {peer_pubkey}; {snapshot}");
+            let topic_snapshot = runtime
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: peer_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .flatten()
+                .map(|topic_status| {
+                    format!(
+                        "topic={}, joined={}, topic_peer_count={}, connected_peers={:?}, status_detail={}, last_error={:?}",
+                        topic_status.topic,
+                        topic_status.joined,
+                        topic_status.peer_count,
+                        topic_status.connected_peers,
+                        topic_status.status_detail,
+                        topic_status.last_error
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_topic=unavailable".to_string());
+            anyhow::bail!(
+                "direct message peer readiness timeout for {peer_pubkey}; {snapshot}; {topic_snapshot}"
+            );
         }
     }
 }
@@ -1025,6 +1057,177 @@ pub(crate) async fn refresh_public_pair(
     wait_for_topic_peer_count(runtime_a, topic, 1, step_timeout).await?;
     wait_for_topic_peer_count(runtime_b, topic, 1, step_timeout).await?;
     Ok(())
+}
+
+pub(crate) async fn refresh_direct_message_pair(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    ticket_a: &str,
+    ticket_b: &str,
+    a_pubkey: &str,
+    b_pubkey: &str,
+) -> Result<()> {
+    runtime_a
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_b.to_string(),
+        })
+        .await?;
+    runtime_b
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_a.to_string(),
+        })
+        .await?;
+    runtime_a
+        .open_direct_message(DirectMessageRequest {
+            pubkey: b_pubkey.to_string(),
+        })
+        .await?;
+    runtime_b
+        .open_direct_message(DirectMessageRequest {
+            pubkey: a_pubkey.to_string(),
+        })
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn wait_for_direct_message_pair_ready_with_refresh(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    ticket_a: &str,
+    ticket_b: &str,
+    a_pubkey: &str,
+    b_pubkey: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = Instant::now() + refresh_interval;
+        loop {
+            let status_a = runtime_a
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: b_pubkey.to_string(),
+                })
+                .await
+                .context("desktop a direct message status")?;
+            let topic_a = runtime_a
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: b_pubkey.to_string(),
+                })
+                .await
+                .context("desktop a direct message topic status")?;
+            let status_b = runtime_b
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: a_pubkey.to_string(),
+                })
+                .await
+                .context("desktop b direct message status")?;
+            let topic_b = runtime_b
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: a_pubkey.to_string(),
+                })
+                .await
+                .context("desktop b direct message topic status")?;
+            let ready_a = status_a.send_enabled
+                && topic_a.as_ref().is_some_and(|topic_status| {
+                    topic_status.joined && topic_status.peer_count >= 1
+                });
+            let ready_b = status_b.send_enabled
+                && topic_b.as_ref().is_some_and(|topic_status| {
+                    topic_status.joined && topic_status.peer_count >= 1
+                });
+            if ready_a && ready_b {
+                return Ok::<(), anyhow::Error>(());
+            }
+            if Instant::now() >= next_refresh_at {
+                refresh_direct_message_pair(
+                    runtime_a, runtime_b, ticket_a, ticket_b, a_pubkey, b_pubkey,
+                )
+                .await
+                .context("refresh direct message pair")?;
+                next_refresh_at = Instant::now() + refresh_interval;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot_a = runtime_a
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: b_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .map(|status| {
+                    format!(
+                        "send_enabled={}, mutual={}, peer_count={}, pending_outbox_count={}",
+                        status.send_enabled,
+                        status.mutual,
+                        status.peer_count,
+                        status.pending_outbox_count
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_status=unavailable".to_string());
+            let topic_snapshot_a = runtime_a
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: b_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .flatten()
+                .map(|topic_status| {
+                    format!(
+                        "topic={}, joined={}, topic_peer_count={}, connected_peers={:?}, status_detail={}, last_error={:?}",
+                        topic_status.topic,
+                        topic_status.joined,
+                        topic_status.peer_count,
+                        topic_status.connected_peers,
+                        topic_status.status_detail,
+                        topic_status.last_error
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_topic=unavailable".to_string());
+            let snapshot_b = runtime_b
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: a_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .map(|status| {
+                    format!(
+                        "send_enabled={}, mutual={}, peer_count={}, pending_outbox_count={}",
+                        status.send_enabled,
+                        status.mutual,
+                        status.peer_count,
+                        status.pending_outbox_count
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_status=unavailable".to_string());
+            let topic_snapshot_b = runtime_b
+                .get_direct_message_topic_status(DirectMessageRequest {
+                    pubkey: a_pubkey.to_string(),
+                })
+                .await
+                .ok()
+                .flatten()
+                .map(|topic_status| {
+                    format!(
+                        "topic={}, joined={}, topic_peer_count={}, connected_peers={:?}, status_detail={}, last_error={:?}",
+                        topic_status.topic,
+                        topic_status.joined,
+                        topic_status.peer_count,
+                        topic_status.connected_peers,
+                        topic_status.status_detail,
+                        topic_status.last_error
+                    )
+                })
+                .unwrap_or_else(|| "direct_message_topic=unavailable".to_string());
+            anyhow::bail!(
+                "direct message pair readiness timeout; desktop_a=({snapshot_a}; {topic_snapshot_a}); desktop_b=({snapshot_b}; {topic_snapshot_b})"
+            );
+        }
+    }
 }
 
 pub(crate) async fn select_public_feature_pair<'a>(

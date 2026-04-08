@@ -64,6 +64,7 @@ pub(crate) use tokio::task::JoinHandle;
 pub(crate) use tracing::{info, warn};
 
 pub(crate) const REPLICA_SYNC_RESTART_RETRY_SECONDS: i64 = 5;
+pub(crate) const DIRECT_MESSAGE_SUBSCRIPTION_RESTART_RETRY_SECONDS: i64 = 5;
 pub(crate) const PUBLIC_CHANNEL_ID: &str = "public";
 pub(crate) const DIRECT_MESSAGE_FRAME_MIME: &str =
     "application/vnd.kukuri.direct-message-frame+json";
@@ -116,6 +117,7 @@ pub struct AppService {
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
+    pub(crate) direct_message_subscription_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
 }
 
@@ -206,6 +208,7 @@ impl AppService {
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
+            direct_message_subscription_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -1792,7 +1795,27 @@ impl AppService {
     }
 
     pub(crate) async fn ensure_direct_message_subscription(&self, peer_pubkey: &str) -> Result<()> {
-        if !self.direct_message_send_enabled(peer_pubkey).await? {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        if !self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?
+        {
+            return Ok(());
+        }
+        let has_active_handle = self
+            .direct_message_subscriptions
+            .lock()
+            .await
+            .get(peer_pubkey.as_str())
+            .is_some_and(|handle| !handle.is_finished());
+        if has_active_handle {
+            if self
+                .should_restart_stale_direct_message_subscription(peer_pubkey.as_str())
+                .await?
+            {
+                self.restart_direct_message_subscription(peer_pubkey.as_str())
+                    .await?;
+            }
             return Ok(());
         }
         Self::spawn_direct_message_subscription_with_services(
@@ -1804,9 +1827,91 @@ impl AppService {
             Arc::clone(&self.keys),
             Arc::clone(&self.last_sync_ts),
             self.current_author_pubkey().as_str(),
-            peer_pubkey,
+            peer_pubkey.as_str(),
         )
         .await
+    }
+
+    pub(crate) async fn restart_direct_message_subscription(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<()> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        stop_direct_message_subscription_with_services(
+            self.direct_message_subscriptions.as_ref(),
+            self.hint_transport.as_ref(),
+            self.keys.as_ref(),
+            peer_pubkey.as_str(),
+        )
+        .await?;
+        Self::spawn_direct_message_subscription_with_services(
+            Arc::clone(&self.direct_message_subscriptions),
+            Arc::clone(&self.projection_store),
+            Arc::clone(&self.blob_service),
+            Arc::clone(&self.hint_transport),
+            Arc::clone(&self.transport),
+            Arc::clone(&self.keys),
+            Arc::clone(&self.last_sync_ts),
+            self.current_author_pubkey().as_str(),
+            peer_pubkey.as_str(),
+        )
+        .await
+    }
+
+    pub(crate) async fn direct_message_topic_snapshot(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<Option<TopicPeerSnapshot>> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let topic =
+            derive_direct_message_topic(self.keys.as_ref(), &Pubkey::from(peer_pubkey.as_str()))?;
+        let hint_topic = format!("hint/{}", topic.as_str());
+        Ok(self
+            .transport
+            .peers()
+            .await?
+            .topic_diagnostics
+            .into_iter()
+            .find(|diagnostic| {
+                diagnostic.topic == hint_topic || diagnostic.topic == topic.as_str()
+            }))
+    }
+
+    pub(crate) async fn should_restart_stale_direct_message_subscription(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<bool> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        let Some(snapshot) = self
+            .direct_message_topic_snapshot(peer_pubkey.as_str())
+            .await?
+        else {
+            return Ok(false);
+        };
+        if snapshot.joined || snapshot.peer_count > 0 || snapshot.configured_peer_ids.is_empty() {
+            self.direct_message_subscription_restart_deadlines
+                .lock()
+                .await
+                .remove(peer_pubkey.as_str());
+            return Ok(false);
+        }
+        let now = Utc::now().timestamp();
+        let mut deadlines = self
+            .direct_message_subscription_restart_deadlines
+            .lock()
+            .await;
+        let next_due_at = deadlines
+            .get(peer_pubkey.as_str())
+            .copied()
+            .unwrap_or_default();
+        if now < next_due_at {
+            return Ok(false);
+        }
+        deadlines.insert(
+            peer_pubkey,
+            now.saturating_add(DIRECT_MESSAGE_SUBSCRIPTION_RESTART_RETRY_SECONDS),
+        );
+        Ok(true)
     }
 
     #[allow(clippy::too_many_arguments)]

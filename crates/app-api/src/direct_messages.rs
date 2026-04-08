@@ -223,4 +223,32 @@ impl AppService {
         }
         self.direct_message_status_view(peer_pubkey.as_str()).await
     }
+
+    pub async fn get_direct_message_topic_status(
+        &self,
+        peer_pubkey: &str,
+    ) -> Result<Option<DirectMessageTopicStatusView>> {
+        let peer_pubkey = normalize_author_pubkey(peer_pubkey)?;
+        self.ensure_author_subscription(peer_pubkey.as_str())
+            .await?;
+        self.rebuild_author_relationships().await?;
+        if self
+            .direct_message_send_enabled(peer_pubkey.as_str())
+            .await?
+        {
+            self.ensure_direct_message_subscription(peer_pubkey.as_str())
+                .await?;
+        }
+        Ok(self
+            .direct_message_topic_snapshot(peer_pubkey.as_str())
+            .await?
+            .map(|diagnostic| DirectMessageTopicStatusView {
+                topic: diagnostic.topic,
+                joined: diagnostic.joined,
+                peer_count: diagnostic.peer_count,
+                connected_peers: diagnostic.connected_peers,
+                status_detail: diagnostic.status_detail,
+                last_error: diagnostic.last_error,
+            }))
+    }
 }
