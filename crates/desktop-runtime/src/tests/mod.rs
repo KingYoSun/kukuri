@@ -567,6 +567,90 @@ async fn wait_for_timeline_post_result(
     }
 }
 
+async fn wait_for_joined_private_channel_epoch_result(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    channel_id: &str,
+    expected_epoch_id: &str,
+    min_participant_count: usize,
+    step_timeout: Duration,
+) -> Result<JoinedPrivateChannelView> {
+    match timeout(step_timeout, async {
+        let private_scope = TimelineScope::Channel {
+            channel_id: kukuri_core::ChannelId::new(channel_id.to_string()),
+        };
+        loop {
+            let _ = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.into(),
+                    scope: TimelineScope::Public,
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await;
+            let joined = runtime
+                .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                    topic: topic.into(),
+                })
+                .await
+                .context("joined channels query failed")?;
+            let Some(entry) = joined.iter().find(|item| item.channel_id == channel_id) else {
+                sleep(Duration::from_millis(50)).await;
+                continue;
+            };
+            let _ = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.into(),
+                    scope: private_scope.clone(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await;
+            if entry.current_epoch_id == expected_epoch_id
+                && entry.participant_count >= min_participant_count
+            {
+                return Ok::<JoinedPrivateChannelView, anyhow::Error>(entry.clone());
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let status = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|value| format_sync_snapshot(&value, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            let joined = runtime
+                .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                    topic: topic.into(),
+                })
+                .await
+                .unwrap_or_default();
+            bail!("joined private channel epoch timeout; {status}; joined={joined:?}");
+        }
+    }
+}
+
+async fn joined_private_channel_epoch_result(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    channel_id: &str,
+) -> Result<Option<JoinedPrivateChannelView>> {
+    let joined = runtime
+        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+            topic: topic.into(),
+        })
+        .await
+        .context("joined channels query failed")?;
+    Ok(joined
+        .into_iter()
+        .find(|entry| entry.channel_id == channel_id))
+}
+
 async fn wait_for_profile_timeline_posts_result(
     runtime: &DesktopRuntime,
     author_pubkey: &str,
@@ -812,6 +896,12 @@ async fn replicate_private_post_with_retry(
 ) -> String {
     let (attempts, attempt_timeout) =
         public_replication_retry_schedule(runtime_replication_timeout(), false);
+    let channel_id = match scope {
+        TimelineScope::Channel { channel_id } => channel_id.as_str().to_string(),
+        TimelineScope::Public | TimelineScope::AllJoined => {
+            panic!("replicate_private_post_with_retry requires a private channel scope")
+        }
+    };
     let mut last_error = None;
 
     for attempt in 1..=attempts {
@@ -872,6 +962,11 @@ async fn replicate_private_post_with_retry(
                     .await
                     .context("subscriber did not observe private topic connectivity")?;
             }
+            let pre_write_epoch =
+                joined_private_channel_epoch_result(publisher, topic, channel_id.as_str())
+                    .await
+                    .context("failed to read publisher private channel state before write")?
+                    .map(|entry| entry.current_epoch_id);
             let object_id = publisher
                 .create_post(CreatePostRequest {
                     topic: topic.to_string(),
@@ -891,6 +986,26 @@ async fn replicate_private_post_with_retry(
             )
             .await
             .context("publisher did not observe private post locally")?;
+            let post_write_epoch =
+                joined_private_channel_epoch_result(publisher, topic, channel_id.as_str())
+                    .await
+                    .context("failed to read publisher private channel state after write")?
+                    .ok_or_else(|| anyhow::anyhow!("publisher lost private channel after write"))?
+                    .current_epoch_id;
+            if pre_write_epoch.as_deref() != Some(post_write_epoch.as_str()) {
+                for subscriber in subscribers {
+                    wait_for_joined_private_channel_epoch_result(
+                        subscriber,
+                        topic,
+                        channel_id.as_str(),
+                        post_write_epoch.as_str(),
+                        1,
+                        attempt_timeout,
+                    )
+                    .await
+                    .context("subscriber did not redeem private channel rotation after write")?;
+                }
+            }
             for subscriber in subscribers {
                 wait_for_timeline_post_result(
                     subscriber,
@@ -1031,61 +1146,18 @@ async fn wait_for_joined_private_channel_epoch(
     min_participant_count: usize,
     timeout_label: &str,
 ) -> JoinedPrivateChannelView {
-    match timeout(runtime_replication_timeout(), async {
-        let private_scope = TimelineScope::Channel {
-            channel_id: kukuri_core::ChannelId::new(channel_id.to_string()),
-        };
-        loop {
-            let _ = runtime
-                .list_timeline(ListTimelineRequest {
-                    topic: topic.into(),
-                    scope: TimelineScope::Public,
-                    cursor: None,
-                    limit: Some(20),
-                })
-                .await;
-            let joined = runtime
-                .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
-                    topic: topic.into(),
-                })
-                .await
-                .expect("joined channels");
-            let Some(entry) = joined.iter().find(|item| item.channel_id == channel_id) else {
-                sleep(Duration::from_millis(50)).await;
-                continue;
-            };
-            let _ = runtime
-                .list_timeline(ListTimelineRequest {
-                    topic: topic.into(),
-                    scope: private_scope.clone(),
-                    cursor: None,
-                    limit: Some(20),
-                })
-                .await;
-            if entry.current_epoch_id == expected_epoch_id
-                && entry.participant_count >= min_participant_count
-            {
-                break entry.clone();
-            }
-            sleep(Duration::from_millis(50)).await;
-        }
-    })
+    match wait_for_joined_private_channel_epoch_result(
+        runtime,
+        topic,
+        channel_id,
+        expected_epoch_id,
+        min_participant_count,
+        runtime_replication_timeout(),
+    )
     .await
     {
         Ok(entry) => entry,
-        Err(_) => {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            let joined = runtime
-                .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
-                    topic: topic.into(),
-                })
-                .await
-                .unwrap_or_default();
-            panic!(
-                "{timeout_label}: {} joined={joined:?}",
-                format_sync_snapshot(&status, topic)
-            );
-        }
+        Err(error) => panic!("{timeout_label}: {error:#}"),
     }
 }
 
