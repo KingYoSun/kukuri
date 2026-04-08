@@ -465,9 +465,7 @@ pub(crate) async fn wait_for_direct_message_peer_ready(
                     )
                 })
                 .unwrap_or_else(|| "direct_message_status=unavailable".to_string());
-            anyhow::bail!(
-                "direct message peer readiness timeout for {peer_pubkey}; {snapshot}"
-            );
+            anyhow::bail!("direct message peer readiness timeout for {peer_pubkey}; {snapshot}");
         }
     }
 }
