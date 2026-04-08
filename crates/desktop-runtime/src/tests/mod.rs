@@ -816,6 +816,62 @@ async fn replicate_private_post_with_retry(
 
     for attempt in 1..=attempts {
         let attempt_result = async {
+            let _ = publisher
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: TimelineScope::Public,
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("failed to resubscribe publisher to public topic")?;
+            let _ = publisher
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: scope.clone(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("failed to resubscribe publisher to private topic")?;
+            let _ = publisher
+                .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                    topic: topic.to_string(),
+                })
+                .await
+                .context("failed to refresh publisher joined private channels")?;
+            wait_for_connected_topic_peer_count_result(publisher, topic, 1, attempt_timeout)
+                .await
+                .context("publisher did not observe private topic connectivity")?;
+            for subscriber in subscribers {
+                let _ = subscriber
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .context("failed to resubscribe subscriber to public topic")?;
+                let _ = subscriber
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: scope.clone(),
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .context("failed to resubscribe subscriber to private topic")?;
+                let _ = subscriber
+                    .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                        topic: topic.to_string(),
+                    })
+                    .await
+                    .context("failed to refresh subscriber joined private channels")?;
+                wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
+                    .await
+                    .context("subscriber did not observe private topic connectivity")?;
+            }
             let object_id = publisher
                 .create_post(CreatePostRequest {
                     topic: topic.to_string(),
