@@ -17,7 +17,7 @@ async function openComposerDialog(page: Page) {
   return dialog;
 }
 
-test('browser mock hash routes deep link profile, timeline normalization, and settings surfaces', async ({
+test('browser mock hash routes deep link profile, notifications, timeline normalization, and settings surfaces', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
@@ -41,6 +41,19 @@ test('browser mock hash routes deep link profile, timeline normalization, and se
 
   await settingsDialog.getByTestId('settings-section-connectivity').click();
   await expect(page).toHaveURL(/settings=connectivity/);
+  await page.keyboard.press('Escape');
+  await expect(settingsDialog).not.toBeVisible();
+
+  await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ademo');
+  await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+  await expect(page.getByText('browser mock reply notification')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Notifications/ })).toContainText('0');
+
+  await page.getByText('browser mock reply notification').click();
+  await expect(page).toHaveURL(
+    /#\/timeline\?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=browser-seed-post/
+  );
+  await expect(page.getByRole('complementary', { name: 'Thread' })).toBeVisible();
 });
 
 test('browser mock hash history keeps route state stable without narrow-width overflow', async ({

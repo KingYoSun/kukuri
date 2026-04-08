@@ -6,8 +6,9 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Bell, Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
+import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
@@ -32,6 +33,7 @@ import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import { type PrimarySection } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -136,6 +138,10 @@ export function DesktopShellPage({
     profileSaving,
     selectedAuthorPubkey,
     selectedAuthor,
+    notifications,
+    notificationStatus,
+    notificationPanelState,
+    notificationAutoReadError,
     selectedDirectMessagePeerPubkey,
     directMessages,
     directMessageComposer,
@@ -226,6 +232,8 @@ export function DesktopShellPage({
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setComposer = useDesktopShellFieldSetter('composer');
   const setDirectMessageComposer = useDesktopShellFieldSetter('directMessageComposer');
+  const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
+  const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
@@ -251,6 +259,7 @@ export function DesktopShellPage({
     game: null,
     messages: null,
     profile: null,
+    notifications: null,
   });
 
   const {
@@ -324,6 +333,7 @@ export function DesktopShellPage({
     handleSendDirectMessage,
     handleDeleteDirectMessageMessage,
     handleClearDirectMessage,
+    handleOpenNotification,
     handleToggleReaction,
     handleCreateCustomReactionAsset,
     handleBookmarkCustomReaction,
@@ -359,6 +369,7 @@ export function DesktopShellPage({
     loadTopics,
     syncRoute,
     openDirectMessagePane,
+    openAuthorDetail,
     openThread,
     setComposeDialogOpen,
     setLiveCreateDialogOpen,
@@ -430,8 +441,83 @@ export function DesktopShellPage({
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
     [bookmarkedPosts]
   );
+  const notificationBadgeLabel =
+    notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
+  const notificationItems = useMemo(
+    () =>
+      notifications.map((notification) => {
+        const knownAuthor = knownAuthorsByPubkey[notification.actor_pubkey] ?? null;
+        const actorLabel = authorDisplayLabel(
+          notification.actor_pubkey,
+          notification.actor_display_name,
+          notification.actor_name
+        );
+        const actorPicture = knownAuthor
+          ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
+          : notification.actor_picture_asset
+            ? mediaObjectUrls[notification.actor_picture_asset.hash] ?? notification.actor_picture ?? null
+            : notification.actor_picture ?? null;
+        const contextLabel =
+          notification.kind === 'direct_message'
+            ? t('shell:notifications.context.directMessage')
+            : notification.topic_id && notification.channel_id
+              ? t('shell:notifications.context.topicChannel', {
+                  channel: notification.channel_id,
+                  topic: notification.topic_id,
+                })
+              : notification.topic_id
+                ? t('shell:notifications.context.topic', {
+                    topic: notification.topic_id,
+                  })
+                : t('shell:notifications.context.authorActivity');
+        const previewText =
+          notification.preview_text ??
+          (notification.kind === 'followed'
+            ? t('shell:notifications.preview.followed')
+            : notification.kind === 'direct_message'
+              ? t('shell:notifications.preview.noMessage')
+              : t('shell:notifications.preview.noContent'));
+
+        return {
+          ...notification,
+          actorLabel,
+          actorPicture,
+          contextLabel,
+          kindLabel: t(`shell:notifications.kinds.${notification.kind}`),
+          previewText,
+          receivedLabel: formatLocalizedTime(notification.received_at, locale),
+          unread: !notification.read_at,
+        };
+      }),
+    [knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
+  );
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
+  const notificationAction = (
+    <Button
+      className='shell-notification-button'
+      variant={shellChromeState.activePrimarySection === 'notifications' ? 'primary' : 'secondary'}
+      type='button'
+      aria-current={shellChromeState.activePrimarySection === 'notifications' ? 'page' : undefined}
+      onClick={() => {
+        setNotificationAutoReadError(null);
+        setNotificationPanelState({
+          status: 'loading',
+          error: null,
+        });
+        focusPrimarySection('notifications');
+      }}
+    >
+      <Bell className='size-4' aria-hidden='true' />
+      <span>{t('shell:navigation.notificationsButton')}</span>
+      <Badge
+        className='shell-notification-button-badge'
+        tone={notificationStatus.unread_count > 0 ? 'accent' : 'neutral'}
+      >
+        {notificationBadgeLabel}
+      </Badge>
+    </Button>
+  );
   const navRailHeader = (
     <div className='shell-nav-status'>
       <div className='shell-status-badges'>
@@ -873,6 +959,94 @@ export function DesktopShellPage({
       ) : null}
     </>
   );
+  const notificationsWorkspace = (
+    <>
+      <Card className='shell-workspace-card'>
+        <div className='shell-workspace-header'>
+          <div>
+            <h3>{t('shell:notifications.title')}</h3>
+            <small>
+              {t('shell:notifications.summary', {
+                count: notifications.length,
+                unread: notificationStatus.unread_count,
+              })}
+            </small>
+          </div>
+          <Button
+            variant='secondary'
+            type='button'
+            onClick={() => {
+              setNotificationAutoReadError(null);
+              setNotificationPanelState({
+                status: 'loading',
+                error: null,
+              });
+              void loadTopics(trackedTopics, activeTopic, null);
+            }}
+          >
+            {t('common:actions.refresh')}
+          </Button>
+        </div>
+        {notificationPanelState.status === 'loading' ? (
+          <Notice>{t('shell:notifications.loading')}</Notice>
+        ) : null}
+        {notificationPanelState.status === 'error' && notificationPanelState.error ? (
+          <Notice tone='destructive'>{notificationPanelState.error}</Notice>
+        ) : null}
+        {notificationAutoReadError ? <Notice tone='warning'>{notificationAutoReadError}</Notice> : null}
+      </Card>
+
+      <Card className='shell-workspace-card'>
+        {notificationPanelState.status === 'ready' && notificationItems.length === 0 ? (
+          <p className='empty-state'>{t('shell:notifications.empty')}</p>
+        ) : null}
+        {notificationItems.length > 0 ? (
+          <ul className='notification-list' aria-label={t('shell:notifications.title')}>
+            {notificationItems.map((notification) => (
+              <li key={notification.notification_id}>
+                <button
+                  className='notification-item'
+                  data-unread={notification.unread}
+                  type='button'
+                  onClick={() => void handleOpenNotification(notification)}
+                >
+                  <div className='notification-item-header'>
+                    <div className='notification-item-author'>
+                      <AuthorAvatar
+                        label={notification.actorLabel}
+                        picture={notification.actorPicture}
+                        testId={`notification-avatar-${notification.notification_id}`}
+                      />
+                      <div className='notification-item-copy'>
+                        <span className='notification-item-author-label'>
+                          {notification.actorLabel}
+                        </span>
+                        <div className='notification-item-badges'>
+                          <Badge tone={notification.unread ? 'accent' : 'neutral'}>
+                            {notification.kindLabel}
+                          </Badge>
+                          {notification.unread ? (
+                            <Badge tone='warning'>
+                              {t('shell:notifications.unread')}
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <span className='notification-item-time'>{notification.receivedLabel}</span>
+                  </div>
+                  <div className='notification-item-body'>
+                    <p className='notification-item-preview'>{notification.previewText}</p>
+                    <small className='notification-item-context'>{notification.contextLabel}</small>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Card>
+    </>
+  );
   const detailPaneStack = (
     <>
       {selectedThread ? (
@@ -959,6 +1133,7 @@ export function DesktopShellPage({
             railId={SHELL_NAV_ID}
             open={shellChromeState.navOpen}
             onOpenChange={(open) => setNavOpen(open, !open)}
+            notificationAction={notificationAction}
             headerContent={navRailHeader}
             addTopicControl={
               <Label>
@@ -987,13 +1162,15 @@ export function DesktopShellPage({
         }
         workspace={
           <div className='shell-main-stack'>
-            <Card className='shell-workspace-card shell-workspace-header-card'>
-              <TimelineWorkspaceHeader
-                activeSection={shellChromeState.activePrimarySection}
-                items={primarySectionItems}
-                onSelectSection={focusPrimarySection}
-              />
-            </Card>
+            {shellChromeState.activePrimarySection !== 'notifications' ? (
+              <Card className='shell-workspace-card shell-workspace-header-card'>
+                <TimelineWorkspaceHeader
+                  activeSection={shellChromeState.activePrimarySection}
+                  items={primarySectionItems}
+                  onSelectSection={focusPrimarySection}
+                />
+              </Card>
+            ) : null}
 
             <section
               className='shell-section'
@@ -1329,6 +1506,10 @@ export function DesktopShellPage({
                   </Card>
                 </>
               ) : null}
+
+              {shellChromeState.activePrimarySection === 'notifications'
+                ? notificationsWorkspace
+                : null}
 
               {shellChromeState.activePrimarySection === 'messages' ? messagesWorkspace : null}
 

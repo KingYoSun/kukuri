@@ -12,6 +12,7 @@ import type {
   DirectMessageMessageView,
   GameRoomView,
   JoinedPrivateChannelView,
+  NotificationView,
   PostView,
 } from '@/lib/api';
 
@@ -92,6 +93,8 @@ export function useDesktopShellData({
     thread,
     ownedReactionAssets,
     bookmarkedReactionAssets,
+    notifications,
+    shellChromeState,
   } = state;
   const selectedDirectMessageTimeline =
     state.directMessageTimelineByPeer[state.selectedDirectMessagePeerPubkey ?? ''] ??
@@ -135,6 +138,10 @@ export function useDesktopShellData({
   const setSelectedAuthor = useDesktopShellFieldSetter('selectedAuthor');
   const setSelectedAuthorTimeline = useDesktopShellFieldSetter('selectedAuthorTimeline');
   const setAuthorError = useDesktopShellFieldSetter('authorError');
+  const setNotifications = useDesktopShellFieldSetter('notifications');
+  const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
+  const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
+  const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setSelectedDirectMessagePeerPubkey = useDesktopShellFieldSetter(
     'selectedDirectMessagePeerPubkey'
   );
@@ -212,6 +219,7 @@ export function useDesktopShellData({
     for (const pictureAsset of [
       localProfile?.picture_asset ?? null,
       ...Object.values(knownAuthorsByPubkey).map((author) => author.picture_asset ?? null),
+      ...notifications.map((notification) => notification.actor_picture_asset ?? null),
     ]) {
       tryAddAttachment(
         pictureAsset
@@ -233,6 +241,7 @@ export function useDesktopShellData({
     bookmarkedReactionAssets,
     knownAuthorsByPubkey,
     localProfile?.picture_asset,
+    notifications,
     ownedReactionAssets,
     profileTimeline,
     selectedDirectMessageTimeline,
@@ -249,9 +258,11 @@ export function useDesktopShellData({
       const currentSelectedAuthorPubkey = currentState.selectedAuthorPubkey;
       const currentDirectMessagePaneOpen = currentState.directMessagePaneOpen;
       const currentSelectedDirectMessagePeerPubkey = currentState.selectedDirectMessagePeerPubkey;
+      const currentActivePrimarySection = currentState.shellChromeState.activePrimarySection;
       const currentDiscoveryEditorDirty = currentState.discoveryEditorDirty;
       const currentCommunityNodeEditorDirty = currentState.communityNodeEditorDirty;
       const currentProfileDirty = currentState.profileDirty;
+      const shouldLoadNotifications = currentActivePrimarySection === 'notifications';
 
       try {
         const [
@@ -329,6 +340,8 @@ export function useDesktopShellData({
           followingConnectionsResult,
           followedConnectionsResult,
           mutedConnectionsResult,
+          notificationStatusResult,
+          notificationsResult,
         ] = await Promise.allSettled([
           api.getDiscoveryConfig(),
           api.getCommunityNodeConfig(),
@@ -355,7 +368,44 @@ export function useDesktopShellData({
           api.listSocialConnections('following'),
           api.listSocialConnections('followed'),
           api.listSocialConnections('muted'),
+          api.getNotificationStatus(),
+          shouldLoadNotifications ? api.listNotifications() : Promise.resolve(null),
         ]);
+        if (requestId !== loadTopicsRequestRef.current) {
+          return;
+        }
+        let nextNotifications: NotificationView[] | null =
+          shouldLoadNotifications && notificationsResult.status === 'fulfilled'
+            ? notificationsResult.value ?? []
+            : null;
+        let nextNotificationStatus =
+          notificationStatusResult.status === 'fulfilled'
+            ? notificationStatusResult.value
+            : nextNotifications
+              ? {
+                  unread_count: nextNotifications.filter((notification) => !notification.read_at)
+                    .length,
+                }
+              : null;
+        let nextNotificationAutoReadError: string | null = null;
+
+        if (shouldLoadNotifications && nextNotifications) {
+          const hasUnreadNotifications = nextNotifications.some((notification) => !notification.read_at);
+          if (hasUnreadNotifications) {
+            try {
+              nextNotificationStatus = await api.markAllNotificationsRead();
+              const readAt = Date.now();
+              nextNotifications = nextNotifications.map((notification) =>
+                notification.read_at ? notification : { ...notification, read_at: readAt }
+              );
+            } catch (notificationReadError) {
+              nextNotificationAutoReadError = messageFromError(
+                notificationReadError,
+                translate('shell:notifications.errors.failedAutoRead')
+              );
+            }
+          }
+        }
         if (requestId !== loadTopicsRequestRef.current) {
           return;
         }
@@ -468,6 +518,30 @@ export function useDesktopShellData({
             mergeKnownAuthors(current, directMessagesView.map(authorViewFromDirectMessageConversation))
           );
           setSyncStatus(status);
+          if (nextNotificationStatus) {
+            setNotificationStatus(nextNotificationStatus);
+          }
+          if (shouldLoadNotifications) {
+            if (notificationsResult.status === 'fulfilled' && nextNotifications) {
+              setNotifications(nextNotifications);
+              setNotificationPanelState({
+                status: 'ready',
+                error: null,
+              });
+            } else {
+              setNotifications([]);
+              setNotificationPanelState({
+                status: 'error',
+                error: messageFromError(
+                  notificationsResult.status === 'rejected' ? notificationsResult.reason : null,
+                  translate('shell:notifications.errors.failedToLoad')
+                ),
+              });
+            }
+            setNotificationAutoReadError(nextNotificationAutoReadError);
+          } else {
+            setNotificationAutoReadError(null);
+          }
           if (discoveryResult.status === 'fulfilled') {
             setDiscoveryConfig(discoveryResult.value);
             if (!currentDiscoveryEditorDirty) {
@@ -720,6 +794,10 @@ export function useDesktopShellData({
       setLiveSessionsByTopic,
       setLocalPeerTicket,
       setLocalProfile,
+      setNotifications,
+      setNotificationAutoReadError,
+      setNotificationPanelState,
+      setNotificationStatus,
       setOwnedReactionAssets,
       setProfileDraft,
       setProfileError,
@@ -763,6 +841,7 @@ export function useDesktopShellData({
   }, [
     activeTopic,
     loadTopics,
+    shellChromeState.activePrimarySection,
     selectedAuthorPubkey,
     selectedThread,
     trackedTopics,

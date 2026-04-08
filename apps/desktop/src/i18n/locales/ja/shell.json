@@ -12,6 +12,7 @@
     "channel": "チャンネル",
     "channelsGroup": "チャンネル",
     "close": "ナビゲーションを閉じる",
+    "notificationsButton": "通知",
     "open": "ナビゲーションを開く",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "メインナビゲーション",
@@ -28,8 +29,39 @@
     "game": "ゲーム",
     "live": "ライブ",
     "messages": "メッセージ",
+    "notifications": "通知",
     "profile": "プロフィール",
     "timeline": "タイムライン"
+  },
+  "notifications": {
+    "context": {
+      "authorActivity": "著者アクティビティ",
+      "directMessage": "ダイレクトメッセージ",
+      "topic": "トピック: {{topic}}",
+      "topicChannel": "トピック: {{topic}} / チャンネル: {{channel}}"
+    },
+    "empty": "通知はまだありません。",
+    "errors": {
+      "failedAutoRead": "通知を既読にできませんでした。",
+      "failedToLoad": "通知の読み込みに失敗しました。"
+    },
+    "kinds": {
+      "direct_message": "ダイレクトメッセージ",
+      "followed": "フォロー",
+      "mention": "メンション",
+      "quote_repost": "引用リポスト",
+      "reply": "返信",
+      "repost": "リポスト"
+    },
+    "loading": "通知を読み込み中です...",
+    "preview": {
+      "followed": "あなたをフォローしました。",
+      "noContent": "元のイベントを開きます。",
+      "noMessage": "会話を開きます。"
+    },
+    "summary": "{{count}} 件 / 未読 {{unread}} 件",
+    "title": "通知",
+    "unread": "未読"
   },
   "settingsDrawer": {
     "close": "設定と診断を閉じる",

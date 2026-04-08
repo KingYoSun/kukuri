@@ -1,4 +1,10 @@
-export type PrimarySection = 'timeline' | 'live' | 'game' | 'messages' | 'profile';
+export type PrimarySection =
+  | 'timeline'
+  | 'live'
+  | 'game'
+  | 'messages'
+  | 'profile'
+  | 'notifications';
 export type TimelineWorkspaceView = 'feed' | 'bookmarks';
 export type ProfileConnectionsView = 'following' | 'followed' | 'muted';
 

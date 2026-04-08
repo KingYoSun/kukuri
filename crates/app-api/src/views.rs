@@ -198,6 +198,16 @@ pub struct DirectMessageStatusView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMessageTopicStatusView {
+    pub topic: String,
+    pub joined: bool,
+    pub peer_count: usize,
+    pub connected_peers: Vec<String>,
+    pub status_detail: String,
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMessageMessageView {
     pub dm_id: String,
     pub message_id: String,
@@ -240,6 +250,7 @@ pub struct NotificationView {
     pub topic_id: Option<String>,
     pub channel_id: Option<String>,
     pub object_id: Option<String>,
+    pub thread_root_object_id: Option<String>,
     pub dm_id: Option<String>,
     pub message_id: Option<String>,
     pub preview_text: Option<String>,

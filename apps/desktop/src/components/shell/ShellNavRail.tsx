@@ -10,6 +10,7 @@ type ShellNavRailProps = {
   railId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  notificationAction?: React.ReactNode;
   headerContent: React.ReactNode;
   addTopicControl: React.ReactNode;
   channelSummary?: React.ReactNode;
@@ -22,6 +23,7 @@ export function ShellNavRail({
   railId,
   open,
   onOpenChange,
+  notificationAction,
   headerContent,
   addTopicControl,
   channelSummary,
@@ -61,6 +63,10 @@ export function ShellNavRail({
             <X className='size-5' aria-hidden='true' />
           </Button>
         </div>
+
+        {notificationAction ? (
+          <div className='shell-nav-notification-action'>{notificationAction}</div>
+        ) : null}
 
         <div className='shell-nav-meta'>{headerContent}</div>
 

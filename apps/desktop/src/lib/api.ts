@@ -209,6 +209,7 @@ export type NotificationView = {
   topic_id?: string | null;
   channel_id?: string | null;
   object_id?: string | null;
+  thread_root_object_id?: string | null;
   dm_id?: string | null;
   message_id?: string | null;
   preview_text?: string | null;

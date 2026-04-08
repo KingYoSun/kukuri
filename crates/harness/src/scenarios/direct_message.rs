@@ -134,6 +134,12 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("desktop b failed to open direct message")?;
+        wait_for_direct_message_peer_ready(&runtime_a, b_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop a did not connect direct message peer")?;
+        wait_for_direct_message_peer_ready(&runtime_b, a_pubkey.as_str(), 1, step_timeout)
+            .await
+            .context("desktop b did not connect direct message peer")?;
         push_named_step(&mut steps, "mutual_ready", started_at);
 
         let started_at = Instant::now();
@@ -245,13 +251,13 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             .context("missing restarted desktop b ticket")?;
         runtime_a
             .import_peer_ticket(ImportPeerTicketRequest {
-                ticket: ticket_b_after_restart,
+                ticket: ticket_b_after_restart.clone(),
             })
             .await
             .context("failed to import restarted desktop b ticket into desktop a")?;
         runtime_b
             .import_peer_ticket(ImportPeerTicketRequest {
-                ticket: ticket_a_after_restart,
+                ticket: ticket_a_after_restart.clone(),
             })
             .await
             .context("failed to import desktop a ticket into restarted desktop b")?;
@@ -303,7 +309,20 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("desktop b failed to reopen direct message after restart")?;
-        let delivered_video = wait_for_direct_message_result(
+        wait_for_direct_message_pair_ready_with_refresh(
+            &runtime_a,
+            &runtime_b,
+            ticket_a_after_restart.as_str(),
+            ticket_b_after_restart.as_str(),
+            a_pubkey.as_str(),
+            b_pubkey.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktops did not reconnect direct message peers after restart")?;
+        let delivered_video = wait_for_direct_message_result_with_sender_refresh(
+            &runtime_a,
+            b_pubkey.as_str(),
             &runtime_b,
             a_pubkey.as_str(),
             queued_video_message_id.as_str(),

@@ -31,6 +31,8 @@ import {
   type GameRoomView,
   type JoinedPrivateChannelView,
   type LiveSessionView,
+  type NotificationStatusView,
+  type NotificationView,
   type PostView,
   type Profile,
   type ProfileInput,
@@ -116,6 +118,10 @@ export type DesktopShellState = {
   selectedAuthor: AuthorSocialView | null;
   selectedAuthorTimeline: PostView[];
   authorError: string | null;
+  notifications: NotificationView[];
+  notificationStatus: NotificationStatusView;
+  notificationPanelState: AsyncPanelState;
+  notificationAutoReadError: string | null;
   directMessagePaneOpen: boolean;
   selectedDirectMessagePeerPubkey: string | null;
   directMessages: DirectMessageConversationView[];
@@ -274,6 +280,10 @@ export const DEFAULT_SYNC_STATUS: SyncStatus = {
   },
 };
 
+export const DEFAULT_NOTIFICATION_STATUS: NotificationStatusView = {
+  unread_count: 0,
+};
+
 export function createInitialShellState(): DesktopShellState {
   const initialSettingsState = parseInitialSettingsSection();
   return {
@@ -343,6 +353,10 @@ export function createInitialShellState(): DesktopShellState {
     selectedAuthor: null,
     selectedAuthorTimeline: [],
     authorError: null,
+    notifications: [],
+    notificationStatus: DEFAULT_NOTIFICATION_STATUS,
+    notificationPanelState: DEFAULT_ASYNC_PANEL_STATE,
+    notificationAutoReadError: null,
     directMessagePaneOpen: false,
     selectedDirectMessagePeerPubkey: null,
     directMessages: [],

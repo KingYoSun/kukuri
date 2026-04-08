@@ -10,9 +10,10 @@ use kukuri_app_api::{
     BookmarkedPostView, ChannelAccessTokenExport, ChannelAccessTokenPreview,
     CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
     CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
-    DirectMessageTimelineView, GameRoomView, JoinedPrivateChannelView, LiveSessionView,
-    NotificationStatusView, NotificationView, PrivateChannelCapability, ProfileInput,
-    ReactionStateView, RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput,
+    DirectMessageTimelineView, DirectMessageTopicStatusView, GameRoomView,
+    JoinedPrivateChannelView, LiveSessionView, NotificationStatusView, NotificationView,
+    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
+    TimelineView, UpdateGameRoomInput,
 };
 use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
@@ -527,6 +528,15 @@ impl DesktopRuntime {
     ) -> Result<DirectMessageStatusView> {
         self.app_service
             .get_direct_message_status(request.pubkey.as_str())
+            .await
+    }
+
+    pub async fn get_direct_message_topic_status(
+        &self,
+        request: DirectMessageRequest,
+    ) -> Result<Option<DirectMessageTopicStatusView>> {
+        self.app_service
+            .get_direct_message_topic_status(request.pubkey.as_str())
             .await
     }
 

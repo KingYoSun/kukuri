@@ -12,6 +12,7 @@
     "channel": "Channel",
     "channelsGroup": "Channels",
     "close": "Close navigation",
+    "notificationsButton": "Notifications",
     "open": "Open navigation",
     "placeholder": "kukuri:topic:demo",
     "primaryNavigation": "Primary navigation",
@@ -28,8 +29,39 @@
     "game": "Game",
     "live": "Live",
     "messages": "Messages",
+    "notifications": "Notifications",
     "profile": "Profile",
     "timeline": "Timeline"
+  },
+  "notifications": {
+    "context": {
+      "authorActivity": "Author activity",
+      "directMessage": "Direct message",
+      "topic": "Topic: {{topic}}",
+      "topicChannel": "Topic: {{topic}} / Channel: {{channel}}"
+    },
+    "empty": "No notifications yet.",
+    "errors": {
+      "failedAutoRead": "Failed to mark notifications as read.",
+      "failedToLoad": "Failed to load notifications."
+    },
+    "kinds": {
+      "direct_message": "Direct message",
+      "followed": "Followed",
+      "mention": "Mention",
+      "quote_repost": "Quote repost",
+      "reply": "Reply",
+      "repost": "Repost"
+    },
+    "loading": "Loading notifications...",
+    "preview": {
+      "followed": "Started following you.",
+      "noContent": "Open the source event.",
+      "noMessage": "Open the conversation."
+    },
+    "summary": "{{count}} items / {{unread}} unread",
+    "title": "Notifications",
+    "unread": "Unread"
   },
   "settingsDrawer": {
     "close": "Close settings and diagnostics",
