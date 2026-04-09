@@ -1084,12 +1084,13 @@ impl AppService {
                                     );
                                 }
                             }
-                            if let Ok(count) = hydrate_subscription_state_with_services(
+                            if let Ok(count) = hydrate_subscription_event_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
                                 &replica_for_task,
+                                event.key.as_str(),
                             ).await
                             && count > 0
                             {
@@ -1116,12 +1117,13 @@ impl AppService {
                                     *last_sync.lock().await = Some(now);
                                 }
                                 _ => {
-                                    if let Ok(count) = hydrate_subscription_state_with_services(
+                                    if let Ok(count) = hydrate_subscription_hint_with_services(
                                         docs_sync.as_ref(),
                                         blob_service.as_ref(),
                                         projection_store.as_ref(),
                                         topic.as_str(),
                                         &replica_for_task,
+                                        &event.hint,
                                     ).await
                                     && count > 0
                                     {
@@ -5224,6 +5226,59 @@ pub(crate) async fn hydrate_object_projection_from_replica(
     Ok(hydrated)
 }
 
+pub(crate) async fn hydrate_object_projection_from_record(
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    record: DocRecord,
+) -> Result<bool> {
+    let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
+    let content = match &header.payload_ref {
+        PayloadRef::InlineText { text } => Some(text.clone()),
+        PayloadRef::BlobText { hash, .. } => {
+            let payload = fetch_projection_blob_text(blob_service, hash).await;
+            projection_store
+                .mark_blob_status(
+                    hash,
+                    match payload {
+                        Some(_) => BlobCacheStatus::Available,
+                        None => BlobCacheStatus::Missing,
+                    },
+                )
+                .await?;
+            payload
+        }
+    };
+    for attachment in &header.attachments {
+        let status = best_effort_blob_cache_status(blob_service, &attachment.hash).await;
+        projection_store
+            .mark_blob_status(&attachment.hash, status)
+            .await?;
+    }
+    projection_store
+        .put_object_projection(projection_row_from_header(&header, content, replica))
+        .await?;
+    Ok(true)
+}
+
+pub(crate) async fn hydrate_object_projection_from_key(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<bool> {
+    let Some(record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(key.to_string()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(false);
+    };
+    hydrate_object_projection_from_record(blob_service, projection_store, replica, record).await
+}
+
 pub(crate) async fn hydrate_reaction_cache_from_replica(
     docs_sync: &dyn DocsSync,
     projection_store: &dyn ProjectionStore,
@@ -5242,6 +5297,58 @@ pub(crate) async fn hydrate_reaction_cache_from_replica(
             .upsert_reaction_cache(reaction_projection_row_from_doc(&reaction, replica))
             .await?;
         hydrated += 1;
+    }
+    Ok(hydrated)
+}
+
+pub(crate) async fn hydrate_reaction_cache_from_record(
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    record: DocRecord,
+) -> Result<bool> {
+    let reaction: ReactionDocV1 = serde_json::from_slice(record.value.as_slice())?;
+    projection_store
+        .upsert_reaction_cache(reaction_projection_row_from_doc(&reaction, replica))
+        .await?;
+    Ok(true)
+}
+
+pub(crate) async fn hydrate_reaction_cache_from_key(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<bool> {
+    let Some(record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(key.to_string()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(false);
+    };
+    hydrate_reaction_cache_from_record(projection_store, replica, record).await
+}
+
+pub(crate) async fn hydrate_reaction_cache_for_target(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    target_object_id: &str,
+) -> Result<usize> {
+    let records = docs_sync
+        .query_replica(
+            replica,
+            DocQuery::Prefix(stable_key("reactions", &format!("{target_object_id}/"))),
+        )
+        .await?;
+    let mut hydrated = 0usize;
+    for record in records {
+        if !record.key.ends_with("/state") {
+            continue;
+        }
+        hydrated +=
+            hydrate_reaction_cache_from_record(projection_store, replica, record).await? as usize;
     }
     Ok(hydrated)
 }
@@ -5332,6 +5439,58 @@ pub(crate) async fn hydrate_live_sessions_from_replica(
     Ok(hydrated)
 }
 
+pub(crate) async fn hydrate_live_session_from_record(
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    record: DocRecord,
+) -> Result<bool> {
+    let state: LiveSessionStateDocV1 = serde_json::from_slice(&record.value)?;
+    projection_store
+        .mark_blob_status(
+            &state.current_manifest.hash,
+            blob_status(
+                blob_service
+                    .blob_status(&state.current_manifest.hash)
+                    .await?,
+            ),
+        )
+        .await?;
+    let Some(manifest) =
+        fetch_manifest_blob::<LiveSessionManifestBlobV1>(blob_service, &state.current_manifest)
+            .await?
+    else {
+        return Ok(false);
+    };
+    projection_store
+        .upsert_live_session_cache(live_projection_row_from_state(
+            &state, &manifest, topic_id, replica,
+        ))
+        .await?;
+    Ok(true)
+}
+
+pub(crate) async fn hydrate_live_session_from_key(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<bool> {
+    let Some(record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(key.to_string()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(false);
+    };
+    hydrate_live_session_from_record(blob_service, projection_store, topic_id, replica, record)
+        .await
+}
+
 pub(crate) async fn hydrate_game_rooms_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -5369,6 +5528,187 @@ pub(crate) async fn hydrate_game_rooms_from_replica(
         hydrated += 1;
     }
     Ok(hydrated)
+}
+
+pub(crate) async fn hydrate_game_room_from_record(
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    record: DocRecord,
+) -> Result<bool> {
+    let state: GameRoomStateDocV1 = serde_json::from_slice(&record.value)?;
+    projection_store
+        .mark_blob_status(
+            &state.current_manifest.hash,
+            blob_status(
+                blob_service
+                    .blob_status(&state.current_manifest.hash)
+                    .await?,
+            ),
+        )
+        .await?;
+    let Some(manifest) =
+        fetch_manifest_blob::<GameRoomManifestBlobV1>(blob_service, &state.current_manifest)
+            .await?
+    else {
+        return Ok(false);
+    };
+    projection_store
+        .upsert_game_room_cache(game_projection_row_from_state(
+            &state, &manifest, topic_id, replica,
+        ))
+        .await?;
+    Ok(true)
+}
+
+pub(crate) async fn hydrate_game_room_from_key(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<bool> {
+    let Some(record) = docs_sync
+        .query_replica(replica, DocQuery::Exact(key.to_string()))
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(false);
+    };
+    hydrate_game_room_from_record(blob_service, projection_store, topic_id, replica, record).await
+}
+
+pub(crate) async fn hydrate_subscription_event_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<usize> {
+    if key.starts_with("objects/") && key.ends_with("/state") {
+        return Ok(hydrate_object_projection_from_key(
+            docs_sync,
+            blob_service,
+            projection_store,
+            replica,
+            key,
+        )
+        .await? as usize);
+    }
+    if key.starts_with("reactions/") && key.ends_with("/state") {
+        return Ok(
+            hydrate_reaction_cache_from_key(docs_sync, projection_store, replica, key).await?
+                as usize,
+        );
+    }
+    if key.starts_with("sessions/live/") && key.ends_with("/state") {
+        return Ok(hydrate_live_session_from_key(
+            docs_sync,
+            blob_service,
+            projection_store,
+            topic_id,
+            replica,
+            key,
+        )
+        .await? as usize);
+    }
+    if key.starts_with("sessions/game/") && key.ends_with("/state") {
+        return Ok(hydrate_game_room_from_key(
+            docs_sync,
+            blob_service,
+            projection_store,
+            topic_id,
+            replica,
+            key,
+        )
+        .await? as usize);
+    }
+    Ok(0)
+}
+
+pub(crate) async fn hydrate_subscription_hint_with_services(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    hint: &GossipHint,
+) -> Result<usize> {
+    match hint {
+        GossipHint::TopicObjectsChanged { objects, .. } => {
+            let mut hydrated = 0usize;
+            for object in objects {
+                if object.object_kind == "reaction" {
+                    hydrated += hydrate_reaction_cache_for_target(
+                        docs_sync,
+                        projection_store,
+                        replica,
+                        object.object_id.as_str(),
+                    )
+                    .await?;
+                    continue;
+                }
+                hydrated += hydrate_object_projection_from_key(
+                    docs_sync,
+                    blob_service,
+                    projection_store,
+                    replica,
+                    stable_key("objects", &format!("{}/state", object.object_id)).as_str(),
+                )
+                .await? as usize;
+            }
+            Ok(hydrated)
+        }
+        GossipHint::ThreadUpdated { object_ids, .. } => {
+            let mut hydrated = 0usize;
+            for object_id in object_ids {
+                hydrated += hydrate_object_projection_from_key(
+                    docs_sync,
+                    blob_service,
+                    projection_store,
+                    replica,
+                    stable_key("objects", &format!("{}/state", object_id.as_str())).as_str(),
+                )
+                .await? as usize;
+            }
+            Ok(hydrated)
+        }
+        GossipHint::SessionChanged {
+            session_id,
+            object_kind,
+            ..
+        } => match object_kind.as_str() {
+            "live-session" => Ok(hydrate_live_session_from_key(
+                docs_sync,
+                blob_service,
+                projection_store,
+                topic_id,
+                replica,
+                stable_key("sessions/live", &format!("{session_id}/state")).as_str(),
+            )
+            .await? as usize),
+            "game-session" => Ok(hydrate_game_room_from_key(
+                docs_sync,
+                blob_service,
+                projection_store,
+                topic_id,
+                replica,
+                stable_key("sessions/game", &format!("{session_id}/state")).as_str(),
+            )
+            .await? as usize),
+            _ => Ok(0),
+        },
+        GossipHint::ProfileUpdated { .. }
+        | GossipHint::Presence { .. }
+        | GossipHint::Typing { .. }
+        | GossipHint::LivePresence { .. }
+        | GossipHint::DirectMessageFrame { .. }
+        | GossipHint::DirectMessageAck { .. } => Ok(0),
+    }
 }
 
 pub(crate) fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
