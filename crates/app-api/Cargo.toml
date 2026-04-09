@@ -24,4 +24,4 @@ kukuri-transport = { path = "../transport" }
 [dev-dependencies]
 tempfile.workspace = true
 pkarr.workspace = true
-iroh.workspace = true
+iroh = { workspace = true, features = ["test-utils"] }

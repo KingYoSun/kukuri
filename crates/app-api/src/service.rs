@@ -43,7 +43,7 @@ pub(crate) use kukuri_core::{
     parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
 };
 pub(crate) use kukuri_docs_sync::{
-    DocEvent, DocOp, DocQuery, DocsSync, MemoryDocsSync, author_replica_id,
+    DocEvent, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync, author_replica_id,
     private_channel_epoch_replica_id, private_channel_hint_topic, private_channel_replica_id,
     stable_key, topic_replica_id,
 };
@@ -163,6 +163,29 @@ pub(crate) struct NotificationCandidate {
     pub(crate) preview_text: Option<String>,
     pub(crate) created_at: i64,
     pub(crate) received_at: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct NotificationDocEventBaseline {
+    fingerprints: BTreeSet<String>,
+}
+
+impl NotificationDocEventBaseline {
+    pub(crate) fn from_records(records: &[DocRecord]) -> Self {
+        Self {
+            fingerprints: records
+                .iter()
+                .map(|record| {
+                    notification_doc_event_fingerprint_parts(&record.key, &record.content_hash)
+                })
+                .collect(),
+        }
+    }
+
+    pub(crate) fn contains(&self, event: &DocEvent) -> bool {
+        self.fingerprints
+            .contains(notification_doc_event_fingerprint(event).as_str())
+    }
 }
 
 impl AppService {
@@ -1011,6 +1034,8 @@ impl AppService {
         let storage_channel_id = channel_storage_id(channel_id.as_ref());
         let local_author_pubkey = self.current_author_pubkey();
         docs_sync.open_replica(&replica).await?;
+        let notification_baseline =
+            snapshot_object_notification_baseline(docs_sync.as_ref(), &replica).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
         let replica_for_task = replica.clone();
@@ -1043,6 +1068,7 @@ impl AppService {
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 local_author_pubkey.as_str(),
+                                &notification_baseline,
                                 &event,
                             ).await {
                                 Ok(true) => {
@@ -1465,6 +1491,8 @@ impl AppService {
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
         docs_sync.open_replica(&replica).await?;
+        let notification_baseline =
+            snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica).await?;
         let initial_count = hydrate_author_state_with_services(
             docs_sync.as_ref(),
             store.as_ref(),
@@ -1504,6 +1532,7 @@ impl AppService {
                                 docs_sync.as_ref(),
                                 local_author_pubkey.as_str(),
                                 author_key_for_task.as_str(),
+                                &notification_baseline,
                                 event,
                             ).await {
                                 Ok(true) => {
@@ -2102,8 +2131,12 @@ impl AppService {
         docs_sync: &dyn DocsSync,
         blob_service: &dyn BlobService,
         local_author_pubkey: &str,
+        notification_baseline: &NotificationDocEventBaseline,
         event: &DocEvent,
     ) -> Result<bool> {
+        if notification_baseline.contains(event) {
+            return Ok(false);
+        }
         let Some(candidate) = notification_candidate_from_object_event(
             projection_store,
             docs_sync,
@@ -2124,8 +2157,12 @@ impl AppService {
         docs_sync: &dyn DocsSync,
         local_author_pubkey: &str,
         author_pubkey: &str,
+        notification_baseline: &NotificationDocEventBaseline,
         event: &DocEvent,
     ) -> Result<bool> {
+        if notification_baseline.contains(event) {
+            return Ok(false);
+        }
         let Some(candidate) = notification_candidate_from_follow_event(
             store,
             docs_sync,
@@ -3396,12 +3433,7 @@ pub(crate) async fn notification_candidate_from_object_event(
         return Ok(None);
     };
     let header: CanonicalPostHeader = serde_json::from_slice(&record.value)?;
-    if header.author.as_str() == local_author_pubkey
-        || projection_store
-            .get_object_projection(&header.object_id)
-            .await?
-            .is_some()
-    {
+    if header.author.as_str() == local_author_pubkey {
         return Ok(None);
     }
     let content = notification_text_from_payload_ref(blob_service, &header.payload_ref).await;
@@ -3498,7 +3530,7 @@ pub(crate) async fn notification_candidate_from_object_event(
 }
 
 pub(crate) async fn notification_candidate_from_follow_event(
-    store: &dyn Store,
+    _store: &dyn Store,
     docs_sync: &dyn DocsSync,
     local_author_pubkey: &str,
     author_pubkey: &str,
@@ -3530,7 +3562,6 @@ pub(crate) async fn notification_candidate_from_follow_event(
     if edge.subject_pubkey.as_str() == local_author_pubkey
         || edge.target_pubkey.as_str() != local_author_pubkey
         || edge.status != FollowEdgeStatus::Active
-        || store.get_envelope(&edge.envelope_id).await?.is_some()
     {
         return Ok(None);
     }
@@ -3574,6 +3605,14 @@ pub(crate) fn notification_kind_key(kind: &NotificationKind) -> &'static str {
         NotificationKind::DirectMessage => "direct_message",
         NotificationKind::Followed => "followed",
     }
+}
+
+pub(crate) fn notification_doc_event_fingerprint_parts(key: &str, content_hash: &str) -> String {
+    format!("{key}|{content_hash}")
+}
+
+pub(crate) fn notification_doc_event_fingerprint(event: &DocEvent) -> String {
+    notification_doc_event_fingerprint_parts(&event.key, &event.content_hash)
 }
 
 pub(crate) fn document_notification_id(
@@ -4398,6 +4437,31 @@ pub(crate) async fn load_profile_reposts_from_author_replica(
     }
 
     Ok(items)
+}
+
+pub(crate) async fn snapshot_object_notification_baseline(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+) -> Result<NotificationDocEventBaseline> {
+    let records = docs_sync
+        .query_replica(replica, DocQuery::Prefix("objects/".into()))
+        .await?;
+    Ok(NotificationDocEventBaseline::from_records(
+        &records
+            .into_iter()
+            .filter(|record| record.key.ends_with("/state"))
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub(crate) async fn snapshot_follow_notification_baseline(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+) -> Result<NotificationDocEventBaseline> {
+    let records = docs_sync
+        .query_replica(replica, DocQuery::Prefix("graph/follows/".into()))
+        .await?;
+    Ok(NotificationDocEventBaseline::from_records(&records))
 }
 
 pub(crate) fn merge_seed_peers(

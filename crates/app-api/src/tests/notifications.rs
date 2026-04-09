@@ -36,12 +36,14 @@ async fn remote_reply_to_local_post_creates_single_unread_reply_notification() {
         docs_sync.as_ref(),
         blob_service.as_ref(),
         remote_doc_event(
+            docs_sync.as_ref(),
             &topic_replica_id(topic.as_str()),
             stable_key(
                 "objects",
                 &format!("{}/state", remote_object.object_id.as_str()),
             ),
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -110,12 +112,14 @@ async fn object_notification_view_exposes_thread_root_object_id_for_click_throug
             docs_sync.as_ref(),
             blob_service.as_ref(),
             remote_doc_event(
+                docs_sync.as_ref(),
                 &topic_replica_id(topic.as_str()),
                 stable_key(
                     "objects",
                     &format!("{}/state", remote_object.object_id.as_str()),
                 ),
-            ),
+            )
+            .await,
         )
         .await
     );
@@ -162,12 +166,14 @@ async fn public_or_private_post_with_pubkey_mention_creates_mention_notification
         docs_sync.as_ref(),
         blob_service.as_ref(),
         remote_doc_event(
+            docs_sync.as_ref(),
             &topic_replica_id(topic.as_str()),
             stable_key(
                 "objects",
                 &format!("{}/state", remote_object.object_id.as_str()),
             ),
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -217,12 +223,14 @@ async fn simple_repost_of_local_post_creates_repost_notification() {
         docs_sync.as_ref(),
         blob_service.as_ref(),
         remote_doc_event(
+            docs_sync.as_ref(),
             &topic_replica_id(topic.as_str()),
             stable_key(
                 "objects",
                 &format!("{}/state", remote_object.object_id.as_str()),
             ),
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -275,12 +283,172 @@ async fn quote_repost_of_local_post_creates_quote_notification() {
         docs_sync.as_ref(),
         blob_service.as_ref(),
         remote_doc_event(
+            docs_sync.as_ref(),
             &topic_replica_id(topic.as_str()),
             stable_key(
                 "objects",
                 &format!("{}/state", remote_object.object_id.as_str()),
             ),
-        ),
+        )
+        .await,
+    )
+    .await;
+
+    assert!(created);
+    let notifications = app.list_notifications().await.expect("list notifications");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].kind, NotificationKind::QuoteRepost);
+    assert_eq!(
+        notifications[0].preview_text.as_deref(),
+        Some("quote commentary")
+    );
+}
+
+#[tokio::test]
+async fn repost_notification_survives_hydration_before_live_doc_event() {
+    let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+    let topic = TopicId::new("notifications-repost-race");
+    let replica = topic_replica_id(topic.as_str());
+    let source_object_id = app
+        .create_post(topic.as_str(), "source post", None)
+        .await
+        .expect("create source post");
+    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
+        .await
+        .expect("snapshot object baseline");
+    let remote_keys = generate_keys();
+    let repost_source = app
+        .resolve_repost_source(topic.as_str(), source_object_id.as_str())
+        .await
+        .expect("resolve repost source");
+    let remote_envelope =
+        build_repost_envelope(&remote_keys, &topic, repost_source.repost_of, None)
+            .expect("build simple repost");
+    let remote_object = remote_envelope
+        .to_post_object()
+        .expect("parse simple repost")
+        .expect("simple repost object");
+    persist_post_object(
+        docs_sync.as_ref(),
+        &replica,
+        remote_object.clone(),
+        remote_envelope,
+    )
+    .await
+    .expect("persist simple repost");
+
+    hydrate_subscription_state_with_services(
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        store.as_ref(),
+        topic.as_str(),
+        &replica,
+    )
+    .await
+    .expect("hydrate topic state");
+    assert!(
+        app.list_notifications()
+            .await
+            .expect("list notifications")
+            .is_empty()
+    );
+
+    let created = create_remote_object_notification_with_baseline(
+        &app,
+        store.as_ref(),
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        &baseline,
+        remote_doc_event(
+            docs_sync.as_ref(),
+            &replica,
+            stable_key(
+                "objects",
+                &format!("{}/state", remote_object.object_id.as_str()),
+            ),
+        )
+        .await,
+    )
+    .await;
+
+    assert!(created);
+    let notifications = app.list_notifications().await.expect("list notifications");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].kind, NotificationKind::Repost);
+    assert_eq!(
+        notifications[0].object_id.as_deref(),
+        Some(remote_object.object_id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn quote_repost_notification_survives_hydration_before_live_doc_event() {
+    let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
+    let topic = TopicId::new("notifications-quote-race");
+    let replica = topic_replica_id(topic.as_str());
+    let source_object_id = app
+        .create_post(topic.as_str(), "quoted source", None)
+        .await
+        .expect("create source post");
+    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
+        .await
+        .expect("snapshot object baseline");
+    let remote_keys = generate_keys();
+    let repost_source = app
+        .resolve_repost_source(topic.as_str(), source_object_id.as_str())
+        .await
+        .expect("resolve repost source");
+    let remote_envelope = build_repost_envelope(
+        &remote_keys,
+        &topic,
+        repost_source.repost_of,
+        Some("quote commentary"),
+    )
+    .expect("build quote repost");
+    let remote_object = remote_envelope
+        .to_post_object()
+        .expect("parse quote repost")
+        .expect("quote repost object");
+    persist_post_object(
+        docs_sync.as_ref(),
+        &replica,
+        remote_object.clone(),
+        remote_envelope,
+    )
+    .await
+    .expect("persist quote repost");
+
+    hydrate_subscription_state_with_services(
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        store.as_ref(),
+        topic.as_str(),
+        &replica,
+    )
+    .await
+    .expect("hydrate topic state");
+    assert!(
+        app.list_notifications()
+            .await
+            .expect("list notifications")
+            .is_empty()
+    );
+
+    let created = create_remote_object_notification_with_baseline(
+        &app,
+        store.as_ref(),
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        &baseline,
+        remote_doc_event(
+            docs_sync.as_ref(),
+            &replica,
+            stable_key(
+                "objects",
+                &format!("{}/state", remote_object.object_id.as_str()),
+            ),
+        )
+        .await,
     )
     .await;
 
@@ -383,9 +551,11 @@ async fn incoming_follow_edge_to_local_author_creates_followed_notification_for_
         docs_sync.as_ref(),
         remote_pubkey.as_str(),
         remote_doc_event(
+            docs_sync.as_ref(),
             &author_replica_id(remote_pubkey.as_str()),
             stable_key("graph/follows", local_author_pubkey.as_str()),
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -394,6 +564,132 @@ async fn incoming_follow_edge_to_local_author_creates_followed_notification_for_
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].kind, NotificationKind::Followed);
     assert_eq!(notifications[0].actor_pubkey, remote_pubkey);
+}
+
+#[tokio::test]
+async fn follow_notification_survives_hydration_before_live_doc_event() {
+    let (app, store, docs_sync, _) = local_app_with_memory_services();
+    let local_author_pubkey = app.current_author_pubkey();
+    let remote_keys = generate_keys();
+    let remote_pubkey = remote_keys.public_key_hex();
+    let replica = author_replica_id(remote_pubkey.as_str());
+    let baseline = snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica)
+        .await
+        .expect("snapshot follow baseline");
+    let envelope = build_follow_edge_envelope(
+        &remote_keys,
+        &Pubkey::from(local_author_pubkey.as_str()),
+        FollowEdgeStatus::Active,
+    )
+    .expect("build follow edge");
+    let edge = parse_follow_edge(&envelope)
+        .expect("parse follow edge")
+        .expect("follow edge");
+    persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
+        .await
+        .expect("persist follow edge doc");
+
+    hydrate_author_state_with_services(
+        docs_sync.as_ref(),
+        store.as_ref(),
+        store.as_ref(),
+        local_author_pubkey.as_str(),
+        remote_pubkey.as_str(),
+    )
+    .await
+    .expect("hydrate author state");
+    assert!(
+        app.list_notifications()
+            .await
+            .expect("list notifications")
+            .is_empty()
+    );
+
+    let created = create_remote_follow_notification_with_baseline(
+        &app,
+        store.as_ref(),
+        store.as_ref(),
+        docs_sync.as_ref(),
+        remote_pubkey.as_str(),
+        &baseline,
+        remote_doc_event(
+            docs_sync.as_ref(),
+            &replica,
+            stable_key("graph/follows", local_author_pubkey.as_str()),
+        )
+        .await,
+    )
+    .await;
+
+    assert!(created);
+    let notifications = app.list_notifications().await.expect("list notifications");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].kind, NotificationKind::Followed);
+    assert_eq!(notifications[0].actor_pubkey, remote_pubkey);
+}
+
+#[tokio::test]
+async fn initial_follow_baseline_prevents_backfill_notification() {
+    let (app, store, docs_sync, _) = local_app_with_memory_services();
+    let local_author_pubkey = app.current_author_pubkey();
+    let remote_keys = generate_keys();
+    let remote_pubkey = remote_keys.public_key_hex();
+    let replica = author_replica_id(remote_pubkey.as_str());
+    let envelope = build_follow_edge_envelope(
+        &remote_keys,
+        &Pubkey::from(local_author_pubkey.as_str()),
+        FollowEdgeStatus::Active,
+    )
+    .expect("build follow edge");
+    let edge = parse_follow_edge(&envelope)
+        .expect("parse follow edge")
+        .expect("follow edge");
+    persist_follow_edge_doc(docs_sync.as_ref(), &edge, &envelope)
+        .await
+        .expect("persist follow edge doc");
+    let baseline = snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica)
+        .await
+        .expect("snapshot follow baseline");
+
+    hydrate_author_state_with_services(
+        docs_sync.as_ref(),
+        store.as_ref(),
+        store.as_ref(),
+        local_author_pubkey.as_str(),
+        remote_pubkey.as_str(),
+    )
+    .await
+    .expect("hydrate author state");
+    assert!(
+        app.list_notifications()
+            .await
+            .expect("list notifications")
+            .is_empty()
+    );
+
+    let created = create_remote_follow_notification_with_baseline(
+        &app,
+        store.as_ref(),
+        store.as_ref(),
+        docs_sync.as_ref(),
+        remote_pubkey.as_str(),
+        &baseline,
+        remote_doc_event(
+            docs_sync.as_ref(),
+            &replica,
+            stable_key("graph/follows", local_author_pubkey.as_str()),
+        )
+        .await,
+    )
+    .await;
+
+    assert!(!created);
+    assert!(
+        app.list_notifications()
+            .await
+            .expect("list notifications")
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -427,12 +723,14 @@ async fn notification_overlap_uses_precedence_and_does_not_double_insert() {
         .expect("parse overlap reply")
         .expect("overlap reply object");
     let event = remote_doc_event(
+        docs_sync.as_ref(),
         &topic_replica_id(topic.as_str()),
         stable_key(
             "objects",
             &format!("{}/state", remote_object.object_id.as_str()),
         ),
-    );
+    )
+    .await;
 
     assert!(
         create_remote_object_notification(
@@ -464,6 +762,7 @@ async fn notification_overlap_uses_precedence_and_does_not_double_insert() {
 async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notifications() {
     let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
     let topic = TopicId::new("notifications-hydration");
+    let replica = topic_replica_id(topic.as_str());
     let local_object_id = app
         .create_post(topic.as_str(), "local root", None)
         .await
@@ -491,12 +790,15 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         .to_post_object()
         .expect("parse existing reply")
         .expect("existing reply object");
+    let baseline = snapshot_object_notification_baseline(docs_sync.as_ref(), &replica)
+        .await
+        .expect("snapshot object baseline");
     hydrate_subscription_state_with_services(
         docs_sync.as_ref(),
         blob_service.as_ref(),
         store.as_ref(),
         topic.as_str(),
-        &topic_replica_id(topic.as_str()),
+        &replica,
     )
     .await
     .expect("hydrate topic state");
@@ -507,18 +809,21 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
             .is_empty()
     );
     assert!(
-        !create_remote_object_notification(
+        !create_remote_object_notification_with_baseline(
             &app,
             store.as_ref(),
             docs_sync.as_ref(),
             blob_service.as_ref(),
+            &baseline,
             remote_doc_event(
-                &topic_replica_id(topic.as_str()),
+                docs_sync.as_ref(),
+                &replica,
                 stable_key(
                     "objects",
                     &format!("{}/state", existing_object.object_id.as_str())
                 ),
-            ),
+            )
+            .await,
         )
         .await
     );
@@ -540,18 +845,21 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         .expect("parse new reply")
         .expect("new reply object");
     assert!(
-        create_remote_object_notification(
+        create_remote_object_notification_with_baseline(
             &app,
             store.as_ref(),
             docs_sync.as_ref(),
             blob_service.as_ref(),
+            &baseline,
             remote_doc_event(
-                &topic_replica_id(topic.as_str()),
+                docs_sync.as_ref(),
+                &replica,
                 stable_key(
                     "objects",
                     &format!("{}/state", new_object.object_id.as_str())
                 ),
-            ),
+            )
+            .await,
         )
         .await
     );
@@ -560,7 +868,7 @@ async fn restart_or_manual_hydration_does_not_backfill_or_duplicate_notification
         blob_service.as_ref(),
         store.as_ref(),
         topic.as_str(),
-        &topic_replica_id(topic.as_str()),
+        &replica,
     )
     .await
     .expect("rehydrate topic state");
@@ -601,12 +909,14 @@ async fn mark_notification_read_and_mark_all_read_update_unread_count() {
             docs_sync.as_ref(),
             blob_service.as_ref(),
             remote_doc_event(
+                docs_sync.as_ref(),
                 &topic_replica_id(topic.as_str()),
                 stable_key(
                     "objects",
                     &format!("{}/state", mention_object.object_id.as_str())
                 ),
-            ),
+            )
+            .await,
         )
         .await
     );
@@ -634,9 +944,11 @@ async fn mark_notification_read_and_mark_all_read_update_unread_count() {
             docs_sync.as_ref(),
             follower_pubkey.as_str(),
             remote_doc_event(
+                docs_sync.as_ref(),
                 &author_replica_id(follower_pubkey.as_str()),
                 stable_key("graph/follows", local_author_pubkey.as_str()),
-            ),
+            )
+            .await,
         )
         .await
     );

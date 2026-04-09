@@ -134,12 +134,17 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("desktop b failed to open direct message")?;
-        wait_for_direct_message_peer_ready(&runtime_a, b_pubkey.as_str(), 1, step_timeout)
-            .await
-            .context("desktop a did not connect direct message peer")?;
-        wait_for_direct_message_peer_ready(&runtime_b, a_pubkey.as_str(), 1, step_timeout)
-            .await
-            .context("desktop b did not connect direct message peer")?;
+        wait_for_direct_message_pair_ready_with_refresh(
+            &runtime_a,
+            &runtime_b,
+            ticket_a.as_str(),
+            ticket_b.as_str(),
+            a_pubkey.as_str(),
+            b_pubkey.as_str(),
+            step_timeout,
+        )
+        .await
+        .context("desktops did not connect direct message peers")?;
         push_named_step(&mut steps, "mutual_ready", started_at);
 
         let started_at = Instant::now();

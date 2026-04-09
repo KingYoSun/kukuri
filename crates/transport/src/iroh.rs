@@ -19,7 +19,7 @@ use iroh::address_lookup::{
     AddrFilter, AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem,
     MemoryLookup,
 };
-use iroh::endpoint::Builder as EndpointBuilder;
+use iroh::endpoint::{Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig};
 use iroh::protocol::Router;
 #[cfg(test)]
 use iroh::tls::CaRootsConfig;
@@ -753,6 +753,22 @@ fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     GossipTopicId::from_bytes(*hash.as_bytes())
 }
 
+fn relay_backed_windows_transport_config(relay_urls: &[RelayUrl]) -> Option<QuicTransportConfig> {
+    if !cfg!(target_os = "windows") || relay_urls.is_empty() {
+        return None;
+    }
+    Some(
+        QuicTransportConfig::builder()
+            .enable_segmentation_offload(false)
+            .initial_mtu(1200)
+            .min_mtu(1200)
+            .mtu_discovery_config(None::<MtuDiscoveryConfig>)
+            .send_observed_address_reports(false)
+            .receive_observed_address_reports(false)
+            .build(),
+    )
+}
+
 pub fn build_endpoint_builder(
     builder: EndpointBuilder,
     discovery: &Arc<MemoryLookup>,
@@ -760,6 +776,13 @@ pub fn build_endpoint_builder(
     relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
 ) -> Result<EndpointBuilder> {
     let mut builder = builder.address_lookup(discovery.clone());
+    let relay_urls_snapshot = relay_urls
+        .read()
+        .expect("relay transport config poisoned")
+        .clone();
+    if let Some(transport_config) = relay_backed_windows_transport_config(&relay_urls_snapshot) {
+        builder = builder.transport_config(transport_config);
+    }
     builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
         let mut dht_builder = DhtAddressLookup::builder()

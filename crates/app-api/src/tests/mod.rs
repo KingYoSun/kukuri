@@ -10,7 +10,7 @@ use kukuri_docs_sync::IrohDocsSync;
 use kukuri_store::{BookmarkedCustomReactionRow, MemoryStore, SqliteStore};
 use kukuri_transport::{
     DhtDiscoveryOptions, DiscoveryMode, FakeNetwork, FakeTransport, HintEnvelope, HintStream,
-    IrohGossipTransport, SeedPeer,
+    IrohGossipTransport, SeedPeer, TransportRelayConfig,
 };
 use pkarr::errors::{ConcurrencyError, PublishError, QueryError};
 use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
@@ -667,25 +667,40 @@ struct TestIrohStack {
 
 impl TestIrohStack {
     async fn new(root: &std::path::Path) -> Self {
-        Self::new_with_discovery(root, DhtDiscoveryOptions::disabled()).await
+        Self::new_with_options(
+            root,
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
+        )
+        .await
     }
 
     async fn new_with_dht(root: &std::path::Path, testnet: &Testnet) -> Self {
-        let stack = Self::new_with_discovery(
+        let stack = Self::new_with_options(
             root,
             DhtDiscoveryOptions::with_client(dht_test_client(testnet)),
+            TransportRelayConfig::default(),
         )
         .await;
         publish_endpoint_to_testnet(stack._node.endpoint(), testnet).await;
         stack
     }
 
-    async fn new_with_discovery(root: &std::path::Path, dht_options: DhtDiscoveryOptions) -> Self {
+    async fn new_with_relay(root: &std::path::Path, relay_config: TransportRelayConfig) -> Self {
+        Self::new_with_options(root, DhtDiscoveryOptions::disabled(), relay_config).await
+    }
+
+    async fn new_with_options(
+        root: &std::path::Path,
+        dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
+    ) -> Self {
+        let relay_config = relay_config.normalized();
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             kukuri_transport::TransportNetworkConfig::loopback(),
             dht_options,
-            kukuri_transport::TransportRelayConfig::default(),
+            relay_config.clone(),
         )
         .await
         .expect("iroh docs node");
@@ -695,7 +710,7 @@ impl TestIrohStack {
                 node.gossip().clone(),
                 node.discovery(),
                 kukuri_transport::TransportNetworkConfig::loopback(),
-                kukuri_transport::TransportRelayConfig::default(),
+                relay_config,
             )
             .expect("transport"),
         );
@@ -988,11 +1003,22 @@ async fn author_profile_doc(
         })
 }
 
-fn remote_doc_event(replica_id: &ReplicaId, key: String) -> DocEvent {
+async fn remote_doc_event(
+    docs_sync: &dyn DocsSync,
+    replica_id: &ReplicaId,
+    key: String,
+) -> DocEvent {
+    let record = docs_sync
+        .query_replica(replica_id, DocQuery::Exact(key.clone()))
+        .await
+        .expect("doc record")
+        .into_iter()
+        .next()
+        .expect("doc record exists");
     DocEvent {
         replica_id: replica_id.clone(),
         key,
-        content_hash: "remote-content-hash".into(),
+        content_hash: record.content_hash,
         source_peer: Some("remote-peer".into()),
     }
 }
@@ -1004,11 +1030,31 @@ async fn create_remote_object_notification(
     blob_service: &dyn BlobService,
     event: DocEvent,
 ) -> bool {
+    create_remote_object_notification_with_baseline(
+        app,
+        projection_store,
+        docs_sync,
+        blob_service,
+        &NotificationDocEventBaseline::default(),
+        event,
+    )
+    .await
+}
+
+async fn create_remote_object_notification_with_baseline(
+    app: &AppService,
+    projection_store: &dyn ProjectionStore,
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    baseline: &NotificationDocEventBaseline,
+    event: DocEvent,
+) -> bool {
     AppService::maybe_create_notification_for_remote_object_event(
         projection_store,
         docs_sync,
         blob_service,
         app.current_author_pubkey().as_str(),
+        baseline,
         &event,
     )
     .await
@@ -1023,12 +1069,34 @@ async fn create_remote_follow_notification(
     author_pubkey: &str,
     event: DocEvent,
 ) -> bool {
+    create_remote_follow_notification_with_baseline(
+        app,
+        store,
+        projection_store,
+        docs_sync,
+        author_pubkey,
+        &NotificationDocEventBaseline::default(),
+        event,
+    )
+    .await
+}
+
+async fn create_remote_follow_notification_with_baseline(
+    app: &AppService,
+    store: &dyn Store,
+    projection_store: &dyn ProjectionStore,
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+    baseline: &NotificationDocEventBaseline,
+    event: DocEvent,
+) -> bool {
     AppService::maybe_create_notification_for_remote_follow_event(
         store,
         projection_store,
         docs_sync,
         app.current_author_pubkey().as_str(),
         author_pubkey,
+        baseline,
         &event,
     )
     .await
