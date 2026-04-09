@@ -4901,17 +4901,17 @@ pub(crate) fn projection_blob_status_timeout() -> tokio::time::Duration {
 
 pub(crate) fn session_projection_retry_attempts() -> usize {
     if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        4
+        20
     } else {
-        3
+        10
     }
 }
 
 pub(crate) fn session_projection_retry_delay() -> tokio::time::Duration {
     if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        tokio::time::Duration::from_millis(250)
+        tokio::time::Duration::from_millis(500)
     } else {
-        tokio::time::Duration::from_millis(100)
+        tokio::time::Duration::from_millis(250)
     }
 }
 
