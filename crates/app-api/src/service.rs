@@ -4899,6 +4899,22 @@ pub(crate) fn projection_blob_status_timeout() -> tokio::time::Duration {
     }
 }
 
+pub(crate) fn session_projection_retry_attempts() -> usize {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        4
+    } else {
+        3
+    }
+}
+
+pub(crate) fn session_projection_retry_delay() -> tokio::time::Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        tokio::time::Duration::from_millis(250)
+    } else {
+        tokio::time::Duration::from_millis(100)
+    }
+}
+
 pub(crate) async fn fetch_projection_blob_text(
     blob_service: &dyn BlobService,
     hash: &kukuri_core::BlobHash,
@@ -5491,6 +5507,34 @@ pub(crate) async fn hydrate_live_session_from_key(
         .await
 }
 
+pub(crate) async fn hydrate_live_session_from_key_with_retry(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<usize> {
+    for attempt in 0..session_projection_retry_attempts() {
+        if hydrate_live_session_from_key(
+            docs_sync,
+            blob_service,
+            projection_store,
+            topic_id,
+            replica,
+            key,
+        )
+        .await?
+        {
+            return Ok(1);
+        }
+        if attempt + 1 < session_projection_retry_attempts() {
+            tokio::time::sleep(session_projection_retry_delay()).await;
+        }
+    }
+    Ok(0)
+}
+
 pub(crate) async fn hydrate_game_rooms_from_replica(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -5581,6 +5625,34 @@ pub(crate) async fn hydrate_game_room_from_key(
     hydrate_game_room_from_record(blob_service, projection_store, topic_id, replica, record).await
 }
 
+pub(crate) async fn hydrate_game_room_from_key_with_retry(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    key: &str,
+) -> Result<usize> {
+    for attempt in 0..session_projection_retry_attempts() {
+        if hydrate_game_room_from_key(
+            docs_sync,
+            blob_service,
+            projection_store,
+            topic_id,
+            replica,
+            key,
+        )
+        .await?
+        {
+            return Ok(1);
+        }
+        if attempt + 1 < session_projection_retry_attempts() {
+            tokio::time::sleep(session_projection_retry_delay()).await;
+        }
+    }
+    Ok(0)
+}
+
 pub(crate) async fn hydrate_subscription_event_with_services(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -5606,7 +5678,7 @@ pub(crate) async fn hydrate_subscription_event_with_services(
         );
     }
     if key.starts_with("sessions/live/") && key.ends_with("/state") {
-        return Ok(hydrate_live_session_from_key(
+        return hydrate_live_session_from_key_with_retry(
             docs_sync,
             blob_service,
             projection_store,
@@ -5614,10 +5686,10 @@ pub(crate) async fn hydrate_subscription_event_with_services(
             replica,
             key,
         )
-        .await? as usize);
+        .await;
     }
     if key.starts_with("sessions/game/") && key.ends_with("/state") {
-        return Ok(hydrate_game_room_from_key(
+        return hydrate_game_room_from_key_with_retry(
             docs_sync,
             blob_service,
             projection_store,
@@ -5625,7 +5697,7 @@ pub(crate) async fn hydrate_subscription_event_with_services(
             replica,
             key,
         )
-        .await? as usize);
+        .await;
     }
     Ok(0)
 }
@@ -5682,24 +5754,28 @@ pub(crate) async fn hydrate_subscription_hint_with_services(
             object_kind,
             ..
         } => match object_kind.as_str() {
-            "live-session" => Ok(hydrate_live_session_from_key(
-                docs_sync,
-                blob_service,
-                projection_store,
-                topic_id,
-                replica,
-                stable_key("sessions/live", &format!("{session_id}/state")).as_str(),
-            )
-            .await? as usize),
-            "game-session" => Ok(hydrate_game_room_from_key(
-                docs_sync,
-                blob_service,
-                projection_store,
-                topic_id,
-                replica,
-                stable_key("sessions/game", &format!("{session_id}/state")).as_str(),
-            )
-            .await? as usize),
+            "live-session" => {
+                hydrate_live_session_from_key_with_retry(
+                    docs_sync,
+                    blob_service,
+                    projection_store,
+                    topic_id,
+                    replica,
+                    stable_key("sessions/live", &format!("{session_id}/state")).as_str(),
+                )
+                .await
+            }
+            "game-session" => {
+                hydrate_game_room_from_key_with_retry(
+                    docs_sync,
+                    blob_service,
+                    projection_store,
+                    topic_id,
+                    replica,
+                    stable_key("sessions/game", &format!("{session_id}/state")).as_str(),
+                )
+                .await
+            }
             _ => Ok(0),
         },
         GossipHint::ProfileUpdated { .. }

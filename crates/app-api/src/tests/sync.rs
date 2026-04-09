@@ -1,4 +1,6 @@
 use super::*;
+use kukuri_core::BlobHash;
+use std::collections::HashMap;
 
 #[derive(Clone, Default)]
 struct CountingDocsSync {
@@ -57,6 +59,63 @@ impl DocsSync for CountingDocsSync {
         replica_id: &ReplicaId,
     ) -> Result<kukuri_docs_sync::DocEventStream> {
         self.inner.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[derive(Clone, Default)]
+struct DelayedBlobService {
+    inner: MemoryBlobService,
+    remaining_misses: Arc<TokioMutex<HashMap<String, usize>>>,
+}
+
+impl DelayedBlobService {
+    async fn delay_hash(&self, hash: &BlobHash, misses: usize) {
+        self.remaining_misses
+            .lock()
+            .await
+            .insert(hash.as_str().to_string(), misses);
+    }
+}
+
+#[async_trait]
+impl BlobService for DelayedBlobService {
+    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+        self.inner.put_blob(data, mime).await
+    }
+
+    async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        let mut guard = self.remaining_misses.lock().await;
+        if let Some(remaining) = guard.get_mut(hash.as_str())
+            && *remaining > 0
+        {
+            *remaining -= 1;
+            return Ok(None);
+        }
+        drop(guard);
+        self.inner.fetch_blob(hash).await
+    }
+
+    async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.inner.pin_blob(hash).await
+    }
+
+    async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        if self
+            .remaining_misses
+            .lock()
+            .await
+            .get(hash.as_str())
+            .copied()
+            .unwrap_or_default()
+            > 0
+        {
+            return Ok(BlobStatus::Missing);
+        }
+        self.inner.blob_status(hash).await
     }
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
@@ -587,6 +646,69 @@ async fn topic_reaction_hints_rehydrate_only_target_reactions() {
             )
         }),
         "reaction hint should not trigger whole-replica rehydrate, got {queries:?}"
+    );
+}
+
+#[tokio::test]
+async fn topic_session_hints_retry_until_manifest_blob_is_available() {
+    let docs_sync = Arc::new(kukuri_docs_sync::MemoryDocsSync::default());
+    let blob_service = Arc::new(DelayedBlobService::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let owner_store = Arc::new(MemoryStore::default());
+    let remote_store = Arc::new(MemoryStore::default());
+    let owner_app = AppService::new_with_services(
+        owner_store.clone(),
+        owner_store,
+        transport.clone(),
+        Arc::new(NoopHintTransport),
+        docs_sync.clone(),
+        blob_service.clone(),
+        generate_keys(),
+    );
+    let topic = TopicId::new("kukuri:topic:incremental-live-session-retry");
+    let replica = topic_replica_id(topic.as_str());
+
+    let session_id = owner_app
+        .create_live_session(
+            topic.as_str(),
+            CreateLiveSessionInput {
+                title: "retry live".into(),
+                description: "delayed manifest".into(),
+            },
+        )
+        .await
+        .expect("create live session");
+    let state = fetch_live_session_state_from_replica(docs_sync.as_ref(), &replica, &session_id)
+        .await
+        .expect("fetch live state")
+        .expect("live state");
+    blob_service
+        .delay_hash(&state.current_manifest.hash, 2)
+        .await;
+
+    let hydrated = hydrate_subscription_hint_with_services(
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        remote_store.as_ref(),
+        topic.as_str(),
+        &replica,
+        &GossipHint::SessionChanged {
+            topic_id: topic.clone(),
+            session_id: session_id.clone(),
+            object_kind: "live-session".into(),
+        },
+    )
+    .await
+    .expect("hydrate live hint");
+
+    assert_eq!(hydrated, 1);
+    assert!(
+        ProjectionStore::list_topic_live_sessions(remote_store.as_ref(), topic.as_str())
+            .await
+            .expect("list remote live sessions")
+            .iter()
+            .any(|session| session.session_id == session_id),
+        "expected live session projection after retry"
     );
 }
 
