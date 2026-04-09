@@ -165,11 +165,12 @@ fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
             .find(|entry| entry.topic == topic)
             .map(|entry| {
                 format!(
-                    "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, status_detail={}",
+                    "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, missing_peer_ids={:?}, status_detail={}",
                     entry.peer_count,
                     entry.connected_peers,
                     entry.assist_peer_ids,
                     entry.configured_peer_ids,
+                    entry.missing_peer_ids,
                     entry.status_detail
                 )
             })
@@ -266,6 +267,65 @@ async fn wait_for_connected_topic_peer_count_result(
                 .map(|value| format_sync_snapshot(&value, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             bail!("topic readiness timeout; {status}");
+        }
+    }
+}
+
+async fn wait_for_direct_topic_peer_with_ticket_refresh(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected_peer_id: &str,
+    refresh_ticket: &str,
+    timeout_label: &str,
+) {
+    match timeout(runtime_replication_timeout(), async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await.expect("sync status");
+            let ready = status.connected
+                && status.topic_diagnostics.iter().any(|topic_status| {
+                    topic_status.topic == topic
+                        && topic_status.joined
+                        && topic_status
+                            .connected_peers
+                            .iter()
+                            .any(|peer_id| peer_id == expected_peer_id)
+                });
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return;
+                }
+            } else {
+                stable_ready_polls = 0;
+                runtime
+                    .import_peer_ticket(ImportPeerTicketRequest {
+                        ticket: refresh_ticket.to_string(),
+                    })
+                    .await
+                    .expect("refresh peer ticket");
+                let _ = runtime
+                    .list_timeline(ListTimelineRequest {
+                        topic: topic.to_string(),
+                        scope: TimelineScope::Public,
+                        cursor: None,
+                        limit: Some(20),
+                    })
+                    .await
+                    .expect("resubscribe public topic");
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(()) => {}
+        Err(_) => {
+            let status = runtime.get_sync_status().await.expect("sync status");
+            panic!(
+                "{timeout_label} for {expected_peer_id}: {}",
+                format_sync_snapshot(&status, topic)
+            );
         }
     }
 }
@@ -2880,21 +2940,14 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
     wait_for_connected_peer_count(&runtime_b, 1, "friend-plus sponsor peer readiness timeout")
         .await;
 
-    let a_pubkey = runtime_a
-        .get_sync_status()
-        .await
-        .expect("status a")
-        .local_author_pubkey;
-    let b_pubkey = runtime_b
-        .get_sync_status()
-        .await
-        .expect("status b")
-        .local_author_pubkey;
-    let c_pubkey = runtime_c
-        .get_sync_status()
-        .await
-        .expect("status c")
-        .local_author_pubkey;
+    let status_a = runtime_a.get_sync_status().await.expect("status a");
+    let a_pubkey = status_a.local_author_pubkey;
+    let status_b = runtime_b.get_sync_status().await.expect("status b");
+    let b_pubkey = status_b.local_author_pubkey;
+    let b_endpoint_id = status_b.discovery.local_endpoint_id;
+    let status_c = runtime_c.get_sync_status().await.expect("status c");
+    let c_pubkey = status_c.local_author_pubkey;
+    let c_endpoint_id = status_c.discovery.local_endpoint_id;
     let topic = "kukuri:topic:desktop-friend-plus-restart";
     for runtime in [&runtime_a, &runtime_b] {
         let _ = runtime
@@ -3003,6 +3056,33 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("subscribe runtime c");
+    // C joins after A and B have already subscribed, so re-import the peer tickets to
+    // rebuild the existing topic subscriptions against C's endpoint instead of leaving
+    // them assist-only.
+    runtime_a
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_c.clone(),
+        })
+        .await
+        .expect("a refreshes c after subscribe");
+    runtime_b
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_c.clone(),
+        })
+        .await
+        .expect("b refreshes c after subscribe");
+    runtime_c
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_a.clone(),
+        })
+        .await
+        .expect("c refreshes a after subscribe");
+    runtime_c
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_b.clone(),
+        })
+        .await
+        .expect("c refreshes b after subscribe");
     wait_for_connected_topic_peer_count(
         &runtime_a,
         topic,
@@ -3022,6 +3102,22 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         topic,
         2,
         "friend-plus recipient topic mesh timeout",
+    )
+    .await;
+    wait_for_direct_topic_peer_with_ticket_refresh(
+        &runtime_b,
+        topic,
+        c_endpoint_id.as_str(),
+        ticket_c.as_str(),
+        "friend-plus sponsor direct recipient topic timeout",
+    )
+    .await;
+    wait_for_direct_topic_peer_with_ticket_refresh(
+        &runtime_c,
+        topic,
+        b_endpoint_id.as_str(),
+        ticket_b.as_str(),
+        "friend-plus recipient direct sponsor topic timeout",
     )
     .await;
     warm_author_social_view(
