@@ -332,6 +332,50 @@ pub(crate) async fn run_community_node_connectivity(
         push_named_step(&mut steps, "post", started_at);
 
         let started_at = Instant::now();
+        let (reply_thread_attempts, reply_thread_timeout) = public_replication_retry_schedule(
+            step_timeout,
+            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
+        );
+        let mut direct_reply_path_error = None;
+        for attempt in 1..=reply_thread_attempts {
+            match wait_for_direct_topic_peer_count(&runtime_b, topic, 1, reply_thread_timeout).await
+            {
+                Ok(()) => {
+                    direct_reply_path_error = None;
+                    break;
+                }
+                Err(error) if attempt < reply_thread_attempts => {
+                    direct_reply_path_error = Some(format!("{error:#}"));
+                    refresh_public_pair(&runtime_a, &runtime_b, topic, reply_thread_timeout)
+                        .await
+                        .context("failed to refresh public topic before community reply")?;
+                    let _ = runtime_a
+                        .list_thread(ListThreadRequest {
+                            topic: topic.to_string(),
+                            thread_id: post_id.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    let _ = runtime_b
+                        .list_thread(ListThreadRequest {
+                            topic: topic.to_string(),
+                            thread_id: post_id.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    direct_reply_path_error = Some(format!("{error:#}"));
+                    break;
+                }
+            }
+        }
+        if let Some(error) = direct_reply_path_error {
+            anyhow::bail!("desktop b did not observe direct public connectivity before community reply: {error}");
+        }
         let reply_id = runtime_b
             .create_post(CreatePostRequest {
                 topic: topic.to_string(),
@@ -342,22 +386,28 @@ pub(crate) async fn run_community_node_connectivity(
             })
             .await
             .context("failed to create scenario reply on desktop b")?;
-        let (reply_thread_attempts, reply_thread_timeout) =
-            public_replication_retry_schedule(
-                step_timeout,
-                identity_mode == CommunityNodeIdentityMode::SharedIdentity,
-            );
+        wait_for_topic_doc_index_entry(&runtime_b, topic, reply_id.as_str(), reply_thread_timeout)
+            .await
+            .context("desktop b did not persist community reply into docs index")?;
         let mut reply_thread_error = None;
         for attempt in 1..=reply_thread_attempts {
-            match wait_for_thread_object(
-                &runtime_a,
-                topic,
-                post_id.as_str(),
-                reply_id.as_str(),
-                reply_thread_timeout,
-            )
-            .await
-            {
+            let attempt_result = async {
+                wait_for_timeline_object(&runtime_a, topic, reply_id.as_str(), reply_thread_timeout)
+                    .await
+                    .context("desktop a did not receive community reply in timeline")?;
+                wait_for_thread_object(
+                    &runtime_a,
+                    topic,
+                    post_id.as_str(),
+                    reply_id.as_str(),
+                    reply_thread_timeout,
+                )
+                .await
+                .context("desktop a did not receive community reply in thread")?;
+                Ok::<(), anyhow::Error>(())
+            }
+            .await;
+            match attempt_result {
                 Ok(()) => {
                     reply_thread_error = None;
                     break;
@@ -368,6 +418,14 @@ pub(crate) async fn run_community_node_connectivity(
                         .await
                         .context("failed to refresh public topic after reply-thread timeout")?;
                     let _ = runtime_a
+                        .list_thread(ListThreadRequest {
+                            topic: topic.to_string(),
+                            thread_id: post_id.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    let _ = runtime_b
                         .list_thread(ListThreadRequest {
                             topic: topic.to_string(),
                             thread_id: post_id.clone(),
