@@ -234,6 +234,31 @@ pub(crate) fn should_publish_from_direct_connected_subscriber(
         && topic_has_direct_peer(subscriber_status, topic, expected)
 }
 
+pub(crate) fn should_retry_public_replication_from_subscriber(
+    publisher_status: &SyncStatus,
+    subscriber_status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+    direction: PublicReplicationDirection,
+    attempt: usize,
+) -> bool {
+    if should_publish_from_direct_connected_subscriber(
+        publisher_status,
+        subscriber_status,
+        topic,
+        expected,
+        direction,
+    ) {
+        return true;
+    }
+    matches!(
+        direction,
+        PublicReplicationDirection::PreferDirectConnectedSubscriber
+    ) && attempt.is_multiple_of(2)
+        && !topic_has_direct_peer(publisher_status, topic, expected)
+        && !topic_has_direct_peer(subscriber_status, topic, expected)
+}
+
 pub(crate) async fn wait_for_direct_topic_peer_count(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -805,12 +830,13 @@ pub(crate) async fn replicate_public_post_with_retry(
                 .get_sync_status()
                 .await
                 .context("subscriber sync status")?;
-            let publish_from_subscriber = should_publish_from_direct_connected_subscriber(
+            let publish_from_subscriber = should_retry_public_replication_from_subscriber(
                 &publisher_status,
                 &subscriber_status,
                 topic,
                 1,
                 direction,
+                attempt,
             );
             let (active_publisher, active_subscriber, publisher_label, subscriber_label) =
                 if publish_from_subscriber {

@@ -1,4 +1,127 @@
 use super::*;
+use kukuri_core::BlobHash;
+use std::collections::HashMap;
+
+#[derive(Clone, Default)]
+struct CountingDocsSync {
+    inner: kukuri_docs_sync::MemoryDocsSync,
+    queries: Arc<TokioMutex<Vec<(String, DocQuery)>>>,
+}
+
+impl CountingDocsSync {
+    async fn clear_queries(&self) {
+        self.queries.lock().await.clear();
+    }
+
+    async fn queries(&self) -> Vec<(String, DocQuery)> {
+        self.queries.lock().await.clone()
+    }
+}
+
+#[async_trait]
+impl DocsSync for CountingDocsSync {
+    async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.open_replica(replica_id).await
+    }
+
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.inner
+            .register_private_replica_secret(replica_id, namespace_secret_hex)
+            .await
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.remove_private_replica_secret(replica_id).await
+    }
+
+    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
+        self.inner.apply_doc_op(replica_id, op).await
+    }
+
+    async fn query_replica(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+    ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
+        self.queries
+            .lock()
+            .await
+            .push((replica_id.as_str().to_string(), query.clone()));
+        self.inner.query_replica(replica_id, query).await
+    }
+
+    async fn subscribe_replica(
+        &self,
+        replica_id: &ReplicaId,
+    ) -> Result<kukuri_docs_sync::DocEventStream> {
+        self.inner.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[derive(Clone, Default)]
+struct DelayedBlobService {
+    inner: MemoryBlobService,
+    remaining_misses: Arc<TokioMutex<HashMap<String, usize>>>,
+}
+
+impl DelayedBlobService {
+    async fn delay_hash(&self, hash: &BlobHash, misses: usize) {
+        self.remaining_misses
+            .lock()
+            .await
+            .insert(hash.as_str().to_string(), misses);
+    }
+}
+
+#[async_trait]
+impl BlobService for DelayedBlobService {
+    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+        self.inner.put_blob(data, mime).await
+    }
+
+    async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        let mut guard = self.remaining_misses.lock().await;
+        if let Some(remaining) = guard.get_mut(hash.as_str())
+            && *remaining > 0
+        {
+            *remaining -= 1;
+            return Ok(None);
+        }
+        drop(guard);
+        self.inner.fetch_blob(hash).await
+    }
+
+    async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.inner.pin_blob(hash).await
+    }
+
+    async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        if self
+            .remaining_misses
+            .lock()
+            .await
+            .get(hash.as_str())
+            .copied()
+            .unwrap_or_default()
+            > 0
+        {
+            return Ok(BlobStatus::Missing);
+        }
+        self.inner.blob_status(hash).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
 
 async fn relay_sync_diagnostics(
     app_a: &AppService,
@@ -236,6 +359,356 @@ async fn relay_assisted_peers_contribute_to_sync_status_and_topic_counts() {
     assert_eq!(
         status.topic_diagnostics[0].status_detail,
         "relay-assisted sync available via 3 peer(s)"
+    );
+}
+
+#[tokio::test]
+async fn topic_doc_events_do_not_rehydrate_whole_replica() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let docs_sync = Arc::new(CountingDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let keys = generate_keys();
+    let app = AppService::new_with_services(
+        store.clone(),
+        store.clone(),
+        transport.clone(),
+        transport,
+        docs_sync.clone(),
+        blob_service,
+        keys.clone(),
+    );
+    let topic = TopicId::new("kukuri:topic:incremental-doc-event");
+
+    let _ = app
+        .list_timeline(topic.as_str(), None, 20)
+        .await
+        .expect("initial timeline");
+    sleep(Duration::from_millis(100)).await;
+    docs_sync.clear_queries().await;
+
+    let envelope = persist_test_post(
+        docs_sync.as_ref(),
+        None,
+        &keys,
+        &topic,
+        PayloadRef::InlineText {
+            text: "remote incremental doc".into(),
+        },
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if ProjectionStore::get_object_projection(store.as_ref(), &envelope.id)
+                .await
+                .expect("get projection")
+                .is_some()
+            {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("doc event projection timeout");
+
+    let queries = docs_sync.queries().await;
+    assert!(
+        queries.iter().any(|(_, query)| {
+            *query
+                == DocQuery::Exact(stable_key(
+                    "objects",
+                    &format!("{}/state", envelope.id.as_str()),
+                ))
+        }),
+        "expected exact object query after doc event, got {queries:?}"
+    );
+    assert!(
+        queries.iter().all(|(_, query)| {
+            !matches!(
+                query,
+                DocQuery::Prefix(prefix)
+                    if prefix == "objects/"
+                        || prefix == "reactions/"
+                        || prefix == "sessions/live/"
+                        || prefix == "sessions/game/"
+            )
+        }),
+        "doc event should not trigger whole-replica rehydrate, got {queries:?}"
+    );
+}
+
+#[tokio::test]
+async fn topic_object_hints_do_not_rehydrate_whole_replica() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let docs_sync = Arc::new(CountingDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let keys = generate_keys();
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport.clone(),
+        transport.clone(),
+        docs_sync.clone(),
+        blob_service,
+        keys.clone(),
+    );
+    let topic = TopicId::new("kukuri:topic:incremental-hint-event");
+
+    let envelope = persist_test_post(
+        docs_sync.as_ref(),
+        None,
+        &keys,
+        &topic,
+        PayloadRef::InlineText {
+            text: "remote incremental hint".into(),
+        },
+        Vec::new(),
+        None,
+    )
+    .await;
+
+    let _ = app
+        .list_timeline(topic.as_str(), None, 20)
+        .await
+        .expect("initial timeline");
+    sleep(Duration::from_millis(100)).await;
+    docs_sync.clear_queries().await;
+
+    transport
+        .publish_hint(
+            &channel_hint_topic_for(topic.as_str(), None),
+            GossipHint::TopicObjectsChanged {
+                topic_id: topic.clone(),
+                objects: vec![HintObjectRef {
+                    object_id: envelope.id.as_str().to_string(),
+                    object_kind: "post".into(),
+                }],
+            },
+        )
+        .await
+        .expect("publish hint");
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let queries = docs_sync.queries().await;
+            if !queries.is_empty() {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("hint handling timeout");
+
+    let queries = docs_sync.queries().await;
+    assert!(
+        queries.iter().any(|(_, query)| {
+            *query
+                == DocQuery::Exact(stable_key(
+                    "objects",
+                    &format!("{}/state", envelope.id.as_str()),
+                ))
+        }),
+        "expected exact object query after hint, got {queries:?}"
+    );
+    assert!(
+        queries.iter().all(|(_, query)| {
+            !matches!(
+                query,
+                DocQuery::Prefix(prefix)
+                    if prefix == "objects/"
+                        || prefix == "reactions/"
+                        || prefix == "sessions/live/"
+                        || prefix == "sessions/game/"
+            )
+        }),
+        "hint should not trigger whole-replica rehydrate, got {queries:?}"
+    );
+}
+
+#[tokio::test]
+async fn topic_reaction_hints_rehydrate_only_target_reactions() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let docs_sync = Arc::new(CountingDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let keys = generate_keys();
+    let app = AppService::new_with_services(
+        store.clone(),
+        store.clone(),
+        transport.clone(),
+        transport.clone(),
+        docs_sync.clone(),
+        blob_service,
+        keys.clone(),
+    );
+    let topic = TopicId::new("kukuri:topic:incremental-reaction-hint");
+    let replica = topic_replica_id(topic.as_str());
+
+    let envelope = persist_test_post(
+        docs_sync.as_ref(),
+        None,
+        &keys,
+        &topic,
+        PayloadRef::InlineText {
+            text: "remote reaction target".into(),
+        },
+        Vec::new(),
+        None,
+    )
+    .await;
+    let reaction_key = ReactionKeyV1::Emoji {
+        emoji: "👍".into()
+    };
+    let reaction_id = deterministic_reaction_id(
+        &replica,
+        &envelope.id,
+        &keys.public_key(),
+        reaction_key
+            .normalized_key()
+            .expect("normalized reaction key")
+            .as_str(),
+    );
+    let reaction_envelope = build_reaction_envelope(
+        &keys,
+        &topic,
+        None,
+        &envelope.id,
+        reaction_key,
+        &reaction_id,
+        ObjectStatus::Active,
+    )
+    .expect("build reaction envelope");
+    let reaction = parse_reaction(&reaction_envelope)
+        .expect("parse reaction envelope")
+        .expect("reaction doc");
+    persist_reaction_doc(docs_sync.as_ref(), &replica, &reaction, &reaction_envelope)
+        .await
+        .expect("persist reaction doc");
+
+    let _ = app
+        .list_timeline(topic.as_str(), None, 20)
+        .await
+        .expect("initial timeline");
+    sleep(Duration::from_millis(100)).await;
+    docs_sync.clear_queries().await;
+
+    transport
+        .publish_hint(
+            &channel_hint_topic_for(topic.as_str(), None),
+            GossipHint::TopicObjectsChanged {
+                topic_id: topic.clone(),
+                objects: vec![HintObjectRef {
+                    object_id: envelope.id.as_str().to_string(),
+                    object_kind: "reaction".into(),
+                }],
+            },
+        )
+        .await
+        .expect("publish reaction hint");
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if !docs_sync.queries().await.is_empty() {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("reaction hint handling timeout");
+
+    let queries = docs_sync.queries().await;
+    assert!(
+        queries.iter().any(|(_, query)| {
+            *query
+                == DocQuery::Prefix(stable_key(
+                    "reactions",
+                    &format!("{}/", envelope.id.as_str()),
+                ))
+        }),
+        "expected targeted reaction prefix query after hint, got {queries:?}"
+    );
+    assert!(
+        queries.iter().all(|(_, query)| {
+            !matches!(
+                query,
+                DocQuery::Prefix(prefix)
+                    if prefix == "objects/"
+                        || prefix == "reactions/"
+                        || prefix == "sessions/live/"
+                        || prefix == "sessions/game/"
+            )
+        }),
+        "reaction hint should not trigger whole-replica rehydrate, got {queries:?}"
+    );
+}
+
+#[tokio::test]
+async fn topic_session_hints_retry_until_manifest_blob_is_available() {
+    let docs_sync = Arc::new(kukuri_docs_sync::MemoryDocsSync::default());
+    let blob_service = Arc::new(DelayedBlobService::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let owner_store = Arc::new(MemoryStore::default());
+    let remote_store = Arc::new(MemoryStore::default());
+    let owner_app = AppService::new_with_services(
+        owner_store.clone(),
+        owner_store,
+        transport.clone(),
+        Arc::new(NoopHintTransport),
+        docs_sync.clone(),
+        blob_service.clone(),
+        generate_keys(),
+    );
+    let topic = TopicId::new("kukuri:topic:incremental-live-session-retry");
+    let replica = topic_replica_id(topic.as_str());
+
+    let session_id = owner_app
+        .create_live_session(
+            topic.as_str(),
+            CreateLiveSessionInput {
+                title: "retry live".into(),
+                description: "delayed manifest".into(),
+            },
+        )
+        .await
+        .expect("create live session");
+    let state = fetch_live_session_state_from_replica(docs_sync.as_ref(), &replica, &session_id)
+        .await
+        .expect("fetch live state")
+        .expect("live state");
+    blob_service
+        .delay_hash(&state.current_manifest.hash, 2)
+        .await;
+
+    let hydrated = hydrate_subscription_hint_with_services(
+        docs_sync.as_ref(),
+        blob_service.as_ref(),
+        remote_store.as_ref(),
+        topic.as_str(),
+        &replica,
+        &GossipHint::SessionChanged {
+            topic_id: topic.clone(),
+            session_id: session_id.clone(),
+            object_kind: "live-session".into(),
+        },
+    )
+    .await
+    .expect("hydrate live hint");
+
+    assert_eq!(hydrated, 1);
+    assert!(
+        ProjectionStore::list_topic_live_sessions(remote_store.as_ref(), topic.as_str())
+            .await
+            .expect("list remote live sessions")
+            .iter()
+            .any(|session| session.session_id == session_id),
+        "expected live session projection after retry"
     );
 }
 

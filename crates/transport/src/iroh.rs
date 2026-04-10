@@ -435,7 +435,7 @@ impl IrohGossipTransport {
                             let _ = outbound.send(HintEnvelope {
                                 hint: parsed,
                                 received_at: Utc::now().timestamp_millis(),
-                                source_peer: String::new(),
+                                source_peer: message.delivered_from.to_string(),
                             });
                         } else {
                             *last_error_task.lock().await =
@@ -893,11 +893,15 @@ mod tests {
         .expect("resolve published endpoint info");
     }
 
+    struct HintRoundtripParticipant<'a, T> {
+        transport: &'a T,
+        stream: &'a mut HintStream,
+        expected_source_peer: Option<&'a str>,
+    }
+
     async fn wait_for_hint_roundtrip<T>(
-        transport_a: &T,
-        stream_a: &mut HintStream,
-        transport_b: &T,
-        stream_b: &mut HintStream,
+        participant_a: HintRoundtripParticipant<'_, T>,
+        participant_b: HintRoundtripParticipant<'_, T>,
         topic: &TopicId,
         step_timeout: Duration,
         label: &str,
@@ -923,28 +927,36 @@ mod tests {
             let mut received_on_b = false;
             loop {
                 if !received_on_a {
-                    transport_b
+                    participant_b
+                        .transport
                         .publish_hint(topic, hint_from_b.clone())
                         .await
                         .expect("publish hint from b");
                 }
                 if !received_on_b {
-                    transport_a
+                    participant_a
+                        .transport
                         .publish_hint(topic, hint_from_a.clone())
                         .await
                         .expect("publish hint from a");
                 }
                 if !received_on_a
                     && let Ok(Some(envelope)) =
-                        timeout(Duration::from_millis(500), stream_a.next()).await
+                        timeout(Duration::from_millis(500), participant_a.stream.next()).await
                 {
-                    received_on_a = envelope.hint == hint_from_b;
+                    received_on_a = envelope.hint == hint_from_b
+                        && participant_b
+                            .expected_source_peer
+                            .is_none_or(|peer_id| envelope.source_peer == peer_id);
                 }
                 if !received_on_b
                     && let Ok(Some(envelope)) =
-                        timeout(Duration::from_millis(500), stream_b.next()).await
+                        timeout(Duration::from_millis(500), participant_b.stream.next()).await
                 {
-                    received_on_b = envelope.hint == hint_from_a;
+                    received_on_b = envelope.hint == hint_from_a
+                        && participant_a
+                            .expected_source_peer
+                            .is_none_or(|peer_id| envelope.source_peer == peer_id);
                 }
                 if received_on_a && received_on_b {
                     return;
@@ -956,8 +968,8 @@ mod tests {
         {
             Ok(()) => {}
             Err(_) => {
-                let peers_a = transport_a.peers().await.expect("peers a");
-                let peers_b = transport_b.peers().await.expect("peers b");
+                let peers_a = participant_a.transport.peers().await.expect("peers a");
+                let peers_b = participant_b.transport.peers().await.expect("peers b");
                 panic!(
                     "{label} hint roundtrip timeout: a={} b={}",
                     format_peer_snapshot(&peers_a),
@@ -1026,16 +1038,24 @@ mod tests {
             .expect("import a");
         let topic = TopicId::new("kukuri:topic:transport");
         let join_timeout = initial_topic_join_timeout();
+        let peer_id_a = transport_a.endpoint.id().to_string();
+        let peer_id_b = transport_b.endpoint.id().to_string();
         let (mut stream_a, mut stream_b) = tokio::try_join!(
             transport_a.subscribe_hints(&topic),
             transport_b.subscribe_hints(&topic)
         )
         .expect("subscribe both");
         wait_for_hint_roundtrip(
-            &transport_a,
-            &mut stream_a,
-            &transport_b,
-            &mut stream_b,
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut stream_a,
+                expected_source_peer: Some(peer_id_a.as_str()),
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: Some(peer_id_b.as_str()),
+            },
             &topic,
             join_timeout,
             "static-peer",
@@ -1455,10 +1475,16 @@ mod tests {
             .await
             .expect("subscribe b");
         wait_for_hint_roundtrip(
-            &transport_b,
-            &mut stream_b,
-            &transport_c,
-            &mut stream_c,
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: None,
+            },
+            HintRoundtripParticipant {
+                transport: &transport_c,
+                stream: &mut stream_c,
+                expected_source_peer: None,
+            },
             &topic,
             join_timeout,
             "late-subscriber",
