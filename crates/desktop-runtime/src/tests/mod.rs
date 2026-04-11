@@ -968,6 +968,32 @@ async fn replicate_private_post_with_retry(
                     .await
                     .context("failed to read publisher private channel state before write")?
                     .map(|entry| entry.current_epoch_id);
+            if let Some(pre_write_epoch) = pre_write_epoch.as_deref() {
+                wait_for_joined_private_channel_epoch_result(
+                    publisher,
+                    topic,
+                    channel_id.as_str(),
+                    pre_write_epoch,
+                    subscribers.len() + 1,
+                    attempt_timeout,
+                )
+                .await
+                .context(
+                    "publisher was not synced to the current private channel participant set before write",
+                )?;
+                for subscriber in subscribers {
+                    wait_for_joined_private_channel_epoch_result(
+                        subscriber,
+                        topic,
+                        channel_id.as_str(),
+                        pre_write_epoch,
+                        1,
+                        attempt_timeout,
+                    )
+                    .await
+                    .context("subscriber was not synced to the current private channel epoch before write")?;
+                }
+            }
             let object_id = publisher
                 .create_post(CreatePostRequest {
                     topic: topic.to_string(),
