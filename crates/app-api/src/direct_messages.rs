@@ -62,11 +62,6 @@ impl AppService {
             .await?;
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
-            // Re-establish DM subscriptions for mutual peers when the conversation list is polled
-            // after a restart. This keeps queued outbox delivery progressing even if the UI only
-            // reopens the conversation list first.
-            self.ensure_direct_message_subscription(row.peer_pubkey.as_str())
-                .await?;
             items.push(
                 self.direct_message_conversation_view(row.peer_pubkey.as_str())
                     .await?,

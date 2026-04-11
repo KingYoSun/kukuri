@@ -233,6 +233,10 @@ async fn list_social_connections_followed_is_local_known_only() {
         .follow_author(local_pubkey.as_str())
         .await
         .expect("remote follows local");
+    local_app
+        .warm_social_graph()
+        .await
+        .expect("warm local social graph");
 
     let followed = local_app
         .list_social_connections(SocialConnectionKind::Followed)

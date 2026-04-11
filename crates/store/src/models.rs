@@ -36,6 +36,7 @@ pub struct ObjectProjectionRow {
     pub reply_to_object_id: Option<EnvelopeId>,
     pub payload_ref: PayloadRef,
     pub content: Option<String>,
+    pub attachments: Vec<AssetRef>,
     pub repost_of: Option<RepostSourceSnapshotV1>,
     pub source_replica_id: ReplicaId,
     pub source_key: String,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -180,6 +180,19 @@ impl Store for MemoryStore {
         Ok(self.profiles.read().await.get(pubkey).cloned())
     }
 
+    async fn get_profiles(&self, pubkeys: &[String]) -> Result<HashMap<String, Profile>> {
+        let profiles = self.profiles.read().await;
+        Ok(pubkeys
+            .iter()
+            .filter_map(|pubkey| {
+                profiles
+                    .get(pubkey.as_str())
+                    .cloned()
+                    .map(|profile| (pubkey.clone(), profile))
+            })
+            .collect())
+    }
+
     async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()> {
         let key = (
             edge.subject_pubkey.as_str().to_string(),
@@ -235,10 +248,14 @@ impl Store for MemoryStore {
 #[async_trait]
 impl ProjectionStore for MemoryStore {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()> {
-        self.object_projection_rows
-            .write()
-            .await
-            .insert(row.object_id.clone(), row);
+        self.put_object_projections(vec![row]).await
+    }
+
+    async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
+        let mut projections = self.object_projection_rows.write().await;
+        for row in rows {
+            projections.insert(row.object_id.clone(), row);
+        }
         Ok(())
     }
 
@@ -277,6 +294,32 @@ impl ProjectionStore for MemoryStore {
         Ok(apply_desc_projection_cursor(items, cursor, limit))
     }
 
+    async fn list_topic_timeline_filtered(
+        &self,
+        topic_id: &str,
+        allowed_channels: &BTreeSet<String>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        let mut items = self
+            .object_projection_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| {
+                row.topic_id == topic_id && allowed_channels.contains(row.channel_id.as_str())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.object_id.cmp(&left.object_id))
+        });
+        Ok(apply_desc_projection_cursor(items, cursor, limit))
+    }
+
     async fn list_thread(
         &self,
         topic_id: &str,
@@ -291,6 +334,42 @@ impl ProjectionStore for MemoryStore {
             .values()
             .filter(|row| {
                 row.topic_id == topic_id
+                    && (row.object_id == *thread_root_object_id
+                        || row
+                            .root_object_id
+                            .as_ref()
+                            .is_some_and(|root| root == thread_root_object_id))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            let left_root = left.object_id == *thread_root_object_id;
+            let right_root = right.object_id == *thread_root_object_id;
+            left_root
+                .cmp(&right_root)
+                .reverse()
+                .then_with(|| left.created_at.cmp(&right.created_at))
+                .then_with(|| left.object_id.cmp(&right.object_id))
+        });
+        Ok(apply_asc_projection_cursor(items, cursor, limit))
+    }
+
+    async fn list_thread_filtered(
+        &self,
+        topic_id: &str,
+        thread_root_object_id: &EnvelopeId,
+        allowed_channel: Option<&str>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        let mut items = self
+            .object_projection_rows
+            .read()
+            .await
+            .values()
+            .filter(|row| {
+                row.topic_id == topic_id
+                    && allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id)
                     && (row.object_id == *thread_root_object_id
                         || row
                             .root_object_id
@@ -400,6 +479,23 @@ impl ProjectionStore for MemoryStore {
             .cloned())
     }
 
+    async fn list_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkeys: &[String],
+    ) -> Result<HashMap<String, AuthorRelationshipProjectionRow>> {
+        let relationships = self.author_relationship_rows.read().await;
+        Ok(author_pubkeys
+            .iter()
+            .filter_map(|author_pubkey| {
+                relationships
+                    .get(&(local_author_pubkey.to_string(), author_pubkey.clone()))
+                    .cloned()
+                    .map(|relationship| (author_pubkey.clone(), relationship))
+            })
+            .collect())
+    }
+
     async fn rebuild_author_relationships(
         &self,
         local_author_pubkey: &str,
@@ -499,6 +595,14 @@ impl ProjectionStore for MemoryStore {
         Ok(())
     }
 
+    async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
+        let mut statuses = self.blob_statuses.write().await;
+        for (hash, status) in rows {
+            statuses.insert(hash.as_str().to_string(), status);
+        }
+        Ok(())
+    }
+
     async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
         self.reaction_projection_rows.write().await.insert(
             (
@@ -551,6 +655,36 @@ impl ProjectionStore for MemoryStore {
                 .then_with(|| left.reaction_id.cmp(&right.reaction_id))
         });
         Ok(items)
+    }
+
+    async fn list_reaction_cache_for_targets(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_ids: &[EnvelopeId],
+    ) -> Result<HashMap<String, Vec<ReactionProjectionRow>>> {
+        let target_ids = target_object_ids
+            .iter()
+            .map(|target_object_id| target_object_id.as_str().to_string())
+            .collect::<HashSet<_>>();
+        let mut grouped = HashMap::<String, Vec<ReactionProjectionRow>>::new();
+        for row in self.reaction_projection_rows.read().await.values() {
+            if row.source_replica_id == *source_replica_id
+                && target_ids.contains(row.target_object_id.as_str())
+            {
+                grouped
+                    .entry(row.target_object_id.as_str().to_string())
+                    .or_default()
+                    .push(row.clone());
+            }
+        }
+        for rows in grouped.values_mut() {
+            rows.sort_by(|left, right| {
+                left.normalized_reaction_key
+                    .cmp(&right.normalized_reaction_key)
+                    .then_with(|| left.reaction_id.cmp(&right.reaction_id))
+            });
+        }
+        Ok(grouped)
     }
 
     async fn list_recent_reaction_cache_by_author(

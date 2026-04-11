@@ -38,6 +38,7 @@ import {
   type ProfileInput,
   type RecentReactionView,
   type SyncStatus,
+  type TimelineCursor,
   type TimelineScope,
 } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
@@ -75,7 +76,11 @@ export type DesktopShellState = {
   draftMediaItems: DraftMediaItem[];
   attachmentInputKey: number;
   timelinesByTopic: Record<string, PostView[]>;
+  timelineNextCursorByTopic: Record<string, TimelineCursor | null>;
+  timelineLoadingMoreByTopic: Record<string, boolean>;
   publicTimelinesByTopic: Record<string, PostView[]>;
+  publicTimelineNextCursorByTopic: Record<string, TimelineCursor | null>;
+  publicTimelineLoadingMoreByTopic: Record<string, boolean>;
   liveSessionsByTopic: Record<string, LiveSessionView[]>;
   gameRoomsByTopic: Record<string, GameRoomView[]>;
   joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]>;
@@ -83,6 +88,8 @@ export type DesktopShellState = {
   timelineScopeByTopic: Record<string, TimelineScope>;
   composeChannelByTopic: Record<string, ChannelRef>;
   thread: PostView[];
+  threadNextCursorById: Record<string, TimelineCursor | null>;
+  threadLoadingMoreById: Record<string, boolean>;
   selectedThread: string | null;
   replyTarget: PostView | null;
   repostTarget: PostView | null;
@@ -102,6 +109,8 @@ export type DesktopShellState = {
   syncStatus: SyncStatus;
   localProfile: Profile | null;
   profileTimeline: PostView[];
+  profileTimelineNextCursor: TimelineCursor | null;
+  profileTimelineLoadingMore: boolean;
   knownAuthorsByPubkey: KnownAuthorsByPubkey;
   socialConnections: SocialConnectionsState;
   socialConnectionsPanelState: AsyncPanelState;
@@ -117,6 +126,8 @@ export type DesktopShellState = {
   selectedAuthorPubkey: string | null;
   selectedAuthor: AuthorSocialView | null;
   selectedAuthorTimeline: PostView[];
+  selectedAuthorTimelineNextCursor: TimelineCursor | null;
+  selectedAuthorTimelineLoadingMore: boolean;
   authorError: string | null;
   notifications: NotificationView[];
   notificationStatus: NotificationStatusView;
@@ -126,6 +137,8 @@ export type DesktopShellState = {
   selectedDirectMessagePeerPubkey: string | null;
   directMessages: DirectMessageConversationView[];
   directMessageTimelineByPeer: Record<string, DirectMessageMessageView[]>;
+  directMessageTimelineNextCursorByPeer: Record<string, TimelineCursor | null>;
+  directMessageTimelineLoadingMoreByPeer: Record<string, boolean>;
   directMessageStatusByPeer: Record<string, DirectMessageStatusView>;
   directMessageComposer: string;
   directMessageDraftMediaItems: DraftMediaItem[];
@@ -182,7 +195,8 @@ export type DesktopShellPageProps = AppProps & {
 export const DEFAULT_TOPIC = 'kukuri:topic:demo';
 export const PUBLIC_CHANNEL_REF: ChannelRef = { kind: 'public' };
 export const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };
-export const REFRESH_INTERVAL_MS = 2000;
+export const REFRESH_INTERVAL_MS = 3000;
+export const STATUS_REFRESH_INTERVAL_MS = 10000;
 export const VIDEO_POSTER_TIMEOUT_MS = 5000;
 export const MEDIA_DEBUG_STORAGE_KEY = 'kukuri:media-debug';
 export const SHELL_WORKSPACE_ID = 'shell-primary-workspace';
@@ -296,8 +310,20 @@ export function createInitialShellState(): DesktopShellState {
     timelinesByTopic: {
       [DEFAULT_TOPIC]: [],
     },
+    timelineNextCursorByTopic: {
+      [DEFAULT_TOPIC]: null,
+    },
+    timelineLoadingMoreByTopic: {
+      [DEFAULT_TOPIC]: false,
+    },
     publicTimelinesByTopic: {
       [DEFAULT_TOPIC]: [],
+    },
+    publicTimelineNextCursorByTopic: {
+      [DEFAULT_TOPIC]: null,
+    },
+    publicTimelineLoadingMoreByTopic: {
+      [DEFAULT_TOPIC]: false,
     },
     liveSessionsByTopic: {
       [DEFAULT_TOPIC]: [],
@@ -318,6 +344,8 @@ export function createInitialShellState(): DesktopShellState {
       [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
     },
     thread: [],
+    threadNextCursorById: {},
+    threadLoadingMoreById: {},
     selectedThread: null,
     replyTarget: null,
     repostTarget: null,
@@ -337,6 +365,8 @@ export function createInitialShellState(): DesktopShellState {
     syncStatus: DEFAULT_SYNC_STATUS,
     localProfile: null,
     profileTimeline: [],
+    profileTimelineNextCursor: null,
+    profileTimelineLoadingMore: false,
     knownAuthorsByPubkey: {},
     socialConnections: DEFAULT_SOCIAL_CONNECTIONS,
     socialConnectionsPanelState: DEFAULT_ASYNC_PANEL_STATE,
@@ -352,6 +382,8 @@ export function createInitialShellState(): DesktopShellState {
     selectedAuthorPubkey: null,
     selectedAuthor: null,
     selectedAuthorTimeline: [],
+    selectedAuthorTimelineNextCursor: null,
+    selectedAuthorTimelineLoadingMore: false,
     authorError: null,
     notifications: [],
     notificationStatus: DEFAULT_NOTIFICATION_STATUS,
@@ -361,6 +393,8 @@ export function createInitialShellState(): DesktopShellState {
     selectedDirectMessagePeerPubkey: null,
     directMessages: [],
     directMessageTimelineByPeer: {},
+    directMessageTimelineNextCursorByPeer: {},
+    directMessageTimelineLoadingMoreByPeer: {},
     directMessageStatusByPeer: {},
     directMessageComposer: '',
     directMessageDraftMediaItems: [],

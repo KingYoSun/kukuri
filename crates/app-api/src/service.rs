@@ -457,33 +457,12 @@ impl AppService {
             .projection_store
             .list_reaction_cache_for_target(source_replica_id, target_object_id)
             .await?;
-        let current_author = self.current_author_pubkey();
-        let mut summary = BTreeMap::<String, ReactionSummaryView>::new();
-        let mut my_reactions = Vec::new();
-        for row in rows {
-            let key_view = reaction_key_view_from_projection(&row);
-            if row.status == ObjectStatus::Active {
-                summary
-                    .entry(row.normalized_reaction_key.clone())
-                    .and_modify(|value| value.count += 1)
-                    .or_insert_with(|| ReactionSummaryView {
-                        reaction_key_kind: key_view.reaction_key_kind.clone(),
-                        normalized_reaction_key: key_view.normalized_reaction_key.clone(),
-                        emoji: key_view.emoji.clone(),
-                        custom_asset: key_view.custom_asset.clone(),
-                        count: 1,
-                    });
-                if row.author_pubkey == current_author {
-                    my_reactions.push(key_view);
-                }
-            }
-        }
-        Ok(ReactionStateView {
-            target_object_id: target_object_id.as_str().to_string(),
-            source_replica_id: source_replica_id.as_str().to_string(),
-            reaction_summary: summary.into_values().collect(),
-            my_reactions,
-        })
+        Ok(reaction_state_view_from_rows(
+            source_replica_id,
+            target_object_id,
+            rows,
+            self.current_author_pubkey().as_str(),
+        ))
     }
 
     pub(crate) async fn maybe_redeem_rotation_grants_for_scope(
@@ -3101,9 +3080,43 @@ impl AppService {
         &self,
         page: Page<ObjectProjectionRow>,
     ) -> Result<TimelineView> {
+        let local_author = self.current_author_pubkey();
+        let mut author_pubkeys = BTreeSet::new();
+        let mut targets_by_replica = BTreeMap::<String, Vec<EnvelopeId>>::new();
+        for row in &page.items {
+            author_pubkeys.insert(row.author_pubkey.clone());
+            if let Some(repost_of) = row.repost_of.as_ref() {
+                author_pubkeys.insert(repost_of.source_author_pubkey.as_str().to_string());
+            }
+            targets_by_replica
+                .entry(row.source_replica_id.as_str().to_string())
+                .or_default()
+                .push(row.object_id.clone());
+        }
+
+        let author_pubkeys = author_pubkeys.into_iter().collect::<Vec<_>>();
+        let profiles = self.store.get_profiles(&author_pubkeys).await?;
+        let relationships = self
+            .projection_store
+            .list_author_relationships(local_author.as_str(), &author_pubkeys)
+            .await?;
+        let mut reactions_by_target = HashMap::<String, Vec<ReactionProjectionRow>>::new();
+        for (replica_id, object_ids) in targets_by_replica {
+            let grouped = self
+                .projection_store
+                .list_reaction_cache_for_targets(&ReplicaId::new(replica_id.clone()), &object_ids)
+                .await?;
+            for (object_id, rows) in grouped {
+                reactions_by_target.insert(format!("{replica_id}:{object_id}"), rows);
+            }
+        }
+
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
-            items.push(self.row_to_view(row).await?);
+            items.push(
+                self.row_to_view_with_cache(row, &profiles, &relationships, &reactions_by_target)
+                    .await?,
+            );
         }
         Ok(TimelineView {
             items,
@@ -3111,59 +3124,52 @@ impl AppService {
         })
     }
 
-    pub(crate) async fn row_to_view(&self, row: ObjectProjectionRow) -> Result<PostView> {
-        let post_object = fetch_post_object_for_projection(
-            self.docs_sync.as_ref(),
-            &row.source_replica_id,
-            row.source_key.as_str(),
-        )
-        .await?;
-        let profile = self.store.get_profile(row.author_pubkey.as_str()).await?;
-        let relationship = self
-            .projection_store
-            .get_author_relationship(
-                self.current_author_pubkey().as_str(),
-                row.author_pubkey.as_str(),
-            )
-            .await?;
+    pub(crate) async fn row_to_view_with_cache(
+        &self,
+        row: ObjectProjectionRow,
+        profiles: &HashMap<String, Profile>,
+        relationships: &HashMap<String, AuthorRelationshipProjectionRow>,
+        reactions_by_target: &HashMap<String, Vec<ReactionProjectionRow>>,
+    ) -> Result<PostView> {
+        let profile = profiles.get(row.author_pubkey.as_str());
+        let relationship = relationships.get(row.author_pubkey.as_str());
         let repost_commentary = normalize_repost_commentary(row.content.clone());
         let content_status = if row.object_kind == "repost" {
             BlobViewStatus::Available
         } else {
             blob_view_status_for_payload(self.blob_service.as_ref(), &row.payload_ref).await?
         };
-        let attachments = if row.object_kind == "repost" {
-            Vec::new()
-        } else if let Some(post_object) = post_object {
-            attachment_views(self.blob_service.as_ref(), &post_object).await?
-        } else {
-            Vec::new()
-        };
+        let attachments = self.attachment_views_for_projection_row(&row).await?;
         let repost_of = match row.repost_of.clone() {
-            Some(snapshot) => Some(self.repost_snapshot_to_view(snapshot).await?),
+            Some(snapshot) => Some(
+                self.repost_snapshot_to_view_with_profiles(snapshot, profiles)
+                    .await?,
+            ),
             None => None,
         };
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
             .await;
-        let reaction_state = self
-            .reaction_state_for_target(&row.source_replica_id, &row.object_id)
-            .await?;
+        let reaction_state = reaction_state_view_from_rows(
+            &row.source_replica_id,
+            &row.object_id,
+            reactions_by_target
+                .get(reaction_cache_key(&row.source_replica_id, &row.object_id).as_str())
+                .cloned()
+                .unwrap_or_default(),
+            self.current_author_pubkey().as_str(),
+        );
 
         Ok(PostView {
             object_id: row.object_id.0.clone(),
             envelope_id: row.source_envelope_id.0.clone(),
             author_pubkey: row.author_pubkey.clone(),
-            author_name: profile.as_ref().and_then(|profile| profile.name.clone()),
-            author_display_name: profile
-                .as_ref()
-                .and_then(|profile| profile.display_name.clone()),
-            following: relationship.as_ref().is_some_and(|value| value.following),
-            followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
-            mutual: relationship.as_ref().is_some_and(|value| value.mutual),
-            friend_of_friend: relationship
-                .as_ref()
-                .is_some_and(|value| value.friend_of_friend),
+            author_name: profile.and_then(|profile| profile.name.clone()),
+            author_display_name: profile.and_then(|profile| profile.display_name.clone()),
+            following: relationship.is_some_and(|value| value.following),
+            followed_by: relationship.is_some_and(|value| value.followed_by),
+            mutual: relationship.is_some_and(|value| value.mutual),
+            friend_of_friend: relationship.is_some_and(|value| value.friend_of_friend),
             content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
             content_status,
             attachments,
@@ -3181,6 +3187,29 @@ impl AppService {
             reaction_summary: reaction_state.reaction_summary,
             my_reactions: reaction_state.my_reactions,
         })
+    }
+
+    pub(crate) async fn attachment_views_for_projection_row(
+        &self,
+        row: &ObjectProjectionRow,
+    ) -> Result<Vec<AttachmentView>> {
+        if row.object_kind == "repost" {
+            return Ok(Vec::new());
+        }
+        if !row.attachments.is_empty() || row.projection_version >= 2 {
+            return attachment_views_from_refs(self.blob_service.as_ref(), &row.attachments).await;
+        }
+
+        let post_object = fetch_post_object_for_projection(
+            self.docs_sync.as_ref(),
+            &row.source_replica_id,
+            row.source_key.as_str(),
+        )
+        .await?;
+        if let Some(post_object) = post_object {
+            return attachment_views(self.blob_service.as_ref(), &post_object).await;
+        }
+        Ok(Vec::new())
     }
 
     pub(crate) async fn bookmarked_post_view_from_row(
@@ -3359,18 +3388,26 @@ impl AppService {
         &self,
         snapshot: RepostSourceSnapshotV1,
     ) -> Result<RepostSourceView> {
-        let source_profile = self
+        let profiles = self
             .store
-            .get_profile(snapshot.source_author_pubkey.as_str())
+            .get_profiles(&[snapshot.source_author_pubkey.as_str().to_string()])
             .await?;
+        self.repost_snapshot_to_view_with_profiles(snapshot, &profiles)
+            .await
+    }
+
+    pub(crate) async fn repost_snapshot_to_view_with_profiles(
+        &self,
+        snapshot: RepostSourceSnapshotV1,
+        profiles: &HashMap<String, Profile>,
+    ) -> Result<RepostSourceView> {
+        let source_profile = profiles.get(snapshot.source_author_pubkey.as_str());
         Ok(RepostSourceView {
             source_object_id: snapshot.source_object_id.as_str().to_string(),
             source_topic_id: snapshot.source_topic_id.as_str().to_string(),
             source_author_pubkey: snapshot.source_author_pubkey.as_str().to_string(),
-            source_author_name: source_profile.as_ref().and_then(|value| value.name.clone()),
-            source_author_display_name: source_profile
-                .as_ref()
-                .and_then(|value| value.display_name.clone()),
+            source_author_name: source_profile.and_then(|value| value.name.clone()),
+            source_author_display_name: source_profile.and_then(|value| value.display_name.clone()),
             source_object_kind: snapshot.source_object_kind,
             content: snapshot.content,
             attachments: attachment_views_from_refs(
@@ -5065,13 +5102,14 @@ pub(crate) fn projection_row_from_header(
         reply_to_object_id: header.reply_to.clone(),
         payload_ref: header.payload_ref.clone(),
         content,
+        attachments: header.attachments.clone(),
         repost_of: header.repost_of.clone(),
         source_replica_id: source_replica_id.clone(),
         source_key: stable_key("objects", &format!("{}/state", header.object_id.as_str())),
         source_envelope_id: header.envelope_id.clone(),
         source_blob_hash,
         derived_at: Utc::now().timestamp_millis(),
-        projection_version: 1,
+        projection_version: 2,
     }
 }
 
@@ -5189,6 +5227,51 @@ pub(crate) fn reaction_key_view_from_projection(row: &ReactionProjectionRow) -> 
     }
 }
 
+pub(crate) fn reaction_cache_key(
+    source_replica_id: &ReplicaId,
+    target_object_id: &EnvelopeId,
+) -> String {
+    format!(
+        "{}:{}",
+        source_replica_id.as_str(),
+        target_object_id.as_str()
+    )
+}
+
+pub(crate) fn reaction_state_view_from_rows(
+    source_replica_id: &ReplicaId,
+    target_object_id: &EnvelopeId,
+    rows: Vec<ReactionProjectionRow>,
+    current_author: &str,
+) -> ReactionStateView {
+    let mut summary = BTreeMap::<String, ReactionSummaryView>::new();
+    let mut my_reactions = Vec::new();
+    for row in rows {
+        let key_view = reaction_key_view_from_projection(&row);
+        if row.status == ObjectStatus::Active {
+            summary
+                .entry(row.normalized_reaction_key.clone())
+                .and_modify(|value| value.count += 1)
+                .or_insert_with(|| ReactionSummaryView {
+                    reaction_key_kind: key_view.reaction_key_kind.clone(),
+                    normalized_reaction_key: key_view.normalized_reaction_key.clone(),
+                    emoji: key_view.emoji.clone(),
+                    custom_asset: key_view.custom_asset.clone(),
+                    count: 1,
+                });
+            if row.author_pubkey == current_author {
+                my_reactions.push(key_view);
+            }
+        }
+    }
+    ReactionStateView {
+        target_object_id: target_object_id.as_str().to_string(),
+        source_replica_id: source_replica_id.as_str().to_string(),
+        reaction_summary: summary.into_values().collect(),
+        my_reactions,
+    }
+}
+
 pub(crate) fn search_key_or_asset_id(search_key: &str, asset_id: &str) -> String {
     let normalized = search_key.trim();
     if normalized.is_empty() {
@@ -5207,6 +5290,8 @@ pub(crate) async fn hydrate_object_projection_from_replica(
         .query_replica(replica, DocQuery::Prefix("objects/".into()))
         .await?;
     let mut hydrated = 0usize;
+    let mut blob_statuses = Vec::new();
+    let mut projections = Vec::new();
     for record in records {
         if !record.key.ends_with("/state") {
             continue;
@@ -5216,29 +5301,25 @@ pub(crate) async fn hydrate_object_projection_from_replica(
             PayloadRef::InlineText { text } => Some(text.clone()),
             PayloadRef::BlobText { hash, .. } => {
                 let payload = fetch_projection_blob_text(blob_service, hash).await;
-                projection_store
-                    .mark_blob_status(
-                        hash,
-                        match payload {
-                            Some(_) => BlobCacheStatus::Available,
-                            None => BlobCacheStatus::Missing,
-                        },
-                    )
-                    .await?;
+                blob_statuses.push((
+                    hash.clone(),
+                    match payload {
+                        Some(_) => BlobCacheStatus::Available,
+                        None => BlobCacheStatus::Missing,
+                    },
+                ));
                 payload
             }
         };
         for attachment in &header.attachments {
             let status = best_effort_blob_cache_status(blob_service, &attachment.hash).await;
-            projection_store
-                .mark_blob_status(&attachment.hash, status)
-                .await?;
+            blob_statuses.push((attachment.hash.clone(), status));
         }
-        projection_store
-            .put_object_projection(projection_row_from_header(&header, content, replica))
-            .await?;
+        projections.push(projection_row_from_header(&header, content, replica));
         hydrated += 1;
     }
+    projection_store.mark_blob_statuses(blob_statuses).await?;
+    projection_store.put_object_projections(projections).await?;
     Ok(hydrated)
 }
 
@@ -5858,18 +5939,17 @@ pub(crate) async fn filtered_timeline_page(
     let mut items = Vec::new();
     let page_size = limit.max(20);
     loop {
-        let page = ProjectionStore::list_topic_timeline(
+        let page = ProjectionStore::list_topic_timeline_filtered(
             projection_store,
             topic_id,
+            allowed_channels,
             current_cursor.clone(),
             page_size,
         )
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if allowed_channels.contains(row.channel_id.as_str())
-                && !object_projection_row_is_muted(&row, muted_author_pubkeys)
-            {
+            if !object_projection_row_is_muted(&row, muted_author_pubkeys) {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });
@@ -5902,19 +5982,18 @@ pub(crate) async fn filtered_thread_page(
     let mut items = Vec::new();
     let page_size = limit.max(20);
     loop {
-        let page = ProjectionStore::list_thread(
+        let page = ProjectionStore::list_thread_filtered(
             projection_store,
             topic_id,
             thread_root_object_id,
+            allowed_channel,
             current_cursor.clone(),
             page_size,
         )
         .await?;
         let next_cursor = page.next_cursor.clone();
         for row in page.items {
-            if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id)
-                && !object_projection_row_is_muted(&row, muted_author_pubkeys)
-            {
+            if !object_projection_row_is_muted(&row, muted_author_pubkeys) {
                 items.push(row);
                 if items.len() >= limit {
                     return Ok(Page { items, next_cursor });

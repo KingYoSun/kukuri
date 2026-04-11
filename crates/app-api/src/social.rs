@@ -153,7 +153,6 @@ impl AppService {
         &self,
         kind: SocialConnectionKind,
     ) -> Result<Vec<AuthorSocialView>> {
-        self.rebuild_author_relationships().await?;
         let local_author_pubkey = self.current_author_pubkey();
         let pubkeys = match kind {
             SocialConnectionKind::Following => self

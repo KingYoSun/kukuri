@@ -51,6 +51,8 @@ type PostCardProps = {
   showBookmarkAction?: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: (post: PostCardView['post']) => void;
+  onRetryLocalPost?: (post: PostCardView['post']) => void;
+  onRestoreLocalPost?: (post: PostCardView['post']) => void;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -83,17 +85,29 @@ export function PostCard({
   showBookmarkAction = false,
   isBookmarked = false,
   onToggleBookmark,
+  onRetryLocalPost,
+  onRestoreLocalPost,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
+  const localState = post.local_state ?? null;
+  const interactionDisabled = localState !== null;
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
   const repostSource = post.repost_of ?? null;
   const isQuoteRepost = post.object_kind === 'repost' && Boolean(post.repost_commentary?.trim());
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
+  const localStateLabel =
+    localState === 'pending'
+      ? t('feed.localPosting')
+      : localState === 'syncing'
+        ? t('feed.localSyncing')
+        : localState === 'failed'
+          ? t('feed.localFailed')
+          : null;
   const hasPrimaryContent = isPendingText || post.content.trim().length > 0;
   const reactionSummary = post.reaction_summary ?? [];
   const myReactionKeys = useMemo(
@@ -124,6 +138,7 @@ export function PostCard({
   return (
     <article
       className={context === 'thread' ? 'post-card post-card-thread post-layout-safe' : 'post-card post-layout-safe'}
+      aria-busy={localState === 'pending' || localState === 'syncing'}
     >
       <div className='post-meta'>
         <AuthorIdentityButton
@@ -229,6 +244,23 @@ export function PostCard({
         </button>
       )}
 
+      {localStateLabel ? (
+        <div className='topic-diagnostic topic-diagnostic-secondary' aria-live='polite'>
+          <span>{localStateLabel}</span>
+          {post.local_error ? <span>{post.local_error}</span> : null}
+          {localState === 'failed' && onRetryLocalPost ? (
+            <Button variant='secondary' type='button' onClick={() => onRetryLocalPost(post)}>
+              {t('actions.retry')}
+            </Button>
+          ) : null}
+          {localState === 'failed' && onRestoreLocalPost ? (
+            <Button variant='secondary' type='button' onClick={() => onRestoreLocalPost(post)}>
+              {t('actions.restoreDraft')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className='post-actions'>
         {readOnly ? (
           publishedTopicId && onOpenOriginalTopic ? (
@@ -242,7 +274,7 @@ export function PostCard({
           ) : null
         ) : (
           <>
-            {reactionSummary.length > 0 ? (
+            {reactionSummary.length > 0 && !interactionDisabled ? (
               <div className='post-reaction-summary'>
                 {reactionSummary.map((reaction) => {
                   const reactionKey = reactionKeyInputFromView(reaction);
@@ -294,14 +326,16 @@ export function PostCard({
                 })}
               </div>
             ) : null}
-            <ReactionPickerPopover
-              post={post}
-              recentReactions={recentReactions}
-              assets={pickerAssets}
-              mediaObjectUrls={mediaObjectUrls}
-              onToggleReaction={onToggleReaction}
-            />
-            {canRepost && (onRepost || onQuoteRepost) ? (
+            {!interactionDisabled ? (
+              <ReactionPickerPopover
+                post={post}
+                recentReactions={recentReactions}
+                assets={pickerAssets}
+                mediaObjectUrls={mediaObjectUrls}
+                onToggleReaction={onToggleReaction}
+              />
+            ) : null}
+            {!interactionDisabled && canRepost && (onRepost || onQuoteRepost) ? (
               <Popover open={repostMenuOpen} onOpenChange={setRepostMenuOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -344,7 +378,7 @@ export function PostCard({
                 </PopoverContent>
               </Popover>
             ) : null}
-            {canReply ? (
+            {!interactionDisabled && canReply ? (
               <Button
                 variant='secondary'
                 size='icon'
@@ -356,7 +390,7 @@ export function PostCard({
                 <Reply className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
-            {showBookmarkAction && onToggleBookmark ? (
+            {!interactionDisabled && showBookmarkAction && onToggleBookmark ? (
               <Button
                 variant={isBookmarked ? 'primary' : 'secondary'}
                 size='icon'

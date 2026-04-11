@@ -46,6 +46,13 @@ pub(crate) fn row_to_object_projection(
             .map(EnvelopeId::from),
         payload_ref: serde_json::from_str(row.get::<String, _>("payload_ref_json").as_str())?,
         content: row.try_get("content").ok(),
+        attachments: row
+            .try_get::<String, _>("attachments_json")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| serde_json::from_str(value.as_str()))
+            .transpose()?
+            .unwrap_or_default(),
         repost_of: row
             .try_get::<String, _>("repost_of_json")
             .ok()

@@ -20,8 +20,10 @@
     "refresh": "Refresh",
     "manageReactions": "Manage reactions",
     "removeBookmark": "Remove bookmark",
+    "restoreDraft": "Restore draft",
     "repost": "Repost",
     "reply": "Reply",
+    "retry": "Retry",
     "reset": "Reset",
     "rotate": "Rotate",
     "save": "Save",
@@ -74,6 +76,9 @@
     "unsupportedAttachmentType": "unsupported attachment type: {{name}}"
   },
   "feed": {
+    "localFailed": "Publish failed",
+    "localPosting": "Posting…",
+    "localSyncing": "Syncing…",
     "quoteRepost": "Quote repost",
     "reposted": "Reposted"
   },
