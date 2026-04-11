@@ -315,8 +315,12 @@ pub(crate) async fn run_community_node_connectivity(
                 })
                 .await
                 .context("desktop a failed to send direct message in community-node lane")?;
-            let delivered = wait_for_direct_message_result(
+            let delivered = wait_for_direct_message_result_with_pair_refresh(
+                &runtime_a,
+                ticket_a.as_str(),
+                sync_b.local_author_pubkey.as_str(),
                 &runtime_b,
+                ticket_b.as_str(),
                 sync_a.local_author_pubkey.as_str(),
                 message_id.as_str(),
                 step_timeout,
