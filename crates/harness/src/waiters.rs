@@ -450,13 +450,17 @@ pub(crate) async fn wait_for_direct_message_result_with_sender_refresh(
     }
 }
 
+pub(crate) struct DirectMessagePairRefreshContext<'a> {
+    pub(crate) sender_runtime: &'a DesktopRuntime,
+    pub(crate) sender_ticket: &'a str,
+    pub(crate) sender_peer_pubkey: &'a str,
+    pub(crate) receiver_runtime: &'a DesktopRuntime,
+    pub(crate) receiver_ticket: &'a str,
+    pub(crate) receiver_peer_pubkey: &'a str,
+}
+
 pub(crate) async fn wait_for_direct_message_result_with_pair_refresh(
-    sender_runtime: &DesktopRuntime,
-    sender_ticket: &str,
-    sender_peer_pubkey: &str,
-    receiver_runtime: &DesktopRuntime,
-    receiver_ticket: &str,
-    receiver_peer_pubkey: &str,
+    pair: DirectMessagePairRefreshContext<'_>,
     message_id: &str,
     step_timeout: Duration,
 ) -> Result<DirectMessageMessageView> {
@@ -464,15 +468,17 @@ pub(crate) async fn wait_for_direct_message_result_with_pair_refresh(
     match timeout(step_timeout, async {
         let mut next_refresh_at = Instant::now() + refresh_interval;
         loop {
-            let _ = sender_runtime
+            let _ = pair
+                .sender_runtime
                 .get_direct_message_status(DirectMessageRequest {
-                    pubkey: sender_peer_pubkey.to_string(),
+                    pubkey: pair.sender_peer_pubkey.to_string(),
                 })
                 .await
                 .context("sender direct message status")?;
-            let timeline = receiver_runtime
+            let timeline = pair
+                .receiver_runtime
                 .list_direct_message_messages(ListDirectMessageMessagesRequest {
-                    pubkey: receiver_peer_pubkey.to_string(),
+                    pubkey: pair.receiver_peer_pubkey.to_string(),
                     cursor: None,
                     limit: Some(20),
                 })
@@ -487,12 +493,12 @@ pub(crate) async fn wait_for_direct_message_result_with_pair_refresh(
             }
             if Instant::now() >= next_refresh_at {
                 refresh_direct_message_pair(
-                    sender_runtime,
-                    receiver_runtime,
-                    sender_ticket,
-                    receiver_ticket,
-                    sender_peer_pubkey,
-                    receiver_peer_pubkey,
+                    pair.sender_runtime,
+                    pair.receiver_runtime,
+                    pair.sender_ticket,
+                    pair.receiver_ticket,
+                    pair.sender_peer_pubkey,
+                    pair.receiver_peer_pubkey,
                 )
                 .await
                 .context("refresh direct message pair")?;
