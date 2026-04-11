@@ -53,6 +53,10 @@ type UseDesktopShellActionsArgs = {
   api: DesktopApi;
   translate: (key: string, options?: Record<string, unknown>) => string;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
+  refreshVisibleTimelineAfterPublish: (
+    topic: string,
+    currentThread: string | null
+  ) => Promise<void>;
   syncRoute: (mode?: 'push' | 'replace', overrides?: Record<string, unknown>) => void;
   openDirectMessagePane: (
     peerPubkey: string,
@@ -94,6 +98,7 @@ export function useDesktopShellActions({
   api,
   translate,
   loadTopics,
+  refreshVisibleTimelineAfterPublish,
   syncRoute,
   openDirectMessagePane,
   openAuthorDetail,
@@ -721,11 +726,11 @@ export function useDesktopShellActions({
           ...current,
           activePrimarySection: 'timeline',
         }));
-        await loadTopics(trackedTopics, activeTopic, null);
         syncRoute('replace', {
           primarySection: 'timeline',
           selectedThread: null,
         });
+        void refreshVisibleTimelineAfterPublish(activeTopic, null);
       } catch (publishError) {
         setComposerError(
           publishError instanceof Error
@@ -754,16 +759,16 @@ export function useDesktopShellActions({
       setAttachmentInputKey((value) => value + 1);
       setComposerError(null);
       setComposeDialogOpen(false);
+      setReplyTarget(null);
+      setRepostTarget(null);
       setShellChromeState((current) => ({
         ...current,
         activePrimarySection: 'timeline',
       }));
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-      setReplyTarget(null);
-      setRepostTarget(null);
       syncRoute('replace', {
         primarySection: 'timeline',
       });
+      void refreshVisibleTimelineAfterPublish(activeTopic, selectedThread);
     } catch (publishError) {
       setComposerError(
         publishError instanceof Error
@@ -1252,11 +1257,11 @@ export function useDesktopShellActions({
         ...current,
         activePrimarySection: 'timeline',
       }));
-      await loadTopics(trackedTopics, activeTopic, null);
       syncRoute('replace', {
         primarySection: 'timeline',
         selectedThread: null,
       });
+      void refreshVisibleTimelineAfterPublish(activeTopic, null);
     } catch (repostError) {
       setComposerError(
         repostError instanceof Error
