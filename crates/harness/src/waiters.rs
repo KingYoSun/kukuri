@@ -1191,6 +1191,26 @@ pub(crate) async fn select_public_feature_pair<'a>(
     &'static str,
 )> {
     refresh_public_pair(runtime_a, runtime_b, topic, step_timeout).await?;
+    let direct_pair_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(60));
+    let _ =
+        timeout(direct_pair_timeout, async {
+            loop {
+                let publisher_status = runtime_a.get_sync_status().await.context(
+                    "desktop a sync status while waiting for public feature connectivity",
+                )?;
+                let subscriber_status = runtime_b.get_sync_status().await.context(
+                    "desktop b sync status while waiting for public feature connectivity",
+                )?;
+                if topic_has_direct_peer(&publisher_status, topic, 1)
+                    && topic_has_direct_peer(&subscriber_status, topic, 1)
+                {
+                    return Ok::<(), anyhow::Error>(());
+                }
+                refresh_public_pair(runtime_a, runtime_b, topic, direct_pair_timeout).await?;
+                sleep(Duration::from_millis(250)).await;
+            }
+        })
+        .await;
     let publisher_status = runtime_a
         .get_sync_status()
         .await
