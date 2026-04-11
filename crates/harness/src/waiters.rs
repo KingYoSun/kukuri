@@ -220,6 +220,18 @@ pub(crate) fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: 
         })
 }
 
+pub(crate) fn topic_has_direct_peer_without_pending_join(
+    status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+) -> bool {
+    topic_has_direct_peer(status, topic, expected)
+        && status
+            .last_error
+            .as_deref()
+            .is_none_or(|error| !error.contains("topic join pending"))
+}
+
 pub(crate) fn should_publish_from_direct_connected_subscriber(
     publisher_status: &SyncStatus,
     subscriber_status: &SyncStatus,
@@ -259,6 +271,33 @@ pub(crate) fn should_retry_public_replication_from_subscriber(
         && !topic_has_direct_peer(subscriber_status, topic, expected)
 }
 
+pub(crate) struct PublicFeatureSelection {
+    pub(crate) select_subscriber: bool,
+    pub(crate) require_direct_subscriber: bool,
+}
+
+pub(crate) fn select_public_feature_strategy(
+    publisher_status: &SyncStatus,
+    subscriber_status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+    attempt: usize,
+) -> PublicFeatureSelection {
+    let select_subscriber = should_retry_public_replication_from_subscriber(
+        publisher_status,
+        subscriber_status,
+        topic,
+        expected,
+        PublicReplicationDirection::PreferDirectConnectedSubscriber,
+        attempt,
+    );
+    PublicFeatureSelection {
+        select_subscriber,
+        require_direct_subscriber: select_subscriber
+            && topic_has_direct_peer(subscriber_status, topic, expected),
+    }
+}
+
 pub(crate) async fn wait_for_direct_topic_peer_count(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -292,6 +331,43 @@ pub(crate) async fn wait_for_direct_topic_peer_count(
                 .map(|status| format_sync_snapshot(&status, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             anyhow::bail!("direct topic connected-peer assertion timeout; {snapshot}");
+        }
+    }
+}
+
+pub(crate) async fn wait_for_direct_topic_peer_count_without_pending_join(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await?;
+            let ready = topic_has_direct_peer_without_pending_join(&status, topic, expected);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!("direct topic readiness timeout; {snapshot}");
         }
     }
 }
@@ -1248,6 +1324,7 @@ pub(crate) async fn select_public_feature_pair<'a>(
     runtime_b: &'a DesktopRuntime,
     topic: &str,
     step_timeout: Duration,
+    attempt: usize,
 ) -> Result<(
     &'a DesktopRuntime,
     &'a DesktopRuntime,
@@ -1283,19 +1360,21 @@ pub(crate) async fn select_public_feature_pair<'a>(
         .get_sync_status()
         .await
         .context("desktop b sync status for public feature selection")?;
-    let publish_from_b = should_publish_from_direct_connected_subscriber(
-        &publisher_status,
-        &subscriber_status,
-        topic,
-        1,
-        PublicReplicationDirection::PreferDirectConnectedSubscriber,
-    );
-    if publish_from_b {
-        wait_for_direct_topic_peer_count(runtime_b, topic, 1, step_timeout)
-            .await
-            .context("desktop b did not observe direct public topic connectivity")?;
+    let strategy =
+        select_public_feature_strategy(&publisher_status, &subscriber_status, topic, 1, attempt);
+    if strategy.select_subscriber {
+        if strategy.require_direct_subscriber {
+            wait_for_direct_topic_peer_count(runtime_b, topic, 1, step_timeout)
+                .await
+                .context("desktop b did not observe direct public topic connectivity")?;
+        }
         Ok((runtime_b, runtime_a, "desktop b", "desktop a"))
     } else {
+        if topic_has_direct_peer(&publisher_status, topic, 1) {
+            wait_for_direct_topic_peer_count(runtime_a, topic, 1, step_timeout)
+                .await
+                .context("desktop a did not observe direct public topic connectivity")?;
+        }
         Ok((runtime_a, runtime_b, "desktop a", "desktop b"))
     }
 }
