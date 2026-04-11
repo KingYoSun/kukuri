@@ -285,6 +285,27 @@ pub(crate) async fn run_community_node_connectivity(
                 })
                 .await
                 .context("desktop b failed to open direct message in community-node lane")?;
+            let ticket_a = runtime_a
+                .local_peer_ticket()
+                .await
+                .context("failed to load peer ticket for desktop a in community-node lane")?
+                .context("missing peer ticket for desktop a in community-node lane")?;
+            let ticket_b = runtime_b
+                .local_peer_ticket()
+                .await
+                .context("failed to load peer ticket for desktop b in community-node lane")?
+                .context("missing peer ticket for desktop b in community-node lane")?;
+            wait_for_direct_message_pair_ready_with_refresh(
+                &runtime_a,
+                &runtime_b,
+                ticket_a.as_str(),
+                ticket_b.as_str(),
+                sync_a.local_author_pubkey.as_str(),
+                sync_b.local_author_pubkey.as_str(),
+                step_timeout,
+            )
+            .await
+            .context("community-node desktops did not connect direct message peers")?;
             let message_id = runtime_a
                 .send_direct_message(SendDirectMessageRequest {
                     pubkey: sync_b.local_author_pubkey.clone(),
