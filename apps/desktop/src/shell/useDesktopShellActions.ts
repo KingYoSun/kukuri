@@ -7,7 +7,6 @@ import {
 
 import type {
   AttachmentView,
-  ChannelRef,
   CustomReactionCropRect,
   DesktopApi,
   DirectMessageConversationView,

@@ -30,7 +30,6 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import {
-  DEFAULT_SOCIAL_CONNECTIONS,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
   REFRESH_INTERVAL_MS,
@@ -168,9 +167,6 @@ export function useDesktopShellData({
   const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
-  const setSelectedDirectMessagePeerPubkey = useDesktopShellFieldSetter(
-    'selectedDirectMessagePeerPubkey'
-  );
   const setDirectMessages = useDesktopShellFieldSetter('directMessages');
   const setDirectMessageTimelineByPeer = useDesktopShellFieldSetter('directMessageTimelineByPeer');
   const setDirectMessageTimelineNextCursorByPeer = useDesktopShellFieldSetter(
@@ -179,7 +175,6 @@ export function useDesktopShellData({
   const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setLivePanelStateByTopic = useDesktopShellFieldSetter('livePanelStateByTopic');
-  const setChannelPanelStateByTopic = useDesktopShellFieldSetter('channelPanelStateByTopic');
   const setGamePanelStateByTopic = useDesktopShellFieldSetter('gamePanelStateByTopic');
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
@@ -295,14 +290,6 @@ export function useDesktopShellData({
     const localObjectIds = new Set(localPosts.map((post) => post.object_id));
     return [...localPosts, ...incoming.filter((post) => !localObjectIds.has(post.object_id))];
   }, []);
-
-  const mergeUniqueMessages = useCallback(
-    (current: DirectMessageMessageView[], incoming: DirectMessageMessageView[]) => {
-      const seen = new Set(current.map((message) => message.message_id));
-      return [...current, ...incoming.filter((message) => !seen.has(message.message_id))];
-    },
-    []
-  );
 
   const refreshVisibleShellData = useCallback(
     async (topic: string, currentThread: string | null) => {
@@ -483,7 +470,6 @@ export function useDesktopShellData({
       const currentState = storeApi.getState();
       const selectedChannelId = currentState.selectedChannelIdByTopic[currentActiveTopic] ?? null;
       const selectedAuthorPubkey = currentState.selectedAuthorPubkey;
-      const selectedDirectMessagePeerPubkey = currentState.selectedDirectMessagePeerPubkey;
       const {
         activePrimarySection,
         activeSettingsSection,
