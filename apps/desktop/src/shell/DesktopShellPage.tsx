@@ -264,6 +264,7 @@ export function DesktopShellPage({
 
   const {
     loadTopics,
+    refreshVisibleTimelineAfterPublish,
     rememberDraftPreview,
     releaseDraftPreview,
     releaseAllDraftPreviews,
@@ -367,6 +368,7 @@ export function DesktopShellPage({
     api,
     translate,
     loadTopics,
+    refreshVisibleTimelineAfterPublish,
     syncRoute,
     openDirectMessagePane,
     openAuthorDetail,
@@ -981,7 +983,7 @@ export function DesktopShellPage({
                 status: 'loading',
                 error: null,
               });
-              void loadTopics(trackedTopics, activeTopic, null);
+              void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
             }}
           >
             {t('common:actions.refresh')}
@@ -1231,7 +1233,11 @@ export function DesktopShellPage({
                       <Button
                         variant='secondary'
                         type='button'
-                        onClick={() => void loadTopics(trackedTopics, activeTopic, selectedThread)}
+                        onClick={() =>
+                          void loadTopics(trackedTopics, activeTopic, selectedThread).catch(
+                            () => undefined
+                          )
+                        }
                       >
                         {t('common:actions.refresh')}
                       </Button>

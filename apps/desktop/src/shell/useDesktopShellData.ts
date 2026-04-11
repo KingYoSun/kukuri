@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   type MutableRefObject,
 } from 'react';
 
@@ -65,6 +66,11 @@ const EMPTY_POSTS: PostView[] = [];
 const EMPTY_GAME_ROOMS: GameRoomView[] = [];
 const EMPTY_JOINED_CHANNELS: JoinedPrivateChannelView[] = [];
 const EMPTY_DIRECT_MESSAGE_TIMELINE: DirectMessageMessageView[] = [];
+type LoadTopicsArgs = readonly [string[], string, string | null];
+type LoadTopicsWaiter = {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+};
 
 export function useDesktopShellData({
   api,
@@ -105,6 +111,9 @@ export function useDesktopShellData({
   const activeJoinedChannels = joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
   const selectedPrivateChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
   const selectedAuthorPubkey = state.selectedAuthorPubkey;
+  const loadTopicsInFlightRef = useRef(false);
+  const queuedLoadTopicsArgsRef = useRef<LoadTopicsArgs | null>(null);
+  const loadTopicsWaitersRef = useRef<LoadTopicsWaiter[]>([]);
 
   const setTimelinesByTopic = useDesktopShellFieldSetter('timelinesByTopic');
   const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
@@ -249,7 +258,7 @@ export function useDesktopShellData({
     thread,
   ]);
 
-  const loadTopics = useCallback(
+  const runLoadTopics = useCallback(
     async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
       const requestId = loadTopicsRequestRef.current + 1;
       loadTopicsRequestRef.current = requestId;
@@ -767,6 +776,7 @@ export function useDesktopShellData({
             ? loadError.message
             : translate('common:errors.failedToLoadTopic')
         );
+        throw loadError;
       }
     },
     [
@@ -819,6 +829,113 @@ export function useDesktopShellData({
     ]
   );
 
+  const drainLoadTopicsQueue = useCallback(
+    async (initialArgs: LoadTopicsArgs) => {
+      let nextArgs: LoadTopicsArgs | null = initialArgs;
+      let lastError: unknown = null;
+
+      while (nextArgs) {
+        queuedLoadTopicsArgsRef.current = null;
+        try {
+          await runLoadTopics(...nextArgs);
+          lastError = null;
+        } catch (error) {
+          lastError = error;
+        }
+        nextArgs = queuedLoadTopicsArgsRef.current;
+      }
+
+      loadTopicsInFlightRef.current = false;
+      const waiters = loadTopicsWaitersRef.current;
+      loadTopicsWaitersRef.current = [];
+      for (const waiter of waiters) {
+        if (lastError) {
+          waiter.reject(lastError);
+          continue;
+        }
+        waiter.resolve();
+      }
+    },
+    [runLoadTopics]
+  );
+
+  const loadTopics = useCallback(
+    (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
+      const args: LoadTopicsArgs = [[...currentTopics], currentActiveTopic, currentThread];
+      return new Promise<void>((resolve, reject) => {
+        loadTopicsWaitersRef.current.push({ resolve, reject });
+        if (loadTopicsInFlightRef.current) {
+          queuedLoadTopicsArgsRef.current = args;
+          return;
+        }
+        loadTopicsInFlightRef.current = true;
+        void drainLoadTopicsQueue(args);
+      });
+    },
+    [drainLoadTopicsQueue]
+  );
+
+  const refreshVisibleTimelineAfterPublish = useCallback(
+    async (topic: string, currentThread: string | null) => {
+      const requestId = loadTopicsRequestRef.current + 1;
+      loadTopicsRequestRef.current = requestId;
+      const currentState = storeApi.getState();
+      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
+
+      try {
+        const [timeline, publicTimeline, threadView, status] = await Promise.all([
+          api.listTimeline(topic, null, 50, privateTimelineScope(selectedChannelId)),
+          api.listTimeline(topic, null, 50, PUBLIC_TIMELINE_SCOPE),
+          currentThread ? api.listThread(topic, currentThread, null, 50) : Promise.resolve(null),
+          api.getSyncStatus(),
+        ]);
+
+        if (requestId !== loadTopicsRequestRef.current) {
+          return;
+        }
+
+        const latestState = storeApi.getState();
+        const matchesThreadContext = latestState.selectedThread === currentThread;
+
+        startTransition(() => {
+          setTimelinesByTopic((current) => ({
+            ...current,
+            [topic]: timeline.items,
+          }));
+          setPublicTimelinesByTopic((current) => ({
+            ...current,
+            [topic]: publicTimeline.items,
+          }));
+          if (matchesThreadContext) {
+            setThread(threadView?.items ?? []);
+          }
+          setSyncStatus(status);
+          setError(null);
+        });
+      } catch (refreshError) {
+        if (requestId !== loadTopicsRequestRef.current) {
+          return;
+        }
+        setError(
+          refreshError instanceof Error
+            ? refreshError.message
+            : translate('common:errors.failedToLoadTopic')
+        );
+      }
+    },
+    [
+      api,
+      loadTopicsRequestRef,
+      setError,
+      setPublicTimelinesByTopic,
+      setSyncStatus,
+      setThread,
+      setTimelinesByTopic,
+      storeApi,
+      translate,
+    ]
+  );
+
   useEffect(() => {
     let disposed = false;
 
@@ -826,7 +943,11 @@ export function useDesktopShellData({
       if (disposed) {
         return;
       }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      try {
+        await loadTopics(trackedTopics, activeTopic, selectedThread);
+      } catch {
+        // loadTopics already writes the visible error state
+      }
     };
 
     void refresh();
@@ -1084,6 +1205,7 @@ export function useDesktopShellData({
 
   return {
     loadTopics,
+    refreshVisibleTimelineAfterPublish,
     rememberDraftPreview,
     releaseDraftPreview,
     releaseAllDraftPreviews,

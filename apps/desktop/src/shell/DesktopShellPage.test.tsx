@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
@@ -13,11 +13,17 @@ import type {
   DirectMessageMessageView,
   NotificationView,
   PostView,
+  TimelineView,
 } from '@/lib/api';
+import { REFRESH_INTERVAL_MS } from '@/shell/store';
 
 beforeEach(() => {
   setViewportWidth(1024);
   window.history.replaceState(null, '', '/');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function setViewportWidth(width: number) {
@@ -27,6 +33,20 @@ function setViewportWidth(width: number) {
     value: width,
   });
   window.dispatchEvent(new Event('resize'));
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return {
+    promise,
+    reject,
+    resolve,
+  };
 }
 
 function buildImagePost(overrides?: Partial<PostView>): PostView {
@@ -1344,6 +1364,87 @@ test('reply publish reloads thread only once after a successful submit', async (
     expect(screen.getAllByText('reply post').length).toBeGreaterThan(0);
   });
   expect(listThreadSpy.mock.calls.length - threadCallsBeforeSubmit).toBe(1);
+});
+
+test('timeline polling does not overlap refreshes while a refresh is in flight', async () => {
+  vi.useFakeTimers();
+  const api = createDesktopMockApi();
+  const listTimelineDeferreds: Array<ReturnType<typeof createDeferred<TimelineView>>> = [];
+  const listTimelineSpy = vi.fn(() => {
+    const deferred = createDeferred<TimelineView>();
+    listTimelineDeferreds.push(deferred);
+    return deferred.promise;
+  });
+  api.listTimeline = listTimelineSpy;
+
+  const view = render(<App api={api} />);
+
+  await vi.advanceTimersByTimeAsync(0);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+
+  await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS * 3);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+
+  const initialDeferreds = [...listTimelineDeferreds];
+  for (const deferred of initialDeferreds) {
+    deferred.resolve({
+      items: [],
+      next_cursor: null,
+    });
+  }
+
+  await Promise.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(4);
+
+  await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS * 2);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(4);
+
+  view.unmount();
+});
+
+test('publish dialog closes without waiting for a timeline refresh after submit', async () => {
+  const api = createDesktopMockApi();
+  const listTimelineDeferreds: Array<ReturnType<typeof createDeferred<TimelineView>>> = [];
+  api.listTimeline = vi.fn(() => {
+    const deferred = createDeferred<TimelineView>();
+    listTimelineDeferreds.push(deferred);
+    return deferred.promise;
+  });
+
+  const user = userEvent.setup();
+  render(<App api={api} />);
+
+  const publishDialog = await openPublishDialog(user);
+  await user.type(within(publishDialog).getByPlaceholderText('Write a post'), 'publish without wait');
+  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Publish' })).not.toBeInTheDocument();
+  });
+});
+
+test('publish refreshes the active timeline without reloading full shell data', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const originalListDirectMessages = api.listDirectMessages;
+  const listDirectMessagesSpy = vi.fn(() => originalListDirectMessages());
+  api.listDirectMessages = listDirectMessagesSpy;
+
+  render(<App api={api} />);
+
+  await waitFor(() => {
+    expect(listDirectMessagesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  const publishDialog = await openPublishDialog(user);
+  await user.type(within(publishDialog).getByPlaceholderText('Write a post'), 'local refresh post');
+  await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('local refresh post')).toBeInTheDocument();
+  });
+  expect(listDirectMessagesSpy).toHaveBeenCalledTimes(1);
 });
 
 test('desktop shell can create a simple repost from timeline', async () => {

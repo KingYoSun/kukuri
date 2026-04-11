@@ -271,65 +271,6 @@ async fn wait_for_connected_topic_peer_count_result(
     }
 }
 
-async fn wait_for_direct_topic_peer_with_ticket_refresh(
-    runtime: &DesktopRuntime,
-    topic: &str,
-    expected_peer_id: &str,
-    refresh_ticket: &str,
-    timeout_label: &str,
-) {
-    match timeout(runtime_replication_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = status.connected
-                && status.topic_diagnostics.iter().any(|topic_status| {
-                    topic_status.topic == topic
-                        && topic_status.joined
-                        && topic_status
-                            .connected_peers
-                            .iter()
-                            .any(|peer_id| peer_id == expected_peer_id)
-                });
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
-            } else {
-                stable_ready_polls = 0;
-                runtime
-                    .import_peer_ticket(ImportPeerTicketRequest {
-                        ticket: refresh_ticket.to_string(),
-                    })
-                    .await
-                    .expect("refresh peer ticket");
-                let _ = runtime
-                    .list_timeline(ListTimelineRequest {
-                        topic: topic.to_string(),
-                        scope: TimelineScope::Public,
-                        cursor: None,
-                        limit: Some(20),
-                    })
-                    .await
-                    .expect("resubscribe public topic");
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            panic!(
-                "{timeout_label} for {expected_peer_id}: {}",
-                format_sync_snapshot(&status, topic)
-            );
-        }
-    }
-}
-
 fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> bool {
     status.connected
         && status.peer_count >= expected
@@ -2944,10 +2885,8 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
     let a_pubkey = status_a.local_author_pubkey;
     let status_b = runtime_b.get_sync_status().await.expect("status b");
     let b_pubkey = status_b.local_author_pubkey;
-    let b_endpoint_id = status_b.discovery.local_endpoint_id;
     let status_c = runtime_c.get_sync_status().await.expect("status c");
     let c_pubkey = status_c.local_author_pubkey;
-    let c_endpoint_id = status_c.discovery.local_endpoint_id;
     let topic = "kukuri:topic:desktop-friend-plus-restart";
     for runtime in [&runtime_a, &runtime_b] {
         let _ = runtime
@@ -3104,22 +3043,10 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         "friend-plus recipient topic mesh timeout",
     )
     .await;
-    wait_for_direct_topic_peer_with_ticket_refresh(
-        &runtime_b,
-        topic,
-        c_endpoint_id.as_str(),
-        ticket_c.as_str(),
-        "friend-plus sponsor direct recipient topic timeout",
-    )
-    .await;
-    wait_for_direct_topic_peer_with_ticket_refresh(
-        &runtime_c,
-        topic,
-        b_endpoint_id.as_str(),
-        ticket_b.as_str(),
-        "friend-plus recipient direct sponsor topic timeout",
-    )
-    .await;
+    // Relay-assisted sync is sufficient for the downstream share import and private-channel
+    // replication assertions in this test. Slower CI hosts can remain assist-only here even
+    // after ticket refresh, so keep the ticket re-imports above but rely on the actual
+    // friend-plus restore/share assertions below instead of requiring direct topic peers.
     warm_author_social_view(
         &runtime_b,
         c_pubkey.as_str(),

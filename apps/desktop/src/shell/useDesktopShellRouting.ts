@@ -1308,7 +1308,7 @@ export function useDesktopShellRouting({
         trackedTopics,
         nextTopic,
         requestedContext === 'thread' ? requestedThreadId : null
-      );
+      ).catch(() => undefined);
     }
 
     if (shouldNormalize) {
