@@ -387,9 +387,20 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             poster_payload.bytes_base64,
             BASE64_STANDARD.encode(b"pairwise-dm-video-poster")
         );
-        wait_for_direct_message_outbox_count(&runtime_a, b_pubkey.as_str(), 0, step_timeout)
-            .await
-            .context("desktop a queued video direct message outbox did not drain")?;
+        wait_for_direct_message_outbox_count_with_pair_refresh(
+            DirectMessagePairRefreshContext {
+                sender_runtime: &runtime_a,
+                sender_ticket: ticket_a_after_restart.as_str(),
+                sender_peer_pubkey: b_pubkey.as_str(),
+                receiver_runtime: &runtime_b,
+                receiver_ticket: ticket_b_after_restart.as_str(),
+                receiver_peer_pubkey: a_pubkey.as_str(),
+            },
+            0,
+            step_timeout,
+        )
+        .await
+        .context("desktop a queued video direct message outbox did not drain")?;
         push_named_step(&mut steps, "offline_video_delivery", started_at);
 
         let started_at = Instant::now();

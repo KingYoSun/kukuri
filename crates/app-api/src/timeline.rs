@@ -8,9 +8,6 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
-        self.ensure_author_subscription(author_pubkey.as_str())
-            .await?;
-        self.rebuild_author_relationships().await?;
         let mut posts =
             load_profile_posts_from_author_replica(self.docs_sync.as_ref(), author_pubkey.as_str())
                 .await?;

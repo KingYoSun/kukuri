@@ -1,3 +1,5 @@
+use std::collections::{BTreeSet, HashMap};
+
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_core::{BlobHash, EnvelopeId, FollowEdge, KukuriEnvelope, Profile, ReplicaId};
@@ -29,6 +31,15 @@ pub trait Store: Send + Sync {
     ) -> Result<Page<KukuriEnvelope>>;
     async fn upsert_profile(&self, profile: Profile) -> Result<()>;
     async fn get_profile(&self, pubkey: &str) -> Result<Option<Profile>>;
+    async fn get_profiles(&self, pubkeys: &[String]) -> Result<HashMap<String, Profile>> {
+        let mut profiles = HashMap::new();
+        for pubkey in pubkeys {
+            if let Some(profile) = self.get_profile(pubkey.as_str()).await? {
+                profiles.insert(pubkey.clone(), profile);
+            }
+        }
+        Ok(profiles)
+    }
     async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()>;
     async fn list_follow_edges_by_subject(&self, subject_pubkey: &str) -> Result<Vec<FollowEdge>>;
     async fn list_follow_edges_by_target(&self, target_pubkey: &str) -> Result<Vec<FollowEdge>>;
@@ -37,6 +48,12 @@ pub trait Store: Send + Sync {
 #[async_trait]
 pub trait ProjectionStore: Send + Sync {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()>;
+    async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
+        for row in rows {
+            self.put_object_projection(row).await?;
+        }
+        Ok(())
+    }
     async fn get_object_projection(
         &self,
         object_id: &EnvelopeId,
@@ -47,6 +64,42 @@ pub trait ProjectionStore: Send + Sync {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<Page<ObjectProjectionRow>>;
+    async fn list_topic_timeline_filtered(
+        &self,
+        topic_id: &str,
+        allowed_channels: &BTreeSet<String>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        if limit == 0 {
+            return Ok(Page {
+                items: Vec::new(),
+                next_cursor: cursor,
+            });
+        }
+
+        let mut current_cursor = cursor;
+        let mut items = Vec::new();
+        let page_size = limit.max(20);
+        loop {
+            let page = self
+                .list_topic_timeline(topic_id, current_cursor.clone(), page_size)
+                .await?;
+            let next_cursor = page.next_cursor.clone();
+            for row in page.items {
+                if allowed_channels.contains(row.channel_id.as_str()) {
+                    items.push(row);
+                    if items.len() >= limit {
+                        return Ok(Page { items, next_cursor });
+                    }
+                }
+            }
+            if next_cursor.is_none() {
+                return Ok(Page { items, next_cursor });
+            }
+            current_cursor = next_cursor;
+        }
+    }
     async fn list_thread(
         &self,
         topic_id: &str,
@@ -54,6 +107,48 @@ pub trait ProjectionStore: Send + Sync {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<Page<ObjectProjectionRow>>;
+    async fn list_thread_filtered(
+        &self,
+        topic_id: &str,
+        thread_root_object_id: &EnvelopeId,
+        allowed_channel: Option<&str>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        if limit == 0 {
+            return Ok(Page {
+                items: Vec::new(),
+                next_cursor: cursor,
+            });
+        }
+
+        let mut current_cursor = cursor;
+        let mut items = Vec::new();
+        let page_size = limit.max(20);
+        loop {
+            let page = self
+                .list_thread(
+                    topic_id,
+                    thread_root_object_id,
+                    current_cursor.clone(),
+                    page_size,
+                )
+                .await?;
+            let next_cursor = page.next_cursor.clone();
+            for row in page.items {
+                if allowed_channel.is_none_or(|channel_id| row.channel_id == channel_id) {
+                    items.push(row);
+                    if items.len() >= limit {
+                        return Ok(Page { items, next_cursor });
+                    }
+                }
+            }
+            if next_cursor.is_none() {
+                return Ok(Page { items, next_cursor });
+            }
+            current_cursor = next_cursor;
+        }
+    }
     async fn upsert_profile_cache(&self, profile: Profile) -> Result<()>;
     async fn upsert_live_session_cache(&self, row: LiveSessionProjectionRow) -> Result<()>;
     async fn list_topic_live_sessions(
@@ -67,6 +162,22 @@ pub trait ProjectionStore: Send + Sync {
         local_author_pubkey: &str,
         author_pubkey: &str,
     ) -> Result<Option<AuthorRelationshipProjectionRow>>;
+    async fn list_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkeys: &[String],
+    ) -> Result<HashMap<String, AuthorRelationshipProjectionRow>> {
+        let mut relationships = HashMap::new();
+        for author_pubkey in author_pubkeys {
+            if let Some(relationship) = self
+                .get_author_relationship(local_author_pubkey, author_pubkey.as_str())
+                .await?
+            {
+                relationships.insert(author_pubkey.clone(), relationship);
+            }
+        }
+        Ok(relationships)
+    }
     async fn rebuild_author_relationships(
         &self,
         local_author_pubkey: &str,
@@ -88,6 +199,12 @@ pub trait ProjectionStore: Send + Sync {
     async fn clear_topic_live_presence(&self, topic_id: &str) -> Result<()>;
     async fn clear_expired_live_presence(&self, now_ms: i64) -> Result<()>;
     async fn mark_blob_status(&self, hash: &BlobHash, status: BlobCacheStatus) -> Result<()>;
+    async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
+        for (hash, status) in rows {
+            self.mark_blob_status(&hash, status).await?;
+        }
+        Ok(())
+    }
     async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()>;
     async fn get_reaction_cache(
         &self,
@@ -100,6 +217,21 @@ pub trait ProjectionStore: Send + Sync {
         source_replica_id: &ReplicaId,
         target_object_id: &EnvelopeId,
     ) -> Result<Vec<ReactionProjectionRow>>;
+    async fn list_reaction_cache_for_targets(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_ids: &[EnvelopeId],
+    ) -> Result<HashMap<String, Vec<ReactionProjectionRow>>> {
+        let mut reactions = HashMap::new();
+        for target_object_id in target_object_ids {
+            reactions.insert(
+                target_object_id.as_str().to_string(),
+                self.list_reaction_cache_for_target(source_replica_id, target_object_id)
+                    .await?,
+            );
+        }
+        Ok(reactions)
+    }
     async fn list_recent_reaction_cache_by_author(
         &self,
         author_pubkey: &str,

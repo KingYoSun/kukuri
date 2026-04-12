@@ -1395,6 +1395,9 @@ test('timeline polling does not overlap refreshes while a refresh is in flight',
 
   await Promise.resolve();
   await vi.advanceTimersByTimeAsync(0);
+  expect(listTimelineSpy).toHaveBeenCalledTimes(2);
+
+  await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS);
   expect(listTimelineSpy).toHaveBeenCalledTimes(4);
 
   await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS * 2);
@@ -1434,7 +1437,7 @@ test('publish refreshes the active timeline without reloading full shell data', 
   render(<App api={api} />);
 
   await waitFor(() => {
-    expect(listDirectMessagesSpy).toHaveBeenCalledTimes(1);
+    expect(listDirectMessagesSpy).toHaveBeenCalledTimes(0);
   });
 
   const publishDialog = await openPublishDialog(user);
@@ -1444,7 +1447,7 @@ test('publish refreshes the active timeline without reloading full shell data', 
   await waitFor(() => {
     expect(screen.getByText('local refresh post')).toBeInTheDocument();
   });
-  expect(listDirectMessagesSpy).toHaveBeenCalledTimes(1);
+  expect(listDirectMessagesSpy).toHaveBeenCalledTimes(0);
 });
 
 test('desktop shell can create a simple repost from timeline', async () => {
@@ -3240,8 +3243,10 @@ test('messages dm headers use resolved author labels instead of You and Peer', a
   );
 
   await screen.findByText('hello dm');
-  expect(screen.getAllByRole('button', { name: 'Local Author' }).length).toBeGreaterThan(0);
-  expect(screen.getAllByRole('button', { name: 'Bob Display' }).length).toBeGreaterThan(0);
+  await waitFor(() => {
+    expect(screen.getAllByRole('button', { name: 'Local Author' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Bob Display' }).length).toBeGreaterThan(0);
+  });
   expect(screen.queryByText('You')).not.toBeInTheDocument();
   expect(screen.queryByText('Peer')).not.toBeInTheDocument();
 });
@@ -3399,7 +3404,7 @@ test('messages workspace keeps the last successful DM state when status refresh 
   });
 
   failNextStatusRefresh = true;
-  await new Promise((resolve) => window.setTimeout(resolve, 2300));
+  await new Promise((resolve) => window.setTimeout(resolve, REFRESH_INTERVAL_MS + 300));
 
   await waitFor(() => {
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);

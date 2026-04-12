@@ -1,9 +1,13 @@
+import { useEffect, useRef } from 'react';
+
 import type {
   BookmarkedCustomReactionView,
   CustomReactionAssetView,
   ReactionKeyInput,
   RecentReactionView,
 } from '@/lib/api';
+
+import { Button } from '@/components/ui/button';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
@@ -31,6 +35,11 @@ type TimelineFeedProps = {
   showBookmarkAction?: boolean;
   bookmarkedPostIds?: Set<string>;
   onToggleBookmark?: (post: PostCardView['post']) => void;
+  onRetryLocalPost?: (post: PostCardView['post']) => void;
+  onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 };
 
 export function TimelineFeed({
@@ -56,7 +65,34 @@ export function TimelineFeed({
   showBookmarkAction = false,
   bookmarkedPostIds,
   onToggleBookmark,
+  onRetryLocalPost,
+  onRestoreLocalPost,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: TimelineFeedProps) {
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const canAutoLoad =
+    typeof window !== 'undefined' &&
+    'IntersectionObserver' in window &&
+    typeof onLoadMore === 'function';
+
+  useEffect(() => {
+    if (!canAutoLoad || !hasMore || loadingMore || !loadMoreRef.current) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          onLoadMore?.();
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [canAutoLoad, hasMore, loadingMore, onLoadMore]);
+
   if (posts.length === 0) {
     return <p className='empty'>{emptyCopy}</p>;
   }
@@ -85,9 +121,22 @@ export function TimelineFeed({
             showBookmarkAction={showBookmarkAction}
             isBookmarked={bookmarkedPostIds?.has(view.post.object_id) ?? false}
             onToggleBookmark={onToggleBookmark}
+            onRetryLocalPost={onRetryLocalPost}
+            onRestoreLocalPost={onRestoreLocalPost}
           />
         </li>
       ))}
+      {hasMore ? (
+        <li className={itemClassName}>
+          {canAutoLoad ? <div ref={loadMoreRef} aria-hidden='true' /> : null}
+          {!canAutoLoad && onLoadMore ? (
+            <Button variant='secondary' type='button' onClick={() => onLoadMore()}>
+              {loadingMore ? 'Loading...' : 'Load more'}
+            </Button>
+          ) : null}
+          {canAutoLoad && loadingMore ? <p className='empty'>Loading more…</p> : null}
+        </li>
+      ) : null}
     </ul>
   );
 }

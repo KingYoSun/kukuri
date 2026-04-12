@@ -30,10 +30,10 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import {
-  DEFAULT_SOCIAL_CONNECTIONS,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
   REFRESH_INTERVAL_MS,
+  STATUS_REFRESH_INTERVAL_MS,
   type DraftMediaItem,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
@@ -66,6 +66,8 @@ const EMPTY_POSTS: PostView[] = [];
 const EMPTY_GAME_ROOMS: GameRoomView[] = [];
 const EMPTY_JOINED_CHANNELS: JoinedPrivateChannelView[] = [];
 const EMPTY_DIRECT_MESSAGE_TIMELINE: DirectMessageMessageView[] = [];
+const VISIBLE_TIMELINE_LIMIT = 20;
+const THREAD_TIMELINE_LIMIT = 30;
 type LoadTopicsArgs = readonly [string[], string, string | null];
 type LoadTopicsWaiter = {
   resolve: () => void;
@@ -114,9 +116,15 @@ export function useDesktopShellData({
   const loadTopicsInFlightRef = useRef(false);
   const queuedLoadTopicsArgsRef = useRef<LoadTopicsArgs | null>(null);
   const loadTopicsWaitersRef = useRef<LoadTopicsWaiter[]>([]);
+  const visibleRefreshInFlightRef = useRef(false);
 
   const setTimelinesByTopic = useDesktopShellFieldSetter('timelinesByTopic');
+  const setTimelineNextCursorByTopic = useDesktopShellFieldSetter('timelineNextCursorByTopic');
+  const setTimelineLoadingMoreByTopic = useDesktopShellFieldSetter('timelineLoadingMoreByTopic');
   const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
+  const setPublicTimelineNextCursorByTopic = useDesktopShellFieldSetter(
+    'publicTimelineNextCursorByTopic'
+  );
   const setLiveSessionsByTopic = useDesktopShellFieldSetter('liveSessionsByTopic');
   const setGameRoomsByTopic = useDesktopShellFieldSetter('gameRoomsByTopic');
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
@@ -124,16 +132,21 @@ export function useDesktopShellData({
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setThread = useDesktopShellFieldSetter('thread');
+  const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
+  const setThreadLoadingMoreById = useDesktopShellFieldSetter('threadLoadingMoreById');
   const setLocalPeerTicket = useDesktopShellFieldSetter('localPeerTicket');
   const setDiscoveryConfig = useDesktopShellFieldSetter('discoveryConfig');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
+  const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
+  const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setMediaObjectUrls = useDesktopShellFieldSetter('mediaObjectUrls');
   const setSyncStatus = useDesktopShellFieldSetter('syncStatus');
   const setLocalProfile = useDesktopShellFieldSetter('localProfile');
   const setProfileTimeline = useDesktopShellFieldSetter('profileTimeline');
+  const setProfileTimelineNextCursor = useDesktopShellFieldSetter('profileTimelineNextCursor');
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const setSocialConnections = useDesktopShellFieldSetter('socialConnections');
   const setSocialConnectionsPanelState = useDesktopShellFieldSetter('socialConnectionsPanelState');
@@ -146,20 +159,22 @@ export function useDesktopShellData({
   const setProfilePanelState = useDesktopShellFieldSetter('profilePanelState');
   const setSelectedAuthor = useDesktopShellFieldSetter('selectedAuthor');
   const setSelectedAuthorTimeline = useDesktopShellFieldSetter('selectedAuthorTimeline');
+  const setSelectedAuthorTimelineNextCursor = useDesktopShellFieldSetter(
+    'selectedAuthorTimelineNextCursor'
+  );
   const setAuthorError = useDesktopShellFieldSetter('authorError');
   const setNotifications = useDesktopShellFieldSetter('notifications');
   const setNotificationStatus = useDesktopShellFieldSetter('notificationStatus');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
-  const setSelectedDirectMessagePeerPubkey = useDesktopShellFieldSetter(
-    'selectedDirectMessagePeerPubkey'
-  );
   const setDirectMessages = useDesktopShellFieldSetter('directMessages');
   const setDirectMessageTimelineByPeer = useDesktopShellFieldSetter('directMessageTimelineByPeer');
+  const setDirectMessageTimelineNextCursorByPeer = useDesktopShellFieldSetter(
+    'directMessageTimelineNextCursorByPeer'
+  );
   const setDirectMessageStatusByPeer = useDesktopShellFieldSetter('directMessageStatusByPeer');
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setLivePanelStateByTopic = useDesktopShellFieldSetter('livePanelStateByTopic');
-  const setChannelPanelStateByTopic = useDesktopShellFieldSetter('channelPanelStateByTopic');
   const setGamePanelStateByTopic = useDesktopShellFieldSetter('gamePanelStateByTopic');
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
@@ -258,547 +273,539 @@ export function useDesktopShellData({
     thread,
   ]);
 
-  const runLoadTopics = useCallback(
-    async (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
+  const mergeUniquePosts = useCallback((current: PostView[], incoming: PostView[]) => {
+    const seen = new Set(current.map((post) => post.object_id));
+    return [...current, ...incoming.filter((post) => !seen.has(post.object_id))];
+  }, []);
+
+  const mergeLocalPosts = useCallback((current: PostView[], incoming: PostView[]) => {
+    const authoritativeIds = new Set(incoming.map((post) => post.object_id));
+    const localPosts = current.filter((post) => {
+      if (!post.local_state) {
+        return false;
+      }
+      const authoritativeId = post.server_object_id ?? post.object_id;
+      return !authoritativeIds.has(authoritativeId);
+    });
+    const localObjectIds = new Set(localPosts.map((post) => post.object_id));
+    return [...localPosts, ...incoming.filter((post) => !localObjectIds.has(post.object_id))];
+  }, []);
+
+  const refreshVisibleShellData = useCallback(
+    async (topic: string, currentThread: string | null) => {
       const requestId = loadTopicsRequestRef.current + 1;
       loadTopicsRequestRef.current = requestId;
       const currentState = storeApi.getState();
-      const currentSelectedChannelIdByTopic = currentState.selectedChannelIdByTopic;
-      const currentSelectedAuthorPubkey = currentState.selectedAuthorPubkey;
-      const currentDirectMessagePaneOpen = currentState.directMessagePaneOpen;
-      const currentSelectedDirectMessagePeerPubkey = currentState.selectedDirectMessagePeerPubkey;
-      const currentActivePrimarySection = currentState.shellChromeState.activePrimarySection;
-      const currentDiscoveryEditorDirty = currentState.discoveryEditorDirty;
-      const currentCommunityNodeEditorDirty = currentState.communityNodeEditorDirty;
-      const currentProfileDirty = currentState.profileDirty;
-      const shouldLoadNotifications = currentActivePrimarySection === 'notifications';
+      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
 
       try {
-        const [
-          timelineViews,
-          publicTimelineViews,
-          liveViewsResult,
-          gameViewsResult,
-          joinedChannelViewsResult,
-          threadView,
-          directMessagesView,
-          status,
-        ] = await Promise.all([
-          Promise.all(
-            currentTopics.map(async (topic) => ({
-              topic,
-              timeline: await api.listTimeline(
-                topic,
-                null,
-                50,
-                privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
-              ),
-            }))
+        const [timeline, publicTimeline, joinedChannels, threadView, status] = await Promise.all([
+          api.listTimeline(
+            topic,
+            null,
+            VISIBLE_TIMELINE_LIMIT,
+            privateTimelineScope(selectedChannelId)
           ),
-          Promise.all(
-            currentTopics.map(async (topic) => ({
-              topic,
-              timeline: await api.listTimeline(topic, null, 50, PUBLIC_TIMELINE_SCOPE),
-            }))
-          ),
-          Promise.allSettled(
-            currentTopics.map(async (topic) => ({
-              topic,
-              sessions: await api.listLiveSessions(
-                topic,
-                privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
-              ),
-            }))
-          ),
-          Promise.allSettled(
-            currentTopics.map(async (topic) => ({
-              topic,
-              rooms: await api.listGameRooms(
-                topic,
-                privateTimelineScope(currentSelectedChannelIdByTopic[topic] ?? null)
-              ),
-            }))
-          ),
-          Promise.allSettled(
-            currentTopics.map(async (topic) => ({
-              topic,
-              channels: await api.listJoinedPrivateChannels(topic),
-            }))
-          ),
+          api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
+          api.listJoinedPrivateChannels(topic),
           currentThread
-            ? api.listThread(currentActiveTopic, currentThread, null, 50)
+            ? api.listThread(topic, currentThread, null, THREAD_TIMELINE_LIMIT)
             : Promise.resolve(null),
-          api.listDirectMessages(),
           api.getSyncStatus(),
         ]);
-        const [
-          discoveryResult,
-          communityConfigResult,
-          communityStatusesResult,
-          ticketResult,
-          profileResult,
-          authorViewResult,
-          profileTimelineResult,
-          authorTimelineResult,
-          directMessageTimelineResult,
-          directMessageStatusResult,
-          ownedReactionAssetsResult,
-          bookmarkedReactionAssetsResult,
-          bookmarkedPostsResult,
-          recentReactionsResult,
-          followingConnectionsResult,
-          followedConnectionsResult,
-          mutedConnectionsResult,
-          notificationStatusResult,
-          notificationsResult,
-        ] = await Promise.allSettled([
-          api.getDiscoveryConfig(),
-          api.getCommunityNodeConfig(),
-          api.getCommunityNodeStatuses(),
-          api.getLocalPeerTicket(),
-          api.getMyProfile(),
-          currentSelectedAuthorPubkey
-            ? api.getAuthorSocialView(currentSelectedAuthorPubkey)
-            : Promise.resolve(null),
-          api.listProfileTimeline(status.local_author_pubkey, null, 50),
-          currentSelectedAuthorPubkey
-            ? api.listProfileTimeline(currentSelectedAuthorPubkey, null, 50)
-            : Promise.resolve(null),
-          currentDirectMessagePaneOpen && currentSelectedDirectMessagePeerPubkey
-            ? api.listDirectMessageMessages(currentSelectedDirectMessagePeerPubkey, null, 100)
-            : Promise.resolve(null),
-          currentDirectMessagePaneOpen && currentSelectedDirectMessagePeerPubkey
-            ? api.getDirectMessageStatus(currentSelectedDirectMessagePeerPubkey)
-            : Promise.resolve(null),
-          api.listMyCustomReactionAssets(),
-          api.listBookmarkedCustomReactions(),
-          api.listBookmarkedPosts(),
-          api.listRecentReactions(8),
-          api.listSocialConnections('following'),
-          api.listSocialConnections('followed'),
-          api.listSocialConnections('muted'),
-          api.getNotificationStatus(),
-          shouldLoadNotifications ? api.listNotifications() : Promise.resolve(null),
-        ]);
-        if (requestId !== loadTopicsRequestRef.current) {
-          return;
-        }
-        let nextNotifications: NotificationView[] | null =
-          shouldLoadNotifications && notificationsResult.status === 'fulfilled'
-            ? notificationsResult.value ?? []
-            : null;
-        let nextNotificationStatus =
-          notificationStatusResult.status === 'fulfilled'
-            ? notificationStatusResult.value
-            : nextNotifications
-              ? {
-                  unread_count: nextNotifications.filter((notification) => !notification.read_at)
-                    .length,
-                }
-              : null;
-        let nextNotificationAutoReadError: string | null = null;
 
-        if (shouldLoadNotifications && nextNotifications) {
-          const hasUnreadNotifications = nextNotifications.some((notification) => !notification.read_at);
-          if (hasUnreadNotifications) {
-            try {
-              nextNotificationStatus = await api.markAllNotificationsRead();
-              const readAt = Date.now();
-              nextNotifications = nextNotifications.map((notification) =>
-                notification.read_at ? notification : { ...notification, read_at: readAt }
-              );
-            } catch (notificationReadError) {
-              nextNotificationAutoReadError = messageFromError(
-                notificationReadError,
-                translate('shell:notifications.errors.failedAutoRead')
-              );
-            }
-          }
-        }
         if (requestId !== loadTopicsRequestRef.current) {
           return;
         }
-        const latestState = storeApi.getState();
-        const matchesSelectedAuthorContext =
-          latestState.selectedAuthorPubkey === currentSelectedAuthorPubkey;
-        const matchesDirectMessageContext =
-          latestState.directMessagePaneOpen === currentDirectMessagePaneOpen &&
-          latestState.selectedDirectMessagePeerPubkey === currentSelectedDirectMessagePeerPubkey;
-        const matchesThreadContext = latestState.selectedThread === currentThread;
 
         startTransition(() => {
-          setTimelinesByTopic(
-            Object.fromEntries(timelineViews.map(({ topic, timeline }) => [topic, timeline.items]))
-          );
-          setPublicTimelinesByTopic(
-            Object.fromEntries(
-              publicTimelineViews.map(({ topic, timeline }) => [topic, timeline.items])
-            )
-          );
-          setLiveSessionsByTopic((current) => {
-            const next = { ...current };
-            for (const result of liveViewsResult) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = result.value.sessions;
-              }
-            }
-            return next;
-          });
-          setGameRoomsByTopic((current) => {
-            const next = { ...current };
-            for (const result of gameViewsResult) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = result.value.rooms;
-              }
-            }
-            return next;
-          });
-          setJoinedChannelsByTopic((current) => {
-            const next = { ...current };
-            for (const result of joinedChannelViewsResult) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = result.value.channels;
-              }
-            }
-            return next;
-          });
-          setLivePanelStateByTopic((current) => {
-            const next = { ...current };
-            for (const [index, result] of liveViewsResult.entries()) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = {
-                  status: 'ready',
-                  error: null,
-                };
-              } else {
-                next[currentTopics[index]] = {
-                  status: 'error',
-                  error: messageFromError(
-                    result.reason,
-                    translate('common:errors.failedToLoadLiveSessions')
-                  ),
-                };
-              }
-            }
-            return next;
-          });
-          setGamePanelStateByTopic((current) => {
-            const next = { ...current };
-            for (const [index, result] of gameViewsResult.entries()) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = {
-                  status: 'ready',
-                  error: null,
-                };
-              } else {
-                next[currentTopics[index]] = {
-                  status: 'error',
-                  error: messageFromError(
-                    result.reason,
-                    translate('common:errors.failedToLoadGameRooms')
-                  ),
-                };
-              }
-            }
-            return next;
-          });
-          setChannelPanelStateByTopic((current) => {
-            const next = { ...current };
-            for (const [index, result] of joinedChannelViewsResult.entries()) {
-              if (result.status === 'fulfilled') {
-                next[result.value.topic] = {
-                  status: 'ready',
-                  error: null,
-                };
-              } else {
-                next[currentTopics[index]] = {
-                  status: 'error',
-                  error: messageFromError(
-                    result.reason,
-                    translate('common:errors.failedToLoadPrivateChannels')
-                  ),
-                };
-              }
-            }
-            return next;
-          });
-          setDirectMessages(directMessagesView);
-          setKnownAuthorsByPubkey((current) =>
-            mergeKnownAuthors(current, directMessagesView.map(authorViewFromDirectMessageConversation))
-          );
+          setTimelinesByTopic((current) => ({
+            ...current,
+            [topic]: mergeLocalPosts(current[topic] ?? EMPTY_POSTS, timeline.items),
+          }));
+          setTimelineNextCursorByTopic((current) => ({
+            ...current,
+            [topic]: timeline.next_cursor ?? null,
+          }));
+          setPublicTimelinesByTopic((current) => ({
+            ...current,
+            [topic]: mergeLocalPosts(current[topic] ?? EMPTY_POSTS, publicTimeline.items),
+          }));
+          setPublicTimelineNextCursorByTopic((current) => ({
+            ...current,
+            [topic]: publicTimeline.next_cursor ?? null,
+          }));
+          setJoinedChannelsByTopic((current) => ({
+            ...current,
+            [topic]: joinedChannels,
+          }));
+          if (currentThread) {
+            setThread((current) => mergeLocalPosts(current, threadView?.items ?? []));
+            setThreadNextCursorById((current) => ({
+              ...current,
+              [currentThread]: threadView?.next_cursor ?? null,
+            }));
+          } else {
+            setThread([]);
+          }
           setSyncStatus(status);
-          if (nextNotificationStatus) {
-            setNotificationStatus(nextNotificationStatus);
-          }
-          if (shouldLoadNotifications) {
-            if (notificationsResult.status === 'fulfilled' && nextNotifications) {
-              setNotifications(nextNotifications);
-              setNotificationPanelState({
-                status: 'ready',
-                error: null,
-              });
-            } else {
-              setNotifications([]);
-              setNotificationPanelState({
-                status: 'error',
-                error: messageFromError(
-                  notificationsResult.status === 'rejected' ? notificationsResult.reason : null,
-                  translate('shell:notifications.errors.failedToLoad')
-                ),
-              });
-            }
-            setNotificationAutoReadError(nextNotificationAutoReadError);
-          } else {
-            setNotificationAutoReadError(null);
-          }
-          if (discoveryResult.status === 'fulfilled') {
-            setDiscoveryConfig(discoveryResult.value);
-            if (!currentDiscoveryEditorDirty) {
-              setDiscoverySeedInput(seedPeersToEditorValue(discoveryResult.value));
-            }
-          }
-          if (communityConfigResult.status === 'fulfilled') {
-            setCommunityNodeConfig(communityConfigResult.value);
-            if (!currentCommunityNodeEditorDirty) {
-              setCommunityNodeInput(communityNodesToEditorValue(communityConfigResult.value));
-            }
-          }
-          if (communityStatusesResult.status === 'fulfilled') {
-            setCommunityNodeStatuses((current) =>
-              mergeCommunityNodeStatuses(current, communityStatusesResult.value)
-            );
-          }
-          if (ticketResult.status === 'fulfilled') {
-            setLocalPeerTicket(ticketResult.value);
-          }
-          if (ownedReactionAssetsResult.status === 'fulfilled') {
-            setOwnedReactionAssets(ownedReactionAssetsResult.value);
-          }
-          if (bookmarkedReactionAssetsResult.status === 'fulfilled') {
-            setBookmarkedReactionAssets(bookmarkedReactionAssetsResult.value);
-          }
-          if (bookmarkedPostsResult.status === 'fulfilled') {
-            setBookmarkedPosts(bookmarkedPostsResult.value);
-          }
-          if (recentReactionsResult.status === 'fulfilled') {
-            setRecentReactions(recentReactionsResult.value);
-          }
-          if (
-            followingConnectionsResult.status === 'fulfilled' &&
-            followedConnectionsResult.status === 'fulfilled' &&
-            mutedConnectionsResult.status === 'fulfilled'
-          ) {
-            setSocialConnections({
-              following: followingConnectionsResult.value,
-              followed: followedConnectionsResult.value,
-              muted: mutedConnectionsResult.value,
-            });
-            setKnownAuthorsByPubkey((current) =>
-              mergeKnownAuthors(current, [
-                ...followingConnectionsResult.value,
-                ...followedConnectionsResult.value,
-                ...mutedConnectionsResult.value,
-              ])
-            );
-            setSocialConnectionsPanelState({
-              status: 'ready',
-              error: null,
-            });
-          } else {
-            setSocialConnections(DEFAULT_SOCIAL_CONNECTIONS);
-            setSocialConnectionsPanelState({
-              status: 'error',
-              error:
-                followingConnectionsResult.status === 'rejected'
-                  ? messageFromError(
-                      followingConnectionsResult.reason,
-                      translate('common:errors.failedToLoadSocialConnections')
-                    )
-                  : followedConnectionsResult.status === 'rejected'
-                    ? messageFromError(
-                        followedConnectionsResult.reason,
-                        translate('common:errors.failedToLoadSocialConnections')
-                      )
-                    : mutedConnectionsResult.status === 'rejected'
-                      ? messageFromError(
-                          mutedConnectionsResult.reason,
-                          translate('common:errors.failedToLoadSocialConnections')
-                        )
-                      : null,
-            });
-          }
-          setReactionPanelState({
-            status:
-              ownedReactionAssetsResult.status === 'fulfilled' &&
-              bookmarkedReactionAssetsResult.status === 'fulfilled' &&
-              recentReactionsResult.status === 'fulfilled'
-                ? 'ready'
-                : 'error',
-            error:
-              ownedReactionAssetsResult.status === 'rejected'
-                ? messageFromError(
-                    ownedReactionAssetsResult.reason,
-                    translate('common:errors.failedToLoadSettings')
-                  )
-                : bookmarkedReactionAssetsResult.status === 'rejected'
-                  ? messageFromError(
-                      bookmarkedReactionAssetsResult.reason,
-                      translate('common:errors.failedToLoadSettings')
-                    )
-                  : recentReactionsResult.status === 'rejected'
-                    ? messageFromError(
-                        recentReactionsResult.reason,
-                        translate('common:errors.failedToLoadSettings')
-                      )
-                    : null,
-          });
-          if (profileResult.status === 'fulfilled') {
-            setLocalProfile(profileResult.value);
-            if (!currentProfileDirty) {
-              setProfileDraft(profileInputFromProfile(profileResult.value));
-            }
-            if (profileTimelineResult.status === 'fulfilled') {
-              setProfileTimeline(profileTimelineResult.value.items);
-              setProfileError(null);
-              setProfilePanelState({
-                status: 'ready',
-                error: null,
-              });
-            } else {
-              const nextProfileError = messageFromError(
-                profileTimelineResult.reason,
-                translate('common:errors.failedToLoadProfile')
-              );
-              setProfileTimeline([]);
-              setProfileError(nextProfileError);
-              setProfilePanelState({
-                status: 'error',
-                error: nextProfileError,
-              });
-            }
-          } else {
-            const nextProfileError = messageFromError(
-              profileResult.reason,
-              translate('common:errors.failedToLoadProfile')
-            );
-            setProfileTimeline([]);
-            setProfileError(nextProfileError);
-            setProfilePanelState({
-              status: 'error',
-              error: nextProfileError,
-            });
-          }
-          if (matchesSelectedAuthorContext) {
-            if (!currentSelectedAuthorPubkey) {
-              setSelectedAuthor(null);
-              setSelectedAuthorTimeline([]);
-              setAuthorError(null);
-            } else if (
-              authorViewResult.status === 'fulfilled' &&
-              authorTimelineResult.status === 'fulfilled'
-            ) {
-              setSelectedAuthor(authorViewResult.value);
-              setSelectedAuthorTimeline(authorTimelineResult.value?.items ?? []);
-              setAuthorError(null);
-              if (authorViewResult.value) {
-                setKnownAuthorsByPubkey((current) =>
-                  mergeKnownAuthors(current, [authorViewResult.value])
-                );
-              }
-            } else {
-              setSelectedAuthorTimeline([]);
-              setAuthorError(
-                messageFromError(
-                  authorViewResult.status === 'rejected'
-                    ? authorViewResult.reason
-                    : authorTimelineResult.status === 'rejected'
-                      ? authorTimelineResult.reason
-                      : null,
-                  translate('common:errors.failedToLoadAuthor')
-                )
-              );
-            }
-          }
-          if (matchesDirectMessageContext) {
-            if (!currentDirectMessagePaneOpen) {
-              setSelectedDirectMessagePeerPubkey(null);
-              setDirectMessageError(null);
-            } else if (!currentSelectedDirectMessagePeerPubkey) {
-              setDirectMessageError(null);
-            } else {
-              if (directMessageTimelineResult.status === 'fulfilled') {
-                setDirectMessageTimelineByPeer((current) => ({
-                  ...current,
-                  [currentSelectedDirectMessagePeerPubkey]:
-                    directMessageTimelineResult.value?.items ?? [],
-                }));
-              }
-              if (directMessageStatusResult.status === 'fulfilled') {
-                setDirectMessageStatusByPeer((current) => ({
-                  ...current,
-                  [currentSelectedDirectMessagePeerPubkey]: directMessageStatusResult.value!,
-                }));
-              }
-              if (
-                directMessageTimelineResult.status === 'fulfilled' &&
-                directMessageStatusResult.status === 'fulfilled'
-              ) {
-                setDirectMessageError(null);
-              } else {
-                setDirectMessageError(
-                  messageFromError(
-                    directMessageTimelineResult.status === 'rejected'
-                      ? directMessageTimelineResult.reason
-                      : directMessageStatusResult.status === 'rejected'
-                        ? directMessageStatusResult.reason
-                        : null,
-                    'failed to load direct messages'
-                  )
-                );
-              }
-            }
-          }
-          if (matchesThreadContext) {
-            if (threadView) {
-              setThread(threadView.items);
-            } else if (!currentThread) {
-              setThread([]);
-            }
-          }
           setError(null);
         });
-      } catch (loadError) {
+      } catch (refreshError) {
         if (requestId !== loadTopicsRequestRef.current) {
           return;
         }
         setError(
-          loadError instanceof Error
-            ? loadError.message
+          refreshError instanceof Error
+            ? refreshError.message
             : translate('common:errors.failedToLoadTopic')
         );
-        throw loadError;
       }
     },
     [
       api,
+      mergeLocalPosts,
       loadTopicsRequestRef,
+      setError,
+      setJoinedChannelsByTopic,
+      setPublicTimelineNextCursorByTopic,
+      setPublicTimelinesByTopic,
+      setSyncStatus,
+      setThread,
+      setThreadNextCursorById,
+      setTimelineNextCursorByTopic,
+      setTimelinesByTopic,
+      storeApi,
+      translate,
+    ]
+  );
+
+  const loadMoreTimeline = useCallback(
+    async (topic: string) => {
+      const currentState = storeApi.getState();
+      const cursor = currentState.timelineNextCursorByTopic[topic] ?? null;
+      if (!cursor || currentState.timelineLoadingMoreByTopic[topic]) {
+        return;
+      }
+      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
+      setTimelineLoadingMoreByTopic((current) => ({
+        ...current,
+        [topic]: true,
+      }));
+      try {
+        const timeline = await api.listTimeline(
+          topic,
+          cursor,
+          VISIBLE_TIMELINE_LIMIT,
+          privateTimelineScope(selectedChannelId)
+        );
+        startTransition(() => {
+          setTimelinesByTopic((current) => ({
+            ...current,
+            [topic]: mergeUniquePosts(current[topic] ?? EMPTY_POSTS, timeline.items),
+          }));
+          setTimelineNextCursorByTopic((current) => ({
+            ...current,
+            [topic]: timeline.next_cursor ?? null,
+          }));
+        });
+      } finally {
+        setTimelineLoadingMoreByTopic((current) => ({
+          ...current,
+          [topic]: false,
+        }));
+      }
+    },
+    [
+      api,
+      mergeUniquePosts,
+      setTimelineLoadingMoreByTopic,
+      setTimelineNextCursorByTopic,
+      setTimelinesByTopic,
+      storeApi,
+    ]
+  );
+
+  const loadMoreThread = useCallback(
+    async (topic: string, threadId: string) => {
+      const currentState = storeApi.getState();
+      const cursor = currentState.threadNextCursorById[threadId] ?? null;
+      if (!cursor || currentState.threadLoadingMoreById[threadId]) {
+        return;
+      }
+      setThreadLoadingMoreById((current) => ({
+        ...current,
+        [threadId]: true,
+      }));
+      try {
+        const threadView = await api.listThread(topic, threadId, cursor, THREAD_TIMELINE_LIMIT);
+        startTransition(() => {
+          setThread((current) => mergeUniquePosts(current, threadView.items));
+          setThreadNextCursorById((current) => ({
+            ...current,
+            [threadId]: threadView.next_cursor ?? null,
+          }));
+        });
+      } finally {
+        setThreadLoadingMoreById((current) => ({
+          ...current,
+          [threadId]: false,
+        }));
+      }
+    },
+    [
+      api,
+      mergeUniquePosts,
+      setThread,
+      setThreadLoadingMoreById,
+      setThreadNextCursorById,
+      storeApi,
+    ]
+  );
+
+  const runLoadTopics = useCallback(
+    async (_currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
+      await refreshVisibleShellData(currentActiveTopic, currentThread);
+
+      const currentState = storeApi.getState();
+      const selectedChannelId = currentState.selectedChannelIdByTopic[currentActiveTopic] ?? null;
+      const selectedAuthorPubkey = currentState.selectedAuthorPubkey;
+      const {
+        activePrimarySection,
+        activeSettingsSection,
+        settingsOpen,
+        timelineView,
+      } = currentState.shellChromeState;
+
+      const tasks: Promise<void>[] = [];
+
+      if (activePrimarySection === 'live') {
+        tasks.push(
+          api
+            .listLiveSessions(currentActiveTopic, privateTimelineScope(selectedChannelId))
+            .then((sessions) => {
+              startTransition(() => {
+                setLiveSessionsByTopic((current) => ({
+                  ...current,
+                  [currentActiveTopic]: sessions,
+                }));
+                setLivePanelStateByTopic((current) => ({
+                  ...current,
+                  [currentActiveTopic]: { status: 'ready', error: null },
+                }));
+              });
+            })
+            .catch((error) => {
+              setLivePanelStateByTopic((current) => ({
+                ...current,
+                [currentActiveTopic]: {
+                  status: 'error',
+                  error: messageFromError(
+                    error,
+                    translate('common:errors.failedToLoadLiveSessions')
+                  ),
+                },
+              }));
+            })
+        );
+      }
+
+      if (activePrimarySection === 'game') {
+        tasks.push(
+          api
+            .listGameRooms(currentActiveTopic, privateTimelineScope(selectedChannelId))
+            .then((rooms) => {
+              startTransition(() => {
+                setGameRoomsByTopic((current) => ({
+                  ...current,
+                  [currentActiveTopic]: rooms,
+                }));
+                setGamePanelStateByTopic((current) => ({
+                  ...current,
+                  [currentActiveTopic]: { status: 'ready', error: null },
+                }));
+              });
+            })
+            .catch((error) => {
+              setGamePanelStateByTopic((current) => ({
+                ...current,
+                [currentActiveTopic]: {
+                  status: 'error',
+                  error: messageFromError(error, translate('common:errors.failedToLoadGameRooms')),
+                },
+              }));
+            })
+        );
+      }
+
+      if (activePrimarySection === 'profile') {
+        tasks.push(
+          Promise.all([
+            api.getMyProfile(),
+            api.listSocialConnections('following'),
+            api.listSocialConnections('followed'),
+            api.listSocialConnections('muted'),
+          ])
+            .then(async ([profile, following, followed, muted]) => {
+              const timeline = await api.listProfileTimeline(profile.pubkey, null, VISIBLE_TIMELINE_LIMIT);
+              startTransition(() => {
+                setLocalProfile(profile);
+                if (!storeApi.getState().profileDirty) {
+                  setProfileDraft(profileInputFromProfile(profile));
+                }
+                setProfileTimeline(timeline.items);
+                setProfileTimelineNextCursor(timeline.next_cursor ?? null);
+                setProfileError(null);
+                setProfilePanelState({ status: 'ready', error: null });
+                setSocialConnections({ following, followed, muted });
+                setKnownAuthorsByPubkey((current) =>
+                  mergeKnownAuthors(current, [...following, ...followed, ...muted])
+                );
+                setSocialConnectionsPanelState({ status: 'ready', error: null });
+              });
+            })
+            .catch((error) => {
+              const message = messageFromError(error, translate('common:errors.failedToLoadProfile'));
+              setProfileError(message);
+              setProfilePanelState({ status: 'error', error: message });
+            })
+        );
+      }
+
+      if (selectedAuthorPubkey) {
+        tasks.push(
+          Promise.all([
+            api.getAuthorSocialView(selectedAuthorPubkey),
+            api.listProfileTimeline(selectedAuthorPubkey, null, VISIBLE_TIMELINE_LIMIT),
+          ])
+            .then(([author, timeline]) => {
+              startTransition(() => {
+                setSelectedAuthor(author);
+                setSelectedAuthorTimeline(timeline.items);
+                setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
+                setAuthorError(null);
+                if (author) {
+                  setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
+                }
+              });
+            })
+            .catch((error) => {
+              setAuthorError(messageFromError(error, translate('common:errors.failedToLoadAuthor')));
+            })
+        );
+      }
+
+      if (activePrimarySection === 'messages' || currentState.directMessagePaneOpen) {
+        tasks.push(
+          api
+            .listDirectMessages()
+            .then(async (directMessages) => {
+              startTransition(() => {
+                setDirectMessages(directMessages);
+                setKnownAuthorsByPubkey((current) =>
+                  mergeKnownAuthors(
+                    current,
+                    directMessages.map(authorViewFromDirectMessageConversation)
+                  )
+                );
+              });
+              const selectedPeerPubkey = storeApi.getState().selectedDirectMessagePeerPubkey;
+              if (!selectedPeerPubkey) {
+                setDirectMessageError(null);
+                return;
+              }
+              const [timelineResult, statusResult] = await Promise.allSettled([
+                api.listDirectMessageMessages(selectedPeerPubkey, null, VISIBLE_TIMELINE_LIMIT),
+                api.getDirectMessageStatus(selectedPeerPubkey),
+              ]);
+              startTransition(() => {
+                if (timelineResult.status === 'fulfilled') {
+                  setDirectMessageTimelineByPeer((current) => ({
+                    ...current,
+                    [selectedPeerPubkey]: timelineResult.value.items,
+                  }));
+                  setDirectMessageTimelineNextCursorByPeer((current) => ({
+                    ...current,
+                    [selectedPeerPubkey]: timelineResult.value.next_cursor ?? null,
+                  }));
+                }
+                if (statusResult.status === 'fulfilled') {
+                  setDirectMessageStatusByPeer((current) => ({
+                    ...current,
+                    [selectedPeerPubkey]: statusResult.value,
+                  }));
+                }
+                setDirectMessageError(
+                  timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
+                    ? null
+                    : messageFromError(
+                        timelineResult.status === 'rejected'
+                          ? timelineResult.reason
+                          : statusResult.status === 'rejected'
+                            ? statusResult.reason
+                            : null,
+                        'failed to load direct messages'
+                      )
+                );
+              });
+            })
+            .catch((error) => {
+              setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
+            })
+        );
+      }
+
+      if (activePrimarySection === 'notifications') {
+        tasks.push(
+          Promise.all([api.getNotificationStatus(), api.listNotifications()])
+            .then(async ([status, notificationItems]) => {
+              let nextNotifications: NotificationView[] = notificationItems;
+              let nextStatus = status;
+              if (notificationItems.some((notification) => !notification.read_at)) {
+                try {
+                  nextStatus = await api.markAllNotificationsRead();
+                  const readAt = Date.now();
+                  nextNotifications = notificationItems.map((notification) =>
+                    notification.read_at ? notification : { ...notification, read_at: readAt }
+                  );
+                  setNotificationAutoReadError(null);
+                } catch (notificationReadError) {
+                  setNotificationAutoReadError(
+                    messageFromError(
+                      notificationReadError,
+                      translate('shell:notifications.errors.failedAutoRead')
+                    )
+                  );
+                }
+              }
+              startTransition(() => {
+                setNotificationStatus(nextStatus);
+                setNotifications(nextNotifications);
+                setNotificationPanelState({ status: 'ready', error: null });
+              });
+            })
+            .catch((error) => {
+              setNotificationPanelState({
+                status: 'error',
+                error: messageFromError(error, translate('shell:notifications.errors.failedToLoad')),
+              });
+            })
+        );
+      }
+
+      if (activePrimarySection === 'timeline' && timelineView === 'bookmarks') {
+        tasks.push(
+          api
+            .listBookmarkedPosts()
+            .then((bookmarks) => {
+              setBookmarkedPosts(bookmarks);
+            })
+            .catch(() => undefined)
+        );
+      }
+
+      if (settingsOpen) {
+        if (activeSettingsSection === 'connectivity') {
+          tasks.push(
+            api
+              .getLocalPeerTicket()
+              .then((ticket) => {
+                setLocalPeerTicket(ticket);
+              })
+              .catch(() => undefined)
+          );
+        }
+
+        if (activeSettingsSection === 'discovery') {
+          tasks.push(
+            api
+              .getDiscoveryConfig()
+              .then((config) => {
+                setDiscoveryConfig(config);
+                if (!storeApi.getState().discoveryEditorDirty) {
+                  setDiscoverySeedInput(seedPeersToEditorValue(config));
+                }
+                setDiscoveryError(null);
+              })
+              .catch((error) => {
+                setDiscoveryError(
+                  messageFromError(error, translate('common:errors.failedToLoadSettings'))
+                );
+              })
+          );
+        }
+
+        if (activeSettingsSection === 'community-node') {
+          tasks.push(
+            Promise.all([api.getCommunityNodeConfig(), api.getCommunityNodeStatuses()])
+              .then(([config, statuses]) => {
+                startTransition(() => {
+                  setCommunityNodeConfig(config);
+                  if (!storeApi.getState().communityNodeEditorDirty) {
+                    setCommunityNodeInput(communityNodesToEditorValue(config));
+                  }
+                  setCommunityNodeStatuses((current) =>
+                    mergeCommunityNodeStatuses(current, statuses)
+                  );
+                  setCommunityNodeError(null);
+                });
+              })
+              .catch((error) => {
+                setCommunityNodeError(
+                  messageFromError(error, translate('common:errors.failedToLoadSettings'))
+                );
+              })
+          );
+        }
+
+        if (activeSettingsSection === 'reactions') {
+          tasks.push(
+            Promise.all([
+              api.listMyCustomReactionAssets(),
+              api.listBookmarkedCustomReactions(),
+              api.listBookmarkedPosts(),
+              api.listRecentReactions(8),
+            ])
+              .then(([ownedAssets, bookmarkedAssets, bookmarkedPosts, recent]) => {
+                startTransition(() => {
+                  setOwnedReactionAssets(ownedAssets);
+                  setBookmarkedReactionAssets(bookmarkedAssets);
+                  setBookmarkedPosts(bookmarkedPosts);
+                  setRecentReactions(recent);
+                  setReactionPanelState({ status: 'ready', error: null });
+                });
+              })
+              .catch((error) => {
+                setReactionPanelState({
+                  status: 'error',
+                  error: messageFromError(error, translate('common:errors.failedToLoadSettings')),
+                });
+              })
+          );
+        }
+      }
+
+      await Promise.allSettled(tasks);
+    },
+    [
+      api,
       setAuthorError,
       setBookmarkedPosts,
       setBookmarkedReactionAssets,
-      setChannelPanelStateByTopic,
       setCommunityNodeConfig,
+      setCommunityNodeError,
       setCommunityNodeInput,
       setCommunityNodeStatuses,
-      setDirectMessageError,
       setDirectMessages,
-      setDirectMessageStatusByPeer,
+      setDirectMessageError,
+      setDirectMessageTimelineNextCursorByPeer,
       setDirectMessageTimelineByPeer,
+      setDirectMessageStatusByPeer,
       setDiscoveryConfig,
+      setDiscoveryError,
       setDiscoverySeedInput,
-      setError,
       setGamePanelStateByTopic,
       setGameRoomsByTopic,
-      setJoinedChannelsByTopic,
       setKnownAuthorsByPubkey,
       setLivePanelStateByTopic,
       setLiveSessionsByTopic,
@@ -812,18 +819,16 @@ export function useDesktopShellData({
       setProfileDraft,
       setProfileError,
       setProfilePanelState,
+      setProfileTimelineNextCursor,
       setProfileTimeline,
-      setPublicTimelinesByTopic,
       setReactionPanelState,
       setRecentReactions,
       setSelectedAuthor,
+      setSelectedAuthorTimelineNextCursor,
       setSelectedAuthorTimeline,
-      setSelectedDirectMessagePeerPubkey,
       setSocialConnections,
       setSocialConnectionsPanelState,
-      setSyncStatus,
-      setThread,
-      setTimelinesByTopic,
+      refreshVisibleShellData,
       storeApi,
       translate,
     ]
@@ -877,76 +882,27 @@ export function useDesktopShellData({
 
   const refreshVisibleTimelineAfterPublish = useCallback(
     async (topic: string, currentThread: string | null) => {
-      const requestId = loadTopicsRequestRef.current + 1;
-      loadTopicsRequestRef.current = requestId;
-      const currentState = storeApi.getState();
-      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
-
-      try {
-        const [timeline, publicTimeline, threadView, status] = await Promise.all([
-          api.listTimeline(topic, null, 50, privateTimelineScope(selectedChannelId)),
-          api.listTimeline(topic, null, 50, PUBLIC_TIMELINE_SCOPE),
-          currentThread ? api.listThread(topic, currentThread, null, 50) : Promise.resolve(null),
-          api.getSyncStatus(),
-        ]);
-
-        if (requestId !== loadTopicsRequestRef.current) {
-          return;
-        }
-
-        const latestState = storeApi.getState();
-        const matchesThreadContext = latestState.selectedThread === currentThread;
-
-        startTransition(() => {
-          setTimelinesByTopic((current) => ({
-            ...current,
-            [topic]: timeline.items,
-          }));
-          setPublicTimelinesByTopic((current) => ({
-            ...current,
-            [topic]: publicTimeline.items,
-          }));
-          if (matchesThreadContext) {
-            setThread(threadView?.items ?? []);
-          }
-          setSyncStatus(status);
-          setError(null);
-        });
-      } catch (refreshError) {
-        if (requestId !== loadTopicsRequestRef.current) {
-          return;
-        }
-        setError(
-          refreshError instanceof Error
-            ? refreshError.message
-            : translate('common:errors.failedToLoadTopic')
-        );
-      }
+      await refreshVisibleShellData(topic, currentThread);
     },
-    [
-      api,
-      loadTopicsRequestRef,
-      setError,
-      setPublicTimelinesByTopic,
-      setSyncStatus,
-      setThread,
-      setTimelinesByTopic,
-      storeApi,
-      translate,
-    ]
+    [refreshVisibleShellData]
   );
 
   useEffect(() => {
     let disposed = false;
 
     const refresh = async () => {
-      if (disposed) {
+      if (
+        disposed ||
+        visibleRefreshInFlightRef.current ||
+        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+      ) {
         return;
       }
+      visibleRefreshInFlightRef.current = true;
       try {
-        await loadTopics(trackedTopics, activeTopic, selectedThread);
-      } catch {
-        // loadTopics already writes the visible error state
+        await refreshVisibleShellData(activeTopic, selectedThread);
+      } finally {
+        visibleRefreshInFlightRef.current = false;
       }
     };
 
@@ -954,18 +910,406 @@ export function useDesktopShellData({
     const intervalId = window.setInterval(() => {
       void refresh();
     }, REFRESH_INTERVAL_MS);
+    const handleFocus = () => {
+      void refresh();
+    };
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
 
+    return () => {
+      disposed = true;
+      visibleRefreshInFlightRef.current = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [activeTopic, refreshVisibleShellData, selectedThread]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const refreshStatus = async () => {
+      if (
+        disposed ||
+        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+      ) {
+        return;
+      }
+      try {
+        const status = await api.getNotificationStatus();
+        if (!disposed) {
+          setNotificationStatus(status);
+        }
+      } catch {
+        // best effort badge refresh
+      }
+    };
+
+    void refreshStatus();
+    const intervalId = window.setInterval(() => {
+      void refreshStatus();
+    }, STATUS_REFRESH_INTERVAL_MS);
     return () => {
       disposed = true;
       window.clearInterval(intervalId);
     };
+  }, [api, setNotificationStatus]);
+
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      try {
+        const profile = await api.getMyProfile();
+        if (disposed) {
+          return;
+        }
+        setLocalProfile(profile);
+        if (!storeApi.getState().profileDirty) {
+          setProfileDraft(profileInputFromProfile(profile));
+        }
+      } catch {
+        // best effort background bootstrap
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [api, setLocalProfile, setProfileDraft, storeApi]);
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'live') {
+      return;
+    }
+    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
+  }, [activeTopic, loadTopics, selectedThread, shellChromeState.activePrimarySection, trackedTopics]);
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'game') {
+      return;
+    }
+    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
+  }, [activeTopic, loadTopics, selectedThread, shellChromeState.activePrimarySection, trackedTopics]);
+
+  useEffect(() => {
+    if (
+      shellChromeState.activePrimarySection !== 'timeline' ||
+      shellChromeState.timelineView !== 'bookmarks'
+    ) {
+      return;
+    }
+    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
   }, [
     activeTopic,
     loadTopics,
-    shellChromeState.activePrimarySection,
-    selectedAuthorPubkey,
     selectedThread,
+    shellChromeState.activePrimarySection,
+    shellChromeState.timelineView,
     trackedTopics,
+  ]);
+
+  useEffect(() => {
+    if (!shellChromeState.settingsOpen) {
+      return;
+    }
+    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
+  }, [
+    activeTopic,
+    loadTopics,
+    selectedThread,
+    shellChromeState.activeSettingsSection,
+    shellChromeState.settingsOpen,
+    trackedTopics,
+  ]);
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'profile') {
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const profile = await api.getMyProfile();
+        if (disposed) {
+          return;
+        }
+        setLocalProfile(profile);
+        if (!storeApi.getState().profileDirty) {
+          setProfileDraft(profileInputFromProfile(profile));
+        }
+        const [timeline, following, followed, muted] = await Promise.all([
+          api.listProfileTimeline(profile.pubkey, null, VISIBLE_TIMELINE_LIMIT),
+          api.listSocialConnections('following'),
+          api.listSocialConnections('followed'),
+          api.listSocialConnections('muted'),
+        ]);
+        if (disposed) {
+          return;
+        }
+        startTransition(() => {
+          setProfileTimeline(timeline.items);
+          setProfileTimelineNextCursor(timeline.next_cursor ?? null);
+          setProfilePanelState({ status: 'ready', error: null });
+          setProfileError(null);
+          setSocialConnections({
+            following,
+            followed,
+            muted,
+          });
+          setKnownAuthorsByPubkey((current) =>
+            mergeKnownAuthors(current, [...following, ...followed, ...muted])
+          );
+          setSocialConnectionsPanelState({ status: 'ready', error: null });
+        });
+      } catch (error) {
+        if (!disposed) {
+          const message = messageFromError(
+            error,
+            translate('common:errors.failedToLoadProfile')
+          );
+          setProfileError(message);
+          setProfilePanelState({ status: 'error', error: message });
+        }
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [
+    api,
+    setKnownAuthorsByPubkey,
+    setLocalProfile,
+    setProfileDraft,
+    setProfileError,
+    setProfilePanelState,
+    setProfileTimeline,
+    setProfileTimelineNextCursor,
+    setSocialConnections,
+    setSocialConnectionsPanelState,
+    shellChromeState.activePrimarySection,
+    storeApi,
+    translate,
+  ]);
+
+  useEffect(() => {
+    if (!selectedAuthorPubkey) {
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const [author, timeline] = await Promise.all([
+          api.getAuthorSocialView(selectedAuthorPubkey),
+          api.listProfileTimeline(selectedAuthorPubkey, null, VISIBLE_TIMELINE_LIMIT),
+        ]);
+        if (disposed) {
+          return;
+        }
+        startTransition(() => {
+          setSelectedAuthor(author);
+          setSelectedAuthorTimeline(timeline.items);
+          setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
+          setAuthorError(null);
+          if (author) {
+            setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
+          }
+        });
+      } catch (error) {
+        if (!disposed) {
+          setAuthorError(
+            messageFromError(error, translate('common:errors.failedToLoadAuthor'))
+          );
+        }
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [
+    api,
+    selectedAuthorPubkey,
+    setAuthorError,
+    setKnownAuthorsByPubkey,
+    setSelectedAuthor,
+    setSelectedAuthorTimeline,
+    setSelectedAuthorTimelineNextCursor,
+    translate,
+  ]);
+
+  useEffect(() => {
+    if (
+      shellChromeState.activePrimarySection !== 'messages' &&
+      !storeApi.getState().directMessagePaneOpen
+    ) {
+      return;
+    }
+    let disposed = false;
+    const refresh = async () => {
+      if (
+        disposed ||
+        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+      ) {
+        return;
+      }
+      try {
+        const directMessages = await api.listDirectMessages();
+        if (disposed) {
+          return;
+        }
+        setDirectMessages(directMessages);
+        setKnownAuthorsByPubkey((current) =>
+          mergeKnownAuthors(current, directMessages.map(authorViewFromDirectMessageConversation))
+        );
+        const selectedPeerPubkey = storeApi.getState().selectedDirectMessagePeerPubkey;
+        if (!selectedPeerPubkey) {
+          setDirectMessageError(null);
+          return;
+        }
+        const [timelineResult, statusResult] = await Promise.allSettled([
+          api.listDirectMessageMessages(selectedPeerPubkey, null, VISIBLE_TIMELINE_LIMIT),
+          api.getDirectMessageStatus(selectedPeerPubkey),
+        ]);
+        if (disposed) {
+          return;
+        }
+        startTransition(() => {
+          if (timelineResult.status === 'fulfilled') {
+            setDirectMessageTimelineByPeer((current) => ({
+              ...current,
+              [selectedPeerPubkey]: timelineResult.value.items,
+            }));
+            setDirectMessageTimelineNextCursorByPeer((current) => ({
+              ...current,
+              [selectedPeerPubkey]: timelineResult.value.next_cursor ?? null,
+            }));
+          }
+          if (statusResult.status === 'fulfilled') {
+            setDirectMessageStatusByPeer((current) => ({
+              ...current,
+              [selectedPeerPubkey]: statusResult.value,
+            }));
+          }
+          setDirectMessageError(
+            timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
+              ? null
+              : messageFromError(
+                  timelineResult.status === 'rejected'
+                    ? timelineResult.reason
+                    : statusResult.status === 'rejected'
+                      ? statusResult.reason
+                      : null,
+                  'failed to load direct messages'
+                )
+          );
+        });
+      } catch (error) {
+        if (!disposed) {
+          setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
+        }
+      }
+    };
+
+    void refresh();
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, REFRESH_INTERVAL_MS);
+    const handleFocus = () => {
+      void refresh();
+    };
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [
+    api,
+    setDirectMessageError,
+    setDirectMessages,
+    setDirectMessageStatusByPeer,
+    setDirectMessageTimelineByPeer,
+    setDirectMessageTimelineNextCursorByPeer,
+    setKnownAuthorsByPubkey,
+    shellChromeState.activePrimarySection,
+    storeApi,
+  ]);
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'notifications') {
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const [status, notificationItems] = await Promise.all([
+          api.getNotificationStatus(),
+          api.listNotifications(),
+        ]);
+        if (disposed) {
+          return;
+        }
+        let nextNotifications = notificationItems;
+        let nextStatus = status;
+        if (notificationItems.some((notification) => !notification.read_at)) {
+          try {
+            nextStatus = await api.markAllNotificationsRead();
+            const readAt = Date.now();
+            nextNotifications = notificationItems.map((notification) =>
+              notification.read_at ? notification : { ...notification, read_at: readAt }
+            );
+            if (!disposed) {
+              setNotificationAutoReadError(null);
+            }
+          } catch (notificationReadError) {
+            if (!disposed) {
+              setNotificationAutoReadError(
+                messageFromError(
+                  notificationReadError,
+                  translate('shell:notifications.errors.failedAutoRead')
+                )
+              );
+            }
+          }
+        }
+        if (disposed) {
+          return;
+        }
+        startTransition(() => {
+          setNotificationStatus(nextStatus);
+          setNotifications(nextNotifications);
+          setNotificationPanelState({ status: 'ready', error: null });
+        });
+      } catch (error) {
+        if (!disposed) {
+          setNotificationPanelState({
+            status: 'error',
+            error: messageFromError(error, translate('shell:notifications.errors.failedToLoad')),
+          });
+        }
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [
+    api,
+    setNotificationAutoReadError,
+    setNotificationPanelState,
+    setNotifications,
+    setNotificationStatus,
+    shellChromeState.activePrimarySection,
+    translate,
   ]);
 
   useEffect(() => {
@@ -1205,7 +1549,10 @@ export function useDesktopShellData({
 
   return {
     loadTopics,
+    refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
+    loadMoreTimeline,
+    loadMoreThread,
     rememberDraftPreview,
     releaseDraftPreview,
     releaseAllDraftPreviews,

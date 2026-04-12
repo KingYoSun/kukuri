@@ -114,7 +114,11 @@ export function DesktopShellPage({
     topicInput,
     composer,
     attachmentInputKey,
+    timelineNextCursorByTopic,
+    timelineLoadingMoreByTopic,
     selectedThread,
+    threadNextCursorById,
+    threadLoadingMoreById,
     replyTarget,
     repostTarget,
     discoveryConfig,
@@ -264,7 +268,10 @@ export function DesktopShellPage({
 
   const {
     loadTopics,
+    refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
+    loadMoreTimeline,
+    loadMoreThread,
     rememberDraftPreview,
     releaseDraftPreview,
     releaseAllDraftPreviews,
@@ -345,6 +352,8 @@ export function DesktopShellPage({
     clearRepost,
     openFloatingActionDialog,
     handleSimpleRepost,
+    handleRetryLocalPost,
+    handleRestoreLocalPost,
     beginQuoteRepost,
     handleRelationshipAction,
     handleMuteAction,
@@ -443,6 +452,14 @@ export function DesktopShellPage({
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
     [bookmarkedPosts]
   );
+  const activeTimelineHasMore = Boolean(timelineNextCursorByTopic[activeTopic]);
+  const activeTimelineLoadingMore = timelineLoadingMoreByTopic[activeTopic] ?? false;
+  const selectedThreadHasMore = selectedThread
+    ? Boolean(threadNextCursorById[selectedThread])
+    : false;
+  const selectedThreadLoadingMore = selectedThread
+    ? (threadLoadingMoreById[selectedThread] ?? false)
+    : false;
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   const notificationItems = useMemo(
@@ -1058,14 +1075,19 @@ export function DesktopShellPage({
           summary={threadPanelState.summary}
           showBackdrop={!selectedAuthorPubkey}
           stackIndex={0}
-          onClose={closeThreadPane}
-        >
-          <ThreadPanel
-            state={threadPanelState}
-            posts={threadPostViews}
-            onOpenAuthor={(authorPubkey) =>
-              void openAuthorDetail(authorPubkey, {
-                fromThread: true,
+            onClose={closeThreadPane}
+          >
+            <ThreadPanel
+              state={threadPanelState}
+              posts={threadPostViews}
+              hasMore={selectedThreadHasMore}
+              loadingMore={selectedThreadLoadingMore}
+              onLoadMore={
+                selectedThread ? () => void loadMoreThread(activeTopic, selectedThread) : undefined
+              }
+              onOpenAuthor={(authorPubkey) =>
+                void openAuthorDetail(authorPubkey, {
+                  fromThread: true,
                 threadId: selectedThread,
               })
             }
@@ -1073,8 +1095,10 @@ export function DesktopShellPage({
             onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
             onReply={beginReply}
             onRepost={(post) => void handleSimpleRepost(post)}
-            onQuoteRepost={beginQuoteRepost}
-            localAuthorPubkey={syncStatus.local_author_pubkey}
+                onQuoteRepost={beginQuoteRepost}
+                onRetryLocalPost={handleRetryLocalPost}
+                onRestoreLocalPost={handleRestoreLocalPost}
+                localAuthorPubkey={syncStatus.local_author_pubkey}
             mediaObjectUrls={mediaObjectUrls}
             ownedReactionAssets={ownedReactionAssets}
             bookmarkedReactionAssets={bookmarkedReactionAssets}
@@ -1233,11 +1257,7 @@ export function DesktopShellPage({
                       <Button
                         variant='secondary'
                         type='button'
-                        onClick={() =>
-                          void loadTopics(trackedTopics, activeTopic, selectedThread).catch(
-                            () => undefined
-                          )
-                        }
+                        onClick={() => void refreshVisibleShellData(activeTopic, selectedThread)}
                       >
                         {t('common:actions.refresh')}
                       </Button>
@@ -1255,6 +1275,8 @@ export function DesktopShellPage({
                         onReply={beginReply}
                         onRepost={(post) => void handleSimpleRepost(post)}
                         onQuoteRepost={beginQuoteRepost}
+                        onRetryLocalPost={handleRetryLocalPost}
+                        onRestoreLocalPost={handleRestoreLocalPost}
                         localAuthorPubkey={syncStatus.local_author_pubkey}
                         mediaObjectUrls={mediaObjectUrls}
                         ownedReactionAssets={ownedReactionAssets}
@@ -1265,6 +1287,9 @@ export function DesktopShellPage({
                         showBookmarkAction={true}
                         bookmarkedPostIds={bookmarkedPostIds}
                         onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                        hasMore={activeTimelineHasMore}
+                        loadingMore={activeTimelineLoadingMore}
+                        onLoadMore={() => void loadMoreTimeline(activeTopic)}
                       />
                     ) : (
                       <TimelineFeed
@@ -1276,6 +1301,8 @@ export function DesktopShellPage({
                         onReply={beginReply}
                         onRepost={(post) => void handleSimpleRepost(post)}
                         onQuoteRepost={beginQuoteRepost}
+                        onRetryLocalPost={handleRetryLocalPost}
+                        onRestoreLocalPost={handleRestoreLocalPost}
                         localAuthorPubkey={syncStatus.local_author_pubkey}
                         mediaObjectUrls={mediaObjectUrls}
                         ownedReactionAssets={ownedReactionAssets}

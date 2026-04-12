@@ -9,7 +9,7 @@ use kukuri_core::{
 };
 use sha2::{Digest, Sha384};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, QueryBuilder, Row, Sqlite};
 
 use crate::models::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
@@ -41,11 +41,17 @@ pub struct SqliteStore {
 
 impl SqliteStore {
     pub async fn connect(database_url: &str) -> Result<Self> {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(database_url)
-            .await
-            .with_context(|| format!("failed to connect sqlite database: {database_url}"))?;
+        let pool = sqlite_pool_options(
+            if database_url.contains(":memory:") {
+                1
+            } else {
+                4
+            },
+            !database_url.contains(":memory:"),
+        )
+        .connect(database_url)
+        .await
+        .with_context(|| format!("failed to connect sqlite database: {database_url}"))?;
 
         run_store_migrations(&pool).await?;
 
@@ -56,8 +62,7 @@ impl SqliteStore {
         let path = path.as_ref();
         let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))?
             .create_if_missing(true);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
+        let pool = sqlite_pool_options(4, true)
             .connect_with(options)
             .await
             .with_context(|| format!("failed to connect sqlite database: {}", path.display()))?;
@@ -78,6 +83,28 @@ impl SqliteStore {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+}
+
+fn sqlite_pool_options(max_connections: u32, enable_wal: bool) -> SqlitePoolOptions {
+    SqlitePoolOptions::new()
+        .min_connections(1)
+        .max_connections(max_connections)
+        .after_connect(move |connection, _meta| {
+            Box::pin(async move {
+                sqlx::query("PRAGMA busy_timeout = 5000")
+                    .execute(&mut *connection)
+                    .await?;
+                sqlx::query("PRAGMA synchronous = NORMAL")
+                    .execute(&mut *connection)
+                    .await?;
+                if enable_wal {
+                    sqlx::query("PRAGMA journal_mode = WAL")
+                        .execute(&mut *connection)
+                        .await?;
+                }
+                Ok(())
+            })
+        })
 }
 
 async fn run_store_migrations(pool: &Pool<Sqlite>) -> Result<()> {
@@ -441,6 +468,60 @@ impl Store for SqliteStore {
         }))
     }
 
+    async fn get_profiles(
+        &self,
+        pubkeys: &[String],
+    ) -> Result<std::collections::HashMap<String, Profile>> {
+        if pubkeys.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT
+              pubkey, name, display_name, about, picture,
+              picture_blob_hash, picture_mime, picture_bytes, updated_at
+            FROM profiles
+            WHERE pubkey IN (
+            "#,
+        );
+        let mut separated = builder.separated(", ");
+        for pubkey in pubkeys {
+            separated.push_bind(pubkey);
+        }
+        separated.push_unseparated(")");
+
+        let rows = builder.build().fetch_all(&self.pool).await?;
+        let mut profiles = std::collections::HashMap::with_capacity(rows.len());
+        for row in rows {
+            let profile = Profile {
+                pubkey: row.get::<String, _>("pubkey").into(),
+                name: row.try_get("name").ok(),
+                display_name: row.try_get("display_name").ok(),
+                about: row.try_get("about").ok(),
+                picture: row.try_get("picture").ok(),
+                picture_asset: row
+                    .try_get::<String, _>("picture_blob_hash")
+                    .ok()
+                    .map(|hash| kukuri_core::AssetRef {
+                        hash: kukuri_core::BlobHash::new(hash),
+                        mime: row
+                            .try_get::<String, _>("picture_mime")
+                            .ok()
+                            .unwrap_or_else(|| "application/octet-stream".into()),
+                        bytes: row
+                            .try_get::<i64, _>("picture_bytes")
+                            .ok()
+                            .unwrap_or_default() as u64,
+                        role: kukuri_core::AssetRole::ProfileAvatar,
+                    }),
+                updated_at: row.get("updated_at"),
+            };
+            profiles.insert(profile.pubkey.as_str().to_string(), profile);
+        }
+        Ok(profiles)
+    }
+
     async fn upsert_follow_edge(&self, edge: FollowEdge) -> Result<()> {
         let existing_updated_at = sqlx::query_scalar::<_, i64>(
             r#"
@@ -519,86 +600,100 @@ impl Store for SqliteStore {
 #[async_trait]
 impl ProjectionStore for SqliteStore {
     async fn put_object_projection(&self, row: ObjectProjectionRow) -> Result<()> {
-        let payload_json = serde_json::to_string(&row.payload_ref)?;
-        let repost_json = row
-            .repost_of
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
-        sqlx::query(
-            r#"
-            INSERT INTO object_index_cache (
-              object_id, topic_id, channel_id, author_pubkey, created_at, object_kind,
-              root_object_id, reply_to_object_id, payload_ref_json, content, repost_of_json,
-              source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
-              projection_version
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
-            ON CONFLICT(object_id) DO UPDATE SET
-              topic_id = excluded.topic_id,
-              channel_id = excluded.channel_id,
-              author_pubkey = excluded.author_pubkey,
-              created_at = excluded.created_at,
-              object_kind = excluded.object_kind,
-              root_object_id = excluded.root_object_id,
-              reply_to_object_id = excluded.reply_to_object_id,
-              payload_ref_json = excluded.payload_ref_json,
-              content = excluded.content,
-              repost_of_json = excluded.repost_of_json,
-              source_replica_id = excluded.source_replica_id,
-              source_key = excluded.source_key,
-              source_envelope_id = excluded.source_envelope_id,
-              source_blob_hash = excluded.source_blob_hash,
-              derived_at = excluded.derived_at,
-              projection_version = excluded.projection_version
-            "#,
-        )
-        .bind(row.object_id.as_str())
-        .bind(row.topic_id.as_str())
-        .bind(row.channel_id.as_str())
-        .bind(row.author_pubkey.as_str())
-        .bind(row.created_at)
-        .bind(row.object_kind.as_str())
-        .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
-        .bind(row.reply_to_object_id.as_ref().map(EnvelopeId::as_str))
-        .bind(payload_json)
-        .bind(row.content.as_deref())
-        .bind(repost_json.as_deref())
-        .bind(row.source_replica_id.as_str())
-        .bind(row.source_key.as_str())
-        .bind(row.source_envelope_id.as_str())
-        .bind(row.source_blob_hash.as_ref().map(BlobHash::as_str))
-        .bind(row.derived_at)
-        .bind(row.projection_version)
-        .execute(&self.pool)
-        .await?;
+        self.put_object_projections(vec![row]).await
+    }
 
-        sqlx::query(
-            r#"
-            INSERT INTO object_thread_cache (
-              object_id, topic_id, channel_id, root_object_id, created_at
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            ON CONFLICT(object_id) DO UPDATE SET
-              topic_id = excluded.topic_id,
-              channel_id = excluded.channel_id,
-              root_object_id = excluded.root_object_id,
-              created_at = excluded.created_at
-            "#,
-        )
-        .bind(row.object_id.as_str())
-        .bind(row.topic_id.as_str())
-        .bind(row.channel_id.as_str())
-        .bind(
-            row.root_object_id
+    async fn put_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await?;
+        for row in rows {
+            let payload_json = serde_json::to_string(&row.payload_ref)?;
+            let attachments_json = serde_json::to_string(&row.attachments)?;
+            let repost_json = row
+                .repost_of
                 .as_ref()
-                .unwrap_or(&row.object_id)
-                .as_str(),
-        )
-        .bind(row.created_at)
-        .execute(&self.pool)
-        .await?;
+                .map(serde_json::to_string)
+                .transpose()?;
+            sqlx::query(
+                r#"
+                INSERT INTO object_index_cache (
+                  object_id, topic_id, channel_id, author_pubkey, created_at, object_kind,
+                  root_object_id, reply_to_object_id, payload_ref_json, content, attachments_json,
+                  repost_of_json, source_replica_id, source_key, source_envelope_id,
+                  source_blob_hash, derived_at, projection_version
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                ON CONFLICT(object_id) DO UPDATE SET
+                  topic_id = excluded.topic_id,
+                  channel_id = excluded.channel_id,
+                  author_pubkey = excluded.author_pubkey,
+                  created_at = excluded.created_at,
+                  object_kind = excluded.object_kind,
+                  root_object_id = excluded.root_object_id,
+                  reply_to_object_id = excluded.reply_to_object_id,
+                  payload_ref_json = excluded.payload_ref_json,
+                  content = excluded.content,
+                  attachments_json = excluded.attachments_json,
+                  repost_of_json = excluded.repost_of_json,
+                  source_replica_id = excluded.source_replica_id,
+                  source_key = excluded.source_key,
+                  source_envelope_id = excluded.source_envelope_id,
+                  source_blob_hash = excluded.source_blob_hash,
+                  derived_at = excluded.derived_at,
+                  projection_version = excluded.projection_version
+                "#,
+            )
+            .bind(row.object_id.as_str())
+            .bind(row.topic_id.as_str())
+            .bind(row.channel_id.as_str())
+            .bind(row.author_pubkey.as_str())
+            .bind(row.created_at)
+            .bind(row.object_kind.as_str())
+            .bind(row.root_object_id.as_ref().map(EnvelopeId::as_str))
+            .bind(row.reply_to_object_id.as_ref().map(EnvelopeId::as_str))
+            .bind(payload_json)
+            .bind(row.content.as_deref())
+            .bind(attachments_json)
+            .bind(repost_json.as_deref())
+            .bind(row.source_replica_id.as_str())
+            .bind(row.source_key.as_str())
+            .bind(row.source_envelope_id.as_str())
+            .bind(row.source_blob_hash.as_ref().map(BlobHash::as_str))
+            .bind(row.derived_at)
+            .bind(row.projection_version)
+            .execute(&mut *tx)
+            .await?;
 
+            sqlx::query(
+                r#"
+                INSERT INTO object_thread_cache (
+                  object_id, topic_id, channel_id, root_object_id, created_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ON CONFLICT(object_id) DO UPDATE SET
+                  topic_id = excluded.topic_id,
+                  channel_id = excluded.channel_id,
+                  root_object_id = excluded.root_object_id,
+                  created_at = excluded.created_at
+                "#,
+            )
+            .bind(row.object_id.as_str())
+            .bind(row.topic_id.as_str())
+            .bind(row.channel_id.as_str())
+            .bind(
+                row.root_object_id
+                    .as_ref()
+                    .unwrap_or(&row.object_id)
+                    .as_str(),
+            )
+            .bind(row.created_at)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -609,9 +704,9 @@ impl ProjectionStore for SqliteStore {
         let row = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
-                   reply_to_object_id, channel_id, payload_ref_json, content, repost_of_json,
-                   source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
-                   projection_version
+                   reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
+                   repost_of_json, source_replica_id, source_key, source_envelope_id,
+                   source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE object_id = ?1
             "#,
@@ -632,9 +727,9 @@ impl ProjectionStore for SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
-                   reply_to_object_id, channel_id, payload_ref_json, content, repost_of_json,
-                   source_replica_id, source_key, source_envelope_id, source_blob_hash, derived_at,
-                   projection_version
+                   reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
+                   repost_of_json, source_replica_id, source_key, source_envelope_id,
+                   source_blob_hash, derived_at, projection_version
             FROM object_index_cache
             WHERE topic_id = ?1
               AND (
@@ -656,6 +751,66 @@ impl ProjectionStore for SqliteStore {
         object_projection_page_from_rows(rows, limit)
     }
 
+    async fn list_topic_timeline_filtered(
+        &self,
+        topic_id: &str,
+        allowed_channels: &std::collections::BTreeSet<String>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        if limit == 0 || allowed_channels.is_empty() {
+            return Ok(Page {
+                items: Vec::new(),
+                next_cursor: cursor,
+            });
+        }
+
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT object_id, topic_id, author_pubkey, created_at, object_kind, root_object_id,
+                   reply_to_object_id, channel_id, payload_ref_json, content, attachments_json,
+                   repost_of_json, source_replica_id, source_key, source_envelope_id,
+                   source_blob_hash, derived_at, projection_version
+            FROM object_index_cache
+            WHERE topic_id = "#,
+        );
+        builder.push_bind(topic_id);
+        builder.push(" AND channel_id IN (");
+        let mut separated = builder.separated(", ");
+        for channel_id in allowed_channels {
+            separated.push_bind(channel_id);
+        }
+        separated.push_unseparated(")");
+        builder.push(
+            r#"
+              AND (
+                "#,
+        );
+        builder.push_bind(cursor.as_ref().map(|value| value.created_at));
+        builder.push(
+            r#" IS NULL
+                OR created_at < "#,
+        );
+        builder.push_bind(cursor.as_ref().map(|value| value.created_at));
+        builder.push(
+            r#"
+                OR (created_at = "#,
+        );
+        builder.push_bind(cursor.as_ref().map(|value| value.created_at));
+        builder.push(" AND object_id < ");
+        builder.push_bind(cursor.as_ref().map(|value| value.object_id.as_str()));
+        builder.push(
+            r#")
+              )
+            ORDER BY created_at DESC, object_id DESC
+            LIMIT "#,
+        );
+        builder.push_bind(limit as i64);
+
+        let rows = builder.build().fetch_all(&self.pool).await?;
+        object_projection_page_from_rows(rows, limit)
+    }
+
     async fn list_thread(
         &self,
         topic_id: &str,
@@ -667,9 +822,9 @@ impl ProjectionStore for SqliteStore {
             r#"
             SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.object_kind,
                    oic.root_object_id, oic.reply_to_object_id, oic.channel_id,
-                   oic.payload_ref_json, oic.content, oic.repost_of_json, oic.source_replica_id,
-                   oic.source_key, oic.source_envelope_id, oic.source_blob_hash, oic.derived_at,
-                   oic.projection_version
+                   oic.payload_ref_json, oic.content, oic.attachments_json, oic.repost_of_json,
+                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
+                   oic.source_blob_hash, oic.derived_at, oic.projection_version
             FROM object_thread_cache tc
             INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
             WHERE tc.topic_id = ?1
@@ -688,6 +843,61 @@ impl ProjectionStore for SqliteStore {
         )
         .bind(topic_id)
         .bind(thread_root_object_id.as_str())
+        .bind(cursor.as_ref().map(|value| value.created_at))
+        .bind(cursor.as_ref().map(|value| value.object_id.as_str()))
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        object_projection_page_from_rows(rows, limit)
+    }
+
+    async fn list_thread_filtered(
+        &self,
+        topic_id: &str,
+        thread_root_object_id: &EnvelopeId,
+        allowed_channel: Option<&str>,
+        cursor: Option<TimelineCursor>,
+        limit: usize,
+    ) -> Result<Page<ObjectProjectionRow>> {
+        let Some(channel_id) = allowed_channel else {
+            return ProjectionStore::list_thread(
+                self,
+                topic_id,
+                thread_root_object_id,
+                cursor,
+                limit,
+            )
+            .await;
+        };
+
+        let rows = sqlx::query(
+            r#"
+            SELECT oic.object_id, oic.topic_id, oic.author_pubkey, oic.created_at, oic.object_kind,
+                   oic.root_object_id, oic.reply_to_object_id, oic.channel_id,
+                   oic.payload_ref_json, oic.content, oic.attachments_json, oic.repost_of_json,
+                   oic.source_replica_id, oic.source_key, oic.source_envelope_id,
+                   oic.source_blob_hash, oic.derived_at, oic.projection_version
+            FROM object_thread_cache tc
+            INNER JOIN object_index_cache oic ON oic.object_id = tc.object_id
+            WHERE tc.topic_id = ?1
+              AND tc.root_object_id = ?2
+              AND tc.channel_id = ?3
+              AND (
+                ?4 IS NULL
+                OR oic.created_at > ?4
+                OR (oic.created_at = ?4 AND oic.object_id > ?5)
+              )
+            ORDER BY
+              CASE WHEN oic.object_id = tc.root_object_id THEN 0 ELSE 1 END ASC,
+              oic.created_at ASC,
+              oic.object_id ASC
+            LIMIT ?6
+            "#,
+        )
+        .bind(topic_id)
+        .bind(thread_root_object_id.as_str())
+        .bind(channel_id)
         .bind(cursor.as_ref().map(|value| value.created_at))
         .bind(cursor.as_ref().map(|value| value.object_id.as_str()))
         .bind(limit as i64)
@@ -911,6 +1121,39 @@ impl ProjectionStore for SqliteStore {
         row.map(row_to_author_relationship_projection).transpose()
     }
 
+    async fn list_author_relationships(
+        &self,
+        local_author_pubkey: &str,
+        author_pubkeys: &[String],
+    ) -> Result<std::collections::HashMap<String, AuthorRelationshipProjectionRow>> {
+        if author_pubkeys.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT local_author_pubkey, author_pubkey, following, followed_by, mutual,
+                   friend_of_friend, friend_of_friend_via_pubkeys_json, derived_at
+            FROM author_relationship_cache
+            WHERE local_author_pubkey = "#,
+        );
+        builder.push_bind(local_author_pubkey);
+        builder.push(" AND author_pubkey IN (");
+        let mut separated = builder.separated(", ");
+        for author_pubkey in author_pubkeys {
+            separated.push_bind(author_pubkey);
+        }
+        separated.push_unseparated(")");
+
+        let rows = builder.build().fetch_all(&self.pool).await?;
+        let mut relationships = std::collections::HashMap::with_capacity(rows.len());
+        for row in rows {
+            let relationship = row_to_author_relationship_projection(row)?;
+            relationships.insert(relationship.author_pubkey.clone(), relationship);
+        }
+        Ok(relationships)
+    }
+
     async fn rebuild_author_relationships(
         &self,
         local_author_pubkey: &str,
@@ -1087,6 +1330,33 @@ impl ProjectionStore for SqliteStore {
         Ok(())
     }
 
+    async fn mark_blob_statuses(&self, rows: Vec<(BlobHash, BlobCacheStatus)>) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await?;
+        for (hash, status) in rows {
+            sqlx::query(
+                r#"
+                INSERT INTO blob_objects (blob_hash, status)
+                VALUES (?1, ?2)
+                ON CONFLICT(blob_hash) DO UPDATE SET status = excluded.status
+                "#,
+            )
+            .bind(hash.as_str())
+            .bind(match status {
+                BlobCacheStatus::Missing => "missing",
+                BlobCacheStatus::Available => "available",
+                BlobCacheStatus::Pinned => "pinned",
+            })
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     async fn upsert_reaction_cache(&self, row: ReactionProjectionRow) -> Result<()> {
         let snapshot_json = row
             .custom_asset_snapshot
@@ -1184,6 +1454,46 @@ impl ProjectionStore for SqliteStore {
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_reaction_projection).collect()
+    }
+
+    async fn list_reaction_cache_for_targets(
+        &self,
+        source_replica_id: &ReplicaId,
+        target_object_ids: &[EnvelopeId],
+    ) -> Result<std::collections::HashMap<String, Vec<ReactionProjectionRow>>> {
+        if target_object_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT source_replica_id, target_object_id, reaction_id, author_pubkey, created_at,
+                   updated_at, reaction_key_kind, normalized_reaction_key, emoji,
+                   custom_asset_id, custom_asset_snapshot_json, status, source_key,
+                   source_envelope_id, derived_at, projection_version
+            FROM reaction_cache
+            WHERE source_replica_id = "#,
+        );
+        builder.push_bind(source_replica_id.as_str());
+        builder.push(" AND target_object_id IN (");
+        let mut separated = builder.separated(", ");
+        for target_object_id in target_object_ids {
+            separated.push_bind(target_object_id.as_str());
+        }
+        separated.push_unseparated(")");
+        builder
+            .push(" ORDER BY target_object_id ASC, normalized_reaction_key ASC, reaction_id ASC");
+
+        let rows = builder.build().fetch_all(&self.pool).await?;
+        let mut reactions = std::collections::HashMap::<String, Vec<ReactionProjectionRow>>::new();
+        for row in rows {
+            let projection = row_to_reaction_projection(row)?;
+            reactions
+                .entry(projection.target_object_id.as_str().to_string())
+                .or_default()
+                .push(projection);
+        }
+        Ok(reactions)
     }
 
     async fn list_recent_reaction_cache_by_author(
@@ -1894,27 +2204,27 @@ impl ProjectionStore for SqliteStore {
     }
 
     async fn rebuild_object_projections(&self, rows: Vec<ObjectProjectionRow>) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
         sqlx::query("DELETE FROM object_thread_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM object_index_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM live_session_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM game_room_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM live_presence_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
         sqlx::query("DELETE FROM reaction_cache")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
-        for row in rows {
-            self.put_object_projection(row).await?;
-        }
+        tx.commit().await?;
+        self.put_object_projections(rows).await?;
         Ok(())
     }
 }

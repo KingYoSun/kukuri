@@ -72,6 +72,23 @@ function withSocialPostDefaults(post: PostView): PostView {
     attachments: [...post.attachments],
     reaction_summary: [...(post.reaction_summary ?? [])],
     my_reactions: [...(post.my_reactions ?? [])],
+    local_id: post.local_id ?? null,
+    local_state: post.local_state ?? null,
+    local_error: post.local_error ?? null,
+    server_object_id: post.server_object_id ?? null,
+    local_draft: post.local_draft
+      ? {
+          ...post.local_draft,
+          channel_ref: post.local_draft.channel_ref ?? null,
+          attachments: [...(post.local_draft.attachments ?? [])],
+        }
+      : null,
+    local_draft_media_items: post.local_draft_media_items
+      ? post.local_draft_media_items.map((item) => ({
+          ...item,
+          attachments: [...item.attachments],
+        }))
+      : null,
   };
 }
 

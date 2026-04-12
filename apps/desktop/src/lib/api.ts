@@ -17,6 +17,24 @@ export type TimelineScope =
 export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
 export type ChannelSharingState = 'open' | 'frozen';
 
+export type LocalPostDraft = {
+  kind: 'post' | 'repost';
+  topic: string;
+  content: string;
+  reply_to?: string | null;
+  source_topic?: string | null;
+  source_object_id?: string | null;
+  channel_ref?: ChannelRef | null;
+  attachments?: CreateAttachmentInput[];
+};
+
+export type LocalDraftMediaItem = {
+  id: string;
+  source_name: string;
+  preview_url: string;
+  attachments: CreateAttachmentInput[];
+};
+
 export type PostView = {
   object_id: string;
   envelope_id: string;
@@ -43,6 +61,12 @@ export type PostView = {
   audience_label: string;
   reaction_summary?: ReactionSummaryView[];
   my_reactions?: ReactionKeyView[];
+  local_id?: string | null;
+  local_state?: 'pending' | 'syncing' | 'failed' | null;
+  local_error?: string | null;
+  server_object_id?: string | null;
+  local_draft?: LocalPostDraft | null;
+  local_draft_media_items?: LocalDraftMediaItem[] | null;
 };
 
 export type CustomReactionAssetView = {

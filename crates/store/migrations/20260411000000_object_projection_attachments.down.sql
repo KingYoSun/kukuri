@@ -1,0 +1,1 @@
+-- SQLite down migration is intentionally a no-op for attachments_json.

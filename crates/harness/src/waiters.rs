@@ -220,6 +220,18 @@ pub(crate) fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: 
         })
 }
 
+pub(crate) fn topic_has_direct_peer_without_pending_join(
+    status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+) -> bool {
+    topic_has_direct_peer(status, topic, expected)
+        && status
+            .last_error
+            .as_deref()
+            .is_none_or(|error| !error.contains("topic join pending"))
+}
+
 pub(crate) fn should_publish_from_direct_connected_subscriber(
     publisher_status: &SyncStatus,
     subscriber_status: &SyncStatus,
@@ -259,6 +271,33 @@ pub(crate) fn should_retry_public_replication_from_subscriber(
         && !topic_has_direct_peer(subscriber_status, topic, expected)
 }
 
+pub(crate) struct PublicFeatureSelection {
+    pub(crate) select_subscriber: bool,
+    pub(crate) require_direct_subscriber: bool,
+}
+
+pub(crate) fn select_public_feature_strategy(
+    publisher_status: &SyncStatus,
+    subscriber_status: &SyncStatus,
+    topic: &str,
+    expected: usize,
+    attempt: usize,
+) -> PublicFeatureSelection {
+    let select_subscriber = should_retry_public_replication_from_subscriber(
+        publisher_status,
+        subscriber_status,
+        topic,
+        expected,
+        PublicReplicationDirection::PreferDirectConnectedSubscriber,
+        attempt,
+    );
+    PublicFeatureSelection {
+        select_subscriber,
+        require_direct_subscriber: select_subscriber
+            && topic_has_direct_peer(subscriber_status, topic, expected),
+    }
+}
+
 pub(crate) async fn wait_for_direct_topic_peer_count(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -292,6 +331,43 @@ pub(crate) async fn wait_for_direct_topic_peer_count(
                 .map(|status| format_sync_snapshot(&status, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             anyhow::bail!("direct topic connected-peer assertion timeout; {snapshot}");
+        }
+    }
+}
+
+pub(crate) async fn wait_for_direct_topic_peer_count_without_pending_join(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await?;
+            let ready = topic_has_direct_peer_without_pending_join(&status, topic, expected);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!("direct topic readiness timeout; {snapshot}");
         }
     }
 }
@@ -450,6 +526,70 @@ pub(crate) async fn wait_for_direct_message_result_with_sender_refresh(
     }
 }
 
+pub(crate) struct DirectMessagePairRefreshContext<'a> {
+    pub(crate) sender_runtime: &'a DesktopRuntime,
+    pub(crate) sender_ticket: &'a str,
+    pub(crate) sender_peer_pubkey: &'a str,
+    pub(crate) receiver_runtime: &'a DesktopRuntime,
+    pub(crate) receiver_ticket: &'a str,
+    pub(crate) receiver_peer_pubkey: &'a str,
+}
+
+pub(crate) async fn wait_for_direct_message_result_with_pair_refresh(
+    pair: DirectMessagePairRefreshContext<'_>,
+    message_id: &str,
+    step_timeout: Duration,
+) -> Result<DirectMessageMessageView> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = Instant::now() + refresh_interval;
+        loop {
+            let _ = pair
+                .sender_runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: pair.sender_peer_pubkey.to_string(),
+                })
+                .await
+                .context("sender direct message status")?;
+            let timeline = pair
+                .receiver_runtime
+                .list_direct_message_messages(ListDirectMessageMessagesRequest {
+                    pubkey: pair.receiver_peer_pubkey.to_string(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .context("list direct message timeline")?;
+            if let Some(message) = timeline
+                .items
+                .into_iter()
+                .find(|item| item.message_id == message_id)
+            {
+                return Ok::<DirectMessageMessageView, anyhow::Error>(message);
+            }
+            if Instant::now() >= next_refresh_at {
+                refresh_direct_message_pair(
+                    pair.sender_runtime,
+                    pair.receiver_runtime,
+                    pair.sender_ticket,
+                    pair.receiver_ticket,
+                    pair.sender_peer_pubkey,
+                    pair.receiver_peer_pubkey,
+                )
+                .await
+                .context("refresh direct message pair")?;
+                next_refresh_at = Instant::now() + refresh_interval;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!("direct message delivery timeout for {message_id}"),
+    }
+}
+
 pub(crate) async fn wait_for_direct_message_conversation_result(
     runtime: &DesktopRuntime,
     peer_pubkey: &str,
@@ -536,6 +676,51 @@ pub(crate) async fn wait_for_direct_message_outbox_count(
         Ok(result) => result,
         Err(_) => anyhow::bail!(
             "direct message outbox count timeout for {peer_pubkey}; expected={expected}"
+        ),
+    }
+}
+
+pub(crate) async fn wait_for_direct_message_outbox_count_with_pair_refresh(
+    pair: DirectMessagePairRefreshContext<'_>,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<DirectMessageStatusView> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = Instant::now() + refresh_interval;
+        loop {
+            let status = pair
+                .sender_runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: pair.sender_peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message status")?;
+            if status.pending_outbox_count == expected {
+                return Ok::<DirectMessageStatusView, anyhow::Error>(status);
+            }
+            if Instant::now() >= next_refresh_at {
+                refresh_direct_message_pair(
+                    pair.sender_runtime,
+                    pair.receiver_runtime,
+                    pair.sender_ticket,
+                    pair.receiver_ticket,
+                    pair.sender_peer_pubkey,
+                    pair.receiver_peer_pubkey,
+                )
+                .await
+                .context("refresh direct message pair")?;
+                next_refresh_at = Instant::now() + refresh_interval;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!(
+            "direct message outbox count timeout for {}; expected={expected}",
+            pair.sender_peer_pubkey
         ),
     }
 }
@@ -1184,6 +1369,7 @@ pub(crate) async fn select_public_feature_pair<'a>(
     runtime_b: &'a DesktopRuntime,
     topic: &str,
     step_timeout: Duration,
+    attempt: usize,
 ) -> Result<(
     &'a DesktopRuntime,
     &'a DesktopRuntime,
@@ -1191,6 +1377,26 @@ pub(crate) async fn select_public_feature_pair<'a>(
     &'static str,
 )> {
     refresh_public_pair(runtime_a, runtime_b, topic, step_timeout).await?;
+    let direct_pair_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(60));
+    let _ =
+        timeout(direct_pair_timeout, async {
+            loop {
+                let publisher_status = runtime_a.get_sync_status().await.context(
+                    "desktop a sync status while waiting for public feature connectivity",
+                )?;
+                let subscriber_status = runtime_b.get_sync_status().await.context(
+                    "desktop b sync status while waiting for public feature connectivity",
+                )?;
+                if topic_has_direct_peer(&publisher_status, topic, 1)
+                    && topic_has_direct_peer(&subscriber_status, topic, 1)
+                {
+                    return Ok::<(), anyhow::Error>(());
+                }
+                refresh_public_pair(runtime_a, runtime_b, topic, direct_pair_timeout).await?;
+                sleep(Duration::from_millis(250)).await;
+            }
+        })
+        .await;
     let publisher_status = runtime_a
         .get_sync_status()
         .await
@@ -1199,19 +1405,21 @@ pub(crate) async fn select_public_feature_pair<'a>(
         .get_sync_status()
         .await
         .context("desktop b sync status for public feature selection")?;
-    let publish_from_b = should_publish_from_direct_connected_subscriber(
-        &publisher_status,
-        &subscriber_status,
-        topic,
-        1,
-        PublicReplicationDirection::PreferDirectConnectedSubscriber,
-    );
-    if publish_from_b {
-        wait_for_direct_topic_peer_count(runtime_b, topic, 1, step_timeout)
-            .await
-            .context("desktop b did not observe direct public topic connectivity")?;
+    let strategy =
+        select_public_feature_strategy(&publisher_status, &subscriber_status, topic, 1, attempt);
+    if strategy.select_subscriber {
+        if strategy.require_direct_subscriber {
+            wait_for_direct_topic_peer_count(runtime_b, topic, 1, step_timeout)
+                .await
+                .context("desktop b did not observe direct public topic connectivity")?;
+        }
         Ok((runtime_b, runtime_a, "desktop b", "desktop a"))
     } else {
+        if topic_has_direct_peer(&publisher_status, topic, 1) {
+            wait_for_direct_topic_peer_count(runtime_a, topic, 1, step_timeout)
+                .await
+                .context("desktop a did not observe direct public topic connectivity")?;
+        }
         Ok((runtime_a, runtime_b, "desktop a", "desktop b"))
     }
 }

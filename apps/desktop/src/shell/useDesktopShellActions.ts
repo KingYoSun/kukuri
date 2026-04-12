@@ -13,6 +13,8 @@ import type {
   DirectMessageMessageView,
   GameScoreView,
   JoinedPrivateChannelView,
+  LocalDraftMediaItem,
+  LocalPostDraft,
   NotificationView,
   PostView,
   ProfileInput,
@@ -161,6 +163,7 @@ export function useDesktopShellActions({
     nextJoinedChannels.find((channel) => channel.channel_id === nextSelectedChannelId) ?? null;
   const bookmarkedPostIds = new Set(state.bookmarkedPosts.map((item) => item.post.object_id));
   const activeGameRooms = state.gameRoomsByTopic[nextActiveTopic] ?? [];
+  const localAuthorPubkey = state.syncStatus.local_author_pubkey;
 
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
   const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
@@ -242,6 +245,289 @@ export function useDesktopShellActions({
   const setReactionCreatePending = useDesktopShellFieldSetter('reactionCreatePending');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setError = useDesktopShellFieldSetter('error');
+
+  function cloneDraftMediaItems(items: DraftMediaItem[]): LocalDraftMediaItem[] {
+    return items.map((item) => ({
+      id: item.id,
+      source_name: item.source_name,
+      preview_url: item.preview_url,
+      attachments: item.attachments.map((attachment) => ({ ...attachment })),
+    }));
+  }
+
+  function attachmentViewsFromDraftMediaItems(
+    localId: string,
+    items: LocalDraftMediaItem[]
+  ): AttachmentView[] {
+    let attachmentIndex = 0;
+    return items.flatMap((item) =>
+      item.attachments.map((attachment) => ({
+        hash: `${localId}-attachment-${attachmentIndex++}`,
+        mime: attachment.mime,
+        bytes: attachment.byte_size,
+        role: attachment.role ?? 'image_original',
+        status: 'Available',
+      }))
+    );
+  }
+
+  function prependPost(posts: PostView[], post: PostView) {
+    return [post, ...posts.filter((current) => current.object_id !== post.object_id)];
+  }
+
+  function patchLocalPosts(
+    localId: string,
+    updater: (post: PostView) => PostView,
+    topicId: string = activeTopic
+  ) {
+    const patch = (posts: PostView[]) =>
+      posts.map((post) => (post.local_id === localId ? updater(post) : post));
+
+    setTimelinesByTopic((current) => ({
+      ...current,
+      [topicId]: patch(current[topicId] ?? []),
+    }));
+    setPublicTimelinesByTopic((current) => ({
+      ...current,
+      [topicId]: patch(current[topicId] ?? []),
+    }));
+    setThread((current) => patch(current));
+    setProfileTimeline((current) => patch(current));
+    setSelectedAuthorTimeline((current) => patch(current));
+  }
+
+  function findKnownPost(objectId: string): PostView | null {
+    const currentState = storeApi.getState();
+    const lists = [
+      currentState.thread,
+      currentState.timelinesByTopic[currentState.activeTopic] ?? [],
+      currentState.publicTimelinesByTopic[currentState.activeTopic] ?? [],
+      currentState.profileTimeline,
+      currentState.selectedAuthorTimeline,
+    ];
+    for (const posts of lists) {
+      const match = posts.find((post) => post.object_id === objectId);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  function restoreLocalDraft(post: PostView) {
+    const draft = post.local_draft;
+    if (!draft) {
+      return;
+    }
+    const draftMedia = cloneDraftMediaItems(post.local_draft_media_items ?? []);
+    for (const item of draftMedia) {
+      rememberDraftPreview(item as DraftMediaItem);
+    }
+    if (draft.topic !== activeTopic) {
+      setActiveTopic(draft.topic);
+    }
+    setComposer(draft.content);
+    setDraftMediaItems(draftMedia as DraftMediaItem[]);
+    setAttachmentInputKey((value) => value + 1);
+    setComposeChannelByTopic((current) => ({
+      ...current,
+      [draft.topic]:
+        draft.kind === 'repost' ? PUBLIC_CHANNEL_REF : (draft.channel_ref ?? PUBLIC_CHANNEL_REF),
+    }));
+    if (draft.kind === 'repost' && draft.source_object_id) {
+      setRepostTarget(findKnownPost(draft.source_object_id));
+      setReplyTarget(null);
+    } else if (draft.reply_to) {
+      setReplyTarget(findKnownPost(draft.reply_to));
+      setRepostTarget(null);
+      setSelectedThread(post.root_id ?? draft.reply_to);
+    } else {
+      setReplyTarget(null);
+      setRepostTarget(null);
+      const channelRef = draft.channel_ref;
+      if (channelRef && channelRef.kind === 'private_channel') {
+        setSelectedChannelIdByTopic((current) => ({
+          ...current,
+          [draft.topic]: channelRef.channel_id,
+        }));
+      }
+    }
+    setComposerError(post.local_error ?? null);
+    setComposeDialogOpen(true);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+    }));
+    syncRoute('replace', {
+      activeTopic: draft.topic,
+      primarySection: 'timeline',
+      selectedThread: draft.reply_to ? post.root_id ?? draft.reply_to : null,
+    });
+  }
+
+  function createOptimisticPost(args: {
+    localId: string;
+    draft: LocalPostDraft;
+    draftMedia: LocalDraftMediaItem[];
+    replyPost?: PostView | null;
+    repostPost?: PostView | null;
+  }): PostView {
+    const { localId, draft, draftMedia, replyPost = null, repostPost = null } = args;
+    const isRepost = draft.kind === 'repost' && repostPost;
+    const channelId =
+      draft.kind === 'post' && draft.channel_ref?.kind === 'private_channel'
+        ? draft.channel_ref.channel_id
+        : null;
+    const rootId = replyPost ? replyPost.root_id ?? replyPost.object_id : localId;
+    return {
+      object_id: localId,
+      envelope_id: localId,
+      author_pubkey: localAuthorPubkey,
+      author_name: localProfile?.name ?? null,
+      author_display_name: localProfile?.display_name ?? null,
+      following: false,
+      followed_by: false,
+      mutual: false,
+      friend_of_friend: false,
+      object_kind: isRepost ? 'repost' : replyPost ? 'comment' : 'post',
+      content: draft.content,
+      content_status: 'Available',
+      attachments: attachmentViewsFromDraftMediaItems(localId, draftMedia),
+      created_at: Math.floor(Date.now() / 1000),
+      reply_to: replyPost?.object_id ?? null,
+      root_id: isRepost ? null : rootId,
+      published_topic_id: draft.topic,
+      origin_topic_id: draft.topic,
+      repost_of: repostPost
+        ? {
+            source_object_id: repostPost.object_id,
+            source_topic_id: publishedTopicIdForPost(repostPost) ?? draft.topic,
+            source_author_pubkey: repostPost.author_pubkey,
+            source_author_name: repostPost.author_name ?? null,
+            source_author_display_name: repostPost.author_display_name ?? null,
+            source_object_kind: repostPost.object_kind,
+            content: repostPost.content,
+            attachments: repostPost.attachments.map((attachment) => ({ ...attachment })),
+            reply_to: repostPost.reply_to ?? null,
+            root_id: repostPost.root_id ?? null,
+          }
+        : null,
+      repost_commentary: repostPost ? (draft.content.trim() || null) : null,
+      is_threadable: repostPost ? Boolean(draft.content.trim()) : true,
+      channel_id: channelId,
+      audience_label:
+        replyPost?.audience_label ??
+        (channelId ? activePrivateChannel?.label ?? 'Private channel' : 'Public'),
+      reaction_summary: [],
+      my_reactions: [],
+      local_id: localId,
+      local_state: 'pending',
+      local_error: null,
+      server_object_id: null,
+      local_draft: {
+        ...draft,
+        attachments: draft.attachments?.map((attachment) => ({ ...attachment })) ?? [],
+      },
+      local_draft_media_items: draftMedia,
+    };
+  }
+
+  function insertOptimisticPost(post: PostView) {
+    const currentState = storeApi.getState();
+    const selectedChannelId = currentState.selectedChannelIdByTopic[post.published_topic_id ?? activeTopic] ?? null;
+    const topicId = post.published_topic_id ?? activeTopic;
+    const belongsToActiveTimeline = post.channel_id
+      ? selectedChannelId === post.channel_id
+      : selectedChannelId === null;
+
+    if (belongsToActiveTimeline) {
+      setTimelinesByTopic((current) => ({
+        ...current,
+        [topicId]: prependPost(current[topicId] ?? [], post),
+      }));
+    }
+    if (!post.channel_id) {
+      setPublicTimelinesByTopic((current) => ({
+        ...current,
+        [topicId]: prependPost(current[topicId] ?? [], post),
+      }));
+    }
+    if (post.root_id && currentState.selectedThread === post.root_id) {
+      setThread((current) => prependPost(current, post));
+    }
+    if (!post.channel_id && localProfile && currentState.shellChromeState.activePrimarySection === 'profile') {
+      setProfileTimeline((current) => prependPost(current, post));
+    }
+    if (
+      !post.channel_id &&
+      currentState.selectedAuthorPubkey === localAuthorPubkey &&
+      currentState.shellChromeState.activePrimarySection === 'timeline'
+    ) {
+      setSelectedAuthorTimeline((current) => prependPost(current, post));
+    }
+  }
+
+  async function submitOptimisticPost(post: PostView) {
+    const draft = post.local_draft;
+    const draftMedia = cloneDraftMediaItems(post.local_draft_media_items ?? []);
+    if (!draft || !post.local_id) {
+      return;
+    }
+    patchLocalPosts(post.local_id, (current) => ({
+      ...current,
+      local_state: 'pending',
+      local_error: null,
+    }), draft.topic);
+    try {
+      const serverObjectId =
+        draft.kind === 'repost' && draft.source_topic && draft.source_object_id
+          ? await api.createRepost(
+              draft.topic,
+              draft.source_topic,
+              draft.source_object_id,
+              draft.content.trim() || null
+            )
+          : await api.createPost(
+              draft.topic,
+              draft.content,
+              draft.reply_to ?? null,
+              draft.attachments ?? [],
+              draft.channel_ref ?? PUBLIC_CHANNEL_REF
+            );
+      for (const item of draftMedia) {
+        releaseDraftPreview(item.id);
+      }
+      patchLocalPosts(
+        post.local_id,
+        (current) => ({
+          ...current,
+          local_state: 'syncing',
+          local_error: null,
+          server_object_id: serverObjectId,
+        }),
+        draft.topic
+      );
+      void refreshVisibleTimelineAfterPublish(
+        draft.topic,
+        draft.reply_to ? post.root_id ?? draft.reply_to : null
+      );
+    } catch (publishError) {
+      const message =
+        publishError instanceof Error
+          ? publishError.message
+          : translate('common:errors.failedToPublish');
+      patchLocalPosts(
+        post.local_id,
+        (current) => ({
+          ...current,
+          local_state: 'failed',
+          local_error: message,
+        }),
+        draft.topic
+      );
+      setComposerError(message);
+    }
+  }
 
   function clearThreadContext() {
     setSelectedThread(null);
@@ -698,7 +984,8 @@ export function useDesktopShellActions({
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedComposer = composer.trim();
-    const attachments = draftMediaItems.flatMap((item) => item.attachments);
+    const draftMediaSnapshot = cloneDraftMediaItems(draftMediaItems);
+    const attachments = draftMediaSnapshot.flatMap((item) => item.attachments);
     if (repostTarget) {
       const sourceTopic = publishedTopicIdForPost(repostTarget);
       if (!sourceTopic) {
@@ -709,35 +996,39 @@ export function useDesktopShellActions({
         setComposerError(translate('common:errors.quoteRepostRequiresCommentary'));
         return;
       }
-
-      try {
-        await api.createRepost(activeTopic, sourceTopic, repostTarget.object_id, trimmedComposer);
-        releaseAllDraftPreviews();
-        setComposer('');
-        setDraftMediaItems([]);
-        setAttachmentInputKey((value) => value + 1);
-        setComposerError(null);
-        setReplyTarget(null);
-        setRepostTarget(null);
-        setComposeDialogOpen(false);
-        setSelectedThread(null);
-        setThread([]);
-        setShellChromeState((current) => ({
-          ...current,
-          activePrimarySection: 'timeline',
-        }));
-        syncRoute('replace', {
-          primarySection: 'timeline',
-          selectedThread: null,
-        });
-        void refreshVisibleTimelineAfterPublish(activeTopic, null);
-      } catch (publishError) {
-        setComposerError(
-          publishError instanceof Error
-            ? publishError.message
-            : translate('common:errors.failedToPublish')
-        );
-      }
+      const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      const optimisticPost = createOptimisticPost({
+        localId,
+        draft: {
+          kind: 'repost',
+          topic: activeTopic,
+          content: trimmedComposer,
+          source_topic: sourceTopic,
+          source_object_id: repostTarget.object_id,
+          channel_ref: PUBLIC_CHANNEL_REF,
+        },
+        draftMedia: [],
+        repostPost: repostTarget,
+      });
+      insertOptimisticPost(optimisticPost);
+      setComposer('');
+      setDraftMediaItems([]);
+      setAttachmentInputKey((value) => value + 1);
+      setComposerError(null);
+      setReplyTarget(null);
+      setRepostTarget(null);
+      setComposeDialogOpen(false);
+      setSelectedThread(null);
+      setThread([]);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'timeline',
+      }));
+      syncRoute('replace', {
+        primarySection: 'timeline',
+        selectedThread: null,
+      });
+      void submitOptimisticPost(optimisticPost);
       return;
     }
 
@@ -745,37 +1036,36 @@ export function useDesktopShellActions({
       return;
     }
 
-    try {
-      await api.createPost(
-        activeTopic,
-        trimmedComposer,
-        replyTarget?.object_id ?? null,
+    const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    const optimisticPost = createOptimisticPost({
+      localId,
+      draft: {
+        kind: 'post',
+        topic: activeTopic,
+        content: trimmedComposer,
+        reply_to: replyTarget?.object_id ?? null,
+        channel_ref: activeComposeChannel,
         attachments,
-        activeComposeChannel
-      );
-      releaseAllDraftPreviews();
-      setComposer('');
-      setDraftMediaItems([]);
-      setAttachmentInputKey((value) => value + 1);
-      setComposerError(null);
-      setComposeDialogOpen(false);
-      setReplyTarget(null);
-      setRepostTarget(null);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-      }));
-      syncRoute('replace', {
-        primarySection: 'timeline',
-      });
-      void refreshVisibleTimelineAfterPublish(activeTopic, selectedThread);
-    } catch (publishError) {
-      setComposerError(
-        publishError instanceof Error
-          ? publishError.message
-          : translate('common:errors.failedToPublish')
-      );
-    }
+      },
+      draftMedia: draftMediaSnapshot,
+      replyPost: replyTarget,
+    });
+    insertOptimisticPost(optimisticPost);
+    setComposer('');
+    setDraftMediaItems([]);
+    setAttachmentInputKey((value) => value + 1);
+    setComposerError(null);
+    setComposeDialogOpen(false);
+    setReplyTarget(null);
+    setRepostTarget(null);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+    }));
+    syncRoute('replace', {
+      primarySection: 'timeline',
+    });
+    void submitOptimisticPost(optimisticPost);
   }
 
   async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
@@ -1245,30 +1535,47 @@ export function useDesktopShellActions({
       setComposerError(translate('common:errors.failedToPublish'));
       return;
     }
+    const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    const optimisticPost = createOptimisticPost({
+      localId,
+      draft: {
+        kind: 'repost',
+        topic: activeTopic,
+        content: '',
+        source_topic: sourceTopic,
+        source_object_id: post.object_id,
+        channel_ref: PUBLIC_CHANNEL_REF,
+      },
+      draftMedia: [],
+      repostPost: post,
+    });
+    insertOptimisticPost(optimisticPost);
+    setComposerError(null);
+    setReplyTarget(null);
+    setRepostTarget(null);
+    setSelectedThread(null);
+    setThread([]);
+    setShellChromeState((current) => ({
+      ...current,
+      activePrimarySection: 'timeline',
+    }));
+    syncRoute('replace', {
+      primarySection: 'timeline',
+      selectedThread: null,
+    });
+    void submitOptimisticPost(optimisticPost);
+  }
 
-    try {
-      await api.createRepost(activeTopic, sourceTopic, post.object_id, null);
-      setComposerError(null);
-      setReplyTarget(null);
-      setRepostTarget(null);
-      setSelectedThread(null);
-      setThread([]);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-      }));
-      syncRoute('replace', {
-        primarySection: 'timeline',
-        selectedThread: null,
-      });
-      void refreshVisibleTimelineAfterPublish(activeTopic, null);
-    } catch (repostError) {
-      setComposerError(
-        repostError instanceof Error
-          ? repostError.message
-          : translate('common:errors.failedToPublish')
-      );
+  function handleRestoreLocalPost(post: PostView) {
+    restoreLocalDraft(post);
+  }
+
+  function handleRetryLocalPost(post: PostView) {
+    if (post.local_state !== 'failed') {
+      return;
     }
+    setComposerError(null);
+    void submitOptimisticPost(post);
   }
 
   function beginQuoteRepost(post: PostView) {
@@ -1729,6 +2036,8 @@ export function useDesktopShellActions({
     openNewPostDialog,
     openFloatingActionDialog,
     handleSimpleRepost,
+    handleRetryLocalPost,
+    handleRestoreLocalPost,
     beginQuoteRepost,
     handleRelationshipAction,
     handleMuteAction,

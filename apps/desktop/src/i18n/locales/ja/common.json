@@ -20,8 +20,10 @@
     "refresh": "更新",
     "manageReactions": "リアクション管理",
     "removeBookmark": "ブックマーク解除",
+    "restoreDraft": "下書きを復元",
     "repost": "リポスト",
     "reply": "返信",
+    "retry": "再試行",
     "reset": "リセット",
     "rotate": "ローテーション",
     "save": "保存",
@@ -74,6 +76,9 @@
     "unsupportedAttachmentType": "未対応の添付タイプです: {{name}}"
   },
   "feed": {
+    "localFailed": "投稿に失敗しました",
+    "localPosting": "投稿中…",
+    "localSyncing": "同期中…",
     "quoteRepost": "引用リポスト",
     "reposted": "リポスト"
   },
