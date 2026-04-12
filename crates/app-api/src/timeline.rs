@@ -8,6 +8,7 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+        let empty_recovery_key = author_empty_recovery_key(author_pubkey.as_str());
         self.ensure_author_subscription(author_pubkey.as_str())
             .await?;
         let load_profile_items = || async {
@@ -36,9 +37,17 @@ impl AppService {
             }
         };
         if cursor.is_none() && posts.is_empty() && reposts.is_empty() {
-            self.maybe_restart_author_subscription(author_pubkey.as_str())
+            if self
+                .should_restart_after_empty_result(empty_recovery_key.as_str())
+                .await
+            {
+                self.maybe_restart_author_subscription(author_pubkey.as_str())
+                    .await;
+                (posts, reposts) = load_profile_items().await?;
+            }
+        } else {
+            self.clear_empty_result_restart_marker(empty_recovery_key.as_str())
                 .await;
-            (posts, reposts) = load_profile_items().await?;
         }
         let mut items = Vec::with_capacity(posts.len() + reposts.len());
         items.extend(posts.drain(..).map(ProfileTimelineItem::Post));
@@ -474,6 +483,7 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         let had_topic_subscription = self.has_topic_subscription(topic_id).await;
+        let empty_recovery_key = scope_empty_recovery_key(topic_id, &scope);
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let mut page = filtered_timeline_page(
@@ -485,12 +495,30 @@ impl AppService {
             &muted_author_pubkeys,
         )
         .await?;
-        if page.items.is_empty()
-            || projection_page_needs_hydration(&page)
+        let needs_hydration = projection_page_needs_hydration(&page)
             || self
                 .scope_needs_current_private_epoch_hydration(topic_id, &scope, &page)
-                .await
-        {
+                .await;
+        let restart_after_empty = had_topic_subscription
+            && page.items.is_empty()
+            && self
+                .should_restart_after_empty_result(empty_recovery_key.as_str())
+                .await;
+        if page.items.is_empty() || needs_hydration {
+            if self.hydrate_scope_projection(topic_id, &scope).await? > 0 {
+                *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+                page = filtered_timeline_page(
+                    self.projection_store.as_ref(),
+                    topic_id,
+                    cursor.clone(),
+                    limit,
+                    &self.allowed_channel_ids_for_scope(topic_id, &scope).await?,
+                    &muted_author_pubkeys,
+                )
+                .await?;
+            }
+        }
+        if needs_hydration || (page.items.is_empty() && restart_after_empty) {
             if had_topic_subscription {
                 self.maybe_restart_scope_subscription(topic_id, &scope)
                     .await;
@@ -510,6 +538,10 @@ impl AppService {
             )
             .await?;
         }
+        if !page.items.is_empty() {
+            self.clear_empty_result_restart_marker(empty_recovery_key.as_str())
+                .await;
+        }
         self.ensure_author_subscriptions_for_rows(&page.items)
             .await?;
         let view = self.page_to_view(page).await?;
@@ -528,6 +560,7 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         let had_topic_subscription = self.has_topic_subscription(topic_id).await;
+        let empty_recovery_key = thread_empty_recovery_key(topic_id, thread_id);
         self.ensure_scope_subscriptions(topic_id, &TimelineScope::AllJoined)
             .await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
@@ -542,7 +575,37 @@ impl AppService {
             &muted_author_pubkeys,
         )
         .await?;
-        if page.items.is_empty() || projection_page_needs_hydration(&page) {
+        let needs_hydration = projection_page_needs_hydration(&page);
+        let restart_after_empty = had_topic_subscription
+            && page.items.is_empty()
+            && self
+                .should_restart_after_empty_result(empty_recovery_key.as_str())
+                .await;
+        if page.items.is_empty() || needs_hydration {
+            if self
+                .hydrate_scope_projection(topic_id, &TimelineScope::AllJoined)
+                .await?
+                > 0
+            {
+                *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
+                let root_channel = self
+                    .projection_store
+                    .get_object_projection(&thread_root)
+                    .await?
+                    .map(|row| row.channel_id);
+                page = filtered_thread_page(
+                    self.projection_store.as_ref(),
+                    topic_id,
+                    &thread_root,
+                    cursor.clone(),
+                    limit,
+                    root_channel.as_deref(),
+                    &muted_author_pubkeys,
+                )
+                .await?;
+            }
+        }
+        if needs_hydration || (page.items.is_empty() && restart_after_empty) {
             if had_topic_subscription {
                 self.maybe_restart_scope_subscription(topic_id, &TimelineScope::AllJoined)
                     .await;
@@ -572,6 +635,10 @@ impl AppService {
             )
             .await?;
         }
+        if !page.items.is_empty() {
+            self.clear_empty_result_restart_marker(empty_recovery_key.as_str())
+                .await;
+        }
         self.ensure_author_subscriptions_for_rows(&page.items)
             .await?;
         let view = self.page_to_view(page).await?;
@@ -581,4 +648,22 @@ impl AppService {
         }
         Ok(view)
     }
+}
+
+fn author_empty_recovery_key(author_pubkey: &str) -> String {
+    format!("empty-author:{author_pubkey}")
+}
+
+fn scope_empty_recovery_key(topic_id: &str, scope: &TimelineScope) -> String {
+    match scope {
+        TimelineScope::Public => format!("empty-scope:{topic_id}:public"),
+        TimelineScope::AllJoined => format!("empty-scope:{topic_id}:all-joined"),
+        TimelineScope::Channel { channel_id } => {
+            format!("empty-scope:{topic_id}:channel:{}", channel_id.as_str())
+        }
+    }
+}
+
+fn thread_empty_recovery_key(topic_id: &str, thread_id: &str) -> String {
+    format!("empty-thread:{topic_id}:{thread_id}")
 }

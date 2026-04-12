@@ -828,6 +828,11 @@ async fn list_timeline_restarts_topic_replica_sync_with_cooldown_when_projection
         .await
         .expect("second timeline");
     assert!(second_timeline.items.is_empty());
+    let third_timeline = app
+        .list_timeline("kukuri:topic:replica-restart", None, 20)
+        .await
+        .expect("third timeline");
+    assert!(third_timeline.items.is_empty());
 
     let restarted = docs_sync.restarted_replicas.lock().await.clone();
     assert_eq!(
@@ -864,12 +869,63 @@ async fn list_timeline_restarts_topic_subscription_with_cooldown_when_projection
         .await
         .expect("second timeline");
     assert!(second_timeline.items.is_empty());
+    let third_timeline = app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("third timeline");
+    assert!(third_timeline.items.is_empty());
 
     assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
     assert_eq!(
         hint_transport.unsubscribed_topics.lock().await.clone(),
         vec![topic.to_string()]
     );
+}
+
+#[tokio::test]
+async fn ensure_topic_subscription_recreates_finished_handle() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let hint_transport = Arc::new(TrackingHintTransport::default());
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport,
+        hint_transport.clone(),
+        Arc::new(TrackingDocsSync::default()),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:stale-subscription";
+
+    let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
+    assert!(timeline.items.is_empty());
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+
+    {
+        let subscriptions = app.subscriptions.lock().await;
+        subscriptions
+            .get(topic)
+            .expect("topic subscription handle")
+            .abort();
+    }
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if !app.has_topic_subscription(topic).await {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("subscription should finish after abort");
+
+    let second_timeline = app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("second timeline");
+    assert!(second_timeline.items.is_empty());
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
 }
 
 #[tokio::test]
