@@ -118,6 +118,56 @@ export function parsePrimarySectionPath(pathname: string): PrimarySection | null
   return match?.[0] ?? null;
 }
 
+export type HashRouteLocation = {
+  pathname: string;
+  search: string;
+};
+
+export function parseHashRouteLocation(hash: string): HashRouteLocation {
+  const normalizedHash = hash.startsWith('#') ? hash.slice(1) : hash;
+  if (!normalizedHash) {
+    return {
+      pathname: '/',
+      search: '',
+    };
+  }
+
+  const searchIndex = normalizedHash.indexOf('?');
+  if (searchIndex === -1) {
+    return {
+      pathname: normalizedHash || '/',
+      search: '',
+    };
+  }
+
+  return {
+    pathname: normalizedHash.slice(0, searchIndex) || '/',
+    search: normalizedHash.slice(searchIndex),
+  };
+}
+
+export function resolveHashBackedRouteLocation(
+  pathname: string,
+  search: string
+): HashRouteLocation {
+  if (typeof window === 'undefined') {
+    return {
+      pathname,
+      search,
+    };
+  }
+
+  const hashRouteLocation = parseHashRouteLocation(window.location.hash);
+  const shouldUseHashPathname =
+    parsePrimarySectionPath(pathname) === null ||
+    (pathname === '/' && hashRouteLocation.pathname !== '/');
+
+  return {
+    pathname: shouldUseHashPathname ? hashRouteLocation.pathname : pathname,
+    search: search || hashRouteLocation.search,
+  };
+}
+
 export function parseLegacyRequestedChannel(
   requestedTimelineScopeValue: string | null,
   requestedComposeTargetValue: string | null

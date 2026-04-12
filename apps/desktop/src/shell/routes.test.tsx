@@ -4,6 +4,7 @@ import { beforeEach, expect, test } from 'vitest';
 
 import { App } from '@/App';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import { resolveHashBackedRouteLocation } from '@/shell/routes';
 
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', {
@@ -53,6 +54,19 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   expect(
     screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
   ).not.toBeInTheDocument();
+});
+
+test('hash-backed route resolution preserves hash query during router hydration gaps', () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance'
+  );
+
+  expect(resolveHashBackedRouteLocation('/', '')).toEqual({
+    pathname: '/timeline',
+    search: '?topic=kukuri%3Atopic%3Ademo&settings=appearance',
+  });
 });
 
 test('invalid timelineView normalizes to the feed route', async () => {

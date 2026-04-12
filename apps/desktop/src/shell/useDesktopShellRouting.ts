@@ -27,6 +27,7 @@ import {
   isProfileConnectionsView,
   isSettingsSection,
   parsePrimarySectionPath,
+  resolveHashBackedRouteLocation,
 } from '@/shell/routes';
 import {
   useDesktopShellFieldSetter,
@@ -102,10 +103,16 @@ export function useDesktopShellRouting({
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setError = useDesktopShellFieldSetter('error');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const resolvedRouteLocation = useMemo(
+    () => resolveHashBackedRouteLocation(location.pathname, location.search),
+    [location.pathname, location.search]
+  );
 
   const routeSection = useMemo(
-    () => parsePrimarySectionPath(location.pathname) ?? shellChromeState.activePrimarySection,
-    [location.pathname, shellChromeState.activePrimarySection]
+    () =>
+      parsePrimarySectionPath(resolvedRouteLocation.pathname) ??
+      shellChromeState.activePrimarySection,
+    [resolvedRouteLocation.pathname, shellChromeState.activePrimarySection]
   );
   const pendingAnimationFrameIdsRef = useRef<number[]>([]);
 
@@ -210,7 +217,7 @@ export function useDesktopShellRouting({
       const nextPath = PRIMARY_SECTION_PATHS[nextPrimarySection];
       const nextSearch = search.toString();
       const nextUrl = nextSearch ? `${nextPath}?${nextSearch}` : nextPath;
-      const currentUrl = `${location.pathname}${location.search}`;
+      const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
       if (currentUrl !== nextUrl) {
         pendingRouteUrlRef.current = nextUrl;
         navigate(nextUrl, { replace: mode === 'replace' });
@@ -220,10 +227,10 @@ export function useDesktopShellRouting({
     },
     [
       activeTopic,
-      location.pathname,
-      location.search,
       navigate,
       pendingRouteUrlRef,
+      resolvedRouteLocation.pathname,
+      resolvedRouteLocation.search,
       selectedAuthorPubkey,
       selectedChannelIdByTopic,
       selectedDirectMessagePeerPubkey,
@@ -837,18 +844,20 @@ export function useDesktopShellRouting({
   ]);
 
   useEffect(() => {
-    const currentUrl = `${location.pathname}${location.search}`;
+    const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
     if (pendingRouteUrlRef.current && pendingRouteUrlRef.current !== currentUrl) {
       return;
     }
     pendingRouteUrlRef.current = null;
 
-    if (!parsePrimarySectionPath(location.pathname)) {
-      navigate(`${PRIMARY_SECTION_PATHS.timeline}${location.search}`, { replace: true });
+    if (!parsePrimarySectionPath(resolvedRouteLocation.pathname)) {
+      navigate(`${PRIMARY_SECTION_PATHS.timeline}${resolvedRouteLocation.search}`, {
+        replace: true,
+      });
       return;
     }
 
-    const params = new URLSearchParams(location.search);
+    const params = new URLSearchParams(resolvedRouteLocation.search);
     const requestedTopic = params.get('topic')?.trim() ?? null;
     const requestedChannelParam = params.get('channel')?.trim() ?? null;
     const requestedTimelineView = params.get('timelineView');
@@ -1334,14 +1343,14 @@ export function useDesktopShellRouting({
     directMessagePaneOpen,
     joinedChannelsByTopic,
     loadTopics,
-    location.pathname,
-    location.search,
     navigate,
     openAuthorDetail,
     openDirectMessagePane,
     openThread,
     pendingRouteUrlRef,
     routeSection,
+    resolvedRouteLocation.pathname,
+    resolvedRouteLocation.search,
     scheduleAnimationFrame,
     selectedAuthor,
     selectedAuthorPubkey,

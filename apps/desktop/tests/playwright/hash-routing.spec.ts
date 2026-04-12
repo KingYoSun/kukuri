@@ -31,8 +31,13 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
   await expect(page).toHaveURL(/#\/timeline\?topic=/);
 
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
+  await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Ademo&settings=appearance/);
+  await expect(page.getByTestId('shell-settings-trigger')).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  );
   const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
-  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog).toBeVisible({ timeout: 10000 });
   await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
     'aria-current',
     'location'

@@ -13,6 +13,7 @@ import {
   type SettingsSection,
   type ShellChromeState,
 } from '@/components/shell/types';
+import { parseHashRouteLocation } from '@/shell/routes';
 import {
   type AuthorSocialView,
   type BookmarkedCustomReactionView,
@@ -239,18 +240,15 @@ function parseInitialSettingsSection(): {
     };
   }
 
-  const hash = window.location.hash.startsWith('#')
-    ? window.location.hash.slice(1)
-    : window.location.hash;
-  const searchIndex = hash.indexOf('?');
-  if (searchIndex === -1) {
+  const { search } = parseHashRouteLocation(window.location.hash);
+  if (!search) {
     return {
       activeSettingsSection: DEFAULT_SETTINGS_SECTION,
       settingsOpen: false,
     };
   }
 
-  const requestedSection = new URLSearchParams(hash.slice(searchIndex + 1)).get('settings');
+  const requestedSection = new URLSearchParams(search).get('settings');
   if (
     requestedSection !== 'appearance' &&
     requestedSection !== 'connectivity' &&
