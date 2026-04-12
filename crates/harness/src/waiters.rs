@@ -680,6 +680,51 @@ pub(crate) async fn wait_for_direct_message_outbox_count(
     }
 }
 
+pub(crate) async fn wait_for_direct_message_outbox_count_with_pair_refresh(
+    pair: DirectMessagePairRefreshContext<'_>,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<DirectMessageStatusView> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = Instant::now() + refresh_interval;
+        loop {
+            let status = pair
+                .sender_runtime
+                .get_direct_message_status(DirectMessageRequest {
+                    pubkey: pair.sender_peer_pubkey.to_string(),
+                })
+                .await
+                .context("direct message status")?;
+            if status.pending_outbox_count == expected {
+                return Ok::<DirectMessageStatusView, anyhow::Error>(status);
+            }
+            if Instant::now() >= next_refresh_at {
+                refresh_direct_message_pair(
+                    pair.sender_runtime,
+                    pair.receiver_runtime,
+                    pair.sender_ticket,
+                    pair.receiver_ticket,
+                    pair.sender_peer_pubkey,
+                    pair.receiver_peer_pubkey,
+                )
+                .await
+                .context("refresh direct message pair")?;
+                next_refresh_at = Instant::now() + refresh_interval;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!(
+            "direct message outbox count timeout for {}; expected={expected}",
+            pair.sender_peer_pubkey
+        ),
+    }
+}
+
 pub(crate) fn image_attachment_request(
     name: &str,
     mime: &str,
