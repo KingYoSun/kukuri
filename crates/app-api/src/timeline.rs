@@ -473,6 +473,7 @@ impl AppService {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<TimelineView> {
+        let had_topic_subscription = self.has_topic_subscription(topic_id).await;
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
         let mut page = filtered_timeline_page(
@@ -490,8 +491,10 @@ impl AppService {
                 .scope_needs_current_private_epoch_hydration(topic_id, &scope, &page)
                 .await
         {
-            self.maybe_restart_scope_subscription(topic_id, &scope)
-                .await;
+            if had_topic_subscription {
+                self.maybe_restart_scope_subscription(topic_id, &scope)
+                    .await;
+            }
             self.maybe_restart_scope_replica_sync(topic_id, &scope)
                 .await;
             if self.hydrate_scope_projection(topic_id, &scope).await? > 0 {
@@ -524,6 +527,7 @@ impl AppService {
         cursor: Option<TimelineCursor>,
         limit: usize,
     ) -> Result<TimelineView> {
+        let had_topic_subscription = self.has_topic_subscription(topic_id).await;
         self.ensure_scope_subscriptions(topic_id, &TimelineScope::AllJoined)
             .await?;
         let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
@@ -539,8 +543,10 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
-            self.maybe_restart_scope_subscription(topic_id, &TimelineScope::AllJoined)
-                .await;
+            if had_topic_subscription {
+                self.maybe_restart_scope_subscription(topic_id, &TimelineScope::AllJoined)
+                    .await;
+            }
             self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
                 .await;
             if self

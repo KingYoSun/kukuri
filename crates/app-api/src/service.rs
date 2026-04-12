@@ -2685,6 +2685,14 @@ impl AppService {
         self.spawn_topic_subscription(topic_id).await
     }
 
+    pub(crate) async fn has_topic_subscription(&self, topic_id: &str) -> bool {
+        self.subscriptions
+            .lock()
+            .await
+            .get(topic_id)
+            .is_some_and(|handle| !handle.is_finished())
+    }
+
     pub(crate) async fn restart_topic_subscription(&self, topic_id: &str) -> Result<()> {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
