@@ -8,14 +8,38 @@ impl AppService {
         limit: usize,
     ) -> Result<TimelineView> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
-        let mut posts =
-            load_profile_posts_from_author_replica(self.docs_sync.as_ref(), author_pubkey.as_str())
-                .await?;
-        let mut reposts = load_profile_reposts_from_author_replica(
-            self.docs_sync.as_ref(),
-            author_pubkey.as_str(),
-        )
-        .await?;
+        self.ensure_author_subscription(author_pubkey.as_str())
+            .await?;
+        let load_profile_items = || async {
+            let posts = load_profile_posts_from_author_replica(
+                self.docs_sync.as_ref(),
+                author_pubkey.as_str(),
+            )
+            .await?;
+            let reposts = load_profile_reposts_from_author_replica(
+                self.docs_sync.as_ref(),
+                author_pubkey.as_str(),
+            )
+            .await?;
+            Ok::<_, anyhow::Error>((posts, reposts))
+        };
+        let (mut posts, mut reposts) = match load_profile_items().await {
+            Ok(items) => items,
+            Err(error) => {
+                self.maybe_restart_author_subscription(author_pubkey.as_str())
+                    .await;
+                load_profile_items().await.map_err(|retry_error| {
+                    retry_error.context(format!(
+                        "failed to reload profile timeline after author subscription restart: {error}"
+                    ))
+                })?
+            }
+        };
+        if cursor.is_none() && posts.is_empty() && reposts.is_empty() {
+            self.maybe_restart_author_subscription(author_pubkey.as_str())
+                .await;
+            (posts, reposts) = load_profile_items().await?;
+        }
         let mut items = Vec::with_capacity(posts.len() + reposts.len());
         items.extend(posts.drain(..).map(ProfileTimelineItem::Post));
         items.extend(reposts.drain(..).map(ProfileTimelineItem::Repost));
@@ -466,6 +490,8 @@ impl AppService {
                 .scope_needs_current_private_epoch_hydration(topic_id, &scope, &page)
                 .await
         {
+            self.maybe_restart_scope_subscription(topic_id, &scope)
+                .await;
             self.maybe_restart_scope_replica_sync(topic_id, &scope)
                 .await;
             if self.hydrate_scope_projection(topic_id, &scope).await? > 0 {
@@ -513,6 +539,8 @@ impl AppService {
         )
         .await?;
         if page.items.is_empty() || projection_page_needs_hydration(&page) {
+            self.maybe_restart_scope_subscription(topic_id, &TimelineScope::AllJoined)
+                .await;
             self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
                 .await;
             if self

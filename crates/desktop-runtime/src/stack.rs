@@ -177,6 +177,10 @@ impl DocsSync for ReloadableDocsSync {
         self.current().await.import_peer_ticket(ticket).await
     }
 
+    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
+        self.current().await.learn_peer(endpoint_id).await
+    }
+
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         self.current().await.set_seed_peers(peers).await
     }

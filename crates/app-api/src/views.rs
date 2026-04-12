@@ -12,6 +12,8 @@ pub struct PostView {
     pub author_pubkey: String,
     pub author_name: Option<String>,
     pub author_display_name: Option<String>,
+    pub author_picture: Option<String>,
+    pub author_picture_asset: Option<ProfileAssetView>,
     pub following: bool,
     pub followed_by: bool,
     pub mutual: bool,

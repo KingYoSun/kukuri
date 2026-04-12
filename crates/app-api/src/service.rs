@@ -349,6 +349,10 @@ impl AppService {
         ))
     }
 
+    pub(crate) async fn docs_assisted_peer_ids(&self) -> Result<Vec<String>> {
+        self.docs_sync.assist_peer_ids().await
+    }
+
     pub async fn shutdown(&self) {
         let topics_to_unsubscribe = self
             .subscriptions
@@ -1033,14 +1037,23 @@ impl AppService {
                     Some(event) = doc_stream.next() => {
                         if let Ok(event) = event {
                             if let Some(source_peer) = event.source_peer.as_deref()
-                                && let Err(error) = blob_service.learn_peer(source_peer).await
                             {
-                                warn!(
-                                    topic = %topic,
-                                    source_peer = %source_peer,
-                                    error = %error,
-                                    "failed to learn blob peer from docs sync event"
-                                );
+                                if let Err(error) = docs_sync.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn docs peer from docs sync event"
+                                    );
+                                }
+                                if let Err(error) = blob_service.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn blob peer from docs sync event"
+                                    );
+                                }
                             }
                             match AppService::maybe_create_notification_for_remote_object_event(
                                 projection_store.as_ref(),
@@ -1507,6 +1520,24 @@ impl AppService {
                             continue;
                         }
                         if let Ok(event) = event.as_ref() {
+                            if let Some(source_peer) = event.source_peer.as_deref() {
+                                if let Err(error) = docs_sync.learn_peer(source_peer).await {
+                                    warn!(
+                                        author_pubkey = %author_key_for_task,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn docs peer from author sync event"
+                                    );
+                                }
+                                if let Err(error) = blob_service.learn_peer(source_peer).await {
+                                    warn!(
+                                        author_pubkey = %author_key_for_task,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn blob peer from author sync event"
+                                    );
+                                }
+                            }
                             match AppService::maybe_create_notification_for_remote_follow_event(
                                 store.as_ref(),
                                 projection_store.as_ref(),
@@ -3166,6 +3197,9 @@ impl AppService {
             author_pubkey: row.author_pubkey.clone(),
             author_name: profile.and_then(|profile| profile.name.clone()),
             author_display_name: profile.and_then(|profile| profile.display_name.clone()),
+            author_picture: profile.and_then(|profile| profile.picture.clone()),
+            author_picture_asset: profile
+                .and_then(|profile| profile_asset_view_from_ref(profile.picture_asset.as_ref())),
             following: relationship.is_some_and(|value| value.following),
             followed_by: relationship.is_some_and(|value| value.followed_by),
             mutual: relationship.is_some_and(|value| value.mutual),
@@ -3256,6 +3290,10 @@ impl AppService {
                 author_display_name: profile
                     .as_ref()
                     .and_then(|profile| profile.display_name.clone()),
+                author_picture: profile.as_ref().and_then(|profile| profile.picture.clone()),
+                author_picture_asset: profile.as_ref().and_then(|profile| {
+                    profile_asset_view_from_ref(profile.picture_asset.as_ref())
+                }),
                 following: relationship.as_ref().is_some_and(|value| value.following),
                 followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
                 mutual: relationship.as_ref().is_some_and(|value| value.mutual),
@@ -3303,6 +3341,10 @@ impl AppService {
             author_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
+            author_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            author_picture_asset: profile
+                .as_ref()
+                .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             following: relationship.as_ref().is_some_and(|value| value.following),
             followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
             mutual: relationship.as_ref().is_some_and(|value| value.mutual),
@@ -3356,6 +3398,10 @@ impl AppService {
             author_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
+            author_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            author_picture_asset: profile
+                .as_ref()
+                .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             following: relationship.as_ref().is_some_and(|value| value.following),
             followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
             mutual: relationship.as_ref().is_some_and(|value| value.mutual),

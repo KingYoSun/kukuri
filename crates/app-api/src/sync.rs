@@ -15,7 +15,7 @@ impl AppService {
         } = self.transport.peers().await?;
         let subscribed_topics = normalize_topics(subscribed_topics);
         let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
-        let assist_peer_ids = self.assisted_peer_ids().await?;
+        let assist_peer_ids = self.docs_assisted_peer_ids().await?;
         let effective_connected_peer_ids =
             merge_peer_ids(connected_peers.clone(), assist_peer_ids.clone());
         let discovery = self.get_discovery_status().await?;

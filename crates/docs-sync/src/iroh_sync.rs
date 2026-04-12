@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use iroh::EndpointAddr;
+use iroh::EndpointId;
 use iroh_docs::api::Doc;
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
@@ -32,6 +33,7 @@ struct ReplicaHandle {
 pub struct IrohDocsSync {
     node: Arc<IrohDocsNode>,
     replicas: Arc<Mutex<HashMap<String, ReplicaHandle>>>,
+    learned_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     private_replica_secrets: Arc<Mutex<HashMap<String, NamespaceSecret>>>,
@@ -42,6 +44,7 @@ impl IrohDocsSync {
         Self {
             node,
             replicas: Arc::new(Mutex::new(HashMap::new())),
+            learned_peers: Arc::new(Mutex::new(BTreeMap::new())),
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             private_replica_secrets: Arc::new(Mutex::new(HashMap::new())),
@@ -63,18 +66,76 @@ impl IrohDocsSync {
 
     async fn sync_peers(&self) -> Vec<EndpointAddr> {
         let mut peers = self
-            .seed_peers
+            .learned_peers
             .lock()
             .await
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        for peer in self.seed_peers.lock().await.values() {
+            if !peers.iter().any(|existing| existing.id == peer.id) {
+                peers.push(peer.clone());
+            }
+        }
         for peer in self.imported_peers.lock().await.values() {
             if !peers.iter().any(|existing| existing.id == peer.id) {
                 peers.push(peer.clone());
             }
         }
         peers
+    }
+
+    async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
+        let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
+        let relay_urls = self.node.relay_urls().await;
+        let mut endpoint_addr = self
+            .node
+            .endpoint()
+            .remote_info(endpoint_id)
+            .await
+            .map(|remote_info| {
+                EndpointAddr::from_parts(
+                    remote_info.id(),
+                    remote_info.into_addrs().map(|addr| addr.into_addr()),
+                )
+            })
+            .unwrap_or_else(|| EndpointAddr::new(endpoint_id));
+        for relay_url in relay_urls {
+            endpoint_addr = endpoint_addr.with_relay_url(relay_url);
+        }
+        if !endpoint_addr.is_empty() {
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
+        }
+        self.learned_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        Ok(())
+    }
+
+    async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
+        let mut candidates = Vec::new();
+        if imported_peer.relay_urls().next().is_some() {
+            candidates.push(imported_peer.clone());
+        }
+        if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
+            let learned_peer = EndpointAddr::from_parts(
+                remote_info.id(),
+                remote_info.into_addrs().map(|addr| addr.into_addr()),
+            );
+            if !learned_peer.is_empty() {
+                candidates.push(learned_peer);
+            }
+        }
+        if !candidates
+            .iter()
+            .any(|candidate| candidate == imported_peer)
+        {
+            candidates.push(imported_peer.clone());
+        }
+        candidates
     }
 
     pub(crate) async fn available_sync_peer_ids(&self) -> Vec<String> {
@@ -206,26 +267,6 @@ impl IrohDocsSync {
             .map(|handle| handle.events.clone())
             .context("missing replica sender")?;
         Ok(sender)
-    }
-
-    async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
-        let mut candidates = Vec::new();
-        if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = EndpointAddr::from_parts(
-                remote_info.id(),
-                remote_info.into_addrs().map(|addr| addr.into_addr()),
-            );
-            if !learned_peer.is_empty() {
-                candidates.push(learned_peer);
-            }
-        }
-        if !candidates
-            .iter()
-            .any(|candidate| candidate == imported_peer)
-        {
-            candidates.push(imported_peer.clone());
-        }
-        candidates
     }
 
     async fn fetch_entry_bytes(&self, content_hash: &str) -> Result<Option<Vec<u8>>> {
@@ -411,6 +452,10 @@ impl DocsSync for IrohDocsSync {
             .insert(endpoint_addr.id.to_string(), endpoint_addr.clone());
         self.reapply_sync_peers().await?;
         Ok(())
+    }
+
+    async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
+        self.record_learned_peer(endpoint_id).await
     }
 
     async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {

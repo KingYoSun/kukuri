@@ -494,6 +494,7 @@ impl DocsSync for AssistedDocsSync {
 #[derive(Clone, Default)]
 struct TrackingDocsSync {
     restarted_replicas: Arc<TokioMutex<Vec<String>>>,
+    subscribe_replicas: Arc<TokioMutex<Vec<String>>>,
 }
 
 #[async_trait]
@@ -516,8 +517,12 @@ impl DocsSync for TrackingDocsSync {
 
     async fn subscribe_replica(
         &self,
-        _replica_id: &ReplicaId,
+        replica_id: &ReplicaId,
     ) -> Result<kukuri_docs_sync::DocEventStream> {
+        self.subscribe_replicas
+            .lock()
+            .await
+            .push(replica_id.as_str().to_string());
         let (sender, _) = broadcast::channel::<kukuri_docs_sync::DocEvent>(1);
         let stream = BroadcastStream::new(sender.subscribe())
             .filter_map(|item| async move { item.ok().map(Ok) });
