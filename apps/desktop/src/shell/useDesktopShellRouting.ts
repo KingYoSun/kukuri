@@ -32,6 +32,7 @@ import {
 import {
   useDesktopShellFieldSetter,
   useDesktopShellStore,
+  useDesktopShellStoreApi,
 } from '@/shell/store';
 import {
   authorViewFromDirectMessageConversation,
@@ -65,6 +66,7 @@ export function useDesktopShellRouting({
 }: UseDesktopShellRoutingArgs) {
   const location = useLocation();
   const navigate = useNavigate();
+  const storeApi = useDesktopShellStoreApi();
   const state = useDesktopShellStore();
   const {
     activeTopic,
@@ -115,6 +117,9 @@ export function useDesktopShellRouting({
     [resolvedRouteLocation.pathname, shellChromeState.activePrimarySection]
   );
   const pendingAnimationFrameIdsRef = useRef<number[]>([]);
+  const lastObservedRouteUrlRef = useRef(
+    `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`
+  );
 
   const scheduleAnimationFrame = useCallback((callback: () => void) => {
     const frameId = window.requestAnimationFrame(() => {
@@ -137,30 +142,34 @@ export function useDesktopShellRouting({
 
   const syncRoute = useCallback(
     (mode: 'push' | 'replace' = 'replace', overrides?: DesktopShellRouteOverrides) => {
+      const currentState = storeApi.getState();
       const hasOverride = <K extends keyof DesktopShellRouteOverrides>(key: K) =>
         overrides ? Object.prototype.hasOwnProperty.call(overrides, key) : false;
       const search = new URLSearchParams();
-      const nextTopic = overrides?.activeTopic ?? activeTopic;
-      const nextPrimarySection = overrides?.primarySection ?? shellChromeState.activePrimarySection;
-      const nextTimelineView = overrides?.timelineView ?? shellChromeState.timelineView;
-      const nextProfileMode = overrides?.profileMode ?? shellChromeState.profileMode;
+      const nextTopic = overrides?.activeTopic ?? currentState.activeTopic;
+      const nextPrimarySection =
+        overrides?.primarySection ?? currentState.shellChromeState.activePrimarySection;
+      const nextTimelineView =
+        overrides?.timelineView ?? currentState.shellChromeState.timelineView;
+      const nextProfileMode =
+        overrides?.profileMode ?? currentState.shellChromeState.profileMode;
       const nextProfileConnectionsView =
-        overrides?.profileConnectionsView ?? shellChromeState.profileConnectionsView;
+        overrides?.profileConnectionsView ?? currentState.shellChromeState.profileConnectionsView;
       const nextSelectedThread = hasOverride('selectedThread')
         ? overrides?.selectedThread ?? null
-        : selectedThread;
+        : currentState.selectedThread;
       const nextSelectedAuthorPubkey = hasOverride('selectedAuthorPubkey')
         ? overrides?.selectedAuthorPubkey ?? null
-        : selectedAuthorPubkey;
+        : currentState.selectedAuthorPubkey;
       const nextSelectedDirectMessagePeerPubkey = hasOverride('selectedDirectMessagePeerPubkey')
         ? overrides?.selectedDirectMessagePeerPubkey ?? null
-        : selectedDirectMessagePeerPubkey;
+        : currentState.selectedDirectMessagePeerPubkey;
       const nextSettingsOpen = hasOverride('settingsOpen')
         ? overrides?.settingsOpen ?? false
-        : shellChromeState.settingsOpen;
+        : currentState.shellChromeState.settingsOpen;
       const nextSettingsSection =
-        overrides?.settingsSection ?? shellChromeState.activeSettingsSection;
-      let nextSelectedChannelId = selectedChannelIdByTopic[nextTopic] ?? null;
+        overrides?.settingsSection ?? currentState.shellChromeState.activeSettingsSection;
+      let nextSelectedChannelId = currentState.selectedChannelIdByTopic[nextTopic] ?? null;
 
       if (hasOverride('composeTarget')) {
         nextSelectedChannelId =
@@ -226,21 +235,11 @@ export function useDesktopShellRouting({
       pendingRouteUrlRef.current = null;
     },
     [
-      activeTopic,
       navigate,
       pendingRouteUrlRef,
       resolvedRouteLocation.pathname,
       resolvedRouteLocation.search,
-      selectedAuthorPubkey,
-      selectedChannelIdByTopic,
-      selectedDirectMessagePeerPubkey,
-      selectedThread,
-      shellChromeState.activePrimarySection,
-      shellChromeState.activeSettingsSection,
-      shellChromeState.profileConnectionsView,
-      shellChromeState.profileMode,
-      shellChromeState.settingsOpen,
-      shellChromeState.timelineView,
+      storeApi,
     ]
   );
 
@@ -845,10 +844,15 @@ export function useDesktopShellRouting({
 
   useEffect(() => {
     const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
+    const routeChanged = lastObservedRouteUrlRef.current !== currentUrl;
     if (pendingRouteUrlRef.current && pendingRouteUrlRef.current !== currentUrl) {
-      return;
+      if (!routeChanged) {
+        return;
+      }
+      pendingRouteUrlRef.current = null;
     }
     pendingRouteUrlRef.current = null;
+    lastObservedRouteUrlRef.current = currentUrl;
 
     if (!parsePrimarySectionPath(resolvedRouteLocation.pathname)) {
       navigate(`${PRIMARY_SECTION_PATHS.timeline}${resolvedRouteLocation.search}`, {
