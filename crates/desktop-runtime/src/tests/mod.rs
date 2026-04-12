@@ -1380,6 +1380,7 @@ fn seeded_dht_config(seed_peers: Vec<SeedPeer>) -> DiscoveryConfig {
 struct MockCommunityNodeState {
     base_url: String,
     seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
+    heartbeat_seed_peers: Arc<Mutex<Option<Vec<CommunityNodeSeedPeer>>>>,
     heartbeat_hits: Arc<AtomicUsize>,
     bootstrap_hits: Arc<AtomicUsize>,
 }
@@ -1389,6 +1390,9 @@ async fn mock_bootstrap_heartbeat(
     Json(_request): Json<serde_json::Value>,
 ) -> Json<BootstrapHeartbeatResponse> {
     state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    if let Some(seed_peers) = state.heartbeat_seed_peers.lock().await.take() {
+        *state.seed_peers.lock().await = seed_peers;
+    }
     Json(BootstrapHeartbeatResponse {
         expires_at: Utc::now().timestamp() + 300,
     })
@@ -5262,6 +5266,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
             )
             .expect("seed peer"),
         ])),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
         heartbeat_hits: Arc::new(AtomicUsize::new(0)),
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
@@ -5346,6 +5351,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
     let state = Arc::new(MockCommunityNodeState {
         base_url: base_url.clone(),
         seed_peers: Arc::new(Mutex::new(Vec::new())),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
         heartbeat_hits: Arc::new(AtomicUsize::new(0)),
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
@@ -5420,6 +5426,96 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
             .expect("resolved urls")
             .seed_peers,
         vec![seed_peer]
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap_sync() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-refresh-heartbeat.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let refreshed_seed_peer = CommunityNodeSeedPeer::new(
+        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        Some("127.0.0.1:44003".into()),
+    )
+    .expect("refreshed seed peer");
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(Vec::new())),
+        heartbeat_seed_peers: Arc::new(Mutex::new(Some(vec![refreshed_seed_peer.clone()]))),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let status = runtime
+        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("refresh metadata");
+
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert!(
+        state.bootstrap_hits.load(Ordering::SeqCst) >= 1,
+        "metadata refresh should fetch bootstrap nodes"
+    );
+    assert_eq!(
+        status
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![refreshed_seed_peer.clone()]
+    );
+    assert_eq!(
+        runtime.community_node_config.lock().await.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![refreshed_seed_peer]
     );
 
     runtime.shutdown().await;
