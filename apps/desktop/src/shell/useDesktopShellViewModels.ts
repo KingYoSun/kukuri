@@ -407,6 +407,13 @@ export function useDesktopShellViewModels({
         post.author_pubkey === syncStatus.local_author_pubkey
           ? localProfile
           : knownAuthorsByPubkey[post.author_pubkey] ?? null;
+      const authorPicture = resolveProfilePictureSrc(
+        {
+          picture: post.author_picture ?? knownAuthor?.picture ?? null,
+          picture_asset: post.author_picture_asset ?? knownAuthor?.picture_asset ?? null,
+        },
+        mediaObjectUrls
+      );
 
       return {
         post,
@@ -416,10 +423,7 @@ export function useDesktopShellViewModels({
           post.author_display_name,
           post.author_name
         ),
-        authorPicture:
-          post.author_pubkey === syncStatus.local_author_pubkey || knownAuthor
-            ? resolveProfilePictureSrc(knownAuthor, mediaObjectUrls)
-            : null,
+        authorPicture,
         relationshipLabel: strongestRelationshipLabel(post),
         audienceChipLabel: post.channel_id
           ? activeJoinedChannels.find((channel) => channel.channel_id === post.channel_id)?.label ??

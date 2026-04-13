@@ -57,6 +57,8 @@ function withSocialPostDefaults(post: PostView): PostView {
     ...post,
     author_name: post.author_name ?? null,
     author_display_name: post.author_display_name ?? null,
+    author_picture: post.author_picture ?? null,
+    author_picture_asset: post.author_picture_asset ? { ...post.author_picture_asset } : null,
     following: post.following ?? false,
     followed_by: post.followed_by ?? false,
     mutual: post.mutual ?? false,

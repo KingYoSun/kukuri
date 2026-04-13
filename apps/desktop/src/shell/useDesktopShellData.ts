@@ -211,6 +211,15 @@ export function useDesktopShellData({
       ...selectedAuthorTimeline,
       ...thread,
     ]) {
+      if (post.author_picture_asset) {
+        tryAddAttachment({
+          hash: post.author_picture_asset.hash,
+          mime: post.author_picture_asset.mime,
+          bytes: post.author_picture_asset.bytes,
+          role: post.author_picture_asset.role,
+          status: 'Available',
+        });
+      }
       for (const attachment of [
         selectPrimaryImage(post),
         selectVideoPoster(post),

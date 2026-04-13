@@ -227,14 +227,6 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         .await
         .expect("b imports a");
     app_a
-        .import_peer_ticket(&ticket_c)
-        .await
-        .expect("a imports c");
-    app_c
-        .import_peer_ticket(&ticket_a)
-        .await
-        .expect("c imports a");
-    app_a
         .import_peer_ticket(&ticket_d)
         .await
         .expect("a imports d");
@@ -306,6 +298,22 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
     )
     .await;
     assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+    app_a
+        .import_peer_ticket(&ticket_c)
+        .await
+        .expect("a imports c");
+    app_c
+        .import_peer_ticket(&ticket_a)
+        .await
+        .expect("c imports a");
+    wait_for_connected_peer_count(&app_c, 1).await;
+    let _ = app_c
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe public timeline c");
+    wait_for_topic_peer_count(&app_c, topic, 1).await;
+    warm_author_social_view(&app_c, a_pubkey.as_str(), topic).await;
 
     let non_mutual_error = app_c
         .import_friend_only_grant(grant.as_str())

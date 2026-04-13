@@ -68,6 +68,9 @@ pub trait DocsSync: Send + Sync {
     ) -> Result<Vec<DocRecord>>;
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
+    async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {
+        Ok(())
+    }
     async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
         self.open_replica(replica_id).await
     }

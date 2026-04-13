@@ -1211,17 +1211,33 @@ pub(crate) async fn refresh_direct_message_pair(
             ticket: ticket_a.to_string(),
         })
         .await?;
-    runtime_a
+    match runtime_a
         .open_direct_message(DirectMessageRequest {
             pubkey: b_pubkey.to_string(),
         })
-        .await?;
-    runtime_b
+        .await
+    {
+        Ok(_) => {}
+        Err(error)
+            if is_retryable_direct_message_pair_refresh_error(error.to_string().as_str()) => {}
+        Err(error) => return Err(error),
+    }
+    match runtime_b
         .open_direct_message(DirectMessageRequest {
             pubkey: a_pubkey.to_string(),
         })
-        .await?;
+        .await
+    {
+        Ok(_) => {}
+        Err(error)
+            if is_retryable_direct_message_pair_refresh_error(error.to_string().as_str()) => {}
+        Err(error) => return Err(error),
+    }
     Ok(())
+}
+
+pub(crate) fn is_retryable_direct_message_pair_refresh_error(message: &str) -> bool {
+    message.contains("mutual relationship")
 }
 
 pub(crate) async fn wait_for_direct_message_pair_ready_with_refresh(

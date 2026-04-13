@@ -41,6 +41,8 @@ export type PostView = {
   author_pubkey: string;
   author_name?: string | null;
   author_display_name?: string | null;
+  author_picture?: string | null;
+  author_picture_asset?: ProfileAssetView | null;
   following: boolean;
   followed_by: boolean;
   mutual: boolean;

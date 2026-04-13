@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use futures_util::StreamExt;
 use iroh::RelayUrl;
 use tempfile::tempdir;
 use tokio::time::{sleep, timeout};
@@ -154,6 +155,115 @@ async fn public_replica_syncs_over_custom_relay_seed_peers() -> Result<()> {
             "relay-seeded public replica sync timeout: {error:?}; rows_a={rows_a:?}; rows_b={rows_b:?}; remote_info_a={remote_info_a}; remote_info_b={remote_info_b}; seed_peers_a={seed_peers_a:?}; seed_peers_b={seed_peers_b:?}"
         );
     }
+
+    docs_a.shutdown().await;
+    docs_b.shutdown().await;
+    node_a.shutdown().await?;
+    node_b.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn learned_peer_recovers_relay_backfilled_doc_entry_after_seed_peers_are_cleared()
+-> Result<()> {
+    if std::env::var_os("GITHUB_ACTIONS").is_some() {
+        return Ok(());
+    }
+    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server().await?;
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url.to_string()],
+    }
+    .normalized();
+    let dir = tempdir()?;
+    let node_a = IrohDocsNode::persistent_with_discovery_config(
+        dir.path().join("docs-learned-a"),
+        TransportNetworkConfig::loopback(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config.clone(),
+    )
+    .await?;
+    let node_b = IrohDocsNode::persistent_with_discovery_config(
+        dir.path().join("docs-learned-b"),
+        TransportNetworkConfig::loopback(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config,
+    )
+    .await?;
+    let docs_a = IrohDocsSync::new(node_a.clone());
+    let docs_b = IrohDocsSync::new(node_b.clone());
+    let replica = topic_replica_id("kukuri:topic:relay-learned-docs");
+    let key = stable_key("timeline", "0001-learned-peer");
+    let value = b"learned-peer-doc-entry".repeat(128);
+
+    docs_a
+        .set_seed_peers(vec![SeedPeer {
+            endpoint_id: node_b.endpoint().id().to_string(),
+            addr_hint: None,
+        }])
+        .await?;
+    docs_b
+        .set_seed_peers(vec![SeedPeer {
+            endpoint_id: node_a.endpoint().id().to_string(),
+            addr_hint: None,
+        }])
+        .await?;
+    docs_a.open_replica(&replica).await?;
+    docs_b.open_replica(&replica).await?;
+    let mut events_b = docs_b.subscribe_replica(&replica).await?;
+
+    docs_a
+        .apply_doc_op(
+            &replica,
+            DocOp::SetBytes {
+                key: key.clone(),
+                value: value.clone(),
+            },
+        )
+        .await?;
+
+    timeout(relay_seeded_public_replication_timeout(), async {
+        loop {
+            if let Some(Ok(event)) = events_b.next().await
+                && event.key == key
+                && event.source_peer.is_some()
+            {
+                return;
+            }
+        }
+    })
+    .await?;
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if node_b
+                .endpoint()
+                .remote_info(node_a.endpoint().id())
+                .await
+                .is_some()
+            {
+                return;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await?;
+
+    docs_b
+        .learn_peer(&node_a.endpoint().id().to_string())
+        .await?;
+    docs_b.set_seed_peers(Vec::new()).await?;
+
+    assert_eq!(
+        docs_b.available_sync_peer_ids().await,
+        vec![node_a.endpoint().id().to_string()]
+    );
+
+    let rows = docs_b
+        .query_replica(&replica, DocQuery::Exact(key.clone()))
+        .await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].key, key);
+    assert_eq!(rows[0].value, value);
 
     docs_a.shutdown().await;
     docs_b.shutdown().await;

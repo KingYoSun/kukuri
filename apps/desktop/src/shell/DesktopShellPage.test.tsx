@@ -3484,6 +3484,58 @@ test('author avatar blob stays visible on the timeline after the author pane clo
   });
 });
 
+test('remote author avatar appears on the timeline without opening the author pane', async () => {
+  installObjectUrlMocks();
+
+  const authorPubkey = 'c'.repeat(64);
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'post-inline-avatar',
+              envelope_id: 'envelope-inline-avatar',
+              author_pubkey: authorPubkey,
+              author_name: 'carol',
+              author_display_name: null,
+              author_picture: null,
+              author_picture_asset: {
+                hash: 'inline-avatar-hash',
+                mime: 'image/png',
+                bytes: 64,
+                role: 'profile_avatar',
+              },
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'inline avatar hydration',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'post-inline-avatar',
+              audience_label: 'Public',
+            },
+          ],
+        },
+      })}
+    />
+  );
+
+  await waitFor(() => {
+    expect(
+      screen
+        .getByTestId('post-inline-avatar-author-avatar')
+        .querySelector('img')
+        ?.getAttribute('src')
+    ).toBe('blob:mock-1');
+  });
+});
+
 test('profile overview connection count buttons open the requested connections tab', async () => {
   const followedPubkey = 'b'.repeat(64);
   const mutedPubkey = 'c'.repeat(64);

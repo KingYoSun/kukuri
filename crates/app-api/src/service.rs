@@ -1,4 +1,4 @@
-pub(crate) use std::collections::{BTreeMap, BTreeSet, HashMap};
+pub(crate) use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 pub(crate) use std::sync::Arc;
 
 pub(crate) use anyhow::{Context, Result};
@@ -119,6 +119,7 @@ pub struct AppService {
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
     pub(crate) direct_message_subscription_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+    pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -233,6 +234,7 @@ impl AppService {
             last_sync_ts: Arc::new(Mutex::new(None)),
             direct_message_subscription_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
+            empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -347,6 +349,10 @@ impl AppService {
             self.docs_sync.assist_peer_ids().await?,
             self.blob_service.assist_peer_ids().await?,
         ))
+    }
+
+    pub(crate) async fn docs_assisted_peer_ids(&self) -> Result<Vec<String>> {
+        self.docs_sync.assist_peer_ids().await
     }
 
     pub async fn shutdown(&self) {
@@ -1033,14 +1039,23 @@ impl AppService {
                     Some(event) = doc_stream.next() => {
                         if let Ok(event) = event {
                             if let Some(source_peer) = event.source_peer.as_deref()
-                                && let Err(error) = blob_service.learn_peer(source_peer).await
                             {
-                                warn!(
-                                    topic = %topic,
-                                    source_peer = %source_peer,
-                                    error = %error,
-                                    "failed to learn blob peer from docs sync event"
-                                );
+                                if let Err(error) = docs_sync.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn docs peer from docs sync event"
+                                    );
+                                }
+                                if let Err(error) = blob_service.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn blob peer from docs sync event"
+                                    );
+                                }
                             }
                             match AppService::maybe_create_notification_for_remote_object_event(
                                 projection_store.as_ref(),
@@ -1407,13 +1422,19 @@ impl AppService {
 
     pub(crate) async fn ensure_author_subscription(&self, author_pubkey: &str) -> Result<()> {
         let author_pubkey = normalize_author_pubkey(author_pubkey)?;
-        if self
-            .author_subscriptions
-            .lock()
-            .await
-            .contains_key(author_pubkey.as_str())
-        {
-            return Ok(());
+        let stale_key = {
+            let subscriptions = self.author_subscriptions.lock().await;
+            match subscriptions.get(author_pubkey.as_str()) {
+                Some(handle) if !handle.is_finished() => return Ok(()),
+                Some(_) => Some(author_pubkey.to_string()),
+                None => None,
+            }
+        };
+        if let Some(stale_key) = stale_key {
+            self.author_subscriptions
+                .lock()
+                .await
+                .remove(stale_key.as_str());
         }
 
         self.spawn_author_subscription(author_pubkey.as_str()).await
@@ -1507,6 +1528,24 @@ impl AppService {
                             continue;
                         }
                         if let Ok(event) = event.as_ref() {
+                            if let Some(source_peer) = event.source_peer.as_deref() {
+                                if let Err(error) = docs_sync.learn_peer(source_peer).await {
+                                    warn!(
+                                        author_pubkey = %author_key_for_task,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn docs peer from author sync event"
+                                    );
+                                }
+                                if let Err(error) = blob_service.learn_peer(source_peer).await {
+                                    warn!(
+                                        author_pubkey = %author_key_for_task,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn blob peer from author sync event"
+                                    );
+                                }
+                            }
                             match AppService::maybe_create_notification_for_remote_follow_event(
                                 store.as_ref(),
                                 projection_store.as_ref(),
@@ -2647,11 +2686,39 @@ impl AppService {
     }
 
     pub(crate) async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
-        if self.subscriptions.lock().await.contains_key(topic_id) {
-            return Ok(());
+        let stale_key = {
+            let subscriptions = self.subscriptions.lock().await;
+            match subscriptions.get(topic_id) {
+                Some(handle) if !handle.is_finished() => return Ok(()),
+                Some(_) => Some(topic_id.to_string()),
+                None => None,
+            }
+        };
+        if let Some(stale_key) = stale_key {
+            self.subscriptions.lock().await.remove(stale_key.as_str());
         }
 
         self.spawn_topic_subscription(topic_id).await
+    }
+
+    pub(crate) async fn has_topic_subscription(&self, topic_id: &str) -> bool {
+        self.subscriptions
+            .lock()
+            .await
+            .get(topic_id)
+            .is_some_and(|handle| !handle.is_finished())
+    }
+
+    pub(crate) async fn should_restart_after_empty_result(&self, key: &str) -> bool {
+        !self
+            .empty_recovery_candidates
+            .lock()
+            .await
+            .insert(key.to_string())
+    }
+
+    pub(crate) async fn clear_empty_result_restart_marker(&self, key: &str) {
+        self.empty_recovery_candidates.lock().await.remove(key);
     }
 
     pub(crate) async fn restart_topic_subscription(&self, topic_id: &str) -> Result<()> {
@@ -3166,6 +3233,9 @@ impl AppService {
             author_pubkey: row.author_pubkey.clone(),
             author_name: profile.and_then(|profile| profile.name.clone()),
             author_display_name: profile.and_then(|profile| profile.display_name.clone()),
+            author_picture: profile.and_then(|profile| profile.picture.clone()),
+            author_picture_asset: profile
+                .and_then(|profile| profile_asset_view_from_ref(profile.picture_asset.as_ref())),
             following: relationship.is_some_and(|value| value.following),
             followed_by: relationship.is_some_and(|value| value.followed_by),
             mutual: relationship.is_some_and(|value| value.mutual),
@@ -3256,6 +3326,10 @@ impl AppService {
                 author_display_name: profile
                     .as_ref()
                     .and_then(|profile| profile.display_name.clone()),
+                author_picture: profile.as_ref().and_then(|profile| profile.picture.clone()),
+                author_picture_asset: profile.as_ref().and_then(|profile| {
+                    profile_asset_view_from_ref(profile.picture_asset.as_ref())
+                }),
                 following: relationship.as_ref().is_some_and(|value| value.following),
                 followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
                 mutual: relationship.as_ref().is_some_and(|value| value.mutual),
@@ -3303,6 +3377,10 @@ impl AppService {
             author_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
+            author_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            author_picture_asset: profile
+                .as_ref()
+                .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             following: relationship.as_ref().is_some_and(|value| value.following),
             followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
             mutual: relationship.as_ref().is_some_and(|value| value.mutual),
@@ -3356,6 +3434,10 @@ impl AppService {
             author_display_name: profile
                 .as_ref()
                 .and_then(|value| value.display_name.clone()),
+            author_picture: profile.as_ref().and_then(|value| value.picture.clone()),
+            author_picture_asset: profile
+                .as_ref()
+                .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             following: relationship.as_ref().is_some_and(|value| value.following),
             followed_by: relationship.as_ref().is_some_and(|value| value.followed_by),
             mutual: relationship.as_ref().is_some_and(|value| value.mutual),

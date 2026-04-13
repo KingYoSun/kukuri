@@ -1111,6 +1111,16 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
+        if let Err(error) = self
+            .refresh_community_node_registration_if_due(base_url.as_str())
+            .await
+        {
+            tracing::warn!(
+                base_url = %base_url,
+                error = %error,
+                "failed to refresh community-node registration before metadata sync"
+            );
+        }
         let token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
