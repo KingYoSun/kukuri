@@ -53,6 +53,12 @@ pub struct IrohBlobService {
     imported_peers: Arc<Mutex<BTreeMap<String, iroh::EndpointAddr>>>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct BlobPeerState {
+    pub learned_peers: Vec<iroh::EndpointAddr>,
+    pub imported_peers: Vec<iroh::EndpointAddr>,
+}
+
 #[derive(Clone, Default)]
 pub struct MemoryBlobService {
     blobs: Arc<RwLock<HashMap<String, Vec<u8>>>>,
@@ -118,6 +124,45 @@ impl IrohBlobService {
         peers
     }
 
+    async fn insert_learned_peer_addr(&self, endpoint_addr: iroh::EndpointAddr) {
+        if !endpoint_addr.is_empty() {
+            self.node
+                .discovery()
+                .add_endpoint_info(endpoint_addr.clone());
+        }
+        self.learned_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+    }
+
+    async fn insert_imported_peer_addr(&self, endpoint_addr: iroh::EndpointAddr) {
+        self.node
+            .discovery()
+            .add_endpoint_info(endpoint_addr.clone());
+        self.imported_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+    }
+
+    pub async fn peer_state(&self) -> BlobPeerState {
+        BlobPeerState {
+            learned_peers: self.learned_peers.lock().await.values().cloned().collect(),
+            imported_peers: self.imported_peers.lock().await.values().cloned().collect(),
+        }
+    }
+
+    pub async fn restore_peer_state(&self, state: BlobPeerState) -> Result<()> {
+        for endpoint_addr in state.learned_peers {
+            self.insert_learned_peer_addr(endpoint_addr).await;
+        }
+        for endpoint_addr in state.imported_peers {
+            self.insert_imported_peer_addr(endpoint_addr).await;
+        }
+        Ok(())
+    }
+
     async fn available_fetch_peer_ids(&self) -> Vec<String> {
         let peers = self.fetch_peers().await;
         let mut available = std::collections::BTreeSet::new();
@@ -157,15 +202,7 @@ impl IrohBlobService {
         for relay_url in relay_urls {
             endpoint_addr = endpoint_addr.with_relay_url(relay_url.clone());
         }
-        if !endpoint_addr.is_empty() {
-            self.node
-                .discovery()
-                .add_endpoint_info(endpoint_addr.clone());
-        }
-        self.learned_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        self.insert_learned_peer_addr(endpoint_addr).await;
         Ok(())
     }
 }
@@ -323,13 +360,7 @@ impl BlobService for IrohBlobService {
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         let endpoint_addr = parse_endpoint_ticket(ticket)?;
-        self.node
-            .discovery()
-            .add_endpoint_info(endpoint_addr.clone());
-        self.imported_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        self.insert_imported_peer_addr(endpoint_addr).await;
         Ok(())
     }
 

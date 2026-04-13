@@ -462,6 +462,50 @@ impl AppService {
                 },
             )
             .await?;
+        if effective_channel_id.is_none() {
+            if let Err(error) = self
+                .docs_sync
+                .restart_replica_sync(&topic_replica_id(topic_id))
+                .await
+            {
+                warn!(
+                    topic = %topic_id,
+                    error = %error,
+                    "failed to restart public replica sync after local post"
+                );
+            }
+            match self.get_sync_status().await {
+                Ok(status) => {
+                    if let Some(topic_status) = status
+                        .topic_diagnostics
+                        .iter()
+                        .find(|entry| entry.topic == topic_id)
+                    {
+                        let connectivity_shape = if !topic_status.connected_peers.is_empty() {
+                            "direct"
+                        } else if !topic_status.assist_peer_ids.is_empty() {
+                            "assist-only"
+                        } else {
+                            "disconnected"
+                        };
+                        info!(
+                            topic = %topic_id,
+                            connectivity_shape,
+                            direct_peer_count = topic_status.connected_peers.len(),
+                            assist_peer_count = topic_status.assist_peer_ids.len(),
+                            "public topic connectivity snapshot after local post"
+                        );
+                    }
+                }
+                Err(error) => {
+                    warn!(
+                        topic = %topic_id,
+                        error = %error,
+                        "failed to load public topic connectivity snapshot after local post"
+                    );
+                }
+            }
+        }
         Ok(envelope.id.0)
     }
 

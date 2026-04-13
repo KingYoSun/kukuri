@@ -23,6 +23,7 @@ const DHT_PUBLISH_TTL_SECONDS: u32 = 30;
 const DHT_PUBLISH_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 const DHT_PUBLISH_REPUBLISH_INTERVAL: Duration = Duration::from_secs(30);
 const DHT_PUBLISH_STARTUP_TIMEOUT: Duration = Duration::from_secs(6);
+const RELAY_ONLINE_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub async fn prepare_endpoint_for_discovery(
     endpoint: &Endpoint,
@@ -32,7 +33,25 @@ pub async fn prepare_endpoint_for_discovery(
 ) -> Result<Option<JoinHandle<()>>> {
     let relay_backed = relay_config.connect_mode() == ConnectMode::DirectOrRelay;
     if relay_backed {
-        endpoint.online().await;
+        let endpoint = endpoint.clone();
+        let discovery = Arc::clone(discovery);
+        let online_task = tokio::spawn(async move {
+            endpoint.online().await;
+            discovery.add_endpoint_info(endpoint.addr());
+        });
+        match timeout(RELAY_ONLINE_STARTUP_TIMEOUT, async {
+            let _ = online_task.await;
+        })
+        .await
+        {
+            Ok(()) => {}
+            Err(error) => {
+                debug!(
+                    error = %error,
+                    "timed out waiting for relay-backed endpoint to come online; continuing startup in background"
+                );
+            }
+        }
     }
     discovery.add_endpoint_info(endpoint.addr());
 

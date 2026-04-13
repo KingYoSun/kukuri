@@ -19,6 +19,73 @@ fn relay_seeded_public_replication_timeout() -> Duration {
     }
 }
 
+async fn wait_for_relay_seeded_replica_row(
+    docs: &IrohDocsSync,
+    replica: &str,
+    expected_key: &str,
+) -> Result<()> {
+    let sync_result = timeout(relay_seeded_public_replication_timeout(), async {
+        loop {
+            let rows = docs
+                .query_replica(
+                    &topic_replica_id(replica),
+                    DocQuery::Prefix("timeline/".into()),
+                )
+                .await
+                .expect("query replica");
+            if rows.iter().any(|row| row.key == expected_key) {
+                return;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+
+    if let Err(error) = sync_result {
+        anyhow::bail!("relay-seeded public replica sync timeout: {error:?}");
+    }
+    Ok(())
+}
+
+async fn relay_seeded_timeout_diagnostics(
+    docs_a: &IrohDocsSync,
+    docs_b: &IrohDocsSync,
+    node_a: &IrohDocsNode,
+    node_b: &IrohDocsNode,
+    replica: &str,
+) -> String {
+    let replica = topic_replica_id(replica);
+    let rows_a = docs_a
+        .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| row.key)
+        .collect::<Vec<_>>();
+    let rows_b = docs_b
+        .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|row| row.key)
+        .collect::<Vec<_>>();
+    let remote_info_a = node_a
+        .endpoint()
+        .remote_info(node_b.endpoint().id())
+        .await
+        .is_some();
+    let remote_info_b = node_b
+        .endpoint()
+        .remote_info(node_a.endpoint().id())
+        .await
+        .is_some();
+    let seed_peers_a = docs_a.available_sync_peer_ids().await;
+    let seed_peers_b = docs_b.available_sync_peer_ids().await;
+    format!(
+        "rows_a={rows_a:?}; rows_b={rows_b:?}; remote_info_a={remote_info_a}; remote_info_b={remote_info_b}; seed_peers_a={seed_peers_a:?}; seed_peers_b={seed_peers_b:?}"
+    )
+}
+
 #[tokio::test]
 async fn apply_relay_config_tolerates_relay_activation_timeout() -> Result<()> {
     let node = IrohDocsNode::memory().await?;
@@ -92,68 +159,52 @@ async fn public_replica_syncs_over_custom_relay_seed_peers() -> Result<()> {
             },
         )
         .await?;
-
-    let sync_result = timeout(relay_seeded_public_replication_timeout(), async {
-        loop {
-            let rows = docs_b
-                .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
-                .await
-                .expect("query replica b");
-            if rows
-                .iter()
-                .any(|row| row.key == "timeline/0001-relay-event")
-            {
-                return;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await;
-
-    let timeout_diagnostics = if let Err(error) = sync_result {
-        let rows_a = docs_a
-            .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
-            .await?
-            .into_iter()
-            .map(|row| row.key)
-            .collect::<Vec<_>>();
-        let rows_b = docs_b
-            .query_replica(&replica, DocQuery::Prefix("timeline/".into()))
-            .await?
-            .into_iter()
-            .map(|row| row.key)
-            .collect::<Vec<_>>();
-        let remote_info_a = node_a
-            .endpoint()
-            .remote_info(node_b.endpoint().id())
-            .await
-            .is_some();
-        let remote_info_b = node_b
-            .endpoint()
-            .remote_info(node_a.endpoint().id())
-            .await
-            .is_some();
-        let seed_peers_a = docs_a.available_sync_peer_ids().await;
-        let seed_peers_b = docs_b.available_sync_peer_ids().await;
-        Some((
-            error,
-            rows_a,
-            rows_b,
-            remote_info_a,
-            remote_info_b,
-            seed_peers_a,
-            seed_peers_b,
-        ))
-    } else {
-        None
-    };
-
-    if let Some((error, rows_a, rows_b, remote_info_a, remote_info_b, seed_peers_a, seed_peers_b)) =
-        timeout_diagnostics
+    if let Err(error) = wait_for_relay_seeded_replica_row(
+        &docs_b,
+        "kukuri:topic:relay-seeded-docs",
+        "timeline/0001-relay-event",
+    )
+    .await
     {
-        panic!(
-            "relay-seeded public replica sync timeout: {error:?}; rows_a={rows_a:?}; rows_b={rows_b:?}; remote_info_a={remote_info_a}; remote_info_b={remote_info_b}; seed_peers_a={seed_peers_a:?}; seed_peers_b={seed_peers_b:?}"
-        );
+        let diagnostics = relay_seeded_timeout_diagnostics(
+            &docs_a,
+            &docs_b,
+            &node_a,
+            &node_b,
+            "kukuri:topic:relay-seeded-docs",
+        )
+        .await;
+        anyhow::bail!("{error:#}; {diagnostics}");
+    }
+
+    docs_b
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("timeline", "0002-relay-event"),
+                value: serde_json::json!({
+                    "object_id": "relay-event-2",
+                    "topic_id": "kukuri:topic:relay-seeded-docs"
+                }),
+            },
+        )
+        .await?;
+    if let Err(error) = wait_for_relay_seeded_replica_row(
+        &docs_a,
+        "kukuri:topic:relay-seeded-docs",
+        "timeline/0002-relay-event",
+    )
+    .await
+    {
+        let diagnostics = relay_seeded_timeout_diagnostics(
+            &docs_a,
+            &docs_b,
+            &node_a,
+            &node_b,
+            "kukuri:topic:relay-seeded-docs",
+        )
+        .await;
+        anyhow::bail!("{error:#}; {diagnostics}");
     }
 
     docs_a.shutdown().await;

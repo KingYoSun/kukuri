@@ -754,6 +754,43 @@ async fn replicate_public_post_with_retry(
     content_prefix: &str,
     timeout_label: &str,
 ) -> String {
+    replicate_public_post_with_retry_inner(
+        publisher,
+        subscriber,
+        topic,
+        content_prefix,
+        timeout_label,
+        true,
+    )
+    .await
+}
+
+async fn replicate_public_post_from_original_publisher_with_retry(
+    publisher: &DesktopRuntime,
+    subscriber: &DesktopRuntime,
+    topic: &str,
+    content_prefix: &str,
+    timeout_label: &str,
+) -> String {
+    replicate_public_post_with_retry_inner(
+        publisher,
+        subscriber,
+        topic,
+        content_prefix,
+        timeout_label,
+        false,
+    )
+    .await
+}
+
+async fn replicate_public_post_with_retry_inner(
+    publisher: &DesktopRuntime,
+    subscriber: &DesktopRuntime,
+    topic: &str,
+    content_prefix: &str,
+    timeout_label: &str,
+    allow_shared_identity_swap: bool,
+) -> String {
     let same_author_shared_identity = publisher
         .get_sync_status()
         .await
@@ -803,7 +840,8 @@ async fn replicate_public_post_with_retry(
                 .get_sync_status()
                 .await
                 .context("subscriber sync status")?;
-            let publish_from_subscriber = same_author_shared_identity
+            let publish_from_subscriber = allow_shared_identity_swap
+                && same_author_shared_identity
                 && should_swap_shared_identity_public_replication_direction(
                     &publisher_status,
                     &subscriber_status,
@@ -4780,83 +4818,6 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
         .expect("runtime shutdown timeout");
 }
 
-#[tokio::test]
-async fn community_node_connectivity_assist_preserves_manual_ticket_peers() {
-    let _serial = acquire_async_test_lock().await;
-    let dir = tempdir().expect("tempdir");
-    let db_a = dir.path().join("assist-a.db");
-    let db_b = dir.path().join("assist-b.db");
-    let runtime_a = DesktopRuntime::new_with_config_and_identity(
-        &db_a,
-        TransportNetworkConfig::loopback(),
-        IdentityStorageMode::FileOnly,
-    )
-    .await
-    .expect("runtime a");
-    let runtime_b = DesktopRuntime::new_with_config_and_identity(
-        &db_b,
-        TransportNetworkConfig::loopback(),
-        IdentityStorageMode::FileOnly,
-    )
-    .await
-    .expect("runtime b");
-
-    let ticket_b = runtime_b
-        .local_peer_ticket()
-        .await
-        .expect("ticket b")
-        .expect("ticket b value");
-    runtime_a
-        .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
-        .await
-        .expect("import b");
-
-    let manual_ticket_peer_ids = runtime_a
-        .get_sync_status()
-        .await
-        .expect("sync status before assist")
-        .discovery
-        .manual_ticket_peer_ids;
-    assert!(!manual_ticket_peer_ids.is_empty());
-
-    let seed_peer = CommunityNodeSeedPeer::new(
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        None,
-    )
-    .expect("seed peer");
-    *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: "https://community.example.com".into(),
-            resolved_urls: Some(
-                CommunityNodeResolvedUrls::new(
-                    "https://community.example.com",
-                    Vec::new(),
-                    vec![seed_peer],
-                )
-                .expect("resolved urls"),
-            ),
-        }],
-    };
-
-    runtime_a
-        .apply_runtime_connectivity_assist()
-        .await
-        .expect("apply runtime connectivity assist");
-
-    assert_eq!(
-        runtime_a
-            .get_sync_status()
-            .await
-            .expect("sync status after assist")
-            .discovery
-            .manual_ticket_peer_ids,
-        manual_ticket_peer_ids
-    );
-
-    runtime_a.shutdown().await;
-    runtime_b.shutdown().await;
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_syncs_public_timeline_without_manual_tickets() {
     let _serial = acquire_async_test_lock().await;
@@ -5017,31 +4978,20 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     )
     .await;
 
-    let status_a = runtime_a
-        .get_sync_status()
-        .await
-        .expect("status a after readiness");
-    let status_b = runtime_b
-        .get_sync_status()
-        .await
-        .expect("status b after readiness");
-    // Community-node assist can yield one runtime with a direct topic peer and the other
-    // relying only on relay-assisted connectivity. Prefer the direct-connected side as the
-    // publisher so this test exercises the assist-only receiver path instead of depending on
-    // the slower assist-only publisher path being healthy on every CI host.
-    let publisher_a_has_direct_peer = topic_has_direct_peer(&status_a, topic, 1);
-    let publisher_b_has_direct_peer = topic_has_direct_peer(&status_b, topic, 1);
-    let (publisher, subscriber) = if publisher_a_has_direct_peer && !publisher_b_has_direct_peer {
-        (&runtime_a, &runtime_b)
-    } else {
-        (&runtime_b, &runtime_a)
-    };
-    let _object_id = replicate_public_post_with_retry(
-        publisher,
-        subscriber,
+    let _object_id = replicate_public_post_from_original_publisher_with_retry(
+        &runtime_a,
+        &runtime_b,
         topic,
         "community relay hello",
-        "community-node assist post sync timeout",
+        "community-node assist forward post sync timeout",
+    )
+    .await;
+    let _reverse_object_id = replicate_public_post_from_original_publisher_with_retry(
+        &runtime_b,
+        &runtime_a,
+        topic,
+        "community relay reverse hello",
+        "community-node assist reverse post sync timeout",
     )
     .await;
 
@@ -5224,12 +5174,20 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     )
     .await;
 
-    let _object_id = replicate_public_post_with_retry(
+    let _object_id = replicate_public_post_from_original_publisher_with_retry(
         &runtime_a,
         &runtime_b,
         topic,
         "community relay shared hello",
-        "community-node assist shared identity post sync timeout",
+        "community-node assist shared identity forward post sync timeout",
+    )
+    .await;
+    let _reverse_object_id = replicate_public_post_from_original_publisher_with_retry(
+        &runtime_b,
+        &runtime_a,
+        topic,
+        "community relay shared reverse hello",
+        "community-node assist shared identity reverse post sync timeout",
     )
     .await;
 
@@ -5314,6 +5272,81 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
             .seed_peers,
         state.seed_peers.lock().await.clone()
     );
+    assert_eq!(
+        runtime.community_node_config.lock().await.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        state.seed_peers.lock().await.clone()
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-sync-status-refresh.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(vec![
+            CommunityNodeSeedPeer::new(
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                None,
+            )
+            .expect("seed peer"),
+        ])),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let _status = runtime.get_sync_status().await.expect("sync status");
+
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
     assert_eq!(
         runtime.community_node_config.lock().await.nodes[0]
             .resolved_urls

@@ -61,6 +61,14 @@ fn initial_topic_join_timeout() -> Duration {
     }
 }
 
+fn relay_online_timeout() -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        Duration::from_secs(20)
+    } else {
+        Duration::from_secs(10)
+    }
+}
+
 struct HintTopicState {
     sender: Arc<Mutex<GossipSender>>,
     broadcaster: broadcast::Sender<HintEnvelope>,
@@ -69,6 +77,11 @@ struct HintTopicState {
     last_received_at: Arc<Mutex<Option<i64>>>,
     last_error: Arc<Mutex<Option<String>>>,
     _receiver_task: JoinHandle<()>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TransportPeerState {
+    pub imported_peers: Vec<EndpointAddr>,
 }
 
 #[derive(Clone, Debug)]
@@ -232,6 +245,28 @@ impl IrohGossipTransport {
             drop(state.sender);
         }
         self.subscribed_topics.lock().await.remove(topic);
+    }
+
+    async fn insert_imported_peer_addr(&self, endpoint_addr: EndpointAddr) {
+        self.discovery.add_endpoint_info(endpoint_addr.clone());
+        self.imported_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+    }
+
+    pub async fn peer_state(&self) -> TransportPeerState {
+        TransportPeerState {
+            imported_peers: self.imported_peers.lock().await.values().cloned().collect(),
+        }
+    }
+
+    pub async fn restore_peer_state(&self, state: TransportPeerState) -> Result<()> {
+        for endpoint_addr in state.imported_peers {
+            self.insert_imported_peer_addr(endpoint_addr).await;
+        }
+        *self.last_error.lock().await = None;
+        Ok(())
     }
 
     pub async fn update_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
@@ -648,11 +683,7 @@ impl Transport for IrohGossipTransport {
                 return Err(anyhow!(message));
             }
         };
-        self.discovery.add_endpoint_info(endpoint_addr.clone());
-        self.imported_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        self.insert_imported_peer_addr(endpoint_addr).await;
         *self.last_error.lock().await = None;
         Ok(())
     }
@@ -669,6 +700,25 @@ impl Transport for IrohGossipTransport {
             .read()
             .expect("transport relay urls poisoned")
             .clone();
+        if !relay_urls.is_empty() {
+            let endpoint = self.endpoint.clone();
+            let online_task = tokio::spawn(async move {
+                endpoint.online().await;
+            });
+            match timeout(relay_online_timeout(), async {
+                let _ = online_task.await;
+            })
+            .await
+            {
+                Ok(()) => {}
+                Err(error) => {
+                    tracing::debug!(
+                        error = %error,
+                        "timed out waiting for relay-backed transport endpoint to come online; continuing discovery setup in background"
+                    );
+                }
+            }
+        }
         let mut configured = BTreeMap::new();
         for seed in configured_seed_peers {
             let endpoint_addr = seed.to_endpoint_addr_with_relays(&relay_urls)?;

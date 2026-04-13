@@ -14,8 +14,8 @@ use iroh_blobs::store::{fs::options::Options as BlobStoreOptions, mem::MemStore}
 use iroh_docs::api::DocsApi;
 use iroh_gossip::net::Gossip;
 use kukuri_transport::{
-    DhtDiscoveryOptions, TransportNetworkConfig, TransportRelayConfig, build_endpoint_builder,
-    prepare_endpoint_for_discovery, sync_endpoint_relay_config,
+    ConnectMode, DhtDiscoveryOptions, TransportNetworkConfig, TransportRelayConfig,
+    build_endpoint_builder, prepare_endpoint_for_discovery, sync_endpoint_relay_config,
 };
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
@@ -29,6 +29,14 @@ const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
 
 fn relay_activation_timeout() -> Duration {
     Duration::from_secs(10)
+}
+
+fn router_shutdown_timeout() -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        Duration::from_secs(15)
+    } else {
+        Duration::from_secs(5)
+    }
 }
 
 pub struct IrohDocsNode {
@@ -163,7 +171,7 @@ impl IrohDocsNode {
             .accept(iroh_gossip::ALPN, gossip.clone())
             .spawn();
 
-        Ok(Arc::new(Self {
+        let node = Arc::new(Self {
             endpoint,
             gossip,
             discovery,
@@ -173,7 +181,11 @@ impl IrohDocsNode {
             blobs,
             endpoint_publish_task,
             shutdown_started: AtomicBool::new(false),
-        }))
+        });
+        if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
+            node.apply_relay_config(relay_config.clone()).await?;
+        }
+        Ok(node)
     }
 
     pub fn endpoint(&self) -> &Endpoint {
@@ -270,7 +282,18 @@ impl IrohDocsNode {
         if let Some(task) = &self.endpoint_publish_task {
             task.abort();
         }
-        self.router.shutdown().await?;
+        match timeout(router_shutdown_timeout(), self.router.shutdown()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                warn!(error = %error, "failed to shut down iroh docs router cleanly");
+            }
+            Err(error) => {
+                warn!(
+                    error = %error,
+                    "timed out shutting down iroh docs router; continuing endpoint close"
+                );
+            }
+        }
         self.endpoint.close().await;
         let _ = self.blobs.shutdown().await;
         Ok(())

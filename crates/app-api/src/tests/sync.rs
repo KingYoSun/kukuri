@@ -123,7 +123,7 @@ impl BlobService for DelayedBlobService {
     }
 }
 
-async fn relay_sync_diagnostics(
+async fn iroh_sync_diagnostics(
     app_a: &AppService,
     app_b: &AppService,
     stack_a: &TestIrohStack,
@@ -1512,54 +1512,35 @@ async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn relay_backed_iroh_transport_syncs_repost_and_notification() {
-    if std::env::var_os("GITHUB_ACTIONS").is_some() {
-        return;
-    }
+async fn iroh_transport_syncs_repost_and_notification() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
-    let (_relay_map, relay_url, _relay_guard) = iroh::test_utils::run_relay_server()
-        .await
-        .expect("run relay server");
-    let relay_config = TransportRelayConfig {
-        iroh_relay_urls: vec![relay_url.to_string()],
-    }
-    .normalized();
     let dir = tempdir().expect("tempdir");
-    let stack_a =
-        TestIrohStack::new_with_relay(&dir.path().join("relay-repost-a"), relay_config.clone())
-            .await;
-    let stack_b =
-        TestIrohStack::new_with_relay(&dir.path().join("relay-repost-b"), relay_config).await;
+    let stack_a = TestIrohStack::new(&dir.path().join("repost-a")).await;
+    let stack_b = TestIrohStack::new(&dir.path().join("repost-b")).await;
     let store_a = Arc::new(MemoryStore::default());
     let store_b = Arc::new(MemoryStore::default());
     let app_a = app_with_iroh_services(store_a, &stack_a);
     let app_b = app_with_iroh_services(store_b, &stack_b);
-    let topic = "kukuri:topic:relay-repost";
+    let topic = "kukuri:topic:repost-notification";
 
+    let ticket_a = app_a
+        .peer_ticket()
+        .await
+        .expect("ticket a")
+        .expect("ticket a value");
+    let ticket_b = app_b
+        .peer_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
     app_a
-        .set_discovery_seeds(
-            DiscoveryMode::StaticPeer,
-            false,
-            vec![SeedPeer {
-                endpoint_id: stack_b._node.endpoint().id().to_string(),
-                addr_hint: None,
-            }],
-            Vec::new(),
-        )
+        .import_peer_ticket(&ticket_b)
         .await
-        .expect("configure discovery a");
+        .expect("import b into a");
     app_b
-        .set_discovery_seeds(
-            DiscoveryMode::StaticPeer,
-            false,
-            vec![SeedPeer {
-                endpoint_id: stack_a._node.endpoint().id().to_string(),
-                addr_hint: None,
-            }],
-            Vec::new(),
-        )
+        .import_peer_ticket(&ticket_a)
         .await
-        .expect("configure discovery b");
+        .expect("import a into b");
 
     let _ = app_a
         .list_timeline(topic, None, 20)
@@ -1595,8 +1576,8 @@ async fn relay_backed_iroh_transport_syncs_repost_and_notification() {
     .await
     {
         panic!(
-            "relay-backed source propagation timeout: {error:?}; {}",
-            relay_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
+            "source propagation timeout: {error:?}; {}",
+            iroh_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
         );
     }
 
@@ -1628,8 +1609,8 @@ async fn relay_backed_iroh_transport_syncs_repost_and_notification() {
     .await
     {
         panic!(
-            "relay-backed repost propagation timeout: {error:?}; {}",
-            relay_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
+            "repost propagation timeout: {error:?}; {}",
+            iroh_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await
         );
     }
 

@@ -14,6 +14,7 @@ use kukuri_transport::{
     TransportRelayConfig,
 };
 use tokio::sync::{Mutex, RwLock};
+use tracing::info;
 
 use crate::discovery::{DiscoveryConfig, normalize_seed_peers};
 
@@ -47,6 +48,16 @@ pub(crate) struct SharedIrohStack {
     pub(crate) root: PathBuf,
     pub(crate) network_config: TransportNetworkConfig,
     pub(crate) dht_options: DhtDiscoveryOptions,
+}
+
+fn should_rebuild_runtime_connectivity(
+    current_relay_urls: &[String],
+    next_relay_urls: &[String],
+    discovery_mode: &DiscoveryMode,
+    is_windows: bool,
+) -> bool {
+    current_relay_urls != next_relay_urls
+        && (*discovery_mode != DiscoveryMode::StaticPeer || is_windows)
 }
 
 impl ReloadableTransport {
@@ -307,6 +318,7 @@ impl SharedIrohStack {
         bootstrap_seed_peers: &[SeedPeer],
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
+        let relay_config = relay_config.normalized();
         let dht_options =
             effective_dht_options(&self.dht_options, bootstrap_seed_peers, &relay_config);
         let previous = self
@@ -315,6 +327,14 @@ impl SharedIrohStack {
             .await
             .take()
             .context("missing active iroh stack during rebuild")?;
+        let transport_peer_state = previous.transport.peer_state().await;
+        let docs_peer_state = previous.docs_sync.peer_state().await;
+        let blob_peer_state = previous.blob_service.peer_state().await;
+        info!(
+            relay_url_count = relay_config.iroh_relay_urls.len(),
+            discovery_mode = ?discovery_config.mode,
+            "rebuilding iroh stack after runtime relay connectivity change"
+        );
         previous.shutdown().await;
         let next = BoundIrohStack::new(
             &self.root,
@@ -325,6 +345,13 @@ impl SharedIrohStack {
             relay_config,
         )
         .await?;
+        next.transport
+            .restore_peer_state(transport_peer_state)
+            .await?;
+        next.docs_sync.restore_peer_state(docs_peer_state).await?;
+        next.blob_service
+            .restore_peer_state(blob_peer_state)
+            .await?;
         self.transport.replace(next.transport.clone()).await;
         self.docs_sync.replace(next.docs_sync.clone()).await;
         self.blob_service.replace(next.blob_service.clone()).await;
@@ -339,7 +366,11 @@ impl SharedIrohStack {
         relay_config: TransportRelayConfig,
     ) -> Result<()> {
         let relay_config = relay_config.normalized();
-        let next_relay_urls = relay_config.parsed_relay_urls()?;
+        let next_relay_urls = relay_config
+            .parsed_relay_urls()?
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
         let current_relay_urls = {
             let current = self.current.lock().await;
             current
@@ -348,13 +379,33 @@ impl SharedIrohStack {
                 .node
                 .relay_urls()
                 .await
+                .into_iter()
+                .map(|url| url.to_string())
+                .collect::<Vec<_>>()
         };
-        if current_relay_urls != next_relay_urls
-            && discovery_config.mode != DiscoveryMode::StaticPeer
-        {
+        if should_rebuild_runtime_connectivity(
+            &current_relay_urls,
+            &next_relay_urls,
+            &discovery_config.mode,
+            cfg!(target_os = "windows"),
+        ) {
+            info!(
+                current_relay_url_count = current_relay_urls.len(),
+                next_relay_url_count = next_relay_urls.len(),
+                discovery_mode = ?discovery_config.mode,
+                "runtime relay connectivity change requires stack rebuild"
+            );
             return self
                 .rebuild(discovery_config, bootstrap_seed_peers, relay_config)
                 .await;
+        }
+        if current_relay_urls != next_relay_urls {
+            info!(
+                current_relay_url_count = current_relay_urls.len(),
+                next_relay_url_count = next_relay_urls.len(),
+                discovery_mode = ?discovery_config.mode,
+                "runtime relay connectivity change applied in place"
+            );
         }
         let current = self.current.lock().await;
         let current = current
@@ -456,5 +507,165 @@ impl BoundIrohStack {
         self.transport.shutdown().await;
         self.docs_sync.shutdown().await;
         let _ = self.node.clone().shutdown().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kukuri_blob_service::BlobService;
+    use kukuri_docs_sync::DocsSync;
+    use kukuri_transport::Transport;
+    use tempfile::tempdir;
+    use tokio::time::{Duration, timeout};
+
+    #[test]
+    fn runtime_connectivity_rebuild_helper_skips_rebuild_when_relay_urls_are_unchanged() {
+        let relay_url = "https://relay.example.com".to_string();
+        assert!(!should_rebuild_runtime_connectivity(
+            std::slice::from_ref(&relay_url),
+            std::slice::from_ref(&relay_url),
+            &DiscoveryMode::StaticPeer,
+            true,
+        ));
+    }
+
+    #[test]
+    fn runtime_connectivity_rebuild_helper_rebuilds_for_windows_static_peer_relay_change() {
+        let current = "https://relay-a.example.com".to_string();
+        let next = "https://relay-b.example.com".to_string();
+        assert!(should_rebuild_runtime_connectivity(
+            std::slice::from_ref(&current),
+            std::slice::from_ref(&next),
+            &DiscoveryMode::StaticPeer,
+            true,
+        ));
+    }
+
+    #[test]
+    fn runtime_connectivity_rebuild_helper_rebuilds_for_non_static_peer_relay_change() {
+        let current = "https://relay-a.example.com".to_string();
+        let next = "https://relay-b.example.com".to_string();
+        assert!(should_rebuild_runtime_connectivity(
+            std::slice::from_ref(&current),
+            std::slice::from_ref(&next),
+            &DiscoveryMode::SeededDht,
+            false,
+        ));
+    }
+
+    #[test]
+    fn runtime_connectivity_rebuild_helper_keeps_non_windows_static_peer_in_place() {
+        let current = "https://relay-a.example.com".to_string();
+        let next = "https://relay-b.example.com".to_string();
+        assert!(!should_rebuild_runtime_connectivity(
+            std::slice::from_ref(&current),
+            std::slice::from_ref(&next),
+            &DiscoveryMode::StaticPeer,
+            false,
+        ));
+    }
+
+    #[tokio::test]
+    async fn runtime_connectivity_rebuild_preserves_manual_ticket_peers() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let dir = tempdir().expect("tempdir");
+        let discovery_config = DiscoveryConfig::static_peer_default();
+        let stack_a = SharedIrohStack::new(
+            &dir.path().join("stack-a"),
+            TransportNetworkConfig::loopback(),
+            &discovery_config,
+            &[],
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
+        )
+        .await
+        .expect("stack a");
+        let stack_b = SharedIrohStack::new(
+            &dir.path().join("stack-b"),
+            TransportNetworkConfig::loopback(),
+            &discovery_config,
+            &[],
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
+        )
+        .await
+        .expect("stack b");
+
+        let ticket_b = stack_b
+            .transport
+            .current()
+            .await
+            .export_ticket()
+            .await
+            .expect("export ticket b")
+            .expect("ticket b value");
+        stack_a
+            .transport
+            .current()
+            .await
+            .import_ticket(ticket_b.as_str())
+            .await
+            .expect("import transport ticket");
+        stack_a
+            .docs_sync
+            .current()
+            .await
+            .import_peer_ticket(ticket_b.as_str())
+            .await
+            .expect("import docs ticket");
+        stack_a
+            .blob_service
+            .current()
+            .await
+            .import_peer_ticket(ticket_b.as_str())
+            .await
+            .expect("import blob ticket");
+
+        let current_guard = stack_a.current.lock().await;
+        let current = current_guard
+            .as_ref()
+            .expect("current stack before rebuild");
+        let transport_before = current.transport.peer_state().await;
+        let docs_before = current.docs_sync.peer_state().await;
+        let blob_before = current.blob_service.peer_state().await;
+        drop(current_guard);
+
+        timeout(
+            Duration::from_secs(30),
+            stack_a.rebuild(
+                &discovery_config,
+                &[],
+                TransportRelayConfig {
+                    iroh_relay_urls: vec![relay_url.to_string()],
+                },
+            ),
+        )
+        .await
+        .expect("stack rebuild timeout")
+        .expect("stack rebuild");
+
+        let current_guard = stack_a.current.lock().await;
+        let current = current_guard.as_ref().expect("current stack after rebuild");
+        let transport_after = current.transport.peer_state().await;
+        let docs_after = current.docs_sync.peer_state().await;
+        let blob_after = current.blob_service.peer_state().await;
+        drop(current_guard);
+
+        assert_eq!(
+            transport_after.imported_peers,
+            transport_before.imported_peers
+        );
+        assert_eq!(docs_after.imported_peers, docs_before.imported_peers);
+        assert_eq!(blob_after.imported_peers, blob_before.imported_peers);
+
+        timeout(Duration::from_secs(30), stack_a.shutdown())
+            .await
+            .expect("stack a shutdown timeout");
+        timeout(Duration::from_secs(30), stack_b.shutdown())
+            .await
+            .expect("stack b shutdown timeout");
     }
 }
