@@ -97,3 +97,13 @@ fn direct_topic_readiness_rejects_pending_join_errors() {
         &status, topic, 1
     ));
 }
+
+#[test]
+fn direct_message_pair_refresh_retries_mutual_relationship_errors() {
+    assert!(is_retryable_direct_message_pair_refresh_error(
+        "direct message requires a mutual relationship"
+    ));
+    assert!(!is_retryable_direct_message_pair_refresh_error(
+        "desktop runtime disconnected"
+    ));
+}
