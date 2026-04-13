@@ -777,18 +777,28 @@ pub(crate) async fn run_community_node_connectivity(
         let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
-        let _ = runtime_a
-            .refresh_community_node_metadata(CommunityNodeTargetRequest {
-                base_url: stack.base_url.clone(),
-            })
-            .await
-            .context("failed to refresh community-node metadata for desktop a after restart")?;
         let _ = runtime_b
             .refresh_community_node_metadata(CommunityNodeTargetRequest {
                 base_url: stack.base_url.clone(),
             })
             .await
             .context("failed to refresh community-node metadata for desktop b after restart")?;
+        // Refresh the restarted peer first so the community node publishes its new
+        // endpoint before the still-running peer rebuilds active topic subscriptions.
+        let _ = runtime_a
+            .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: stack.base_url.clone(),
+            })
+            .await
+            .context("failed to refresh community-node metadata for desktop a after restart")?;
+        // Refresh the restarted peer again after desktop A renews its own registration so
+        // both desktops rebuild against the latest seed-peer endpoints.
+        let _ = runtime_b
+            .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                base_url: stack.base_url.clone(),
+            })
+            .await
+            .context("failed to re-refresh community-node metadata for desktop b after restart")?;
         let reconnect_timeout = ci_timeout_floor(step_timeout, Duration::from_secs(360));
         let _ = runtime_b
             .list_timeline(ListTimelineRequest {
