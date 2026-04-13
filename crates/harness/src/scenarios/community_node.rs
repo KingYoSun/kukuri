@@ -503,6 +503,9 @@ pub(crate) async fn run_community_node_connectivity(
                     })?;
                 wait_for_live_session(live_owner, topic, session_id.as_str(), step_timeout)
                     .await?;
+                refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                    .await
+                    .context("failed to refresh public topic after live-session creation")?;
                 match wait_for_live_session(
                     live_viewer,
                     topic,
@@ -658,6 +661,9 @@ pub(crate) async fn run_community_node_connectivity(
                     .with_context(|| format!("failed to create game room on {game_owner_label}"))?;
                 let room_owner =
                     wait_for_game_room(game_owner, topic, room_id.as_str(), step_timeout).await?;
+                refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                    .await
+                    .context("failed to refresh public topic after game-room creation")?;
                 match wait_for_game_room(
                     game_observer,
                     topic,
