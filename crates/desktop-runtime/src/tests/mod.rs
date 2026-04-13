@@ -3117,6 +3117,33 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         .expect("c imports friend-plus share");
     let original_epoch_id = preview_c.epoch_id.clone();
     assert_eq!(preview_c.sponsor_pubkey.as_str(), b_pubkey.as_str());
+    // Importing the fresh share updates C's joined private-channel state after A and B have
+    // already built their active topic/private subscriptions, so refresh the tickets once more
+    // to rebuild those subscriptions against the new friend-plus epoch before the first write.
+    runtime_a
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_c.clone(),
+        })
+        .await
+        .expect("a refreshes c after friend-plus share");
+    runtime_b
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_c.clone(),
+        })
+        .await
+        .expect("b refreshes c after friend-plus share");
+    runtime_c
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_a.clone(),
+        })
+        .await
+        .expect("c refreshes a after friend-plus share");
+    runtime_c
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_b.clone(),
+        })
+        .await
+        .expect("c refreshes b after friend-plus share");
 
     let private_scope = TimelineScope::Channel {
         channel_id: kukuri_core::ChannelId::new(channel.channel_id.clone()),
