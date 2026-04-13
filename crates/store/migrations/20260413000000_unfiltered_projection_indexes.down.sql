@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_game_room_cache_topic_updated_all;
+DROP INDEX IF EXISTS idx_live_session_cache_topic_started_all;
+DROP INDEX IF EXISTS idx_object_thread_cache_topic_root_created_all;
+DROP INDEX IF EXISTS idx_object_index_cache_topic_created_all;
