@@ -1220,7 +1220,7 @@ pub(crate) async fn refresh_direct_message_pair(
         Ok(_) => {}
         Err(error)
             if is_retryable_direct_message_pair_refresh_error(error.to_string().as_str()) => {}
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(error),
     }
     match runtime_b
         .open_direct_message(DirectMessageRequest {
@@ -1231,7 +1231,7 @@ pub(crate) async fn refresh_direct_message_pair(
         Ok(_) => {}
         Err(error)
             if is_retryable_direct_message_pair_refresh_error(error.to_string().as_str()) => {}
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(error),
     }
     Ok(())
 }
