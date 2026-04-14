@@ -778,6 +778,25 @@ impl AppService {
         state.current_epoch_id = next_epoch_id;
         state.current_epoch_secret_hex = next_secret;
         self.register_joined_private_channel(state.clone()).await?;
+        if let Err(error) = self
+            .hint_transport
+            .publish_hint(
+                &channel_hint_topic_for(topic_id, Some(&state.channel_id)),
+                GossipHint::TopicObjectsChanged {
+                    topic_id: TopicId::new(topic_id),
+                    objects: Vec::new(),
+                },
+            )
+            .await
+        {
+            warn!(
+                topic = %topic_id,
+                channel_id = %state.channel_id.as_str(),
+                epoch_id = %state.current_epoch_id,
+                error = %error,
+                "failed to publish private channel rotation hint"
+            );
+        }
         self.joined_private_channel_view_for_state(&state).await
     }
 

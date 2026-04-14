@@ -541,6 +541,19 @@ impl DesktopRuntime {
     }
 
     pub async fn get_sync_status(&self) -> Result<SyncStatus> {
+        let community_node_config = self.community_node_config.lock().await.clone();
+        for node in community_node_config.nodes {
+            if let Err(error) = self
+                .refresh_community_node_registration_if_due(node.base_url.as_str())
+                .await
+            {
+                tracing::warn!(
+                    base_url = %node.base_url,
+                    error = %error,
+                    "failed to refresh community-node registration while loading sync status"
+                );
+            }
+        }
         self.app_service.get_sync_status().await
     }
 

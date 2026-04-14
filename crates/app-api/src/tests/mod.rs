@@ -691,34 +691,46 @@ impl TestIrohStack {
         stack
     }
 
-    async fn new_with_relay(root: &std::path::Path, relay_config: TransportRelayConfig) -> Self {
-        Self::new_with_options(root, DhtDiscoveryOptions::disabled(), relay_config).await
-    }
-
     async fn new_with_options(
         root: &std::path::Path,
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Self {
         let relay_config = relay_config.normalized();
+        let initial_relay_config = if relay_config.iroh_relay_urls.is_empty() {
+            relay_config.clone()
+        } else {
+            TransportRelayConfig::default()
+        };
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             kukuri_transport::TransportNetworkConfig::loopback(),
             dht_options,
-            relay_config.clone(),
+            initial_relay_config,
         )
         .await
         .expect("iroh docs node");
+        if !relay_config.iroh_relay_urls.is_empty() {
+            node.apply_relay_config(relay_config.clone())
+                .await
+                .expect("apply relay config");
+        }
         let transport = Arc::new(
             IrohGossipTransport::from_shared_parts(
                 node.endpoint().clone(),
                 node.gossip().clone(),
                 node.discovery(),
                 kukuri_transport::TransportNetworkConfig::loopback(),
-                relay_config,
+                relay_config.clone(),
             )
             .expect("transport"),
         );
+        if !relay_config.iroh_relay_urls.is_empty() {
+            transport
+                .update_relay_config(relay_config.clone())
+                .await
+                .expect("update relay config");
+        }
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
         Self {

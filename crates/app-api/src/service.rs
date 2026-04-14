@@ -1094,6 +1094,25 @@ impl AppService {
                     }
                     Some(event) = hint_stream.next() => {
                         if hint_targets_topic(&event.hint, topic.as_str()) {
+                            if !event.source_peer.is_empty() {
+                                let source_peer = event.source_peer.as_str();
+                                if let Err(error) = docs_sync.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn docs peer from hint event"
+                                    );
+                                }
+                                if let Err(error) = blob_service.learn_peer(source_peer).await {
+                                    warn!(
+                                        topic = %topic,
+                                        source_peer = %source_peer,
+                                        error = %error,
+                                        "failed to learn blob peer from hint event"
+                                    );
+                                }
+                            }
                             match &event.hint {
                                 GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {
                                     let now = Utc::now().timestamp_millis();
@@ -1111,16 +1130,37 @@ impl AppService {
                                     *last_sync.lock().await = Some(now);
                                 }
                                 _ => {
-                                    if let Ok(count) = hydrate_subscription_hint_with_services(
+                                    let hydrated = match hydrate_subscription_hint_with_services(
                                         docs_sync.as_ref(),
                                         blob_service.as_ref(),
                                         projection_store.as_ref(),
                                         topic.as_str(),
                                         &replica_for_task,
                                         &event.hint,
-                                    ).await
-                                    && count > 0
+                                    )
+                                    .await {
+                                        Ok(count) => count,
+                                        Err(error) => {
+                                            warn!(
+                                                topic = %topic,
+                                                error = %error,
+                                                "failed to hydrate subscription from hint"
+                                            );
+                                            0
+                                        }
+                                    };
+                                    if hydrated == 0
+                                        && let Err(error) =
+                                            docs_sync.restart_replica_sync(&replica_for_task).await
                                     {
+                                        warn!(
+                                            topic = %topic,
+                                            replica = %replica_for_task.as_str(),
+                                            error = %error,
+                                            "failed to restart replica sync after hint miss"
+                                        );
+                                    }
+                                    if hydrated > 0 {
                                         *last_sync.lock().await = Some(Utc::now().timestamp_millis());
                                     }
                                 }

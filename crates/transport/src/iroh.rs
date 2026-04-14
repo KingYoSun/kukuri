@@ -71,6 +71,11 @@ struct HintTopicState {
     _receiver_task: JoinHandle<()>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct TransportPeerState {
+    pub imported_peers: Vec<EndpointAddr>,
+}
+
 #[derive(Clone, Debug)]
 struct RelayFallbackLookup {
     relay_urls: Arc<StdRwLock<Vec<RelayUrl>>>,
@@ -232,6 +237,28 @@ impl IrohGossipTransport {
             drop(state.sender);
         }
         self.subscribed_topics.lock().await.remove(topic);
+    }
+
+    async fn insert_imported_peer_addr(&self, endpoint_addr: EndpointAddr) {
+        self.discovery.add_endpoint_info(endpoint_addr.clone());
+        self.imported_peers
+            .lock()
+            .await
+            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+    }
+
+    pub async fn peer_state(&self) -> TransportPeerState {
+        TransportPeerState {
+            imported_peers: self.imported_peers.lock().await.values().cloned().collect(),
+        }
+    }
+
+    pub async fn restore_peer_state(&self, state: TransportPeerState) -> Result<()> {
+        for endpoint_addr in state.imported_peers {
+            self.insert_imported_peer_addr(endpoint_addr).await;
+        }
+        *self.last_error.lock().await = None;
+        Ok(())
     }
 
     pub async fn update_relay_config(&self, relay_config: TransportRelayConfig) -> Result<()> {
@@ -648,11 +675,7 @@ impl Transport for IrohGossipTransport {
                 return Err(anyhow!(message));
             }
         };
-        self.discovery.add_endpoint_info(endpoint_addr.clone());
-        self.imported_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        self.insert_imported_peer_addr(endpoint_addr).await;
         *self.last_error.lock().await = None;
         Ok(())
     }
@@ -669,6 +692,12 @@ impl Transport for IrohGossipTransport {
             .read()
             .expect("transport relay urls poisoned")
             .clone();
+        if !relay_urls.is_empty() {
+            let endpoint = self.endpoint.clone();
+            tokio::spawn(async move {
+                endpoint.online().await;
+            });
+        }
         let mut configured = BTreeMap::new();
         for seed in configured_seed_peers {
             let endpoint_addr = seed.to_endpoint_addr_with_relays(&relay_urls)?;
