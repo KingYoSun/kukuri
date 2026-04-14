@@ -216,7 +216,7 @@ impl IrohDocsNode {
             .expect("docs sync relay urls poisoned")
             .clone();
         sync_endpoint_relay_config(&self.endpoint, &current_relay_urls, &next_relay_urls).await?;
-        if !next_relay_urls.is_empty() {
+        if !next_relay_urls.is_empty() && current_relay_urls != next_relay_urls {
             if current_relay_urls.is_empty() {
                 let endpoint = self.endpoint.clone();
                 tokio::spawn(async move {

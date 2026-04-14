@@ -91,16 +91,19 @@ impl IrohDocsSync {
         peers
     }
 
-    async fn insert_learned_peer_addr(&self, endpoint_addr: EndpointAddr) {
+    async fn insert_learned_peer_addr(&self, endpoint_addr: EndpointAddr) -> bool {
         if !endpoint_addr.is_empty() {
             self.node
                 .discovery()
                 .add_endpoint_info(endpoint_addr.clone());
         }
-        self.learned_peers
-            .lock()
-            .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+        let key = endpoint_addr.id.to_string();
+        let mut learned_peers = self.learned_peers.lock().await;
+        if learned_peers.get(key.as_str()) == Some(&endpoint_addr) {
+            return false;
+        }
+        learned_peers.insert(key, endpoint_addr);
+        true
     }
 
     async fn insert_imported_peer_addr(&self, endpoint_addr: EndpointAddr) {
@@ -122,7 +125,7 @@ impl IrohDocsSync {
 
     pub async fn restore_peer_state(&self, state: DocsPeerState) -> Result<()> {
         for endpoint_addr in state.learned_peers {
-            self.insert_learned_peer_addr(endpoint_addr).await;
+            let _ = self.insert_learned_peer_addr(endpoint_addr).await;
         }
         for endpoint_addr in state.imported_peers {
             self.insert_imported_peer_addr(endpoint_addr).await;
@@ -130,7 +133,7 @@ impl IrohDocsSync {
         self.reapply_sync_peers().await
     }
 
-    async fn record_learned_peer(&self, endpoint_id: &str) -> Result<()> {
+    async fn record_learned_peer(&self, endpoint_id: &str) -> Result<bool> {
         let endpoint_id = EndpointId::from_str(endpoint_id.trim())?;
         let relay_urls = self.node.relay_urls().await;
         let mut endpoint_addr = self
@@ -148,8 +151,7 @@ impl IrohDocsSync {
         for relay_url in relay_urls {
             endpoint_addr = endpoint_addr.with_relay_url(relay_url);
         }
-        self.insert_learned_peer_addr(endpoint_addr).await;
-        Ok(())
+        Ok(self.insert_learned_peer_addr(endpoint_addr).await)
     }
 
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
@@ -486,7 +488,10 @@ impl DocsSync for IrohDocsSync {
     }
 
     async fn learn_peer(&self, endpoint_id: &str) -> Result<()> {
-        self.record_learned_peer(endpoint_id).await
+        if self.record_learned_peer(endpoint_id).await? {
+            self.reapply_sync_peers().await?;
+        }
+        Ok(())
     }
 
     async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {

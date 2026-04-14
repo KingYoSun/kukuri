@@ -61,14 +61,6 @@ fn initial_topic_join_timeout() -> Duration {
     }
 }
 
-fn relay_online_timeout() -> Duration {
-    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
-        Duration::from_secs(20)
-    } else {
-        Duration::from_secs(10)
-    }
-}
-
 struct HintTopicState {
     sender: Arc<Mutex<GossipSender>>,
     broadcaster: broadcast::Sender<HintEnvelope>,
@@ -702,22 +694,9 @@ impl Transport for IrohGossipTransport {
             .clone();
         if !relay_urls.is_empty() {
             let endpoint = self.endpoint.clone();
-            let online_task = tokio::spawn(async move {
+            tokio::spawn(async move {
                 endpoint.online().await;
             });
-            match timeout(relay_online_timeout(), async {
-                let _ = online_task.await;
-            })
-            .await
-            {
-                Ok(()) => {}
-                Err(error) => {
-                    tracing::debug!(
-                        error = %error,
-                        "timed out waiting for relay-backed transport endpoint to come online; continuing discovery setup in background"
-                    );
-                }
-            }
         }
         let mut configured = BTreeMap::new();
         for seed in configured_seed_peers {
