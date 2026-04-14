@@ -98,16 +98,6 @@ impl AppService {
         self.transport.import_ticket(ticket).await?;
         self.docs_sync.import_peer_ticket(ticket).await?;
         self.blob_service.import_peer_ticket(ticket).await?;
-        let existing_topics = self
-            .subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for topic in existing_topics {
-            self.restart_topic_subscription(topic.as_str()).await?;
-        }
         let existing_private_topics = self
             .joined_private_channels
             .lock()
@@ -161,16 +151,6 @@ impl AppService {
         self.blob_service
             .set_seed_peers(effective_seed_peers)
             .await?;
-        let existing_topics = self
-            .subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for topic in existing_topics {
-            self.restart_topic_subscription(topic.as_str()).await?;
-        }
         let existing_private_topics = self
             .joined_private_channels
             .lock()

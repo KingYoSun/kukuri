@@ -926,10 +926,7 @@ pub(crate) fn public_replication_retry_schedule(
     step_timeout: Duration,
     same_author_shared_identity: bool,
 ) -> (usize, Duration) {
-    let attempts = if cfg!(target_os = "windows")
-        || std::env::var_os("GITHUB_ACTIONS").is_some()
-        || same_author_shared_identity
-    {
+    let attempts = if std::env::var_os("GITHUB_ACTIONS").is_some() || same_author_shared_identity {
         3
     } else {
         1

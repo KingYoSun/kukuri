@@ -463,17 +463,8 @@ impl AppService {
             )
             .await?;
         if effective_channel_id.is_none() {
-            if let Err(error) = self
-                .docs_sync
-                .restart_replica_sync(&topic_replica_id(topic_id))
-                .await
-            {
-                warn!(
-                    topic = %topic_id,
-                    error = %error,
-                    "failed to restart public replica sync after local post"
-                );
-            }
+            self.maybe_restart_replica_sync(topic_id, &topic_replica_id(topic_id))
+                .await;
             match self.get_sync_status().await {
                 Ok(status) => {
                     if let Some(topic_status) = status

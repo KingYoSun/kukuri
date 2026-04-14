@@ -712,10 +712,7 @@ fn public_replication_retry_schedule(
     step_timeout: Duration,
     same_author_shared_identity: bool,
 ) -> (usize, Duration) {
-    let attempts = if cfg!(target_os = "windows")
-        || std::env::var_os("GITHUB_ACTIONS").is_some()
-        || same_author_shared_identity
-    {
+    let attempts = if std::env::var_os("GITHUB_ACTIONS").is_some() || same_author_shared_identity {
         3
     } else {
         1
@@ -4963,20 +4960,12 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_connected_topic_peer_count(
-        &runtime_a,
-        topic,
-        1,
-        "community-node assist topic readiness timeout a",
-    )
-    .await;
-    wait_for_connected_topic_peer_count(
-        &runtime_b,
-        topic,
-        1,
-        "community-node assist topic readiness timeout b",
-    )
-    .await;
+    wait_for_direct_topic_peer_count_result(&runtime_a, topic, 1, Duration::from_secs(15))
+        .await
+        .expect("community-node assist direct topic readiness timeout a");
+    wait_for_direct_topic_peer_count_result(&runtime_b, topic, 1, Duration::from_secs(15))
+        .await
+        .expect("community-node assist direct topic readiness timeout b");
 
     let _object_id = replicate_public_post_from_original_publisher_with_retry(
         &runtime_a,
@@ -5159,20 +5148,12 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_connected_topic_peer_count(
-        &runtime_a,
-        topic,
-        1,
-        "community-node assist shared topic readiness timeout a",
-    )
-    .await;
-    wait_for_connected_topic_peer_count(
-        &runtime_b,
-        topic,
-        1,
-        "community-node assist shared topic readiness timeout b",
-    )
-    .await;
+    wait_for_direct_topic_peer_count_result(&runtime_a, topic, 1, Duration::from_secs(15))
+        .await
+        .expect("community-node assist shared direct topic readiness timeout a");
+    wait_for_direct_topic_peer_count_result(&runtime_b, topic, 1, Duration::from_secs(15))
+        .await
+        .expect("community-node assist shared direct topic readiness timeout b");
 
     let _object_id = replicate_public_post_from_original_publisher_with_retry(
         &runtime_a,
