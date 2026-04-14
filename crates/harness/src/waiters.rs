@@ -1190,6 +1190,51 @@ pub(crate) async fn refresh_public_pair(
     Ok(())
 }
 
+pub(crate) async fn wait_for_direct_public_pair_with_refresh(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    topic: &str,
+    step_timeout: Duration,
+    same_author_shared_identity: bool,
+) -> Result<()> {
+    let (attempts, attempt_timeout) =
+        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
+    let mut last_error = None;
+
+    for attempt in 1..=attempts {
+        let attempt_result = async {
+            refresh_public_pair(runtime_a, runtime_b, topic, attempt_timeout)
+                .await
+                .context("failed to refresh public topic before waiting for direct connectivity")?;
+            wait_for_direct_topic_peer_count(runtime_a, topic, 1, attempt_timeout)
+                .await
+                .context("desktop a did not observe direct public topic connectivity")?;
+            wait_for_direct_topic_peer_count(runtime_b, topic, 1, attempt_timeout)
+                .await
+                .context("desktop b did not observe direct public topic connectivity")?;
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+
+        match attempt_result {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < attempts => {
+                last_error = Some(format!("{error:#}"));
+                sleep(Duration::from_millis(250)).await;
+            }
+            Err(error) => {
+                last_error = Some(format!("{error:#}"));
+                break;
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "public pair did not observe direct topic connectivity before public events: {}",
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    );
+}
+
 pub(crate) async fn refresh_direct_message_pair(
     runtime_a: &DesktopRuntime,
     runtime_b: &DesktopRuntime,

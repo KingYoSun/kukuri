@@ -376,12 +376,14 @@ pub(crate) async fn run_community_node_connectivity(
         }
 
         let started_at = Instant::now();
-        wait_for_direct_topic_peer_count(&runtime_a, topic, 1, step_timeout)
-            .await
-            .context("desktop a did not observe direct public connectivity before public events")?;
-        wait_for_direct_topic_peer_count(&runtime_b, topic, 1, step_timeout)
-            .await
-            .context("desktop b did not observe direct public connectivity before public events")?;
+        wait_for_direct_public_pair_with_refresh(
+            &runtime_a,
+            &runtime_b,
+            topic,
+            step_timeout,
+            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
+        )
+        .await?;
         let post_id = runtime_a
             .create_post(CreatePostRequest {
                 topic: topic.to_string(),
