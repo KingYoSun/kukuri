@@ -23,7 +23,7 @@ use iroh::endpoint::{Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTranspo
 use iroh::protocol::Router;
 #[cfg(test)]
 use iroh::tls::CaRootsConfig;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey, TransportAddr};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{GossipHint, TopicId};
@@ -37,6 +37,7 @@ use tokio::sync::{Mutex, Notify, RwLock, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
+use tracing::{info, warn};
 
 use crate::config::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, SeedPeer,
@@ -58,6 +59,19 @@ fn initial_topic_join_timeout() -> Duration {
         Duration::from_secs(180)
     } else {
         Duration::from_secs(15)
+    }
+}
+
+fn direct_warmup_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
+    let direct_addrs = endpoint_addr
+        .ip_addrs()
+        .copied()
+        .map(TransportAddr::Ip)
+        .collect::<Vec<_>>();
+    if direct_addrs.is_empty() {
+        endpoint_addr.clone()
+    } else {
+        EndpointAddr::from_parts(endpoint_addr.id, direct_addrs)
     }
 }
 
@@ -239,12 +253,91 @@ impl IrohGossipTransport {
         self.subscribed_topics.lock().await.remove(topic);
     }
 
+    async fn extend_active_topic_peers(&self, endpoint_addrs: Vec<EndpointAddr>, reason: &str) {
+        if endpoint_addrs.is_empty() {
+            return;
+        }
+        let mut updates = Vec::new();
+        {
+            let mut topic_states = self.topic_states.lock().await;
+            for (topic, state) in topic_states.iter_mut() {
+                let mut join_peer_ids = Vec::new();
+                let mut added_peer_ids = Vec::new();
+                let mut join_endpoint_addrs = Vec::new();
+                for endpoint_addr in &endpoint_addrs {
+                    let peer_id = endpoint_addr.id.to_string();
+                    if state.bootstrap_peer_ids.insert(peer_id.clone()) {
+                        join_peer_ids.push(endpoint_addr.id);
+                        added_peer_ids.push(peer_id);
+                        join_endpoint_addrs.push(endpoint_addr.clone());
+                    }
+                }
+                if !join_peer_ids.is_empty() {
+                    updates.push((
+                        topic.clone(),
+                        state.sender.clone(),
+                        Arc::clone(&state.neighbors),
+                        added_peer_ids,
+                        join_peer_ids,
+                        join_endpoint_addrs,
+                    ));
+                }
+            }
+        }
+
+        for (topic, sender, neighbors, added_peer_ids, join_peer_ids, join_endpoint_addrs) in
+            updates
+        {
+            info!(
+                topic = %topic,
+                reason,
+                added_peer_ids = ?added_peer_ids,
+                "updating active gossip topic peers"
+            );
+            if let Err(error) = sender.lock().await.join_peers(join_peer_ids).await {
+                warn!(
+                    topic = %topic,
+                    reason,
+                    added_peer_ids = ?added_peer_ids,
+                    error = %error,
+                    "failed to join updated peers on active gossip topic"
+                );
+            }
+
+            let endpoint = self.endpoint.clone();
+            let gossip = self.gossip.clone();
+            tokio::spawn(async move {
+                let join_deadline = tokio::time::Instant::now() + initial_topic_join_timeout();
+                loop {
+                    let already_connected = {
+                        let guard = neighbors.read().await;
+                        join_endpoint_addrs
+                            .iter()
+                            .any(|peer| guard.contains(&peer.id.to_string()))
+                    };
+                    if already_connected || tokio::time::Instant::now() >= join_deadline {
+                        return;
+                    }
+                    for peer in &join_endpoint_addrs {
+                        let warmup_addr = direct_warmup_addr(peer);
+                        if let Ok(connection) = endpoint.connect(warmup_addr, GOSSIP_ALPN).await {
+                            let _ = gossip.handle_connection(connection).await;
+                        }
+                    }
+                    sleep(Duration::from_millis(100)).await;
+                }
+            });
+        }
+    }
+
     async fn insert_imported_peer_addr(&self, endpoint_addr: EndpointAddr) {
         self.discovery.add_endpoint_info(endpoint_addr.clone());
         self.imported_peers
             .lock()
             .await
-            .insert(endpoint_addr.id.to_string(), endpoint_addr);
+            .insert(endpoint_addr.id.to_string(), endpoint_addr.clone());
+        self.extend_active_topic_peers(vec![endpoint_addr], "imported-peer")
+            .await;
     }
 
     pub async fn peer_state(&self) -> TransportPeerState {
@@ -389,6 +482,7 @@ impl IrohGossipTransport {
         let (sender, mut receiver) = topic_handle.split();
         let (broadcaster, _) = broadcast::channel(256);
         let outbound = broadcaster.clone();
+        let topic_name = topic.as_str().to_string();
         let joined = Arc::new(AtomicBool::new(bootstrap_peers.is_empty()));
         let joined_notify = Arc::new(Notify::new());
         let joined_task_state = Arc::clone(&joined);
@@ -412,8 +506,9 @@ impl IrohGossipTransport {
                     let join_deadline = tokio::time::Instant::now() + join_timeout;
                     loop {
                         for peer in &warm_bootstrap_peers {
+                            let warmup_addr = direct_warmup_addr(peer);
                             if let Ok(connection) =
-                                warm_endpoint.connect(peer.clone(), GOSSIP_ALPN).await
+                                warm_endpoint.connect(warmup_addr, GOSSIP_ALPN).await
                             {
                                 let _ = warm_gossip.handle_connection(connection).await;
                             }
@@ -473,7 +568,15 @@ impl IrohGossipTransport {
                         joined_task_state.store(true, Ordering::SeqCst);
                         joined_task_notify.notify_waiters();
                         let mut guard = neighbors_task.write().await;
+                        let first_direct_peer = guard.is_empty();
                         guard.insert(peer_id.to_string());
+                        if first_direct_peer {
+                            info!(
+                                topic = %topic_name,
+                                peer_id = %peer_id,
+                                "gossip topic established direct peer"
+                            );
+                        }
                         *last_error_task.lock().await = None;
                         *transport_last_error.lock().await = None;
                     }
@@ -710,11 +813,18 @@ impl Transport for IrohGossipTransport {
             self.discovery.add_endpoint_info(endpoint_addr.clone());
             bootstrap.insert(endpoint_addr.id.to_string(), endpoint_addr);
         }
+        let updated_topic_peers = configured
+            .values()
+            .chain(bootstrap.values())
+            .cloned()
+            .collect::<Vec<_>>();
         *self.discovery_mode.lock().await = mode;
         *self.env_locked.lock().await = env_locked;
         *self.configured_seed_peers.lock().await = configured;
         *self.bootstrap_seed_peers.lock().await = bootstrap;
         *self.last_error.lock().await = None;
+        self.extend_active_topic_peers(updated_topic_peers, "seed-update")
+            .await;
         Ok(())
     }
 
@@ -1036,6 +1146,14 @@ mod tests {
         )
     }
 
+    fn seed_peer_from_ticket(ticket: &str) -> SeedPeer {
+        let (endpoint_id, addr_hint) = ticket.split_once('@').expect("ticket host");
+        SeedPeer {
+            endpoint_id: endpoint_id.to_string(),
+            addr_hint: Some(addr_hint.to_string()),
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn transport_two_process_hint_roundtrip_static_peer() {
         if std::env::var_os("GITHUB_ACTIONS").is_some() {
@@ -1126,6 +1244,168 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_import_ticket_updates_existing_topic_subscription() {
+        let transport_a = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport b");
+        let topic = TopicId::new("kukuri:topic:import-update");
+        let join_timeout = Duration::from_secs(10);
+        let peer_id_a = transport_a.endpoint.id().to_string();
+        let peer_id_b = transport_b.endpoint.id().to_string();
+        let (mut stream_a, mut stream_b) = tokio::try_join!(
+            transport_a.subscribe_hints(&topic),
+            transport_b.subscribe_hints(&topic)
+        )
+        .expect("subscribe both before import");
+
+        let ticket_a = transport_a
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = transport_b
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        transport_a
+            .import_ticket(&ticket_b)
+            .await
+            .expect("import b after subscribe");
+        transport_b
+            .import_ticket(&ticket_a)
+            .await
+            .expect("import a after subscribe");
+
+        wait_for_hint_roundtrip(
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut stream_a,
+                expected_source_peer: Some(peer_id_a.as_str()),
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: Some(peer_id_b.as_str()),
+            },
+            &topic,
+            join_timeout,
+            "import-update",
+        )
+        .await;
+
+        timeout(join_timeout, async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let peers_b = transport_b.peers().await.expect("peers b");
+                let direct_a = peers_a.topic_diagnostics.iter().any(|diag| {
+                    diag.topic == "hint/kukuri:topic:import-update"
+                        && !diag.connected_peers.is_empty()
+                });
+                let direct_b = peers_b.topic_diagnostics.iter().any(|diag| {
+                    diag.topic == "hint/kukuri:topic:import-update"
+                        && !diag.connected_peers.is_empty()
+                });
+                if direct_a && direct_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("direct topic update timeout");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_seed_update_updates_existing_topic_subscription() {
+        let transport_a = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_local()
+            .await
+            .expect("transport b");
+        let topic = TopicId::new("kukuri:topic:seed-update");
+        let join_timeout = Duration::from_secs(10);
+        let peer_id_a = transport_a.endpoint.id().to_string();
+        let peer_id_b = transport_b.endpoint.id().to_string();
+        let (mut stream_a, mut stream_b) = tokio::try_join!(
+            transport_a.subscribe_hints(&topic),
+            transport_b.subscribe_hints(&topic)
+        )
+        .expect("subscribe both before seed update");
+
+        let ticket_a = transport_a
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = transport_b
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![seed_peer_from_ticket(&ticket_b)],
+                Vec::new(),
+            )
+            .await
+            .expect("configure a after subscribe");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![seed_peer_from_ticket(&ticket_a)],
+                Vec::new(),
+            )
+            .await
+            .expect("configure b after subscribe");
+
+        wait_for_hint_roundtrip(
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut stream_a,
+                expected_source_peer: Some(peer_id_a.as_str()),
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: Some(peer_id_b.as_str()),
+            },
+            &topic,
+            join_timeout,
+            "seed-update",
+        )
+        .await;
+
+        timeout(join_timeout, async {
+            loop {
+                let peers_a = transport_a.peers().await.expect("peers a");
+                let peers_b = transport_b.peers().await.expect("peers b");
+                let direct_a = peers_a.topic_diagnostics.iter().any(|diag| {
+                    diag.topic == "hint/kukuri:topic:seed-update"
+                        && !diag.connected_peers.is_empty()
+                });
+                let direct_b = peers_b.topic_diagnostics.iter().any(|diag| {
+                    diag.topic == "hint/kukuri:topic:seed-update"
+                        && !diag.connected_peers.is_empty()
+                });
+                if direct_a && direct_b {
+                    return;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("direct seed update timeout");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

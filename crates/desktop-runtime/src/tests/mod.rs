@@ -712,10 +712,7 @@ fn public_replication_retry_schedule(
     step_timeout: Duration,
     same_author_shared_identity: bool,
 ) -> (usize, Duration) {
-    let attempts = if cfg!(target_os = "windows")
-        || std::env::var_os("GITHUB_ACTIONS").is_some()
-        || same_author_shared_identity
-    {
+    let attempts = if std::env::var_os("GITHUB_ACTIONS").is_some() || same_author_shared_identity {
         3
     } else {
         1
@@ -781,6 +778,107 @@ async fn replicate_public_post_from_original_publisher_with_retry(
         false,
     )
     .await
+}
+
+async fn refresh_public_pair_result(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    topic: &str,
+    step_timeout: Duration,
+) -> Result<()> {
+    let scope = TimelineScope::Public;
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await;
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await;
+    let _ = runtime_a
+        .list_live_sessions(ListLiveSessionsRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+        })
+        .await;
+    let _ = runtime_b
+        .list_live_sessions(ListLiveSessionsRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+        })
+        .await;
+    let _ = runtime_a
+        .list_game_rooms(ListGameRoomsRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+        })
+        .await;
+    let _ = runtime_b
+        .list_game_rooms(ListGameRoomsRequest {
+            topic: topic.to_string(),
+            scope,
+        })
+        .await;
+    wait_for_connected_topic_peer_count_result(runtime_a, topic, 1, step_timeout)
+        .await
+        .context("runtime a did not observe public topic connectivity")?;
+    wait_for_connected_topic_peer_count_result(runtime_b, topic, 1, step_timeout)
+        .await
+        .context("runtime b did not observe public topic connectivity")?;
+    Ok(())
+}
+
+async fn wait_for_direct_public_pair_with_refresh_result(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    topic: &str,
+    step_timeout: Duration,
+    same_author_shared_identity: bool,
+) -> Result<()> {
+    let (attempts, attempt_timeout) =
+        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
+    let mut last_error = None;
+
+    for attempt in 1..=attempts {
+        let attempt_result = async {
+            refresh_public_pair_result(runtime_a, runtime_b, topic, attempt_timeout)
+                .await
+                .context("failed to refresh public pair before waiting for direct connectivity")?;
+            wait_for_direct_topic_peer_count_result(runtime_a, topic, 1, attempt_timeout)
+                .await
+                .context("runtime a did not observe direct public topic connectivity")?;
+            wait_for_direct_topic_peer_count_result(runtime_b, topic, 1, attempt_timeout)
+                .await
+                .context("runtime b did not observe direct public topic connectivity")?;
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+
+        match attempt_result {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < attempts => {
+                last_error = Some(format!("{error:#}"));
+                sleep(Duration::from_millis(250)).await;
+            }
+            Err(error) => {
+                last_error = Some(format!("{error:#}"));
+                break;
+            }
+        }
+    }
+
+    bail!(
+        "public pair direct topic readiness timeout; {}",
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    );
 }
 
 async fn replicate_public_post_with_retry_inner(
@@ -4963,20 +5061,15 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_connected_topic_peer_count(
+    wait_for_direct_public_pair_with_refresh_result(
         &runtime_a,
-        topic,
-        1,
-        "community-node assist topic readiness timeout a",
-    )
-    .await;
-    wait_for_connected_topic_peer_count(
         &runtime_b,
         topic,
-        1,
-        "community-node assist topic readiness timeout b",
+        Duration::from_secs(15),
+        false,
     )
-    .await;
+    .await
+    .expect("community-node assist direct topic readiness timeout");
 
     let _object_id = replicate_public_post_from_original_publisher_with_retry(
         &runtime_a,
@@ -5159,20 +5252,15 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_connected_topic_peer_count(
+    wait_for_direct_public_pair_with_refresh_result(
         &runtime_a,
-        topic,
-        1,
-        "community-node assist shared topic readiness timeout a",
-    )
-    .await;
-    wait_for_connected_topic_peer_count(
         &runtime_b,
         topic,
-        1,
-        "community-node assist shared topic readiness timeout b",
+        Duration::from_secs(15),
+        true,
     )
-    .await;
+    .await
+    .expect("community-node assist shared direct topic readiness timeout");
 
     let _object_id = replicate_public_post_from_original_publisher_with_retry(
         &runtime_a,

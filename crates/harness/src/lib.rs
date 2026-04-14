@@ -47,12 +47,12 @@ pub(crate) use kukuri_core::{
 pub(crate) use kukuri_desktop_runtime::{
     AcceptCommunityNodeConsentsRequest, AuthorRequest, CommunityNodeTargetRequest,
     CreateAttachmentRequest, CreateGameRoomRequest, CreateLiveSessionRequest, CreatePostRequest,
-    CreatePrivateChannelRequest, DeleteDirectMessageMessageRequest, DesktopRuntime,
-    DirectMessageRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
+    CreatePrivateChannelRequest, CreateRepostRequest, DeleteDirectMessageMessageRequest,
+    DesktopRuntime, DirectMessageRequest, ExportPrivateChannelInviteRequest, GetBlobMediaRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListDirectMessageMessagesRequest,
     ListGameRoomsRequest, ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest,
-    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, SendDirectMessageRequest,
-    SetCommunityNodeConfigRequest,
+    ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, ReactionKeyRequest,
+    SendDirectMessageRequest, SetCommunityNodeConfigRequest, ToggleReactionRequest,
 };
 pub(crate) use kukuri_store::SqliteStore;
 pub(crate) use kukuri_transport::{

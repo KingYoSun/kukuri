@@ -29,7 +29,7 @@ pub use requests::{
     ListGameRoomsRequest, ListJoinedPrivateChannelsRequest, ListLiveSessionsRequest,
     ListProfileTimelineRequest, ListRecentReactionsRequest, ListSocialConnectionsRequest,
     ListThreadRequest, ListTimelineRequest, LiveSessionCommandRequest, NotificationIdRequest,
-    RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
+    ReactionKeyRequest, RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
     RotatePrivateChannelRequest, SendDirectMessageRequest, SetMyProfileRequest,
     ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
 };

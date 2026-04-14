@@ -929,7 +929,7 @@ async fn ensure_topic_subscription_recreates_finished_handle() {
 }
 
 #[tokio::test]
-async fn set_discovery_seeds_restarts_topic_hint_subscription() {
+async fn set_discovery_seeds_keeps_existing_topic_hint_subscription() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
@@ -961,9 +961,125 @@ async fn set_discovery_seeds_restarts_topic_hint_subscription() {
     .await
     .expect("set discovery seeds");
 
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+    assert!(hint_transport.unsubscribed_topics.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn import_peer_ticket_keeps_existing_topic_hint_subscription() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let hint_transport = Arc::new(TrackingHintTransport::default());
+    let docs_sync = Arc::new(TrackingDocsSync::default());
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport,
+        hint_transport.clone(),
+        docs_sync.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:hint-import";
+
+    let _ = app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe timeline");
+
+    app.import_peer_ticket("peer-ticket")
+        .await
+        .expect("import peer ticket");
+
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
+    assert!(hint_transport.unsubscribed_topics.lock().await.is_empty());
+    assert_eq!(docs_sync.subscribe_replicas.lock().await.len(), 1);
+}
+
+#[tokio::test]
+async fn local_public_post_coalesces_replica_sync_restarts() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let docs_sync = Arc::new(TrackingDocsSync::default());
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport.clone(),
+        transport,
+        docs_sync.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:post-restart-cooldown";
+
+    let _ = app
+        .create_post(topic, "first post", None)
+        .await
+        .expect("first post");
+    let _ = app
+        .create_post(topic, "second post", None)
+        .await
+        .expect("second post");
+
     assert_eq!(
-        hint_transport.unsubscribed_topics.lock().await.clone(),
-        vec![topic.to_string()]
+        docs_sync.restarted_replicas.lock().await.clone(),
+        vec![topic_replica_id(topic).as_str().to_string()]
+    );
+}
+
+#[tokio::test]
+async fn hint_miss_coalesces_replica_sync_restarts() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let hint_transport = Arc::new(TrackingHintTransport::default());
+    let docs_sync = Arc::new(TrackingDocsSync::default());
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport,
+        hint_transport.clone(),
+        docs_sync.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:hint-miss-cooldown";
+
+    let _ = app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe timeline");
+
+    let hint_topic = TopicId::new(topic);
+    for suffix in ["one", "two"] {
+        hint_transport
+            .publish_hint(
+                &hint_topic,
+                GossipHint::TopicObjectsChanged {
+                    topic_id: hint_topic.clone(),
+                    objects: vec![HintObjectRef {
+                        object_id: format!("missing-{suffix}"),
+                        object_kind: "post".into(),
+                    }],
+                },
+            )
+            .await
+            .expect("publish hint miss");
+    }
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if !docs_sync.restarted_replicas.lock().await.is_empty() {
+                return;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("restart should be requested");
+
+    assert_eq!(
+        docs_sync.restarted_replicas.lock().await.clone(),
+        vec![topic_replica_id(topic).as_str().to_string()]
     );
 }
 
@@ -1160,7 +1276,7 @@ async fn iroh_transport_syncs_post_between_apps() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
+async fn import_peer_ticket_updates_existing_topic_subscription_without_rebuild() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
     let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
@@ -1204,10 +1320,14 @@ async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
             let status_a = app_a.get_sync_status().await.expect("status a");
             let status_b = app_b.get_sync_status().await.expect("status b");
             let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic && topic_status.joined && topic_status.peer_count > 0
+                topic_status.topic == topic
+                    && topic_status.joined
+                    && !topic_status.connected_peers.is_empty()
             });
             let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic && topic_status.joined && topic_status.peer_count > 0
+                topic_status.topic == topic
+                    && topic_status.joined
+                    && !topic_status.connected_peers.is_empty()
             });
             if ready_a && ready_b {
                 return;
@@ -1216,7 +1336,7 @@ async fn import_peer_ticket_rebuilds_existing_topic_subscription() {
         }
     })
     .await
-    .expect("subscription rebuild timeout");
+    .expect("subscription update timeout");
 
     let object_id = app_a
         .create_post(topic, "hello after import", None)
@@ -1328,7 +1448,7 @@ async fn seeded_dht_syncs_post_between_apps_without_ticket_import() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn seeded_dht_rebuilds_existing_topic_subscription_after_seed_update() {
+async fn seeded_dht_updates_existing_topic_subscription_after_seed_update() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
     let testnet = Testnet::new(5).expect("testnet");
@@ -1369,14 +1489,16 @@ async fn seeded_dht_rebuilds_existing_topic_subscription_after_seed_update() {
         loop {
             let status_a = app_a.get_sync_status().await.expect("status a");
             let status_b = app_b.get_sync_status().await.expect("status b");
-            let ready_a = status_a
-                .topic_diagnostics
-                .iter()
-                .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
-            let ready_b = status_b
-                .topic_diagnostics
-                .iter()
-                .any(|topic_status| topic_status.topic == topic && topic_status.peer_count > 0);
+            let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
+                topic_status.topic == topic
+                    && topic_status.joined
+                    && !topic_status.connected_peers.is_empty()
+            });
+            let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
+                topic_status.topic == topic
+                    && topic_status.joined
+                    && !topic_status.connected_peers.is_empty()
+            });
             if ready_a && ready_b {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -1389,7 +1511,7 @@ async fn seeded_dht_rebuilds_existing_topic_subscription_after_seed_update() {
         }
     })
     .await
-    .expect("seeded dht topic rebind timeout");
+    .expect("seeded dht topic update timeout");
 
     let object_id = app_a
         .create_post(topic, "seeded dht rebind", None)

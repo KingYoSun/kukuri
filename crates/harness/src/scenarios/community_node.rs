@@ -6,6 +6,40 @@ pub(crate) enum CommunityNodeIdentityMode {
     SharedIdentity,
 }
 
+async fn wait_for_public_reaction_summary(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    object_id: &str,
+    normalized_reaction_key: &str,
+    expected_count: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    timeout(step_timeout, async {
+        loop {
+            let timeline = runtime
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.to_string(),
+                    scope: TimelineScope::Public,
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await?;
+            if timeline.items.iter().any(|item| {
+                item.object_id == object_id
+                    && item.reaction_summary.iter().any(|entry| {
+                        entry.normalized_reaction_key == normalized_reaction_key
+                            && entry.count >= expected_count
+                    })
+            }) {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .context("public reaction propagation timeout")?
+}
+
 pub(crate) async fn run_community_node_connectivity(
     scenario: &ScenarioSpec,
     artifacts_dir: &Path,
@@ -342,21 +376,70 @@ pub(crate) async fn run_community_node_connectivity(
         }
 
         let started_at = Instant::now();
-        let post_id = replicate_public_post_with_retry(
+        wait_for_direct_public_pair_with_refresh(
             &runtime_a,
             &runtime_b,
             topic,
-            "community node scenario post",
             step_timeout,
-            PublicReplicationDirection::PreferDirectConnectedSubscriber,
-            PublicReplicationLabels {
-                failure: "initial scenario post",
-                publisher: "desktop a",
-                subscriber: "desktop b",
-            },
+            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
         )
         .await?;
+        let post_id = runtime_a
+            .create_post(CreatePostRequest {
+                topic: topic.to_string(),
+                content: "community node scenario post".to_string(),
+                reply_to: None,
+                channel_ref: ChannelRef::Public,
+                attachments: Vec::new(),
+            })
+            .await
+            .context("failed to create scenario post on desktop a")?;
+        wait_for_topic_doc_index_entry(&runtime_a, topic, post_id.as_str(), step_timeout)
+            .await
+            .context("desktop a did not persist community post into docs index")?;
+        wait_for_timeline_object(&runtime_b, topic, post_id.as_str(), step_timeout)
+            .await
+            .context("desktop b did not receive community post in timeline")?;
         push_named_step(&mut steps, "post", started_at);
+
+        let started_at = Instant::now();
+        runtime_b
+            .toggle_reaction(ToggleReactionRequest {
+                target_topic_id: topic.to_string(),
+                target_object_id: post_id.clone(),
+                reaction_key: ReactionKeyRequest::Emoji {
+                    emoji: "🔥".to_string(),
+                },
+                channel_ref: None,
+            })
+            .await
+            .context("failed to toggle scenario reaction on desktop b")?;
+        wait_for_public_reaction_summary(
+            &runtime_a,
+            topic,
+            post_id.as_str(),
+            "emoji:🔥",
+            1,
+            step_timeout,
+        )
+        .await
+        .context("desktop a did not receive community reaction summary")?;
+        push_named_step(&mut steps, "reaction", started_at);
+
+        let started_at = Instant::now();
+        let repost_id = runtime_b
+            .create_repost(CreateRepostRequest {
+                topic: topic.to_string(),
+                source_topic: topic.to_string(),
+                source_object_id: post_id.clone(),
+                commentary: None,
+            })
+            .await
+            .context("failed to create scenario repost on desktop b")?;
+        wait_for_timeline_object(&runtime_a, topic, repost_id.as_str(), step_timeout)
+            .await
+            .context("desktop a did not receive community repost in timeline")?;
+        push_named_step(&mut steps, "repost", started_at);
 
         let started_at = Instant::now();
         let (reply_thread_attempts, reply_thread_timeout) = public_replication_retry_schedule(

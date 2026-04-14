@@ -75,6 +75,32 @@ pub(crate) const NOTIFICATION_PREVIEW_LIMIT: usize = 80;
 
 pub(crate) use crate::views::*;
 
+pub(crate) async fn maybe_restart_replica_sync_with_cooldown(
+    docs_sync: &dyn DocsSync,
+    deadlines: &Arc<Mutex<HashMap<String, i64>>>,
+    topic_id: &str,
+    replica: &ReplicaId,
+) {
+    let key = replica.as_str().to_string();
+    let now = Utc::now().timestamp();
+    {
+        let mut guard = deadlines.lock().await;
+        let next_due_at = guard.get(key.as_str()).copied().unwrap_or_default();
+        if next_due_at > now {
+            return;
+        }
+        guard.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
+    }
+    if let Err(error) = docs_sync.restart_replica_sync(replica).await {
+        warn!(
+            topic = %topic_id,
+            replica = %replica.as_str(),
+            error = %error,
+            "failed to restart replica sync"
+        );
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ProfileTimelineItem {
     Post(ProfilePost),
@@ -1015,6 +1041,7 @@ impl AppService {
         let blob_service = Arc::clone(&self.blob_service);
         let hint_transport = Arc::clone(&self.hint_transport);
         let last_sync = Arc::clone(&self.last_sync_ts);
+        let replica_sync_restart_deadlines = Arc::clone(&self.replica_sync_restart_deadlines);
         let topic = topic_id.to_string();
         let storage_channel_id = channel_storage_id(channel_id.as_ref());
         let local_author_pubkey = self.current_author_pubkey();
@@ -1150,15 +1177,14 @@ impl AppService {
                                         }
                                     };
                                     if hydrated == 0
-                                        && let Err(error) =
-                                            docs_sync.restart_replica_sync(&replica_for_task).await
                                     {
-                                        warn!(
-                                            topic = %topic,
-                                            replica = %replica_for_task.as_str(),
-                                            error = %error,
-                                            "failed to restart replica sync after hint miss"
-                                        );
+                                        maybe_restart_replica_sync_with_cooldown(
+                                            docs_sync.as_ref(),
+                                            &replica_sync_restart_deadlines,
+                                            topic.as_str(),
+                                            &replica_for_task,
+                                        )
+                                        .await;
                                     }
                                     if hydrated > 0 {
                                         *last_sync.lock().await = Some(Utc::now().timestamp_millis());
@@ -3091,24 +3117,13 @@ impl AppService {
     }
 
     pub(crate) async fn maybe_restart_replica_sync(&self, topic_id: &str, replica: &ReplicaId) {
-        let key = replica.as_str().to_string();
-        let now = Utc::now().timestamp();
-        {
-            let mut deadlines = self.replica_sync_restart_deadlines.lock().await;
-            let next_due_at = deadlines.get(key.as_str()).copied().unwrap_or_default();
-            if next_due_at > now {
-                return;
-            }
-            deadlines.insert(key, now.saturating_add(REPLICA_SYNC_RESTART_RETRY_SECONDS));
-        }
-        if let Err(error) = self.docs_sync.restart_replica_sync(replica).await {
-            warn!(
-                topic = %topic_id,
-                replica = %replica.as_str(),
-                error = %error,
-                "failed to restart replica sync"
-            );
-        }
+        maybe_restart_replica_sync_with_cooldown(
+            self.docs_sync.as_ref(),
+            &self.replica_sync_restart_deadlines,
+            topic_id,
+            replica,
+        )
+        .await;
     }
 
     pub(crate) async fn maybe_restart_private_channel_subscription(
