@@ -3344,7 +3344,9 @@ impl AppService {
             author: ReplyPreviewAuthorView {
                 pubkey: row.author_pubkey.clone(),
                 name: profile.as_ref().and_then(|value| value.name.clone()),
-                display_name: profile.as_ref().and_then(|value| value.display_name.clone()),
+                display_name: profile
+                    .as_ref()
+                    .and_then(|value| value.display_name.clone()),
                 picture: profile.as_ref().and_then(|value| value.picture.clone()),
                 picture_asset: profile
                     .as_ref()
