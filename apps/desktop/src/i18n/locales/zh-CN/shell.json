@@ -64,12 +64,12 @@
     "unread": "未读"
   },
   "settingsDrawer": {
-    "close": "关闭设置和诊断",
+    "close": "关闭设置",
     "currentSection": "当前部分",
     "eyebrow": "设置",
-    "open": "打开设置和诊断",
+    "open": "打开设置",
     "sectionsLabel": "设置部分",
-    "title": "设置与诊断"
+    "title": "设置"
   },
   "settingsSections": {
     "appearance": {

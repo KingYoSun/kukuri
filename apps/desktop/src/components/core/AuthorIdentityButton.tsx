@@ -22,20 +22,18 @@ export function AuthorIdentityButton({
   buttonClassName,
 }: AuthorIdentityButtonProps) {
   return (
-    <div className={cn('post-meta-author', className)}>
+    <button
+      className={cn('post-meta-author author-link', className, buttonClassName)}
+      type='button'
+      onClick={onClick}
+    >
       <AuthorAvatar
         label={label}
         picture={picture}
         size={avatarSize}
         testId={avatarTestId}
       />
-      <button
-        className={cn('author-link', buttonClassName)}
-        type='button'
-        onClick={onClick}
-      >
-        {label}
-      </button>
-    </div>
+      <span>{label}</span>
+    </button>
   );
 }

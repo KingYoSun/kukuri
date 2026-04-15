@@ -401,6 +401,70 @@ async fn private_channel_post_is_not_indexed_in_profile_timeline() {
 }
 
 #[tokio::test]
+async fn reply_posts_include_parent_preview_in_timeline_views() {
+    let (app, _, _, _) = local_app_with_memory_services();
+    let topic = "kukuri:topic:reply-preview";
+
+    let root_id = app
+        .create_post(topic, "root body", None)
+        .await
+        .expect("root post");
+    let reply_id = app
+        .create_post(topic, "reply body", Some(root_id.as_str()))
+        .await
+        .expect("reply post");
+
+    let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
+    let reply = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == reply_id)
+        .expect("reply post in timeline");
+    let preview = reply.reply_preview.as_ref().expect("reply preview");
+
+    assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
+    assert_eq!(preview.object_id, root_id);
+    assert_eq!(preview.topic, topic);
+    assert_eq!(preview.content, "root body");
+    assert_eq!(preview.root_id, None);
+    assert_eq!(preview.reply_to, None);
+}
+
+#[tokio::test]
+async fn reply_preview_is_omitted_when_parent_projection_is_unavailable() {
+    let (app, store, _, _) = local_app_with_memory_services();
+    let topic = "kukuri:topic:reply-preview-fallback";
+
+    let root_id = app
+        .create_post(topic, "root body", None)
+        .await
+        .expect("root post");
+    let reply_id = app
+        .create_post(topic, "reply body", Some(root_id.as_str()))
+        .await
+        .expect("reply post");
+
+    let reply_projection =
+        ProjectionStore::get_object_projection(store.as_ref(), &EnvelopeId::from(reply_id.clone()))
+            .await
+            .expect("reply projection lookup")
+            .expect("reply projection");
+    ProjectionStore::rebuild_object_projections(store.as_ref(), vec![reply_projection])
+        .await
+        .expect("rebuild reply-only projections");
+
+    let timeline = app.list_timeline(topic, None, 20).await.expect("timeline");
+    let reply = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == reply_id)
+        .expect("reply post in timeline");
+
+    assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
+    assert!(reply.reply_preview.is_none());
+}
+
+#[tokio::test]
 async fn set_my_profile_with_avatar_upload_persists_blob_backed_profile_and_author_view() {
     let (app, store, docs_sync, blob_service) = local_app_with_memory_services();
     let avatar_bytes = tiny_png_bytes();

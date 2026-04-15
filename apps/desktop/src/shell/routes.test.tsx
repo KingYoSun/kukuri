@@ -21,8 +21,9 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
   return render(<App api={api} />);
 }
 
-function expectActiveTopicBar(topic: string) {
-  expect(screen.getByRole('banner', { name: 'Active topic bar' })).toHaveTextContent(topic);
+function expectActiveTopic(topic: string) {
+  expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
+  expect(screen.getByRole('button', { name: topic }).closest('li')).toHaveClass('topic-item-active');
 }
 
 function getTimelineViewTabs() {
@@ -50,10 +51,8 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
-  expectActiveTopicBar('kukuri:topic:demo');
-  expect(
-    screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
-  ).not.toBeInTheDocument();
+  expectActiveTopic('kukuri:topic:demo');
+  expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
 });
 
 test('hash-backed route resolution preserves hash query during router hydration gaps', () => {
@@ -225,7 +224,7 @@ test('settings hash route opens the drawer and keeps the selected section in syn
   const user = userEvent.setup();
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
 
-  const drawer = await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
     expect(within(drawer).getByTestId('settings-section-discovery')).toHaveAttribute(
       'aria-current',

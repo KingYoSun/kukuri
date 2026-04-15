@@ -76,9 +76,12 @@ export type DesktopShellState = {
   composer: string;
   draftMediaItems: DraftMediaItem[];
   attachmentInputKey: number;
-  timelinesByTopic: Record<string, PostView[]>;
-  timelineNextCursorByTopic: Record<string, TimelineCursor | null>;
-  timelineLoadingMoreByTopic: Record<string, boolean>;
+  timelinesByKey: Record<string, PostView[]>;
+  timelineNextCursorByKey: Record<string, TimelineCursor | null>;
+  timelineLoadingMoreByKey: Record<string, boolean>;
+  pendingTimelineSnapshotsByKey: Record<string, PostView[]>;
+  pendingTimelineCountsByKey: Record<string, number>;
+  pendingTimelineNextCursorByKey: Record<string, TimelineCursor | null>;
   publicTimelinesByTopic: Record<string, PostView[]>;
   publicTimelineNextCursorByTopic: Record<string, TimelineCursor | null>;
   publicTimelineLoadingMoreByTopic: Record<string, boolean>;
@@ -172,6 +175,7 @@ export type DesktopShellState = {
   reactionPanelState: AsyncPanelState;
   reactionCreatePending: boolean;
   error: string | null;
+  lastNonNotificationsRoute: string | null;
   shellChromeState: ShellChromeState;
 };
 
@@ -204,6 +208,27 @@ export const SHELL_WORKSPACE_ID = 'shell-primary-workspace';
 export const SHELL_NAV_ID = 'shell-nav-rail';
 export const SHELL_CONTEXT_ID = 'shell-context-pane';
 export const SHELL_SETTINGS_ID = 'shell-settings-drawer';
+
+export function timelineScopeStorageKey(topic: string, scope: TimelineScope): string {
+  if (scope.kind === 'channel') {
+    return `${topic}::channel::${scope.channel_id}`;
+  }
+  return `${topic}::${scope.kind}`;
+}
+
+export function activeTimelineStorageKey(
+  state: Pick<DesktopShellState, 'timelineScopeByTopic'>,
+  topic: string
+): string {
+  return timelineScopeStorageKey(topic, state.timelineScopeByTopic[topic] ?? PUBLIC_TIMELINE_SCOPE);
+}
+
+export function timelineStorageKeyForChannel(topic: string, channelId: string | null): string {
+  return timelineScopeStorageKey(
+    topic,
+    channelId ? { kind: 'channel', channel_id: channelId } : PUBLIC_TIMELINE_SCOPE
+  );
+}
 
 export const DEFAULT_ASYNC_PANEL_STATE: AsyncPanelState = {
   status: 'loading',
@@ -305,15 +330,18 @@ export function createInitialShellState(): DesktopShellState {
     composer: '',
     draftMediaItems: [],
     attachmentInputKey: 0,
-    timelinesByTopic: {
-      [DEFAULT_TOPIC]: [],
+    timelinesByKey: {
+      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: [],
     },
-    timelineNextCursorByTopic: {
-      [DEFAULT_TOPIC]: null,
+    timelineNextCursorByKey: {
+      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: null,
     },
-    timelineLoadingMoreByTopic: {
-      [DEFAULT_TOPIC]: false,
+    timelineLoadingMoreByKey: {
+      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: false,
     },
+    pendingTimelineSnapshotsByKey: {},
+    pendingTimelineCountsByKey: {},
+    pendingTimelineNextCursorByKey: {},
     publicTimelinesByTopic: {
       [DEFAULT_TOPIC]: [],
     },
@@ -431,6 +459,7 @@ export function createInitialShellState(): DesktopShellState {
     reactionPanelState: DEFAULT_ASYNC_PANEL_STATE,
     reactionCreatePending: false,
     error: null,
+    lastNonNotificationsRoute: null,
     shellChromeState: {
       activePrimarySection: 'timeline',
       timelineView: 'feed',

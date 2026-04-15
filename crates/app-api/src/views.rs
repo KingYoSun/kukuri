@@ -23,6 +23,7 @@ pub struct PostView {
     pub attachments: Vec<AttachmentView>,
     pub created_at: i64,
     pub reply_to: Option<String>,
+    pub reply_preview: Option<ReplyPreviewView>,
     pub root_id: Option<String>,
     pub object_kind: String,
     pub published_topic_id: Option<String>,
@@ -36,6 +37,26 @@ pub struct PostView {
     pub reaction_summary: Vec<ReactionSummaryView>,
     #[serde(default)]
     pub my_reactions: Vec<ReactionKeyView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplyPreviewAuthorView {
+    pub pubkey: String,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub picture: Option<String>,
+    pub picture_asset: Option<ProfileAssetView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplyPreviewView {
+    pub object_id: String,
+    pub topic: String,
+    pub author: ReplyPreviewAuthorView,
+    pub content: String,
+    pub attachments: Vec<AttachmentView>,
+    pub root_id: Option<String>,
+    pub reply_to: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

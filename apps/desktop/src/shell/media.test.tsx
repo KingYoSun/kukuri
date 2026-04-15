@@ -353,7 +353,6 @@ test('video card renders object-url playback source when manifest payload is ava
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
-  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
   expect(video.getAttribute('src')).toContain('blob:mock-');
 });
 
@@ -412,7 +411,7 @@ test('video card falls back to poster preview when playback is unsupported on th
     expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
   });
   expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
-  expect(screen.getAllByText('unsupported on this client').length).toBeGreaterThan(0);
+  expect(screen.getByAltText('video poster')).toBeInTheDocument();
 });
 
 test('timeline image post switches to ready state when attachment becomes available', async () => {
@@ -428,7 +427,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByText('syncing image')).toBeInTheDocument();
+    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
 
   rerender(
@@ -453,7 +452,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByText('image ready')).toBeInTheDocument();
+    expect(screen.getByTestId('media-preview-image-post')).toBeInTheDocument();
   });
-  expect(screen.queryByText('syncing image')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -57,6 +57,15 @@ function createView(overrides?: Partial<PostCardView>): PostCardView {
   };
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event('resize'));
+}
+
 test('post card hides the object kind and shows a placeholder avatar when no picture is available', () => {
   render(
     <PostCard
@@ -86,6 +95,24 @@ test('post card renders the author image when one is available', () => {
     'src',
     'https://example.com/avatar.png'
   );
+});
+
+test('clicking the author avatar triggers the same author action as the name', async () => {
+  const user = userEvent.setup();
+  const onOpenAuthor = vi.fn();
+
+  render(
+    <PostCard
+      view={createView()}
+      onOpenAuthor={onOpenAuthor}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  await user.click(screen.getByTestId('post-1-author-avatar'));
+
+  expect(onOpenAuthor).toHaveBeenCalledWith('a'.repeat(64));
 });
 
 test('post card renders repost source context for quote reposts', () => {
@@ -122,6 +149,41 @@ test('post card renders repost source context for quote reposts', () => {
   expect(screen.getByText('original body')).toBeInTheDocument();
 });
 
+test('post card renders reply parent preview inline', () => {
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...createView().post,
+          reply_to: 'parent-1',
+          reply_preview: {
+            object_id: 'parent-1',
+            topic: 'kukuri:topic:source',
+            author: {
+              pubkey: 'b'.repeat(64),
+              name: 'parent-author',
+              display_name: 'Parent Author',
+              picture: null,
+              picture_asset: null,
+            },
+            content: 'parent body',
+            attachments: [],
+            root_id: 'parent-1',
+            reply_to: null,
+          },
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.getByText('Parent Author')).toBeInTheDocument();
+  expect(screen.getByText('parent body')).toBeInTheDocument();
+  expect(screen.getAllByText('Reply').length).toBeGreaterThan(0);
+});
+
 test('post card marks long content fields as wrap-safe', () => {
   const longContent = 'channel_payload_'.repeat(48);
   const longEnvelopeId = 'f'.repeat(192);
@@ -143,6 +205,55 @@ test('post card marks long content fields as wrap-safe', () => {
 
   expect(screen.getByText(longContent)).toHaveClass('post-copy-wrap');
   expect(screen.getByText(longEnvelopeId)).toHaveClass('post-copy-wrap');
+});
+
+test('post card opens a media dialog and navigates multi-image attachments', async () => {
+  const user = userEvent.setup();
+
+  render(
+    <PostCard
+      view={createView({
+        media: {
+          ...createView().media,
+          kind: 'image',
+          imagePreviewSrc: 'https://example.com/one.png',
+          imageGalleryItems: [
+            {
+              hash: 'image-1',
+              src: 'https://example.com/one.png',
+              mime: 'image/png',
+            },
+            {
+              hash: 'image-2',
+              src: 'https://example.com/two.png',
+              mime: 'image/png',
+            },
+          ],
+          currentImageIndex: 0,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  await user.click(screen.getByRole('button', { name: 'image attachment' }));
+
+  const dialog = screen.getByRole('dialog');
+  expect(dialog).toHaveClass('media-viewer-dialog');
+  expect(dialog.querySelector('.media-viewer-counter')).toBeNull();
+  expect(within(dialog).getByRole('img', { name: 'image attachment' })).toHaveAttribute(
+    'src',
+    'https://example.com/one.png'
+  );
+
+  await user.click(within(dialog).getByRole('button', { name: 'Next image' }));
+
+  expect(within(dialog).getByRole('img', { name: 'image attachment' })).toHaveAttribute(
+    'src',
+    'https://example.com/two.png'
+  );
 });
 
 test('simple repost opens the source thread in its published topic', async () => {
@@ -189,6 +300,7 @@ test('simple repost opens the source thread in its published topic', async () =>
 });
 
 test('post card toggles reaction summary chips and uses the reaction popover for recent and custom search', async () => {
+  setViewportWidth(280);
   const user = userEvent.setup();
   const onToggleReaction = vi.fn();
   const onBookmarkCustomReaction = vi.fn();
@@ -276,7 +388,37 @@ test('post card toggles reaction summary chips and uses the reaction popover for
 
   await user.click(screen.getByRole('button', { name: 'React' }));
   expect(screen.queryByRole('button', { name: 'Manage reactions' })).not.toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '🔥' }));
+  expect(screen.getByText('Recent')).toBeInTheDocument();
+  expect(screen.getByText('Emoji')).toBeInTheDocument();
+  expect(screen.getByText('Custom')).toBeInTheDocument();
+  const reactionPopover = screen.getByPlaceholderText('Search reactions').closest('.post-reaction-popover');
+  expect(reactionPopover).toHaveClass('post-reaction-popover-wide');
+  expect(reactionPopover).not.toHaveClass('post-action-popover');
+  expect(reactionPopover).toHaveStyle({ width: '248px' });
+  expect(reactionPopover).toHaveStyle({ '--reaction-grid-columns': '6' });
+  expect(screen.queryByText(bookmarkedAsset.asset_id)).not.toBeInTheDocument();
+  const emojiSection = screen.getByText('Emoji').closest('section');
+  if (!(emojiSection instanceof HTMLElement)) {
+    throw new Error('emoji section not found');
+  }
+  expect(emojiSection.querySelector('.post-reaction-picker-grid-8')).not.toBeNull();
+  expect(
+    within(emojiSection).getByRole('button', { name: 'thumbs-up' })
+  ).toHaveAttribute('data-tooltip', 'thumbs-up');
+  expect(screen.getByRole('button', { name: /saved-cat/i })).toHaveAttribute(
+    'data-tooltip',
+    'saved-cat'
+  );
+  setViewportWidth(1024);
+  await waitFor(() => {
+    expect(reactionPopover).toHaveStyle({ width: '410px' });
+    expect(reactionPopover).toHaveStyle({ '--reaction-grid-columns': '8' });
+  });
+  await user.click(
+    within(screen.getByText('Recent').closest('section') as HTMLElement).getByRole('button', {
+      name: 'fire',
+    })
+  );
   expect(onToggleReaction).toHaveBeenNthCalledWith(2, view.post, { kind: 'emoji', emoji: '🔥' });
 
   await user.click(screen.getByRole('button', { name: 'React' }));
@@ -342,6 +484,7 @@ test('post card renders bookmark as an icon-only action with an accessible label
 
   const bookmarkButton = screen.getByRole('button', { name: 'Remove bookmark' });
   expect(bookmarkButton).toHaveAttribute('aria-pressed', 'true');
+  expect(bookmarkButton).toHaveClass('post-action-button-active');
   expect(bookmarkButton).not.toHaveTextContent(/bookmark/i);
 
   await user.click(bookmarkButton);

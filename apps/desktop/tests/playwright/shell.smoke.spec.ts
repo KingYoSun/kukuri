@@ -5,6 +5,14 @@ async function openComposerDialog(page: Page) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
+async function expectActiveTopic(page: Page, topic: string) {
+  const navRail = page.getByRole('complementary', { name: 'Primary navigation' });
+  const topicItem = navRail
+    .getByRole('button', { name: topic, exact: true })
+    .locator('xpath=ancestor::li[1]');
+  await expect(topicItem).toHaveClass(/topic-item-active/);
+}
+
 test('browser mock wide shell keeps navigation rail beside the workspace', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
@@ -27,16 +35,12 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await page.setViewportSize({ width: 1400, height: 980 });
   await page.goto('/');
 
-  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
-    'kukuri:topic:demo'
-  );
+  await expectActiveTopic(page, 'kukuri:topic:demo');
 
   await page.getByPlaceholder('kukuri:topic:demo').fill('kukuri:topic:browser');
   await page.getByRole('button', { name: 'Add' }).click();
   await page.getByRole('button', { name: /^kukuri:topic:browser$/ }).click();
-  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
-    'kukuri:topic:browser'
-  );
+  await expectActiveTopic(page, 'kukuri:topic:browser');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('hello browser mock');
@@ -55,7 +59,7 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(page.getByRole('complementary', { name: 'Author' })).toBeVisible();
 
   await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(settingsDialog).toBeVisible();
   await settingsDialog.getByTestId('settings-section-discovery').click();
   await settingsDialog.getByPlaceholder('node_id or node_id@host:port').fill('seed-peer-1');
@@ -123,7 +127,7 @@ test('browser mock shell persists appearance theme changes across reloads', asyn
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await settingsDialog.getByTestId('settings-section-appearance').click();
   await settingsDialog.getByRole('radio', { name: /Light/i }).click();
 
@@ -144,7 +148,7 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await page.keyboard.press('Escape');
 
   await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await settingsDialog.getByTestId('settings-section-appearance').click();
   await settingsDialog.getByLabel('Language').selectOption('ja');
 
@@ -163,6 +167,46 @@ test('browser mock shell persists language changes across reloads', async ({ pag
   await expect(page.getByPlaceholder('投稿を書く')).toBeVisible();
 });
 
+test('browser mock settings drawer keeps the close button clear of content and captures wheel scrolling', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await page.goto('/');
+
+  await page.getByTestId('shell-settings-trigger').click();
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByTestId('settings-section-connectivity').click();
+
+  const closeButton = settingsDialog.getByRole('button', { name: 'Close settings' });
+  const syncStatusCard = settingsDialog
+    .getByRole('heading', { name: 'Sync Status' })
+    .locator('xpath=ancestor::section[1]');
+  const scrollContainer = settingsDialog.locator('.shell-settings-content');
+
+  await expect.poll(() =>
+    scrollContainer.evaluate((element) => element.scrollHeight > element.clientHeight)
+  ).toBeTruthy();
+
+  const closeBox = await closeButton.boundingBox();
+  const syncStatusBox = await syncStatusCard.boundingBox();
+
+  expect(closeBox).not.toBeNull();
+  expect(syncStatusBox).not.toBeNull();
+  expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(syncStatusBox!.y);
+
+  const scrollBox = await scrollContainer.boundingBox();
+  expect(scrollBox).not.toBeNull();
+
+  await page.mouse.move(
+    scrollBox!.x + scrollBox!.width / 2,
+    scrollBox!.y + Math.min(scrollBox!.height / 2, 220)
+  );
+  await page.mouse.wheel(0, 960);
+
+  await expect.poll(() => scrollContainer.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test('browser mock narrow shell keeps nav, context, and settings flows reachable without overflow', async ({
   page,
 }) => {
@@ -175,9 +219,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
 
   await page.getByTestId('shell-nav-trigger').click();
   await page.getByRole('button', { name: /^kukuri:topic:demo$/ }).click();
-  await expect(page.getByRole('banner', { name: 'Active topic bar' })).toContainText(
-    'kukuri:topic:demo'
-  );
+  await expectActiveTopic(page, 'kukuri:topic:demo');
 
   await openComposerDialog(page);
   await page.getByPlaceholder('Write a post').fill('narrow browser mock');
@@ -197,7 +239,7 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await page.goto('/');
   await page.getByTestId('shell-nav-trigger').click();
   await page.getByTestId('shell-settings-trigger').click();
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await settingsDialog.getByTestId('settings-section-connectivity').click();
   await settingsDialog.getByPlaceholder('nodeid@127.0.0.1:7777').fill('peer-b@127.0.0.1:8888');
   await settingsDialog.getByRole('button', { name: 'Import Peer' }).click();

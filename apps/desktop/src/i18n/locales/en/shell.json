@@ -64,12 +64,12 @@
     "unread": "Unread"
   },
   "settingsDrawer": {
-    "close": "Close settings and diagnostics",
+    "close": "Close settings",
     "currentSection": "Current section",
     "eyebrow": "Settings",
-    "open": "Open settings and diagnostics",
+    "open": "Open settings",
     "sectionsLabel": "Settings sections",
-    "title": "Settings & diagnostics"
+    "title": "Settings"
   },
   "settingsSections": {
     "appearance": {

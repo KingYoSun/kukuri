@@ -64,12 +64,12 @@
     "unread": "未読"
   },
   "settingsDrawer": {
-    "close": "設定と診断を閉じる",
+    "close": "設定を閉じる",
     "currentSection": "現在のセクション",
     "eyebrow": "設定",
-    "open": "設定と診断を開く",
+    "open": "設定を開く",
     "sectionsLabel": "設定セクション",
-    "title": "設定と診断"
+    "title": "設定"
   },
   "settingsSections": {
     "appearance": {

@@ -2,9 +2,8 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 
-import { Card, CardHeader } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 
 import { type AppearancePanelView } from './types';
@@ -24,17 +23,6 @@ export function AppearancePanel({
 
   return (
     <Card className='space-y-4'>
-      <CardHeader>
-        <h3>{t('settings:appearance.title')}</h3>
-        <small>
-          {view.selectedTheme === 'dark'
-            ? t('settings:appearance.darkSelected')
-            : t('settings:appearance.lightSelected')}
-        </small>
-      </CardHeader>
-
-      <Notice>{t('settings:appearance.themeHint')}</Notice>
-
       <div
         role='radiogroup'
         aria-label={t('settings:appearance.themeLabel')}
@@ -63,9 +51,6 @@ export function AppearancePanel({
               onClick={() => onThemeChange(option.value)}
             >
               <span className='block text-base font-semibold text-foreground'>{option.label}</span>
-              <span className='mt-2 block text-sm leading-6 text-[var(--muted-foreground)]'>
-                {option.description}
-              </span>
               <span
                 className={cn(
                   'mt-4 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]',
@@ -97,8 +82,6 @@ export function AppearancePanel({
           ))}
         </Select>
       </Label>
-
-      <Notice>{t('settings:appearance.languageHint')}</Notice>
     </Card>
   );
 }

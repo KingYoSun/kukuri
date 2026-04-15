@@ -30,10 +30,12 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import {
+  activeTimelineStorageKey,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
   REFRESH_INTERVAL_MS,
   STATUS_REFRESH_INTERVAL_MS,
+  timelineScopeStorageKey,
   type DraftMediaItem,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
@@ -107,8 +109,9 @@ export function useDesktopShellData({
   const selectedDirectMessageTimeline =
     state.directMessageTimelineByPeer[state.selectedDirectMessagePeerPubkey ?? ''] ??
     EMPTY_DIRECT_MESSAGE_TIMELINE;
+  const activeTimelineKey = activeTimelineStorageKey(state, activeTopic);
   const activePublicTimeline = state.publicTimelinesByTopic[activeTopic] ?? EMPTY_POSTS;
-  const activeTimeline = state.timelinesByTopic[activeTopic] ?? EMPTY_POSTS;
+  const activeTimeline = state.timelinesByKey[activeTimelineKey] ?? EMPTY_POSTS;
   const activeGameRooms = gameRoomsByTopic[activeTopic] ?? EMPTY_GAME_ROOMS;
   const activeJoinedChannels = joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
   const selectedPrivateChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
@@ -118,9 +121,16 @@ export function useDesktopShellData({
   const loadTopicsWaitersRef = useRef<LoadTopicsWaiter[]>([]);
   const visibleRefreshInFlightRef = useRef(false);
 
-  const setTimelinesByTopic = useDesktopShellFieldSetter('timelinesByTopic');
-  const setTimelineNextCursorByTopic = useDesktopShellFieldSetter('timelineNextCursorByTopic');
-  const setTimelineLoadingMoreByTopic = useDesktopShellFieldSetter('timelineLoadingMoreByTopic');
+  const setTimelinesByKey = useDesktopShellFieldSetter('timelinesByKey');
+  const setTimelineNextCursorByKey = useDesktopShellFieldSetter('timelineNextCursorByKey');
+  const setTimelineLoadingMoreByKey = useDesktopShellFieldSetter('timelineLoadingMoreByKey');
+  const setPendingTimelineSnapshotsByKey = useDesktopShellFieldSetter(
+    'pendingTimelineSnapshotsByKey'
+  );
+  const setPendingTimelineCountsByKey = useDesktopShellFieldSetter('pendingTimelineCountsByKey');
+  const setPendingTimelineNextCursorByKey = useDesktopShellFieldSetter(
+    'pendingTimelineNextCursorByKey'
+  );
   const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
   const setPublicTimelineNextCursorByTopic = useDesktopShellFieldSetter(
     'publicTimelineNextCursorByTopic'
@@ -300,21 +310,84 @@ export function useDesktopShellData({
     return [...localPosts, ...incoming.filter((post) => !localObjectIds.has(post.object_id))];
   }, []);
 
+  const clearPendingTimeline = useCallback(
+    (key: string) => {
+      setPendingTimelineSnapshotsByKey((current) => {
+        if (!current[key]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setPendingTimelineCountsByKey((current) => {
+        if (!current[key]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setPendingTimelineNextCursorByKey((current) => {
+        if (!(key in current)) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    },
+    [
+      setPendingTimelineCountsByKey,
+      setPendingTimelineNextCursorByKey,
+      setPendingTimelineSnapshotsByKey,
+    ]
+  );
+
+  const applyPendingTimeline = useCallback(
+    (
+      topic: string,
+      scope = storeApi.getState().timelineScopeByTopic[topic] ??
+        privateTimelineScope(storeApi.getState().selectedChannelIdByTopic[topic] ?? null)
+    ) => {
+      const key = timelineScopeStorageKey(topic, scope);
+      const currentState = storeApi.getState();
+      const pendingItems = currentState.pendingTimelineSnapshotsByKey[key];
+      if (!pendingItems || pendingItems.length === 0) {
+        return false;
+      }
+      startTransition(() => {
+        setTimelinesByKey((current) => ({
+          ...current,
+          [key]: mergeLocalPosts(current[key] ?? EMPTY_POSTS, pendingItems),
+        }));
+        setTimelineNextCursorByKey((current) => ({
+          ...current,
+          [key]: currentState.pendingTimelineNextCursorByKey[key] ?? null,
+        }));
+      });
+      clearPendingTimeline(key);
+      return true;
+    },
+    [clearPendingTimeline, mergeLocalPosts, setTimelineNextCursorByKey, setTimelinesByKey, storeApi]
+  );
+
   const refreshVisibleShellData = useCallback(
-    async (topic: string, currentThread: string | null) => {
+    async (
+      topic: string,
+      currentThread: string | null,
+      mode: 'apply' | 'buffer' = 'buffer'
+    ) => {
       const requestId = loadTopicsRequestRef.current + 1;
       loadTopicsRequestRef.current = requestId;
       const currentState = storeApi.getState();
       const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
+      const timelineScope = privateTimelineScope(selectedChannelId);
+      const timelineKey = timelineScopeStorageKey(topic, timelineScope);
 
       try {
         const [timeline, publicTimeline, joinedChannels, threadView, status] = await Promise.all([
-          api.listTimeline(
-            topic,
-            null,
-            VISIBLE_TIMELINE_LIMIT,
-            privateTimelineScope(selectedChannelId)
-          ),
+          api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, timelineScope),
           api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
           api.listJoinedPrivateChannels(topic),
           currentThread
@@ -328,14 +401,42 @@ export function useDesktopShellData({
         }
 
         startTransition(() => {
-          setTimelinesByTopic((current) => ({
-            ...current,
-            [topic]: mergeLocalPosts(current[topic] ?? EMPTY_POSTS, timeline.items),
-          }));
-          setTimelineNextCursorByTopic((current) => ({
-            ...current,
-            [topic]: timeline.next_cursor ?? null,
-          }));
+          const baselinePosts = currentState.timelinesByKey[timelineKey] ?? EMPTY_POSTS;
+          const authoritativeIds = new Set(
+            baselinePosts
+              .filter((post) => !post.local_state)
+              .map((post) => post.server_object_id ?? post.object_id)
+          );
+          const hasAuthoritativeBaseline = authoritativeIds.size > 0;
+          const pendingCount = timeline.items.filter(
+            (post) => !authoritativeIds.has(post.object_id)
+          ).length;
+          const shouldBuffer = mode === 'buffer' && hasAuthoritativeBaseline && pendingCount > 0;
+
+          if (shouldBuffer) {
+            setPendingTimelineSnapshotsByKey((current) => ({
+              ...current,
+              [timelineKey]: timeline.items,
+            }));
+            setPendingTimelineCountsByKey((current) => ({
+              ...current,
+              [timelineKey]: pendingCount,
+            }));
+            setPendingTimelineNextCursorByKey((current) => ({
+              ...current,
+              [timelineKey]: timeline.next_cursor ?? null,
+            }));
+          } else {
+            setTimelinesByKey((current) => ({
+              ...current,
+              [timelineKey]: mergeLocalPosts(current[timelineKey] ?? EMPTY_POSTS, timeline.items),
+            }));
+            setTimelineNextCursorByKey((current) => ({
+              ...current,
+              [timelineKey]: timeline.next_cursor ?? null,
+            }));
+            clearPendingTimeline(timelineKey);
+          }
           setPublicTimelinesByTopic((current) => ({
             ...current,
             [topic]: mergeLocalPosts(current[topic] ?? EMPTY_POSTS, publicTimeline.items),
@@ -374,16 +475,20 @@ export function useDesktopShellData({
     [
       api,
       mergeLocalPosts,
+      clearPendingTimeline,
       loadTopicsRequestRef,
       setError,
       setJoinedChannelsByTopic,
+      setPendingTimelineCountsByKey,
+      setPendingTimelineNextCursorByKey,
+      setPendingTimelineSnapshotsByKey,
       setPublicTimelineNextCursorByTopic,
       setPublicTimelinesByTopic,
       setSyncStatus,
       setThread,
       setThreadNextCursorById,
-      setTimelineNextCursorByTopic,
-      setTimelinesByTopic,
+      setTimelineNextCursorByKey,
+      setTimelinesByKey,
       storeApi,
       translate,
     ]
@@ -392,14 +497,15 @@ export function useDesktopShellData({
   const loadMoreTimeline = useCallback(
     async (topic: string) => {
       const currentState = storeApi.getState();
-      const cursor = currentState.timelineNextCursorByTopic[topic] ?? null;
-      if (!cursor || currentState.timelineLoadingMoreByTopic[topic]) {
+      const timelineKey = activeTimelineStorageKey(currentState, topic);
+      const cursor = currentState.timelineNextCursorByKey[timelineKey] ?? null;
+      if (!cursor || currentState.timelineLoadingMoreByKey[timelineKey]) {
         return;
       }
       const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
-      setTimelineLoadingMoreByTopic((current) => ({
+      setTimelineLoadingMoreByKey((current) => ({
         ...current,
-        [topic]: true,
+        [timelineKey]: true,
       }));
       try {
         const timeline = await api.listTimeline(
@@ -409,28 +515,28 @@ export function useDesktopShellData({
           privateTimelineScope(selectedChannelId)
         );
         startTransition(() => {
-          setTimelinesByTopic((current) => ({
+          setTimelinesByKey((current) => ({
             ...current,
-            [topic]: mergeUniquePosts(current[topic] ?? EMPTY_POSTS, timeline.items),
+            [timelineKey]: mergeUniquePosts(current[timelineKey] ?? EMPTY_POSTS, timeline.items),
           }));
-          setTimelineNextCursorByTopic((current) => ({
+          setTimelineNextCursorByKey((current) => ({
             ...current,
-            [topic]: timeline.next_cursor ?? null,
+            [timelineKey]: timeline.next_cursor ?? null,
           }));
         });
       } finally {
-        setTimelineLoadingMoreByTopic((current) => ({
+        setTimelineLoadingMoreByKey((current) => ({
           ...current,
-          [topic]: false,
+          [timelineKey]: false,
         }));
       }
     },
     [
       api,
       mergeUniquePosts,
-      setTimelineLoadingMoreByTopic,
-      setTimelineNextCursorByTopic,
-      setTimelinesByTopic,
+      setTimelineLoadingMoreByKey,
+      setTimelineNextCursorByKey,
+      setTimelinesByKey,
       storeApi,
     ]
   );
@@ -472,9 +578,37 @@ export function useDesktopShellData({
     ]
   );
 
+  const loadReactionCatalogData = useCallback(async () => {
+    try {
+      const [ownedAssets, bookmarkedAssets, recent] = await Promise.all([
+        api.listMyCustomReactionAssets(),
+        api.listBookmarkedCustomReactions(),
+        api.listRecentReactions(8),
+      ]);
+      startTransition(() => {
+        setOwnedReactionAssets(ownedAssets);
+        setBookmarkedReactionAssets(bookmarkedAssets);
+        setRecentReactions(recent);
+        setReactionPanelState({ status: 'ready', error: null });
+      });
+    } catch (error) {
+      setReactionPanelState({
+        status: 'error',
+        error: messageFromError(error, translate('common:errors.failedToLoadSettings')),
+      });
+    }
+  }, [
+    api,
+    setBookmarkedReactionAssets,
+    setOwnedReactionAssets,
+    setReactionPanelState,
+    setRecentReactions,
+    translate,
+  ]);
+
   const runLoadTopics = useCallback(
     async (_currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
-      await refreshVisibleShellData(currentActiveTopic, currentThread);
+      await refreshVisibleShellData(currentActiveTopic, currentThread, 'apply');
 
       const currentState = storeApi.getState();
       const selectedChannelId = currentState.selectedChannelIdByTopic[currentActiveTopic] ?? null;
@@ -769,19 +903,10 @@ export function useDesktopShellData({
 
         if (activeSettingsSection === 'reactions') {
           tasks.push(
-            Promise.all([
-              api.listMyCustomReactionAssets(),
-              api.listBookmarkedCustomReactions(),
-              api.listBookmarkedPosts(),
-              api.listRecentReactions(8),
-            ])
-              .then(([ownedAssets, bookmarkedAssets, bookmarkedPosts, recent]) => {
+            Promise.all([api.listBookmarkedPosts(), loadReactionCatalogData()])
+              .then(([bookmarkedPosts]) => {
                 startTransition(() => {
-                  setOwnedReactionAssets(ownedAssets);
-                  setBookmarkedReactionAssets(bookmarkedAssets);
                   setBookmarkedPosts(bookmarkedPosts);
-                  setRecentReactions(recent);
-                  setReactionPanelState({ status: 'ready', error: null });
                 });
               })
               .catch((error) => {
@@ -800,7 +925,6 @@ export function useDesktopShellData({
       api,
       setAuthorError,
       setBookmarkedPosts,
-      setBookmarkedReactionAssets,
       setCommunityNodeConfig,
       setCommunityNodeError,
       setCommunityNodeInput,
@@ -824,19 +948,18 @@ export function useDesktopShellData({
       setNotificationAutoReadError,
       setNotificationPanelState,
       setNotificationStatus,
-      setOwnedReactionAssets,
       setProfileDraft,
       setProfileError,
       setProfilePanelState,
       setProfileTimelineNextCursor,
       setProfileTimeline,
       setReactionPanelState,
-      setRecentReactions,
       setSelectedAuthor,
       setSelectedAuthorTimelineNextCursor,
       setSelectedAuthorTimeline,
       setSocialConnections,
       setSocialConnectionsPanelState,
+      loadReactionCatalogData,
       refreshVisibleShellData,
       storeApi,
       translate,
@@ -891,9 +1014,19 @@ export function useDesktopShellData({
 
   const refreshVisibleTimelineAfterPublish = useCallback(
     async (topic: string, currentThread: string | null) => {
-      await refreshVisibleShellData(topic, currentThread);
+      await refreshVisibleShellData(topic, currentThread, 'apply');
     },
     [refreshVisibleShellData]
+  );
+
+  const refreshTimelineFeed = useCallback(
+    async (topic: string, currentThread: string | null) => {
+      if (applyPendingTimeline(topic)) {
+        return;
+      }
+      await refreshVisibleShellData(topic, currentThread, 'apply');
+    },
+    [applyPendingTimeline, refreshVisibleShellData]
   );
 
   useEffect(() => {
@@ -909,7 +1042,7 @@ export function useDesktopShellData({
       }
       visibleRefreshInFlightRef.current = true;
       try {
-        await refreshVisibleShellData(activeTopic, selectedThread);
+        await refreshVisibleShellData(activeTopic, selectedThread, 'buffer');
       } finally {
         visibleRefreshInFlightRef.current = false;
       }
@@ -1560,6 +1693,9 @@ export function useDesktopShellData({
     loadTopics,
     refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
+    refreshTimelineFeed,
+    applyPendingTimeline,
+    loadReactionCatalogData,
     loadMoreTimeline,
     loadMoreThread,
     rememberDraftPreview,

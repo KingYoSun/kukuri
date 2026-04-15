@@ -24,6 +24,7 @@ type ThreadPanelProps = {
   recentReactions?: RecentReactionView[];
   onToggleReaction?: (post: PostCardView['post'], reactionKey: ReactionKeyInput) => void;
   onBookmarkCustomReaction?: (asset: CustomReactionAssetView) => void;
+  onReactionPickerOpen?: () => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
   hasMore?: boolean;
@@ -47,6 +48,7 @@ export function ThreadPanel({
   recentReactions,
   onToggleReaction,
   onBookmarkCustomReaction,
+  onReactionPickerOpen,
   onRetryLocalPost,
   onRestoreLocalPost,
   hasMore = false,
@@ -73,6 +75,7 @@ export function ThreadPanel({
         recentReactions={recentReactions}
         onToggleReaction={onToggleReaction}
         onBookmarkCustomReaction={onBookmarkCustomReaction}
+        onReactionPickerOpen={onReactionPickerOpen}
         onRetryLocalPost={onRetryLocalPost}
         onRestoreLocalPost={onRestoreLocalPost}
         hasMore={hasMore}

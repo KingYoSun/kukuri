@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, Lock, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Bell, BookPlus, GitBranchPlus, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
@@ -30,7 +30,6 @@ import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
-import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import { type PrimarySection } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
@@ -61,6 +61,7 @@ import {
   SHELL_NAV_ID,
   SHELL_SETTINGS_ID,
   SHELL_WORKSPACE_ID,
+  timelineScopeStorageKey,
   type DesktopShellPageProps,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
@@ -71,7 +72,6 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import {
-  audienceLabelForTimelineScope,
   authorDisplayLabel,
   authorViewFromDirectMessageConversation,
   communityNodesToEditorValue,
@@ -114,8 +114,8 @@ export function DesktopShellPage({
     topicInput,
     composer,
     attachmentInputKey,
-    timelineNextCursorByTopic,
-    timelineLoadingMoreByTopic,
+    timelineNextCursorByKey,
+    timelineLoadingMoreByKey,
     selectedThread,
     threadNextCursorById,
     threadLoadingMoreById,
@@ -146,6 +146,7 @@ export function DesktopShellPage({
     notificationStatus,
     notificationPanelState,
     notificationAutoReadError,
+    pendingTimelineCountsByKey,
     selectedDirectMessagePeerPubkey,
     directMessages,
     directMessageComposer,
@@ -178,6 +179,8 @@ export function DesktopShellPage({
   const [liveCreateDialogOpen, setLiveCreateDialogOpen] = useState(false);
   const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
+  const [profileAvatarCropFile, setProfileAvatarCropFile] = useState<File | null>(null);
+  const [profileAvatarCropOpen, setProfileAvatarCropOpen] = useState(false);
   const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
   const previousTimelineViewRef = useRef(shellChromeState.timelineView);
@@ -268,8 +271,9 @@ export function DesktopShellPage({
 
   const {
     loadTopics,
-    refreshVisibleShellData,
     refreshVisibleTimelineAfterPublish,
+    refreshTimelineFeed,
+    loadReactionCatalogData,
     loadMoreTimeline,
     loadMoreThread,
     rememberDraftPreview,
@@ -298,6 +302,7 @@ export function DesktopShellPage({
     setSettingsOpen,
     setPrimarySectionRef,
     focusPrimarySection,
+    toggleNotificationsSection,
     focusTimelineView,
     closeAuthorPane,
     closeThreadPane,
@@ -321,7 +326,7 @@ export function DesktopShellPage({
 
   const {
     handleProfileFieldChange,
-    handleProfileAvatarSelection,
+    handleProfileAvatarFile,
     handleClearProfileAvatar,
     resetProfileDraft,
     handleSaveProfile,
@@ -428,7 +433,6 @@ export function DesktopShellPage({
     settingsSectionCopy,
     activeComposeAudienceLabel,
     activeTimelineScope,
-    activeJoinedChannels,
     activeGameRooms,
     activeSocialConnectionViews,
     activeChannelPanelState,
@@ -452,8 +456,10 @@ export function DesktopShellPage({
     () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
     [bookmarkedPosts]
   );
-  const activeTimelineHasMore = Boolean(timelineNextCursorByTopic[activeTopic]);
-  const activeTimelineLoadingMore = timelineLoadingMoreByTopic[activeTopic] ?? false;
+  const activeTimelineKey = timelineScopeStorageKey(activeTopic, activeTimelineScope);
+  const activeTimelinePendingCount = pendingTimelineCountsByKey[activeTimelineKey] ?? 0;
+  const activeTimelineHasMore = Boolean(timelineNextCursorByKey[activeTimelineKey]);
+  const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
   const selectedThreadHasMore = selectedThread
     ? Boolean(threadNextCursorById[selectedThread])
     : false;
@@ -519,12 +525,14 @@ export function DesktopShellPage({
       type='button'
       aria-current={shellChromeState.activePrimarySection === 'notifications' ? 'page' : undefined}
       onClick={() => {
-        setNotificationAutoReadError(null);
-        setNotificationPanelState({
-          status: 'loading',
-          error: null,
-        });
-        focusPrimarySection('notifications');
+        if (shellChromeState.activePrimarySection !== 'notifications') {
+          setNotificationAutoReadError(null);
+          setNotificationPanelState({
+            status: 'loading',
+            error: null,
+          });
+        }
+        toggleNotificationsSection();
       }}
     >
       <Bell className='size-4' aria-hidden='true' />
@@ -600,7 +608,7 @@ export function DesktopShellPage({
         aria-label={t('channels:title')}
         onClick={() => setChannelDialogOpen(true)}
       >
-        <Lock className='size-4' aria-hidden='true' />
+        <GitBranchPlus className='size-4' aria-hidden='true' />
       </Button>
     </div>
   );
@@ -1105,6 +1113,7 @@ export function DesktopShellPage({
             recentReactions={recentReactions}
             onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
             onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+            onReactionPickerOpen={() => void loadReactionCatalogData()}
           />
         </ContextPane>
       ) : null}
@@ -1153,7 +1162,6 @@ export function DesktopShellPage({
     <>
       <ShellFrame
         skipTargetId={SHELL_WORKSPACE_ID}
-        topBar={<ShellTopBar activeTopic={activeTopic} />}
         navRail={
           <ShellNavRail
             railId={SHELL_NAV_ID}
@@ -1170,8 +1178,14 @@ export function DesktopShellPage({
                     onChange={(event) => setTopicInput(event.target.value)}
                     placeholder={t('shell:navigation.placeholder')}
                   />
-                  <Button variant='secondary' onClick={() => void handleAddTopic()}>
-                    {t('common:actions.add')}
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    type='button'
+                    aria-label={t('common:actions.add')}
+                    onClick={() => void handleAddTopic()}
+                  >
+                    <BookPlus className='size-4' aria-hidden='true' />
                   </Button>
                 </div>
               </Label>
@@ -1230,37 +1244,14 @@ export function DesktopShellPage({
                             </button>
                           ))}
                         </div>
-                        {shellChromeState.timelineView === 'feed' ? (
-                          <>
-                            <span className='relationship-badge'>
-                              {t('common:audience.viewing', {
-                                audience: audienceLabelForTimelineScope(
-                                  activeTimelineScope,
-                                  activeJoinedChannels
-                                ),
-                              })}
-                            </span>
-                            <span className='relationship-badge relationship-badge-direct'>
-                              {t('common:audience.posting', {
-                                audience: activeComposeAudienceLabel,
-                              })}
-                            </span>
-                          </>
-                        ) : (
+                        {shellChromeState.timelineView === 'bookmarks' ? (
                           <span className='relationship-badge'>
                             {t('shell:workspace.savedCount', {
                               count: bookmarkedTimelinePostViews.length,
                             })}
                           </span>
-                        )}
+                        ) : null}
                       </div>
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        onClick={() => void refreshVisibleShellData(activeTopic, selectedThread)}
-                      >
-                        {t('common:actions.refresh')}
-                      </Button>
                     </div>
                     {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
                   </Card>
@@ -1284,12 +1275,17 @@ export function DesktopShellPage({
                         recentReactions={recentReactions}
                         onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
                         onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                        onReactionPickerOpen={() => void loadReactionCatalogData()}
                         showBookmarkAction={true}
                         bookmarkedPostIds={bookmarkedPostIds}
                         onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
                         hasMore={activeTimelineHasMore}
                         loadingMore={activeTimelineLoadingMore}
                         onLoadMore={() => void loadMoreTimeline(activeTopic)}
+                        pendingCount={activeTimelinePendingCount}
+                        onApplyPending={() =>
+                          void refreshTimelineFeed(activeTopic, selectedThread)
+                        }
                       />
                     ) : (
                       <TimelineFeed
@@ -1310,6 +1306,7 @@ export function DesktopShellPage({
                         recentReactions={recentReactions}
                         onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
                         onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                        onReactionPickerOpen={() => void loadReactionCatalogData()}
                         showBookmarkAction={true}
                         bookmarkedPostIds={bookmarkedPostIds}
                         onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
@@ -1561,7 +1558,12 @@ export function DesktopShellPage({
                       pictureInputKey={profileAvatarInputKey}
                       onFieldChange={handleProfileFieldChange}
                       onPictureSelect={(event) => {
-                        void handleProfileAvatarSelection(event);
+                        const file = event.target.files?.[0] ?? null;
+                        if (!file) {
+                          return;
+                        }
+                        setProfileAvatarCropFile(file);
+                        setProfileAvatarCropOpen(true);
                       }}
                       onPictureClear={handleClearProfileAvatar}
                       onBack={openProfileOverview}
@@ -1641,6 +1643,27 @@ export function DesktopShellPage({
             {t('shell:navigation.topicsButton')}
           </Button>
         }
+      />
+
+      <ImageCropDialog
+        open={profileAvatarCropOpen}
+        file={profileAvatarCropFile}
+        title={t('profile:editor.picture')}
+        description={t('profile:editor.pictureCropDescription', {
+          defaultValue: 'Drag and zoom to choose the visible square for your avatar.',
+        })}
+        confirmLabel={t('common:actions.save')}
+        onOpenChange={(open) => {
+          setProfileAvatarCropOpen(open);
+          if (!open) {
+            setProfileAvatarCropFile(null);
+          }
+        }}
+        onConfirm={async ({ croppedFile }) => {
+          await handleProfileAvatarFile(croppedFile);
+          setProfileAvatarCropOpen(false);
+          setProfileAvatarCropFile(null);
+        }}
       />
 
       <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>

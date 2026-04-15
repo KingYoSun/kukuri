@@ -37,12 +37,18 @@ export type ComposerDraftMediaView = {
 export type PostMediaView = {
   objectId: string;
   kind: 'image' | 'video' | null;
-  statusLabel: string | null;
+  statusLabel?: string | null;
   extraAttachmentCount: number;
   state: 'loading' | 'ready';
   metaMime?: string | null;
   metaBytesLabel?: string | null;
   imagePreviewSrc?: string | null;
+  imageGalleryItems?: Array<{
+    hash: string;
+    src: string | null;
+    mime: string;
+  }>;
+  currentImageIndex?: number;
   videoPosterPreviewSrc?: string | null;
   videoPlaybackSrc?: string | null;
   videoUnsupportedOnClient: boolean;

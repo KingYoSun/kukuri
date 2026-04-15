@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PanelLeftOpen, Settings } from 'lucide-react';
+import { BookPlus, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TopicNavList } from '@/components/core/TopicNavList';
@@ -14,7 +14,6 @@ import i18n from '@/i18n';
 import { ContextPane } from './ContextPane';
 import { ShellFrame } from './ShellFrame';
 import { ShellNavRail } from './ShellNavRail';
-import { ShellTopBar } from './ShellTopBar';
 
 const meta = {
   title: 'Shell/ShellFrame',
@@ -33,7 +32,6 @@ function ShellFrameStory() {
     <div style={{ width: '1440px', minWidth: '1440px', margin: '0 auto' }}>
       <ShellFrame
         skipTargetId='storybook-shell-workspace'
-        topBar={<ShellTopBar activeTopic='kukuri:topic:demo' />}
         navRail={
           <ShellNavRail
             railId='storybook-shell-nav'
@@ -56,13 +54,22 @@ function ShellFrameStory() {
                 <span>{i18n.t('shell:navigation.addTopic')}</span>
                 <div className='topic-input-row'>
                   <Input value='kukuri:topic:demo' onChange={() => undefined} />
-                  <Button variant='secondary' type='button'>
-                    {i18n.t('common:actions.add')}
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    type='button'
+                    aria-label={i18n.t('common:actions.add')}
+                  >
+                    <BookPlus className='size-4' aria-hidden='true' />
                   </Button>
                 </div>
               </Label>
             }
-            channelAction={<Button variant='secondary'>Private Channels</Button>}
+            channelAction={
+              <Button variant='secondary' size='icon' type='button' aria-label='Private Channels'>
+                <GitBranchPlus className='size-4' aria-hidden='true' />
+              </Button>
+            }
             topicList={
               <TopicNavList
                 items={topicItems}

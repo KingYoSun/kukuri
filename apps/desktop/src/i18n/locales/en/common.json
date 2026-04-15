@@ -4,6 +4,7 @@
     "add": "Add",
     "authenticate": "Authenticate",
     "bookmark": "Bookmark",
+    "cancel": "Cancel",
     "clear": "Clear",
     "consents": "Consents",
     "end": "End",
@@ -28,7 +29,8 @@
     "rotate": "Rotate",
     "save": "Save",
     "unmute": "Unmute",
-    "unfollow": "Unfollow"
+    "unfollow": "Unfollow",
+    "zoom": "Zoom"
   },
   "composer": {
     "clearQuoteRepost": "Clear quote repost",
@@ -79,6 +81,7 @@
     "localFailed": "Publish failed",
     "localPosting": "Posting…",
     "localSyncing": "Syncing…",
+    "pendingPosts": "Show {{count}} new post",
     "quoteRepost": "Quote repost",
     "reposted": "Reposted"
   },
@@ -122,7 +125,9 @@
     "videoPosterAlt": "video poster"
   },
   "reactions": {
+    "custom": "Custom",
     "recent": "Recent",
+    "emoji": "Emoji",
     "customResults": "Search results",
     "searchPlaceholder": "Search reactions",
     "searchHint": "Search by emoji or custom reaction key.",

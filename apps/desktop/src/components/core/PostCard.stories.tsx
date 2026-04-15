@@ -36,7 +36,6 @@ function createView(overrides?: Partial<PostCardView>): PostCardView {
     media: {
       objectId: 'post-1',
       kind: null,
-      statusLabel: null,
       extraAttachmentCount: 0,
       state: 'ready',
       metaMime: null,
@@ -77,7 +76,6 @@ export const ImagePending: Story = {
       media: {
         objectId: 'image-post',
         kind: 'image',
-        statusLabel: 'syncing image',
         extraAttachmentCount: 0,
         state: 'loading',
         metaMime: 'image/png',
@@ -97,13 +95,25 @@ export const ImageReady: Story = {
       media: {
         objectId: 'image-post',
         kind: 'image',
-        statusLabel: 'image ready',
         extraAttachmentCount: 0,
         state: 'ready',
         metaMime: 'image/png',
         metaBytesLabel: '2.0 KB',
         imagePreviewSrc:
           'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"><rect width="640" height="360" fill="%2300b3a4"/><circle cx="180" cy="120" r="42" fill="%23ffd36e"/><path d="M0 280l120-100 80 70 110-130 130 160H0z" fill="%230f2231"/></svg>',
+        imageGalleryItems: [
+          {
+            hash: 'image-1',
+            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"><rect width="640" height="360" fill="%2300b3a4"/><circle cx="180" cy="120" r="42" fill="%23ffd36e"/><path d="M0 280l120-100 80 70 110-130 130 160H0z" fill="%230f2231"/></svg>',
+            mime: 'image/png',
+          },
+          {
+            hash: 'image-2',
+            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23f59d62"/><path d="M0 260l140-90 120 80 140-130 240 140H0z" fill="%23101923"/></svg>',
+            mime: 'image/png',
+          },
+        ],
+        currentImageIndex: 0,
         videoPosterPreviewSrc: null,
         videoPlaybackSrc: null,
         videoUnsupportedOnClient: false,
@@ -119,7 +129,6 @@ export const VideoPosterOnly: Story = {
       media: {
         objectId: 'video-post',
         kind: 'video',
-        statusLabel: 'poster ready',
         extraAttachmentCount: 1,
         state: 'ready',
         metaMime: 'video/mp4',
@@ -141,7 +150,6 @@ export const VideoPlayable: Story = {
       media: {
         objectId: 'video-post',
         kind: 'video',
-        statusLabel: 'playable video',
         extraAttachmentCount: 0,
         state: 'ready',
         metaMime: 'video/mp4',
@@ -163,7 +171,6 @@ export const UnsupportedVideo: Story = {
       media: {
         objectId: 'video-post',
         kind: 'video',
-        statusLabel: 'unsupported on this client',
         extraAttachmentCount: 0,
         state: 'ready',
         metaMime: 'video/mp4',
