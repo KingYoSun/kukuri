@@ -41,6 +41,7 @@ import {
   type SupportedLocale,
 } from '@/i18n';
 import {
+  activeTimelineStorageKey,
   DEFAULT_ASYNC_PANEL_STATE,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
@@ -101,7 +102,7 @@ export function useDesktopShellViewModels({
   const activeTopic = state.activeTopic;
   const selectedPrivateChannelId = state.selectedChannelIdByTopic[activeTopic] ?? null;
   const activeJoinedChannels = state.joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
-  const activeTimeline = state.timelinesByTopic[activeTopic] ?? EMPTY_POSTS;
+  const activeTimeline = state.timelinesByKey[activeTimelineStorageKey(state, activeTopic)] ?? EMPTY_POSTS;
   const activeLiveSessions = state.liveSessionsByTopic[activeTopic] ?? EMPTY_LIVE_SESSIONS;
   const activeGameRooms = state.gameRoomsByTopic[activeTopic] ?? EMPTY_GAME_ROOMS;
   const activeTimelineScope = state.timelineScopeByTopic[activeTopic] ?? { kind: 'public' as const };
@@ -324,6 +325,19 @@ export function useDesktopShellViewModels({
       const primaryImage = selectPrimaryImage(post);
       const videoPoster = selectVideoPoster(post);
       const videoManifest = selectVideoManifest(post);
+      const imageGalleryItems = post.attachments
+        .filter(
+          (attachment) =>
+            attachment.mime.startsWith('image/') && attachment.role !== 'video_poster'
+        )
+        .map((attachment) => ({
+          hash: attachment.hash,
+          src:
+            typeof mediaObjectUrls[attachment.hash] === 'string'
+              ? mediaObjectUrls[attachment.hash]
+              : null,
+          mime: attachment.mime,
+        }));
       const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
       const mediaMetaAttachment =
         mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
@@ -380,20 +394,6 @@ export function useDesktopShellViewModels({
             });
           }
         };
-      const mediaStatusLabel =
-        mediaKind === 'video'
-          ? videoUnsupportedOnClient
-            ? translate('common:media.unsupportedOnClient')
-            : videoPlaybackSrc
-              ? translate('common:media.playableVideo')
-              : videoPosterPreviewSrc
-                ? translate('common:media.posterReady')
-                : translate('common:media.syncingPoster')
-          : mediaKind === 'image'
-            ? imagePreviewSrc
-              ? translate('common:media.imageReady')
-              : translate('common:media.syncingImage')
-            : null;
       const publishedTopicId = publishedTopicIdForPost(post);
       const threadTargetId =
         post.object_kind === 'repost' && !isQuoteRepost(post) && post.repost_of
@@ -436,7 +436,6 @@ export function useDesktopShellViewModels({
         media: {
           objectId: post.object_id,
           kind: mediaKind,
-          statusLabel: mediaStatusLabel,
           extraAttachmentCount,
           state:
             mediaKind === 'video'
@@ -451,6 +450,13 @@ export function useDesktopShellViewModels({
           metaMime: mediaMetaAttachment?.mime ?? null,
           metaBytesLabel: mediaMetaAttachment ? formatBytes(mediaMetaAttachment.bytes, locale) : null,
           imagePreviewSrc,
+          imageGalleryItems,
+          currentImageIndex: primaryImage
+            ? Math.max(
+                0,
+                imageGalleryItems.findIndex((item) => item.hash === primaryImage.hash)
+              )
+            : 0,
           videoPosterPreviewSrc,
           videoPlaybackSrc,
           videoUnsupportedOnClient,
@@ -477,7 +483,6 @@ export function useDesktopShellViewModels({
       mediaObjectUrls,
       setUnsupportedVideoManifests,
       syncStatus.local_author_pubkey,
-      translate,
       unsupportedVideoManifests,
     ]
   );

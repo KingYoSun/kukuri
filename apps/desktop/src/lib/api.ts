@@ -53,6 +53,7 @@ export type PostView = {
   attachments: AttachmentView[];
   created_at: number;
   reply_to?: string | null;
+  reply_preview?: ReplyPreviewView | null;
   root_id?: string | null;
   published_topic_id?: string | null;
   origin_topic_id?: string | null;
@@ -69,6 +70,24 @@ export type PostView = {
   server_object_id?: string | null;
   local_draft?: LocalPostDraft | null;
   local_draft_media_items?: LocalDraftMediaItem[] | null;
+};
+
+export type ReplyPreviewAuthorView = {
+  pubkey: string;
+  name?: string | null;
+  display_name?: string | null;
+  picture?: string | null;
+  picture_asset?: ProfileAssetView | null;
+};
+
+export type ReplyPreviewView = {
+  object_id: string;
+  topic: string;
+  author: ReplyPreviewAuthorView;
+  content: string;
+  attachments: AttachmentView[];
+  root_id?: string | null;
+  reply_to?: string | null;
 };
 
 export type CustomReactionAssetView = {

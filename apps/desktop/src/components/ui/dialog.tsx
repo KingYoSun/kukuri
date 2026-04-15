@@ -62,6 +62,13 @@ export const DialogBody = ({
   <div className={cn('ui-dialog-body', className)} {...props} />
 );
 
+export const DialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn('ui-dialog-footer', className)} {...props} />
+);
+
 export const DialogTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>

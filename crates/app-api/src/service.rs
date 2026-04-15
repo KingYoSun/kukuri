@@ -3269,6 +3269,9 @@ impl AppService {
             ),
             None => None,
         };
+        let reply_preview = self
+            .reply_preview_for_object_id(row.reply_to_object_id.as_ref(), profiles)
+            .await?;
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
             .await;
@@ -3300,6 +3303,7 @@ impl AppService {
             attachments,
             created_at: row.created_at,
             reply_to: row.reply_to_object_id.clone().map(|id| id.0),
+            reply_preview,
             root_id: row.root_object_id.clone().map(|id| id.0),
             object_kind: row.object_kind.clone(),
             published_topic_id: Some(row.topic_id.clone()),
@@ -3312,6 +3316,45 @@ impl AppService {
             reaction_summary: reaction_state.reaction_summary,
             my_reactions: reaction_state.my_reactions,
         })
+    }
+
+    pub(crate) async fn reply_preview_for_object_id(
+        &self,
+        object_id: Option<&EnvelopeId>,
+        profiles: &HashMap<String, Profile>,
+    ) -> Result<Option<ReplyPreviewView>> {
+        let Some(object_id) = object_id else {
+            return Ok(None);
+        };
+        let Some(row) = self
+            .projection_store
+            .get_object_projection(object_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let attachments = self.attachment_views_for_projection_row(&row).await?;
+        let profile = match profiles.get(row.author_pubkey.as_str()) {
+            Some(profile) => Some(profile.clone()),
+            None => self.store.get_profile(row.author_pubkey.as_str()).await?,
+        };
+        Ok(Some(ReplyPreviewView {
+            object_id: row.object_id.0.clone(),
+            topic: row.topic_id.clone(),
+            author: ReplyPreviewAuthorView {
+                pubkey: row.author_pubkey.clone(),
+                name: profile.as_ref().and_then(|value| value.name.clone()),
+                display_name: profile.as_ref().and_then(|value| value.display_name.clone()),
+                picture: profile.as_ref().and_then(|value| value.picture.clone()),
+                picture_asset: profile
+                    .as_ref()
+                    .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
+            },
+            content: row.content.unwrap_or_else(|| "[blob pending]".to_string()),
+            attachments,
+            root_id: row.root_object_id.map(|id| id.0),
+            reply_to: row.reply_to_object_id.map(|id| id.0),
+        }))
     }
 
     pub(crate) async fn attachment_views_for_projection_row(
@@ -3370,6 +3413,10 @@ impl AppService {
         let reaction_state = self
             .reaction_state_for_target(&row.source_replica_id, &row.source_object_id)
             .await?;
+        let empty_profiles = HashMap::new();
+        let reply_preview = self
+            .reply_preview_for_object_id(row.reply_to_object_id.as_ref(), &empty_profiles)
+            .await?;
 
         Ok(BookmarkedPostView {
             bookmarked_at: row.bookmarked_at,
@@ -3397,6 +3444,7 @@ impl AppService {
                 attachments,
                 created_at: row.created_at,
                 reply_to: row.reply_to_object_id.map(|id| id.0),
+                reply_preview,
                 root_id: row.root_object_id.map(|id| id.0),
                 published_topic_id: Some(row.topic_id.clone()),
                 origin_topic_id: Some(row.topic_id.clone()),
@@ -3422,6 +3470,10 @@ impl AppService {
                 self.current_author_pubkey().as_str(),
                 profile_post.author_pubkey.as_str(),
             )
+            .await?;
+        let empty_profiles = HashMap::new();
+        let reply_preview = self
+            .reply_preview_for_object_id(profile_post.reply_to_object_id.as_ref(), &empty_profiles)
             .await?;
 
         Ok(PostView {
@@ -3452,6 +3504,7 @@ impl AppService {
             .await?,
             created_at: profile_post.created_at,
             reply_to: profile_post.reply_to_object_id.map(|id| id.0),
+            reply_preview,
             root_id: profile_post.root_id.map(|id| id.0),
             published_topic_id: Some(profile_post.published_topic_id.as_str().to_string()),
             origin_topic_id: Some(profile_post.published_topic_id.as_str().to_string()),
@@ -3505,6 +3558,7 @@ impl AppService {
             attachments: Vec::new(),
             created_at: profile_repost.created_at,
             reply_to: None,
+            reply_preview: None,
             root_id: None,
             published_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),
             origin_topic_id: Some(profile_repost.published_topic_id.as_str().to_string()),

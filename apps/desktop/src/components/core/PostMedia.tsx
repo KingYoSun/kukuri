@@ -5,9 +5,10 @@ import { type PostMediaView } from './types';
 
 type PostMediaProps = {
   media: PostMediaView;
+  onOpenImage?: (index: number) => void;
 };
 
-export function PostMedia({ media }: PostMediaProps) {
+export function PostMedia({ media, onOpenImage }: PostMediaProps) {
   const { t } = useTranslation('common');
 
   if (!media.kind) {
@@ -22,7 +23,6 @@ export function PostMedia({ media }: PostMediaProps) {
         }
       >
         <div className='media-badges'>
-          {media.statusLabel ? <span className='media-status-badge'>{media.statusLabel}</span> : null}
           {media.kind === 'video' ? <span className='media-type-badge'>{t('media.video')}</span> : null}
           {media.extraAttachmentCount > 0 ? (
             <span className='media-count-badge'>+{media.extraAttachmentCount}</span>
@@ -47,12 +47,19 @@ export function PostMedia({ media }: PostMediaProps) {
             data-testid={`media-preview-${media.objectId}`}
           />
         ) : media.kind === 'image' && media.imagePreviewSrc ? (
-          <img
-            className='media-preview'
-            src={media.imagePreviewSrc}
-            alt={t('media.imageAlt')}
-            data-testid={`media-preview-${media.objectId}`}
-          />
+          <button
+            className='media-image-trigger'
+            type='button'
+            onClick={() => onOpenImage?.(media.currentImageIndex ?? 0)}
+            aria-label={t('media.imageAlt')}
+          >
+            <img
+              className='media-preview'
+              src={media.imagePreviewSrc}
+              alt={t('media.imageAlt')}
+              data-testid={`media-preview-${media.objectId}`}
+            />
+          </button>
         ) : (
           <div
             className='media-skeleton'

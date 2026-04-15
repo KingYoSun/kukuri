@@ -52,6 +52,9 @@
   --ring: rgba(0, 179, 164, 0.45);
   --shadow-panel: 0 18px 60px rgba(2, 7, 15, 0.22);
   --shadow-button-primary: 0 10px 28px rgba(245, 157, 98, 0.16);
+  --scrollbar-track: #12202c;
+  --scrollbar-thumb: #2a4d56;
+  --scrollbar-thumb-hover: #38717c;
 }
 
 :root[data-theme='light'] {
@@ -100,6 +103,9 @@
   --ring: rgba(15, 140, 130, 0.32);
   --shadow-panel: 0 18px 48px rgba(33, 48, 59, 0.12);
   --shadow-button-primary: 0 10px 24px rgba(215, 125, 69, 0.18);
+  --scrollbar-track: #edf2f6;
+  --scrollbar-thumb: #b8c6d2;
+  --scrollbar-thumb-hover: #93a8b8;
 }
 
 @theme inline {

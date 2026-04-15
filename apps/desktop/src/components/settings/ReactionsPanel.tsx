@@ -1,7 +1,8 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
@@ -17,36 +18,6 @@ type ReactionsPanelProps = {
   onRemoveBookmark: (assetId: string) => void;
 };
 
-type CropDraft = {
-  x: number;
-  y: number;
-  size: number;
-  width: number;
-  height: number;
-};
-
-function centeredCrop(width: number, height: number): CropDraft {
-  const size = Math.min(width, height);
-  return {
-    x: Math.floor((width - size) / 2),
-    y: Math.floor((height - size) / 2),
-    size,
-    width,
-    height,
-  };
-}
-
-function clampCrop(crop: CropDraft): CropDraft {
-  const maxSize = Math.max(1, Math.min(crop.width, crop.height));
-  const size = Math.min(Math.max(1, crop.size), maxSize);
-  return {
-    ...crop,
-    size,
-    x: Math.min(Math.max(0, crop.x), Math.max(0, crop.width - size)),
-    y: Math.min(Math.max(0, crop.y), Math.max(0, crop.height - size)),
-  };
-}
-
 export function ReactionsPanel({
   view,
   creating,
@@ -57,9 +28,11 @@ export function ReactionsPanel({
   const { t } = useTranslation(['settings', 'common']);
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [draftPreviewUrl, setDraftPreviewUrl] = useState<string | null>(null);
-  const [draftCrop, setDraftCrop] = useState<CropDraft | null>(null);
+  const [draftCrop, setDraftCrop] = useState<CustomReactionCropRect | null>(null);
   const [draftSearchKey, setDraftSearchKey] = useState('');
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropDialogFile, setCropDialogFile] = useState<File | null>(null);
 
   useEffect(() => {
     return () => {
@@ -69,43 +42,14 @@ export function ReactionsPanel({
     };
   }, [draftPreviewUrl]);
 
-  const cropPreviewStyle = useMemo(() => {
-    if (!draftPreviewUrl || !draftCrop) {
-      return undefined;
-    }
-    const backgroundScale = 128 / draftCrop.size;
-    return {
-      backgroundImage: `url(${draftPreviewUrl})`,
-      backgroundSize: `${draftCrop.width * backgroundScale}px ${draftCrop.height * backgroundScale}px`,
-      backgroundPosition: `${-draftCrop.x * backgroundScale}px ${-draftCrop.y * backgroundScale}px`,
-    };
-  }, [draftCrop, draftPreviewUrl]);
-
-  const handleDraftFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleDraftFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) {
       return;
     }
-    if (draftPreviewUrl) {
-      URL.revokeObjectURL(draftPreviewUrl);
-    }
-    const nextUrl = URL.createObjectURL(file);
-    setDraftPreviewUrl(nextUrl);
-    setDraftFile(file);
-    setDraftSearchKey('');
+    setCropDialogFile(file);
+    setCropDialogOpen(true);
     setDraftError(null);
-    try {
-      const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-        image.onerror = () => reject(new Error('failed to read image dimensions'));
-        image.src = nextUrl;
-      });
-      setDraftCrop(centeredCrop(dimensions.width, dimensions.height));
-    } catch (error) {
-      setDraftCrop(null);
-      setDraftError(error instanceof Error ? error.message : 'failed to read image dimensions');
-    }
   };
 
   return (
@@ -117,73 +61,32 @@ export function ReactionsPanel({
         </div>
         <Label>
           <span>{t('reactions.uploadLabel')}</span>
-          <Input type='file' accept='image/*,.gif' onChange={(event) => void handleDraftFileChange(event)} />
+          <Input type='file' accept='image/*,.gif' onChange={handleDraftFileChange} />
         </Label>
         {draftError ? <Notice tone='destructive'>{draftError}</Notice> : null}
         {draftFile && draftPreviewUrl && draftCrop ? (
           <div className='reactions-editor-grid'>
-            <div className='reactions-editor-source'>
-              <img src={draftPreviewUrl} alt={draftFile.name} className='reactions-editor-image' />
-              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>
-                  {t('reactions.sourceSize', {
-                    width: draftCrop.width,
-                    height: draftCrop.height,
-                  })}
-                </span>
+            <div className='shell-main-stack'>
+              <div className='reactions-preview-card'>
+                <div
+                  className='reactions-preview-thumb'
+                  style={{ backgroundImage: `url(${draftPreviewUrl})` }}
+                  aria-label={t('reactions.preview')}
+                />
+                <small>{t('reactions.previewHint')}</small>
               </div>
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => {
+                  setCropDialogFile(draftFile);
+                  setCropDialogOpen(true);
+                }}
+              >
+                {t('reactions.editCrop', { defaultValue: 'Edit crop' })}
+              </Button>
             </div>
             <div className='shell-main-stack'>
-              <div className='reactions-crop-fields'>
-                <Label>
-                  <span>X</span>
-                  <Input
-                    type='number'
-                    min={0}
-                    max={Math.max(0, draftCrop.width - draftCrop.size)}
-                    value={draftCrop.x}
-                    onChange={(event) =>
-                      setDraftCrop((current) =>
-                        current
-                          ? clampCrop({ ...current, x: Number(event.target.value) || 0 })
-                          : current
-                      )
-                    }
-                  />
-                </Label>
-                <Label>
-                  <span>Y</span>
-                  <Input
-                    type='number'
-                    min={0}
-                    max={Math.max(0, draftCrop.height - draftCrop.size)}
-                    value={draftCrop.y}
-                    onChange={(event) =>
-                      setDraftCrop((current) =>
-                        current
-                          ? clampCrop({ ...current, y: Number(event.target.value) || 0 })
-                          : current
-                      )
-                    }
-                  />
-                </Label>
-                <Label>
-                  <span>{t('reactions.cropSize')}</span>
-                  <Input
-                    type='number'
-                    min={1}
-                    max={Math.min(draftCrop.width, draftCrop.height)}
-                    value={draftCrop.size}
-                    onChange={(event) =>
-                      setDraftCrop((current) =>
-                        current
-                          ? clampCrop({ ...current, size: Number(event.target.value) || 1 })
-                          : current
-                      )
-                    }
-                  />
-                </Label>
-              </div>
               <Label>
                 <span>{t('reactions.searchKeyLabel')}</span>
                 <Input
@@ -197,10 +100,6 @@ export function ReactionsPanel({
                   }}
                 />
               </Label>
-              <div className='reactions-preview-card'>
-                <div className='reactions-preview-thumb' style={cropPreviewStyle} aria-label={t('reactions.preview')} />
-                <small>{t('reactions.previewHint')}</small>
-              </div>
               <div className='post-actions-inline'>
                 <Button
                   type='button'
@@ -211,15 +110,7 @@ export function ReactionsPanel({
                       setDraftError(t('reactions.searchKeyRequired'));
                       return;
                     }
-                    onCreateAsset(
-                      draftFile,
-                      {
-                        x: draftCrop.x,
-                        y: draftCrop.y,
-                        size: draftCrop.size,
-                      },
-                      normalizedSearchKey
-                    );
+                    onCreateAsset(draftFile, draftCrop, normalizedSearchKey);
                   }}
                 >
                   {t('common:actions.save')}
@@ -239,7 +130,7 @@ export function ReactionsPanel({
                     setDraftError(null);
                   }}
                 >
-                  {t('common:actions.cancel')}
+                  {t('common:actions.cancel', { defaultValue: 'Cancel' })}
                 </Button>
               </div>
             </div>
@@ -302,6 +193,32 @@ export function ReactionsPanel({
       </section>
 
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
+
+      <ImageCropDialog
+        open={cropDialogOpen}
+        file={cropDialogFile}
+        title={t('reactions.cropTitle', { defaultValue: 'Crop reaction image' })}
+        description={t('reactions.cropDescription', {
+          defaultValue: 'Drag to reposition and use zoom to choose the visible square.',
+        })}
+        confirmLabel={t('common:actions.save')}
+        onOpenChange={(open) => {
+          setCropDialogOpen(open);
+          if (!open) {
+            setCropDialogFile(null);
+          }
+        }}
+        onConfirm={async ({ file, cropRect, croppedFile }) => {
+          if (draftPreviewUrl) {
+            URL.revokeObjectURL(draftPreviewUrl);
+          }
+          setDraftFile(file);
+          setDraftCrop(cropRect);
+          setDraftPreviewUrl(URL.createObjectURL(croppedFile));
+          setCropDialogOpen(false);
+          setCropDialogFile(null);
+        }}
+      />
     </div>
   );
 }

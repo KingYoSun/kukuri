@@ -65,6 +65,18 @@ function withSocialPostDefaults(post: PostView): PostView {
     friend_of_friend: post.friend_of_friend ?? false,
     published_topic_id: post.published_topic_id ?? post.origin_topic_id ?? null,
     origin_topic_id: post.origin_topic_id ?? null,
+    reply_preview: post.reply_preview
+      ? {
+          ...post.reply_preview,
+          author: {
+            ...post.reply_preview.author,
+            picture_asset: post.reply_preview.author.picture_asset
+              ? { ...post.reply_preview.author.picture_asset }
+              : null,
+          },
+          attachments: post.reply_preview.attachments.map((attachment) => ({ ...attachment })),
+        }
+      : null,
     repost_of: post.repost_of ?? null,
     repost_commentary: post.repost_commentary ?? null,
     is_threadable:
@@ -121,6 +133,20 @@ function cloneBookmarkedPost(view: BookmarkedPostView): BookmarkedPostView {
         ? {
             ...view.post.repost_of,
             attachments: view.post.repost_of.attachments.map((attachment) => ({ ...attachment })),
+          }
+        : null,
+      reply_preview: view.post.reply_preview
+        ? {
+            ...view.post.reply_preview,
+            author: {
+              ...view.post.reply_preview.author,
+              picture_asset: view.post.reply_preview.author.picture_asset
+                ? { ...view.post.reply_preview.author.picture_asset }
+                : null,
+            },
+            attachments: view.post.reply_preview.attachments.map((attachment) => ({
+              ...attachment,
+            })),
           }
         : null,
       reaction_summary: [...(view.post.reaction_summary ?? [])],

@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Settings } from 'lucide-react';
+import { BookPlus, Settings } from 'lucide-react';
 
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
@@ -11,7 +11,6 @@ import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import { type PrimarySection } from '@/components/shell/types';
 import { STORY_ACTIVE_TOPIC } from '@/components/storyFixtures';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -107,7 +106,6 @@ const PROFILE_TIMELINE_POSTS: PostCardView[] = [
     media: {
       objectId: 'profile-post-1',
       kind: null,
-      statusLabel: null,
       extraAttachmentCount: 0,
       state: 'ready',
       metaMime: null,
@@ -188,7 +186,6 @@ function ShellSurface({
     <div style={{ width: `${width}px`, minWidth: `${width}px`, margin: '0 auto' }}>
       <ShellFrame
         skipTargetId={`review-workspace-${activeSection}`}
-        topBar={<ShellTopBar activeTopic={STORY_ACTIVE_TOPIC} />}
         navRail={
           <ShellNavRail
             railId={`review-nav-${activeSection}`}
@@ -215,8 +212,8 @@ function ShellSurface({
                     onChange={(event) => setTopicInput(event.target.value)}
                     placeholder='kukuri:topic:demo'
                   />
-                  <Button variant='secondary' type='button'>
-                    Add
+                  <Button variant='secondary' size='icon' type='button' aria-label='Add'>
+                    <BookPlus className='size-4' aria-hidden='true' />
                   </Button>
                 </div>
               </Label>

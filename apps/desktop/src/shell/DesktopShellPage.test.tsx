@@ -244,7 +244,7 @@ async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
     expect(window.location.hash).toMatch(/^#\/(?:timeline|channels|live|game|profile)/);
   });
   await user.click(screen.getByTestId('shell-settings-trigger'));
-  return await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  return await screen.findByRole('dialog', { name: 'Settings' });
 }
 
 async function openSettingsSection(
@@ -269,8 +269,9 @@ function renderAtHash(hash: string, api = createDesktopMockApi()) {
   return render(<App api={api} />);
 }
 
-function expectActiveTopicBar(topic: string) {
-  expect(screen.getByRole('banner', { name: 'Active topic bar' })).toHaveTextContent(topic);
+function expectActiveTopic(topic: string) {
+  expect(window.location.hash).toContain(`topic=${encodeURIComponent(topic)}`);
+  expect(screen.getByRole('button', { name: topic }).closest('li')).toHaveClass('topic-item-active');
 }
 
 function getWorkspaceTabs() {
@@ -368,7 +369,7 @@ test('desktop shell can publish and render a post', async () => {
   await waitFor(() => {
     expect(screen.getByText('hello desktop')).toBeInTheDocument();
   });
-  expectActiveTopicBar('kukuri:topic:demo');
+  expectActiveTopic('kukuri:topic:demo');
   expect(screen.queryByTestId('shell-nav-trigger')).not.toBeInTheDocument();
   const demoTopic = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
   expect(demoTopic).not.toBeNull();
@@ -466,6 +467,29 @@ test('sidebar notifications button shows unread count and opening inbox auto-mar
   });
   expect(screen.getByText('first unread notification')).toBeInTheDocument();
   expect(screen.getByText('second unread notification')).toBeInTheDocument();
+});
+
+test('clicking the active notifications button returns to the previous route', async () => {
+  const user = userEvent.setup();
+
+  renderAtHash('#/profile?topic=kukuri%3Atopic%3Ademo');
+
+  expect(await screen.findByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
+
+  const notificationsButton = screen.getByRole('button', { name: /Notifications/ });
+  await user.click(notificationsButton);
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: /Notifications/ }));
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
 });
 
 test('notifications route renders inbox and marks unread notifications as read on load', async () => {
@@ -739,10 +763,8 @@ test('invalid hash routes fall back to the active public timeline and normalize 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
-  expectActiveTopicBar('kukuri:topic:demo');
-  expect(
-    screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
-  ).not.toBeInTheDocument();
+  expectActiveTopic('kukuri:topic:demo');
+  expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
 });
 
 test('invalid timelineView normalizes to the feed route', async () => {
@@ -1056,7 +1078,7 @@ test('settings hash route opens the drawer and keeps the selected section in syn
   const user = userEvent.setup();
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=discovery');
 
-  const drawer = await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
     expect(within(drawer).getByTestId('settings-section-discovery')).toHaveAttribute(
       'aria-current',
@@ -1094,7 +1116,7 @@ test('appearance settings deep link updates the document theme and storage immed
   const user = userEvent.setup();
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&settings=appearance');
 
-  const drawer = await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   await waitFor(() => {
     expect(within(drawer).getByTestId('settings-section-appearance')).toHaveAttribute(
       'aria-current',
@@ -1109,6 +1131,20 @@ test('appearance settings deep link updates the document theme and storage immed
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
   });
   expect(window.localStorage.getItem(DESKTOP_THEME_STORAGE_KEY)).toBe('light');
+});
+
+test('settings drawer removes redundant section copy and duplicate headings', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  const drawer = await openSettingsSection(user, 'appearance');
+
+  expect(within(drawer).queryByText('Current section')).not.toBeInTheDocument();
+  expect(
+    within(drawer).queryByText('Local light, dark, and language selection.')
+  ).not.toBeInTheDocument();
+  expect(within(drawer).queryByRole('heading', { name: 'Appearance', level: 3 })).not.toBeInTheDocument();
+  expect(within(drawer).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
 });
 
 test('topic and private channel selection sync into the hash route', async () => {
@@ -1234,7 +1270,7 @@ test('sidebar can switch from one topic public scope to another topic private ch
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:demo');
+    expectActiveTopic('kukuri:topic:demo');
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
   });
 
@@ -1251,7 +1287,7 @@ test('sidebar can switch from one topic public scope to another topic private ch
 
   await user.click(secondChannelButton);
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:second');
+    expectActiveTopic('kukuri:topic:second');
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond&channel=channel-1');
     expect(secondChannelButton).toHaveAttribute('aria-pressed', 'true');
   });
@@ -1543,8 +1579,8 @@ test('reaction popover supports search and recent reactions without legacy manag
   const searchInput = await screen.findByPlaceholderText('Search reactions');
   expect(screen.queryByRole('button', { name: 'Manage reactions' })).not.toBeInTheDocument();
 
-  await user.type(searchInput, '🎉');
-  await user.click(screen.getByRole('button', { name: '🎉' }));
+  await user.type(searchInput, 'party');
+  await user.click(screen.getByRole('button', { name: 'party-popper' }));
 
   await waitFor(() => {
     expect(within(postCard).getByText('🎉')).toBeInTheDocument();
@@ -1552,7 +1588,229 @@ test('reaction popover supports search and recent reactions without legacy manag
 
   await user.click(within(postCard).getByRole('button', { name: 'React' }));
   expect(await screen.findByText('Recent')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '🎉' })).toBeInTheDocument();
+  expect(screen.getByText('Emoji')).toBeInTheDocument();
+  expect(screen.getByText('Custom')).toBeInTheDocument();
+  expect(
+    within(screen.getByText('Recent').closest('section') as HTMLElement).getByRole('button', {
+      name: 'party-popper',
+    })
+  ).toBeInTheDocument();
+});
+
+test('reaction picker lazily loads recent and custom reactions when opened', async () => {
+  const user = userEvent.setup();
+  const baseApi = createDesktopMockApi();
+  const api: DesktopApi = {
+    ...baseApi,
+    listRecentReactions: vi.fn(baseApi.listRecentReactions),
+    listMyCustomReactionAssets: vi.fn(baseApi.listMyCustomReactionAssets),
+    listBookmarkedCustomReactions: vi.fn(baseApi.listBookmarkedCustomReactions),
+  };
+
+  render(<App api={api} />);
+
+  await publishPost(user, 'reaction preload');
+  const postCard = (await screen.findByText('reaction preload')).closest('article');
+  if (!(postCard instanceof HTMLElement)) {
+    throw new Error('reaction preload post card not found');
+  }
+
+  expect(api.listRecentReactions).not.toHaveBeenCalled();
+  expect(api.listMyCustomReactionAssets).not.toHaveBeenCalled();
+  expect(api.listBookmarkedCustomReactions).not.toHaveBeenCalled();
+
+  await user.click(within(postCard).getByRole('button', { name: 'React' }));
+
+  await waitFor(() => {
+    expect(api.listRecentReactions).toHaveBeenCalledTimes(1);
+    expect(api.listMyCustomReactionAssets).toHaveBeenCalledTimes(1);
+    expect(api.listBookmarkedCustomReactions).toHaveBeenCalledTimes(1);
+  });
+});
+
+test('timeline buffers remote posts until the pending banner is applied', async () => {
+  const user = userEvent.setup();
+  const olderPost: PostView = {
+    object_id: 'post-old',
+    envelope_id: 'envelope-old',
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: 'post',
+    content: 'older post',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'post-old',
+    channel_id: null,
+    audience_label: 'Public',
+  };
+  const newerPost: PostView = {
+    ...olderPost,
+    object_id: 'post-new',
+    envelope_id: 'envelope-new',
+    content: 'newer post',
+    created_at: 2,
+    root_id: 'post-new',
+  };
+  let timelineItems = [olderPost];
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': timelineItems,
+    },
+  });
+  const api: DesktopApi = {
+    ...baseApi,
+    async listTimeline(topic, cursor, limit, scope) {
+      if (topic !== 'kukuri:topic:demo') {
+        return baseApi.listTimeline(topic, cursor, limit, scope);
+      }
+      return {
+        items: timelineItems.map((item) => ({ ...item, attachments: [...item.attachments] })),
+        next_cursor: null,
+      };
+    },
+  };
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('older post')).toBeInTheDocument();
+
+  timelineItems = [newerPost, olderPost];
+  window.dispatchEvent(new Event('focus'));
+
+  expect(await screen.findByRole('button', { name: 'Show 1 new post' })).toBeInTheDocument();
+  expect(screen.queryByText('newer post')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Show 1 new post' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('newer post')).toBeInTheDocument();
+  });
+});
+
+test('private channel timeline keeps scope-separated posts and pending counts from public', async () => {
+  const user = userEvent.setup();
+  const publicPost: PostView = {
+    object_id: 'post-public',
+    envelope_id: 'envelope-public',
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: 'post',
+    content: 'public post',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'post-public',
+    channel_id: null,
+    audience_label: 'Public',
+  };
+  const channelPost: PostView = {
+    ...publicPost,
+    object_id: 'post-channel',
+    envelope_id: 'envelope-channel',
+    content: 'channel post',
+    created_at: 2,
+    root_id: 'post-channel',
+    channel_id: 'channel-1',
+    audience_label: 'core',
+  };
+  const channelNewPost: PostView = {
+    ...channelPost,
+    object_id: 'post-channel-new',
+    envelope_id: 'envelope-channel-new',
+    content: 'channel post new',
+    created_at: 3,
+    root_id: 'post-channel-new',
+  };
+  const publicTimelineItems = [publicPost];
+  let channelTimelineItems = [channelPost];
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [publicPost, channelPost],
+    },
+  });
+  const api: DesktopApi = {
+    ...baseApi,
+    async listTimeline(topic, cursor, limit, scope) {
+      if (topic !== 'kukuri:topic:demo') {
+        return baseApi.listTimeline(topic, cursor, limit, scope);
+      }
+      if (scope?.kind === 'channel') {
+        return {
+          items: channelTimelineItems.map((item) => ({ ...item, attachments: [...item.attachments] })),
+          next_cursor: null,
+        };
+      }
+      return {
+        items: publicTimelineItems.map((item) => ({ ...item, attachments: [...item.attachments] })),
+        next_cursor: null,
+      };
+    },
+  };
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('public post')).toBeInTheDocument();
+  expect(screen.queryByText('channel post')).not.toBeInTheDocument();
+
+  const channelDialog = await openChannelManager(user);
+  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Private Channels' })).not.toBeInTheDocument();
+    expect(screen.getByText('channel post')).toBeInTheDocument();
+  });
+  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+
+  channelTimelineItems = [channelNewPost, channelPost];
+  window.dispatchEvent(new Event('focus'));
+
+  expect(await screen.findByRole('button', { name: 'Show 1 new post' })).toBeInTheDocument();
+  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+  expect(screen.queryByText('channel post new')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Show 1 new post' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('channel post new')).toBeInTheDocument();
+  });
+  expect(screen.queryByText('public post')).not.toBeInTheDocument();
+
+  const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  if (!(topicItem instanceof HTMLElement)) {
+    throw new Error('active topic item not found');
+  }
+  const publicButton = within(topicItem).getByText('Public').closest('button');
+  if (!(publicButton instanceof HTMLButtonElement)) {
+    throw new Error('public scope button not found');
+  }
+
+  await user.click(publicButton);
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(screen.getByText('public post')).toBeInTheDocument();
+  });
+  expect(screen.queryByText('channel post')).not.toBeInTheDocument();
+  expect(screen.queryByText('channel post new')).not.toBeInTheDocument();
 });
 
 test('desktop shell can track multiple topics at once', async () => {
@@ -1619,7 +1877,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   await user.click(screen.getByRole('button', { name: 'Add' }));
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:second');
+    expectActiveTopic('kukuri:topic:second');
   });
 
   await selectWorkspace(user, 'Timeline');
@@ -1649,7 +1907,7 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
 
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:second');
+    expectActiveTopic('kukuri:topic:second');
   });
 
   await user.click(screen.getByRole('button', { name: 'Remove kukuri:topic:second' }));
@@ -1658,7 +1916,7 @@ test('removing the active topic falls back to the remaining tracked topic', asyn
     expect(
       screen.queryByRole('button', { name: 'kukuri:topic:second' })
     ).not.toBeInTheDocument();
-    expectActiveTopicBar('kukuri:topic:demo');
+    expectActiveTopic('kukuri:topic:demo');
   });
 });
 
@@ -1792,14 +2050,12 @@ test('desktop shell primary nav jumps focus and settings drawer restores trigger
   expect(settingsTrigger.querySelector('.lucide-settings')).toBeTruthy();
   expect(settingsTrigger.querySelector('.lucide-settings-2')).toBeFalsy();
   await user.click(settingsTrigger);
-  await screen.findByRole('dialog', { name: 'Settings & diagnostics' });
+  await screen.findByRole('dialog', { name: 'Settings' });
 
   fireEvent.keyDown(window, { key: 'Escape' });
 
   await waitFor(() => {
-    expect(
-      screen.queryByRole('dialog', { name: 'Settings & diagnostics' })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
   });
   expect(settingsTrigger).toHaveFocus();
 });
@@ -1884,7 +2140,7 @@ test('desktop shell joins an imported private channel and selects its topic scop
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:private-imported');
+    expectActiveTopic('kukuri:topic:private-imported');
     expect(window.location.hash).toBe(
       '#/timeline?topic=kukuri%3Atopic%3Aprivate-imported&channel=channel-imported'
     );
@@ -2133,7 +2389,7 @@ test('timeline image post shows media skeleton when attachment is missing', asyn
   render(<App api={api} />);
 
   await waitFor(() => {
-    expect(screen.getByText('syncing image')).toBeInTheDocument();
+    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
   expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   expect(screen.getByText('image/png')).toBeInTheDocument();
@@ -2152,7 +2408,7 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByText('syncing image')).toBeInTheDocument();
+    expect(screen.getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
 
   rerender(
@@ -2177,9 +2433,9 @@ test('timeline image post switches to ready state when attachment becomes availa
   );
 
   await waitFor(() => {
-    expect(screen.getByText('image ready')).toBeInTheDocument();
+    expect(screen.getByText('caption ready')).toBeInTheDocument();
   });
-  expect(screen.queryByText('syncing image')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-image-post')).not.toBeInTheDocument();
 });
 
 test('timeline image post renders actual preview when object-url payload is available', async () => {
@@ -2249,7 +2505,7 @@ test('thread pane reuses the same image placeholder renderer', async () => {
   const threadPanel = await screen.findByRole('complementary', { name: 'Thread' });
 
   await waitFor(() => {
-    expect(within(threadPanel).getByText('syncing image')).toBeInTheDocument();
+    expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
   });
   expect(within(threadPanel).getByTestId('media-skeleton-image-post')).toBeInTheDocument();
 });
@@ -2283,7 +2539,7 @@ test('timeline video post shows poster skeleton when poster is missing', async (
   render(<App api={api} />);
 
   await waitFor(() => {
-    expect(screen.getByText('syncing poster')).toBeInTheDocument();
+    expect(screen.getByTestId('media-skeleton-video-post')).toBeInTheDocument();
   });
   expect(screen.getByTestId('media-skeleton-video-post')).toBeInTheDocument();
   expect(screen.getByText('video/mp4')).toBeInTheDocument();
@@ -2328,7 +2584,7 @@ test('poster-only video card renders poster preview without video element', asyn
   const posterPreview = await screen.findByTestId('media-preview-video-post');
   expect(posterPreview).toBeInTheDocument();
   expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
-  expect(screen.getAllByText('poster ready').length).toBeGreaterThan(0);
+  expect(posterPreview.getAttribute('src')).toContain('blob:mock-');
 });
 
 test('video card fetches manifest payload even when attachment status is missing', async () => {
@@ -2377,7 +2633,7 @@ test('video card fetches manifest payload even when attachment status is missing
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
-  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
+  expect(video).toHaveAttribute('src', expect.stringContaining('blob:mock-'));
 });
 
 test('video card retries after stalled manifest fetch after rerender', async () => {
@@ -2445,14 +2701,14 @@ test('video card retries after stalled manifest fetch after rerender', async () 
   const { rerender } = render(<App api={stalledApi} />);
 
   await waitFor(() => {
-    expect(screen.getAllByText('poster ready').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
   });
 
   rerender(<App api={recoveredApi} />);
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
-  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
+  expect(video).toHaveAttribute('src', expect.stringContaining('blob:mock-'));
 });
 
 test('video card renders object-url playback source when manifest payload is available', async () => {
@@ -2501,7 +2757,6 @@ test('video card renders object-url playback source when manifest payload is ava
 
   const video = await screen.findByTestId('media-video-video-post');
   expect(video).toBeInTheDocument();
-  expect(screen.getAllByText('playable video').length).toBeGreaterThan(0);
   expect(video.getAttribute('src')).toContain('blob:mock-');
 });
 
@@ -2560,7 +2815,7 @@ test('video card falls back to poster preview when playback is unsupported on th
     expect(screen.queryByTestId('media-video-video-post')).not.toBeInTheDocument();
   });
   expect(screen.getByTestId('media-preview-video-post')).toBeInTheDocument();
-  expect(screen.getAllByText('unsupported on this client').length).toBeGreaterThan(0);
+  expect(screen.getByAltText('video poster')).toBeInTheDocument();
 });
 
 test('community node panel activates relay connectivity on the current session after consent', async () => {
@@ -3182,7 +3437,7 @@ test('messages author click opens the author pane without leaving the selected d
   if (!(conversationIdentity instanceof HTMLElement)) {
     throw new Error('dm conversation author identity not found');
   }
-  await user.click(within(conversationIdentity).getByRole('button', { name: 'bob' }));
+  await user.click(conversationIdentity);
 
   await waitFor(() => {
     expect(getDetailPane('Author')).toBeInTheDocument();
@@ -3654,7 +3909,7 @@ test('author detail shows profile topic posts and can open an untracked origin t
   await user.click(within(authorPane).getAllByRole('button', { name: 'Open original topic' })[0]);
 
   await waitFor(() => {
-    expectActiveTopicBar('kukuri:topic:relay');
+    expectActiveTopic('kukuri:topic:relay');
     expect(screen.queryByRole('complementary', { name: 'Author' })).not.toBeInTheDocument();
   });
   expect(screen.getByText('post from relay topic')).toBeInTheDocument();

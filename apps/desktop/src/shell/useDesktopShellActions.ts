@@ -23,9 +23,11 @@ import type {
 import { fileToCreateAttachment } from '@/lib/attachments';
 
 import {
+  activeTimelineStorageKey,
   DEFAULT_COMMUNITY_NODE_CONFIG,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
+  timelineStorageKeyForChannel,
   type DraftMediaItem,
   type GameEditorDraft,
   useDesktopShellFieldSetter,
@@ -171,7 +173,7 @@ export function useDesktopShellActions({
   const setComposer = useDesktopShellFieldSetter('composer');
   const setDraftMediaItems = useDesktopShellFieldSetter('draftMediaItems');
   const setAttachmentInputKey = useDesktopShellFieldSetter('attachmentInputKey');
-  const setTimelinesByTopic = useDesktopShellFieldSetter('timelinesByTopic');
+  const setTimelinesByKey = useDesktopShellFieldSetter('timelinesByKey');
   const setPublicTimelinesByTopic = useDesktopShellFieldSetter('publicTimelinesByTopic');
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
@@ -283,10 +285,18 @@ export function useDesktopShellActions({
     const patch = (posts: PostView[]) =>
       posts.map((post) => (post.local_id === localId ? updater(post) : post));
 
-    setTimelinesByTopic((current) => ({
-      ...current,
-      [topicId]: patch(current[topicId] ?? []),
-    }));
+    setTimelinesByKey((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const [key, posts] of Object.entries(current)) {
+        if (!key.startsWith(`${topicId}::`) || !posts.some((post) => post.local_id === localId)) {
+          continue;
+        }
+        next[key] = patch(posts);
+        changed = true;
+      }
+      return changed ? next : current;
+    });
     setPublicTimelinesByTopic((current) => ({
       ...current,
       [topicId]: patch(current[topicId] ?? []),
@@ -300,7 +310,7 @@ export function useDesktopShellActions({
     const currentState = storeApi.getState();
     const lists = [
       currentState.thread,
-      currentState.timelinesByTopic[currentState.activeTopic] ?? [],
+      currentState.timelinesByKey[activeTimelineStorageKey(currentState, currentState.activeTopic)] ?? [],
       currentState.publicTimelinesByTopic[currentState.activeTopic] ?? [],
       currentState.profileTimeline,
       currentState.selectedAuthorTimeline,
@@ -395,6 +405,23 @@ export function useDesktopShellActions({
       attachments: attachmentViewsFromDraftMediaItems(localId, draftMedia),
       created_at: Math.floor(Date.now() / 1000),
       reply_to: replyPost?.object_id ?? null,
+      reply_preview: replyPost
+        ? {
+            object_id: replyPost.object_id,
+            topic: publishedTopicIdForPost(replyPost) ?? draft.topic,
+            author: {
+              pubkey: replyPost.author_pubkey,
+              name: replyPost.author_name ?? null,
+              display_name: replyPost.author_display_name ?? null,
+              picture: replyPost.author_picture ?? null,
+              picture_asset: replyPost.author_picture_asset ?? null,
+            },
+            content: replyPost.content,
+            attachments: replyPost.attachments.map((attachment) => ({ ...attachment })),
+            root_id: replyPost.root_id ?? null,
+            reply_to: replyPost.reply_to ?? null,
+          }
+        : null,
       root_id: isRepost ? null : rootId,
       published_topic_id: draft.topic,
       origin_topic_id: draft.topic,
@@ -436,14 +463,15 @@ export function useDesktopShellActions({
     const currentState = storeApi.getState();
     const selectedChannelId = currentState.selectedChannelIdByTopic[post.published_topic_id ?? activeTopic] ?? null;
     const topicId = post.published_topic_id ?? activeTopic;
+    const timelineKey = timelineStorageKeyForChannel(topicId, post.channel_id ?? null);
     const belongsToActiveTimeline = post.channel_id
       ? selectedChannelId === post.channel_id
       : selectedChannelId === null;
 
     if (belongsToActiveTimeline) {
-      setTimelinesByTopic((current) => ({
+      setTimelinesByKey((current) => ({
         ...current,
-        [topicId]: prependPost(current[topicId] ?? [], post),
+        [timelineKey]: prependPost(current[timelineKey] ?? [], post),
       }));
     }
     if (!post.channel_id) {
@@ -566,11 +594,7 @@ export function useDesktopShellActions({
     setProfileDirty(true);
   }
 
-  async function handleProfileAvatarSelection(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+  async function handleProfileAvatarFile(file: File) {
     const pictureUpload = await fileToCreateAttachment(file, 'profile_avatar');
     const nextPreviewUrl = URL.createObjectURL(file);
     setProfileAvatarPreviewUrl((current) => {
@@ -1353,10 +1377,10 @@ export function useDesktopShellActions({
   }
 
   function patchReactionState(reactionState: Parameters<typeof patchReactionStateIntoPosts>[1]) {
-    setTimelinesByTopic((current) =>
+    setTimelinesByKey((current) =>
       Object.fromEntries(
-        Object.entries(current).map(([topic, posts]) => [
-          topic,
+        Object.entries(current).map(([key, posts]) => [
+          key,
           patchReactionStateIntoPosts(posts, reactionState),
         ])
       )
@@ -2004,7 +2028,7 @@ export function useDesktopShellActions({
 
   return {
     handleProfileFieldChange,
-    handleProfileAvatarSelection,
+    handleProfileAvatarFile,
     handleClearProfileAvatar,
     resetProfileDraft,
     handleSaveProfile,

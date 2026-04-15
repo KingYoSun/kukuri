@@ -79,6 +79,7 @@ export function useDesktopShellRouting({
     selectedAuthor,
     directMessagePaneOpen,
     selectedDirectMessagePeerPubkey,
+    lastNonNotificationsRoute,
     shellChromeState,
   } = state;
 
@@ -104,6 +105,7 @@ export function useDesktopShellRouting({
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setError = useDesktopShellFieldSetter('error');
+  const setLastNonNotificationsRoute = useDesktopShellFieldSetter('lastNonNotificationsRoute');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const resolvedRouteLocation = useMemo(
     () => resolveHashBackedRouteLocation(location.pathname, location.search),
@@ -607,6 +609,30 @@ export function useDesktopShellRouting({
     ]
   );
 
+  const toggleNotificationsSection = useCallback(() => {
+    const currentUrl = `${resolvedRouteLocation.pathname}${resolvedRouteLocation.search}`;
+    if (routeSection === 'notifications') {
+      if (lastNonNotificationsRoute) {
+        pendingRouteUrlRef.current = lastNonNotificationsRoute;
+        navigate(lastNonNotificationsRoute, { replace: false });
+        return;
+      }
+      focusPrimarySection('timeline');
+      return;
+    }
+    setLastNonNotificationsRoute(currentUrl);
+    focusPrimarySection('notifications');
+  }, [
+    focusPrimarySection,
+    lastNonNotificationsRoute,
+    navigate,
+    pendingRouteUrlRef,
+    resolvedRouteLocation.pathname,
+    resolvedRouteLocation.search,
+    routeSection,
+    setLastNonNotificationsRoute,
+  ]);
+
   const focusTimelineView = useCallback(
     (view: TimelineWorkspaceView) => {
       setShellChromeState((current) => ({
@@ -853,6 +879,9 @@ export function useDesktopShellRouting({
     }
     pendingRouteUrlRef.current = null;
     lastObservedRouteUrlRef.current = currentUrl;
+    if (routeSection !== 'notifications') {
+      setLastNonNotificationsRoute(currentUrl);
+    }
 
     if (!parsePrimarySectionPath(resolvedRouteLocation.pathname)) {
       navigate(`${PRIMARY_SECTION_PATHS.timeline}${resolvedRouteLocation.search}`, {
@@ -1376,6 +1405,7 @@ export function useDesktopShellRouting({
     setShellChromeState,
     setThread,
     setTimelineScopeByTopic,
+    setLastNonNotificationsRoute,
     shellChromeState.activePrimarySection,
     shellChromeState.activeSettingsSection,
     shellChromeState.profileConnectionsView,
@@ -1394,6 +1424,7 @@ export function useDesktopShellRouting({
     setSettingsOpen,
     setPrimarySectionRef,
     focusPrimarySection,
+    toggleNotificationsSection,
     focusTimelineView,
     closeAuthorPane,
     closeThreadPane,

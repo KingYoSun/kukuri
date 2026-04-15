@@ -9,15 +9,17 @@ import type {
   ReactionKeyInput,
   ReactionKeyView,
   RecentReactionView,
+  ReplyPreviewView,
 } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { AuthorIdentityButton } from './AuthorIdentityButton';
-import { RelationshipBadge } from './RelationshipBadge';
+import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
+import { RelationshipBadge } from './RelationshipBadge';
 import { type PostCardView } from './types';
 
 function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
@@ -28,6 +30,17 @@ function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | nu
     view.source_author_display_name?.trim() ||
     view.source_author_name?.trim() ||
     `${view.source_author_pubkey.slice(0, 8)}…`
+  );
+}
+
+function replyPreviewAuthorLabel(preview: ReplyPreviewView | null | undefined): string | null {
+  if (!preview) {
+    return null;
+  }
+  return (
+    preview.author.display_name?.trim() ||
+    preview.author.name?.trim() ||
+    `${preview.author.pubkey.slice(0, 8)}…`
   );
 }
 
@@ -53,6 +66,7 @@ type PostCardProps = {
   onToggleBookmark?: (post: PostCardView['post']) => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  onReactionPickerOpen?: () => void;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -87,16 +101,20 @@ export function PostCard({
   onToggleBookmark,
   onRetryLocalPost,
   onRestoreLocalPost,
+  onReactionPickerOpen,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
+  const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const localState = post.local_state ?? null;
   const interactionDisabled = localState !== null;
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
   const repostSource = post.repost_of ?? null;
+  const replyPreview = post.reply_preview ?? null;
   const isQuoteRepost = post.object_kind === 'repost' && Boolean(post.repost_commentary?.trim());
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
@@ -135,6 +153,103 @@ export function PostCard({
     onOpenThread(view.threadTargetId);
   };
 
+  const renderReferencedCard = (
+    source:
+      | {
+          authorLabel: string | null;
+          content: string;
+          topic: string;
+          attachments: { hash: string }[];
+          replyTo?: string | null;
+        }
+      | null,
+    eyebrow: string
+  ) => {
+    if (!source) {
+      return null;
+    }
+    return (
+      <div className='repost-source-card post-layout-safe'>
+        <div className='repost-source-meta'>
+          <span className='repost-source-eyebrow'>{eyebrow}</span>
+          <span className='repost-source-topic'>
+            <span>{t('labels.sourceTopic')}</span>
+            <span className='shell-topic-link-label' title={source.topic}>
+              {source.topic}
+            </span>
+          </span>
+          {source.attachments.length > 0 ? (
+            <span className='repost-source-attachments'>{`+${source.attachments.length} media`}</span>
+          ) : null}
+        </div>
+        <div className='post-body repost-source-body post-layout-safe'>
+          {source.authorLabel ? (
+            <strong className='post-title post-copy-wrap'>{source.authorLabel}</strong>
+          ) : null}
+          {source.content.trim().length > 0 ? (
+            <span className='post-copy-wrap'>{source.content}</span>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const contentBlock = (
+    <>
+      <div className='post-body post-layout-safe'>
+        {isPendingText ? (
+          <div
+            className='text-skeleton-group'
+            data-testid={`text-skeleton-${post.object_id}`}
+            aria-hidden='true'
+          >
+            <span className='text-skeleton text-skeleton-line' />
+            <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
+          </div>
+        ) : hasPrimaryContent ? (
+          <strong className='post-title post-copy-wrap'>{post.content}</strong>
+        ) : null}
+
+        {repostSource
+          ? renderReferencedCard(
+              {
+                authorLabel: sourceAuthorLabel(repostSource),
+                content: repostSource.content,
+                topic: repostSource.source_topic_id,
+                attachments: repostSource.attachments,
+                replyTo: repostSource.reply_to ?? null,
+              },
+              isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')
+            )
+          : null}
+
+        {replyPreview
+          ? renderReferencedCard(
+              {
+                authorLabel: replyPreviewAuthorLabel(replyPreview),
+                content: replyPreview.content,
+                topic: replyPreview.topic,
+                attachments: replyPreview.attachments,
+                replyTo: replyPreview.reply_to ?? null,
+              },
+              t('actions.reply')
+            )
+          : null}
+      </div>
+
+      <small className='post-copy-wrap'>{post.envelope_id}</small>
+      {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
+      {readOnly && publishedTopicId ? (
+        <div className='topic-diagnostic topic-diagnostic-secondary'>
+          <span>{t('feed.originTopic', { ns: 'profile' })}</span>
+          <span className='shell-topic-link-label' title={publishedTopicId}>
+            {publishedTopicId}
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
     <article
       className={context === 'thread' ? 'post-card post-card-thread post-layout-safe' : 'post-card post-layout-safe'}
@@ -154,93 +269,21 @@ export function PostCard({
         </div>
       </div>
 
+      {view.media.kind ? (
+        <PostMedia
+          media={view.media}
+          onOpenImage={(index) => {
+            setMediaViewerIndex(index);
+            setMediaViewerOpen(true);
+          }}
+        />
+      ) : null}
+
       {readOnly ? (
-        <div className='post-link post-layout-safe'>
-          <PostMedia media={view.media} />
-
-          <div className='post-body post-layout-safe'>
-            {isPendingText ? (
-              <div
-                className='text-skeleton-group'
-                data-testid={`text-skeleton-${post.object_id}`}
-                aria-hidden='true'
-              >
-                <span className='text-skeleton text-skeleton-line' />
-                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
-              </div>
-            ) : hasPrimaryContent ? (
-              <strong className='post-title post-copy-wrap'>{post.content}</strong>
-            ) : null}
-
-            {repostSource ? (
-              <div className='repost-source-card post-layout-safe'>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>{isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')}</span>
-                  <span>{t('labels.sourceTopic')}</span>
-                  <span className='shell-topic-link-label' title={repostSource.source_topic_id}>
-                    {repostSource.source_topic_id}
-                  </span>
-                </div>
-                <div className='post-body repost-source-body post-layout-safe'>
-                  <strong className='post-title post-copy-wrap'>{sourceAuthorLabel(repostSource)}</strong>
-                  {repostSource.content.trim().length > 0 ? (
-                    <span className='post-copy-wrap'>{repostSource.content}</span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <small className='post-copy-wrap'>{post.envelope_id}</small>
-          {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
-          {publishedTopicId ? (
-            <div className='topic-diagnostic topic-diagnostic-secondary'>
-              <span>{t('feed.originTopic', { ns: 'profile' })}</span>
-              <span className='shell-topic-link-label' title={publishedTopicId}>
-                {publishedTopicId}
-              </span>
-            </div>
-          ) : null}
-        </div>
+        <div className='post-link post-layout-safe'>{contentBlock}</div>
       ) : (
         <button className='post-link post-layout-safe' type='button' onClick={openPrimaryTarget}>
-          <PostMedia media={view.media} />
-
-          <div className='post-body post-layout-safe'>
-            {isPendingText ? (
-              <div
-                className='text-skeleton-group'
-                data-testid={`text-skeleton-${post.object_id}`}
-                aria-hidden='true'
-              >
-                <span className='text-skeleton text-skeleton-line' />
-                <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
-              </div>
-            ) : hasPrimaryContent ? (
-              <strong className='post-title post-copy-wrap'>{post.content}</strong>
-            ) : null}
-
-            {repostSource ? (
-              <div className='repost-source-card post-layout-safe'>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>{isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')}</span>
-                  <span>{t('labels.sourceTopic')}</span>
-                  <span className='shell-topic-link-label' title={repostSource.source_topic_id}>
-                    {repostSource.source_topic_id}
-                  </span>
-                </div>
-                <div className='post-body repost-source-body post-layout-safe'>
-                  <strong className='post-title post-copy-wrap'>{sourceAuthorLabel(repostSource)}</strong>
-                  {repostSource.content.trim().length > 0 ? (
-                    <span className='post-copy-wrap'>{repostSource.content}</span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <small className='post-copy-wrap'>{post.envelope_id}</small>
-          {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
+          {contentBlock}
         </button>
       )}
 
@@ -306,17 +349,27 @@ export function PostCard({
                           <img
                             className='post-reaction-chip-image'
                             src={previewUrl}
-                            alt={reaction.custom_asset?.asset_id ?? reaction.emoji ?? reaction.normalized_reaction_key}
+                            alt={
+                              reaction.custom_asset?.asset_id ??
+                              reaction.emoji ??
+                              reaction.normalized_reaction_key
+                            }
                           />
                         ) : null}
-                        <span>{reaction.emoji ?? reaction.custom_asset?.asset_id.slice(0, 6) ?? '?'}</span>
+                        <span>
+                          {reaction.emoji ?? reaction.custom_asset?.asset_id.slice(0, 6) ?? '?'}
+                        </span>
                         <span>{reaction.count}</span>
                       </button>
                       {canBookmark && reaction.custom_asset && onBookmarkCustomReaction ? (
                         <Button
                           variant='secondary'
                           type='button'
-                          onClick={() => onBookmarkCustomReaction(reaction.custom_asset as CustomReactionAssetView)}
+                          onClick={() =>
+                            onBookmarkCustomReaction(
+                              reaction.custom_asset as CustomReactionAssetView
+                            )
+                          }
                         >
                           {t('common:actions.save')}
                         </Button>
@@ -333,6 +386,7 @@ export function PostCard({
                 assets={pickerAssets}
                 mediaObjectUrls={mediaObjectUrls}
                 onToggleReaction={onToggleReaction}
+                onOpen={() => onReactionPickerOpen?.()}
               />
             ) : null}
             {!interactionDisabled && canRepost && (onRepost || onQuoteRepost) ? (
@@ -378,7 +432,7 @@ export function PostCard({
                 </PopoverContent>
               </Popover>
             ) : null}
-            {!interactionDisabled && canReply ? (
+            {canReply && !interactionDisabled ? (
               <Button
                 variant='secondary'
                 size='icon'
@@ -390,15 +444,13 @@ export function PostCard({
                 <Reply className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
-            {!interactionDisabled && showBookmarkAction && onToggleBookmark ? (
+            {showBookmarkAction && onToggleBookmark ? (
               <Button
-                variant={isBookmarked ? 'primary' : 'secondary'}
+                variant='secondary'
                 size='icon'
-                className='post-action-button'
+                className={`post-action-button${isBookmarked ? ' post-action-button-active' : ''}`}
                 type='button'
-                aria-label={
-                  isBookmarked ? t('common:actions.removeBookmark') : t('common:actions.bookmark')
-                }
+                aria-label={isBookmarked ? t('actions.removeBookmark') : t('actions.bookmark')}
                 aria-pressed={isBookmarked}
                 onClick={() => onToggleBookmark(post)}
               >
@@ -408,6 +460,14 @@ export function PostCard({
           </>
         )}
       </div>
+
+      <MediaViewerDialog
+        items={view.media.imageGalleryItems ?? []}
+        index={mediaViewerIndex}
+        open={mediaViewerOpen}
+        onOpenChange={setMediaViewerOpen}
+        onIndexChange={setMediaViewerIndex}
+      />
     </article>
   );
 }

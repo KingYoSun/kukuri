@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Settings } from 'lucide-react';
+import { BookPlus, GitBranchPlus, Settings } from 'lucide-react';
 
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -12,7 +12,6 @@ import { TopicNavList } from '@/components/core/TopicNavList';
 import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -106,7 +105,6 @@ const TIMELINE_POSTS: PostCardView[] = [
     media: {
       objectId: 'timeline-post-1',
       kind: null,
-      statusLabel: null,
       extraAttachmentCount: 0,
       state: 'ready',
       metaMime: null,
@@ -147,7 +145,6 @@ const TIMELINE_POSTS: PostCardView[] = [
     media: {
       objectId: 'timeline-post-2',
       kind: 'image',
-      statusLabel: 'image ready',
       extraAttachmentCount: 0,
       state: 'ready',
       metaMime: 'image/png',
@@ -196,7 +193,6 @@ const THREAD_POSTS: PostCardView[] = [
     media: {
       objectId: 'thread-reply-1',
       kind: null,
-      statusLabel: null,
       extraAttachmentCount: 0,
       state: 'ready',
       metaMime: null,
@@ -257,7 +253,6 @@ function CoreProductFlowStory({ width }: { width: number }) {
     <div style={{ width: `${width}px`, minWidth: `${width}px`, margin: '0 auto' }}>
       <ShellFrame
         skipTargetId='core-story-workspace'
-        topBar={<ShellTopBar activeTopic='kukuri:topic:demo' />}
         navRail={
           <ShellNavRail
             railId='core-story-nav'
@@ -284,11 +279,17 @@ function CoreProductFlowStory({ width }: { width: number }) {
                     onChange={(event) => setTopicInput(event.target.value)}
                     placeholder='kukuri:topic:demo'
                   />
-                  <Button variant='secondary'>Add</Button>
+                  <Button variant='secondary' size='icon' type='button' aria-label='Add'>
+                    <BookPlus className='size-4' aria-hidden='true' />
+                  </Button>
                 </div>
               </Label>
             }
-            channelAction={<Button variant='secondary'>Private Channels</Button>}
+            channelAction={
+              <Button variant='secondary' size='icon' type='button' aria-label='Private Channels'>
+                <GitBranchPlus className='size-4' aria-hidden='true' />
+              </Button>
+            }
             topicList={
               <TopicNavList
                 items={TOPIC_ITEMS}
@@ -330,6 +331,8 @@ function CoreProductFlowStory({ width }: { width: number }) {
                 <TimelineFeed
                   posts={TIMELINE_POSTS}
                   emptyCopy='No posts yet for this topic.'
+                  pendingCount={3}
+                  onApplyPending={() => undefined}
                   onOpenAuthor={() => undefined}
                   onOpenThread={() => undefined}
                   onReply={() => undefined}

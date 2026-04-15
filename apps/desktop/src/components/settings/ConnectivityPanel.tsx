@@ -31,7 +31,6 @@ export function ConnectivityPanel({
         <CardHeader className='items-start justify-between gap-3 md:flex'>
           <div>
             <h3>{t('settings:connectivity.title')}</h3>
-            <small>{view.summaryLabel}</small>
           </div>
           <StatusBadge label={view.summaryLabel} tone={view.status === 'error' ? 'destructive' : 'accent'} />
         </CardHeader>

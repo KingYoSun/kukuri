@@ -36,7 +36,7 @@ test('browser mock hash routes deep link profile, notifications, timeline normal
     'aria-expanded',
     'true'
   );
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings & diagnostics' });
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(settingsDialog).toBeVisible({ timeout: 10000 });
   await expect(settingsDialog.getByTestId('settings-section-appearance')).toHaveAttribute(
     'aria-current',

@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
@@ -16,6 +16,37 @@ import {
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
 import { SettingsMetricGrid } from './SettingsMetricGrid';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+function installCropperMocks() {
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:crop-preview');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 320;
+      naturalHeight = 240;
+      onload: null | (() => void) = null;
+      onerror: null | (() => void) = null;
+
+      set src(_value: string) {
+        queueMicrotask(() => {
+          this.onload?.();
+        });
+      }
+    }
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback(new Blob([Uint8Array.from([1, 2, 3, 4])], { type: 'image/png' }));
+  });
+}
 
 test('appearance panel switches the selected theme immediately', async () => {
   const user = userEvent.setup();
@@ -33,6 +64,37 @@ test('appearance panel switches the selected theme immediately', async () => {
   await user.click(screen.getByRole('radio', { name: /Light/i }));
   expect(onThemeChange).toHaveBeenCalledWith('light');
   expect(screen.getByRole('radio', { name: /Dark/i })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('appearance panel removes redundant explanatory copy and duplicate section titles', () => {
+  const appearancePanelFixture = createAppearancePanelFixture();
+
+  render(
+    <AppearancePanel
+      view={appearancePanelFixture}
+      onThemeChange={() => {}}
+      onLocaleChange={() => {}}
+    />
+  );
+
+  expect(screen.queryByRole('heading', { name: 'Appearance' })).not.toBeInTheDocument();
+  expect(screen.queryByText('dark theme selected')).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('Theme changes apply immediately on this device and stay local to this desktop.')
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      'Language changes apply immediately on this device and stay local to this desktop.'
+    )
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('High-contrast solid surfaces for low-light work.')
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('Brighter solid surfaces for daytime readability.')
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole('radiogroup', { name: 'Theme mode' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Language')).toBeInTheDocument();
 });
 
 test('connectivity panel renders loading and topic detail states', async () => {
@@ -220,4 +282,68 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
 
   await user.click(screen.getByRole('button', { name: 'Clear' }));
   expect(onRemoveBookmark).toHaveBeenCalledWith('asset-saved');
+});
+
+test('connectivity panel shows the summary state only once in the sync status card', () => {
+  const connectivityPanelFixture = createConnectivityPanelFixture();
+
+  render(
+    <ConnectivityPanel
+      view={{
+        ...connectivityPanelFixture,
+        summaryLabel: 'waiting',
+      }}
+      onPeerTicketInputChange={() => {}}
+      onImportPeer={() => {}}
+    />
+  );
+
+  expect(screen.getAllByText('waiting')).toHaveLength(1);
+});
+
+test('reactions panel crops an uploaded image before creating a custom asset', async () => {
+  installCropperMocks();
+  const user = userEvent.setup();
+  const onCreateAsset = vi.fn();
+
+  render(
+    <ReactionsPanel
+      view={{
+        status: 'ready',
+        summaryLabel: 'ready',
+        ownedAssets: [],
+        bookmarkedAssets: [],
+      }}
+      creating={false}
+      onCreateAsset={onCreateAsset}
+      onRemoveBookmark={() => {}}
+    />
+  );
+
+  await user.upload(
+    screen.getByLabelText('Upload image'),
+    new File([Uint8Array.from([9, 8, 7, 6])], 'party.png', { type: 'image/png' })
+  );
+
+  const cropDialog = await screen.findByRole('dialog', { name: 'Crop reaction image' });
+  expect(within(cropDialog).getByRole('slider')).toBeInTheDocument();
+
+  await user.click(within(cropDialog).getByRole('button', { name: 'Save' }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Crop reaction image' })).not.toBeInTheDocument();
+  });
+
+  await user.type(screen.getByLabelText('Search key'), 'party');
+  await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+
+  expect(onCreateAsset).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'party.png' }),
+    expect.objectContaining({
+      size: expect.any(Number),
+      x: expect.any(Number),
+      y: expect.any(Number),
+    }),
+    'party'
+  );
 });

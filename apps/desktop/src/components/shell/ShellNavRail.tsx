@@ -51,7 +51,7 @@ export function ShellNavRail({
         aria-label={t('navigation.primaryNavigation')}
       >
         <div className='shell-pane-header shell-pane-header-compact'>
-          <p className='eyebrow'>{t('navigation.title')}</p>
+          <span aria-hidden='true' />
           <Button
             className='shell-mobile-close shell-icon-button'
             variant='ghost'

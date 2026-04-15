@@ -4,6 +4,7 @@
     "add": "追加",
     "authenticate": "認証",
     "bookmark": "ブックマーク",
+    "cancel": "キャンセル",
     "clear": "クリア",
     "consents": "同意状況",
     "end": "終了",
@@ -28,7 +29,8 @@
     "rotate": "ローテーション",
     "save": "保存",
     "unmute": "ミュート解除",
-    "unfollow": "フォロー解除"
+    "unfollow": "フォロー解除",
+    "zoom": "拡大率"
   },
   "composer": {
     "clearQuoteRepost": "引用リポストをクリア",
@@ -79,6 +81,7 @@
     "localFailed": "投稿に失敗しました",
     "localPosting": "投稿中…",
     "localSyncing": "同期中…",
+    "pendingPosts": "{{count}}件のポストを表示",
     "quoteRepost": "引用リポスト",
     "reposted": "リポスト"
   },
@@ -122,7 +125,9 @@
     "videoPosterAlt": "動画ポスター"
   },
   "reactions": {
+    "custom": "カスタム",
     "recent": "最近使ったもの",
+    "emoji": "絵文字",
     "customResults": "検索結果",
     "searchPlaceholder": "リアクションを検索",
     "searchHint": "絵文字かカスタムリアクション key で検索します。",

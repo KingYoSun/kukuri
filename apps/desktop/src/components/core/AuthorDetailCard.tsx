@@ -47,7 +47,15 @@ export function AuthorDetailCard({
                   testId='author-detail-avatar'
                 />
                 <div className='author-detail-identity'>
-                  <strong className='author-detail-name author-detail-break'>{view.displayLabel}</strong>
+                  <div className='author-detail-heading'>
+                    <strong className='author-detail-name author-detail-break'>{view.displayLabel}</strong>
+                    {relationshipLabel ? (
+                      <RelationshipBadge
+                        label={relationshipLabel}
+                        className='author-detail-relationship'
+                      />
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <div className='author-detail-copy-stack'>
@@ -66,11 +74,8 @@ export function AuthorDetailCard({
             </div>
           ) : null}
 
-          {relationshipLabel || showFollowAction || showMuteAction || showMessageAction ? (
+          {showFollowAction || showMuteAction || showMessageAction ? (
             <div className='author-detail-actions'>
-              <div className='author-detail-action-meta'>
-                {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : null}
-              </div>
               <div className='author-detail-action-buttons'>
                 {showMessageAction ? (
                   <button

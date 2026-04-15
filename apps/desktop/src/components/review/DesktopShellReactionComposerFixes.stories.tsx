@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Lock, Plus, Repeat2, Search, Settings, SmilePlus } from 'lucide-react';
+import { BookPlus, GitBranchPlus, Plus, Repeat2, Search, Settings, SmilePlus } from 'lucide-react';
 
 import { ComposerPanel } from '@/components/core/ComposerPanel';
 import { PostCard } from '@/components/core/PostCard';
@@ -9,7 +9,6 @@ import { type PostCardView, type TopicDiagnosticSummary } from '@/components/cor
 import { StatusBadge } from '@/components/StatusBadge';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { ShellTopBar } from '@/components/shell/ShellTopBar';
 import { type PrimarySection } from '@/components/shell/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -195,7 +194,6 @@ const TIMELINE_POST: PostCardView = {
   media: {
     objectId: 'post-desktop-fixes',
     kind: 'image',
-    statusLabel: 'image ready',
     extraAttachmentCount: 0,
     state: 'ready',
     metaMime: 'image/png',
@@ -245,7 +243,6 @@ const SOURCE_PREVIEW: PostCardView = {
   media: {
     objectId: 'source-post-1',
     kind: 'video',
-    statusLabel: 'poster ready',
     extraAttachmentCount: 0,
     state: 'ready',
     metaMime: 'video/mp4',
@@ -429,7 +426,6 @@ function ReviewSurface() {
     <div style={{ minWidth: '1720px', minHeight: '1080px', padding: '1rem 1rem 6rem' }}>
       <ShellFrame
         skipTargetId='desktop-shell-fixes-review'
-        topBar={<ShellTopBar activeTopic={STORY_ACTIVE_TOPIC} />}
         navRail={
           <ShellNavRail
             railId='desktop-shell-fixes-nav'
@@ -457,8 +453,8 @@ function ReviewSurface() {
                 <span>Add Topic</span>
                 <div className='topic-input-row'>
                   <Input value='kukuri:topic:phase2' onChange={() => undefined} readOnly />
-                  <Button variant='secondary' type='button'>
-                    Add
+                  <Button variant='secondary' size='icon' type='button' aria-label='Add'>
+                    <BookPlus className='size-4' aria-hidden='true' />
                   </Button>
                 </div>
               </label>
@@ -472,7 +468,7 @@ function ReviewSurface() {
                 type='button'
                 aria-label='Private channels'
               >
-                <Lock className='size-4' aria-hidden='true' />
+                <GitBranchPlus className='size-4' aria-hidden='true' />
               </Button>
             }
             topicList={

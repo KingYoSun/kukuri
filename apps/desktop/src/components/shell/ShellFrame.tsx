@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 type ShellFrameProps = {
   skipTargetId: string;
-  topBar: React.ReactNode;
+  topBar?: React.ReactNode;
   navRail: React.ReactNode;
   workspace: React.ReactNode;
   detailPaneStack?: React.ReactNode;
@@ -48,13 +48,15 @@ export function ShellFrame({
       <a className='shell-skip-link' href={`#${skipTargetId}`}>
         Skip to workspace
       </a>
-      <div
-        className='shell-layout shell-topbar-grid'
-        data-detail-pane-count={layoutDetailPaneCount}
-      >
-        <div className='shell-topbar-spacer' aria-hidden='true' />
-        {topBar}
-      </div>
+      {topBar ? (
+        <div
+          className='shell-layout shell-topbar-grid'
+          data-detail-pane-count={layoutDetailPaneCount}
+        >
+          <div className='shell-topbar-spacer' aria-hidden='true' />
+          {topBar}
+        </div>
+      ) : null}
       <div className='shell-layout' data-detail-pane-count={layoutDetailPaneCount}>
         {navRail}
         <main
