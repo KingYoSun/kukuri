@@ -1528,6 +1528,10 @@ async fn mock_bootstrap_nodes(
     })
 }
 
+async fn mock_bootstrap_consent_status() -> Json<CommunityNodeConsentStatus> {
+    Json(managed_community_node_consent_status(true))
+}
+
 #[derive(Clone)]
 struct MockManagedCommunityNodeState {
     base_url: String,
@@ -5793,6 +5797,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
         .with_state(state.clone());
@@ -5880,6 +5885,7 @@ async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
         .with_state(state.clone());
@@ -5955,6 +5961,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
         .with_state(state.clone());
@@ -6062,6 +6069,7 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
         bootstrap_hits: Arc::new(AtomicUsize::new(0)),
     });
     let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
         .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
         .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
         .with_state(state.clone());
