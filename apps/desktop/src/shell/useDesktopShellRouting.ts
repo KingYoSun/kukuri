@@ -1710,7 +1710,7 @@ export function useDesktopShellRouting({
     shellChromeState.settingsOpen,
     shellChromeState.timelineView,
     syncRoute,
-    thread.length,
+    thread,
     trackedTopics,
   ]);
 
