@@ -11,8 +11,13 @@ import type {
   RecentReactionView,
   ReplyPreviewView,
 } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
+import {
+  ContextActionMenu,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { AuthorIdentityButton } from './AuthorIdentityButton';
@@ -108,6 +113,10 @@ export function PostCard({
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
+  const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
+    null
+  );
+  const [reactionMenuAsset, setReactionMenuAsset] = useState<CustomReactionAssetView | null>(null);
   const isPendingText = post.content_status === 'Missing' && post.content === '[blob pending]';
   const localState = post.local_state ?? null;
   const interactionDisabled = localState !== null;
@@ -132,10 +141,6 @@ export function PostCard({
     () => new Set((post.my_reactions ?? []).map((reaction) => reaction.normalized_reaction_key)),
     [post.my_reactions]
   );
-  const bookmarkedAssetIds = useMemo(
-    () => new Set(bookmarkedReactionAssets.map((asset) => asset.asset_id)),
-    [bookmarkedReactionAssets]
-  );
   const pickerAssets = useMemo(() => {
     const deduped = new Map<string, CustomReactionAssetView>();
     for (const asset of [...ownedReactionAssets, ...bookmarkedReactionAssets]) {
@@ -152,6 +157,34 @@ export function PostCard({
     }
     onOpenThread(view.threadTargetId);
   };
+
+  const reactionMenuItems = useMemo(() => {
+    if (!reactionMenuAsset) {
+      return [];
+    }
+    const canSaveReaction =
+      Boolean(onBookmarkCustomReaction) &&
+      reactionMenuAsset.owner_pubkey !== localAuthorPubkey;
+    return [
+      {
+        id: 'save',
+        label: t('actions.save'),
+        disabled: !canSaveReaction,
+        onSelect: async () => {
+          if (canSaveReaction && onBookmarkCustomReaction) {
+            onBookmarkCustomReaction(reactionMenuAsset);
+          }
+        },
+      },
+      {
+        id: 'copy-hash',
+        label: t('actions.copyHash'),
+        onSelect: async () => {
+          await copyTextToClipboard(reactionMenuAsset.blob_hash);
+        },
+      },
+    ];
+  }, [localAuthorPubkey, onBookmarkCustomReaction, reactionMenuAsset, t]);
 
   const renderReferencedCard = (
     source:
@@ -326,10 +359,6 @@ export function PostCard({
                     typeof mediaObjectUrls[reaction.custom_asset.blob_hash] === 'string'
                       ? mediaObjectUrls[reaction.custom_asset.blob_hash]
                       : null;
-                  const canBookmark =
-                    reaction.custom_asset &&
-                    reaction.custom_asset.owner_pubkey !== localAuthorPubkey &&
-                    !bookmarkedAssetIds.has(reaction.custom_asset.asset_id);
                   return (
                     <span key={reaction.normalized_reaction_key} className='post-reaction-chip-wrap'>
                       <button
@@ -343,6 +372,17 @@ export function PostCard({
                           if (reactionKey && onToggleReaction) {
                             onToggleReaction(post, reactionKey);
                           }
+                        }}
+                        onContextMenu={(event) => {
+                          if (!reaction.custom_asset) {
+                            return;
+                          }
+                          event.preventDefault();
+                          setReactionMenuAsset(reaction.custom_asset);
+                          setReactionMenuPosition({
+                            x: event.clientX,
+                            y: event.clientY,
+                          });
                         }}
                       >
                         {previewUrl ? (
@@ -361,19 +401,6 @@ export function PostCard({
                         </span>
                         <span>{reaction.count}</span>
                       </button>
-                      {canBookmark && reaction.custom_asset && onBookmarkCustomReaction ? (
-                        <Button
-                          variant='secondary'
-                          type='button'
-                          onClick={() =>
-                            onBookmarkCustomReaction(
-                              reaction.custom_asset as CustomReactionAssetView
-                            )
-                          }
-                        >
-                          {t('common:actions.save')}
-                        </Button>
-                      ) : null}
                     </span>
                   );
                 })}
@@ -467,6 +494,15 @@ export function PostCard({
         open={mediaViewerOpen}
         onOpenChange={setMediaViewerOpen}
         onIndexChange={setMediaViewerIndex}
+      />
+      <ContextActionMenu
+        open={reactionMenuAsset !== null}
+        position={reactionMenuPosition}
+        items={reactionMenuItems}
+        onClose={() => {
+          setReactionMenuAsset(null);
+          setReactionMenuPosition(null);
+        }}
       />
     </article>
   );

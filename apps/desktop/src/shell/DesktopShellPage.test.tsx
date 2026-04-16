@@ -249,7 +249,7 @@ async function openSettingsDrawer(user: ReturnType<typeof userEvent.setup>) {
 
 async function openSettingsSection(
   user: ReturnType<typeof userEvent.setup>,
-  section: 'appearance' | 'connectivity' | 'discovery' | 'community-node'
+  section: 'appearance' | 'connectivity' | 'discovery' | 'community-node' | 'reactions'
 ) {
   const drawer = await openSettingsDrawer(user);
   await user.click(within(drawer).getByTestId(`settings-section-${section}`));
@@ -1626,6 +1626,101 @@ test('reaction picker lazily loads recent and custom reactions when opened', asy
     expect(api.listMyCustomReactionAssets).toHaveBeenCalledTimes(1);
     expect(api.listBookmarkedCustomReactions).toHaveBeenCalledTimes(1);
   });
+});
+
+test('visible custom reactions auto-fetch media before save, and saved reactions require explicit save', async () => {
+  const user = userEvent.setup();
+  installObjectUrlMocks();
+  const remoteReactionAsset = {
+    asset_id: 'asset-remote',
+    owner_pubkey: 'd'.repeat(64),
+    blob_hash: 'blob-remote',
+    search_key: 'remote-cat',
+    mime: 'image/png',
+    bytes: 128,
+    width: 128,
+    height: 128,
+  };
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        {
+          object_id: 'post-remote-reaction',
+          envelope_id: 'envelope-post-remote-reaction',
+          author_pubkey: 'f'.repeat(64),
+          author_name: 'frank',
+          author_display_name: 'Frank',
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          object_kind: 'post',
+          content: 'remote custom reaction',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 10,
+          reply_to: null,
+          root_id: 'post-remote-reaction',
+          channel_id: null,
+          audience_label: 'Public',
+          published_topic_id: 'kukuri:topic:demo',
+          origin_topic_id: 'kukuri:topic:demo',
+          reaction_summary: [
+            {
+              reaction_key_kind: 'custom_asset',
+              normalized_reaction_key: 'custom_asset:asset-remote',
+              emoji: null,
+              custom_asset: remoteReactionAsset,
+              count: 1,
+            },
+          ],
+          my_reactions: [],
+        },
+      ],
+    },
+  });
+  const getBlobMediaPayload = vi.fn(async (hash: string, mime: string) =>
+    hash === remoteReactionAsset.blob_hash
+      ? {
+          bytes_base64: 'ZmFrZS1pbWFnZQ==',
+          mime,
+        }
+      : null
+  );
+  const bookmarkCustomReaction = vi.fn(api.bookmarkCustomReaction.bind(api));
+  api.getBlobMediaPayload = getBlobMediaPayload;
+  api.bookmarkCustomReaction = bookmarkCustomReaction;
+
+  render(<App api={api} />);
+
+  const remoteReactionImage = await screen.findByAltText(remoteReactionAsset.asset_id);
+  expect(remoteReactionImage.getAttribute('src')).toContain('blob:mock-');
+  await waitFor(() => {
+    expect(getBlobMediaPayload).toHaveBeenCalledWith(
+      remoteReactionAsset.blob_hash,
+      remoteReactionAsset.mime
+    );
+  });
+
+  let drawer = await openSettingsSection(user, 'reactions');
+  expect(within(drawer).queryByRole('img', { name: remoteReactionAsset.search_key })).toBeNull();
+
+  await user.click(within(drawer).getByRole('button', { name: 'Close settings' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+
+  const remoteReactionChip = remoteReactionImage.closest('button');
+  if (!(remoteReactionChip instanceof HTMLButtonElement)) {
+    throw new Error('remote reaction chip not found');
+  }
+
+  fireEvent.contextMenu(remoteReactionChip);
+  await user.click(screen.getByRole('menuitem', { name: 'Save' }));
+  expect(bookmarkCustomReaction).toHaveBeenCalledWith(remoteReactionAsset);
+
+  drawer = await openSettingsSection(user, 'reactions');
+  expect(await within(drawer).findByRole('img', { name: remoteReactionAsset.search_key })).toBeInTheDocument();
 });
 
 test('timeline buffers remote posts until the pending banner is applied', async () => {

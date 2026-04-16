@@ -693,7 +693,7 @@ export function DesktopShellPage({
           onCreateAsset={(file, cropRect, searchKey) =>
             void handleCreateCustomReactionAsset(file, cropRect, searchKey)
           }
-          onRemoveBookmark={(assetId) => void handleRemoveBookmarkedCustomReaction(assetId)}
+          onRemoveBookmark={handleRemoveBookmarkedCustomReaction}
         />
       ),
     },
