@@ -73,12 +73,19 @@ export function useDesktopShellRouting({
     trackedTopics,
     joinedChannelsByTopic,
     selectedChannelIdByTopic,
+    liveSessionsByTopic,
+    gameRoomsByTopic,
+    livePanelStateByTopic,
+    gamePanelStateByTopic,
     selectedThread,
+    focusedObjectId,
     thread,
     selectedAuthorPubkey,
     selectedAuthor,
     directMessagePaneOpen,
     selectedDirectMessagePeerPubkey,
+    selectedLiveSessionId,
+    selectedGameRoomId,
     lastNonNotificationsRoute,
     shellChromeState,
   } = state;
@@ -87,6 +94,7 @@ export function useDesktopShellRouting({
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
+  const setFocusedObjectId = useDesktopShellFieldSetter('focusedObjectId');
   const setThread = useDesktopShellFieldSetter('thread');
   const setReplyTarget = useDesktopShellFieldSetter('replyTarget');
   const setRepostTarget = useDesktopShellFieldSetter('repostTarget');
@@ -104,6 +112,8 @@ export function useDesktopShellRouting({
   const setDirectMessageError = useDesktopShellFieldSetter('directMessageError');
   const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
+  const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
+  const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
   const setError = useDesktopShellFieldSetter('error');
   const setLastNonNotificationsRoute = useDesktopShellFieldSetter('lastNonNotificationsRoute');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
@@ -160,12 +170,21 @@ export function useDesktopShellRouting({
       const nextSelectedThread = hasOverride('selectedThread')
         ? overrides?.selectedThread ?? null
         : currentState.selectedThread;
+      const nextFocusedObjectId = hasOverride('focusedObjectId')
+        ? overrides?.focusedObjectId ?? null
+        : currentState.focusedObjectId;
       const nextSelectedAuthorPubkey = hasOverride('selectedAuthorPubkey')
         ? overrides?.selectedAuthorPubkey ?? null
         : currentState.selectedAuthorPubkey;
       const nextSelectedDirectMessagePeerPubkey = hasOverride('selectedDirectMessagePeerPubkey')
         ? overrides?.selectedDirectMessagePeerPubkey ?? null
         : currentState.selectedDirectMessagePeerPubkey;
+      const nextSelectedLiveSessionId = hasOverride('selectedLiveSessionId')
+        ? overrides?.selectedLiveSessionId ?? null
+        : currentState.selectedLiveSessionId;
+      const nextSelectedGameRoomId = hasOverride('selectedGameRoomId')
+        ? overrides?.selectedGameRoomId ?? null
+        : currentState.selectedGameRoomId;
       const nextSettingsOpen = hasOverride('settingsOpen')
         ? overrides?.settingsOpen ?? false
         : currentState.shellChromeState.settingsOpen;
@@ -207,6 +226,9 @@ export function useDesktopShellRouting({
       } else if (nextPrimarySection !== 'notifications' && nextSelectedThread) {
         search.set('context', 'thread');
         search.set('threadId', nextSelectedThread);
+        if (nextFocusedObjectId) {
+          search.set('focusObjectId', nextFocusedObjectId);
+        }
         if (nextSelectedAuthorPubkey) {
           search.set('authorPubkey', nextSelectedAuthorPubkey);
         }
@@ -223,6 +245,12 @@ export function useDesktopShellRouting({
       }
       if (nextSettingsOpen) {
         search.set('settings', nextSettingsSection);
+      }
+      if (nextPrimarySection === 'live' && nextSelectedLiveSessionId) {
+        search.set('sessionId', nextSelectedLiveSessionId);
+      }
+      if (nextPrimarySection === 'game' && nextSelectedGameRoomId) {
+        search.set('roomId', nextSelectedGameRoomId);
       }
 
       const nextPath = PRIMARY_SECTION_PATHS[nextPrimarySection];
@@ -312,6 +340,7 @@ export function useDesktopShellRouting({
         setReplyTarget(null);
         setRepostTarget(null);
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         if (!preserveSelectedAuthor) {
           setSelectedAuthorPubkey(null);
@@ -340,12 +369,17 @@ export function useDesktopShellRouting({
           navOpen: false,
         }));
         setDirectMessagePaneOpen(true);
+        setSelectedLiveSessionId(null);
+        setSelectedGameRoomId(null);
         setSelectedDirectMessagePeerPubkey(peerPubkey);
         setDirectMessageError(null);
         syncRoute(options?.historyMode ?? 'push', {
+          focusedObjectId: null,
           primarySection: 'messages',
+          selectedGameRoomId: null,
           selectedAuthorPubkey: nextSelectedAuthorPubkey,
           selectedDirectMessagePeerPubkey: peerPubkey,
+          selectedLiveSessionId: null,
           selectedThread: null,
         });
       } catch (openError) {
@@ -378,7 +412,10 @@ export function useDesktopShellRouting({
       setSelectedAuthorPubkey,
       setSelectedAuthorTimeline,
       setSelectedDirectMessagePeerPubkey,
+      setSelectedGameRoomId,
+      setSelectedLiveSessionId,
       setSelectedThread,
+      setFocusedObjectId,
       setShellChromeState,
       setThread,
       syncRoute,
@@ -390,9 +427,15 @@ export function useDesktopShellRouting({
       const topic = options?.topic ?? activeTopic;
       try {
         const threadView = await api.listThread(topic, threadId, null, 50);
+        const nextFocusedObjectId =
+          options?.focusObjectId &&
+          threadView.items.some((item) => item.object_id === options.focusObjectId)
+            ? options.focusObjectId
+            : null;
         if (options?.normalizeOnEmpty && threadView.items.length === 0) {
           startTransition(() => {
             setSelectedThread(null);
+            setFocusedObjectId(null);
             setThread([]);
             setSelectedAuthorPubkey(null);
             setSelectedAuthor(null);
@@ -400,13 +443,18 @@ export function useDesktopShellRouting({
             setDirectMessagePaneOpen(false);
             setSelectedDirectMessagePeerPubkey(null);
             setDirectMessageError(null);
+            setSelectedLiveSessionId(null);
+            setSelectedGameRoomId(null);
           });
           syncRoute('replace', {
             activeTopic: topic,
             primarySection: 'timeline',
             timelineView: 'feed',
             directMessagePaneOpen: false,
+            focusedObjectId: null,
+            selectedGameRoomId: null,
             selectedAuthorPubkey: null,
+            selectedLiveSessionId: null,
             selectedThread: null,
           });
           return;
@@ -420,6 +468,7 @@ export function useDesktopShellRouting({
             navOpen: false,
           }));
           setSelectedThread(threadId);
+          setFocusedObjectId(nextFocusedObjectId);
           setThread(threadView.items);
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
@@ -427,6 +476,8 @@ export function useDesktopShellRouting({
           setDirectMessagePaneOpen(false);
           setSelectedDirectMessagePeerPubkey(null);
           setDirectMessageError(null);
+          setSelectedLiveSessionId(null);
+          setSelectedGameRoomId(null);
           setError(null);
         });
         syncRoute(options?.historyMode ?? 'push', {
@@ -434,7 +485,10 @@ export function useDesktopShellRouting({
           primarySection: 'timeline',
           timelineView: 'feed',
           directMessagePaneOpen: false,
+          focusedObjectId: nextFocusedObjectId,
+          selectedGameRoomId: null,
           selectedAuthorPubkey: null,
+          selectedLiveSessionId: null,
           selectedThread: threadId,
         });
       } catch (threadError) {
@@ -446,6 +500,7 @@ export function useDesktopShellRouting({
         if (options?.normalizeOnEmpty) {
           startTransition(() => {
             setSelectedThread(null);
+            setFocusedObjectId(null);
             setThread([]);
             setSelectedAuthorPubkey(null);
             setSelectedAuthor(null);
@@ -453,13 +508,18 @@ export function useDesktopShellRouting({
             setDirectMessagePaneOpen(false);
             setSelectedDirectMessagePeerPubkey(null);
             setDirectMessageError(null);
+            setSelectedLiveSessionId(null);
+            setSelectedGameRoomId(null);
           });
           syncRoute('replace', {
             activeTopic: topic,
             primarySection: 'timeline',
             timelineView: 'feed',
             directMessagePaneOpen: false,
+            focusedObjectId: null,
+            selectedGameRoomId: null,
             selectedAuthorPubkey: null,
+            selectedLiveSessionId: null,
             selectedThread: null,
           });
         }
@@ -473,9 +533,12 @@ export function useDesktopShellRouting({
       setDirectMessageError,
       setDirectMessagePaneOpen,
       setError,
+      setFocusedObjectId,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedDirectMessagePeerPubkey,
+      setSelectedGameRoomId,
+      setSelectedLiveSessionId,
       setSelectedThread,
       setShellChromeState,
       setThread,
@@ -508,11 +571,13 @@ export function useDesktopShellRouting({
         }
         if (!options?.fromThread) {
           setSelectedThread(null);
+          setFocusedObjectId(null);
           setThread([]);
         }
         syncRoute(options?.historyMode ?? 'push', {
           primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
           timelineView: options?.preserveDirectMessageContext ? undefined : 'feed',
+          focusedObjectId: options?.fromThread ? undefined : null,
           selectedThread: nextThreadId,
           selectedAuthorPubkey: authorPubkey,
           selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
@@ -531,11 +596,13 @@ export function useDesktopShellRouting({
           setSelectedAuthorTimeline([]);
           if (!options?.fromThread) {
             setSelectedThread(null);
+            setFocusedObjectId(null);
             setThread([]);
           }
           syncRoute('replace', {
             primarySection: options?.preserveDirectMessageContext ? 'messages' : 'timeline',
             timelineView: options?.preserveDirectMessageContext ? undefined : 'feed',
+            focusedObjectId: options?.fromThread ? undefined : null,
             selectedThread: options?.fromThread ? (options.threadId ?? selectedThread) : null,
             selectedAuthorPubkey: null,
             selectedDirectMessagePeerPubkey: options?.preserveDirectMessageContext
@@ -557,6 +624,7 @@ export function useDesktopShellRouting({
       setSelectedAuthorPubkey,
       setSelectedAuthorTimeline,
       setSelectedDirectMessagePeerPubkey,
+      setFocusedObjectId,
       setSelectedThread,
       setThread,
       syncRoute,
@@ -574,6 +642,7 @@ export function useDesktopShellRouting({
         navOpen: false,
       }));
       setSelectedThread(null);
+      setFocusedObjectId(null);
       setThread([]);
       setSelectedAuthorPubkey(null);
       setSelectedAuthor(null);
@@ -586,6 +655,7 @@ export function useDesktopShellRouting({
       });
       syncRoute('push', {
         primarySection: section,
+        focusedObjectId: null,
         profileMode: section === 'profile' ? 'overview' : undefined,
         profileConnectionsView: section === 'profile' ? 'following' : undefined,
         selectedAuthorPubkey: null,
@@ -598,6 +668,7 @@ export function useDesktopShellRouting({
       setAuthorError,
       setDirectMessageError,
       setDirectMessagePaneOpen,
+      setFocusedObjectId,
       setSelectedAuthor,
       setSelectedAuthorPubkey,
       setSelectedDirectMessagePeerPubkey,
@@ -643,6 +714,7 @@ export function useDesktopShellRouting({
       }));
       if (view === 'bookmarks') {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
@@ -660,6 +732,7 @@ export function useDesktopShellRouting({
       syncRoute('push', {
         primarySection: 'timeline',
         timelineView: view,
+        focusedObjectId: view === 'bookmarks' ? null : undefined,
         selectedAuthorPubkey: view === 'bookmarks' ? null : undefined,
         selectedThread: view === 'bookmarks' ? null : undefined,
         selectedDirectMessagePeerPubkey: view === 'bookmarks' ? null : undefined,
@@ -670,6 +743,7 @@ export function useDesktopShellRouting({
       setAuthorError,
       setDirectMessageError,
       setDirectMessagePaneOpen,
+      setFocusedObjectId,
       setReplyTarget,
       setRepostTarget,
       setSelectedAuthor,
@@ -696,6 +770,7 @@ export function useDesktopShellRouting({
 
   const closeThreadPane = useCallback(() => {
     setSelectedThread(null);
+    setFocusedObjectId(null);
     setThread([]);
     setReplyTarget(null);
     setRepostTarget(null);
@@ -704,11 +779,13 @@ export function useDesktopShellRouting({
     setSelectedAuthorTimeline([]);
     setAuthorError(null);
     syncRoute('replace', {
+      focusedObjectId: null,
       selectedThread: null,
       selectedAuthorPubkey: null,
     });
   }, [
     setAuthorError,
+    setFocusedObjectId,
     setReplyTarget,
     setRepostTarget,
     setSelectedAuthor,
@@ -724,6 +801,7 @@ export function useDesktopShellRouting({
       setReplyTarget(null);
       setRepostTarget(null);
       setSelectedThread(null);
+      setFocusedObjectId(null);
       setThread([]);
       setSelectedAuthorPubkey(null);
       setSelectedAuthor(null);
@@ -739,6 +817,7 @@ export function useDesktopShellRouting({
       setDirectMessageError(null);
       syncRoute(historyMode, {
         primarySection: 'messages',
+        focusedObjectId: null,
         selectedAuthorPubkey: null,
         selectedDirectMessagePeerPubkey: null,
         selectedThread: null,
@@ -748,6 +827,7 @@ export function useDesktopShellRouting({
       setAuthorError,
       setDirectMessageError,
       setDirectMessagePaneOpen,
+      setFocusedObjectId,
       setReplyTarget,
       setRepostTarget,
       setSelectedAuthor,
@@ -901,16 +981,22 @@ export function useDesktopShellRouting({
     const requestedProfileMode = params.get('profileMode');
     const requestedConnectionsView = params.get('connectionsView');
     const requestedThreadId = params.get('threadId');
+    const requestedFocusObjectId = params.get('focusObjectId')?.trim() ?? null;
     const requestedAuthorPubkey = params.get('authorPubkey');
     const requestedPeerPubkey = params.get('peerPubkey');
+    const requestedSessionId = params.get('sessionId')?.trim() ?? null;
+    const requestedRoomId = params.get('roomId')?.trim() ?? null;
 
     let nextTopic = activeTopic;
     let shouldReload = false;
     let shouldNormalize = false;
     let normalizedSelectedThread: string | null = selectedThread;
+    let normalizedFocusedObjectId: string | null = focusedObjectId;
     let normalizedSelectedAuthorPubkey: string | null = selectedAuthorPubkey;
     let normalizedSelectedDirectMessagePeerPubkey: string | null =
       selectedDirectMessagePeerPubkey;
+    let normalizedSelectedLiveSessionId: string | null = selectedLiveSessionId;
+    let normalizedSelectedGameRoomId: string | null = selectedGameRoomId;
 
     if (requestedTopic) {
       if (trackedTopics.includes(requestedTopic)) {
@@ -929,6 +1015,10 @@ export function useDesktopShellRouting({
     const nextTimelineView =
       routeSection === 'timeline' && requestedTimelineView === 'bookmarks' ? 'bookmarks' : 'feed';
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
+    const liveSessionsForTopic = liveSessionsByTopic[nextTopic] ?? [];
+    const gameRoomsForTopic = gameRoomsByTopic[nextTopic] ?? [];
+    const livePanelState = livePanelStateByTopic[nextTopic];
+    const gamePanelState = gamePanelStateByTopic[nextTopic];
     const currentSelectedChannelIdForTopic = selectedChannelIdByTopic[nextTopic] ?? null;
     const allowChannelRouteParam =
       routeSection !== 'messages' && routeSection !== 'notifications';
@@ -1069,24 +1159,35 @@ export function useDesktopShellRouting({
         requestedProfileMode ||
         requestedConnectionsView ||
         requestedThreadId ||
+        requestedFocusObjectId ||
         requestedAuthorPubkey ||
-        requestedPeerPubkey)
+        requestedPeerPubkey ||
+        requestedSessionId ||
+        requestedRoomId)
     ) {
       shouldNormalize = true;
     }
 
     if (nextTimelineView === 'bookmarks') {
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       normalizedSelectedAuthorPubkey = null;
       normalizedSelectedDirectMessagePeerPubkey = null;
       if (requestedContext) {
         shouldNormalize = true;
       }
+      if (requestedFocusObjectId || requestedSessionId || requestedRoomId) {
+        shouldNormalize = true;
+      }
       if (selectedThread) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
       }
       if (selectedAuthorPubkey) {
         setSelectedAuthorPubkey(null);
@@ -1103,14 +1204,22 @@ export function useDesktopShellRouting({
     }
     if (routeSection === 'messages') {
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       if (requestedThreadId) {
+        shouldNormalize = true;
+      }
+      if (requestedFocusObjectId || requestedSessionId || requestedRoomId) {
         shouldNormalize = true;
       }
       if (selectedThread) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
       }
       if (!directMessagePaneOpen) {
         setDirectMessagePaneOpen(true);
@@ -1177,13 +1286,18 @@ export function useDesktopShellRouting({
       }
     } else if (routeSection === 'notifications') {
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       normalizedSelectedAuthorPubkey = null;
       normalizedSelectedDirectMessagePeerPubkey = null;
       if (selectedThread) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
       }
       if (selectedAuthorPubkey) {
         setSelectedAuthorPubkey(null);
@@ -1195,7 +1309,11 @@ export function useDesktopShellRouting({
         setSelectedDirectMessagePeerPubkey(null);
         setDirectMessageError(null);
       }
-    } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'thread') {
+    } else if (
+      routeSection === 'timeline' &&
+      nextTimelineView !== 'bookmarks' &&
+      requestedContext === 'thread'
+    ) {
       normalizedSelectedDirectMessagePeerPubkey = null;
       const threadReadyForNestedAuthor =
         requestedThreadId !== null &&
@@ -1206,9 +1324,11 @@ export function useDesktopShellRouting({
       if (!requestedThreadId) {
         shouldNormalize = true;
         normalizedSelectedThread = null;
+        normalizedFocusedObjectId = null;
         normalizedSelectedAuthorPubkey = null;
         if (selectedThread || selectedAuthorPubkey) {
           setSelectedThread(null);
+          setFocusedObjectId(null);
           setThread([]);
           setReplyTarget(null);
           setRepostTarget(null);
@@ -1218,13 +1338,32 @@ export function useDesktopShellRouting({
         }
       } else if (requestedThreadId !== selectedThread || thread.length === 0) {
         normalizedSelectedThread = requestedThreadId;
+        normalizedFocusedObjectId = requestedFocusObjectId;
         void openThread(requestedThreadId, {
+          focusObjectId: requestedFocusObjectId,
           historyMode: 'replace',
           normalizeOnEmpty: true,
           topic: nextTopic,
         });
       } else {
         normalizedSelectedThread = requestedThreadId;
+        if (!requestedFocusObjectId) {
+          normalizedFocusedObjectId = null;
+          if (focusedObjectId) {
+            setFocusedObjectId(null);
+          }
+        } else if (thread.some((item) => item.object_id === requestedFocusObjectId)) {
+          normalizedFocusedObjectId = requestedFocusObjectId;
+          if (focusedObjectId !== requestedFocusObjectId) {
+            setFocusedObjectId(requestedFocusObjectId);
+          }
+        } else {
+          shouldNormalize = true;
+          normalizedFocusedObjectId = null;
+          if (focusedObjectId) {
+            setFocusedObjectId(null);
+          }
+        }
       }
       if (!requestedAuthorPubkey) {
         normalizedSelectedAuthorPubkey = null;
@@ -1263,17 +1402,29 @@ export function useDesktopShellRouting({
       } else {
         normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
       }
-    } else if (nextTimelineView !== 'bookmarks' && requestedContext === 'author') {
+    } else if (
+      routeSection === 'timeline' &&
+      nextTimelineView !== 'bookmarks' &&
+      requestedContext === 'author'
+    ) {
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       normalizedSelectedDirectMessagePeerPubkey = null;
       if (requestedThreadId) {
         shouldNormalize = true;
       }
+      if (requestedFocusObjectId || requestedSessionId || requestedRoomId) {
+        shouldNormalize = true;
+      }
       if (selectedThread) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
       }
       if (!requestedAuthorPubkey) {
         shouldNormalize = true;
@@ -1300,16 +1451,32 @@ export function useDesktopShellRouting({
       } else {
         normalizedSelectedAuthorPubkey = requestedAuthorPubkey;
       }
-    } else if (nextTimelineView !== 'bookmarks' && requestedContext) {
-      shouldNormalize = true;
+    } else if (routeSection === 'live') {
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       normalizedSelectedAuthorPubkey = null;
       normalizedSelectedDirectMessagePeerPubkey = null;
-      if (selectedThread || selectedAuthorPubkey) {
+      if (
+        requestedContext ||
+        requestedThreadId ||
+        requestedFocusObjectId ||
+        requestedAuthorPubkey ||
+        requestedPeerPubkey ||
+        requestedRoomId
+      ) {
+        shouldNormalize = true;
+      }
+      if (selectedThread) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
+      }
+      if (selectedAuthorPubkey) {
         setSelectedAuthorPubkey(null);
         setSelectedAuthor(null);
         setAuthorError(null);
@@ -1319,20 +1486,137 @@ export function useDesktopShellRouting({
         setSelectedDirectMessagePeerPubkey(null);
         setDirectMessageError(null);
       }
+      normalizedSelectedGameRoomId = null;
+      if (selectedGameRoomId) {
+        setSelectedGameRoomId(null);
+      }
+      if (!requestedSessionId) {
+        normalizedSelectedLiveSessionId = null;
+        if (selectedLiveSessionId) {
+          setSelectedLiveSessionId(null);
+        }
+      } else if (
+        livePanelState?.status === 'ready' &&
+        !liveSessionsForTopic.some((session) => session.session_id === requestedSessionId)
+      ) {
+        shouldNormalize = true;
+        normalizedSelectedLiveSessionId = null;
+        if (selectedLiveSessionId) {
+          setSelectedLiveSessionId(null);
+        }
+      } else {
+        normalizedSelectedLiveSessionId = requestedSessionId;
+        if (selectedLiveSessionId !== requestedSessionId) {
+          setSelectedLiveSessionId(requestedSessionId);
+        }
+      }
+    } else if (routeSection === 'game') {
+      normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
+      if (
+        requestedContext ||
+        requestedThreadId ||
+        requestedFocusObjectId ||
+        requestedAuthorPubkey ||
+        requestedPeerPubkey ||
+        requestedSessionId
+      ) {
+        shouldNormalize = true;
+      }
+      if (selectedThread) {
+        setSelectedThread(null);
+        setFocusedObjectId(null);
+        setThread([]);
+        setReplyTarget(null);
+        setRepostTarget(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
+      }
+      if (selectedAuthorPubkey) {
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
+      if (directMessagePaneOpen || selectedDirectMessagePeerPubkey) {
+        setDirectMessagePaneOpen(false);
+        setSelectedDirectMessagePeerPubkey(null);
+        setDirectMessageError(null);
+      }
+      normalizedSelectedLiveSessionId = null;
+      if (selectedLiveSessionId) {
+        setSelectedLiveSessionId(null);
+      }
+      if (!requestedRoomId) {
+        normalizedSelectedGameRoomId = null;
+        if (selectedGameRoomId) {
+          setSelectedGameRoomId(null);
+        }
+      } else if (
+        gamePanelState?.status === 'ready' &&
+        !gameRoomsForTopic.some((room) => room.room_id === requestedRoomId)
+      ) {
+        shouldNormalize = true;
+        normalizedSelectedGameRoomId = null;
+        if (selectedGameRoomId) {
+          setSelectedGameRoomId(null);
+        }
+      } else {
+        normalizedSelectedGameRoomId = requestedRoomId;
+        if (selectedGameRoomId !== requestedRoomId) {
+          setSelectedGameRoomId(requestedRoomId);
+        }
+      }
+    } else if (routeSection === 'timeline' && nextTimelineView !== 'bookmarks' && requestedContext) {
+      shouldNormalize = true;
+      normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
+      normalizedSelectedAuthorPubkey = null;
+      normalizedSelectedDirectMessagePeerPubkey = null;
+      if (selectedThread || selectedAuthorPubkey) {
+        setSelectedThread(null);
+        setFocusedObjectId(null);
+        setThread([]);
+        setReplyTarget(null);
+        setRepostTarget(null);
+        setSelectedAuthorPubkey(null);
+        setSelectedAuthor(null);
+        setAuthorError(null);
+      }
+      if (focusedObjectId) {
+        setFocusedObjectId(null);
+      }
+      if (directMessagePaneOpen || selectedDirectMessagePeerPubkey) {
+        setDirectMessagePaneOpen(false);
+        setSelectedDirectMessagePeerPubkey(null);
+        setDirectMessageError(null);
+      }
     } else {
-      if (requestedThreadId || requestedAuthorPubkey || requestedPeerPubkey) {
+      if (
+        requestedThreadId ||
+        requestedFocusObjectId ||
+        requestedAuthorPubkey ||
+        requestedPeerPubkey ||
+        requestedSessionId ||
+        requestedRoomId
+      ) {
         shouldNormalize = true;
       }
       normalizedSelectedThread = null;
+      normalizedFocusedObjectId = null;
       normalizedSelectedAuthorPubkey = null;
       normalizedSelectedDirectMessagePeerPubkey = null;
       if (
         selectedThread ||
+        focusedObjectId ||
         selectedAuthorPubkey ||
         directMessagePaneOpen ||
         selectedDirectMessagePeerPubkey
       ) {
         setSelectedThread(null);
+        setFocusedObjectId(null);
         setThread([]);
         setReplyTarget(null);
         setRepostTarget(null);
@@ -1358,11 +1642,14 @@ export function useDesktopShellRouting({
         syncRoute('replace', {
           activeTopic: nextTopic,
           composeTarget: privateComposeTarget(nextSelectedChannelId),
+          focusedObjectId: normalizedFocusedObjectId,
           primarySection: routeSection,
           profileConnectionsView: nextProfileConnectionsView,
           profileMode: nextProfileMode,
           selectedAuthorPubkey: normalizedSelectedAuthorPubkey,
           selectedDirectMessagePeerPubkey: normalizedSelectedDirectMessagePeerPubkey,
+          selectedGameRoomId: normalizedSelectedGameRoomId,
+          selectedLiveSessionId: normalizedSelectedLiveSessionId,
           selectedThread: normalizedSelectedThread,
           settingsOpen: nextSettingsOpen,
           settingsSection: nextSettingsSection as SettingsSection,
@@ -1374,8 +1661,13 @@ export function useDesktopShellRouting({
   }, [
     activeTopic,
     directMessagePaneOpen,
+    focusedObjectId,
+    gamePanelStateByTopic,
+    gameRoomsByTopic,
     joinedChannelsByTopic,
     loadTopics,
+    livePanelStateByTopic,
+    liveSessionsByTopic,
     navigate,
     openAuthorDetail,
     openDirectMessagePane,
@@ -1389,18 +1681,23 @@ export function useDesktopShellRouting({
     selectedAuthorPubkey,
     selectedChannelIdByTopic,
     selectedDirectMessagePeerPubkey,
+    selectedGameRoomId,
+    selectedLiveSessionId,
     selectedThread,
     setActiveTopic,
     setAuthorError,
     setComposeChannelByTopic,
     setDirectMessageError,
     setDirectMessagePaneOpen,
+    setFocusedObjectId,
     setReplyTarget,
     setRepostTarget,
     setSelectedAuthor,
     setSelectedAuthorPubkey,
     setSelectedChannelIdByTopic,
     setSelectedDirectMessagePeerPubkey,
+    setSelectedGameRoomId,
+    setSelectedLiveSessionId,
     setSelectedThread,
     setShellChromeState,
     setThread,

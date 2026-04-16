@@ -35,6 +35,7 @@ pub fn run() {
             commands::community_node::export_private_channel_invite,
             commands::community_node::import_private_channel_invite,
             commands::community_node::export_channel_access_token,
+            commands::community_node::preview_channel_access_token,
             commands::community_node::import_channel_access_token,
             commands::community_node::export_friend_only_grant,
             commands::community_node::import_friend_only_grant,

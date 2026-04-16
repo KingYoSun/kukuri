@@ -8,6 +8,7 @@ import type {
   ReactionKeyInput,
   RecentReactionView,
 } from '@/lib/api';
+import type { InternalSmartReference } from '@/lib/internalLinks';
 
 import { Button } from '@/components/ui/button';
 
@@ -40,6 +41,9 @@ type TimelineFeedProps = {
   onToggleBookmark?: (post: PostCardView['post']) => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  onActivateReference?: (reference: InternalSmartReference) => void;
+  onCopyPostLink?: (link: string) => void;
+  focusedPostObjectId?: string | null;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
@@ -73,6 +77,9 @@ export function TimelineFeed({
   onToggleBookmark,
   onRetryLocalPost,
   onRestoreLocalPost,
+  onActivateReference,
+  onCopyPostLink,
+  focusedPostObjectId,
   hasMore = false,
   loadingMore = false,
   onLoadMore,
@@ -196,6 +203,9 @@ export function TimelineFeed({
             onToggleBookmark={onToggleBookmark}
             onRetryLocalPost={onRetryLocalPost}
             onRestoreLocalPost={onRestoreLocalPost}
+            onActivateReference={onActivateReference}
+            onCopyLink={onCopyPostLink}
+            isFocused={focusedPostObjectId === view.post.object_id}
           />
         </li>
       ))}

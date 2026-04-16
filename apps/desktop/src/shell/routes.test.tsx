@@ -167,6 +167,104 @@ test('thread context restores from the hash route and loads the requested thread
   expect(within(getDetailPane('Thread')).getAllByText('open thread from timeline').length).toBeGreaterThan(0);
 });
 
+test('thread focusObjectId restores and highlights the requested post', async () => {
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&focusObjectId=post-thread-reply',
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'post-thread-open',
+            envelope_id: 'envelope-thread-open',
+            author_pubkey: 'b'.repeat(64),
+            author_name: 'bob',
+            author_display_name: null,
+            following: false,
+            followed_by: true,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'open thread from timeline',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+          {
+            object_id: 'post-thread-reply',
+            envelope_id: 'envelope-thread-reply',
+            author_pubkey: 'c'.repeat(64),
+            author_name: 'carol',
+            author_display_name: null,
+            following: false,
+            followed_by: false,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'reply target',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 2,
+            reply_to: 'post-thread-open',
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toContain('focusObjectId=post-thread-reply');
+    expect(within(getDetailPane('Thread')).getByText('reply target').closest('article')).toHaveClass(
+      'post-card-targeted'
+    );
+  });
+});
+
+test('invalid thread focusObjectId normalizes only the target param', async () => {
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open&focusObjectId=missing-post',
+    createDesktopMockApi({
+      seedPosts: {
+        'kukuri:topic:demo': [
+          {
+            object_id: 'post-thread-open',
+            envelope_id: 'envelope-thread-open',
+            author_pubkey: 'b'.repeat(64),
+            author_name: 'bob',
+            author_display_name: null,
+            following: false,
+            followed_by: true,
+            mutual: false,
+            friend_of_friend: false,
+            object_kind: 'post',
+            content: 'open thread from timeline',
+            content_status: 'Available',
+            attachments: [],
+            created_at: 1,
+            reply_to: null,
+            root_id: 'post-thread-open',
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe(
+      '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=post-thread-open'
+    );
+  });
+  expect(getDetailPane('Thread')).toBeInTheDocument();
+});
+
 test('author context restores from the hash route when a valid author pubkey is supplied', async () => {
   const authorPubkey = 'b'.repeat(64);
   renderAtHash(
@@ -191,6 +289,122 @@ test('author context restores from the hash route when a valid author pubkey is 
     expect(getDetailPane('Author')).toBeInTheDocument();
   });
   expect(within(getDetailPane('Author')).getByText('author detail from route restore')).toBeInTheDocument();
+});
+
+test('live session route restores and normalizes invalid session targets without leaving live', async () => {
+  const firstRender = renderAtHash(
+    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo',
+    createDesktopMockApi({
+      seedLiveSessions: {
+        'kukuri:topic:demo': [
+          {
+            session_id: 'session-demo',
+            host_pubkey: 'b'.repeat(64),
+            title: 'Live Demo',
+            description: 'watch here',
+            status: 'Running',
+            started_at: 1,
+            viewer_count: 4,
+            joined_by_me: false,
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo');
+  });
+  expect(screen.getByText('Live Demo').closest('article')).toHaveClass('post-card-targeted');
+
+  firstRender.unmount();
+
+  renderAtHash(
+    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=missing-session',
+    createDesktopMockApi({
+      seedLiveSessions: {
+        'kukuri:topic:demo': [
+          {
+            session_id: 'session-demo',
+            host_pubkey: 'b'.repeat(64),
+            title: 'Live Demo',
+            description: 'watch here',
+            status: 'Running',
+            started_at: 1,
+            viewer_count: 4,
+            joined_by_me: false,
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/live?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByRole('heading', { name: 'Live Sessions' })).toBeInTheDocument();
+});
+
+test('game room route restores and normalizes invalid room targets without leaving game', async () => {
+  const firstRender = renderAtHash(
+    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo',
+    createDesktopMockApi({
+      seedGameRooms: {
+        'kukuri:topic:demo': [
+          {
+            room_id: 'room-demo',
+            host_pubkey: 'b'.repeat(64),
+            title: 'Room Demo',
+            description: 'play here',
+            status: 'Waiting',
+            phase_label: 'Round 1',
+            scores: [],
+            updated_at: 1,
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo');
+  });
+  expect(screen.getByText('Room Demo').closest('article')).toHaveClass('post-card-targeted');
+
+  firstRender.unmount();
+
+  renderAtHash(
+    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=missing-room',
+    createDesktopMockApi({
+      seedGameRooms: {
+        'kukuri:topic:demo': [
+          {
+            room_id: 'room-demo',
+            host_pubkey: 'b'.repeat(64),
+            title: 'Room Demo',
+            description: 'play here',
+            status: 'Waiting',
+            phase_label: 'Round 1',
+            scores: [],
+            updated_at: 1,
+            channel_id: null,
+            audience_label: 'Public',
+          },
+        ],
+      },
+    })
+  );
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo');
+  });
+  expect(screen.getByRole('heading', { name: 'Game Rooms' })).toBeInTheDocument();
 });
 
 test('profile connections route restores the requested view', async () => {

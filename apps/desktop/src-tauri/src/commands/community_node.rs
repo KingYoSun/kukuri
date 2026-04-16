@@ -5,8 +5,8 @@ use kukuri_desktop_runtime::{
     ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListJoinedPrivateChannelsRequest,
-    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    UnsubscribeTopicRequest,
+    PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetCommunityNodeConfigRequest,
+    SetDiscoverySeedsRequest, UnsubscribeTopicRequest,
 };
 
 use crate::state::{DesktopState, map_error};
@@ -67,6 +67,18 @@ pub async fn import_channel_access_token(
     state
         .runtime
         .import_channel_access_token(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn preview_channel_access_token(
+    state: tauri::State<'_, DesktopState>,
+    request: PreviewChannelAccessTokenRequest,
+) -> Result<kukuri_app_api::ChannelAccessTokenPreview, String> {
+    state
+        .runtime
+        .preview_channel_access_token(request)
         .await
         .map_err(map_error)
 }

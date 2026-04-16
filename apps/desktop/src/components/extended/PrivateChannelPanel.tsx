@@ -1,6 +1,8 @@
 import type { FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link2 } from 'lucide-react';
 
+import type { InternalSmartReference } from '@/lib/internalLinks';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import { cn } from '@/lib/utils';
 
 import {
@@ -60,6 +63,8 @@ type PrivateChannelPanelProps = {
   onJoin: FormEventHandler<HTMLFormElement>;
   onSelectChannel: (channelId: string) => void;
   onShare: () => void;
+  onActivateReference?: (reference: InternalSmartReference) => void;
+  onCopyInviteOutput?: (token: string) => void;
 };
 
 export function PrivateChannelPanel({
@@ -81,6 +86,8 @@ export function PrivateChannelPanel({
   onJoin,
   onSelectChannel,
   onShare,
+  onActivateReference,
+  onCopyInviteOutput,
 }: PrivateChannelPanelProps) {
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
@@ -144,8 +151,25 @@ export function PrivateChannelPanel({
 
         {inviteOutput ? (
           <Notice tone='accent'>
-            <strong>{audienceSummaryLabel(inviteOutputLabel, t)}</strong>
-            <code className='extended-inline-code'>{inviteOutput}</code>
+            <div className='shell-inline-actions'>
+              <strong>{audienceSummaryLabel(inviteOutputLabel, t)}</strong>
+              {onCopyInviteOutput ? (
+                <Button
+                  variant='secondary'
+                  size='icon'
+                  className='post-action-button'
+                  type='button'
+                  aria-label={t('common:actions.copyLink')}
+                  onClick={() => onCopyInviteOutput(inviteOutput)}
+                >
+                  <Link2 className='size-4' aria-hidden='true' />
+                </Button>
+              ) : null}
+            </div>
+            <SmartReferenceText
+              text={inviteOutput}
+              onActivateReference={onActivateReference}
+            />
           </Notice>
         ) : null}
 

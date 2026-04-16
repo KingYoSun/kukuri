@@ -245,8 +245,58 @@ impl AppService {
         &self,
         token: &str,
     ) -> Result<ChannelAccessTokenPreview> {
+        if let Ok(preview) = self.preview_channel_access_token(token).await {
+            match preview.kind {
+                ChannelAccessTokenKind::Invite => {
+                    let preview = self.import_private_channel_invite(token).await?;
+                    return Ok(ChannelAccessTokenPreview {
+                        kind: ChannelAccessTokenKind::Invite,
+                        topic_id: preview.topic_id.as_str().to_string(),
+                        channel_id: preview.channel_id.as_str().to_string(),
+                        channel_label: preview.channel_label,
+                        owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+                        inviter_pubkey: Some(preview.inviter_pubkey.as_str().to_string()),
+                        sponsor_pubkey: None,
+                        epoch_id: preview.epoch_id,
+                    });
+                }
+                ChannelAccessTokenKind::Grant => {
+                    let preview = self.import_friend_only_grant(token).await?;
+                    return Ok(ChannelAccessTokenPreview {
+                        kind: ChannelAccessTokenKind::Grant,
+                        topic_id: preview.topic_id.as_str().to_string(),
+                        channel_id: preview.channel_id.as_str().to_string(),
+                        channel_label: preview.channel_label,
+                        owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+                        inviter_pubkey: None,
+                        sponsor_pubkey: Some(preview.owner_pubkey.as_str().to_string()),
+                        epoch_id: preview.epoch_id,
+                    });
+                }
+                ChannelAccessTokenKind::Share => {
+                    let preview = self.import_friend_plus_share(token).await?;
+                    return Ok(ChannelAccessTokenPreview {
+                        kind: ChannelAccessTokenKind::Share,
+                        topic_id: preview.topic_id.as_str().to_string(),
+                        channel_id: preview.channel_id.as_str().to_string(),
+                        channel_label: preview.channel_label,
+                        owner_pubkey: preview.owner_pubkey.as_str().to_string(),
+                        inviter_pubkey: None,
+                        sponsor_pubkey: Some(preview.sponsor_pubkey.as_str().to_string()),
+                        epoch_id: preview.epoch_id,
+                    });
+                }
+            }
+        }
+        anyhow::bail!("unrecognized private channel access token")
+    }
+
+    pub async fn preview_channel_access_token(
+        &self,
+        token: &str,
+    ) -> Result<ChannelAccessTokenPreview> {
         if parse_private_channel_invite_token(token).is_ok() {
-            let preview = self.import_private_channel_invite(token).await?;
+            let preview = parse_private_channel_invite_token(token)?;
             return Ok(ChannelAccessTokenPreview {
                 kind: ChannelAccessTokenKind::Invite,
                 topic_id: preview.topic_id.as_str().to_string(),
@@ -259,7 +309,7 @@ impl AppService {
             });
         }
         if parse_friend_only_grant_token(token).is_ok() {
-            let preview = self.import_friend_only_grant(token).await?;
+            let preview = parse_friend_only_grant_token(token)?;
             return Ok(ChannelAccessTokenPreview {
                 kind: ChannelAccessTokenKind::Grant,
                 topic_id: preview.topic_id.as_str().to_string(),
@@ -272,7 +322,7 @@ impl AppService {
             });
         }
         if parse_friend_plus_share_token(token).is_ok() {
-            let preview = self.import_friend_plus_share(token).await?;
+            let preview = parse_friend_plus_share_token(token)?;
             return Ok(ChannelAccessTokenPreview {
                 kind: ChannelAccessTokenKind::Share,
                 topic_id: preview.topic_id.as_str().to_string(),

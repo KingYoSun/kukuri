@@ -4,6 +4,7 @@ import type {
   ReactionKeyInput,
   RecentReactionView,
 } from '@/lib/api';
+import type { InternalSmartReference } from '@/lib/internalLinks';
 
 import { TimelineFeed } from './TimelineFeed';
 import { type PostCardView, type ThreadPanelState } from './types';
@@ -27,6 +28,9 @@ type ThreadPanelProps = {
   onReactionPickerOpen?: () => void;
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
+  onActivateReference?: (reference: InternalSmartReference) => void;
+  onCopyPostLink?: (link: string) => void;
+  focusedPostObjectId?: string | null;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void;
@@ -51,6 +55,9 @@ export function ThreadPanel({
   onReactionPickerOpen,
   onRetryLocalPost,
   onRestoreLocalPost,
+  onActivateReference,
+  onCopyPostLink,
+  focusedPostObjectId,
   hasMore = false,
   loadingMore = false,
   onLoadMore,
@@ -78,6 +85,9 @@ export function ThreadPanel({
         onReactionPickerOpen={onReactionPickerOpen}
         onRetryLocalPost={onRetryLocalPost}
         onRestoreLocalPost={onRestoreLocalPost}
+        onActivateReference={onActivateReference}
+        onCopyPostLink={onCopyPostLink}
+        focusedPostObjectId={focusedPostObjectId}
         hasMore={hasMore}
         loadingMore={loadingMore}
         onLoadMore={onLoadMore}

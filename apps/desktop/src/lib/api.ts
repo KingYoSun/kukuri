@@ -640,6 +640,7 @@ export interface DesktopApi {
     channelId: string,
     expiresAt?: number | null
   ): Promise<ChannelAccessTokenExport>;
+  previewChannelAccessToken(token: string): Promise<ChannelAccessTokenPreview>;
   importChannelAccessToken(token: string): Promise<ChannelAccessTokenPreview>;
   exportFriendOnlyGrant(
     topic: string,
@@ -1205,6 +1206,16 @@ export const runtimeApi: DesktopApi = {
         topic,
         channel_id: channelId,
         expires_at: expiresAt,
+      },
+    });
+  },
+  previewChannelAccessToken: async (token) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.previewChannelAccessToken(token);
+    }
+    return invokeDesktop<ChannelAccessTokenPreview>('preview_channel_access_token', {
+      request: {
+        token,
       },
     });
   },

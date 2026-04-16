@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Link2 } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,7 @@ type TopicNavListProps = {
   onSelectTopic: (topic: string) => void;
   onSelectChannel: (topic: string, channelId: string) => void;
   onRemoveTopic: (topic: string) => void;
+  onCopyTopicLink?: (topic: string) => void;
 };
 
 export function TopicNavList({
@@ -15,6 +17,7 @@ export function TopicNavList({
   onSelectTopic,
   onSelectChannel,
   onRemoveTopic,
+  onCopyTopicLink,
 }: TopicNavListProps) {
   const { t } = useTranslation(['common', 'shell']);
 
@@ -34,6 +37,17 @@ export function TopicNavList({
                 {item.topic}
               </span>
             </button>
+
+            {onCopyTopicLink ? (
+              <button
+                className='topic-copy'
+                type='button'
+                aria-label={t('common:actions.copyLink')}
+                onClick={() => onCopyTopicLink(item.topic)}
+              >
+                <Link2 className='size-4' aria-hidden='true' />
+              </button>
+            ) : null}
 
             {item.removable ? (
               <button

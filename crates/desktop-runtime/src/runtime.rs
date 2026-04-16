@@ -729,6 +729,15 @@ impl DesktopRuntime {
         Ok(preview)
     }
 
+    pub async fn preview_channel_access_token(
+        &self,
+        request: PreviewChannelAccessTokenRequest,
+    ) -> Result<ChannelAccessTokenPreview> {
+        self.app_service
+            .preview_channel_access_token(request.token.as_str())
+            .await
+    }
+
     pub async fn export_friend_only_grant(
         &self,
         request: ExportFriendOnlyGrantRequest,

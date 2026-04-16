@@ -17,14 +17,18 @@ export type DesktopShellRouteOverrides = {
   directMessagePaneOpen?: boolean;
   selectedDirectMessagePeerPubkey?: string | null;
   selectedThread?: string | null;
+  focusedObjectId?: string | null;
   settingsOpen?: boolean;
   settingsSection?: SettingsSection;
   timelineScope?: TimelineScope;
   timelineView?: TimelineWorkspaceView;
   selectedChannelId?: string | null;
+  selectedLiveSessionId?: string | null;
+  selectedGameRoomId?: string | null;
 };
 
 export type OpenThreadOptions = {
+  focusObjectId?: string | null;
   historyMode?: 'push' | 'replace';
   normalizeOnEmpty?: boolean;
   topic?: string;
@@ -190,11 +194,14 @@ export type BuildShellUrlOptions = {
   profileMode: ProfileWorkspaceMode;
   profileConnectionsView: ProfileConnectionsView;
   selectedThread: string | null;
+  focusedObjectId: string | null;
   selectedAuthorPubkey: string | null;
   selectedDirectMessagePeerPubkey: string | null;
   settingsOpen: boolean;
   settingsSection: SettingsSection;
   selectedChannelId: string | null;
+  selectedLiveSessionId: string | null;
+  selectedGameRoomId: string | null;
 };
 
 export function buildShellUrl(options: BuildShellUrlOptions): string {
@@ -224,6 +231,9 @@ export function buildShellUrl(options: BuildShellUrlOptions): string {
   } else if (options.primarySection !== 'notifications' && options.selectedThread) {
     search.set('context', 'thread');
     search.set('threadId', options.selectedThread);
+    if (options.focusedObjectId) {
+      search.set('focusObjectId', options.focusedObjectId);
+    }
     if (options.selectedAuthorPubkey) {
       search.set('authorPubkey', options.selectedAuthorPubkey);
     }
@@ -241,6 +251,12 @@ export function buildShellUrl(options: BuildShellUrlOptions): string {
   }
   if (options.settingsOpen) {
     search.set('settings', options.settingsSection);
+  }
+  if (options.primarySection === 'live' && options.selectedLiveSessionId) {
+    search.set('sessionId', options.selectedLiveSessionId);
+  }
+  if (options.primarySection === 'game' && options.selectedGameRoomId) {
+    search.set('roomId', options.selectedGameRoomId);
   }
 
   const nextPath = PRIMARY_SECTION_PATHS[options.primarySection];

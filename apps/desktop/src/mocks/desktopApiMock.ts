@@ -52,6 +52,113 @@ export type DesktopMockApiOptions = {
   invitePreview?: PrivateChannelInvitePreview;
 };
 
+function parseMockChannelAccessTokenPreview(
+  token: string,
+  options: DesktopMockApiOptions,
+  localAuthorPubkey: string
+): ChannelAccessTokenPreview {
+  if (token.startsWith('{')) {
+    const parsed = JSON.parse(token) as {
+      envelope?: {
+        kind?: string;
+        pubkey?: string;
+        content?: string;
+        id?: string;
+      };
+    };
+    const content = parsed.envelope?.content
+      ? (JSON.parse(parsed.envelope.content) as Record<string, string | number | null>)
+      : null;
+    if (!content || !parsed.envelope?.kind) {
+      throw new Error('unrecognized private channel access token');
+    }
+    if (parsed.envelope.kind === 'channel-invite') {
+      return {
+        kind: 'invite',
+        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        channel_id: String(content.channel_id ?? 'channel-imported'),
+        channel_label: String(content.channel_label ?? 'Imported'),
+        owner_pubkey: String(content.owner_pubkey ?? localAuthorPubkey),
+        inviter_pubkey: parsed.envelope.pubkey ?? localAuthorPubkey,
+        sponsor_pubkey: null,
+        epoch_id: String(content.epoch_id ?? 'epoch-imported-1'),
+      };
+    }
+    if (parsed.envelope.kind === 'channel-friend-grant') {
+      const ownerPubkey = String(content.owner_pubkey ?? localAuthorPubkey);
+      return {
+        kind: 'grant',
+        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        channel_id: String(content.channel_id ?? 'channel-friends'),
+        channel_label: String(content.channel_label ?? 'Friends'),
+        owner_pubkey: ownerPubkey,
+        inviter_pubkey: null,
+        sponsor_pubkey: ownerPubkey,
+        epoch_id: String(content.epoch_id ?? 'epoch-1'),
+      };
+    }
+    if (parsed.envelope.kind === 'channel-share') {
+      return {
+        kind: 'share',
+        topic_id: String(content.topic_id ?? 'kukuri:topic:demo'),
+        channel_id: String(content.channel_id ?? 'channel-friends-plus'),
+        channel_label: String(content.channel_label ?? 'Friends+'),
+        owner_pubkey: String(content.owner_pubkey ?? localAuthorPubkey),
+        inviter_pubkey: null,
+        sponsor_pubkey: String(content.sponsor_pubkey ?? parsed.envelope.pubkey ?? localAuthorPubkey),
+        epoch_id: String(content.epoch_id ?? 'epoch-plus-1'),
+      };
+    }
+    throw new Error('unrecognized private channel access token');
+  }
+
+  if (token.startsWith('grant:')) {
+    return {
+      kind: 'grant',
+      topic_id: 'kukuri:topic:demo',
+      channel_id: 'channel-friends',
+      channel_label: 'Friends',
+      owner_pubkey: localAuthorPubkey,
+      inviter_pubkey: null,
+      sponsor_pubkey: localAuthorPubkey,
+      epoch_id: 'epoch-1',
+    };
+  }
+  if (token.startsWith('share:')) {
+    return {
+      kind: 'share',
+      topic_id: 'kukuri:topic:demo',
+      channel_id: 'channel-friends-plus',
+      channel_label: 'Friends+',
+      owner_pubkey: localAuthorPubkey,
+      inviter_pubkey: null,
+      sponsor_pubkey: 'sponsor-pubkey-1234',
+      epoch_id: 'epoch-plus-1',
+    };
+  }
+
+  const invitePreview = options.invitePreview ?? {
+    channel_id: 'channel-imported',
+    topic_id: 'kukuri:topic:demo',
+    channel_label: 'Imported',
+    inviter_pubkey: localAuthorPubkey,
+    owner_pubkey: localAuthorPubkey,
+    epoch_id: 'epoch-imported-1',
+    expires_at: null,
+    namespace_secret_hex: 'a'.repeat(64),
+  };
+  return {
+    kind: 'invite',
+    topic_id: invitePreview.topic_id,
+    channel_id: invitePreview.channel_id,
+    channel_label: invitePreview.channel_label,
+    owner_pubkey: invitePreview.owner_pubkey,
+    inviter_pubkey: invitePreview.inviter_pubkey,
+    sponsor_pubkey: null,
+    epoch_id: invitePreview.epoch_id,
+  };
+}
+
 function withSocialPostDefaults(post: PostView): PostView {
   return {
     ...post,
@@ -1241,8 +1348,12 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         token: `${kind}:${topic}:${channelId}`,
       } satisfies ChannelAccessTokenExport;
     },
+    async previewChannelAccessToken(token) {
+      return parseMockChannelAccessTokenPreview(token, options ?? {}, syncStatus.local_author_pubkey);
+    },
     async importChannelAccessToken(token) {
-      if (token.startsWith('grant:')) {
+      const preview = parseMockChannelAccessTokenPreview(token, options ?? {}, syncStatus.local_author_pubkey);
+      if (preview.kind === 'grant') {
         const preview = await this.importFriendOnlyGrant(token);
         return {
           kind: 'grant',
@@ -1255,7 +1366,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           epoch_id: preview.epoch_id,
         } satisfies ChannelAccessTokenPreview;
       }
-      if (token.startsWith('share:')) {
+      if (preview.kind === 'share') {
         const preview = await this.importFriendPlusShare(token);
         return {
           kind: 'share',
@@ -1268,16 +1379,16 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           epoch_id: preview.epoch_id,
         } satisfies ChannelAccessTokenPreview;
       }
-      const preview = await this.importPrivateChannelInvite(token);
+      const invitePreview = await this.importPrivateChannelInvite(token);
       return {
         kind: 'invite',
-        topic_id: preview.topic_id,
-        channel_id: preview.channel_id,
-        channel_label: preview.channel_label,
-        owner_pubkey: preview.owner_pubkey,
-        inviter_pubkey: preview.inviter_pubkey,
+        topic_id: invitePreview.topic_id,
+        channel_id: invitePreview.channel_id,
+        channel_label: invitePreview.channel_label,
+        owner_pubkey: invitePreview.owner_pubkey,
+        inviter_pubkey: invitePreview.inviter_pubkey,
         sponsor_pubkey: null,
-        epoch_id: preview.epoch_id,
+        epoch_id: invitePreview.epoch_id,
       } satisfies ChannelAccessTokenPreview;
     },
     async exportFriendOnlyGrant(topic, channelId) {

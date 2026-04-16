@@ -6,13 +6,14 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, BookPlus, GitBranchPlus, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Bell, BookPlus, GitBranchPlus, Link2, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
 import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
 import { ComposerPanel } from '@/components/core/ComposerPanel';
+import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import { ThreadPanel } from '@/components/core/ThreadPanel';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
@@ -51,11 +52,19 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 import {
+  type ChannelAccessTokenPreview,
   type GameRoomStatus,
   runtimeApi,
 } from '@/lib/api';
 import i18n, { type SupportedLocale } from '@/i18n';
 import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
+import {
+  buildGameLink,
+  buildLiveLink,
+  buildTopicLink,
+  type InternalSmartReference,
+} from '@/lib/internalLinks';
+import { copyTextToClipboard } from '@/lib/utils';
 import {
   SHELL_CONTEXT_ID,
   SHELL_NAV_ID,
@@ -63,6 +72,8 @@ import {
   SHELL_WORKSPACE_ID,
   timelineScopeStorageKey,
   type DesktopShellPageProps,
+  PUBLIC_CHANNEL_REF,
+  PUBLIC_TIMELINE_SCOPE,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
 } from '@/shell/store';
@@ -77,6 +88,9 @@ import {
   communityNodesToDraftNodes,
   formatCount,
   localizeAudienceLabel,
+  messageFromError,
+  privateComposeTarget,
+  privateTimelineScope,
   resolveProfilePictureSrc,
   seedPeersToEditorValue,
   syncStatusBadgeLabel,
@@ -121,6 +135,7 @@ export function DesktopShellPage({
     timelineNextCursorByKey,
     timelineLoadingMoreByKey,
     selectedThread,
+    focusedObjectId,
     threadNextCursorById,
     threadLoadingMoreById,
     replyTarget,
@@ -152,6 +167,8 @@ export function DesktopShellPage({
     notificationAutoReadError,
     pendingTimelineCountsByKey,
     selectedDirectMessagePeerPubkey,
+    selectedLiveSessionId,
+    selectedGameRoomId,
     directMessages,
     directMessageComposer,
     directMessageAttachmentInputKey,
@@ -186,6 +203,13 @@ export function DesktopShellPage({
   const [profileAvatarCropFile, setProfileAvatarCropFile] = useState<File | null>(null);
   const [profileAvatarCropOpen, setProfileAvatarCropOpen] = useState(false);
   const [profileAvatarInputKey, setProfileAvatarInputKey] = useState(0);
+  const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
+  const [sharePreviewToken, setSharePreviewToken] = useState<string | null>(null);
+  const [sharePreviewData, setSharePreviewData] = useState<ChannelAccessTokenPreview | null>(null);
+  const [sharePreviewLoading, setSharePreviewLoading] = useState(false);
+  const [sharePreviewError, setSharePreviewError] = useState<string | null>(null);
+  const [sharePreviewShowRaw, setSharePreviewShowRaw] = useState(false);
+  const [shareImportPending, setShareImportPending] = useState(false);
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
   const previousTimelineViewRef = useRef(shellChromeState.timelineView);
 
@@ -234,6 +258,8 @@ export function DesktopShellPage({
   ]);
 
   const setTopicInput = useDesktopShellFieldSetter('topicInput');
+  const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
+  const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
   const setPeerTicket = useDesktopShellFieldSetter('peerTicket');
   const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
   const setDiscoveryEditorDirty = useDesktopShellFieldSetter('discoveryEditorDirty');
@@ -246,9 +272,14 @@ export function DesktopShellPage({
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
+  const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
+  const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
   const setInviteTokenInput = useDesktopShellFieldSetter('inviteTokenInput');
+  const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
+  const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
   const setLiveTitle = useDesktopShellFieldSetter('liveTitle');
   const setLiveDescription = useDesktopShellFieldSetter('liveDescription');
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
@@ -342,6 +373,7 @@ export function DesktopShellPage({
     handleCreatePrivateChannel,
     handleShareChannelAccess,
     handleJoinChannelAccess,
+    handleImportChannelAccessToken,
     handlePublish,
     handleAttachmentSelection,
     handleRemoveDraftAttachment,
@@ -520,6 +552,227 @@ export function DesktopShellPage({
       }),
     [knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
   );
+  const syncTopicContext = useCallback(
+    async (topic: string, channelId: string | null) => {
+      const nextTopics = trackedTopics.includes(topic) ? trackedTopics : [...trackedTopics, topic];
+      if (!trackedTopics.includes(topic)) {
+        setTrackedTopics(nextTopics);
+      }
+      setActiveTopic(topic);
+      setSelectedChannelIdByTopic((current) => ({
+        ...current,
+        [topic]: channelId,
+      }));
+      setTimelineScopeByTopic((current) => ({
+        ...current,
+        [topic]: privateTimelineScope(channelId),
+      }));
+      setComposeChannelByTopic((current) => ({
+        ...current,
+        [topic]: privateComposeTarget(channelId),
+      }));
+      await loadTopics(nextTopics, topic, null);
+    },
+    [
+      loadTopics,
+      setActiveTopic,
+      setComposeChannelByTopic,
+      setSelectedChannelIdByTopic,
+      setTimelineScopeByTopic,
+      setTrackedTopics,
+      trackedTopics,
+    ]
+  );
+  const handleCopyInternalLink = useCallback((link: string) => {
+    void copyTextToClipboard(link);
+  }, []);
+  const handleOpenSharePreview = useCallback(
+    async (token: string) => {
+      setSharePreviewOpen(true);
+      setSharePreviewToken(token);
+      setSharePreviewData(null);
+      setSharePreviewError(null);
+      setSharePreviewShowRaw(false);
+      setSharePreviewLoading(true);
+      try {
+        const preview = await api.previewChannelAccessToken(token);
+        setSharePreviewData(preview);
+      } catch (error) {
+        setSharePreviewError(
+          messageFromError(error, translate('channels:errors.failedPreviewToken'))
+        );
+      } finally {
+        setSharePreviewLoading(false);
+      }
+    },
+    [api, translate]
+  );
+  const handleConfirmShareImport = useCallback(async () => {
+    if (!sharePreviewToken) {
+      return;
+    }
+    setShareImportPending(true);
+    setSharePreviewError(null);
+    try {
+      await handleImportChannelAccessToken(sharePreviewToken);
+      setSharePreviewOpen(false);
+    } catch (error) {
+      setSharePreviewError(messageFromError(error, translate('channels:errors.failedJoinChannel')));
+    } finally {
+      setShareImportPending(false);
+    }
+  }, [handleImportChannelAccessToken, sharePreviewToken, translate]);
+  const handleActivateReference = useCallback(
+    async (reference: InternalSmartReference) => {
+      if (reference.kind === 'share_token') {
+        await handleOpenSharePreview(reference.token);
+        return;
+      }
+      if (reference.kind === 'topic') {
+        await syncTopicContext(reference.topic, null);
+        setSelectedLiveSessionId(null);
+        setSelectedGameRoomId(null);
+        setShellChromeState((current) => ({
+          ...current,
+          activePrimarySection: 'timeline',
+          timelineView: 'feed',
+          navOpen: false,
+        }));
+        syncRoute('push', {
+          activeTopic: reference.topic,
+          composeTarget: PUBLIC_CHANNEL_REF,
+          focusedObjectId: null,
+          primarySection: 'timeline',
+          selectedAuthorPubkey: null,
+          selectedDirectMessagePeerPubkey: null,
+          selectedGameRoomId: null,
+          selectedLiveSessionId: null,
+          selectedThread: null,
+          timelineScope: PUBLIC_TIMELINE_SCOPE,
+          timelineView: 'feed',
+        });
+        return;
+      }
+      if (reference.kind === 'post') {
+        if (!trackedTopics.includes(reference.topic)) {
+          setTrackedTopics([...trackedTopics, reference.topic]);
+        }
+        await openThread(reference.threadId, {
+          focusObjectId: reference.focusObjectId ?? reference.threadId,
+          topic: reference.topic,
+        });
+        return;
+      }
+      if (reference.kind === 'live') {
+        await syncTopicContext(reference.topic, reference.channelId);
+        setSelectedLiveSessionId(reference.sessionId);
+        setSelectedGameRoomId(null);
+        setShellChromeState((current) => ({
+          ...current,
+          activePrimarySection: 'live',
+          navOpen: false,
+        }));
+        syncRoute('push', {
+          activeTopic: reference.topic,
+          composeTarget: privateComposeTarget(reference.channelId),
+          focusedObjectId: null,
+          primarySection: 'live',
+          selectedAuthorPubkey: null,
+          selectedDirectMessagePeerPubkey: null,
+          selectedGameRoomId: null,
+          selectedLiveSessionId: reference.sessionId,
+          selectedThread: null,
+          timelineScope: privateTimelineScope(reference.channelId),
+        });
+        return;
+      }
+      await syncTopicContext(reference.topic, reference.channelId);
+      setSelectedGameRoomId(reference.roomId);
+      setSelectedLiveSessionId(null);
+      setShellChromeState((current) => ({
+        ...current,
+        activePrimarySection: 'game',
+        navOpen: false,
+      }));
+      syncRoute('push', {
+        activeTopic: reference.topic,
+        composeTarget: privateComposeTarget(reference.channelId),
+        focusedObjectId: null,
+        primarySection: 'game',
+        selectedAuthorPubkey: null,
+        selectedDirectMessagePeerPubkey: null,
+        selectedGameRoomId: reference.roomId,
+        selectedLiveSessionId: null,
+        selectedThread: null,
+        timelineScope: privateTimelineScope(reference.channelId),
+      });
+    },
+    [
+      handleOpenSharePreview,
+      openThread,
+      setSelectedGameRoomId,
+      setSelectedLiveSessionId,
+      setShellChromeState,
+      setTrackedTopics,
+      syncRoute,
+      syncTopicContext,
+      trackedTopics,
+    ]
+  );
+  useEffect(() => {
+    if (!selectedThread || !focusedObjectId) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      const selector = `[data-post-object-id="${focusedObjectId}"]`;
+      const target = document.querySelector(selector);
+      if (target instanceof HTMLElement) {
+        if (typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ block: 'center' });
+        }
+        target.focus({ preventScroll: true });
+      }
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [focusedObjectId, selectedThread, threadPostViews.length]);
+  useEffect(() => {
+    if (
+      shellChromeState.activePrimarySection !== 'live' ||
+      !selectedLiveSessionId
+    ) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      const selector = `[data-live-session-id="${selectedLiveSessionId}"]`;
+      const target = document.querySelector(selector);
+      if (target instanceof HTMLElement) {
+        if (typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ block: 'center' });
+        }
+        target.focus({ preventScroll: true });
+      }
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [liveSessionListItems.length, selectedLiveSessionId, shellChromeState.activePrimarySection]);
+  useEffect(() => {
+    if (
+      shellChromeState.activePrimarySection !== 'game' ||
+      !selectedGameRoomId
+    ) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      const selector = `[data-game-room-id="${selectedGameRoomId}"]`;
+      const target = document.querySelector(selector);
+      if (target instanceof HTMLElement) {
+        if (typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ block: 'center' });
+        }
+        target.focus({ preventScroll: true });
+      }
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeGameRooms.length, selectedGameRoomId, shellChromeState.activePrimarySection]);
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
   const notificationAction = (
@@ -600,6 +853,7 @@ export function DesktopShellPage({
         handleSelectPrivateChannel(topic, channelId);
       }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
+      onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
     />
   );
   const channelAction = (
@@ -1135,14 +1389,17 @@ export function DesktopShellPage({
                 onRetryLocalPost={handleRetryLocalPost}
                 onRestoreLocalPost={handleRestoreLocalPost}
                 localAuthorPubkey={syncStatus.local_author_pubkey}
-            mediaObjectUrls={mediaObjectUrls}
-            ownedReactionAssets={ownedReactionAssets}
-            bookmarkedReactionAssets={bookmarkedReactionAssets}
-            recentReactions={recentReactions}
-            onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-            onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-            onReactionPickerOpen={() => void loadReactionCatalogData()}
-          />
+                mediaObjectUrls={mediaObjectUrls}
+                ownedReactionAssets={ownedReactionAssets}
+                bookmarkedReactionAssets={bookmarkedReactionAssets}
+                recentReactions={recentReactions}
+                onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+                onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                onReactionPickerOpen={() => void loadReactionCatalogData()}
+                onActivateReference={(reference) => void handleActivateReference(reference)}
+                onCopyPostLink={handleCopyInternalLink}
+                focusedPostObjectId={focusedObjectId}
+              />
         </ContextPane>
       ) : null}
       {selectedAuthorPubkey ? (
@@ -1178,6 +1435,8 @@ export function DesktopShellPage({
                 onReply={beginReply}
                 readOnly={true}
                 onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
+                onActivateReference={(reference) => void handleActivateReference(reference)}
+                onCopyPostLink={handleCopyInternalLink}
               />
             </Card>
           </div>
@@ -1307,6 +1566,8 @@ export function DesktopShellPage({
                         showBookmarkAction={true}
                         bookmarkedPostIds={bookmarkedPostIds}
                         onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                        onActivateReference={(reference) => void handleActivateReference(reference)}
+                        onCopyPostLink={handleCopyInternalLink}
                         hasMore={activeTimelineHasMore}
                         loadingMore={activeTimelineLoadingMore}
                         onLoadMore={() => void loadMoreTimeline(activeTopic)}
@@ -1338,6 +1599,8 @@ export function DesktopShellPage({
                         showBookmarkAction={true}
                         bookmarkedPostIds={bookmarkedPostIds}
                         onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                        onActivateReference={(reference) => void handleActivateReference(reference)}
+                        onCopyPostLink={handleCopyInternalLink}
                       />
                     )}
                   </Card>
@@ -1368,15 +1631,24 @@ export function DesktopShellPage({
                     <ul className='post-list'>
                       {liveSessionListItems.map(({ session, isOwner, pending }) => (
                         <li key={session.session_id}>
-                          <article className='post-card' aria-busy={pending}>
+                          <article
+                            className={`post-card${selectedLiveSessionId === session.session_id ? ' post-card-targeted' : ''}`}
+                            aria-busy={pending}
+                            data-live-session-id={session.session_id}
+                            tabIndex={selectedLiveSessionId === session.session_id ? -1 : undefined}
+                          >
                             <div className='post-meta'>
                               <span>{session.title}</span>
                               <span>{translateLiveStatus(session.status)}</span>
                               <span className='reply-chip'>{localizeAudienceLabel(session.audience_label)}</span>
                             </div>
                             <div className='post-body'>
-                              <strong className='post-title'>
-                                {session.description || t('common:fallbacks.noDescription')}
+                              <strong className='post-title post-copy-wrap'>
+                                <SmartReferenceText
+                                  text={session.description || t('common:fallbacks.noDescription')}
+                                  className='post-copy-wrap'
+                                  onActivateReference={(reference) => void handleActivateReference(reference)}
+                                />
                               </strong>
                             </div>
                             <small>{session.session_id}</small>
@@ -1423,6 +1695,20 @@ export function DesktopShellPage({
                                   {t('common:actions.end')}
                                 </Button>
                               ) : null}
+                              <Button
+                                variant='secondary'
+                                size='icon'
+                                className='post-action-button'
+                                type='button'
+                                aria-label={t('common:actions.copyLink')}
+                                onClick={() =>
+                                  handleCopyInternalLink(
+                                    buildLiveLink(activeTopic, session.session_id, session.channel_id ?? null)
+                                  )
+                                }
+                              >
+                                <Link2 className='size-4' aria-hidden='true' />
+                              </Button>
                             </div>
                           </article>
                         </li>
@@ -1461,15 +1747,24 @@ export function DesktopShellPage({
 
                         return (
                           <li key={room.room_id}>
-                            <article className='post-card' aria-busy={pending}>
+                            <article
+                              className={`post-card${selectedGameRoomId === room.room_id ? ' post-card-targeted' : ''}`}
+                              aria-busy={pending}
+                              data-game-room-id={room.room_id}
+                              tabIndex={selectedGameRoomId === room.room_id ? -1 : undefined}
+                            >
                               <div className='post-meta'>
                                 <span>{room.title}</span>
                                 <span>{translateGameStatus(room.status)}</span>
                                 <span className='reply-chip'>{localizeAudienceLabel(room.audience_label)}</span>
                               </div>
                               <div className='post-body'>
-                                <strong className='post-title'>
-                                  {room.description || t('common:fallbacks.noDescription')}
+                                <strong className='post-title post-copy-wrap'>
+                                  <SmartReferenceText
+                                    text={room.description || t('common:fallbacks.noDescription')}
+                                    className='post-copy-wrap'
+                                    onActivateReference={(reference) => void handleActivateReference(reference)}
+                                  />
                                 </strong>
                               </div>
                               <small>{room.room_id}</small>
@@ -1556,6 +1851,22 @@ export function DesktopShellPage({
                                   </Button>
                                 </div>
                               ) : null}
+                              <div className='post-actions'>
+                                <Button
+                                  variant='secondary'
+                                  size='icon'
+                                  className='post-action-button'
+                                  type='button'
+                                  aria-label={t('common:actions.copyLink')}
+                                  onClick={() =>
+                                    handleCopyInternalLink(
+                                      buildGameLink(activeTopic, room.room_id, room.channel_id ?? null)
+                                    )
+                                  }
+                                >
+                                  <Link2 className='size-4' aria-hidden='true' />
+                                </Button>
+                              </div>
                             </article>
                           </li>
                         );
@@ -1642,6 +1953,8 @@ export function DesktopShellPage({
                         onReply={beginReply}
                         readOnly={true}
                         onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
+                        onActivateReference={(reference) => void handleActivateReference(reference)}
+                        onCopyPostLink={handleCopyInternalLink}
                       />
                     </Card>
                   ) : null}
@@ -1720,7 +2033,98 @@ export function DesktopShellPage({
               onJoin={(event) => void handleJoinChannelAccess(event)}
               onSelectChannel={(channelId) => handleSelectPrivateChannel(activeTopic, channelId)}
               onShare={() => void handleShareChannelAccess()}
+              onActivateReference={(reference) => void handleActivateReference(reference)}
+              onCopyInviteOutput={handleCopyInternalLink}
             />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={sharePreviewOpen}
+        onOpenChange={(open) => {
+          setSharePreviewOpen(open);
+          if (!open) {
+            setSharePreviewShowRaw(false);
+            setSharePreviewError(null);
+            setSharePreviewData(null);
+            setSharePreviewToken(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('channels:previewDialog.title')}</DialogTitle>
+            <DialogDescription>{t('channels:previewDialog.description')}</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            {sharePreviewLoading ? <Notice>{t('channels:loading')}</Notice> : null}
+            {sharePreviewError ? <Notice tone='destructive'>{sharePreviewError}</Notice> : null}
+            {sharePreviewData ? (
+              <>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>{t('common:labels.policy')}: {t(`channels:previewDialog.tokenKinds.${sharePreviewData.kind}`)}</span>
+                  <span>{t('common:labels.epoch')}: {sharePreviewData.epoch_id}</span>
+                </div>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>{t('common:labels.owner')}: {sharePreviewData.owner_pubkey}</span>
+                  <span>{t('common:labels.sourceTopic')}: {sharePreviewData.topic_id}</span>
+                </div>
+                <div className='topic-diagnostic topic-diagnostic-secondary'>
+                  <span>{t('channels:previewDialog.channel')}: {sharePreviewData.channel_label}</span>
+                  <span>{t('channels:previewDialog.channelId')}: {sharePreviewData.channel_id}</span>
+                </div>
+                {sharePreviewData.inviter_pubkey ? (
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>{t('channels:previewDialog.inviter')}: {sharePreviewData.inviter_pubkey}</span>
+                  </div>
+                ) : null}
+                {sharePreviewData.sponsor_pubkey ? (
+                  <div className='topic-diagnostic topic-diagnostic-secondary'>
+                    <span>{t('channels:previewDialog.sponsor')}: {sharePreviewData.sponsor_pubkey}</span>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+            {sharePreviewShowRaw && sharePreviewToken ? (
+              <code className='extended-inline-code'>{sharePreviewToken}</code>
+            ) : null}
+            <div className='ui-dialog-footer'>
+              {sharePreviewToken ? (
+                <Button
+                  variant='secondary'
+                  type='button'
+                  onClick={() => handleCopyInternalLink(sharePreviewToken)}
+                >
+                  {t('channels:previewDialog.copyToken')}
+                </Button>
+              ) : null}
+              {sharePreviewToken ? (
+                <Button
+                  variant='secondary'
+                  type='button'
+                  onClick={() => setSharePreviewShowRaw((current) => !current)}
+                >
+                  {sharePreviewShowRaw
+                    ? t('channels:previewDialog.hideRaw')
+                    : t('channels:previewDialog.showRaw')}
+                </Button>
+              ) : null}
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => setSharePreviewOpen(false)}
+              >
+                {t('common:actions.cancel')}
+              </Button>
+              <Button
+                type='button'
+                disabled={sharePreviewLoading || shareImportPending || !sharePreviewData}
+                onClick={() => void handleConfirmShareImport()}
+              >
+                {shareImportPending ? t('common:actions.join') : t('channels:previewDialog.import')}
+              </Button>
+            </div>
           </DialogBody>
         </DialogContent>
       </Dialog>
