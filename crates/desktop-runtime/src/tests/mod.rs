@@ -2387,7 +2387,10 @@ async fn preview_channel_access_token_is_non_mutating() {
         })
         .await
         .expect("joined after preview");
-    assert!(joined_after.is_empty(), "preview must not mutate runtime state");
+    assert!(
+        joined_after.is_empty(),
+        "preview must not mutate runtime state"
+    );
 
     let invalid = runtime_b
         .preview_channel_access_token(PreviewChannelAccessTokenRequest {

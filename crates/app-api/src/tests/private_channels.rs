@@ -166,7 +166,10 @@ async fn channel_access_preview_is_non_mutating_and_rejects_invalid_tokens() {
         .list_joined_private_channels(topic)
         .await
         .expect("joined before preview");
-    assert!(joined_before.is_empty(), "preview should start without joined channels");
+    assert!(
+        joined_before.is_empty(),
+        "preview should start without joined channels"
+    );
 
     let preview = app_b
         .preview_channel_access_token(invite.as_str())
@@ -180,7 +183,10 @@ async fn channel_access_preview_is_non_mutating_and_rejects_invalid_tokens() {
         .list_joined_private_channels(topic)
         .await
         .expect("joined after preview");
-    assert!(joined_after.is_empty(), "preview must not mutate joined channel state");
+    assert!(
+        joined_after.is_empty(),
+        "preview must not mutate joined channel state"
+    );
 
     let invalid = app_b.preview_channel_access_token("not-a-token").await;
     assert!(invalid.is_err(), "invalid tokens should fail preview");
