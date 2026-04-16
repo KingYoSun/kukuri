@@ -5092,13 +5092,12 @@ async fn auto_approve_node_bootstraps_session_on_status_refresh() {
         crate::CommunityNodeSessionPhase::Ready
     );
     assert_eq!(statuses[0].retry_after, None);
-    assert_eq!(
+    assert!(
         statuses[0]
             .consent_state
             .as_ref()
             .expect("consent state")
-            .all_required_accepted,
-        true
+            .all_required_accepted
     );
     assert_eq!(
         statuses[0]
@@ -5292,13 +5291,12 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         crate::CommunityNodeSessionPhase::Idle
     );
     assert!(statuses[0].auth_state.authenticated);
-    assert_eq!(
-        statuses[0]
+    assert!(
+        !statuses[0]
             .consent_state
             .as_ref()
             .expect("consent state")
-            .all_required_accepted,
-        false
+            .all_required_accepted
     );
 
     runtime.shutdown().await;
