@@ -71,28 +71,24 @@ test('browser mock shell can switch topics, publish, open thread, open author, a
   await expect(settingsDialog.getByRole('textbox', { name: 'Seed Peers' })).toHaveValue('seed-peer-1');
 
   await settingsDialog.getByTestId('settings-section-community-node').click();
+  await expect(
+    settingsDialog.getByRole('checkbox', { name: 'Auto-approve consent for this node' })
+  ).toBeChecked();
+  await expect(settingsDialog.getByText('active on current session', { exact: true })).toBeVisible();
+  await expect(settingsDialog.getByText('connectivity urls active on current session')).toBeVisible();
+
+  await settingsDialog.locator('button').filter({ hasText: /^Add Node$/ }).click();
   await settingsDialog
     .getByPlaceholder('https://community.example.com')
-    .fill('https://api.kukuri.app');
-  await settingsDialog.getByRole('button', { name: 'Save Nodes' }).click();
+    .last()
+    .fill('https://community.example.com');
+  await settingsDialog.getByRole('button', { name: 'Save Nodes', exact: true }).click();
+  await expect(
+    settingsDialog.getByRole('heading', { name: 'https://community.example.com' })
+  ).toBeVisible();
 
-  const nodeCard = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: 'https://api.kukuri.app' }) })
-    .last();
-
-  await nodeCard.getByRole('button', { name: 'Authenticate' }).click();
-  await expect(nodeCard.getByText('waiting for consent acceptance')).toBeVisible();
-
-  await nodeCard.getByRole('button', { name: 'Accept' }).click();
-  await expect(nodeCard.getByText('active on current session', { exact: true })).toBeVisible();
-  await expect(nodeCard.getByText('connectivity urls active on current session')).toBeVisible();
-
-  await nodeCard.getByRole('button', { name: 'Refresh' }).click();
-  await expect(nodeCard.getByRole('heading', { name: 'https://api.kukuri.app' })).toBeVisible();
-
-  await nodeCard.getByRole('button', { name: 'Clear Token' }).click();
-  await expect(nodeCard).toBeVisible();
+  await settingsDialog.getByRole('button', { name: 'Refresh' }).first().click();
+  await expect(settingsDialog.getByRole('heading', { name: 'https://api.kukuri.app' })).toBeVisible();
 });
 
 test('browser mock shell can open an author from messages without leaving the dm workspace', async ({
@@ -246,10 +242,12 @@ test('browser mock narrow shell keeps nav, context, and settings flows reachable
   await expect(settingsDialog.getByPlaceholder('nodeid@127.0.0.1:7777')).toHaveValue('');
 
   await settingsDialog.getByTestId('settings-section-community-node').click();
+  await settingsDialog.locator('button').filter({ hasText: /^Add Node$/ }).click();
   await settingsDialog
     .getByPlaceholder('https://community.example.com')
-    .fill('https://api.kukuri.app\nhttps://community.example.com');
-  await settingsDialog.getByRole('button', { name: 'Save Nodes' }).click();
+    .last()
+    .fill('https://community.example.com');
+  await settingsDialog.getByRole('button', { name: 'Save Nodes', exact: true }).click();
   await expect(
     settingsDialog.getByRole('heading', { name: 'https://community.example.com' })
   ).toBeVisible();
