@@ -1372,6 +1372,7 @@
 
 .shell-nav .topic-link,
 .shell-nav .topic-remove,
+.shell-nav .topic-copy,
 .shell-nav .topic-subitem {
   border: 0;
   color: inherit;
@@ -1388,6 +1389,13 @@
 .shell-nav .topic-remove {
   width: 2rem;
   justify-self: end;
+}
+
+.shell-nav .topic-copy {
+  width: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .shell-nav .topic-diagnostic {
@@ -1898,6 +1906,35 @@
 .post-action-button svg {
   width: 1rem;
   height: 1rem;
+}
+
+.smart-reference-text {
+  display: inline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.smart-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.1rem 0.2rem 0.1rem 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  background: var(--surface-active);
+  color: var(--foreground-strong);
+  font: inherit;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.post-card-targeted {
+  border-color: var(--border-accent);
+  background: color-mix(in srgb, var(--surface-active) 88%, var(--surface-panel-muted));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--border-accent) 54%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--border-accent) 16%, transparent);
 }
 
 .post-action-popover {

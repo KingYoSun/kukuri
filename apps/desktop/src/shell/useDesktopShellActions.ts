@@ -991,9 +991,13 @@ export function useDesktopShellActions({
       setChannelError(translate('channels:errors.inviteTokenRequired'));
       return;
     }
+    await handleImportChannelAccessToken(inviteTokenInput.trim());
+  }
+
+  async function handleImportChannelAccessToken(token: string) {
     setChannelActionPending('join');
     try {
-      const preview = await api.importChannelAccessToken(inviteTokenInput.trim());
+      const preview = await api.importChannelAccessToken(token.trim());
       await activateImportedPrivateChannel(
         preview.topic_id,
         preview.channel_id,
@@ -2039,6 +2043,7 @@ export function useDesktopShellActions({
     handleCreatePrivateChannel,
     handleShareChannelAccess,
     handleJoinChannelAccess,
+    handleImportChannelAccessToken,
     handlePublish,
     handleAttachmentSelection,
     handleRemoveDraftAttachment,

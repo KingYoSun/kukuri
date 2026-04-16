@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookCopy, Reply, Repeat2 } from 'lucide-react';
+import { BookCopy, Link2, Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -12,6 +12,10 @@ import type {
   ReplyPreviewView,
 } from '@/lib/api';
 import { copyTextToClipboard } from '@/lib/utils';
+import {
+  buildPostLink,
+  type InternalSmartReference,
+} from '@/lib/internalLinks';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +29,7 @@ import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
 import { RelationshipBadge } from './RelationshipBadge';
+import { SmartReferenceText } from './SmartReferenceText';
 import { type PostCardView } from './types';
 
 function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | null {
@@ -72,6 +77,9 @@ type PostCardProps = {
   onRetryLocalPost?: (post: PostCardView['post']) => void;
   onRestoreLocalPost?: (post: PostCardView['post']) => void;
   onReactionPickerOpen?: () => void;
+  onActivateReference?: (reference: InternalSmartReference) => void;
+  onCopyLink?: (link: string) => void;
+  isFocused?: boolean;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -107,6 +115,9 @@ export function PostCard({
   onRetryLocalPost,
   onRestoreLocalPost,
   onReactionPickerOpen,
+  onActivateReference,
+  onCopyLink,
+  isFocused = false,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
@@ -122,6 +133,10 @@ export function PostCard({
   const interactionDisabled = localState !== null;
   const audienceChipLabel = view.audienceChipLabel ?? post.audience_label;
   const publishedTopicId = post.published_topic_id?.trim() || post.origin_topic_id?.trim() || null;
+  const canonicalPostTopicId = view.threadTopicId?.trim() || publishedTopicId;
+  const canonicalPostLink = canonicalPostTopicId
+    ? buildPostLink(canonicalPostTopicId, view.threadTargetId, post.object_id)
+    : null;
   const repostSource = post.repost_of ?? null;
   const replyPreview = post.reply_preview ?? null;
   const isQuoteRepost = post.object_kind === 'repost' && Boolean(post.repost_commentary?.trim());
@@ -207,9 +222,11 @@ export function PostCard({
           <span className='repost-source-eyebrow'>{eyebrow}</span>
           <span className='repost-source-topic'>
             <span>{t('labels.sourceTopic')}</span>
-            <span className='shell-topic-link-label' title={source.topic}>
-              {source.topic}
-            </span>
+            <SmartReferenceText
+              text={source.topic}
+              className='shell-topic-link-label'
+              onActivateReference={onActivateReference}
+            />
           </span>
           {source.attachments.length > 0 ? (
             <span className='repost-source-attachments'>{`+${source.attachments.length} media`}</span>
@@ -220,7 +237,11 @@ export function PostCard({
             <strong className='post-title post-copy-wrap'>{source.authorLabel}</strong>
           ) : null}
           {source.content.trim().length > 0 ? (
-            <span className='post-copy-wrap'>{source.content}</span>
+            <SmartReferenceText
+              text={source.content}
+              className='post-copy-wrap'
+              onActivateReference={onActivateReference}
+            />
           ) : null}
         </div>
       </div>
@@ -240,7 +261,13 @@ export function PostCard({
             <span className='text-skeleton text-skeleton-line text-skeleton-line-short' />
           </div>
         ) : hasPrimaryContent ? (
-          <strong className='post-title post-copy-wrap'>{post.content}</strong>
+          <strong className='post-title post-copy-wrap'>
+            <SmartReferenceText
+              text={post.content}
+              className='post-copy-wrap'
+              onActivateReference={onActivateReference}
+            />
+          </strong>
         ) : null}
 
         {repostSource
@@ -275,9 +302,11 @@ export function PostCard({
       {readOnly && publishedTopicId ? (
         <div className='topic-diagnostic topic-diagnostic-secondary'>
           <span>{t('feed.originTopic', { ns: 'profile' })}</span>
-          <span className='shell-topic-link-label' title={publishedTopicId}>
-            {publishedTopicId}
-          </span>
+          <SmartReferenceText
+            text={publishedTopicId}
+            className='shell-topic-link-label'
+            onActivateReference={onActivateReference}
+          />
         </div>
       ) : null}
     </>
@@ -285,8 +314,14 @@ export function PostCard({
 
   return (
     <article
-      className={context === 'thread' ? 'post-card post-card-thread post-layout-safe' : 'post-card post-layout-safe'}
+      className={
+        context === 'thread'
+          ? `post-card post-card-thread post-layout-safe${isFocused ? ' post-card-targeted' : ''}`
+          : `post-card post-layout-safe${isFocused ? ' post-card-targeted' : ''}`
+      }
       aria-busy={localState === 'pending' || localState === 'syncing'}
+      data-post-object-id={post.object_id}
+      tabIndex={isFocused ? -1 : undefined}
     >
       <div className='post-meta'>
         <AuthorIdentityButton
@@ -315,9 +350,20 @@ export function PostCard({
       {readOnly ? (
         <div className='post-link post-layout-safe'>{contentBlock}</div>
       ) : (
-        <button className='post-link post-layout-safe' type='button' onClick={openPrimaryTarget}>
+        <div
+          className='post-link post-layout-safe'
+          role='button'
+          tabIndex={0}
+          onClick={openPrimaryTarget}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              openPrimaryTarget();
+            }
+          }}
+        >
           {contentBlock}
-        </button>
+        </div>
       )}
 
       {localStateLabel ? (
@@ -339,15 +385,29 @@ export function PostCard({
 
       <div className='post-actions'>
         {readOnly ? (
-          publishedTopicId && onOpenOriginalTopic ? (
-            <Button
-              variant='secondary'
-              type='button'
-              onClick={() => onOpenOriginalTopic(publishedTopicId)}
-            >
-              {t('feed.openOriginalTopic', { ns: 'profile' })}
-            </Button>
-          ) : null
+          <>
+            {publishedTopicId && onOpenOriginalTopic ? (
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => onOpenOriginalTopic(publishedTopicId)}
+              >
+                {t('feed.openOriginalTopic', { ns: 'profile' })}
+              </Button>
+            ) : null}
+            {canonicalPostLink && onCopyLink ? (
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('actions.copyLink')}
+                onClick={() => onCopyLink(canonicalPostLink)}
+              >
+                <Link2 className='size-4' aria-hidden='true' />
+              </Button>
+            ) : null}
+          </>
         ) : (
           <>
             {reactionSummary.length > 0 && !interactionDisabled ? (
@@ -469,6 +529,18 @@ export function PostCard({
                 onClick={() => onReply(post)}
               >
                 <Reply className='size-4' aria-hidden='true' />
+              </Button>
+            ) : null}
+            {canonicalPostLink && onCopyLink ? (
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('actions.copyLink')}
+                onClick={() => onCopyLink(canonicalPostLink)}
+              >
+                <Link2 className='size-4' aria-hidden='true' />
               </Button>
             ) : null}
             {showBookmarkAction && onToggleBookmark ? (

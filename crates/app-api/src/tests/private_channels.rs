@@ -137,6 +137,61 @@ async fn private_channel_invite_scopes_posts_and_replies() {
     assert_eq!(reply.reply_to.as_deref(), Some(object_id.as_str()));
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn channel_access_preview_is_non_mutating_and_rejects_invalid_tokens() {
+    let _guard = iroh_integration_test_lock().lock_owned().await;
+    let dir = tempdir().expect("tempdir");
+    let stack_a = TestIrohStack::new(&dir.path().join("preview-a")).await;
+    let stack_b = TestIrohStack::new(&dir.path().join("preview-b")).await;
+    let store_a = Arc::new(MemoryStore::default());
+    let store_b = Arc::new(MemoryStore::default());
+    let app_a = app_with_iroh_services(store_a, &stack_a);
+    let app_b = app_with_iroh_services(store_b, &stack_b);
+    let topic = "kukuri:topic:preview-channel";
+
+    let channel = app_a
+        .create_private_channel(CreatePrivateChannelInput {
+            topic_id: TopicId::new(topic),
+            label: "preview".into(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+    let invite = app_a
+        .export_private_channel_invite(topic, channel.channel_id.as_str(), None)
+        .await
+        .expect("export invite");
+
+    let joined_before = app_b
+        .list_joined_private_channels(topic)
+        .await
+        .expect("joined before preview");
+    assert!(
+        joined_before.is_empty(),
+        "preview should start without joined channels"
+    );
+
+    let preview = app_b
+        .preview_channel_access_token(invite.as_str())
+        .await
+        .expect("preview invite");
+    assert_eq!(preview.kind, ChannelAccessTokenKind::Invite);
+    assert_eq!(preview.topic_id.as_str(), topic);
+    assert_eq!(preview.channel_id.as_str(), channel.channel_id);
+
+    let joined_after = app_b
+        .list_joined_private_channels(topic)
+        .await
+        .expect("joined after preview");
+    assert!(
+        joined_after.is_empty(),
+        "preview must not mutate joined channel state"
+    );
+
+    let invalid = app_b.preview_channel_access_token("not-a-token").await;
+    assert!(invalid.is_err(), "invalid tokens should fail preview");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
     let _guard = iroh_integration_test_lock().lock_owned().await;

@@ -277,6 +277,11 @@ pub struct ImportChannelAccessTokenRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreviewChannelAccessTokenRequest {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportFriendOnlyGrantRequest {
     pub topic: String,
     pub channel_id: String,

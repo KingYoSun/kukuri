@@ -24,6 +24,7 @@
     "inviteTokenRequired": "邀请令牌为必填项",
     "selectChannelForShare": "创建共享前请先选择私密频道",
     "failedCreateChannel": "创建频道失败",
+    "failedPreviewToken": "预览私密频道令牌失败",
     "failedCreateShare": "创建共享失败",
     "failedJoinChannel": "加入私密频道失败",
     "failedShareChannel": "共享私密频道失败"
@@ -39,6 +40,24 @@
     "invite_only": "仅邀请: 只有持有邀请令牌的用户可以加入"
   },
   "rotationRequired": "需要轮换: 当前参与者中包含非互相关注用户",
+  "previewDialog": {
+    "title": "访问预览",
+    "description": "在导入前先检查频道访问令牌。",
+    "import": "导入 / 加入",
+    "copyToken": "复制令牌",
+    "showRaw": "显示原始令牌",
+    "hideRaw": "隐藏原始令牌",
+    "channel": "频道",
+    "channelId": "频道 ID",
+    "inviter": "邀请者",
+    "sponsor": "分享者",
+    "tokenLabelSuffix": "令牌",
+    "tokenKinds": {
+      "invite": "邀请",
+      "grant": "授权",
+      "share": "共享"
+    }
+  },
   "selectChannel": "选择一个频道",
   "selectChannelNotice": "选择私密频道以查看策略和操作。",
   "title": "私密频道"

@@ -101,6 +101,7 @@ export type DesktopShellState = {
   threadNextCursorById: Record<string, TimelineCursor | null>;
   threadLoadingMoreById: Record<string, boolean>;
   selectedThread: string | null;
+  focusedObjectId: string | null;
   replyTarget: PostView | null;
   repostTarget: PostView | null;
   peerTicket: string;
@@ -162,6 +163,7 @@ export type DesktopShellState = {
   livePanelStateByTopic: Record<string, AsyncPanelState>;
   liveCreatePending: boolean;
   livePendingBySessionId: Record<string, true>;
+  selectedLiveSessionId: string | null;
   channelLabelInput: string;
   channelAudienceInput: ChannelAudienceOption['value'];
   inviteTokenInput: string;
@@ -178,6 +180,7 @@ export type DesktopShellState = {
   gamePanelStateByTopic: Record<string, AsyncPanelState>;
   gameCreatePending: boolean;
   gameSavingByRoomId: Record<string, true>;
+  selectedGameRoomId: string | null;
   reactionPanelState: AsyncPanelState;
   reactionCreatePending: boolean;
   error: string | null;
@@ -374,6 +377,7 @@ export function createInitialShellState(): DesktopShellState {
     threadNextCursorById: {},
     threadLoadingMoreById: {},
     selectedThread: null,
+    focusedObjectId: null,
     replyTarget: null,
     repostTarget: null,
     peerTicket: '',
@@ -435,6 +439,7 @@ export function createInitialShellState(): DesktopShellState {
     livePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
     liveCreatePending: false,
     livePendingBySessionId: {},
+    selectedLiveSessionId: null,
     channelLabelInput: '',
     channelAudienceInput: 'invite_only',
     inviteTokenInput: '',
@@ -451,6 +456,7 @@ export function createInitialShellState(): DesktopShellState {
     gamePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
     gameCreatePending: false,
     gameSavingByRoomId: {},
+    selectedGameRoomId: null,
     reactionPanelState: DEFAULT_ASYNC_PANEL_STATE,
     reactionCreatePending: false,
     error: null,

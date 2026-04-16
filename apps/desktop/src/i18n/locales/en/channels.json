@@ -24,6 +24,7 @@
     "inviteTokenRequired": "invite token is required",
     "selectChannelForShare": "select a private channel before creating a share",
     "failedCreateChannel": "failed to create channel",
+    "failedPreviewToken": "failed to preview private channel token",
     "failedCreateShare": "failed to create friends+ share",
     "failedJoinChannel": "failed to join private channel",
     "failedShareChannel": "failed to share private channel"
@@ -39,6 +40,24 @@
     "invite_only": "Invite only"
   },
   "rotationRequired": "rotation required: current participants include non-mutual followers",
+  "previewDialog": {
+    "title": "Preview Access",
+    "description": "Inspect the channel access token before importing it.",
+    "import": "Import / Join",
+    "copyToken": "Copy token",
+    "showRaw": "Show raw token",
+    "hideRaw": "Hide raw token",
+    "channel": "channel",
+    "channelId": "channel id",
+    "inviter": "inviter",
+    "sponsor": "sponsor",
+    "tokenLabelSuffix": "token",
+    "tokenKinds": {
+      "invite": "Invite",
+      "grant": "Grant",
+      "share": "Share"
+    }
+  },
   "selectChannel": "Select a channel",
   "selectChannelNotice": "Select a private channel to inspect policy and actions.",
   "title": "Private Channels"

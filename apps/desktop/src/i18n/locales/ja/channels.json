@@ -24,6 +24,7 @@
     "inviteTokenRequired": "招待トークンは必須です",
     "selectChannelForShare": "共有を作成する前にプライベートチャンネルを選択してください",
     "failedCreateChannel": "チャンネルの作成に失敗しました",
+    "failedPreviewToken": "プライベートチャンネルトークンの確認に失敗しました",
     "failedCreateShare": "共有の作成に失敗しました",
     "failedJoinChannel": "プライベートチャンネルへの参加に失敗しました",
     "failedShareChannel": "プライベートチャンネルの共有に失敗しました"
@@ -39,6 +40,24 @@
     "invite_only": "招待限定: 招待トークンを持つ相手だけが参加できます"
   },
   "rotationRequired": "ローテーションが必要です: 現在の参加者に相互フォローでない相手が含まれています",
+  "previewDialog": {
+    "title": "アクセスプレビュー",
+    "description": "インポート前にチャンネルアクセストークンを確認します。",
+    "import": "インポート / 参加",
+    "copyToken": "トークンをコピー",
+    "showRaw": "生トークンを表示",
+    "hideRaw": "生トークンを隠す",
+    "channel": "チャンネル",
+    "channelId": "チャンネル ID",
+    "inviter": "招待者",
+    "sponsor": "スポンサー",
+    "tokenLabelSuffix": "トークン",
+    "tokenKinds": {
+      "invite": "招待",
+      "grant": "権限付与",
+      "share": "共有"
+    }
+  },
   "selectChannel": "チャンネルを選択",
   "selectChannelNotice": "プライベートチャンネルを選択するとポリシーと操作を確認できます。",
   "title": "プライベートチャンネル"

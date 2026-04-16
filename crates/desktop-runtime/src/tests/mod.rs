@@ -2314,6 +2314,93 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn preview_channel_access_token_is_non_mutating() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_a = dir.path().join("preview-runtime-a.db");
+    let db_b = dir.path().join("preview-runtime-b.db");
+    let runtime_a = DesktopRuntime::new_with_config_and_identity(
+        &db_a,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime a");
+    let runtime_b = DesktopRuntime::new_with_config_and_identity(
+        &db_b,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime b");
+    let topic = "kukuri:topic:desktop-preview-channel";
+
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe a");
+
+    let channel = runtime_a
+        .create_private_channel(CreatePrivateChannelRequest {
+            topic: topic.into(),
+            label: "preview".into(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+    let invite = runtime_a
+        .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+            topic: topic.into(),
+            channel_id: channel.channel_id.clone(),
+            expires_at: None,
+        })
+        .await
+        .expect("export invite");
+
+    let joined_before = runtime_b
+        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+            topic: topic.into(),
+        })
+        .await
+        .expect("joined before preview");
+    assert!(
+        joined_before.is_empty(),
+        "preview should not require pre-existing joined state"
+    );
+
+    let preview = runtime_b
+        .preview_channel_access_token(PreviewChannelAccessTokenRequest { token: invite })
+        .await
+        .expect("preview invite");
+    assert_eq!(preview.kind, kukuri_app_api::ChannelAccessTokenKind::Invite);
+    assert_eq!(preview.topic_id, topic);
+    assert_eq!(preview.channel_id, channel.channel_id);
+
+    let joined_after = runtime_b
+        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+            topic: topic.into(),
+        })
+        .await
+        .expect("joined after preview");
+    assert!(
+        joined_after.is_empty(),
+        "preview must not mutate runtime state"
+    );
+
+    let invalid = runtime_b
+        .preview_channel_access_token(PreviewChannelAccessTokenRequest {
+            token: "not-a-token".into(),
+        })
+        .await;
+    assert!(invalid.is_err(), "invalid tokens should fail preview");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn private_channel_invite_restores_after_restart_without_reimport() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");

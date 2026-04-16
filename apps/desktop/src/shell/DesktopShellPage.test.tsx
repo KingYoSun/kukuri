@@ -2207,7 +2207,7 @@ test('desktop shell can create a private channel and export an invite', async ()
 
   await waitFor(() => {
     expect(screen.getByText('Share')).toBeInTheDocument();
-    expect(screen.getByText(/invite:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /invite token/i })).toBeInTheDocument();
   });
 });
 
@@ -2260,7 +2260,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
 
   await waitFor(() => {
     expect(screen.getByText('Share')).toBeInTheDocument();
-    expect(screen.getByText(/grant:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /grant token/i })).toBeInTheDocument();
   });
 });
 
@@ -2282,8 +2282,181 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Share' }));
 
   await waitFor(() => {
-    expect(screen.getByText(/share:kukuri:topic:demo:channel-1/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /share token/i })).toBeInTheDocument();
   });
+});
+
+test('share token smart link previews before import and joins only after confirmation', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [
+        {
+          object_id: 'share-post',
+          envelope_id: 'envelope-share-post',
+          author_pubkey: 'a'.repeat(64),
+          author_name: 'alice',
+          author_display_name: null,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          object_kind: 'post',
+          content: 'invite:kukuri:topic:private-imported:channel-imported',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 1,
+          reply_to: null,
+          root_id: 'share-post',
+          channel_id: null,
+          audience_label: 'Public',
+        },
+      ],
+    },
+    invitePreview: {
+      channel_id: 'channel-imported',
+      topic_id: 'kukuri:topic:private-imported',
+      channel_label: 'Imported',
+      inviter_pubkey: 'f'.repeat(64),
+      owner_pubkey: 'f'.repeat(64),
+      epoch_id: 'epoch-imported-1',
+      expires_at: null,
+      namespace_secret_hex: 'a'.repeat(64),
+    },
+  });
+  const previewSpy = vi.spyOn(api, 'previewChannelAccessToken');
+  const importSpy = vi.spyOn(api, 'importChannelAccessToken');
+
+  render(<App api={api} />);
+
+  const tokenChip = await screen.findByText('Invite token', { selector: 'button.smart-reference-chip' });
+  await user.click(tokenChip);
+
+  const dialog = await screen.findByRole('dialog', { name: 'Preview Access' });
+  await waitFor(() => {
+    expect(previewSpy).toHaveBeenCalledTimes(1);
+    expect(importSpy).not.toHaveBeenCalled();
+  });
+  expect(within(dialog).getByText(/channel-imported/)).toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole('button', { name: 'Import / Join' }));
+
+  await waitFor(() => {
+    expect(importSpy).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe(
+      '#/timeline?topic=kukuri%3Atopic%3Aprivate-imported&channel=channel-imported'
+    );
+  });
+});
+
+test('copy link actions write canonical hash routes for topic, post, live, and game', async () => {
+  const user = userEvent.setup();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText,
+    },
+  });
+
+  render(
+    <App
+      api={createDesktopMockApi({
+        seedPosts: {
+          'kukuri:topic:demo': [
+            {
+              object_id: 'copy-post',
+              envelope_id: 'envelope-copy-post',
+              author_pubkey: 'a'.repeat(64),
+              author_name: 'alice',
+              author_display_name: null,
+              following: false,
+              followed_by: false,
+              mutual: false,
+              friend_of_friend: false,
+              object_kind: 'post',
+              content: 'copy this post',
+              content_status: 'Available',
+              attachments: [],
+              created_at: 1,
+              reply_to: null,
+              root_id: 'copy-post',
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+        seedLiveSessions: {
+          'kukuri:topic:demo': [
+            {
+              session_id: 'session-demo',
+              host_pubkey: 'a'.repeat(64),
+              title: 'Live Demo',
+              description: 'watch here',
+              status: 'Live',
+              started_at: 1,
+              viewer_count: 1,
+              joined_by_me: false,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+        seedGameRooms: {
+          'kukuri:topic:demo': [
+            {
+              room_id: 'room-demo',
+              host_pubkey: 'a'.repeat(64),
+              title: 'Room Demo',
+              description: 'play here',
+              status: 'Waiting',
+              phase_label: 'Round 1',
+              scores: [],
+              updated_at: 1,
+              channel_id: null,
+              audience_label: 'Public',
+            },
+          ],
+        },
+      })}
+    />
+  );
+
+  const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
+  if (!(topicItem instanceof HTMLElement)) {
+    throw new Error('expected topic item');
+  }
+  await user.click(within(topicItem).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith('#/timeline?topic=kukuri%3Atopic%3Ademo');
+
+  const postArticle = screen.getByText('copy this post').closest('article');
+  if (!(postArticle instanceof HTMLElement)) {
+    throw new Error('expected post article');
+  }
+  await user.click(within(postArticle).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=copy-post&focusObjectId=copy-post'
+  );
+
+  await selectWorkspace(user, 'Live');
+  const liveArticle = screen.getByText('Live Demo').closest('article');
+  if (!(liveArticle instanceof HTMLElement)) {
+    throw new Error('expected live article');
+  }
+  await user.click(within(liveArticle).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith(
+    '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo'
+  );
+
+  await selectWorkspace(user, 'Game');
+  const gameArticle = screen.getByText('Room Demo').closest('article');
+  if (!(gameArticle instanceof HTMLElement)) {
+    throw new Error('expected game article');
+  }
+  await user.click(within(gameArticle).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith(
+    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo'
+  );
 });
 
 test('desktop shell can create and update a game room', async () => {
