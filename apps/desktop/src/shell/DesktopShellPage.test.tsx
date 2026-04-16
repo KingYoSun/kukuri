@@ -2393,7 +2393,7 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
               host_pubkey: 'a'.repeat(64),
               title: 'Live Demo',
               description: 'watch here',
-              status: 'Running',
+              status: 'Live',
               started_at: 1,
               viewer_count: 1,
               joined_by_me: false,
