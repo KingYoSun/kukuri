@@ -103,6 +103,7 @@ export function useDesktopShellData({
     thread,
     ownedReactionAssets,
     bookmarkedReactionAssets,
+    recentReactions,
     notifications,
     shellChromeState,
   } = state;
@@ -237,6 +238,18 @@ export function useDesktopShellData({
       ]) {
         tryAddAttachment(attachment);
       }
+      for (const reaction of post.reaction_summary ?? []) {
+        if (!reaction.custom_asset) {
+          continue;
+        }
+        tryAddAttachment({
+          hash: reaction.custom_asset.blob_hash,
+          mime: reaction.custom_asset.mime,
+          bytes: reaction.custom_asset.bytes,
+          role: 'image_original',
+          status: 'Available',
+        });
+      }
     }
 
     for (const message of selectedDirectMessageTimeline) {
@@ -254,6 +267,19 @@ export function useDesktopShellData({
         hash: asset.blob_hash,
         mime: asset.mime,
         bytes: asset.bytes,
+        role: 'image_original',
+        status: 'Available',
+      });
+    }
+
+    for (const reaction of recentReactions) {
+      if (!reaction.custom_asset) {
+        continue;
+      }
+      tryAddAttachment({
+        hash: reaction.custom_asset.blob_hash,
+        mime: reaction.custom_asset.mime,
+        bytes: reaction.custom_asset.bytes,
         role: 'image_original',
         status: 'Available',
       });
@@ -287,6 +313,7 @@ export function useDesktopShellData({
     notifications,
     ownedReactionAssets,
     profileTimeline,
+    recentReactions,
     selectedDirectMessageTimeline,
     selectedAuthorTimeline,
     thread,

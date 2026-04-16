@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
@@ -299,13 +299,20 @@ test('simple repost opens the source thread in its published topic', async () =>
   expect(onOpenThreadInTopic).toHaveBeenCalledWith('source-root', 'kukuri:topic:source');
 });
 
-test('post card toggles reaction summary chips and uses the reaction popover for recent and custom search', async () => {
+test('post card opens a custom reaction context menu and keeps the reaction popover search flow', async () => {
   setViewportWidth(280);
   const user = userEvent.setup();
   const onToggleReaction = vi.fn();
   const onBookmarkCustomReaction = vi.fn();
+  const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: clipboardWriteText,
+    },
+  });
   const customAsset = {
-    asset_id: 'asset-1',
+    asset_id: 'parrot-asset',
     owner_pubkey: 'b'.repeat(64),
     blob_hash: 'blob-1',
     search_key: 'party-parrot',
@@ -337,7 +344,7 @@ test('post card toggles reaction summary chips and uses the reaction popover for
         },
         {
           reaction_key_kind: 'custom_asset',
-          normalized_reaction_key: 'custom_asset:asset-1',
+          normalized_reaction_key: 'custom_asset:parrot-asset',
           emoji: null,
           custom_asset: customAsset,
           count: 1,
@@ -380,10 +387,23 @@ test('post card toggles reaction summary chips and uses the reaction popover for
     />
   );
 
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+
   await user.click(screen.getAllByRole('button', { name: /👍/ })[0]);
   expect(onToggleReaction).toHaveBeenNthCalledWith(1, view.post, { kind: 'emoji', emoji: '👍' });
 
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  const customReactionChip = screen.getByAltText(customAsset.asset_id).closest('button');
+  if (!(customReactionChip instanceof HTMLButtonElement)) {
+    throw new Error('custom reaction chip not found');
+  }
+
+  fireEvent.contextMenu(customReactionChip);
+  await user.click(screen.getByRole('menuitem', { name: 'Copy hash' }));
+  expect(clipboardWriteText).toHaveBeenCalledWith(customAsset.blob_hash);
+  expect(onToggleReaction).toHaveBeenCalledTimes(1);
+
+  fireEvent.contextMenu(customReactionChip);
+  await user.click(screen.getByRole('menuitem', { name: 'Save' }));
   expect(onBookmarkCustomReaction).toHaveBeenCalledWith(customAsset);
 
   await user.click(screen.getByRole('button', { name: 'React' }));

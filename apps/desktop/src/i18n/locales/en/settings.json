@@ -144,6 +144,9 @@
     "noOwnedAssets": "No custom reactions yet.",
     "savedReactions": "Saved reactions",
     "savedReactionsHint": "Bookmark custom reactions from other people to reuse them.",
+    "clearSelected": "Clear selected",
+    "selectAll": "Select all",
+    "selectReaction": "Select {{key}}",
     "noSavedAssets": "No saved reactions yet."
   }
 }

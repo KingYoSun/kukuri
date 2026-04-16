@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 
@@ -230,9 +230,9 @@ test('settings panels avoid the legacy grid classname collision', () => {
   expect(container.querySelector('.grid')).toBeNull();
 });
 
-test('reactions panel renders owned and saved assets and removes bookmarks', async () => {
+test('reactions panel renders icon-only saved assets and supports single or bulk clear', async () => {
   const user = userEvent.setup();
-  const onRemoveBookmark = vi.fn();
+  const onRemoveBookmark = vi.fn().mockResolvedValue(undefined);
 
   render(
     <ReactionsPanel
@@ -262,12 +262,23 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
             width: 128,
             height: 128,
           },
+          {
+            asset_id: 'asset-wave',
+            owner_pubkey: 'c'.repeat(64),
+            blob_hash: 'blob-wave',
+            search_key: 'wave-dog',
+            mime: 'image/png',
+            bytes: 144,
+            width: 128,
+            height: 128,
+          },
         ],
       }}
       creating={false}
       mediaObjectUrls={{
         'blob-owned': 'https://example.com/owned.png',
         'blob-saved': 'https://example.com/saved.gif',
+        'blob-wave': 'https://example.com/wave.png',
       }}
       onCreateAsset={() => {}}
       onRemoveBookmark={onRemoveBookmark}
@@ -276,12 +287,32 @@ test('reactions panel renders owned and saved assets and removes bookmarks', asy
 
   expect(screen.getByText('My custom reactions')).toBeInTheDocument();
   expect(screen.getByText('party-parrot')).toBeInTheDocument();
-  expect(screen.getByText('saved-cat')).toBeInTheDocument();
   expect(screen.getByAltText('asset-owned')).toHaveAttribute('src', 'https://example.com/owned.png');
-  expect(screen.getByAltText('asset-saved')).toHaveAttribute('src', 'https://example.com/saved.gif');
+  expect(screen.getByRole('img', { name: 'saved-cat' })).toHaveAttribute(
+    'src',
+    'https://example.com/saved.gif'
+  );
+  expect(screen.getByRole('img', { name: 'wave-dog' })).toHaveAttribute(
+    'src',
+    'https://example.com/wave.png'
+  );
+  expect(screen.queryByText('asset-saved')).not.toBeInTheDocument();
+  expect(screen.queryByText('blob-saved')).not.toBeInTheDocument();
+  expect(screen.queryByText('saved-cat')).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'Clear' }));
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'saved-cat' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Clear' }));
   expect(onRemoveBookmark).toHaveBeenCalledWith('asset-saved');
+
+  onRemoveBookmark.mockClear();
+
+  await user.click(screen.getByRole('checkbox', { name: 'Select all' }));
+  await user.click(screen.getByRole('button', { name: 'Clear selected' }));
+  await waitFor(() => {
+    expect(onRemoveBookmark).toHaveBeenCalledTimes(2);
+  });
+  expect(onRemoveBookmark).toHaveBeenCalledWith('asset-saved');
+  expect(onRemoveBookmark).toHaveBeenCalledWith('asset-wave');
 });
 
 test('connectivity panel shows the summary state only once in the sync status card', () => {
@@ -316,7 +347,7 @@ test('reactions panel crops an uploaded image before creating a custom asset', a
       }}
       creating={false}
       onCreateAsset={onCreateAsset}
-      onRemoveBookmark={() => {}}
+      onRemoveBookmark={async () => {}}
     />
   );
 

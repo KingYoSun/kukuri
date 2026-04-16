@@ -535,6 +535,44 @@
   flex: none;
 }
 
+.context-action-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 11rem;
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.context-action-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-action-menu-item:hover,
+.context-action-menu-item:focus-visible {
+  background: var(--surface-panel-soft);
+  outline: none;
+}
+
+.context-action-menu-item-danger {
+  color: var(--foreground-strong);
+}
+
+.context-action-menu-item[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .post-reaction-popover {
   --reaction-grid-columns: 8;
   --reaction-grid-gap: 0.35rem;
@@ -774,8 +812,60 @@
 }
 
 .reactions-saved-list {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.reactions-saved-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.reactions-saved-toolbar,
+.reactions-saved-select-all {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.reactions-saved-select-all input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.reactions-saved-tile {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.25rem;
+  height: 5.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1.1rem;
+  background: var(--surface-card);
+}
+
+.reactions-saved-tile-selected {
+  border-color: var(--accent);
+  background: var(--surface-accent-soft);
+}
+
+.reactions-saved-checkbox {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  display: inline-flex;
+}
+
+.reactions-saved-checkbox input {
+  width: 1rem;
+  height: 1rem;
 }
 
 .post-meta {

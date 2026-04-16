@@ -143,6 +143,9 @@
     "noOwnedAssets": "まだカスタムリアクションがありません。",
     "savedReactions": "保存したリアクション",
     "savedReactionsHint": "他人のカスタムリアクションを保存して再利用します。",
+    "clearSelected": "選択した項目をクリア",
+    "selectAll": "全選択",
+    "selectReaction": "{{key}} を選択",
     "noSavedAssets": "保存済みリアクションはありません。"
   }
 }

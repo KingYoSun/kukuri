@@ -143,6 +143,9 @@
     "noOwnedAssets": "还没有自定义回应。",
     "savedReactions": "已保存回应",
     "savedReactionsHint": "把别人的自定义回应保存下来以便复用。",
+    "clearSelected": "清除已选项",
+    "selectAll": "全选",
+    "selectReaction": "选择 {{key}}",
     "noSavedAssets": "还没有已保存的回应。"
   }
 }

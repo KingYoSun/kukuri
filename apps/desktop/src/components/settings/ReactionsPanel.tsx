@@ -2,11 +2,16 @@ import { ChangeEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import {
+  ContextActionMenu,
+  type ContextActionMenuPosition,
+} from '@/components/ui/context-action-menu';
 import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { type CustomReactionCropRect } from '@/lib/api';
+import { copyTextToClipboard } from '@/lib/utils';
 
 import { type ReactionsPanelView } from './types';
 
@@ -15,7 +20,7 @@ type ReactionsPanelProps = {
   creating: boolean;
   mediaObjectUrls?: Record<string, string | null>;
   onCreateAsset: (file: File, cropRect: CustomReactionCropRect, searchKey: string) => void;
-  onRemoveBookmark: (assetId: string) => void;
+  onRemoveBookmark: (assetId: string) => Promise<void>;
 };
 
 export function ReactionsPanel({
@@ -33,6 +38,12 @@ export function ReactionsPanel({
   const [draftError, setDraftError] = useState<string | null>(null);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [cropDialogFile, setCropDialogFile] = useState<File | null>(null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [removingBookmarks, setRemovingBookmarks] = useState(false);
+  const [savedMenuPosition, setSavedMenuPosition] = useState<ContextActionMenuPosition | null>(
+    null
+  );
+  const [savedMenuAssetId, setSavedMenuAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -41,6 +52,18 @@ export function ReactionsPanel({
       }
     };
   }, [draftPreviewUrl]);
+
+  useEffect(() => {
+    const validAssetIds = new Set(view.bookmarkedAssets.map((asset) => asset.asset_id));
+    setSelectedAssetIds((current) => {
+      const next = new Set([...current].filter((assetId) => validAssetIds.has(assetId)));
+      return next.size === current.size ? current : next;
+    });
+    if (savedMenuAssetId && !validAssetIds.has(savedMenuAssetId)) {
+      setSavedMenuAssetId(null);
+      setSavedMenuPosition(null);
+    }
+  }, [savedMenuAssetId, view.bookmarkedAssets]);
 
   const handleDraftFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -51,6 +74,57 @@ export function ReactionsPanel({
     setCropDialogOpen(true);
     setDraftError(null);
   };
+
+  const selectedSavedCount = selectedAssetIds.size;
+  const allSavedSelected =
+    view.bookmarkedAssets.length > 0 &&
+    view.bookmarkedAssets.every((asset) => selectedAssetIds.has(asset.asset_id));
+  const savedMenuAsset =
+    view.bookmarkedAssets.find((asset) => asset.asset_id === savedMenuAssetId) ?? null;
+
+  const handleToggleSavedAsset = (assetId: string, checked: boolean) => {
+    setSelectedAssetIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(assetId);
+      } else {
+        next.delete(assetId);
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveSavedAssets = async (assetIds: string[]) => {
+    if (assetIds.length === 0) {
+      return;
+    }
+    setRemovingBookmarks(true);
+    try {
+      await Promise.all(assetIds.map((assetId) => onRemoveBookmark(assetId)));
+    } finally {
+      setRemovingBookmarks(false);
+    }
+  };
+
+  const savedMenuItems = savedMenuAsset
+    ? [
+        {
+          id: 'copy-hash',
+          label: t('common:actions.copyHash'),
+          onSelect: async () => {
+            await copyTextToClipboard(savedMenuAsset.blob_hash);
+          },
+        },
+        {
+          id: 'clear',
+          label: t('common:actions.clear'),
+          tone: 'danger' as const,
+          onSelect: async () => {
+            await handleRemoveSavedAssets([savedMenuAsset.asset_id]);
+          },
+        },
+      ]
+    : [];
 
   return (
     <div className='shell-main-stack reactions-panel'>
@@ -160,32 +234,81 @@ export function ReactionsPanel({
       </section>
 
       <section className='shell-main-stack'>
-        <div>
-          <h4>{t('reactions.savedReactions')}</h4>
-          <small>{t('reactions.savedReactionsHint')}</small>
+        <div className='reactions-saved-header'>
+          <div>
+            <h4>{t('reactions.savedReactions')}</h4>
+            <small>{t('reactions.savedReactionsHint')}</small>
+          </div>
+          {view.bookmarkedAssets.length > 0 ? (
+            <div className='reactions-saved-toolbar'>
+              <label className='reactions-saved-select-all'>
+                <input
+                  type='checkbox'
+                  checked={allSavedSelected}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      setSelectedAssetIds(
+                        new Set(view.bookmarkedAssets.map((asset) => asset.asset_id))
+                      );
+                    } else {
+                      setSelectedAssetIds(new Set());
+                    }
+                  }}
+                />
+                <span>{t('reactions.selectAll')}</span>
+              </label>
+              <Button
+                variant='secondary'
+                type='button'
+                disabled={selectedSavedCount === 0 || removingBookmarks}
+                onClick={() => void handleRemoveSavedAssets([...selectedAssetIds])}
+              >
+                {t('reactions.clearSelected')}
+              </Button>
+            </div>
+          ) : null}
         </div>
         <div className='reactions-saved-list'>
-          {view.bookmarkedAssets.map((asset) => (
-            <article key={asset.asset_id} className='post-card reactions-saved-card'>
-              {typeof mediaObjectUrls[asset.blob_hash] === 'string' ? (
-                <img
-                  className='reactions-asset-thumb'
-                  src={mediaObjectUrls[asset.blob_hash] ?? undefined}
-                  alt={asset.asset_id}
-                />
-              ) : null}
-              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>{asset.search_key}</span>
-                <span>{asset.owner_pubkey}</span>
-                <span>{asset.mime}</span>
-              </div>
-              <div className='post-actions'>
-                <Button variant='secondary' type='button' onClick={() => onRemoveBookmark(asset.asset_id)}>
-                  {t('common:actions.clear')}
-                </Button>
-              </div>
-            </article>
-          ))}
+          {view.bookmarkedAssets.map((asset) => {
+            const previewUrl =
+              typeof mediaObjectUrls[asset.blob_hash] === 'string'
+                ? mediaObjectUrls[asset.blob_hash]
+                : null;
+            const isSelected = selectedAssetIds.has(asset.asset_id);
+            return (
+              <article
+                key={asset.asset_id}
+                className={`reactions-saved-tile${isSelected ? ' reactions-saved-tile-selected' : ''}`}
+                aria-label={asset.search_key}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setSavedMenuAssetId(asset.asset_id);
+                  setSavedMenuPosition({
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
+              >
+                <label className='reactions-saved-checkbox'>
+                  <input
+                    type='checkbox'
+                    aria-label={t('reactions.selectReaction', { key: asset.search_key })}
+                    checked={isSelected}
+                    onChange={(event) =>
+                      handleToggleSavedAsset(asset.asset_id, event.target.checked)
+                    }
+                  />
+                </label>
+                {previewUrl ? (
+                  <img className='reactions-asset-thumb' src={previewUrl} alt={asset.search_key} />
+                ) : (
+                  <div className='reactions-asset-thumb reactions-asset-placeholder' aria-hidden='true'>
+                    {asset.search_key.slice(0, 2)}
+                  </div>
+                )}
+              </article>
+            );
+          })}
           {view.bookmarkedAssets.length === 0 ? (
             <p className='empty-state'>{t('reactions.noSavedAssets')}</p>
           ) : null}
@@ -217,6 +340,15 @@ export function ReactionsPanel({
           setDraftPreviewUrl(URL.createObjectURL(croppedFile));
           setCropDialogOpen(false);
           setCropDialogFile(null);
+        }}
+      />
+      <ContextActionMenu
+        open={savedMenuAsset !== null}
+        position={savedMenuPosition}
+        items={savedMenuItems}
+        onClose={() => {
+          setSavedMenuAssetId(null);
+          setSavedMenuPosition(null);
         }}
       />
     </div>
