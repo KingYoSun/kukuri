@@ -74,7 +74,7 @@ import {
 import {
   authorDisplayLabel,
   authorViewFromDirectMessageConversation,
-  communityNodesToEditorValue,
+  communityNodesToDraftNodes,
   formatCount,
   localizeAudienceLabel,
   resolveProfilePictureSrc,
@@ -89,6 +89,10 @@ import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+
+function createCommunityNodeDraftId(): string {
+  return `community-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export function DesktopShellPage({
   api = runtimeApi,
@@ -664,13 +668,37 @@ export function DesktopShellPage({
           saveDisabled={!communityNodeEditorDirty}
           resetDisabled={!communityNodeEditorDirty}
           clearDisabled={communityNodeConfig.nodes.length === 0}
-          onBaseUrlsChange={(value) => {
-            setCommunityNodeInput(value);
+          nodeActionsDisabled={communityNodeEditorDirty}
+          onAddNode={() => {
+            setCommunityNodeInput((current) => [
+              ...current,
+              {
+                id: createCommunityNodeDraftId(),
+                base_url: '',
+                auto_approve: false,
+              },
+            ]);
+            setCommunityNodeEditorDirty(true);
+          }}
+          onNodeBaseUrlChange={(id, value) => {
+            setCommunityNodeInput((current) =>
+              current.map((node) => (node.id === id ? { ...node, base_url: value } : node))
+            );
+            setCommunityNodeEditorDirty(true);
+          }}
+          onNodeAutoApproveChange={(id, value) => {
+            setCommunityNodeInput((current) =>
+              current.map((node) => (node.id === id ? { ...node, auto_approve: value } : node))
+            );
+            setCommunityNodeEditorDirty(true);
+          }}
+          onRemoveNode={(id) => {
+            setCommunityNodeInput((current) => current.filter((node) => node.id !== id));
             setCommunityNodeEditorDirty(true);
           }}
           onSaveNodes={() => void handleSaveCommunityNodes()}
           onReset={() => {
-            setCommunityNodeInput(communityNodesToEditorValue(communityNodeConfig));
+            setCommunityNodeInput(communityNodesToDraftNodes(communityNodeConfig));
             setCommunityNodeEditorDirty(false);
             setCommunityNodeError(null);
           }}

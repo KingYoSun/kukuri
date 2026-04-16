@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
-import { Textarea } from '@/components/ui/textarea';
 
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
@@ -15,7 +15,11 @@ type CommunityNodePanelProps = {
   saveDisabled: boolean;
   resetDisabled: boolean;
   clearDisabled: boolean;
-  onBaseUrlsChange: (value: string) => void;
+  nodeActionsDisabled?: boolean;
+  onAddNode: () => void;
+  onNodeBaseUrlChange: (id: string, value: string) => void;
+  onNodeAutoApproveChange: (id: string, value: boolean) => void;
+  onRemoveNode: (id: string) => void;
   onSaveNodes: () => void;
   onReset: () => void;
   onClearNodes: () => void;
@@ -31,7 +35,11 @@ export function CommunityNodePanel({
   saveDisabled,
   resetDisabled,
   clearDisabled,
-  onBaseUrlsChange,
+  nodeActionsDisabled = false,
+  onAddNode,
+  onNodeBaseUrlChange,
+  onNodeAutoApproveChange,
+  onRemoveNode,
   onSaveNodes,
   onReset,
   onClearNodes,
@@ -54,18 +62,16 @@ export function CommunityNodePanel({
       {view.panelError ? <Notice tone='destructive'>{view.panelError}</Notice> : null}
 
       <SettingsEditorField
-        label={t('settings:communityNode.baseUrlsLabel')}
-        hint={t('settings:communityNode.baseUrlsHint')}
+        label={t('settings:communityNode.nodesLabel')}
+        hint={t('settings:communityNode.nodesHint')}
         message={view.editorMessage}
         tone={view.editorMessageTone}
       >
-        <Textarea
-          aria-label={t('settings:communityNode.baseUrlsLabel')}
-          value={view.baseUrlsInput}
-          onChange={(event) => onBaseUrlsChange(event.target.value)}
-          className='min-h-[120px] resize-y font-mono text-[0.8rem]'
-          placeholder={t('settings:communityNode.baseUrlsPlaceholder')}
-        />
+        <SettingsActionRow>
+          <Button variant='secondary' onClick={onAddNode}>
+            {t('settings:communityNode.actions.addNode')}
+          </Button>
+        </SettingsActionRow>
       </SettingsEditorField>
 
       <SettingsActionRow>
@@ -85,16 +91,45 @@ export function CommunityNodePanel({
       <div className='min-w-0 space-y-3'>
         {view.nodes.map((node) => (
           <section
-            key={node.baseUrl}
+            key={node.id}
             className='min-w-0 rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4 shadow-[0_12px_32px_rgba(2,7,15,0.1)]'
           >
             <div className='flex flex-wrap items-start justify-between gap-3'>
-              <div className='min-w-0'>
-                <h4 className='break-all text-base font-semibold text-foreground'>{node.baseUrl}</h4>
-                <p className='mt-2 text-sm text-[var(--muted-foreground)]'>
-                  {t('settings:communityNode.nodeSummary')}
+              <div className='min-w-0 flex-1 space-y-3'>
+                <h4 className='break-all text-base font-semibold text-foreground'>
+                  {node.baseUrl.trim() || t('settings:communityNode.baseUrlsPlaceholder')}
+                </h4>
+                <div className='space-y-2'>
+                  <label className='block text-sm font-medium text-foreground'>
+                    {t('settings:communityNode.baseUrlLabel')}
+                  </label>
+                  <Input
+                    aria-label={t('settings:communityNode.baseUrlLabel')}
+                    value={node.baseUrl}
+                    onChange={(event) => onNodeBaseUrlChange(node.id, event.target.value)}
+                    placeholder={t('settings:communityNode.baseUrlsPlaceholder')}
+                    className='font-mono text-[0.8rem]'
+                  />
+                </div>
+                <label className='flex items-center gap-3 text-sm text-foreground'>
+                  <input
+                    type='checkbox'
+                    checked={node.autoApprove}
+                    onChange={(event) =>
+                      onNodeAutoApproveChange(node.id, event.currentTarget.checked)
+                    }
+                  />
+                  <span>{t('settings:communityNode.autoApproveLabel')}</span>
+                </label>
+                <p className='text-sm text-[var(--muted-foreground)]'>
+                  {node.saved
+                    ? t('settings:communityNode.nodeSummary')
+                    : t('settings:communityNode.unsavedNodeSummary')}
                 </p>
               </div>
+              <Button variant='secondary' onClick={() => onRemoveNode(node.id)}>
+                {t('common:actions.remove')}
+              </Button>
             </div>
 
             <div className='mt-4'>
@@ -103,19 +138,39 @@ export function CommunityNodePanel({
 
             <div className='mt-4'>
               <SettingsActionRow>
-                <Button variant='secondary' onClick={() => onAuthenticate(node.baseUrl)}>
+                <Button
+                  variant='secondary'
+                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
+                  onClick={() => onAuthenticate(node.baseUrl)}
+                >
                   {t('common:actions.authenticate')}
                 </Button>
-                <Button variant='secondary' onClick={() => onFetchConsents(node.baseUrl)}>
+                <Button
+                  variant='secondary'
+                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
+                  onClick={() => onFetchConsents(node.baseUrl)}
+                >
                   {t('common:actions.consents')}
                 </Button>
-                <Button variant='secondary' onClick={() => onAcceptConsents(node.baseUrl)}>
+                <Button
+                  variant='secondary'
+                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
+                  onClick={() => onAcceptConsents(node.baseUrl)}
+                >
                   {t('common:actions.accept')}
                 </Button>
-                <Button variant='secondary' onClick={() => onRefresh(node.baseUrl)}>
+                <Button
+                  variant='secondary'
+                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
+                  onClick={() => onRefresh(node.baseUrl)}
+                >
                   {t('common:actions.refresh')}
                 </Button>
-                <Button variant='secondary' onClick={() => onClearToken(node.baseUrl)}>
+                <Button
+                  variant='secondary'
+                  disabled={nodeActionsDisabled || !node.saved || !node.baseUrl.trim()}
+                  onClick={() => onClearToken(node.baseUrl)}
+                >
                   {t('settings:communityNode.actions.clearToken')}
                 </Button>
               </SettingsActionRow>

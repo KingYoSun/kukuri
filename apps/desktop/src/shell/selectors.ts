@@ -4,6 +4,7 @@ import {
   type ChannelAudienceKind,
   type ChannelRef,
   type CommunityNodeConfig,
+  type CommunityNodeConfigInput,
   type CommunityNodeNodeStatus,
   type DirectMessageConversationView,
   type DiscoveryConfig,
@@ -27,6 +28,7 @@ import {
 } from '@/i18n/format';
 
 import {
+  type CommunityNodeDraftNode,
   type GameEditorDraft,
   type KnownAuthorsByPubkey,
   PUBLIC_CHANNEL_REF,
@@ -267,8 +269,23 @@ export function seedPeersToEditorValue(config: DiscoveryConfig): string {
   return config.seed_peers.map((peer) => formatSeedPeer(peer)).join('\n');
 }
 
-export function communityNodesToEditorValue(config: CommunityNodeConfig): string {
-  return config.nodes.map((node) => node.base_url).join('\n');
+export function communityNodesToDraftNodes(config: CommunityNodeConfig): CommunityNodeDraftNode[] {
+  return config.nodes.map((node, index) => ({
+    id: `community-node-${index}-${node.base_url}`,
+    base_url: node.base_url,
+    auto_approve: node.auto_approve ?? false,
+  }));
+}
+
+export function communityNodeDraftNodesToConfigInput(
+  draftNodes: CommunityNodeDraftNode[]
+): CommunityNodeConfigInput[] {
+  return draftNodes
+    .map((node) => ({
+      base_url: node.base_url.trim(),
+      auto_approve: node.auto_approve,
+    }))
+    .filter((node) => node.base_url.length > 0);
 }
 
 export function syncStatusBadgeTone(
@@ -315,6 +332,20 @@ export function communityNodeConnectivityUrlsLabel(
     return translate('settings:communityNode.values.notResolvedYet');
   }
   return translate('settings:communityNode.values.notResolved');
+}
+
+export function communityNodeSessionPhaseLabel(status?: CommunityNodeNodeStatus): string {
+  if (!status?.session_phase) {
+    return translate('common:states.unknown');
+  }
+  return translate(`settings:communityNode.sessionPhases.${status.session_phase}`);
+}
+
+export function communityNodeRetryAfterLabel(status?: CommunityNodeNodeStatus): string {
+  if (!status?.retry_after) {
+    return translate('common:fallbacks.none');
+  }
+  return formatLocalizedTime(status.retry_after);
 }
 
 export function communityNodeNextStepLabel(status?: CommunityNodeNodeStatus): string {
@@ -420,11 +451,14 @@ export function mergeCommunityNodeStatus(
 ): CommunityNodeNodeStatus {
   return {
     ...next,
+    auto_approve: next.auto_approve ?? previous?.auto_approve ?? false,
     consent_state: next.auth_state.authenticated
       ? next.consent_state ?? previous?.consent_state ?? null
       : next.consent_state ?? null,
     resolved_urls: next.resolved_urls ?? previous?.resolved_urls ?? null,
     last_error: next.last_error ?? previous?.last_error ?? null,
+    session_phase: next.session_phase ?? previous?.session_phase ?? 'idle',
+    retry_after: next.retry_after ?? previous?.retry_after ?? null,
   };
 }
 
@@ -461,6 +495,7 @@ export function syncCommunityNodeConfigWithStatus(
       node.base_url === status.base_url
         ? {
             ...node,
+            auto_approve: status.auto_approve ?? node.auto_approve ?? false,
             resolved_urls: status.resolved_urls ?? node.resolved_urls ?? null,
           }
         : node

@@ -14,6 +14,7 @@ on:
       - 'harness/**'
       - '.github/workflows/kukuri-fast.yml'
       - '.github/workflows/kukuri-nightly.yml'
+      - '.github/workflows/kukuri-release.yml'
   push:
     branches: [main, develop]
     paths:
@@ -28,6 +29,7 @@ on:
       - 'harness/**'
       - '.github/workflows/kukuri-fast.yml'
       - '.github/workflows/kukuri-nightly.yml'
+      - '.github/workflows/kukuri-release.yml'
   workflow_dispatch:
 
 jobs:

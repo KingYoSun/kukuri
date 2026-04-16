@@ -25,19 +25,25 @@
   },
   "communityNode": {
     "actions": {
+      "addNode": "ノードを追加",
       "clearNodes": "クリア",
       "clearToken": "トークンをクリア",
       "saveNodes": "ノードを保存"
     },
+    "autoApproveLabel": "このノードの consent を自動承認する",
+    "baseUrlLabel": "ベース URL",
     "baseUrlsHint": "HTTPS の base URL を 1 行に 1 つ入力します。",
     "baseUrlsLabel": "ベース URL",
     "baseUrlsPlaceholder": "https://community.example.com",
     "diagnostics": {
+      "autoApprove": "自動承認",
       "auth": "認証",
       "connectivityUrls": "接続 URL",
       "consent": "同意",
       "lastError": "最終エラー",
       "nextStep": "次の手順",
+      "retryAfter": "再試行予定",
+      "sessionPhase": "セッション状態",
       "sessionActivation": "セッション有効化"
     },
     "editorMessage": {
@@ -46,9 +52,21 @@
     },
     "loading": "コミュニティノード診断を読み込み中…",
     "noNodes": "設定済みのコミュニティノードはありません。",
+    "nodesHint": "各 Community Node は base URL と自動承認ポリシーを持ちます。",
+    "nodesLabel": "設定済みノード",
     "nodeSummary": "このノードの認証、同意、接続状態です。",
+    "sessionPhases": {
+      "accepting": "同意を処理中",
+      "authenticating": "認証中",
+      "connecting": "接続中",
+      "idle": "待機中",
+      "ready": "準備完了",
+      "refreshing": "メタデータ更新中",
+      "retrying": "再試行待ち"
+    },
     "summary": "{{count}} 件設定済み",
     "title": "コミュニティノード",
+    "unsavedNodeSummary": "未保存のノード変更があります。トラブルシューティング操作の前に保存してください。",
     "values": {
       "acceptPolicies": "接続 URL を解決するには必須 policy に同意してください",
       "activeOnCurrentSession": "現在のセッションで有効",

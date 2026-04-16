@@ -61,6 +61,8 @@ import {
   communityNodeConnectivityUrlsLabel,
   communityNodeConsentLabel,
   communityNodeNextStepLabel,
+  communityNodeRetryAfterLabel,
+  communityNodeSessionPhaseLabel,
   communityNodeSessionActivationLabel,
   createGameEditorDraft,
   formatBytes,
@@ -813,18 +815,30 @@ export function useDesktopShellViewModels({
   const communityNodePanelView = useMemo<CommunityNodePanelView>(
     () => ({
       status: 'ready' as const,
-      summaryLabel: t('settings:communityNode.summary', { count: communityNodeStatuses.length }),
+      summaryLabel: t('settings:communityNode.summary', { count: communityNodeInput.length }),
       panelError: communityNodeError,
-      baseUrlsInput: communityNodeInput,
       editorMessage: communityNodeEditorDirty
         ? t('settings:communityNode.editorMessage.unsaved')
         : t('settings:communityNode.editorMessage.saved'),
       editorMessageTone: 'default' as const,
-      nodes: communityNodeConfig.nodes.map((node) => {
+      nodes: communityNodeInput.map((node) => {
+        const saved =
+          communityNodeConfig.nodes.find(
+            (candidate) =>
+              candidate.base_url === node.base_url &&
+              (candidate.auto_approve ?? false) === node.auto_approve
+          ) != null;
         const status = communityNodeStatusByBaseUrl[node.base_url];
         return {
+          id: node.id,
           baseUrl: node.base_url,
+          autoApprove: node.auto_approve,
+          saved,
           diagnostics: [
+            {
+              label: t('settings:communityNode.diagnostics.autoApprove'),
+              value: node.auto_approve ? t('common:states.yes') : t('common:states.no'),
+            },
             {
               label: t('settings:communityNode.diagnostics.auth'),
               value: communityNodeAuthLabel(status),
@@ -837,6 +851,14 @@ export function useDesktopShellViewModels({
               label: t('settings:communityNode.diagnostics.connectivityUrls'),
               value: communityNodeConnectivityUrlsLabel(status),
               monospace: true,
+            },
+            {
+              label: t('settings:communityNode.diagnostics.sessionPhase'),
+              value: communityNodeSessionPhaseLabel(status),
+            },
+            {
+              label: t('settings:communityNode.diagnostics.retryAfter'),
+              value: communityNodeRetryAfterLabel(status),
             },
             {
               label: t('settings:communityNode.diagnostics.sessionActivation'),
@@ -862,7 +884,6 @@ export function useDesktopShellViewModels({
       communityNodeError,
       communityNodeInput,
       communityNodeStatusByBaseUrl,
-      communityNodeStatuses.length,
       t,
     ]
   );

@@ -29,7 +29,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
   const [locale, setLocale] = useState<SupportedLocale>(appearancePanelFixture.selectedLocale);
   const [peerTicketInput, setPeerTicketInput] = useState(connectivityPanelFixture.peerTicketInput);
   const [seedPeersInput, setSeedPeersInput] = useState(discoveryPanelFixture.seedPeersInput);
-  const [baseUrlsInput, setBaseUrlsInput] = useState(communityNodePanelFixture.baseUrlsInput);
+  const [communityNodes, setCommunityNodes] = useState(communityNodePanelFixture.nodes);
 
   const sections = [
     {
@@ -77,14 +77,39 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
       description: 'Auth, consent, and connectivity urls',
       content: (
         <CommunityNodePanel
-          view={{ ...communityNodePanelFixture, baseUrlsInput }}
+          view={{ ...communityNodePanelFixture, nodes: communityNodes }}
           saveDisabled={false}
           resetDisabled={false}
           clearDisabled={false}
-          onBaseUrlsChange={setBaseUrlsInput}
+          onAddNode={() =>
+            setCommunityNodes((current) => [
+              ...current,
+              {
+                id: `drawer-node-${current.length + 1}`,
+                baseUrl: '',
+                autoApprove: false,
+                saved: false,
+                diagnostics: [],
+                lastError: null,
+              },
+            ])
+          }
+          onNodeBaseUrlChange={(id, value) =>
+            setCommunityNodes((current) =>
+              current.map((node) => (node.id === id ? { ...node, baseUrl: value } : node))
+            )
+          }
+          onNodeAutoApproveChange={(id, value) =>
+            setCommunityNodes((current) =>
+              current.map((node) => (node.id === id ? { ...node, autoApprove: value } : node))
+            )
+          }
+          onRemoveNode={(id) =>
+            setCommunityNodes((current) => current.filter((node) => node.id !== id))
+          }
           onSaveNodes={() => undefined}
-          onReset={() => setBaseUrlsInput(communityNodePanelFixture.baseUrlsInput)}
-          onClearNodes={() => setBaseUrlsInput('')}
+          onReset={() => setCommunityNodes(communityNodePanelFixture.nodes)}
+          onClearNodes={() => setCommunityNodes([])}
           onAuthenticate={() => undefined}
           onFetchConsents={() => undefined}
           onAcceptConsents={() => undefined}

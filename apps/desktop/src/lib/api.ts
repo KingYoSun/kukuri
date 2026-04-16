@@ -358,6 +358,7 @@ export type CommunityNodeResolvedUrls = {
 
 export type CommunityNodeNodeConfig = {
   base_url: string;
+  auto_approve?: boolean;
   resolved_urls?: CommunityNodeResolvedUrls | null;
 };
 
@@ -383,13 +384,30 @@ export type CommunityNodeConsentStatus = {
   items: CommunityNodeConsentItem[];
 };
 
+export type CommunityNodeSessionPhase =
+  | 'idle'
+  | 'connecting'
+  | 'authenticating'
+  | 'accepting'
+  | 'refreshing'
+  | 'ready'
+  | 'retrying';
+
 export type CommunityNodeNodeStatus = {
   base_url: string;
+  auto_approve?: boolean;
   auth_state: CommunityNodeAuthState;
   consent_state?: CommunityNodeConsentStatus | null;
   resolved_urls?: CommunityNodeResolvedUrls | null;
   last_error?: string | null;
+  session_phase?: CommunityNodeSessionPhase;
+  retry_after?: number | null;
   restart_required: boolean;
+};
+
+export type CommunityNodeConfigInput = {
+  base_url: string;
+  auto_approve: boolean;
 };
 
 export type TopicSyncStatus = {
@@ -649,7 +667,7 @@ export interface DesktopApi {
   getDiscoveryConfig(): Promise<DiscoveryConfig>;
   getCommunityNodeConfig(): Promise<CommunityNodeConfig>;
   getCommunityNodeStatuses(): Promise<CommunityNodeNodeStatus[]>;
-  setCommunityNodeConfig(baseUrls: string[]): Promise<CommunityNodeConfig>;
+  setCommunityNodeConfig(nodes: CommunityNodeConfigInput[]): Promise<CommunityNodeConfig>;
   clearCommunityNodeConfig(): Promise<void>;
   authenticateCommunityNode(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   clearCommunityNodeToken(baseUrl: string): Promise<CommunityNodeNodeStatus>;
@@ -1306,13 +1324,13 @@ export const runtimeApi: DesktopApi = {
     }
     return invokeDesktop<CommunityNodeNodeStatus[]>('get_community_node_statuses');
   },
-  setCommunityNodeConfig: async (baseUrls) => {
+  setCommunityNodeConfig: async (nodes) => {
     if (window.__KUKURI_DESKTOP__) {
-      return window.__KUKURI_DESKTOP__.setCommunityNodeConfig(baseUrls);
+      return window.__KUKURI_DESKTOP__.setCommunityNodeConfig(nodes);
     }
     return invokeDesktop<CommunityNodeConfig>('set_community_node_config', {
       request: {
-        base_urls: baseUrls,
+        nodes,
       },
     });
   },

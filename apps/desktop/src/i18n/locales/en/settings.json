@@ -25,19 +25,25 @@
   },
   "communityNode": {
     "actions": {
+      "addNode": "Add Node",
       "clearNodes": "Clear",
       "clearToken": "Clear Token",
       "saveNodes": "Save Nodes"
     },
+    "autoApproveLabel": "Auto-approve consent for this node",
+    "baseUrlLabel": "Base URL",
     "baseUrlsHint": "One HTTPS base URL per line.",
     "baseUrlsLabel": "Base URLs",
     "baseUrlsPlaceholder": "https://community.example.com",
     "diagnostics": {
+      "autoApprove": "Auto-approve",
       "auth": "Auth",
       "connectivityUrls": "Connectivity URLs",
       "consent": "Consent",
       "lastError": "Last Error",
       "nextStep": "Next Step",
+      "retryAfter": "Retry After",
+      "sessionPhase": "Session Phase",
       "sessionActivation": "Session Activation"
     },
     "editorMessage": {
@@ -46,10 +52,21 @@
     },
     "loading": "Loading community node diagnostics…",
     "noNodes": "No community nodes configured.",
+    "nodesHint": "Each community node keeps a base URL and an auto-approve policy.",
+    "nodesLabel": "Configured Nodes",
     "nodeSummary": "Auth, consent, and connectivity state for this node.",
+    "sessionPhases": {
+      "accepting": "accepting",
+      "authenticating": "authenticating",
+      "connecting": "connecting",
+      "idle": "idle",
+      "ready": "ready",
+      "refreshing": "refreshing",
+      "retrying": "retrying"
+    },
     "summary": "{{count}} configured",
-    "title": "Community Node"
-    ,
+    "title": "Community Node",
+    "unsavedNodeSummary": "Unsaved node edits. Save before running troubleshooting actions.",
     "values": {
       "activeOnCurrentSession": "active on current session",
       "connectivityUrlsActiveOnCurrentSession": "connectivity urls active on current session",

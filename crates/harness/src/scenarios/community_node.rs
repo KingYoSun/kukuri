@@ -86,13 +86,19 @@ pub(crate) async fn run_community_node_connectivity(
         let started_at = Instant::now();
         runtime_a
             .set_community_node_config(SetCommunityNodeConfigRequest {
-                base_urls: vec![stack.base_url.clone()],
+                nodes: vec![kukuri_desktop_runtime::SetCommunityNodeConfigNode {
+                    base_url: stack.base_url.clone(),
+                    auto_approve: false,
+                }],
             })
             .await
             .context("failed to configure community node for desktop a")?;
         runtime_b
             .set_community_node_config(SetCommunityNodeConfigRequest {
-                base_urls: vec![stack.base_url.clone()],
+                nodes: vec![kukuri_desktop_runtime::SetCommunityNodeConfigNode {
+                    base_url: stack.base_url.clone(),
+                    auto_approve: false,
+                }],
             })
             .await
             .context("failed to configure community node for desktop b")?;

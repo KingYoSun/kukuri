@@ -55,7 +55,10 @@ export type DiscoveryPanelView = {
 };
 
 export type CommunityNodeEntryView = {
+  id: string;
   baseUrl: string;
+  autoApprove: boolean;
+  saved: boolean;
   diagnostics: SettingsDiagnosticItemView[];
   lastError?: string | null;
 };
@@ -64,7 +67,6 @@ export type CommunityNodePanelView = {
   status: SettingsPanelStatus;
   summaryLabel: string;
   panelError?: string | null;
-  baseUrlsInput: string;
   editorMessage?: string;
   editorMessageTone?: 'default' | 'danger';
   nodes: CommunityNodeEntryView[];

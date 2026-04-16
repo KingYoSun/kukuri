@@ -6,18 +6,21 @@
 - `legacy/docs` は参照専用の履歴として扱う。
 
 ## 優先参照順
-1. `docs/progress/2026-03-10-foundation.md`
-2. `docs/progress/2026-03-24-shell-ui-production-migration.md`
-3. `docs/runbooks/dev.md`
-4. `docs/adr/0001-linux-first-mvp.md`
-5. `docs/adr/0007-windows-desktop-support.md`
-6. `docs/adr/0008-dht-discovery-data-classification.md`
-7. `docs/adr/0009-community-node-relay-auth-data-classification.md`
-8. `docs/adr/0014-uiux-dev-flow.md`
-9. `docs/DESIGN.md`
-10. `harness/scenarios/`
-11. `docs/adr/0003-image-post-data-classification.md`
-12. `docs/adr/0004-video-post-data-classification.md`
+1. `docs/progress/2026-04-16-mvp-builder-preview-plan.md`
+2. `docs/progress/2026-03-10-foundation.md`
+3. `docs/progress/2026-03-24-shell-ui-production-migration.md`
+4. `docs/runbooks/dev.md`
+5. `docs/runbooks/mvp-user-quickstart.md`
+6. `docs/runbooks/mvp-troubleshooting.md`
+7. `docs/adr/0001-linux-first-mvp.md`
+8. `docs/adr/0007-windows-desktop-support.md`
+9. `docs/adr/0008-dht-discovery-data-classification.md`
+10. `docs/adr/0009-community-node-relay-auth-data-classification.md`
+11. `docs/adr/0014-uiux-dev-flow.md`
+12. `docs/DESIGN.md`
+13. `harness/scenarios/`
+14. `docs/adr/0003-image-post-data-classification.md`
+15. `docs/adr/0004-video-post-data-classification.md`
 
 ## 現在の対象
 - `desktop + core + store + docs-sync + blob-service + desktop-runtime + cn-* + harness`

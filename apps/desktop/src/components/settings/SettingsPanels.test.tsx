@@ -159,7 +159,10 @@ test('community node panel renders ready and error states', async () => {
       saveDisabled={false}
       resetDisabled={false}
       clearDisabled={false}
-      onBaseUrlsChange={() => {}}
+      onAddNode={() => {}}
+      onNodeBaseUrlChange={() => {}}
+      onNodeAutoApproveChange={() => {}}
+      onRemoveNode={() => {}}
       onSaveNodes={() => {}}
       onReset={() => {}}
       onClearNodes={() => {}}
@@ -172,7 +175,7 @@ test('community node panel renders ready and error states', async () => {
   );
 
   expect(screen.getByText('failed to update community nodes')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'https://api.kukuri.app' })).toBeInTheDocument();
+  expect(screen.getByDisplayValue('https://api.kukuri.app')).toBeInTheDocument();
 
   await user.click(screen.getAllByRole('button', { name: 'Accept' })[0]);
   expect(onAcceptConsents).toHaveBeenCalledWith('https://api.kukuri.app');
@@ -209,7 +212,10 @@ test('settings panels avoid the legacy grid classname collision', () => {
         saveDisabled={false}
         resetDisabled={false}
         clearDisabled={false}
-        onBaseUrlsChange={() => {}}
+        onAddNode={() => {}}
+        onNodeBaseUrlChange={() => {}}
+        onNodeAutoApproveChange={() => {}}
+        onRemoveNode={() => {}}
         onSaveNodes={() => {}}
         onReset={() => {}}
         onClearNodes={() => {}}

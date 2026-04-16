@@ -43,7 +43,7 @@ import {
 } from '@/shell/store';
 import {
   authorViewFromDirectMessageConversation,
-  communityNodesToEditorValue,
+  communityNodesToDraftNodes,
   createGameEditorDraft,
   mergeCommunityNodeStatuses,
   mergeKnownAuthors,
@@ -912,7 +912,7 @@ export function useDesktopShellData({
                 startTransition(() => {
                   setCommunityNodeConfig(config);
                   if (!storeApi.getState().communityNodeEditorDirty) {
-                    setCommunityNodeInput(communityNodesToEditorValue(config));
+                    setCommunityNodeInput(communityNodesToDraftNodes(config));
                   }
                   setCommunityNodeStatuses((current) =>
                     mergeCommunityNodeStatuses(current, statuses)
