@@ -12,8 +12,8 @@ mod tests;
 
 pub use community_node::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeAuthState, CommunityNodeConfig,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
-    SetCommunityNodeConfigRequest,
+    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
+    CommunityNodeTargetRequest, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 pub use paths::resolve_db_path_from_env;

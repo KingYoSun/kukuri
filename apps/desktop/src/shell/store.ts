@@ -69,6 +69,12 @@ export type AsyncPanelState = {
 export type SocialConnectionsState = Record<ProfileConnectionsView, AuthorSocialView[]>;
 export type KnownAuthorsByPubkey = Record<string, AuthorSocialView>;
 
+export type CommunityNodeDraftNode = {
+  id: string;
+  base_url: string;
+  auto_approve: boolean;
+};
+
 export type DesktopShellState = {
   trackedTopics: string[];
   activeTopic: string;
@@ -105,7 +111,7 @@ export type DesktopShellState = {
   discoveryError: string | null;
   communityNodeConfig: CommunityNodeConfig;
   communityNodeStatuses: CommunityNodeNodeStatus[];
-  communityNodeInput: string;
+  communityNodeInput: CommunityNodeDraftNode[];
   communityNodeEditorDirty: boolean;
   communityNodeError: string | null;
   mediaObjectUrls: Record<string, string | null>;
@@ -198,6 +204,12 @@ export type DesktopShellPageProps = AppProps & {
 };
 
 export const DEFAULT_TOPIC = 'kukuri:topic:demo';
+export const STARTER_TOPICS = [
+  DEFAULT_TOPIC,
+  'kukuri:topic:iroh',
+  'kukuri:topic:nostr',
+  'kukuri:topic:operators',
+] as const;
 export const PUBLIC_CHANNEL_REF: ChannelRef = { kind: 'public' };
 export const PUBLIC_TIMELINE_SCOPE: TimelineScope = { kind: 'public' };
 export const REFRESH_INTERVAL_MS = 3000;
@@ -245,6 +257,13 @@ export const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
 export const DEFAULT_COMMUNITY_NODE_CONFIG: CommunityNodeConfig = {
   nodes: [],
 };
+
+function buildStarterTopicRecord<T>(factory: () => T): Record<string, T> {
+  return Object.fromEntries(STARTER_TOPICS.map((topic) => [topic, factory()])) as Record<
+    string,
+    T
+  >;
+}
 
 export const DEFAULT_SOCIAL_CONNECTIONS: SocialConnectionsState = {
   following: [],
@@ -324,51 +343,33 @@ export const DEFAULT_NOTIFICATION_STATUS: NotificationStatusView = {
 export function createInitialShellState(): DesktopShellState {
   const initialSettingsState = parseInitialSettingsSection();
   return {
-    trackedTopics: [DEFAULT_TOPIC],
+    trackedTopics: [...STARTER_TOPICS],
     activeTopic: DEFAULT_TOPIC,
     topicInput: '',
     composer: '',
     draftMediaItems: [],
     attachmentInputKey: 0,
-    timelinesByKey: {
-      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: [],
-    },
-    timelineNextCursorByKey: {
-      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: null,
-    },
-    timelineLoadingMoreByKey: {
-      [timelineScopeStorageKey(DEFAULT_TOPIC, PUBLIC_TIMELINE_SCOPE)]: false,
-    },
+    timelinesByKey: Object.fromEntries(
+      STARTER_TOPICS.map((topic) => [timelineScopeStorageKey(topic, PUBLIC_TIMELINE_SCOPE), []])
+    ),
+    timelineNextCursorByKey: Object.fromEntries(
+      STARTER_TOPICS.map((topic) => [timelineScopeStorageKey(topic, PUBLIC_TIMELINE_SCOPE), null])
+    ),
+    timelineLoadingMoreByKey: Object.fromEntries(
+      STARTER_TOPICS.map((topic) => [timelineScopeStorageKey(topic, PUBLIC_TIMELINE_SCOPE), false])
+    ),
     pendingTimelineSnapshotsByKey: {},
     pendingTimelineCountsByKey: {},
     pendingTimelineNextCursorByKey: {},
-    publicTimelinesByTopic: {
-      [DEFAULT_TOPIC]: [],
-    },
-    publicTimelineNextCursorByTopic: {
-      [DEFAULT_TOPIC]: null,
-    },
-    publicTimelineLoadingMoreByTopic: {
-      [DEFAULT_TOPIC]: false,
-    },
-    liveSessionsByTopic: {
-      [DEFAULT_TOPIC]: [],
-    },
-    gameRoomsByTopic: {
-      [DEFAULT_TOPIC]: [],
-    },
-    joinedChannelsByTopic: {
-      [DEFAULT_TOPIC]: [],
-    },
-    selectedChannelIdByTopic: {
-      [DEFAULT_TOPIC]: null,
-    },
-    timelineScopeByTopic: {
-      [DEFAULT_TOPIC]: PUBLIC_TIMELINE_SCOPE,
-    },
-    composeChannelByTopic: {
-      [DEFAULT_TOPIC]: PUBLIC_CHANNEL_REF,
-    },
+    publicTimelinesByTopic: buildStarterTopicRecord(() => [] as PostView[]),
+    publicTimelineNextCursorByTopic: buildStarterTopicRecord(() => null as TimelineCursor | null),
+    publicTimelineLoadingMoreByTopic: buildStarterTopicRecord(() => false),
+    liveSessionsByTopic: buildStarterTopicRecord(() => [] as LiveSessionView[]),
+    gameRoomsByTopic: buildStarterTopicRecord(() => [] as GameRoomView[]),
+    joinedChannelsByTopic: buildStarterTopicRecord(() => [] as JoinedPrivateChannelView[]),
+    selectedChannelIdByTopic: buildStarterTopicRecord(() => null as string | null),
+    timelineScopeByTopic: buildStarterTopicRecord(() => ({ ...PUBLIC_TIMELINE_SCOPE })),
+    composeChannelByTopic: buildStarterTopicRecord(() => ({ ...PUBLIC_CHANNEL_REF })),
     thread: [],
     threadNextCursorById: {},
     threadLoadingMoreById: {},
@@ -383,7 +384,7 @@ export function createInitialShellState(): DesktopShellState {
     discoveryError: null,
     communityNodeConfig: DEFAULT_COMMUNITY_NODE_CONFIG,
     communityNodeStatuses: [],
-    communityNodeInput: '',
+    communityNodeInput: [],
     communityNodeEditorDirty: false,
     communityNodeError: null,
     mediaObjectUrls: {},
@@ -431,9 +432,7 @@ export function createInitialShellState(): DesktopShellState {
     liveTitle: '',
     liveDescription: '',
     liveError: null,
-    livePanelStateByTopic: {
-      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-    },
+    livePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
     liveCreatePending: false,
     livePendingBySessionId: {},
     channelLabelInput: '',
@@ -442,18 +441,14 @@ export function createInitialShellState(): DesktopShellState {
     inviteOutput: null,
     inviteOutputLabel: 'invite',
     channelError: null,
-    channelPanelStateByTopic: {
-      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-    },
+    channelPanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
     channelActionPending: null,
     gameTitle: '',
     gameDescription: '',
     gameParticipantsInput: '',
     gameError: null,
     gameDrafts: {},
-    gamePanelStateByTopic: {
-      [DEFAULT_TOPIC]: DEFAULT_ASYNC_PANEL_STATE,
-    },
+    gamePanelStateByTopic: buildStarterTopicRecord(() => ({ ...DEFAULT_ASYNC_PANEL_STATE })),
     gameCreatePending: false,
     gameSavingByRoomId: {},
     reactionPanelState: DEFAULT_ASYNC_PANEL_STATE,

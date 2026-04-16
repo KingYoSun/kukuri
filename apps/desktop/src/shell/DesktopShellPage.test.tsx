@@ -2913,32 +2913,20 @@ test('video card falls back to poster preview when playback is unsupported on th
   expect(screen.getByAltText('video poster')).toBeInTheDocument();
 });
 
-test('community node panel activates relay connectivity on the current session after consent', async () => {
+test('community node panel keeps the auto-approve node active on the current session', async () => {
   const api = createDesktopMockApi();
   const user = userEvent.setup();
 
   render(<App api={api} />);
 
   const drawer = await openSettingsSection(user, 'community-node');
-  await user.type(
-    within(drawer).getByPlaceholderText('https://community.example.com'),
-    'https://api.kukuri.app'
-  );
-  await user.click(within(drawer).getByRole('button', { name: 'Save Nodes' }));
-
-  const nodeHeading = await within(drawer).findByRole('heading', { name: 'https://api.kukuri.app' });
+  const nodeHeading = await within(drawer).findByText('https://api.kukuri.app', { selector: 'h4' });
   const blockElement = closestSection(nodeHeading);
-
-  await user.click(within(blockElement).getByRole('button', { name: 'Authenticate' }));
-
-  await waitFor(() => {
-    expect(
-      within(blockElement).getByText('accept required policies to resolve connectivity urls')
-    ).toBeInTheDocument();
-    expect(within(blockElement).getByText('waiting for consent acceptance')).toBeInTheDocument();
-  });
-
-  await user.click(within(blockElement).getByRole('button', { name: 'Accept' }));
+  expect(
+    within(blockElement).getByRole('checkbox', {
+      name: 'Auto-approve consent for this node',
+    })
+  ).toBeChecked();
 
   await waitFor(() => {
     expect(within(blockElement).getAllByText('https://api.kukuri.app').length).toBeGreaterThan(0);

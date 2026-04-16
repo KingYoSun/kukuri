@@ -2,7 +2,37 @@ English | [日本語](./README.ja.md)
 
 # kukuri
 
-kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived signed identity and envelope semantics where they are useful, but its internal sync model is centered on separated `docs`, `blobs`, `hints`, and connectivity instead of a relay-first design.
+kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived identity and signed envelope semantics where they are useful, but its internal sync plane is built around separated `docs`, `blobs`, `hints`, and connectivity instead of a relay-first design.
+
+## Builder Preview
+
+- Current preview target: Windows installer via GitHub Releases.
+- Linux remains source-run for now.
+- Preview flow: launch the desktop app, let the preloaded community node reach `ready`, open a starter topic, post or reply, then send feedback.
+- Preview quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
+- Troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
+
+## What To Try In 3 Minutes
+
+1. Launch the app and wait for the preloaded community node to become `ready`.
+2. Open one of the starter topics: `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, or `kukuri:topic:operators`.
+3. Publish a public post or reply in-thread.
+4. Create or join a private channel under the same topic.
+5. Export diagnostics and send feedback through GitHub before you close the app.
+
+## What Community Nodes Do
+
+- Community nodes are bootstrap, auth, control-plane, and connectivity-assist components.
+- They help the app discover connectivity URLs and seed peers.
+- They are not the canonical content store for user data.
+- Each configured node stays part of the same `Community Node` model. Preview automation is controlled per node with an `auto_approve` policy, not with a separate official/custom split.
+
+## What kukuri Is Not
+
+- kukuri is not a full Nostr client.
+- Nostr compatibility is limited to identity, envelope shape, and selected semantics.
+- kukuri is not relay-first internally.
+- Community nodes are not relays with canonical content ownership.
 
 ## What Is kukuri
 

@@ -4,6 +4,36 @@
 
 kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署名付き identity と envelope の利点は活かしつつ、内部の同期モデルは relay-first ではなく、`docs`、`blobs`、`hints`、connectivity を分離した構成を中核に据えています。
 
+## Builder Preview
+
+- 現在の preview 配布対象は Windows installer です。GitHub Releases から取得します。
+- Linux は現時点では source-run を前提にします。
+- preview の主線は `起動 -> preloaded community node が ready になる -> starter topic -> post/reply -> private channel -> feedback` です。
+- quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
+- troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
+
+## 3 分で試すこと
+
+1. アプリを起動し、preloaded community node が `ready` になるまで待ちます。
+2. `kukuri:topic:demo`, `kukuri:topic:iroh`, `kukuri:topic:nostr`, `kukuri:topic:operators` の starter topic を開きます。
+3. public post または thread reply を 1 本試します。
+4. 同じ topic 配下で private channel を作るか参加します。
+5. diagnostics を確認し、GitHub に feedback を送ります。
+
+## Community Node の役割
+
+- community node は bootstrap、auth、control plane、connectivity assist を担います。
+- connectivity URL や seed peer の取得を助けます。
+- ユーザーデータの canonical content store ではありません。
+- preview の自動導線は node ごとの `auto_approve` policy で制御し、official/custom のような別モデルには分けません。
+
+## kukuri は何ではないか
+
+- kukuri は full Nostr client ではありません。
+- Nostr compatibility は identity、envelope 形状、一部 semantics に限られます。
+- kukuri の内部同期は relay-first ではありません。
+- community node は canonical content ownership を持つ relay ではありません。
+
 ## kukuri とは何か
 
 - topic が閲覧と発信の主軸です。

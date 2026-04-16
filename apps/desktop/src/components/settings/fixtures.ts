@@ -134,15 +134,26 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
     status: 'ready',
     summaryLabel: i18n.t('settings:communityNode.summary', { count: 2 }),
     panelError: null,
-    baseUrlsInput: 'https://api.kukuri.app\nhttps://community.example.com',
     editorMessage: 'Save nodes before authenticating.',
     editorMessageTone: 'default',
     nodes: [
       {
+        id: 'node-api',
         baseUrl: 'https://api.kukuri.app',
+        autoApprove: true,
+        saved: true,
         diagnostics: [
+          { label: i18n.t('settings:communityNode.diagnostics.autoApprove'), value: i18n.t('common:states.yes') },
           { label: i18n.t('settings:communityNode.diagnostics.auth'), value: `${i18n.t('common:states.yes')} (1711324800000)` },
           { label: i18n.t('settings:communityNode.diagnostics.consent'), value: i18n.t('common:states.accepted') },
+          {
+            label: i18n.t('settings:communityNode.diagnostics.sessionPhase'),
+            value: i18n.t('settings:communityNode.sessionPhases.ready'),
+          },
+          {
+            label: i18n.t('settings:communityNode.diagnostics.retryAfter'),
+            value: i18n.t('common:fallbacks.none'),
+          },
           {
             label: i18n.t('settings:communityNode.diagnostics.connectivityUrls'),
             value: 'https://api.kukuri.app',
@@ -164,10 +175,22 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
         lastError: null,
       },
       {
+        id: 'node-example',
         baseUrl: 'https://community.example.com',
+        autoApprove: false,
+        saved: true,
         diagnostics: [
+          { label: i18n.t('settings:communityNode.diagnostics.autoApprove'), value: i18n.t('common:states.no') },
           { label: i18n.t('settings:communityNode.diagnostics.auth'), value: i18n.t('common:states.no') },
           { label: i18n.t('settings:communityNode.diagnostics.consent'), value: i18n.t('common:states.unknown') },
+          {
+            label: i18n.t('settings:communityNode.diagnostics.sessionPhase'),
+            value: i18n.t('settings:communityNode.sessionPhases.retrying'),
+          },
+          {
+            label: i18n.t('settings:communityNode.diagnostics.retryAfter'),
+            value: formatLocalizedTime('2026-03-28T13:00:00Z'),
+          },
           {
             label: i18n.t('settings:communityNode.diagnostics.connectivityUrls'),
             value: i18n.t('settings:communityNode.values.notResolved'),

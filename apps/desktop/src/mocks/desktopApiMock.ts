@@ -323,6 +323,12 @@ function pushRecentReaction(
 
 export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopApi {
   const assistPeerIds = options?.assistPeerIds ?? [];
+  const starterTopics = [
+    'kukuri:topic:demo',
+    'kukuri:topic:iroh',
+    'kukuri:topic:nostr',
+    'kukuri:topic:operators',
+  ];
   const effectivePeerIds = Array.from(new Set(['peer-a', ...assistPeerIds]));
   const postsByTopic: Record<string, TimelineView['items']> = Object.fromEntries(
     Object.entries(options?.seedPosts ?? {}).map(([topic, posts]) => [
@@ -376,8 +382,36 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     env_locked: false,
     seed_peers: [],
   };
-  let communityNodeConfig: CommunityNodeConfig = { nodes: [] };
-  let communityNodeStatuses: CommunityNodeNodeStatus[] = [];
+  let communityNodeConfig: CommunityNodeConfig = {
+    nodes: [
+      {
+        base_url: 'https://api.kukuri.app',
+        auto_approve: true,
+        resolved_urls: {
+          public_base_url: 'https://api.kukuri.app',
+          connectivity_urls: ['https://api.kukuri.app'],
+          seed_peers: [],
+        },
+      },
+    ],
+  };
+  let communityNodeStatuses: CommunityNodeNodeStatus[] = [
+    {
+      base_url: 'https://api.kukuri.app',
+      auto_approve: true,
+      auth_state: { authenticated: true, expires_at: Date.now() + 60_000 },
+      consent_state: { all_required_accepted: true, items: [] },
+      resolved_urls: {
+        public_base_url: 'https://api.kukuri.app',
+        connectivity_urls: ['https://api.kukuri.app'],
+        seed_peers: [],
+      },
+      last_error: null,
+      session_phase: 'ready',
+      retry_after: null,
+      restart_required: false,
+    },
+  ];
   const syncStatus: SyncStatus = {
     connected: true,
     last_sync_ts: 1,
@@ -386,21 +420,19 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     status_detail: 'Connected to all configured peers',
     last_error: options?.globalLastError ?? null,
     configured_peers: ['peer-a'],
-    subscribed_topics: ['kukuri:topic:demo'],
-    topic_diagnostics: [
-      {
-        topic: 'kukuri:topic:demo',
-        joined: true,
-        peer_count: effectivePeerIds.length,
-        connected_peers: ['peer-a'],
-        assist_peer_ids: assistPeerIds,
-        configured_peer_ids: ['peer-a'],
-        missing_peer_ids: [],
-        last_received_at: 1,
-        status_detail: 'Connected to all configured peers for this topic',
-        last_error: options?.topicLastError ?? null,
-      },
-    ],
+    subscribed_topics: [...starterTopics],
+    topic_diagnostics: starterTopics.map((topic) => ({
+      topic,
+      joined: true,
+      peer_count: effectivePeerIds.length,
+      connected_peers: ['peer-a'],
+      assist_peer_ids: assistPeerIds,
+      configured_peer_ids: ['peer-a'],
+      missing_peer_ids: [],
+      last_received_at: topic === 'kukuri:topic:demo' ? 1 : null,
+      status_detail: 'Connected to all configured peers for this topic',
+      last_error: topic === 'kukuri:topic:demo' ? options?.topicLastError ?? null : null,
+    })),
     local_author_pubkey: 'f'.repeat(64),
     discovery: {
       mode: 'seeded_dht',
@@ -1371,19 +1403,23 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     async getCommunityNodeStatuses() {
       return communityNodeStatuses;
     },
-    async setCommunityNodeConfig(baseUrls) {
+    async setCommunityNodeConfig(nodes) {
       communityNodeConfig = {
-        nodes: baseUrls.map((baseUrl) => ({
-          base_url: baseUrl,
+        nodes: nodes.map((node) => ({
+          base_url: node.base_url,
+          auto_approve: node.auto_approve,
           resolved_urls: null,
         })),
       };
-      communityNodeStatuses = baseUrls.map((baseUrl) => ({
-        base_url: baseUrl,
+      communityNodeStatuses = nodes.map((node) => ({
+        base_url: node.base_url,
+        auto_approve: node.auto_approve,
         auth_state: { authenticated: false, expires_at: null },
         consent_state: null,
         resolved_urls: null,
         last_error: null,
+        session_phase: node.auto_approve ? 'connecting' : 'idle',
+        retry_after: null,
         restart_required: false,
       }));
       return communityNodeConfig;
@@ -1399,6 +1435,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
               ...status,
               auth_state: { authenticated: true, expires_at: Date.now() },
               consent_state: { all_required_accepted: false, items: [] },
+              session_phase: status.auto_approve ? 'accepting' : 'authenticating',
             }
           : status
       );
@@ -1407,7 +1444,12 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     async clearCommunityNodeToken(baseUrl) {
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
-          ? { ...status, auth_state: { authenticated: false, expires_at: null } }
+          ? {
+              ...status,
+              auth_state: { authenticated: false, expires_at: null },
+              consent_state: null,
+              session_phase: 'idle',
+            }
           : status
       );
       return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
@@ -1424,6 +1466,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
               ...status,
               consent_state: { all_required_accepted: true, items: [] },
               resolved_urls: resolvedUrls,
+              session_phase: 'ready',
+              retry_after: null,
               restart_required: false,
             }
           : status
@@ -1440,7 +1484,13 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       const resolvedUrls = { public_base_url: baseUrl, connectivity_urls: [baseUrl] };
       communityNodeStatuses = communityNodeStatuses.map((status) =>
         status.base_url === baseUrl
-          ? { ...status, resolved_urls: resolvedUrls, restart_required: false }
+          ? {
+              ...status,
+              resolved_urls: resolvedUrls,
+              session_phase: 'ready',
+              retry_after: null,
+              restart_required: false,
+            }
           : status
       );
       communityNodeConfig = {

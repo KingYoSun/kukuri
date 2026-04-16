@@ -15,18 +15,43 @@ function CommunityNodePanelStory({
   args,
   width = 'wide',
 }: CommunityNodeStoryProps) {
-  const [baseUrlsInput, setBaseUrlsInput] = useState(args.view.baseUrlsInput);
+  const [nodes, setNodes] = useState(args.view.nodes);
 
   return (
     <SettingsStoryFrame width={width}>
       <div>
         <CommunityNodePanel
           {...args}
-          view={{ ...args.view, baseUrlsInput }}
-          onBaseUrlsChange={setBaseUrlsInput}
+          view={{ ...args.view, nodes }}
+          onAddNode={() =>
+            setNodes((current) => [
+              ...current,
+              {
+                id: `story-node-${current.length + 1}`,
+                baseUrl: '',
+                autoApprove: false,
+                saved: false,
+                diagnostics: [],
+                lastError: null,
+              },
+            ])
+          }
+          onNodeBaseUrlChange={(id, value) =>
+            setNodes((current) =>
+              current.map((node) => (node.id === id ? { ...node, baseUrl: value } : node))
+            )
+          }
+          onNodeAutoApproveChange={(id, value) =>
+            setNodes((current) =>
+              current.map((node) => (node.id === id ? { ...node, autoApprove: value } : node))
+            )
+          }
+          onRemoveNode={(id) =>
+            setNodes((current) => current.filter((node) => node.id !== id))
+          }
           onSaveNodes={() => {}}
-          onReset={() => setBaseUrlsInput(args.view.baseUrlsInput)}
-          onClearNodes={() => setBaseUrlsInput('')}
+          onReset={() => setNodes(args.view.nodes)}
+          onClearNodes={() => setNodes([])}
           onAuthenticate={() => {}}
           onFetchConsents={() => {}}
           onAcceptConsents={() => {}}
@@ -47,7 +72,10 @@ const meta = {
     saveDisabled: false,
     resetDisabled: false,
     clearDisabled: false,
-    onBaseUrlsChange: () => {},
+    onAddNode: () => {},
+    onNodeBaseUrlChange: () => {},
+    onNodeAutoApproveChange: () => {},
+    onRemoveNode: () => {},
     onSaveNodes: () => {},
     onReset: () => {},
     onClearNodes: () => {},

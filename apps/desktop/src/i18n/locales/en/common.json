@@ -21,6 +21,7 @@
     "react": "React",
     "refresh": "Refresh",
     "manageReactions": "Manage reactions",
+    "remove": "Remove",
     "removeBookmark": "Remove bookmark",
     "restoreDraft": "Restore draft",
     "repost": "Repost",

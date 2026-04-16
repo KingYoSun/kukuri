@@ -15,10 +15,7 @@ use kukuri_app_api::{
     PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
     TimelineView, UpdateGameRoomInput,
 };
-use kukuri_cn_core::{
-    AuthChallengeResponse, AuthVerifyResponse, CommunityNodeConsentStatus,
-    build_auth_envelope_json, normalize_http_url,
-};
+use kukuri_cn_core::{CommunityNodeConsentStatus, normalize_http_url};
 use kukuri_core::{
     BlobHash, CreatePrivateChannelInput, CustomReactionAssetSnapshotV1, FriendOnlyGrantPreview,
     FriendPlusSharePreview, KukuriKeys, PrivateChannelInvitePreview, Profile, TopicId,
@@ -33,11 +30,11 @@ use crate::attachments::{
 };
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeTargetRequest,
-    SetCommunityNodeConfigRequest, StoredCommunityNodeToken, community_node_http_client,
-    community_node_seed_peers, load_community_node_config_from_file, load_community_node_token,
-    normalize_community_node_config, persist_community_node_token,
-    relay_config_from_community_node_config, remove_community_node_config,
+    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
+    CommunityNodeTargetRequest, SetCommunityNodeConfigRequest, community_node_seed_peers,
+    default_preview_community_node_config, load_community_node_config_from_file,
+    load_community_node_token,
+    normalize_community_node_config, relay_config_from_community_node_config,
     save_community_node_config,
 };
 use crate::discovery::{
@@ -65,6 +62,13 @@ pub struct DesktopRuntime {
     pub(crate) community_node_config: Arc<Mutex<CommunityNodeConfig>>,
     pub(crate) community_node_heartbeat_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) community_node_metadata_refresh_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+    pub(crate) community_node_session_retry_deadlines: Arc<Mutex<HashMap<String, i64>>>,
+    pub(crate) community_node_session_phases:
+        Arc<Mutex<HashMap<String, CommunityNodeSessionPhase>>>,
+    pub(crate) community_node_last_errors: Arc<Mutex<HashMap<String, String>>>,
+    pub(crate) community_node_cached_consents:
+        Arc<Mutex<HashMap<String, CommunityNodeConsentStatus>>>,
+    pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) active_connectivity_urls: Arc<Mutex<Vec<String>>>,
 }
 
@@ -108,6 +112,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
+            false,
         )
         .await
     }
@@ -122,6 +127,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
+            false,
         )
         .await
     }
@@ -138,6 +144,7 @@ impl DesktopRuntime {
             identity_mode,
             DiscoveryConfig::static_peer_default(),
             DhtDiscoveryOptions::disabled(),
+            false,
         )
         .await
     }
@@ -148,10 +155,18 @@ impl DesktopRuntime {
         identity_mode: IdentityStorageMode,
         discovery_config: DiscoveryConfig,
         dht_options: DhtDiscoveryOptions,
+        preload_preview_community_node: bool,
     ) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
-        let community_node_config =
-            load_community_node_config_from_file(&db_path)?.unwrap_or_default();
+        let community_node_config = match load_community_node_config_from_file(&db_path)? {
+            Some(config) => config,
+            None if preload_preview_community_node => {
+                let config = default_preview_community_node_config();
+                save_community_node_config(&db_path, &config)?;
+                config
+            }
+            None => CommunityNodeConfig::default(),
+        };
         let relay_config = relay_config_from_community_node_config(&community_node_config);
         let community_node_seed_peers =
             community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
@@ -196,6 +211,11 @@ impl DesktopRuntime {
             community_node_config: Arc::new(Mutex::new(community_node_config)),
             community_node_heartbeat_deadlines: Arc::new(Mutex::new(HashMap::new())),
             community_node_metadata_refresh_deadlines: Arc::new(Mutex::new(HashMap::new())),
+            community_node_session_retry_deadlines: Arc::new(Mutex::new(HashMap::new())),
+            community_node_session_phases: Arc::new(Mutex::new(HashMap::new())),
+            community_node_last_errors: Arc::new(Mutex::new(HashMap::new())),
+            community_node_cached_consents: Arc::new(Mutex::new(HashMap::new())),
+            community_node_session_guard: Arc::new(Mutex::new(())),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
         })
     }
@@ -213,6 +233,7 @@ impl DesktopRuntime {
             IdentityStorageMode::from_env(),
             discovery_config,
             dht_options,
+            true,
         )
         .await
     }
@@ -871,11 +892,9 @@ impl DesktopRuntime {
         let mut statuses = Vec::with_capacity(config.nodes.len());
         for node in config.nodes {
             let base_url = node.base_url.clone();
-            let heartbeat_error = self
+            let _ = self
                 .refresh_community_node_registration_if_due(base_url.as_str())
-                .await
-                .err()
-                .map(|error| error.to_string());
+                .await;
             let current_node = self
                 .community_node_config
                 .lock()
@@ -885,10 +904,7 @@ impl DesktopRuntime {
                 .find(|candidate| candidate.base_url == base_url)
                 .cloned()
                 .unwrap_or(node);
-            statuses.push(
-                self.community_node_status(current_node, None, heartbeat_error)
-                    .await?,
-            );
+            statuses.push(self.community_node_status(current_node, None, None).await?);
         }
         Ok(statuses)
     }
@@ -897,23 +913,36 @@ impl DesktopRuntime {
         &self,
         request: SetCommunityNodeConfigRequest,
     ) -> Result<CommunityNodeConfig> {
+        let current_config = self.community_node_config.lock().await.clone();
         let nodes = request
-            .base_urls
+            .nodes
             .into_iter()
             .map(|base_url| -> Result<CommunityNodeNodeConfig> {
+                let normalized_base_url = normalize_http_url(base_url.base_url.as_str())?;
+                let resolved_urls = current_config
+                    .nodes
+                    .iter()
+                    .find(|node| node.base_url == normalized_base_url)
+                    .and_then(|node| node.resolved_urls.clone());
                 Ok(CommunityNodeNodeConfig {
-                    base_url: normalize_http_url(base_url.as_str())?,
-                    resolved_urls: None,
+                    base_url: normalized_base_url,
+                    auto_approve: base_url.auto_approve,
+                    resolved_urls,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
-        self.community_node_metadata_refresh_deadlines
+        self.community_node_heartbeat_deadlines.lock().await.clear();
+        self.community_node_metadata_refresh_deadlines.lock().await.clear();
+        self.community_node_session_retry_deadlines
             .lock()
             .await
             .clear();
+        self.community_node_session_phases.lock().await.clear();
+        self.community_node_last_errors.lock().await.clear();
+        self.community_node_cached_consents.lock().await.clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(next_config)
@@ -927,13 +956,20 @@ impl DesktopRuntime {
             })
             .await?;
         }
-        remove_community_node_config(&self.db_path)?;
+        save_community_node_config(&self.db_path, &CommunityNodeConfig::default())?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
         self.community_node_heartbeat_deadlines.lock().await.clear();
         self.community_node_metadata_refresh_deadlines
             .lock()
             .await
             .clear();
+        self.community_node_session_retry_deadlines
+            .lock()
+            .await
+            .clear();
+        self.community_node_session_phases.lock().await.clear();
+        self.community_node_last_errors.lock().await.clear();
+        self.community_node_cached_consents.lock().await.clear();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(())
@@ -944,83 +980,55 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        let client = community_node_http_client()?;
-        let challenge_url = format!("{}/v1/auth/challenge", base_url);
-        let pubkey = self.author_keys.public_key_hex();
-        let seed_peer = self.local_community_node_seed_peer("auth").await?;
-        let challenge = client
-            .post(challenge_url)
-            .json(&serde_json::json!({ "pubkey": pubkey }))
-            .send()
-            .await
-            .context("failed to request auth challenge")?
-            .error_for_status()
-            .context("auth challenge request failed")?
-            .json::<AuthChallengeResponse>()
-            .await
-            .context("failed to decode auth challenge response")?;
-
-        let public_base_url = self
-            .community_node_config
-            .lock()
-            .await
-            .nodes
-            .iter()
-            .find(|node| node.base_url == base_url)
-            .and_then(|node| {
-                node.resolved_urls
-                    .as_ref()
-                    .map(|resolved| resolved.public_base_url.clone())
-            })
-            .unwrap_or_else(|| base_url.clone());
-        let auth_envelope_json = build_auth_envelope_json(
-            self.author_keys.as_ref(),
-            challenge.challenge.as_str(),
-            public_base_url.as_str(),
-        )?;
-        let verify_url = format!("{}/v1/auth/verify", base_url);
-        let verify = client
-            .post(verify_url)
-            .json(&serde_json::json!({
-                "auth_envelope_json": auth_envelope_json,
-                "endpoint_id": seed_peer.endpoint_id,
-                "addr_hint": seed_peer.addr_hint,
-            }))
-            .send()
-            .await
-            .context("failed to verify auth envelope")?
-            .error_for_status()
-            .context("auth verify request failed")?
-            .json::<AuthVerifyResponse>()
-            .await
-            .context("failed to decode auth verify response")?;
-        let token = StoredCommunityNodeToken {
-            access_token: verify.access_token,
-            expires_at: verify.expires_at,
-        };
-        persist_community_node_token(&self.db_path, self.identity_mode, base_url.as_str(), &token)?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        let consent_state = client
-            .get(format!("{}/v1/consents/status", base_url))
-            .bearer_auth(token.access_token.as_str())
-            .send()
-            .await
-            .context("failed to fetch community node consent status")?
-            .error_for_status()
-            .context("community node consent status request failed")?
-            .json::<CommunityNodeConsentStatus>()
-            .await
-            .context("failed to decode community node consent status")?;
-        if consent_state.all_required_accepted {
-            self.refresh_community_node_metadata(CommunityNodeTargetRequest {
-                base_url: base_url.clone(),
-            })
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Authenticating,
+        )
+        .await;
+        let mut token = self
+            .request_community_node_authentication_token(base_url.as_str())
             .await?;
+        let mut consent_state = self
+            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, false)
+            .await?;
+        self.set_community_node_cached_consent(base_url.as_str(), Some(consent_state.clone()))
+            .await;
+        if !consent_state.all_required_accepted && node.auto_approve {
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Accepting,
+            )
+            .await;
+            consent_state = self
+                .accept_community_node_consents_with_retry(base_url.as_str(), &mut token, &[])
+                .await?;
+            self.set_community_node_cached_consent(base_url.as_str(), Some(consent_state.clone()))
+                .await;
+        }
+        if consent_state.all_required_accepted {
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Refreshing,
+            )
+            .await;
+            self.refresh_community_node_registration_with_token_if_due(
+                base_url.as_str(),
+                &mut token,
+                node.auto_approve,
+            )
+            .await?;
+            self.clear_community_node_retry_state(base_url.as_str()).await;
+            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(consent_state), None)
                 .await;
         }
+        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+            .await;
         self.community_node_status(node, Some(consent_state), None)
             .await
     }
@@ -1044,6 +1052,22 @@ impl DesktopRuntime {
             .lock()
             .await
             .remove(base_url.as_str());
+        self.community_node_session_retry_deadlines
+            .lock()
+            .await
+            .remove(base_url.as_str());
+        self.community_node_last_errors
+            .lock()
+            .await
+            .remove(base_url.as_str());
+        self.community_node_cached_consents
+            .lock()
+            .await
+            .remove(base_url.as_str());
+        self.community_node_session_phases
+            .lock()
+            .await
+            .insert(base_url.clone(), CommunityNodeSessionPhase::Idle);
         let node = self
             .community_node_config
             .lock()
@@ -1062,23 +1086,15 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        let client = community_node_http_client()?;
-        let token =
+        let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        let consent_url = format!("{}/v1/consents/status", base_url);
-        let response = client
-            .get(consent_url)
-            .bearer_auth(token.access_token.as_str())
-            .send()
+        let status = self
+            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, true)
             .await
             .context("failed to fetch community node consent status")?;
-        let status = response
-            .error_for_status()
-            .context("community node consent status request failed")?
-            .json::<CommunityNodeConsentStatus>()
-            .await
-            .context("failed to decode community node consent status")?;
+        self.set_community_node_cached_consent(base_url.as_str(), Some(status.clone()))
+            .await;
         self.community_node_status(node, Some(status), None).await
     }
 
@@ -1088,34 +1104,46 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        let client = community_node_http_client()?;
-        let token =
+        let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        let consent_url = format!("{}/v1/consents", base_url);
-        let response = client
-            .post(consent_url)
-            .bearer_auth(token.access_token.as_str())
-            .json(&serde_json::json!({ "policy_slugs": request.policy_slugs }))
-            .send()
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Accepting,
+        )
+        .await;
+        let status = self
+            .accept_community_node_consents_with_retry(
+                base_url.as_str(),
+                &mut token,
+                &request.policy_slugs,
+            )
             .await
             .context("failed to accept community node consents")?;
-        let status = response
-            .error_for_status()
-            .context("community node consent accept request failed")?
-            .json::<CommunityNodeConsentStatus>()
-            .await
-            .context("failed to decode accepted community node consents")?;
+        self.set_community_node_cached_consent(base_url.as_str(), Some(status.clone()))
+            .await;
         if status.all_required_accepted {
-            self.refresh_community_node_metadata(CommunityNodeTargetRequest {
-                base_url: base_url.clone(),
-            })
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Refreshing,
+            )
+            .await;
+            self.refresh_community_node_registration_with_token_if_due(
+                base_url.as_str(),
+                &mut token,
+                node.auto_approve,
+            )
             .await?;
+            self.clear_community_node_retry_state(base_url.as_str()).await;
+            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(status), None)
                 .await;
         }
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+            .await;
         self.community_node_status(node, Some(status), None).await
     }
 
@@ -1124,23 +1152,27 @@ impl DesktopRuntime {
         request: CommunityNodeTargetRequest,
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
-        if let Err(error) = self
-            .refresh_community_node_registration_if_due(base_url.as_str())
-            .await
-        {
-            tracing::warn!(
-                base_url = %base_url,
-                error = %error,
-                "failed to refresh community-node registration before metadata sync"
-            );
-        }
-        let token =
+        let node = self.require_community_node(base_url.as_str()).await?;
+        self.ensure_community_node_session(base_url.as_str()).await?;
+        let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
-        let node = self
-            .sync_community_node_bootstrap_metadata(base_url.as_str(), token.access_token.as_str())
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Refreshing,
+        )
+        .await;
+        let refreshed = self
+            .sync_community_node_bootstrap_metadata_with_retry(
+                base_url.as_str(),
+                &mut token,
+                node.auto_approve,
+            )
             .await?;
-        self.community_node_status(node, None, None).await
+        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+            .await;
+        self.community_node_status(refreshed, None, None).await
     }
 
     pub async fn shutdown(&self) {

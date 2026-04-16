@@ -36,7 +36,8 @@ import {
 } from '@/shell/store';
 import {
   canCreateRepostFromPost,
-  communityNodesToEditorValue,
+  communityNodeDraftNodesToConfigInput,
+  communityNodesToDraftNodes,
   createGameEditorDraft,
   joinedChannelFromAccessTokenPreview,
   mergeKnownAuthors,
@@ -1686,13 +1687,11 @@ export function useDesktopShellActions({
 
   async function handleSaveCommunityNodes() {
     try {
-      const baseUrls = communityNodeInput
-        .split('\n')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-      const nextConfig = await api.setCommunityNodeConfig(baseUrls);
+      const nextConfig = await api.setCommunityNodeConfig(
+        communityNodeDraftNodesToConfigInput(communityNodeInput)
+      );
       setCommunityNodeConfig(nextConfig);
-      setCommunityNodeInput(communityNodesToEditorValue(nextConfig));
+      setCommunityNodeInput(communityNodesToDraftNodes(nextConfig));
       setCommunityNodeEditorDirty(false);
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);
@@ -1711,7 +1710,7 @@ export function useDesktopShellActions({
       await api.clearCommunityNodeConfig();
       setCommunityNodeConfig(DEFAULT_COMMUNITY_NODE_CONFIG);
       setCommunityNodeStatuses([]);
-      setCommunityNodeInput('');
+      setCommunityNodeInput([]);
       setCommunityNodeEditorDirty(false);
       setCommunityNodeError(null);
       await loadTopics(trackedTopics, activeTopic, selectedThread);

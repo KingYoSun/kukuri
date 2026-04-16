@@ -4,11 +4,12 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
 use kukuri_cn_core::{
-    BootstrapHeartbeatResponse, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-    CommunityNodeSeedPeer, normalize_http_url,
+    AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
+    CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
+    build_auth_envelope_json, normalize_http_url,
 };
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 use crate::identity::{IdentityStorageMode, load_optional_secret, persist_optional_secret};
@@ -16,13 +17,18 @@ use crate::paths::community_node_config_path;
 use crate::runtime::DesktopRuntime;
 
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";
+pub(crate) const COMMUNITY_NODE_PREVIEW_BASE_URL: &str = "https://api.kukuri.app";
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;
+pub(crate) const COMMUNITY_NODE_SESSION_RETRY_SECONDS: i64 = 30;
+pub(crate) const COMMUNITY_NODE_AUTH_REFRESH_SKEW_SECONDS: i64 = 300;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeNodeConfig {
     pub base_url: String,
+    #[serde(default)]
+    pub auto_approve: bool,
     #[serde(default)]
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
 }
@@ -39,8 +45,15 @@ pub(crate) struct BootstrapNodesResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetCommunityNodeConfigNode {
+    pub base_url: String,
+    #[serde(default)]
+    pub auto_approve: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetCommunityNodeConfigRequest {
-    pub base_urls: Vec<String>,
+    pub nodes: Vec<SetCommunityNodeConfigNode>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,13 +74,31 @@ pub struct CommunityNodeAuthState {
     pub expires_at: Option<i64>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommunityNodeSessionPhase {
+    #[default]
+    Idle,
+    Connecting,
+    Authenticating,
+    Accepting,
+    Refreshing,
+    Ready,
+    Retrying,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeNodeStatus {
     pub base_url: String,
+    #[serde(default)]
+    pub auto_approve: bool,
     pub auth_state: CommunityNodeAuthState,
     pub consent_state: Option<CommunityNodeConsentStatus>,
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub session_phase: CommunityNodeSessionPhase,
+    pub retry_after: Option<i64>,
     pub restart_required: bool,
 }
 
@@ -91,6 +122,16 @@ pub(crate) fn load_community_node_config_from_file(
     Ok(Some(normalize_community_node_config(config)?))
 }
 
+pub(crate) fn default_preview_community_node_config() -> CommunityNodeConfig {
+    CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: COMMUNITY_NODE_PREVIEW_BASE_URL.to_string(),
+            auto_approve: true,
+            resolved_urls: None,
+        }],
+    }
+}
+
 pub(crate) fn save_community_node_config(
     db_path: &Path,
     config: &CommunityNodeConfig,
@@ -107,25 +148,13 @@ pub(crate) fn save_community_node_config(
         .with_context(|| format!("failed to write community-node config `{}`", path.display()))
 }
 
-pub(crate) fn remove_community_node_config(db_path: &Path) -> Result<()> {
-    let path = community_node_config_path(db_path);
-    if path.exists() {
-        fs::remove_file(&path).with_context(|| {
-            format!(
-                "failed to remove community-node config `{}`",
-                path.display()
-            )
-        })?;
-    }
-    Ok(())
-}
-
 pub(crate) fn normalize_community_node_config(
     config: CommunityNodeConfig,
 ) -> Result<CommunityNodeConfig> {
     let mut deduped = std::collections::BTreeMap::<String, CommunityNodeNodeConfig>::new();
     for node in config.nodes {
         let base_url = normalize_http_url(node.base_url.as_str())?;
+        let incoming_auto_approve = node.auto_approve;
         let incoming_resolved_urls = match node.resolved_urls {
             Some(resolved) => Some(CommunityNodeResolvedUrls::new(
                 resolved.public_base_url,
@@ -142,10 +171,15 @@ pub(crate) fn normalize_community_node_config(
         } else {
             incoming_resolved_urls
         };
+        let auto_approve = deduped
+            .get(&base_url)
+            .map(|existing| existing.auto_approve || incoming_auto_approve)
+            .unwrap_or(incoming_auto_approve);
         deduped.insert(
             base_url.clone(),
             CommunityNodeNodeConfig {
                 base_url,
+                auto_approve,
                 resolved_urls,
             },
         );
@@ -257,53 +291,305 @@ pub(crate) fn community_node_http_client() -> Result<Client> {
         .context("failed to build community-node http client")
 }
 
+#[derive(Debug)]
+enum CommunityNodeRequestError {
+    AuthRequired,
+    ConsentRequired,
+    Other(anyhow::Error),
+}
+
+impl CommunityNodeRequestError {
+    fn into_anyhow(self) -> anyhow::Error {
+        match self {
+            Self::AuthRequired => anyhow!("community node authentication is required"),
+            Self::ConsentRequired => anyhow!("community node consent is required"),
+            Self::Other(error) => error,
+        }
+    }
+}
+
 impl DesktopRuntime {
-    pub(crate) async fn sync_community_node_bootstrap_metadata(
+    pub(crate) async fn set_community_node_session_phase(
+        &self,
+        base_url: &str,
+        phase: CommunityNodeSessionPhase,
+    ) {
+        self.community_node_session_phases
+            .lock()
+            .await
+            .insert(base_url.to_string(), phase);
+    }
+
+    pub(crate) async fn set_community_node_cached_consent(
+        &self,
+        base_url: &str,
+        consent_state: Option<CommunityNodeConsentStatus>,
+    ) {
+        let mut cached = self.community_node_cached_consents.lock().await;
+        if let Some(consent_state) = consent_state {
+            cached.insert(base_url.to_string(), consent_state);
+        } else {
+            cached.remove(base_url);
+        }
+    }
+
+    pub(crate) async fn clear_community_node_retry_state(&self, base_url: &str) {
+        self.community_node_session_retry_deadlines
+            .lock()
+            .await
+            .remove(base_url);
+        self.community_node_last_errors.lock().await.remove(base_url);
+    }
+
+    pub(crate) async fn set_community_node_retry_state(&self, base_url: &str, error: anyhow::Error) {
+        let now = Utc::now().timestamp();
+        self.community_node_last_errors
+            .lock()
+            .await
+            .insert(base_url.to_string(), error.to_string());
+        self.community_node_session_retry_deadlines
+            .lock()
+            .await
+            .insert(
+                base_url.to_string(),
+                now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS),
+            );
+        self.set_community_node_session_phase(base_url, CommunityNodeSessionPhase::Retrying)
+            .await;
+    }
+
+    fn community_node_token_requires_refresh(token: &StoredCommunityNodeToken, now: i64) -> bool {
+        token.expires_at <= now.saturating_add(COMMUNITY_NODE_AUTH_REFRESH_SKEW_SECONDS)
+    }
+
+    fn map_community_node_send_error(
+        action: &str,
+        error: reqwest::Error,
+    ) -> CommunityNodeRequestError {
+        CommunityNodeRequestError::Other(anyhow!(error).context(action.to_string()))
+    }
+
+    fn map_community_node_status_error(
+        action: &str,
+        error: reqwest::Error,
+    ) -> CommunityNodeRequestError {
+        match error.status() {
+            Some(StatusCode::UNAUTHORIZED) => CommunityNodeRequestError::AuthRequired,
+            Some(StatusCode::FORBIDDEN) => CommunityNodeRequestError::ConsentRequired,
+            _ => CommunityNodeRequestError::Other(anyhow!(error).context(action.to_string())),
+        }
+    }
+
+    pub(crate) async fn request_community_node_authentication_token(
+        &self,
+        base_url: &str,
+    ) -> Result<StoredCommunityNodeToken> {
+        let base_url = normalize_http_url(base_url)?;
+        let client = community_node_http_client()?;
+        let challenge_url = format!("{}/v1/auth/challenge", base_url);
+        let pubkey = self.author_keys.public_key_hex();
+        let seed_peer = self.local_community_node_seed_peer("auth").await?;
+        let challenge = client
+            .post(challenge_url)
+            .json(&serde_json::json!({ "pubkey": pubkey }))
+            .send()
+            .await
+            .context("failed to request auth challenge")?
+            .error_for_status()
+            .context("auth challenge request failed")?
+            .json::<AuthChallengeResponse>()
+            .await
+            .context("failed to decode auth challenge response")?;
+
+        let public_base_url = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .find(|node| node.base_url == base_url)
+            .and_then(|node| {
+                node.resolved_urls
+                    .as_ref()
+                    .map(|resolved| resolved.public_base_url.clone())
+            })
+            .unwrap_or_else(|| base_url.clone());
+        let auth_envelope_json = build_auth_envelope_json(
+            self.author_keys.as_ref(),
+            challenge.challenge.as_str(),
+            public_base_url.as_str(),
+        )?;
+        let verify_url = format!("{}/v1/auth/verify", base_url);
+        let verify = client
+            .post(verify_url)
+            .json(&serde_json::json!({
+                "auth_envelope_json": auth_envelope_json,
+                "endpoint_id": seed_peer.endpoint_id,
+                "addr_hint": seed_peer.addr_hint,
+            }))
+            .send()
+            .await
+            .context("failed to verify auth envelope")?
+            .error_for_status()
+            .context("auth verify request failed")?
+            .json::<AuthVerifyResponse>()
+            .await
+            .context("failed to decode auth verify response")?;
+        let token = StoredCommunityNodeToken {
+            access_token: verify.access_token,
+            expires_at: verify.expires_at,
+        };
+        persist_community_node_token(&self.db_path, self.identity_mode, base_url.as_str(), &token)?;
+        Ok(token)
+    }
+
+    async fn request_community_node_consent_status(
         &self,
         base_url: &str,
         access_token: &str,
-    ) -> Result<CommunityNodeNodeConfig> {
-        let base_url = normalize_http_url(base_url)?;
+    ) -> std::result::Result<CommunityNodeConsentStatus, CommunityNodeRequestError> {
+        let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
+        let response = client
+            .get(format!("{}/v1/consents/status", base_url))
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to fetch community node consent status",
+                    error,
+                )
+            })?;
+        let response = response.error_for_status().map_err(|error| {
+            Self::map_community_node_status_error(
+                "community node consent status request failed",
+                error,
+            )
+        })?;
+        response
+            .json::<CommunityNodeConsentStatus>()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to decode community node consent status",
+                    error,
+                )
+            })
+    }
+
+    async fn request_accept_community_node_consents(
+        &self,
+        base_url: &str,
+        access_token: &str,
+        policy_slugs: &[String],
+    ) -> std::result::Result<CommunityNodeConsentStatus, CommunityNodeRequestError> {
+        let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
+        let response = client
+            .post(format!("{}/v1/consents", base_url))
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "policy_slugs": policy_slugs }))
+            .send()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to accept community node consents",
+                    error,
+                )
+            })?;
+        let response = response.error_for_status().map_err(|error| {
+            Self::map_community_node_status_error(
+                "community node consent accept request failed",
+                error,
+            )
+        })?;
+        response
+            .json::<CommunityNodeConsentStatus>()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to decode accepted community node consents",
+                    error,
+                )
+            })
+    }
+
+    async fn sync_community_node_bootstrap_metadata(
+        &self,
+        base_url: &str,
+        access_token: &str,
+    ) -> std::result::Result<CommunityNodeNodeConfig, CommunityNodeRequestError> {
+        let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
         let config = self.community_node_config.lock().await.clone();
         let Some(index) = config
             .nodes
             .iter()
             .position(|node| node.base_url == base_url)
         else {
-            bail!("community node `{base_url}` is not configured");
+            return Err(CommunityNodeRequestError::Other(anyhow!(
+                "community node `{base_url}` is not configured"
+            )));
         };
-        let client = community_node_http_client()?;
+        let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
             .get(format!("{}/v1/bootstrap/nodes", base_url))
             .bearer_auth(access_token)
             .send()
             .await
-            .context("failed to refresh community node metadata")?;
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to refresh community node metadata",
+                    error,
+                )
+            })?;
         let bootstrap = response
             .error_for_status()
-            .context("community node bootstrap request failed")?
+            .map_err(|error| {
+                Self::map_community_node_status_error(
+                    "community node bootstrap request failed",
+                    error,
+                )
+            })?
             .json::<BootstrapNodesResponse>()
             .await
-            .context("failed to decode community node bootstrap response")?;
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to decode community node bootstrap response",
+                    error,
+                )
+            })?;
         let resolved_urls = bootstrap
             .nodes
             .iter()
             .find(|node| node.base_url == base_url)
             .map(|node| node.resolved_urls.clone())
-            .ok_or_else(|| anyhow!("community node bootstrap response is missing self metadata"))?;
+            .ok_or_else(|| {
+                CommunityNodeRequestError::Other(anyhow!(
+                    "community node bootstrap response is missing self metadata"
+                ))
+            })?;
         let mut next_config = config;
         next_config.nodes[index].resolved_urls = Some(resolved_urls);
-        let normalized = normalize_community_node_config(next_config)?;
-        save_community_node_config(&self.db_path, &normalized)?;
+        let normalized = normalize_community_node_config(next_config)
+            .map_err(CommunityNodeRequestError::Other)?;
+        save_community_node_config(&self.db_path, &normalized)
+            .map_err(CommunityNodeRequestError::Other)?;
         *self.community_node_config.lock().await = normalized.clone();
-        self.apply_runtime_connectivity_assist().await?;
-        self.apply_effective_seed_peers().await?;
+        self.apply_runtime_connectivity_assist()
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
+        self.apply_effective_seed_peers()
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
         normalized
             .nodes
             .iter()
             .find(|node| node.base_url == base_url)
             .cloned()
-            .ok_or_else(|| anyhow!("community node `{base_url}` disappeared after normalization"))
+            .ok_or_else(|| {
+                CommunityNodeRequestError::Other(anyhow!(
+                    "community node `{base_url}` disappeared after normalization"
+                ))
+            })
     }
 
     pub(crate) async fn community_node_bootstrap_metadata_retry_due(
@@ -382,20 +668,139 @@ impl DesktopRuntime {
         CommunityNodeSeedPeer::new(endpoint_id, addr_hint)
     }
 
-    pub(crate) async fn refresh_community_node_registration_if_due(
+    pub(crate) async fn fetch_community_node_consent_status_with_retry(
         &self,
         base_url: &str,
-    ) -> Result<()> {
-        let base_url = normalize_http_url(base_url)?;
-        let token =
-            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?;
-        let Some(token) = token else {
-            return Ok(());
-        };
-        let now = Utc::now().timestamp();
-        if token.expires_at <= now {
-            return Ok(());
+        token: &mut StoredCommunityNodeToken,
+        allow_reauthenticate: bool,
+    ) -> Result<CommunityNodeConsentStatus> {
+        match self
+            .request_community_node_consent_status(base_url, token.access_token.as_str())
+            .await
+        {
+            Ok(status) => Ok(status),
+            Err(CommunityNodeRequestError::AuthRequired) if allow_reauthenticate => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Authenticating,
+                )
+                .await;
+                *token = self
+                    .request_community_node_authentication_token(base_url)
+                    .await?;
+                self.request_community_node_consent_status(base_url, token.access_token.as_str())
+                    .await
+                    .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(error) => Err(error.into_anyhow()),
         }
+    }
+
+    pub(crate) async fn accept_community_node_consents_with_retry(
+        &self,
+        base_url: &str,
+        token: &mut StoredCommunityNodeToken,
+        policy_slugs: &[String],
+    ) -> Result<CommunityNodeConsentStatus> {
+        match self
+            .request_accept_community_node_consents(base_url, token.access_token.as_str(), policy_slugs)
+            .await
+        {
+            Ok(status) => Ok(status),
+            Err(CommunityNodeRequestError::AuthRequired) => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Authenticating,
+                )
+                .await;
+                *token = self
+                    .request_community_node_authentication_token(base_url)
+                    .await?;
+                self.request_accept_community_node_consents(
+                    base_url,
+                    token.access_token.as_str(),
+                    policy_slugs,
+                )
+                .await
+                .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(error) => Err(error.into_anyhow()),
+        }
+    }
+
+    pub(crate) async fn sync_community_node_bootstrap_metadata_with_retry(
+        &self,
+        base_url: &str,
+        token: &mut StoredCommunityNodeToken,
+        auto_approve: bool,
+    ) -> Result<CommunityNodeNodeConfig> {
+        match self
+            .sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
+            .await
+        {
+            Ok(node) => Ok(node),
+            Err(CommunityNodeRequestError::AuthRequired) => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Authenticating,
+                )
+                .await;
+                *token = self
+                    .request_community_node_authentication_token(base_url)
+                    .await?;
+                let consent_status = self
+                    .fetch_community_node_consent_status_with_retry(base_url, token, false)
+                    .await?;
+                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
+                    .await;
+                if !consent_status.all_required_accepted {
+                    if !auto_approve {
+                        bail!("community node consent is required");
+                    }
+                    self.set_community_node_session_phase(
+                        base_url,
+                        CommunityNodeSessionPhase::Accepting,
+                    )
+                    .await;
+                    let accepted = self
+                        .accept_community_node_consents_with_retry(base_url, token, &[])
+                        .await?;
+                    self.set_community_node_cached_consent(base_url, Some(accepted))
+                        .await;
+                }
+                self.sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
+                    .await
+                    .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(CommunityNodeRequestError::ConsentRequired) if auto_approve => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Accepting,
+                )
+                .await;
+                let accepted = self
+                    .accept_community_node_consents_with_retry(base_url, token, &[])
+                    .await?;
+                self.set_community_node_cached_consent(base_url, Some(accepted))
+                    .await;
+                self.sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
+                    .await
+                    .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(CommunityNodeRequestError::ConsentRequired) => {
+                bail!("community node consent is required")
+            }
+            Err(error) => Err(error.into_anyhow()),
+        }
+    }
+
+    async fn refresh_community_node_registration_with_token_if_due_once(
+        &self,
+        base_url: &str,
+        access_token: &str,
+    ) -> std::result::Result<(), CommunityNodeRequestError> {
+        let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
+        let now = Utc::now().timestamp();
         let next_due_at = self
             .community_node_heartbeat_deadlines
             .lock()
@@ -413,7 +818,7 @@ impl DesktopRuntime {
             return match self
                 .sync_community_node_bootstrap_metadata(
                     base_url.as_str(),
-                    token.access_token.as_str(),
+                    access_token,
                 )
                 .await
             {
@@ -439,26 +844,35 @@ impl DesktopRuntime {
                 }
             };
         }
-        let seed_peer = self.local_community_node_seed_peer("heartbeat").await?;
-        let client = community_node_http_client()?;
+        let seed_peer = self.local_community_node_seed_peer("heartbeat").await.map_err(CommunityNodeRequestError::Other)?;
+        let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
             .post(format!("{}/v1/bootstrap/heartbeat", base_url))
-            .bearer_auth(token.access_token.as_str())
+            .bearer_auth(access_token)
             .json(&serde_json::json!({
                 "endpoint_id": seed_peer.endpoint_id,
                 "addr_hint": seed_peer.addr_hint,
             }))
             .send()
-            .await
-            .context("failed to refresh community node bootstrap registration");
+            .await;
         match response {
             Ok(response) => {
                 let heartbeat = response
                     .error_for_status()
-                    .context("community node bootstrap heartbeat request failed")?
+                    .map_err(|error| {
+                        Self::map_community_node_status_error(
+                            "community node bootstrap heartbeat request failed",
+                            error,
+                        )
+                    })?
                     .json::<BootstrapHeartbeatResponse>()
                     .await
-                    .context("failed to decode community node bootstrap heartbeat response")?;
+                    .map_err(|error| {
+                        Self::map_community_node_send_error(
+                            "failed to decode community node bootstrap heartbeat response",
+                            error,
+                        )
+                    })?;
                 self.community_node_heartbeat_deadlines.lock().await.insert(
                     base_url.clone(),
                     heartbeat
@@ -468,7 +882,7 @@ impl DesktopRuntime {
                 match self
                     .sync_community_node_bootstrap_metadata(
                         base_url.as_str(),
-                        token.access_token.as_str(),
+                        access_token,
                     )
                     .await
                 {
@@ -499,7 +913,208 @@ impl DesktopRuntime {
                     base_url,
                     now.saturating_add(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS),
                 );
-                Err(error)
+                Err(Self::map_community_node_send_error(
+                    "failed to refresh community node bootstrap registration",
+                    error,
+                ))
+            }
+        }
+    }
+
+    pub(crate) async fn refresh_community_node_registration_with_token_if_due(
+        &self,
+        base_url: &str,
+        token: &mut StoredCommunityNodeToken,
+        auto_approve: bool,
+    ) -> Result<()> {
+        match self
+            .refresh_community_node_registration_with_token_if_due_once(
+                base_url,
+                token.access_token.as_str(),
+            )
+            .await
+        {
+            Ok(()) => Ok(()),
+            Err(CommunityNodeRequestError::AuthRequired) => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Authenticating,
+                )
+                .await;
+                *token = self
+                    .request_community_node_authentication_token(base_url)
+                    .await?;
+                let consent_status = self
+                    .fetch_community_node_consent_status_with_retry(base_url, token, false)
+                    .await?;
+                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
+                    .await;
+                if !consent_status.all_required_accepted {
+                    if !auto_approve {
+                        self.set_community_node_session_phase(
+                            base_url,
+                            CommunityNodeSessionPhase::Idle,
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                    self.set_community_node_session_phase(
+                        base_url,
+                        CommunityNodeSessionPhase::Accepting,
+                    )
+                    .await;
+                    let accepted = self
+                        .accept_community_node_consents_with_retry(base_url, token, &[])
+                        .await?;
+                    self.set_community_node_cached_consent(base_url, Some(accepted)).await;
+                }
+                self.refresh_community_node_registration_with_token_if_due_once(
+                    base_url,
+                    token.access_token.as_str(),
+                )
+                .await
+                .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(CommunityNodeRequestError::ConsentRequired) if auto_approve => {
+                self.set_community_node_session_phase(
+                    base_url,
+                    CommunityNodeSessionPhase::Accepting,
+                )
+                .await;
+                let accepted = self
+                    .accept_community_node_consents_with_retry(base_url, token, &[])
+                    .await?;
+                self.set_community_node_cached_consent(base_url, Some(accepted)).await;
+                self.refresh_community_node_registration_with_token_if_due_once(
+                    base_url,
+                    token.access_token.as_str(),
+                )
+                .await
+                .map_err(CommunityNodeRequestError::into_anyhow)
+            }
+            Err(CommunityNodeRequestError::ConsentRequired) => Ok(()),
+            Err(error) => Err(error.into_anyhow()),
+        }
+    }
+
+    pub(crate) async fn ensure_community_node_session(&self, base_url: &str) -> Result<()> {
+        let base_url = normalize_http_url(base_url)?;
+        let now = Utc::now().timestamp();
+        let retry_after = self
+            .community_node_session_retry_deadlines
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .copied();
+        if retry_after.is_some_and(|retry_after| retry_after > now) {
+            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Retrying)
+                .await;
+            return Ok(());
+        }
+
+        let _guard = self.community_node_session_guard.lock().await;
+        let now = Utc::now().timestamp();
+        let retry_after = self
+            .community_node_session_retry_deadlines
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .copied();
+        if retry_after.is_some_and(|retry_after| retry_after > now) {
+            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Retrying)
+                .await;
+            return Ok(());
+        }
+
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Connecting)
+            .await;
+        let node = self.require_community_node(base_url.as_str()).await?;
+        let auto_approve = node.auto_approve;
+        let mut token =
+            load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?;
+
+        if token
+            .as_ref()
+            .is_some_and(|token| Self::community_node_token_requires_refresh(token, now))
+            || (token.is_none() && auto_approve)
+        {
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Authenticating,
+            )
+            .await;
+            token = Some(
+                self.request_community_node_authentication_token(base_url.as_str())
+                    .await?,
+            );
+        } else if token.is_none() {
+            self.clear_community_node_retry_state(base_url.as_str()).await;
+            self.set_community_node_cached_consent(base_url.as_str(), None).await;
+            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+                .await;
+            return Ok(());
+        }
+
+        let mut token = token.expect("token must exist after authentication");
+        let consent_status = self
+            .fetch_community_node_consent_status_with_retry(
+                base_url.as_str(),
+                &mut token,
+                true,
+            )
+            .await?;
+        self.set_community_node_cached_consent(base_url.as_str(), Some(consent_status.clone()))
+            .await;
+        if !consent_status.all_required_accepted {
+            if !auto_approve {
+                self.clear_community_node_retry_state(base_url.as_str()).await;
+                self.set_community_node_session_phase(
+                    base_url.as_str(),
+                    CommunityNodeSessionPhase::Idle,
+                )
+                .await;
+                return Ok(());
+            }
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Accepting,
+            )
+            .await;
+            let accepted = self
+                .accept_community_node_consents_with_retry(base_url.as_str(), &mut token, &[])
+                .await?;
+            self.set_community_node_cached_consent(base_url.as_str(), Some(accepted))
+                .await;
+        }
+
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Refreshing,
+        )
+        .await;
+        self.refresh_community_node_registration_with_token_if_due(
+            base_url.as_str(),
+            &mut token,
+            auto_approve,
+        )
+        .await?;
+        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+            .await;
+        Ok(())
+    }
+
+    pub(crate) async fn refresh_community_node_registration_if_due(
+        &self,
+        base_url: &str,
+    ) -> Result<()> {
+        let base_url = normalize_http_url(base_url)?;
+        match self.ensure_community_node_session(base_url.as_str()).await {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.set_community_node_retry_state(base_url.as_str(), error)
+                    .await;
+                Ok(())
             }
         }
     }
@@ -524,10 +1139,11 @@ impl DesktopRuntime {
         consent_state: Option<CommunityNodeConsentStatus>,
         last_error: Option<String>,
     ) -> Result<CommunityNodeNodeStatus> {
+        let now = Utc::now().timestamp();
         let token =
             load_community_node_token(&self.db_path, self.identity_mode, node.base_url.as_str())?;
         let auth_state = match token {
-            Some(token) if token.expires_at > Utc::now().timestamp() => CommunityNodeAuthState {
+            Some(token) if token.expires_at > now => CommunityNodeAuthState {
                 authenticated: true,
                 expires_at: Some(token.expires_at),
             },
@@ -537,16 +1153,62 @@ impl DesktopRuntime {
             },
             None => CommunityNodeAuthState::default(),
         };
+        let consent_state = if let Some(consent_state) = consent_state {
+            Some(consent_state)
+        } else {
+            self.community_node_cached_consents
+                .lock()
+                .await
+                .get(node.base_url.as_str())
+                .cloned()
+        };
+        let last_error = if let Some(last_error) = last_error {
+            Some(last_error)
+        } else {
+            self.community_node_last_errors
+                .lock()
+                .await
+                .get(node.base_url.as_str())
+                .cloned()
+        };
+        let retry_after = self
+            .community_node_session_retry_deadlines
+            .lock()
+            .await
+            .get(node.base_url.as_str())
+            .copied()
+            .filter(|deadline| *deadline > now);
+        let session_phase = self
+            .community_node_session_phases
+            .lock()
+            .await
+            .get(node.base_url.as_str())
+            .copied()
+            .unwrap_or_else(|| {
+                if auth_state.authenticated
+                    && consent_state
+                        .as_ref()
+                        .is_none_or(|consent| consent.all_required_accepted)
+                    && node.resolved_urls.is_some()
+                {
+                    CommunityNodeSessionPhase::Ready
+                } else {
+                    CommunityNodeSessionPhase::Idle
+                }
+            });
         let current_connectivity_urls = relay_config_from_community_node_config(
             &self.community_node_config.lock().await.clone(),
         )
         .iroh_relay_urls;
         Ok(CommunityNodeNodeStatus {
             base_url: node.base_url,
+            auto_approve: node.auto_approve,
             auth_state,
             consent_state,
             resolved_urls: node.resolved_urls,
             last_error,
+            session_phase,
+            retry_after,
             restart_required: current_connectivity_urls
                 != *self.active_connectivity_urls.lock().await,
         })
