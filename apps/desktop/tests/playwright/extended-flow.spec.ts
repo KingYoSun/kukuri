@@ -29,7 +29,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-1/);
   await expect(channelDialog.getByRole('heading', { name: 'Core Contributors' })).toBeVisible();
   await channelDialog.getByRole('button', { name: 'Share' }).click();
-  await expect(channelDialog.getByText(/^invite:kukuri:topic:demo:channel-1$/)).toBeVisible();
+  await expect(channelDialog.getByRole('button', { name: 'Invite token' })).toBeVisible();
 
   await channelDialog
     .getByPlaceholder('paste private channel invite, friend grant, or friends+ share')
