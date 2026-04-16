@@ -4999,7 +4999,10 @@ async fn runtime_preloads_preview_community_node_when_config_file_is_missing() {
     .await
     .expect("runtime");
 
-    let config = runtime.get_community_node_config().await.expect("community node config");
+    let config = runtime
+        .get_community_node_config()
+        .await
+        .expect("community node config");
     assert_eq!(config.nodes.len(), 1);
     assert_eq!(config.nodes[0].base_url, "https://api.kukuri.app");
     assert!(config.nodes[0].auto_approve);
@@ -5050,7 +5053,10 @@ async fn auto_approve_node_bootstraps_session_on_status_refresh() {
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
-        .route("/v1/bootstrap/heartbeat", post(mock_managed_bootstrap_heartbeat))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_managed_bootstrap_heartbeat),
+        )
         .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
         .with_state(state.clone());
     let server = tokio::spawn(async move {
@@ -5081,7 +5087,10 @@ async fn auto_approve_node_bootstraps_session_on_status_refresh() {
     assert_eq!(statuses.len(), 1);
     assert!(statuses[0].auto_approve);
     assert!(statuses[0].auth_state.authenticated);
-    assert_eq!(statuses[0].session_phase, crate::CommunityNodeSessionPhase::Ready);
+    assert_eq!(
+        statuses[0].session_phase,
+        crate::CommunityNodeSessionPhase::Ready
+    );
     assert_eq!(statuses[0].retry_after, None);
     assert_eq!(
         statuses[0]
@@ -5143,7 +5152,10 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
-        .route("/v1/bootstrap/heartbeat", post(mock_managed_bootstrap_heartbeat))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_managed_bootstrap_heartbeat),
+        )
         .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
         .with_state(state.clone());
     let server = tokio::spawn(async move {
@@ -5181,7 +5193,10 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
     assert_eq!(state.consent_accept_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
-    assert_eq!(statuses[0].session_phase, crate::CommunityNodeSessionPhase::Ready);
+    assert_eq!(
+        statuses[0].session_phase,
+        crate::CommunityNodeSessionPhase::Ready
+    );
     assert!(statuses[0].auth_state.authenticated);
 
     let stored = crate::community_node::load_community_node_token(
@@ -5231,7 +5246,10 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
         .route("/v1/auth/verify", post(mock_managed_auth_verify))
         .route("/v1/consents/status", get(mock_managed_consent_status))
         .route("/v1/consents", post(mock_managed_accept_consents))
-        .route("/v1/bootstrap/heartbeat", post(mock_managed_bootstrap_heartbeat))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_managed_bootstrap_heartbeat),
+        )
         .route("/v1/bootstrap/nodes", get(mock_managed_bootstrap_nodes))
         .with_state(state.clone());
     let server = tokio::spawn(async move {
@@ -5269,7 +5287,10 @@ async fn consent_required_node_without_auto_approve_stays_pending() {
     assert_eq!(state.consent_accept_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 0);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 0);
-    assert_eq!(statuses[0].session_phase, crate::CommunityNodeSessionPhase::Idle);
+    assert_eq!(
+        statuses[0].session_phase,
+        crate::CommunityNodeSessionPhase::Idle
+    );
     assert!(statuses[0].auth_state.authenticated);
     assert_eq!(
         statuses[0]

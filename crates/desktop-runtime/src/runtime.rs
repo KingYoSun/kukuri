@@ -33,9 +33,8 @@ use crate::community_node::{
     CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
     CommunityNodeTargetRequest, SetCommunityNodeConfigRequest, community_node_seed_peers,
     default_preview_community_node_config, load_community_node_config_from_file,
-    load_community_node_token,
-    normalize_community_node_config, relay_config_from_community_node_config,
-    save_community_node_config,
+    load_community_node_token, normalize_community_node_config,
+    relay_config_from_community_node_config, save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,
@@ -935,7 +934,10 @@ impl DesktopRuntime {
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
         self.community_node_heartbeat_deadlines.lock().await.clear();
-        self.community_node_metadata_refresh_deadlines.lock().await.clear();
+        self.community_node_metadata_refresh_deadlines
+            .lock()
+            .await
+            .clear();
         self.community_node_session_retry_deadlines
             .lock()
             .await
@@ -1018,15 +1020,20 @@ impl DesktopRuntime {
                 node.auto_approve,
             )
             .await?;
-            self.clear_community_node_retry_state(base_url.as_str()).await;
-            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+            self.clear_community_node_retry_state(base_url.as_str())
                 .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Ready,
+            )
+            .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(consent_state), None)
                 .await;
         }
-        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.clear_community_node_retry_state(base_url.as_str())
+            .await;
         self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
             .await;
         self.community_node_status(node, Some(consent_state), None)
@@ -1134,9 +1141,13 @@ impl DesktopRuntime {
                 node.auto_approve,
             )
             .await?;
-            self.clear_community_node_retry_state(base_url.as_str()).await;
-            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+            self.clear_community_node_retry_state(base_url.as_str())
                 .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Ready,
+            )
+            .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(status), None)
@@ -1153,7 +1164,8 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        self.ensure_community_node_session(base_url.as_str()).await?;
+        self.ensure_community_node_session(base_url.as_str())
+            .await?;
         let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
@@ -1169,7 +1181,8 @@ impl DesktopRuntime {
                 node.auto_approve,
             )
             .await?;
-        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.clear_community_node_retry_state(base_url.as_str())
+            .await;
         self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
             .await;
         self.community_node_status(refreshed, None, None).await

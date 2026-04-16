@@ -338,10 +338,17 @@ impl DesktopRuntime {
             .lock()
             .await
             .remove(base_url);
-        self.community_node_last_errors.lock().await.remove(base_url);
+        self.community_node_last_errors
+            .lock()
+            .await
+            .remove(base_url);
     }
 
-    pub(crate) async fn set_community_node_retry_state(&self, base_url: &str, error: anyhow::Error) {
+    pub(crate) async fn set_community_node_retry_state(
+        &self,
+        base_url: &str,
+        error: anyhow::Error,
+    ) {
         let now = Utc::now().timestamp();
         self.community_node_last_errors
             .lock()
@@ -703,7 +710,11 @@ impl DesktopRuntime {
         policy_slugs: &[String],
     ) -> Result<CommunityNodeConsentStatus> {
         match self
-            .request_accept_community_node_consents(base_url, token.access_token.as_str(), policy_slugs)
+            .request_accept_community_node_consents(
+                base_url,
+                token.access_token.as_str(),
+                policy_slugs,
+            )
             .await
         {
             Ok(status) => Ok(status),
@@ -816,10 +827,7 @@ impl DesktopRuntime {
                 return Ok(());
             }
             return match self
-                .sync_community_node_bootstrap_metadata(
-                    base_url.as_str(),
-                    access_token,
-                )
+                .sync_community_node_bootstrap_metadata(base_url.as_str(), access_token)
                 .await
             {
                 Ok(node) => {
@@ -844,7 +852,10 @@ impl DesktopRuntime {
                 }
             };
         }
-        let seed_peer = self.local_community_node_seed_peer("heartbeat").await.map_err(CommunityNodeRequestError::Other)?;
+        let seed_peer = self
+            .local_community_node_seed_peer("heartbeat")
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
             .post(format!("{}/v1/bootstrap/heartbeat", base_url))
@@ -880,10 +891,7 @@ impl DesktopRuntime {
                         .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
                 );
                 match self
-                    .sync_community_node_bootstrap_metadata(
-                        base_url.as_str(),
-                        access_token,
-                    )
+                    .sync_community_node_bootstrap_metadata(base_url.as_str(), access_token)
                     .await
                 {
                     Ok(node) => {
@@ -966,7 +974,8 @@ impl DesktopRuntime {
                     let accepted = self
                         .accept_community_node_consents_with_retry(base_url, token, &[])
                         .await?;
-                    self.set_community_node_cached_consent(base_url, Some(accepted)).await;
+                    self.set_community_node_cached_consent(base_url, Some(accepted))
+                        .await;
                 }
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
@@ -984,7 +993,8 @@ impl DesktopRuntime {
                 let accepted = self
                     .accept_community_node_consents_with_retry(base_url, token, &[])
                     .await?;
-                self.set_community_node_cached_consent(base_url, Some(accepted)).await;
+                self.set_community_node_cached_consent(base_url, Some(accepted))
+                    .await;
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
                     token.access_token.as_str(),
@@ -1007,8 +1017,11 @@ impl DesktopRuntime {
             .get(base_url.as_str())
             .copied();
         if retry_after.is_some_and(|retry_after| retry_after > now) {
-            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Retrying)
-                .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Retrying,
+            )
+            .await;
             return Ok(());
         }
 
@@ -1021,13 +1034,19 @@ impl DesktopRuntime {
             .get(base_url.as_str())
             .copied();
         if retry_after.is_some_and(|retry_after| retry_after > now) {
-            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Retrying)
-                .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Retrying,
+            )
+            .await;
             return Ok(());
         }
 
-        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Connecting)
-            .await;
+        self.set_community_node_session_phase(
+            base_url.as_str(),
+            CommunityNodeSessionPhase::Connecting,
+        )
+        .await;
         let node = self.require_community_node(base_url.as_str()).await?;
         let auto_approve = node.auto_approve;
         let mut token =
@@ -1048,26 +1067,28 @@ impl DesktopRuntime {
                     .await?,
             );
         } else if token.is_none() {
-            self.clear_community_node_retry_state(base_url.as_str()).await;
-            self.set_community_node_cached_consent(base_url.as_str(), None).await;
-            self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Idle)
+            self.clear_community_node_retry_state(base_url.as_str())
                 .await;
+            self.set_community_node_cached_consent(base_url.as_str(), None)
+                .await;
+            self.set_community_node_session_phase(
+                base_url.as_str(),
+                CommunityNodeSessionPhase::Idle,
+            )
+            .await;
             return Ok(());
         }
 
         let mut token = token.expect("token must exist after authentication");
         let consent_status = self
-            .fetch_community_node_consent_status_with_retry(
-                base_url.as_str(),
-                &mut token,
-                true,
-            )
+            .fetch_community_node_consent_status_with_retry(base_url.as_str(), &mut token, true)
             .await?;
         self.set_community_node_cached_consent(base_url.as_str(), Some(consent_status.clone()))
             .await;
         if !consent_status.all_required_accepted {
             if !auto_approve {
-                self.clear_community_node_retry_state(base_url.as_str()).await;
+                self.clear_community_node_retry_state(base_url.as_str())
+                    .await;
                 self.set_community_node_session_phase(
                     base_url.as_str(),
                     CommunityNodeSessionPhase::Idle,
@@ -1098,7 +1119,8 @@ impl DesktopRuntime {
             auto_approve,
         )
         .await?;
-        self.clear_community_node_retry_state(base_url.as_str()).await;
+        self.clear_community_node_retry_state(base_url.as_str())
+            .await;
         self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
             .await;
         Ok(())
