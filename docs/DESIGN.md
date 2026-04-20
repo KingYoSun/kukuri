@@ -14,7 +14,7 @@
 2. `generate_figma_design` の HTML capture で Figma design を生成または更新する。
 3. 一次レビューは、その HTML capture で作った Figma design を基準に行う。
 4. code review に耐える方向性が固まってから実装を詰める。
-5. 変更の大きさとリスクに応じて Storybook、Vitest、Playwright、`cargo xtask` で検証する。
+5. 変更の大きさとリスクに応じて `cargo xtask check` / `test` を baseline にし、browser-level UI 変更では `cargo xtask desktop-ui-check` を追加する。
 6. merge された変更が user-facing behavior または design rule を変える場合は、`docs/ui-reviews/` に記録を残す。
 
 ## Tooling Policy
@@ -67,7 +67,7 @@
 - Storybook は、実装開始後の reusable component review surface の既定値とする。
 - Vitest は component と UI logic の既定 frontend regression layer として維持する。
 - Playwright は、Storybook と Vitest だけでは守りにくい component 境界越えの変更に追加する。
-- `cargo xtask` は workspace 全体の integration gate として維持し、frontend-only tooling で置き換えない。
+- `cargo xtask check` / `cargo xtask test` は日常 gate、`cargo xtask desktop-ui-check` は browser-aware UI gate として維持し、frontend-only tooling で workspace integration gate を置き換えない。
 
 ## Exceptions
 - この文書からの例外は PR description に明記する。

@@ -28,6 +28,10 @@
 - current connectivity scope は `static-peer + seeded DHT + community-node connectivity/auth`
 - current product scope には `social graph v1 + private channel audience v1` を含む
 - root 実行入口は `cargo xtask ...`
+- 日常 validation は `cargo xtask check` + `cargo xtask test`
+- browser-level UI change は `cargo xtask desktop-ui-check`
+- community-node / Postgres slice は `cargo xtask cn-check` + `cargo xtask cn-test`
+- targeted rerun は `cargo xtask rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test`
 - 新 feature 着手前に `docs/adr/0002-feature-data-classification-template.md` を埋める。
 
 ## UI/UX
