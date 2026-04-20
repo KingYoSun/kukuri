@@ -1061,11 +1061,8 @@ impl DesktopRuntime {
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Ready,
-            )
-            .await;
+            self.set_community_node_session_ready(base_url.as_str(), true)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(consent_state), None)
@@ -1186,11 +1183,8 @@ impl DesktopRuntime {
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Ready,
-            )
-            .await;
+            self.set_community_node_session_ready(base_url.as_str(), true)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(status), None)
@@ -1226,7 +1220,7 @@ impl DesktopRuntime {
             .await?;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
-        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+        self.set_community_node_session_ready(base_url.as_str(), false)
             .await;
         self.community_node_status(refreshed, None, None).await
     }

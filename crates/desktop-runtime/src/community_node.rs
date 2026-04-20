@@ -364,34 +364,63 @@ impl DesktopRuntime {
         base_url: &str,
         phase: CommunityNodeSessionPhase,
     ) {
-        let previous = self
-            .community_node_session_phases
+        self.community_node_session_phases
             .lock()
             .await
             .insert(base_url.to_string(), phase);
-        if phase == CommunityNodeSessionPhase::Ready {
-            if previous != Some(CommunityNodeSessionPhase::Ready) {
-                self.community_node_ready_refresh_pending
-                    .lock()
-                    .await
-                    .insert(base_url.to_string(), true);
-                debug!(
-                    %base_url,
-                    previous_phase = ?previous,
-                    "scheduled immediate community-node metadata refresh after ready transition"
-                );
-            }
-            return;
-        }
-        if matches!(
-            phase,
-            CommunityNodeSessionPhase::Idle | CommunityNodeSessionPhase::Retrying
-        ) {
+        if phase != CommunityNodeSessionPhase::Ready
+            && matches!(
+                phase,
+                CommunityNodeSessionPhase::Idle | CommunityNodeSessionPhase::Retrying
+            )
+        {
             self.community_node_ready_refresh_pending
                 .lock()
                 .await
                 .remove(base_url);
         }
+    }
+
+    pub(crate) async fn set_community_node_session_ready(
+        &self,
+        base_url: &str,
+        schedule_immediate_refresh: bool,
+    ) {
+        let previous = self
+            .community_node_session_phases
+            .lock()
+            .await
+            .insert(base_url.to_string(), CommunityNodeSessionPhase::Ready);
+        if schedule_immediate_refresh {
+            self.community_node_ready_refresh_pending
+                .lock()
+                .await
+                .insert(base_url.to_string(), true);
+            debug!(
+                %base_url,
+                previous_phase = ?previous,
+                "scheduled immediate community-node metadata refresh after ready transition"
+            );
+        } else {
+            self.community_node_ready_refresh_pending
+                .lock()
+                .await
+                .remove(base_url);
+            debug!(
+                %base_url,
+                previous_phase = ?previous,
+                "keeping community-node metadata refresh pending state cleared for an already-ready session"
+            );
+        }
+    }
+
+    pub(crate) async fn community_node_session_was_ready(&self, base_url: &str) -> bool {
+        self.community_node_session_phases
+            .lock()
+            .await
+            .get(base_url)
+            .copied()
+            == Some(CommunityNodeSessionPhase::Ready)
     }
 
     pub(crate) async fn set_community_node_cached_consent(
@@ -1153,6 +1182,9 @@ impl DesktopRuntime {
             return Ok(());
         }
 
+        let was_ready = self
+            .community_node_session_was_ready(base_url.as_str())
+            .await;
         self.set_community_node_session_phase(
             base_url.as_str(),
             CommunityNodeSessionPhase::Connecting,
@@ -1232,7 +1264,7 @@ impl DesktopRuntime {
         .await?;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
-        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+        self.set_community_node_session_ready(base_url.as_str(), !was_ready)
             .await;
         Ok(())
     }
