@@ -14,7 +14,6 @@ import type {
   NotificationView,
   PostView,
   TimelineCursor,
-  TimelineScope,
   TimelineView,
 } from '@/lib/api';
 import { REFRESH_INTERVAL_MS } from '@/shell/store';
@@ -2562,12 +2561,7 @@ test('background refresh preserves loaded timeline pages and does not restore a 
     },
   });
   api.listTimeline = vi.fn(
-    async (
-      topic: string,
-      cursor: TimelineCursor | null,
-      limit = 20,
-      _scope: TimelineScope = { kind: 'public' }
-    ) => {
+    async (topic: string, cursor: TimelineCursor | null, limit = 20) => {
       return paginatePosts(
         topic === 'kukuri:topic:demo' ? paginatedPosts : [],
         cursor,

@@ -324,19 +324,6 @@ export function useDesktopShellData({
     return [...current, ...incoming.filter((post) => !seen.has(post.object_id))];
   }, []);
 
-  const mergeLocalPosts = useCallback((current: PostView[], incoming: PostView[]) => {
-    const authoritativeIds = new Set(incoming.map((post) => post.object_id));
-    const localPosts = current.filter((post) => {
-      if (!post.local_state) {
-        return false;
-      }
-      const authoritativeId = post.server_object_id ?? post.object_id;
-      return !authoritativeIds.has(authoritativeId);
-    });
-    const localObjectIds = new Set(localPosts.map((post) => post.object_id));
-    return [...localPosts, ...incoming.filter((post) => !localObjectIds.has(post.object_id))];
-  }, []);
-
   const hasLoadedOlderAuthoritativePosts = useCallback(
     (current: PostView[], incoming: PostView[]) =>
       current.filter((post) => !post.local_state).length > incoming.length,
