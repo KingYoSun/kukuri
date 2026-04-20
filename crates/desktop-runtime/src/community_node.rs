@@ -909,16 +909,15 @@ impl DesktopRuntime {
             if !self
                 .community_node_bootstrap_metadata_retry_due(base_url.as_str(), now)
                 .await
+                && !ready_refresh_pending
             {
-                if !ready_refresh_pending {
-                    debug!(
-                        %base_url,
-                        next_due_at,
-                        now,
-                        "skipping community-node heartbeat because the next refresh is not due"
-                    );
-                    return Ok(());
-                }
+                debug!(
+                    %base_url,
+                    next_due_at,
+                    now,
+                    "skipping community-node heartbeat because the next refresh is not due"
+                );
+                return Ok(());
             }
             info!(
                 %base_url,
