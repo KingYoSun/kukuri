@@ -6,6 +6,15 @@ pub(crate) enum CommunityNodeIdentityMode {
     SharedIdentity,
 }
 
+struct PublicReactionSummaryWait<'a> {
+    runtime_a: &'a DesktopRuntime,
+    runtime_b: &'a DesktopRuntime,
+    topic: &'a str,
+    object_id: &'a str,
+    normalized_reaction_key: &'a str,
+    expected_count: usize,
+}
+
 async fn wait_for_public_reaction_summary(
     runtime: &DesktopRuntime,
     topic: &str,
@@ -38,6 +47,47 @@ async fn wait_for_public_reaction_summary(
     })
     .await
     .context("public reaction propagation timeout")?
+}
+
+async fn wait_for_public_reaction_summary_with_refresh(
+    wait: PublicReactionSummaryWait<'_>,
+    step_timeout: Duration,
+    same_author_shared_identity: bool,
+) -> Result<()> {
+    let (attempts, attempt_timeout) =
+        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
+    let mut last_error = None;
+
+    for attempt in 1..=attempts {
+        match wait_for_public_reaction_summary(
+            wait.runtime_a,
+            wait.topic,
+            wait.object_id,
+            wait.normalized_reaction_key,
+            wait.expected_count,
+            attempt_timeout,
+        )
+        .await
+        {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < attempts => {
+                last_error = Some(format!("{error:#}"));
+                refresh_public_pair(wait.runtime_a, wait.runtime_b, wait.topic, attempt_timeout)
+                    .await
+                    .context("failed to refresh public topic after reaction timeout")?;
+                sleep(Duration::from_millis(250)).await;
+            }
+            Err(error) => {
+                last_error = Some(format!("{error:#}"));
+                break;
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "public reaction propagation failed after refresh retries: {}",
+        last_error.unwrap_or_else(|| "unknown public reaction propagation error".to_string())
+    );
 }
 
 pub(crate) async fn run_community_node_connectivity(
@@ -420,13 +470,17 @@ pub(crate) async fn run_community_node_connectivity(
             })
             .await
             .context("failed to toggle scenario reaction on desktop b")?;
-        wait_for_public_reaction_summary(
-            &runtime_a,
-            topic,
-            post_id.as_str(),
-            "emoji:🔥",
-            1,
+        wait_for_public_reaction_summary_with_refresh(
+            PublicReactionSummaryWait {
+                runtime_a: &runtime_a,
+                runtime_b: &runtime_b,
+                topic,
+                object_id: post_id.as_str(),
+                normalized_reaction_key: "emoji:🔥",
+                expected_count: 1,
+            },
             step_timeout,
+            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
         )
         .await
         .context("desktop a did not receive community reaction summary")?;
