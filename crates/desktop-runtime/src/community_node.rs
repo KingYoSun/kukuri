@@ -11,7 +11,9 @@ use kukuri_cn_core::{
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, info};
 
+use crate::discovery::{DiscoveryConfig, normalize_seed_peers};
 use crate::identity::{IdentityStorageMode, load_optional_secret, persist_optional_secret};
 use crate::paths::community_node_config_path;
 use crate::runtime::DesktopRuntime;
@@ -72,6 +74,23 @@ pub struct AcceptCommunityNodeConsentsRequest {
 pub struct CommunityNodeAuthState {
     pub authenticated: bool,
     pub expires_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RuntimeConnectivityAssistState {
+    pub(crate) discovery_mode: kukuri_transport::DiscoveryMode,
+    pub(crate) discovery_env_locked: bool,
+    pub(crate) configured_seed_peers: Vec<SeedPeer>,
+    pub(crate) bootstrap_seed_peers: Vec<SeedPeer>,
+    pub(crate) relay_urls: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct EffectiveSeedPeerApplyState {
+    pub(crate) discovery_mode: kukuri_transport::DiscoveryMode,
+    pub(crate) discovery_env_locked: bool,
+    pub(crate) configured_seed_peers: Vec<SeedPeer>,
+    pub(crate) bootstrap_seed_peers: Vec<SeedPeer>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,6 +274,37 @@ pub(crate) fn relay_config_from_community_node_config(
     }
 }
 
+pub(crate) fn runtime_connectivity_assist_state(
+    discovery_config: &DiscoveryConfig,
+    community_node_config: &CommunityNodeConfig,
+) -> RuntimeConnectivityAssistState {
+    let relay_config = relay_config_from_community_node_config(community_node_config).normalized();
+    let configured_seed_peers = normalize_seed_peers(discovery_config.seed_peers.clone());
+    let bootstrap_seed_peers =
+        normalize_seed_peers(community_node_seed_peers(community_node_config).collect());
+    RuntimeConnectivityAssistState {
+        discovery_mode: discovery_config.mode.clone(),
+        discovery_env_locked: discovery_config.env_locked,
+        configured_seed_peers,
+        bootstrap_seed_peers,
+        relay_urls: relay_config.iroh_relay_urls,
+    }
+}
+
+pub(crate) fn effective_seed_peer_apply_state(
+    discovery_config: &DiscoveryConfig,
+    community_node_config: &CommunityNodeConfig,
+) -> EffectiveSeedPeerApplyState {
+    EffectiveSeedPeerApplyState {
+        discovery_mode: discovery_config.mode.clone(),
+        discovery_env_locked: discovery_config.env_locked,
+        configured_seed_peers: normalize_seed_peers(discovery_config.seed_peers.clone()),
+        bootstrap_seed_peers: normalize_seed_peers(
+            community_node_seed_peers(community_node_config).collect(),
+        ),
+    }
+}
+
 pub(crate) fn load_community_node_token(
     db_path: &Path,
     mode: IdentityStorageMode,
@@ -314,10 +364,34 @@ impl DesktopRuntime {
         base_url: &str,
         phase: CommunityNodeSessionPhase,
     ) {
-        self.community_node_session_phases
+        let previous = self
+            .community_node_session_phases
             .lock()
             .await
             .insert(base_url.to_string(), phase);
+        if phase == CommunityNodeSessionPhase::Ready {
+            if previous != Some(CommunityNodeSessionPhase::Ready) {
+                self.community_node_ready_refresh_pending
+                    .lock()
+                    .await
+                    .insert(base_url.to_string(), true);
+                debug!(
+                    %base_url,
+                    previous_phase = ?previous,
+                    "scheduled immediate community-node metadata refresh after ready transition"
+                );
+            }
+            return;
+        }
+        if matches!(
+            phase,
+            CommunityNodeSessionPhase::Idle | CommunityNodeSessionPhase::Retrying
+        ) {
+            self.community_node_ready_refresh_pending
+                .lock()
+                .await
+                .remove(base_url);
+        }
     }
 
     pub(crate) async fn set_community_node_cached_consent(
@@ -574,6 +648,12 @@ impl DesktopRuntime {
                     "community node bootstrap response is missing self metadata"
                 ))
             })?;
+        debug!(
+            %base_url,
+            relay_url_count = resolved_urls.connectivity_urls.len(),
+            seed_peer_count = resolved_urls.seed_peers.len(),
+            "community-node metadata sync resolved bootstrap metadata"
+        );
         let mut next_config = config;
         next_config.nodes[index].resolved_urls = Some(resolved_urls);
         let normalized = normalize_community_node_config(next_config)
@@ -820,12 +900,33 @@ impl DesktopRuntime {
             .copied()
             .unwrap_or_default();
         if next_due_at > now {
+            let ready_refresh_pending = self
+                .community_node_ready_refresh_pending
+                .lock()
+                .await
+                .remove(base_url.as_str())
+                .unwrap_or(false);
             if !self
                 .community_node_bootstrap_metadata_retry_due(base_url.as_str(), now)
                 .await
             {
-                return Ok(());
+                if !ready_refresh_pending {
+                    debug!(
+                        %base_url,
+                        next_due_at,
+                        now,
+                        "skipping community-node heartbeat because the next refresh is not due"
+                    );
+                    return Ok(());
+                }
             }
+            info!(
+                %base_url,
+                next_due_at,
+                now,
+                ready_refresh_pending,
+                "running community-node metadata refresh without waiting for the next heartbeat"
+            );
             return match self
                 .sync_community_node_bootstrap_metadata(base_url.as_str(), access_token)
                 .await
@@ -856,6 +957,12 @@ impl DesktopRuntime {
             .local_community_node_seed_peer("heartbeat")
             .await
             .map_err(CommunityNodeRequestError::Other)?;
+        info!(
+            %base_url,
+            next_due_at,
+            now,
+            "refreshing community-node bootstrap heartbeat"
+        );
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
             .post(format!("{}/v1/bootstrap/heartbeat", base_url))
@@ -889,6 +996,11 @@ impl DesktopRuntime {
                     heartbeat
                         .expires_at
                         .saturating_sub(COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_INTERVAL_SECONDS),
+                );
+                debug!(
+                    %base_url,
+                    expires_at = heartbeat.expires_at,
+                    "community-node bootstrap heartbeat refreshed"
                 );
                 match self
                     .sync_community_node_bootstrap_metadata(base_url.as_str(), access_token)
@@ -1237,34 +1349,74 @@ impl DesktopRuntime {
     }
 
     pub(crate) async fn apply_runtime_connectivity_assist(&self) -> Result<()> {
-        let community_node_config = self.community_node_config.lock().await.clone();
-        let relay_config = relay_config_from_community_node_config(&community_node_config);
         let discovery_config = self.discovery_config.lock().await.clone();
-        let bootstrap_seed_peers =
-            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
+        let community_node_config = self.community_node_config.lock().await.clone();
+        let next_state =
+            runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+        {
+            let current_state = self.last_runtime_connectivity_assist_state.lock().await;
+            if current_state.as_ref() == Some(&next_state) {
+                debug!(
+                    relay_url_count = next_state.relay_urls.len(),
+                    bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
+                    "skipping runtime connectivity apply because relay and seed inputs are unchanged"
+                );
+                return Ok(());
+            }
+        }
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: next_state.relay_urls.clone(),
+        };
         self.iroh_stack
             .apply_runtime_connectivity(
                 &discovery_config,
-                &bootstrap_seed_peers,
+                &next_state.bootstrap_seed_peers,
                 relay_config.clone(),
             )
             .await?;
+        debug!(
+            relay_url_count = relay_config.iroh_relay_urls.len(),
+            bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
+            "applied runtime connectivity assist from community-node metadata"
+        );
         *self.active_connectivity_urls.lock().await = relay_config.iroh_relay_urls;
+        *self.last_runtime_connectivity_assist_state.lock().await = Some(next_state);
+        self.runtime_connectivity_apply_version
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
     pub(crate) async fn apply_effective_seed_peers(&self) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
-        let bootstrap_seed_peers =
-            community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
+        let next_state = effective_seed_peer_apply_state(&discovery_config, &community_node_config);
+        {
+            let current_state = self.last_effective_seed_peer_apply_state.lock().await;
+            if current_state.as_ref() == Some(&next_state) {
+                debug!(
+                    bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
+                    configured_seed_peer_count = next_state.configured_seed_peers.len(),
+                    "skipping discovery seed apply because the effective seed inputs are unchanged"
+                );
+                return Ok(());
+            }
+        }
         self.app_service
             .set_discovery_seeds(
-                discovery_config.mode.clone(),
-                discovery_config.env_locked,
-                discovery_config.seed_peers,
-                bootstrap_seed_peers,
+                next_state.discovery_mode.clone(),
+                next_state.discovery_env_locked,
+                next_state.configured_seed_peers.clone(),
+                next_state.bootstrap_seed_peers.clone(),
             )
-            .await
+            .await?;
+        debug!(
+            bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
+            configured_seed_peer_count = next_state.configured_seed_peers.len(),
+            "applied effective discovery seeds from community-node metadata"
+        );
+        *self.last_effective_seed_peer_apply_state.lock().await = Some(next_state);
+        self.effective_seed_peer_apply_version
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
     }
 }

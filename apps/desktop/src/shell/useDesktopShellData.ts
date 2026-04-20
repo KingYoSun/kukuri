@@ -337,6 +337,56 @@ export function useDesktopShellData({
     return [...localPosts, ...incoming.filter((post) => !localObjectIds.has(post.object_id))];
   }, []);
 
+  const hasLoadedOlderAuthoritativePosts = useCallback(
+    (current: PostView[], incoming: PostView[]) =>
+      current.filter((post) => !post.local_state).length > incoming.length,
+    []
+  );
+
+  const mergeRefreshedVisiblePosts = useCallback(
+    (current: PostView[], incoming: PostView[], preserveOlderPages: boolean) => {
+      const authoritativeIds = new Set(
+        incoming.map((post) => post.server_object_id ?? post.object_id)
+      );
+      const localPosts = current.filter((post) => {
+        if (!post.local_state) {
+          return false;
+        }
+        const authoritativeId = post.server_object_id ?? post.object_id;
+        return !authoritativeIds.has(authoritativeId);
+      });
+      const nextPosts = [...localPosts];
+      const seenObjectIds = new Set(nextPosts.map((post) => post.object_id));
+
+      for (const post of incoming) {
+        if (seenObjectIds.has(post.object_id)) {
+          continue;
+        }
+        nextPosts.push(post);
+        seenObjectIds.add(post.object_id);
+      }
+
+      if (!preserveOlderPages) {
+        return nextPosts;
+      }
+
+      for (const post of current) {
+        if (post.local_state) {
+          continue;
+        }
+        const authoritativeId = post.server_object_id ?? post.object_id;
+        if (authoritativeIds.has(authoritativeId) || seenObjectIds.has(post.object_id)) {
+          continue;
+        }
+        nextPosts.push(post);
+        seenObjectIds.add(post.object_id);
+      }
+
+      return nextPosts;
+    },
+    []
+  );
+
   const clearPendingTimeline = useCallback(
     (key: string) => {
       setPendingTimelineSnapshotsByKey((current) => {
@@ -383,10 +433,16 @@ export function useDesktopShellData({
       if (!pendingItems || pendingItems.length === 0) {
         return false;
       }
+      const currentTimelinePosts = currentState.timelinesByKey[key] ?? EMPTY_POSTS;
+      const preserveOlderPages = hasLoadedOlderAuthoritativePosts(currentTimelinePosts, pendingItems);
       startTransition(() => {
         setTimelinesByKey((current) => ({
           ...current,
-          [key]: mergeLocalPosts(current[key] ?? EMPTY_POSTS, pendingItems),
+          [key]: mergeRefreshedVisiblePosts(
+            current[key] ?? EMPTY_POSTS,
+            pendingItems,
+            preserveOlderPages
+          ),
         }));
         setTimelineNextCursorByKey((current) => ({
           ...current,
@@ -396,7 +452,14 @@ export function useDesktopShellData({
       clearPendingTimeline(key);
       return true;
     },
-    [clearPendingTimeline, mergeLocalPosts, setTimelineNextCursorByKey, setTimelinesByKey, storeApi]
+    [
+      clearPendingTimeline,
+      hasLoadedOlderAuthoritativePosts,
+      mergeRefreshedVisiblePosts,
+      setTimelineNextCursorByKey,
+      setTimelinesByKey,
+      storeApi,
+    ]
   );
 
   const refreshVisibleShellData = useCallback(
@@ -429,6 +492,19 @@ export function useDesktopShellData({
 
         startTransition(() => {
           const baselinePosts = currentState.timelinesByKey[timelineKey] ?? EMPTY_POSTS;
+          const preserveTimelinePages =
+            mode === 'buffer' &&
+            hasLoadedOlderAuthoritativePosts(baselinePosts, timeline.items);
+          const resolvedTimelineCursor = preserveTimelinePages
+            ? (currentState.timelineNextCursorByKey[timelineKey] ?? null)
+            : (timeline.next_cursor ?? null);
+          const baselinePublicTimeline = currentState.publicTimelinesByTopic[topic] ?? EMPTY_POSTS;
+          const preservePublicTimelinePages =
+            mode === 'buffer' &&
+            hasLoadedOlderAuthoritativePosts(baselinePublicTimeline, publicTimeline.items);
+          const resolvedPublicTimelineCursor = preservePublicTimelinePages
+            ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
+            : (publicTimeline.next_cursor ?? null);
           const authoritativeIds = new Set(
             baselinePosts
               .filter((post) => !post.local_state)
@@ -451,36 +527,54 @@ export function useDesktopShellData({
             }));
             setPendingTimelineNextCursorByKey((current) => ({
               ...current,
-              [timelineKey]: timeline.next_cursor ?? null,
+              [timelineKey]: resolvedTimelineCursor,
             }));
           } else {
             setTimelinesByKey((current) => ({
               ...current,
-              [timelineKey]: mergeLocalPosts(current[timelineKey] ?? EMPTY_POSTS, timeline.items),
+              [timelineKey]: mergeRefreshedVisiblePosts(
+                current[timelineKey] ?? EMPTY_POSTS,
+                timeline.items,
+                preserveTimelinePages
+              ),
             }));
             setTimelineNextCursorByKey((current) => ({
               ...current,
-              [timelineKey]: timeline.next_cursor ?? null,
+              [timelineKey]: resolvedTimelineCursor,
             }));
             clearPendingTimeline(timelineKey);
           }
           setPublicTimelinesByTopic((current) => ({
             ...current,
-            [topic]: mergeLocalPosts(current[topic] ?? EMPTY_POSTS, publicTimeline.items),
+            [topic]: mergeRefreshedVisiblePosts(
+              current[topic] ?? EMPTY_POSTS,
+              publicTimeline.items,
+              preservePublicTimelinePages
+            ),
           }));
           setPublicTimelineNextCursorByTopic((current) => ({
             ...current,
-            [topic]: publicTimeline.next_cursor ?? null,
+            [topic]: resolvedPublicTimelineCursor,
           }));
           setJoinedChannelsByTopic((current) => ({
             ...current,
             [topic]: joinedChannels,
           }));
           if (currentThread) {
-            setThread((current) => mergeLocalPosts(current, threadView?.items ?? []));
+            const incomingThreadItems = threadView?.items ?? [];
+            const currentThreadPosts = currentState.thread;
+            const preserveThreadPages =
+              mode === 'buffer' &&
+              hasLoadedOlderAuthoritativePosts(currentThreadPosts, incomingThreadItems);
+            const resolvedThreadCursor = preserveThreadPages
+              ? (currentState.threadNextCursorById[currentThread] ?? null)
+              : (threadView?.next_cursor ?? null);
+            setThread((current) =>
+              mergeRefreshedVisiblePosts(current, incomingThreadItems, preserveThreadPages)
+            );
             setThreadNextCursorById((current) => ({
               ...current,
-              [currentThread]: threadView?.next_cursor ?? null,
+              [currentThread]: resolvedThreadCursor,
             }));
           } else {
             setThread([]);
@@ -501,9 +595,10 @@ export function useDesktopShellData({
     },
     [
       api,
-      mergeLocalPosts,
       clearPendingTimeline,
+      hasLoadedOlderAuthoritativePosts,
       loadTopicsRequestRef,
+      mergeRefreshedVisiblePosts,
       setError,
       setJoinedChannelsByTopic,
       setPendingTimelineCountsByKey,

@@ -1,6 +1,6 @@
 import type { FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link2 } from 'lucide-react';
+import { DoorOpen, Link2 } from 'lucide-react';
 
 import type { InternalSmartReference } from '@/lib/internalLinks';
 import { Button } from '@/components/ui/button';
@@ -92,6 +92,9 @@ export function PrivateChannelPanel({
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
   const selectedChannelId = selectedChannel?.channel_id ?? null;
+  const selectedChannelShareLabel = selectedChannel
+    ? `${selectedChannel.label} / ${t(`channels:audienceOptions.${selectedChannel.audience_kind}`)}`
+    : t('channels:actions.share');
 
   return (
     <Card className='panel-subsection'>
@@ -233,12 +236,15 @@ export function PrivateChannelPanel({
                   ) : null}
                   <div className='discovery-actions'>
                     <Button
+                      aria-label={selectedChannelShareLabel}
+                      className='w-full justify-between gap-3 text-left'
                       variant='secondary'
                       type='button'
                       disabled={channelActionDisabled || selectedChannelId === null}
                       onClick={onShare}
                     >
-                      {t('channels:actions.share')}
+                      <span>{selectedChannelShareLabel}</span>
+                      <DoorOpen className='size-4 shrink-0' aria-hidden='true' />
                     </Button>
                   </div>
                 </>

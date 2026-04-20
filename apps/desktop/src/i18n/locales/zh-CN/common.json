@@ -81,6 +81,9 @@
     "quoteRepost": "引用转发",
     "reposted": "已转发"
   },
+  "feedback": {
+    "copiedToClipboard": "已复制到剪贴板。"
+  },
   "fallbacks": {
     "attachment": "附件",
     "authorDetail": "作者详情",
