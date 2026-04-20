@@ -88,6 +88,9 @@
     "quoteRepost": "Quote repost",
     "reposted": "Reposted"
   },
+  "feedback": {
+    "copiedToClipboard": "Copied to clipboard."
+  },
   "fallbacks": {
     "attachment": "attachment",
     "authorDetail": "Author Detail",

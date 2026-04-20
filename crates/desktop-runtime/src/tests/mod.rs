@@ -6019,6 +6019,344 @@ async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
 }
 
 #[tokio::test]
+async fn community_node_metadata_refresh_skips_connectivity_reapply_when_bootstrap_metadata_is_unchanged()
+ {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-metadata-refresh-no-churn.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    let seed_peer_runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path()
+            .join("community-metadata-refresh-no-churn-peer.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("seed peer runtime");
+    let seed_peer = seed_peer_runtime
+        .local_community_node_seed_peer("metadata-refresh-test")
+        .await
+        .expect("seed peer");
+    seed_peer_runtime.shutdown().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(vec![seed_peer.clone()])),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("initial sync status");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+    let runtime_connectivity_apply_version = runtime
+        .runtime_connectivity_apply_version
+        .load(Ordering::SeqCst);
+    let effective_seed_peer_apply_version = runtime
+        .effective_seed_peer_apply_version
+        .load(Ordering::SeqCst);
+
+    runtime
+        .community_node_ready_refresh_pending
+        .lock()
+        .await
+        .remove(base_url.as_str());
+
+    let refreshed = runtime
+        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("refresh metadata");
+
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        refreshed
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![seed_peer]
+    );
+    assert_eq!(
+        runtime
+            .runtime_connectivity_apply_version
+            .load(Ordering::SeqCst),
+        runtime_connectivity_apply_version
+    );
+    assert_eq!(
+        runtime
+            .effective_seed_peer_apply_version
+            .load(Ordering::SeqCst),
+        effective_seed_peer_apply_version
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_next_heartbeat_due() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-ready-refresh.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    let initial_seed_peer_runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path().join("community-ready-refresh-initial-peer.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("initial seed peer runtime");
+    let initial_seed_peer = initial_seed_peer_runtime
+        .local_community_node_seed_peer("ready-refresh-initial")
+        .await
+        .expect("initial seed peer");
+    initial_seed_peer_runtime.shutdown().await;
+    let refreshed_seed_peer_runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path().join("community-ready-refresh-refreshed-peer.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("refreshed seed peer runtime");
+    let refreshed_seed_peer = refreshed_seed_peer_runtime
+        .local_community_node_seed_peer("ready-refresh-updated")
+        .await
+        .expect("refreshed seed peer");
+    refreshed_seed_peer_runtime.shutdown().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(vec![initial_seed_peer.clone()])),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("initial sync status");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+    assert!(
+        runtime
+            .community_node_heartbeat_deadlines
+            .lock()
+            .await
+            .get(base_url.as_str())
+            .copied()
+            .expect("heartbeat deadline")
+            > Utc::now().timestamp()
+    );
+    assert_eq!(
+        runtime.community_node_config.lock().await.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![initial_seed_peer]
+    );
+
+    *state.seed_peers.lock().await = vec![refreshed_seed_peer.clone()];
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("refreshed sync status");
+
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        runtime.community_node_config.lock().await.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![refreshed_seed_peer]
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_before_next_heartbeat_due()
+ {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-ready-refresh-once.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    let seed_peer_runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path().join("community-ready-refresh-once-peer.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("seed peer runtime");
+    let seed_peer = seed_peer_runtime
+        .local_community_node_seed_peer("ready-refresh-once")
+        .await
+        .expect("seed peer");
+    seed_peer_runtime.shutdown().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockCommunityNodeState {
+        base_url: base_url.clone(),
+        seed_peers: Arc::new(Mutex::new(vec![seed_peer.clone()])),
+        heartbeat_seed_peers: Arc::new(Mutex::new(None)),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route("/v1/bootstrap/heartbeat", post(mock_bootstrap_heartbeat))
+        .route("/v1/bootstrap/nodes", get(mock_bootstrap_nodes))
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("initial sync status");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 1);
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("ready refresh sync status");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("steady-state sync status");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
 async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_empty() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");

@@ -28,7 +28,9 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-1/);
   await expect(channelDialog.getByRole('heading', { name: 'Core Contributors' })).toBeVisible();
-  await channelDialog.getByRole('button', { name: 'Share' }).click();
+  await channelDialog
+    .getByRole('button', { name: /Core Contributors\s*\/\s*Invite only/i })
+    .click();
   await expect(channelDialog.getByRole('button', { name: 'Invite token' })).toBeVisible();
 
   await channelDialog

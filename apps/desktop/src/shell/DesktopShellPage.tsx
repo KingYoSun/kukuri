@@ -64,7 +64,7 @@ import {
   buildTopicLink,
   type InternalSmartReference,
 } from '@/lib/internalLinks';
-import { copyTextToClipboard } from '@/lib/utils';
+import { CLIPBOARD_COPY_EVENT, copyTextToClipboard } from '@/lib/utils';
 import {
   SHELL_CONTEXT_ID,
   SHELL_NAV_ID,
@@ -107,6 +107,8 @@ import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 function createCommunityNodeDraftId(): string {
   return `community-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 
 export function DesktopShellPage({
   api = runtimeApi,
@@ -210,8 +212,13 @@ export function DesktopShellPage({
   const [sharePreviewError, setSharePreviewError] = useState<string | null>(null);
   const [sharePreviewShowRaw, setSharePreviewShowRaw] = useState(false);
   const [shareImportPending, setShareImportPending] = useState(false);
+  const [clipboardToastId, setClipboardToastId] = useState(0);
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
   const previousTimelineViewRef = useRef(shellChromeState.timelineView);
+  const clipboardToastTimeoutRef = useRef<number | null>(null);
+  const lastThreadFocusKeyRef = useRef<string | null>(null);
+  const lastLiveFocusKeyRef = useRef<string | null>(null);
+  const lastGameFocusKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -225,6 +232,36 @@ export function DesktopShellPage({
     },
     [profileAvatarPreviewUrl]
   );
+
+  useEffect(
+    () => () => {
+      if (clipboardToastTimeoutRef.current !== null) {
+        window.clearTimeout(clipboardToastTimeoutRef.current);
+      }
+    },
+    []
+  );
+
+  const showClipboardToast = useCallback(() => {
+    setClipboardToastId((current) => current + 1);
+    if (clipboardToastTimeoutRef.current !== null) {
+      window.clearTimeout(clipboardToastTimeoutRef.current);
+    }
+    clipboardToastTimeoutRef.current = window.setTimeout(() => {
+      setClipboardToastId(0);
+      clipboardToastTimeoutRef.current = null;
+    }, CLIPBOARD_TOAST_TIMEOUT_MS);
+  }, []);
+
+  useEffect(() => {
+    const handleClipboardCopy = () => {
+      showClipboardToast();
+    };
+    window.addEventListener(CLIPBOARD_COPY_EVENT, handleClipboardCopy as EventListener);
+    return () => {
+      window.removeEventListener(CLIPBOARD_COPY_EVENT, handleClipboardCopy as EventListener);
+    };
+  }, [showClipboardToast]);
 
   useEffect(() => {
     const previousPrimarySection = previousPrimarySectionRef.current;
@@ -719,8 +756,11 @@ export function DesktopShellPage({
       trackedTopics,
     ]
   );
+  const threadFocusKey = selectedThread && focusedObjectId
+    ? `${selectedThread}:${focusedObjectId}`
+    : null;
   useEffect(() => {
-    if (!selectedThread || !focusedObjectId) {
+    if (!threadFocusKey || lastThreadFocusKeyRef.current === threadFocusKey) {
       return;
     }
     const frameId = window.requestAnimationFrame(() => {
@@ -731,48 +771,49 @@ export function DesktopShellPage({
           target.scrollIntoView({ block: 'center' });
         }
         target.focus({ preventScroll: true });
+        lastThreadFocusKeyRef.current = threadFocusKey;
       }
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [focusedObjectId, selectedThread, threadPostViews.length]);
+  }, [focusedObjectId, threadFocusKey, threadPostViews.length]);
+  const liveFocusKey =
+    shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useEffect(() => {
-    if (
-      shellChromeState.activePrimarySection !== 'live' ||
-      !selectedLiveSessionId
-    ) {
+    if (!liveFocusKey || lastLiveFocusKeyRef.current === liveFocusKey) {
       return;
     }
     const frameId = window.requestAnimationFrame(() => {
-      const selector = `[data-live-session-id="${selectedLiveSessionId}"]`;
+      const selector = `[data-live-session-id="${liveFocusKey}"]`;
       const target = document.querySelector(selector);
       if (target instanceof HTMLElement) {
         if (typeof target.scrollIntoView === 'function') {
           target.scrollIntoView({ block: 'center' });
         }
         target.focus({ preventScroll: true });
+        lastLiveFocusKeyRef.current = liveFocusKey;
       }
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [liveSessionListItems.length, selectedLiveSessionId, shellChromeState.activePrimarySection]);
+  }, [liveFocusKey, liveSessionListItems.length]);
+  const gameFocusKey =
+    shellChromeState.activePrimarySection === 'game' ? selectedGameRoomId : null;
   useEffect(() => {
-    if (
-      shellChromeState.activePrimarySection !== 'game' ||
-      !selectedGameRoomId
-    ) {
+    if (!gameFocusKey || lastGameFocusKeyRef.current === gameFocusKey) {
       return;
     }
     const frameId = window.requestAnimationFrame(() => {
-      const selector = `[data-game-room-id="${selectedGameRoomId}"]`;
+      const selector = `[data-game-room-id="${gameFocusKey}"]`;
       const target = document.querySelector(selector);
       if (target instanceof HTMLElement) {
         if (typeof target.scrollIntoView === 'function') {
           target.scrollIntoView({ block: 'center' });
         }
         target.focus({ preventScroll: true });
+        lastGameFocusKeyRef.current = gameFocusKey;
       }
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [activeGameRooms.length, selectedGameRoomId, shellChromeState.activePrimarySection]);
+  }, [activeGameRooms.length, gameFocusKey]);
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
   const notificationAction = (
@@ -2309,6 +2350,21 @@ export function DesktopShellPage({
         }
         sections={settingsSections}
       />
+
+      {clipboardToastId > 0 ? (
+        <div className='pointer-events-none fixed right-4 bottom-4 z-[90] w-[calc(100vw-2rem)] max-w-xs'>
+          <Notice
+            key={clipboardToastId}
+            role='status'
+            aria-live='polite'
+            aria-atomic='true'
+            tone='accent'
+            className='pointer-events-auto'
+          >
+            {t('common:feedback.copiedToClipboard')}
+          </Notice>
+        </div>
+      ) : null}
     </>
   );
 }

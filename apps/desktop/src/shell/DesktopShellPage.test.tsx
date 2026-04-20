@@ -13,6 +13,7 @@ import type {
   DirectMessageMessageView,
   NotificationView,
   PostView,
+  TimelineCursor,
   TimelineView,
 } from '@/lib/api';
 import { REFRESH_INTERVAL_MS } from '@/shell/store';
@@ -142,6 +143,51 @@ function buildNotification(overrides?: Partial<NotificationView>): NotificationV
     received_at: 1,
     read_at: null,
     ...overrides,
+  };
+}
+
+function buildPaginatedPost(index: number, overrides?: Partial<PostView>): PostView {
+  return {
+    object_id: `paginated-post-${index}`,
+    envelope_id: `paginated-envelope-${index}`,
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: index === 1 ? 'post' : 'comment',
+    content: `paginated post ${index}`,
+    content_status: 'Available',
+    attachments: [],
+    created_at: index,
+    reply_to: index === 1 ? null : 'paginated-post-1',
+    root_id: 'paginated-post-1',
+    channel_id: null,
+    audience_label: 'Public',
+    ...overrides,
+  };
+}
+
+function paginatePosts(posts: PostView[], cursor: TimelineCursor | null, limit: number): TimelineView {
+  const startIndex = cursor
+    ? posts.findIndex(
+        (post) =>
+          post.object_id === cursor.object_id && post.created_at === cursor.created_at
+      ) + 1
+    : 0;
+  const normalizedStartIndex = startIndex > 0 ? startIndex : 0;
+  const items = posts.slice(normalizedStartIndex, normalizedStartIndex + limit);
+  return {
+    items,
+    next_cursor:
+      normalizedStartIndex + limit < posts.length
+        ? {
+            created_at: items[items.length - 1]!.created_at,
+            object_id: items[items.length - 1]!.object_id,
+          }
+        : null,
   };
 }
 
@@ -337,6 +383,16 @@ async function publishPost(user: ReturnType<typeof userEvent.setup>, content: st
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Private Channels' }));
   return await screen.findByRole('dialog', { name: 'Private Channels' });
+}
+
+function getChannelShareButton(
+  dialog: HTMLElement,
+  channelLabel: string,
+  audienceLabel: string
+) {
+  return within(dialog).getByRole('button', {
+    name: `${channelLabel} / ${audienceLabel}`,
+  });
 }
 
 async function openLiveCreateDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -1179,7 +1235,7 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
@@ -1225,7 +1281,7 @@ test('sidebar can reselect the same private channel after switching back to publ
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -1264,7 +1320,9 @@ test('sidebar can switch from one topic public scope to another topic private ch
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'second-core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(
+      getChannelShareButton(channelDialog, 'second-core', 'Invite only')
+    ).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -1866,7 +1924,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
@@ -1950,7 +2008,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
@@ -2199,14 +2257,13 @@ test('desktop shell can create a private channel and export an invite', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
   });
 
-  await user.click(within(channelDialog).getByRole('button', { name: 'Share' }));
+  await user.click(getChannelShareButton(channelDialog, 'core', 'Invite only'));
 
   await waitFor(() => {
-    expect(screen.getByText('Share')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /invite token/i })).toBeInTheDocument();
   });
 });
@@ -2251,15 +2308,14 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'friends', 'Friends')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
 
-  await user.click(within(channelDialog).getByRole('button', { name: 'Share' }));
+  await user.click(getChannelShareButton(channelDialog, 'friends', 'Friends'));
 
   await waitFor(() => {
-    expect(screen.getByText('Share')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /grant token/i })).toBeInTheDocument();
   });
 });
@@ -2273,13 +2329,13 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(within(channelDialog).getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(getChannelShareButton(channelDialog, 'friends+', 'Friends+')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Freeze' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
 
-  await user.click(within(channelDialog).getByRole('button', { name: 'Share' }));
+  await user.click(getChannelShareButton(channelDialog, 'friends+', 'Friends+'));
 
   await waitFor(() => {
     expect(screen.getByRole('button', { name: /share token/i })).toBeInTheDocument();
@@ -2428,6 +2484,10 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   }
   await user.click(within(topicItem).getByRole('button', { name: 'Copy link' }));
   expect(writeText).toHaveBeenLastCalledWith('#/timeline?topic=kukuri%3Atopic%3Ademo');
+  await waitFor(() => {
+    expect(screen.getByRole('status')).toHaveTextContent('Copied to clipboard.');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
 
   const postArticle = screen.getByText('copy this post').closest('article');
   if (!(postArticle instanceof HTMLElement)) {
@@ -2437,6 +2497,9 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   expect(writeText).toHaveBeenLastCalledWith(
     '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=copy-post&focusObjectId=copy-post'
   );
+  await waitFor(() => {
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
 
   await selectWorkspace(user, 'Live');
   const liveArticle = screen.getByText('Live Demo').closest('article');
@@ -2447,6 +2510,9 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   expect(writeText).toHaveBeenLastCalledWith(
     '#/live?topic=kukuri%3Atopic%3Ademo&sessionId=session-demo'
   );
+  await waitFor(() => {
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
 
   await selectWorkspace(user, 'Game');
   const gameArticle = screen.getByText('Room Demo').closest('article');
@@ -2457,6 +2523,113 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   expect(writeText).toHaveBeenLastCalledWith(
     '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo'
   );
+  await waitFor(() => {
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+});
+
+test('share button uses the selected channel label and audience with a trailing icon', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  const channelDialog = await openChannelManager(user);
+  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'friends+');
+  await user.selectOptions(within(channelDialog).getByLabelText('Audience'), 'friend_plus');
+  await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
+
+  const shareButton = await within(channelDialog).findByRole('button', {
+    name: 'friends+ / Friends+',
+  });
+  expect(shareButton).toHaveTextContent('friends+ / Friends+');
+  expect(shareButton.lastElementChild?.tagName.toLowerCase()).toBe('svg');
+});
+
+test('background refresh preserves loaded timeline pages and does not restore a stale load-more cursor', async () => {
+  const user = userEvent.setup();
+  const paginatedPosts = Array.from({ length: 25 }, (_, index) =>
+    buildPaginatedPost(25 - index, {
+      object_id: `paginated-post-${25 - index}`,
+      envelope_id: `paginated-envelope-${25 - index}`,
+      root_id: `paginated-post-${25 - index}`,
+      reply_to: null,
+      object_kind: 'post',
+    })
+  );
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': paginatedPosts,
+    },
+  });
+  api.listTimeline = vi.fn(
+    async (topic: string, cursor: TimelineCursor | null, limit = 20) => {
+      return paginatePosts(
+        topic === 'kukuri:topic:demo' ? paginatedPosts : [],
+        cursor,
+        limit
+      );
+    }
+  );
+
+  render(<App api={api} />);
+
+  await screen.findByText('paginated post 25');
+  expect(screen.queryByText('paginated post 1')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Load more' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('paginated post 1')).toBeInTheDocument();
+  });
+  expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+
+  window.dispatchEvent(new Event('focus'));
+
+  await waitFor(() => {
+    expect(screen.getByText('paginated post 1')).toBeInTheDocument();
+  });
+  expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+});
+
+test('thread focus auto-scroll runs only once even when the thread loads additional pages', async () => {
+  const user = userEvent.setup();
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  const threadPosts = Array.from({ length: 35 }, (_, index) =>
+    buildPaginatedPost(35 - index)
+  );
+  const api = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': threadPosts,
+    },
+  });
+  api.listThread = vi.fn(async (_topic: string, threadId: string, cursor: TimelineCursor | null, limit = 30) => {
+    if (threadId !== 'paginated-post-1') {
+      return { items: [], next_cursor: null };
+    }
+    return paginatePosts(threadPosts, cursor, limit);
+  });
+
+  renderAtHash(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&context=thread&threadId=paginated-post-1&focusObjectId=paginated-post-11',
+    api
+  );
+
+  await waitFor(() => {
+    expect(getDetailPane('Thread')).toBeInTheDocument();
+  });
+  await waitFor(() => {
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  await user.click(within(getDetailPane('Thread')).getByRole('button', { name: 'Load more' }));
+
+  await waitFor(() => {
+    expect(within(getDetailPane('Thread')).getByText('paginated post 1')).toBeInTheDocument();
+  });
+  expect(scrollIntoView).toHaveBeenCalledTimes(1);
 });
 
 test('desktop shell can create and update a game room', async () => {

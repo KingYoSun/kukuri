@@ -88,6 +88,9 @@
     "quoteRepost": "引用リポスト",
     "reposted": "リポスト"
   },
+  "feedback": {
+    "copiedToClipboard": "クリップボードにコピーしました。"
+  },
   "fallbacks": {
     "attachment": "添付",
     "authorDetail": "著者詳細",

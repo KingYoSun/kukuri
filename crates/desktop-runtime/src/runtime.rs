@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
@@ -32,9 +33,10 @@ use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
     CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
     CommunityNodeTargetRequest, SetCommunityNodeConfigRequest, community_node_seed_peers,
-    default_preview_community_node_config, load_community_node_config_from_file,
-    load_community_node_token, normalize_community_node_config,
-    relay_config_from_community_node_config, save_community_node_config,
+    default_preview_community_node_config, effective_seed_peer_apply_state,
+    load_community_node_config_from_file, load_community_node_token,
+    normalize_community_node_config, relay_config_from_community_node_config,
+    runtime_connectivity_assist_state, save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,
@@ -64,11 +66,18 @@ pub struct DesktopRuntime {
     pub(crate) community_node_session_retry_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) community_node_session_phases:
         Arc<Mutex<HashMap<String, CommunityNodeSessionPhase>>>,
+    pub(crate) community_node_ready_refresh_pending: Arc<Mutex<HashMap<String, bool>>>,
     pub(crate) community_node_last_errors: Arc<Mutex<HashMap<String, String>>>,
     pub(crate) community_node_cached_consents:
         Arc<Mutex<HashMap<String, CommunityNodeConsentStatus>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) active_connectivity_urls: Arc<Mutex<Vec<String>>>,
+    pub(crate) last_runtime_connectivity_assist_state:
+        Arc<Mutex<Option<crate::community_node::RuntimeConnectivityAssistState>>>,
+    pub(crate) last_effective_seed_peer_apply_state:
+        Arc<Mutex<Option<crate::community_node::EffectiveSeedPeerApplyState>>>,
+    pub(crate) runtime_connectivity_apply_version: Arc<AtomicU64>,
+    pub(crate) effective_seed_peer_apply_version: Arc<AtomicU64>,
 }
 
 fn load_private_channel_capabilities(
@@ -169,6 +178,10 @@ impl DesktopRuntime {
         let relay_config = relay_config_from_community_node_config(&community_node_config);
         let community_node_seed_peers =
             community_node_seed_peers(&community_node_config).collect::<Vec<_>>();
+        let initial_runtime_connectivity_state =
+            runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+        let initial_effective_seed_peer_state =
+            effective_seed_peer_apply_state(&discovery_config, &community_node_config);
         let docs_root = db_path.with_extension("iroh-data");
         let store = Arc::new(SqliteStore::connect_file(&db_path).await?);
         let iroh_stack = SharedIrohStack::new(
@@ -212,10 +225,19 @@ impl DesktopRuntime {
             community_node_metadata_refresh_deadlines: Arc::new(Mutex::new(HashMap::new())),
             community_node_session_retry_deadlines: Arc::new(Mutex::new(HashMap::new())),
             community_node_session_phases: Arc::new(Mutex::new(HashMap::new())),
+            community_node_ready_refresh_pending: Arc::new(Mutex::new(HashMap::new())),
             community_node_last_errors: Arc::new(Mutex::new(HashMap::new())),
             community_node_cached_consents: Arc::new(Mutex::new(HashMap::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
+            last_runtime_connectivity_assist_state: Arc::new(Mutex::new(Some(
+                initial_runtime_connectivity_state,
+            ))),
+            last_effective_seed_peer_apply_state: Arc::new(Mutex::new(Some(
+                initial_effective_seed_peer_state,
+            ))),
+            runtime_connectivity_apply_version: Arc::new(AtomicU64::new(0)),
+            effective_seed_peer_apply_version: Arc::new(AtomicU64::new(0)),
         })
     }
 
@@ -952,6 +974,10 @@ impl DesktopRuntime {
             .await
             .clear();
         self.community_node_session_phases.lock().await.clear();
+        self.community_node_ready_refresh_pending
+            .lock()
+            .await
+            .clear();
         self.community_node_last_errors.lock().await.clear();
         self.community_node_cached_consents.lock().await.clear();
         self.apply_runtime_connectivity_assist().await?;
@@ -979,6 +1005,10 @@ impl DesktopRuntime {
             .await
             .clear();
         self.community_node_session_phases.lock().await.clear();
+        self.community_node_ready_refresh_pending
+            .lock()
+            .await
+            .clear();
         self.community_node_last_errors.lock().await.clear();
         self.community_node_cached_consents.lock().await.clear();
         self.apply_runtime_connectivity_assist().await?;
@@ -1031,11 +1061,8 @@ impl DesktopRuntime {
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Ready,
-            )
-            .await;
+            self.set_community_node_session_ready(base_url.as_str(), true)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(consent_state), None)
@@ -1084,6 +1111,10 @@ impl DesktopRuntime {
             .lock()
             .await
             .insert(base_url.clone(), CommunityNodeSessionPhase::Idle);
+        self.community_node_ready_refresh_pending
+            .lock()
+            .await
+            .remove(base_url.as_str());
         let node = self
             .community_node_config
             .lock()
@@ -1152,11 +1183,8 @@ impl DesktopRuntime {
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
                 .await;
-            self.set_community_node_session_phase(
-                base_url.as_str(),
-                CommunityNodeSessionPhase::Ready,
-            )
-            .await;
+            self.set_community_node_session_ready(base_url.as_str(), true)
+                .await;
             let refreshed = self.require_community_node(base_url.as_str()).await?;
             return self
                 .community_node_status(refreshed, Some(status), None)
@@ -1192,7 +1220,7 @@ impl DesktopRuntime {
             .await?;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
-        self.set_community_node_session_phase(base_url.as_str(), CommunityNodeSessionPhase::Ready)
+        self.set_community_node_session_ready(base_url.as_str(), false)
             .await;
         self.community_node_status(refreshed, None, None).await
     }
