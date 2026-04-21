@@ -290,11 +290,12 @@ async fn discovery_status_separates_bootstrap_seed_peers_from_manual_tickets() {
         discovery.manual_ticket_peer_ids,
         vec!["manual-ticket-peer".to_string()]
     );
-    assert!(discovery.assist_peer_ids.is_empty());
+    assert!(discovery.docs_assist_peer_ids.is_empty());
+    assert!(discovery.blob_assist_peer_ids.is_empty());
 }
 
 #[tokio::test]
-async fn relay_assisted_peers_contribute_to_sync_status_and_topic_counts() {
+async fn docs_assisted_peers_do_not_mark_live_sync_connected() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot {
         connected: false,
@@ -331,30 +332,35 @@ async fn relay_assisted_peers_contribute_to_sync_status_and_topic_counts() {
 
     let status = app.get_sync_status().await.expect("sync status");
 
-    assert!(status.connected);
-    assert_eq!(status.peer_count, 2);
+    assert!(!status.connected);
+    assert_eq!(status.delivery_state, DeliveryState::DurableRecovering);
+    assert_eq!(status.peer_count, 0);
     assert_eq!(
         status.status_detail,
-        "relay-assisted sync available via 2 peer(s)"
+        "docs-assisted recovery is in progress via 2 peer(s); live topic delivery is unavailable"
     );
     assert_eq!(
-        status.discovery.assist_peer_ids,
-        vec![
-            "peer-a".to_string(),
-            "peer-b".to_string(),
-            "peer-c".to_string()
-        ]
+        status.discovery.docs_assist_peer_ids,
+        vec!["peer-a".to_string(), "peer-b".to_string()]
+    );
+    assert_eq!(
+        status.discovery.blob_assist_peer_ids,
+        vec!["peer-b".to_string(), "peer-c".to_string()]
     );
     assert_eq!(status.topic_diagnostics.len(), 1);
-    assert!(status.topic_diagnostics[0].joined);
-    assert_eq!(status.topic_diagnostics[0].peer_count, 2);
+    assert!(!status.topic_diagnostics[0].joined);
     assert_eq!(
-        status.topic_diagnostics[0].assist_peer_ids,
+        status.topic_diagnostics[0].delivery_state,
+        DeliveryState::DurableRecovering
+    );
+    assert_eq!(status.topic_diagnostics[0].peer_count, 0);
+    assert_eq!(
+        status.topic_diagnostics[0].docs_assist_peer_ids,
         vec!["peer-a".to_string(), "peer-b".to_string()]
     );
     assert_eq!(
         status.topic_diagnostics[0].status_detail,
-        "relay-assisted sync available via 2 peer(s)"
+        "docs-assisted recovery is in progress via 2 peer(s); live topic delivery is unavailable"
     );
 }
 
@@ -395,13 +401,22 @@ async fn blob_only_assist_peers_do_not_mark_sync_healthy() {
     let status = app.get_sync_status().await.expect("sync status");
 
     assert!(!status.connected);
+    assert_eq!(status.delivery_state, DeliveryState::Offline);
     assert_eq!(status.peer_count, 0);
     assert_eq!(status.status_detail, "No peers configured");
-    assert_eq!(status.discovery.assist_peer_ids, vec!["peer-b".to_string()]);
+    assert!(status.discovery.docs_assist_peer_ids.is_empty());
+    assert_eq!(
+        status.discovery.blob_assist_peer_ids,
+        vec!["peer-b".to_string()]
+    );
     assert_eq!(status.topic_diagnostics.len(), 1);
     assert!(!status.topic_diagnostics[0].joined);
+    assert_eq!(
+        status.topic_diagnostics[0].delivery_state,
+        DeliveryState::Offline
+    );
     assert_eq!(status.topic_diagnostics[0].peer_count, 0);
-    assert!(status.topic_diagnostics[0].assist_peer_ids.is_empty());
+    assert!(status.topic_diagnostics[0].docs_assist_peer_ids.is_empty());
     assert_eq!(
         status.topic_diagnostics[0].status_detail,
         "No peers configured"
@@ -929,7 +944,7 @@ async fn ensure_topic_subscription_recreates_finished_handle() {
 }
 
 #[tokio::test]
-async fn set_discovery_seeds_keeps_existing_topic_hint_subscription() {
+async fn set_discovery_seeds_restarts_existing_topic_hint_subscription() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
@@ -961,12 +976,15 @@ async fn set_discovery_seeds_keeps_existing_topic_hint_subscription() {
     .await
     .expect("set discovery seeds");
 
-    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
-    assert!(hint_transport.unsubscribed_topics.lock().await.is_empty());
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
+    assert_eq!(
+        hint_transport.unsubscribed_topics.lock().await.clone(),
+        vec![topic.to_string()]
+    );
 }
 
 #[tokio::test]
-async fn import_peer_ticket_keeps_existing_topic_hint_subscription() {
+async fn import_peer_ticket_restarts_existing_topic_hint_subscription() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let hint_transport = Arc::new(TrackingHintTransport::default());
@@ -991,9 +1009,12 @@ async fn import_peer_ticket_keeps_existing_topic_hint_subscription() {
         .await
         .expect("import peer ticket");
 
-    assert_eq!(*hint_transport.subscribe_count.lock().await, 1);
-    assert!(hint_transport.unsubscribed_topics.lock().await.is_empty());
-    assert_eq!(docs_sync.subscribe_replicas.lock().await.len(), 1);
+    assert_eq!(*hint_transport.subscribe_count.lock().await, 2);
+    assert_eq!(
+        hint_transport.unsubscribed_topics.lock().await.clone(),
+        vec![topic.to_string()]
+    );
+    assert_eq!(docs_sync.subscribe_replicas.lock().await.len(), 2);
 }
 
 #[tokio::test]
@@ -1276,7 +1297,7 @@ async fn iroh_transport_syncs_post_between_apps() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn import_peer_ticket_updates_existing_topic_subscription_without_rebuild() {
+async fn import_peer_ticket_restarts_existing_topic_subscription_and_resumes_delivery() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
     let stack_a = TestIrohStack::new(&dir.path().join("rebind-a")).await;
@@ -1315,7 +1336,8 @@ async fn import_peer_ticket_updates_existing_topic_subscription_without_rebuild(
         .await
         .expect("import a into b");
 
-    timeout(Duration::from_secs(10), async {
+    timeout(Duration::from_secs(20), async {
+        let mut stable_ready_polls = 0usize;
         loop {
             let status_a = app_a.get_sync_status().await.expect("status a");
             let status_b = app_b.get_sync_status().await.expect("status b");
@@ -1330,13 +1352,18 @@ async fn import_peer_ticket_updates_existing_topic_subscription_without_rebuild(
                     && !topic_status.connected_peers.is_empty()
             });
             if ready_a && ready_b {
-                return;
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return;
+                }
+            } else {
+                stable_ready_polls = 0;
             }
-            sleep(Duration::from_millis(50)).await;
+            sleep(Duration::from_millis(100)).await;
         }
     })
     .await
-    .expect("subscription update timeout");
+    .expect("subscription restart timeout");
 
     let object_id = app_a
         .create_post(topic, "hello after import", None)
@@ -1445,6 +1472,108 @@ async fn seeded_dht_syncs_post_between_apps_without_ticket_import() {
     .expect("seeded dht sync timeout");
 
     assert_eq!(received.content, "seeded dht app sync");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn relay_seeded_syncs_post_between_apps_without_ticket_import() {
+    let _guard = iroh_integration_test_lock().lock_owned().await;
+    let (_relay_map, relay_url, _relay_guard) = iroh::test_utils::run_relay_server()
+        .await
+        .expect("relay server");
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url.to_string()],
+    };
+    let dir = tempdir().expect("tempdir");
+    let stack_a = TestIrohStack::new_with_options(
+        &dir.path().join("relay-seeded-a"),
+        DhtDiscoveryOptions::disabled(),
+        relay_config.clone(),
+    )
+    .await;
+    let stack_b = TestIrohStack::new_with_options(
+        &dir.path().join("relay-seeded-b"),
+        DhtDiscoveryOptions::disabled(),
+        relay_config,
+    )
+    .await;
+    let store_a = Arc::new(MemoryStore::default());
+    let store_b = Arc::new(MemoryStore::default());
+    let app_a = app_with_iroh_services(store_a, &stack_a);
+    let app_b = app_with_iroh_services(store_b, &stack_b);
+    let ticket_a = app_a
+        .peer_ticket()
+        .await
+        .expect("ticket a")
+        .expect("ticket a value");
+    let ticket_b = app_b
+        .peer_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
+    let seed_a = {
+        let (endpoint_id, addr_hint) = ticket_b.split_once('@').expect("ticket b host");
+        SeedPeer {
+            endpoint_id: endpoint_id.to_string(),
+            addr_hint: Some(addr_hint.to_string()),
+        }
+    };
+    let seed_b = {
+        let (endpoint_id, addr_hint) = ticket_a.split_once('@').expect("ticket a host");
+        SeedPeer {
+            endpoint_id: endpoint_id.to_string(),
+            addr_hint: Some(addr_hint.to_string()),
+        }
+    };
+    app_a
+        .set_discovery_seeds(DiscoveryMode::StaticPeer, false, Vec::new(), vec![seed_a])
+        .await
+        .expect("set relay seeds a");
+    app_b
+        .set_discovery_seeds(DiscoveryMode::StaticPeer, false, Vec::new(), vec![seed_b])
+        .await
+        .expect("set relay seeds b");
+
+    let topic = "kukuri:topic:relay-seeded";
+    let _ = app_a
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe a");
+    let _ = app_b
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe b");
+
+    let object_id = app_a
+        .create_post(topic, "relay seeded app sync", None)
+        .await
+        .expect("create post");
+    let received = timeout(Duration::from_secs(60), async {
+        loop {
+            let timeline = app_b
+                .list_timeline(topic, None, 20)
+                .await
+                .expect("timeline");
+            if let Some(post) = timeline
+                .items
+                .iter()
+                .find(|post| post.object_id == object_id)
+            {
+                return post.clone();
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+    let received = match received {
+        Ok(post) => post,
+        Err(error) => {
+            let diagnostics =
+                iroh_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await;
+            panic!("relay seeded sync timeout: {error:?}; {diagnostics}");
+        }
+    };
+
+    assert_eq!(received.content, "relay seeded app sync");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1672,8 +1801,8 @@ async fn iroh_transport_syncs_repost_and_notification() {
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe b timeline");
-    wait_for_topic_peer_count(&app_a, topic, 1).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
 
     let source_id = app_a
         .create_post(topic, "relay source post", None)
@@ -1784,8 +1913,8 @@ async fn iroh_transport_syncs_reply_into_thread() {
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe b timeline");
-    wait_for_topic_peer_count(&app_a, topic, 1).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
 
     let root_id = app_a
         .create_post(topic, "root over iroh", None)

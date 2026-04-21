@@ -99,6 +99,15 @@ fn direct_topic_readiness_rejects_pending_join_errors() {
 }
 
 #[test]
+fn durable_topic_readiness_accepts_docs_assist_without_live_peer() {
+    let topic = "kukuri:topic:test";
+    let status = sync_status_with_topic(topic, &[], &["assist-peer"]);
+
+    assert!(topic_has_durable_delivery(&status, topic));
+    assert!(!topic_has_direct_peer(&status, topic, 1));
+}
+
+#[test]
 fn direct_message_pair_refresh_retries_mutual_relationship_errors() {
     assert!(is_retryable_direct_message_pair_refresh_error(
         "direct message requires a mutual relationship"

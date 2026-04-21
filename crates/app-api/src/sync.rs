@@ -5,7 +5,7 @@ impl AppService {
         let PeerSnapshot {
             connected,
             peer_count,
-            connected_peers,
+            connected_peers: _,
             configured_peers,
             subscribed_topics,
             pending_events,
@@ -15,53 +15,77 @@ impl AppService {
         } = self.transport.peers().await?;
         let subscribed_topics = normalize_topics(subscribed_topics);
         let topic_diagnostics = normalize_topic_diagnostics(topic_diagnostics);
-        let assist_peer_ids = self.docs_assisted_peer_ids().await?;
-        let effective_connected_peer_ids =
-            merge_peer_ids(connected_peers.clone(), assist_peer_ids.clone());
+        let docs_assist_peer_ids = self.docs_assisted_peer_ids().await?;
         let discovery = self.get_discovery_status().await?;
+        let mut effective_delivery_state = if connected {
+            DeliveryState::Live
+        } else {
+            DeliveryState::Offline
+        };
+        let mut effective_last_docs_activity_at = None;
+        let mut effective_topic_diagnostics = Vec::with_capacity(topic_diagnostics.len());
+
+        for diagnostic in topic_diagnostics {
+            let delivery = self
+                .public_topic_delivery_status(diagnostic.topic.as_str())
+                .await;
+            let last_docs_activity_at = delivery.and_then(|status| status.last_docs_activity_at);
+            let delivery_state = delivery_state_for_topic(
+                diagnostic.connected_peers.len(),
+                docs_assist_peer_ids.len(),
+                last_docs_activity_at,
+            );
+            effective_delivery_state =
+                combine_delivery_states(effective_delivery_state, delivery_state);
+            effective_last_docs_activity_at =
+                merge_optional_timestamp(effective_last_docs_activity_at, last_docs_activity_at);
+            effective_topic_diagnostics.push(TopicSyncStatus {
+                topic: diagnostic.topic,
+                joined: diagnostic.joined,
+                delivery_state,
+                peer_count: diagnostic.peer_count,
+                connected_peers: diagnostic.connected_peers,
+                docs_assist_peer_ids: docs_assist_peer_ids.clone(),
+                configured_peer_ids: diagnostic.configured_peer_ids,
+                missing_peer_ids: diagnostic.missing_peer_ids,
+                last_received_at: diagnostic.last_received_at,
+                last_docs_activity_at,
+                status_detail: effective_topic_status_detail(
+                    diagnostic.status_detail.as_str(),
+                    delivery_state,
+                    docs_assist_peer_ids.len(),
+                ),
+                last_error: diagnostic.last_error,
+            });
+        }
+
+        if effective_delivery_state == DeliveryState::Offline
+            && !docs_assist_peer_ids.is_empty()
+            && !subscribed_topics.is_empty()
+        {
+            effective_delivery_state = if effective_last_docs_activity_at.is_some() {
+                DeliveryState::DurableReady
+            } else {
+                DeliveryState::DurableRecovering
+            };
+        }
 
         Ok(SyncStatus {
-            connected: connected || !assist_peer_ids.is_empty(),
+            connected,
+            delivery_state: effective_delivery_state,
             last_sync_ts: *self.last_sync_ts.lock().await,
-            peer_count: peer_count.max(effective_connected_peer_ids.len()),
+            peer_count,
             pending_events,
             status_detail: effective_sync_status_detail(
                 status_detail.as_str(),
-                connected_peers.len(),
-                assist_peer_ids.len(),
+                effective_delivery_state,
+                docs_assist_peer_ids.len(),
                 subscribed_topics.len(),
             ),
             last_error,
             configured_peers,
             subscribed_topics,
-            topic_diagnostics: topic_diagnostics
-                .into_iter()
-                .map(|diagnostic| {
-                    let gossip_peer_count = diagnostic.connected_peers.len();
-                    TopicSyncStatus {
-                        topic: diagnostic.topic,
-                        joined: diagnostic.joined || !assist_peer_ids.is_empty(),
-                        peer_count: diagnostic.peer_count.max(
-                            merge_peer_ids(
-                                diagnostic.connected_peers.clone(),
-                                assist_peer_ids.clone(),
-                            )
-                            .len(),
-                        ),
-                        connected_peers: diagnostic.connected_peers,
-                        assist_peer_ids: assist_peer_ids.clone(),
-                        configured_peer_ids: diagnostic.configured_peer_ids,
-                        missing_peer_ids: diagnostic.missing_peer_ids,
-                        last_received_at: diagnostic.last_received_at,
-                        status_detail: effective_topic_status_detail(
-                            diagnostic.status_detail.as_str(),
-                            gossip_peer_count,
-                            assist_peer_ids.len(),
-                        ),
-                        last_error: diagnostic.last_error,
-                    }
-                })
-                .collect(),
+            topic_diagnostics: effective_topic_diagnostics,
             local_author_pubkey: self.current_author_pubkey(),
             discovery,
         })
@@ -79,7 +103,8 @@ impl AppService {
             local_endpoint_id,
             last_discovery_error,
         } = self.transport.discovery().await?;
-        let assist_peer_ids = self.assisted_peer_ids().await?;
+        let docs_assist_peer_ids = self.docs_assisted_peer_ids().await?;
+        let blob_assist_peer_ids = self.blob_assisted_peer_ids().await?;
         Ok(DiscoveryStatus {
             mode,
             connect_mode,
@@ -88,7 +113,8 @@ impl AppService {
             bootstrap_seed_peer_ids,
             manual_ticket_peer_ids,
             connected_peer_ids,
-            assist_peer_ids,
+            docs_assist_peer_ids,
+            blob_assist_peer_ids,
             local_endpoint_id,
             last_discovery_error,
         })
@@ -98,33 +124,7 @@ impl AppService {
         self.transport.import_ticket(ticket).await?;
         self.docs_sync.import_peer_ticket(ticket).await?;
         self.blob_service.import_peer_ticket(ticket).await?;
-        let existing_private_topics = self
-            .joined_private_channels
-            .lock()
-            .await
-            .values()
-            .map(|state| {
-                (
-                    state.topic_id.clone(),
-                    state.channel_id.as_str().to_string(),
-                )
-            })
-            .collect::<Vec<_>>();
-        for (topic_id, channel_id) in existing_private_topics {
-            self.restart_private_channel_subscription(topic_id.as_str(), channel_id.as_str())
-                .await?;
-        }
-        let existing_authors = self
-            .author_subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for author in existing_authors {
-            self.restart_author_subscription(author.as_str()).await?;
-        }
-        self.restart_direct_message_subscriptions().await?;
+        self.restart_active_subscriptions().await?;
         Ok(())
     }
 
@@ -151,33 +151,7 @@ impl AppService {
         self.blob_service
             .set_seed_peers(effective_seed_peers)
             .await?;
-        let existing_private_topics = self
-            .joined_private_channels
-            .lock()
-            .await
-            .values()
-            .map(|state| {
-                (
-                    state.topic_id.clone(),
-                    state.channel_id.as_str().to_string(),
-                )
-            })
-            .collect::<Vec<_>>();
-        for (topic_id, channel_id) in existing_private_topics {
-            self.restart_private_channel_subscription(topic_id.as_str(), channel_id.as_str())
-                .await?;
-        }
-        let existing_authors = self
-            .author_subscriptions
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for author in existing_authors {
-            self.restart_author_subscription(author.as_str()).await?;
-        }
-        self.restart_direct_message_subscriptions().await?;
+        self.restart_active_subscriptions().await?;
         Ok(())
     }
 
@@ -185,6 +159,7 @@ impl AppService {
         if let Some(handle) = self.subscriptions.lock().await.remove(topic_id) {
             handle.abort();
         }
+        self.clear_public_topic_delivery(topic_id).await;
         let private_keys = self
             .private_channel_subscriptions
             .lock()

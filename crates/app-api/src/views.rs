@@ -436,6 +436,7 @@ pub struct ChannelAccessTokenPreview {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncStatus {
     pub connected: bool,
+    pub delivery_state: DeliveryState,
     pub last_sync_ts: Option<i64>,
     pub peer_count: usize,
     pub pending_events: usize,
@@ -448,6 +449,15 @@ pub struct SyncStatus {
     pub discovery: DiscoveryStatus,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeliveryState {
+    Live,
+    DurableRecovering,
+    DurableReady,
+    #[default]
+    Offline,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiscoveryStatus {
     pub mode: DiscoveryMode,
@@ -457,7 +467,8 @@ pub struct DiscoveryStatus {
     pub bootstrap_seed_peer_ids: Vec<String>,
     pub manual_ticket_peer_ids: Vec<String>,
     pub connected_peer_ids: Vec<String>,
-    pub assist_peer_ids: Vec<String>,
+    pub docs_assist_peer_ids: Vec<String>,
+    pub blob_assist_peer_ids: Vec<String>,
     pub local_endpoint_id: String,
     pub last_discovery_error: Option<String>,
 }
@@ -466,12 +477,14 @@ pub struct DiscoveryStatus {
 pub struct TopicSyncStatus {
     pub topic: String,
     pub joined: bool,
+    pub delivery_state: DeliveryState,
     pub peer_count: usize,
     pub connected_peers: Vec<String>,
-    pub assist_peer_ids: Vec<String>,
+    pub docs_assist_peer_ids: Vec<String>,
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
+    pub last_docs_activity_at: Option<i64>,
     pub status_detail: String,
     pub last_error: Option<String>,
 }

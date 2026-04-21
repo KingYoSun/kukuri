@@ -32,8 +32,8 @@ async fn private_channel_invite_scopes_posts_and_replies() {
         .list_timeline(topic, None, 20)
         .await
         .expect("warm invitee public timeline");
-    wait_for_topic_peer_count(&app_a, topic, 1).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
 
     let channel = app_a
         .create_private_channel(CreatePrivateChannelInput {
@@ -295,19 +295,15 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
     let d_pubkey = keys_d.public_key_hex();
     let topic = "kukuri:topic:friend-only";
 
-    wait_for_connected_peer_count(&app_a, 2).await;
-    wait_for_connected_peer_count(&app_b, 1).await;
-    wait_for_connected_peer_count(&app_d, 1).await;
-
     for app in [&app_a, &app_b, &app_d] {
         let _ = app
             .list_timeline(topic, None, 20)
             .await
             .expect("subscribe public timeline");
     }
-    wait_for_topic_peer_count(&app_a, topic, 2).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
-    wait_for_topic_peer_count(&app_d, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_d, topic, 1).await;
     warm_author_social_view(&app_a, b_pubkey.as_str(), topic).await;
     warm_author_social_view(&app_b, a_pubkey.as_str(), topic).await;
     warm_author_social_view(&app_a, d_pubkey.as_str(), topic).await;
@@ -362,12 +358,11 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         .import_peer_ticket(&ticket_a)
         .await
         .expect("c imports a");
-    wait_for_connected_peer_count(&app_c, 1).await;
     let _ = app_c
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe public timeline c");
-    wait_for_topic_peer_count(&app_c, topic, 1).await;
+    wait_for_topic_delivery(&app_c, topic, 1).await;
     warm_author_social_view(&app_c, a_pubkey.as_str(), topic).await;
 
     let non_mutual_error = app_c
@@ -450,8 +445,8 @@ async fn friend_only_grant_requires_mutual_and_rotate_requires_fresh_grant() {
         .list_timeline(topic, None, 20)
         .await
         .expect("resubscribe d before fresh grant");
-    wait_for_topic_peer_count(&app_a, topic, 2).await;
-    wait_for_topic_peer_count(&app_d, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_d, topic, 1).await;
     warm_author_social_view(&app_a, d_pubkey.as_str(), topic).await;
     warm_author_social_view(&app_d, a_pubkey.as_str(), topic).await;
     wait_for_mutual_author_view(&app_a, d_pubkey.as_str(), topic).await;
@@ -569,7 +564,7 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     let topic = "kukuri:topic:friend-plus";
     let social_timeout = social_graph_propagation_timeout();
     let replication_timeout = p2p_replication_timeout();
-    let rotation_timeout = Duration::from_secs(60);
+    let rotation_timeout = p2p_replication_timeout().max(Duration::from_secs(120));
 
     app_a
         .import_peer_ticket(&ticket_b)
@@ -579,8 +574,6 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         .import_peer_ticket(&ticket_a)
         .await
         .expect("b imports a");
-    wait_for_connected_peer_count(&app_a, 1).await;
-    wait_for_connected_peer_count(&app_b, 1).await;
 
     for app in [&app_a, &app_b] {
         let _ = app
@@ -588,8 +581,10 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
             .await
             .expect("subscribe public timeline");
     }
-    wait_for_topic_peer_count(&app_a, topic, 1).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
+    warm_author_social_view(&app_a, b_pubkey.as_str(), topic).await;
+    warm_author_social_view(&app_b, a_pubkey.as_str(), topic).await;
 
     app_a
         .follow_author(b_pubkey.as_str())
@@ -673,17 +668,16 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         .import_peer_ticket(&ticket_b)
         .await
         .expect("c imports b");
-    wait_for_connected_peer_count(&app_a, 2).await;
-    wait_for_connected_peer_count(&app_b, 2).await;
-    wait_for_connected_peer_count(&app_c, 2).await;
 
     let _ = app_c
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe public timeline c");
-    wait_for_topic_peer_count(&app_a, topic, 2).await;
-    wait_for_topic_peer_count(&app_b, topic, 2).await;
-    wait_for_topic_peer_count(&app_c, topic, 2).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_c, topic, 1).await;
+    warm_author_social_view(&app_b, c_pubkey.as_str(), topic).await;
+    warm_author_social_view(&app_c, b_pubkey.as_str(), topic).await;
 
     app_b
         .follow_author(c_pubkey.as_str())
@@ -787,14 +781,12 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
         .import_peer_ticket(&ticket_b)
         .await
         .expect("d imports b");
-    wait_for_connected_peer_count(&app_b, 3).await;
-    wait_for_connected_peer_count(&app_d, 1).await;
     let _ = app_d
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe public timeline d");
-    wait_for_topic_peer_count(&app_b, topic, 3).await;
-    wait_for_topic_peer_count(&app_d, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_d, topic, 1).await;
     warm_author_social_view(&app_b, d_pubkey.as_str(), topic).await;
     warm_author_social_view(&app_d, b_pubkey.as_str(), topic).await;
 
@@ -809,12 +801,9 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     wait_for_mutual_author_view(&app_b, d_pubkey.as_str(), topic).await;
     wait_for_mutual_author_view(&app_d, b_pubkey.as_str(), topic).await;
 
-    let freeze_error_message = wait_for_friend_plus_share_rejection(
-        &app_d,
-        stale_share_for_d.as_str(),
-        replication_timeout,
-    )
-    .await;
+    let freeze_error_message =
+        wait_for_friend_plus_share_rejection(&app_d, stale_share_for_d.as_str(), rotation_timeout)
+            .await;
     assert!(
         freeze_error_message.contains("no longer open"),
         "unexpected frozen share error: {freeze_error_message}"

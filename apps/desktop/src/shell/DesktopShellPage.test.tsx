@@ -2133,14 +2133,14 @@ test('clicking a timeline post opens thread and author detail flows in the conte
   expect(within(getDetailPane('Author')).getByText('author detail from timeline')).toBeInTheDocument();
 });
 
-test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', async () => {
+test('desktop shell surfaces docs-assisted topic recovery in diagnostics', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi({ assistPeerIds: ['relay-peer'] })} />);
 
   const drawer = await openSettingsSection(user, 'discovery');
   await waitFor(() => {
-    expect(within(drawer).getByText('Relay-assisted Peers')).toBeInTheDocument();
-    expect(within(drawer).getByText('relay-peer')).toBeInTheDocument();
+    expect(within(drawer).getByText('Docs Assist Peers')).toBeInTheDocument();
+    expect(within(drawer).getAllByText('relay-peer').length).toBeGreaterThan(0);
   });
 
   await user.type(screen.getByPlaceholderText('kukuri:topic:demo'), 'kukuri:topic:relay');
@@ -2149,14 +2149,18 @@ test('desktop shell surfaces relay-assisted topic connectivity in diagnostics', 
   await waitFor(() => {
     const relayTopic = screen.getByRole('button', { name: 'kukuri:topic:relay' }).closest('li');
     expect(relayTopic).not.toBeNull();
-    expect(relayTopic).toHaveTextContent('relay-assisted / peers: 1');
+    expect(relayTopic).toHaveTextContent('recovering / peers: 0');
     expect(relayTopic).not.toHaveTextContent('relay-assisted sync available via 1 peer(s)');
   });
 
   await user.click(within(drawer).getByTestId('settings-section-connectivity'));
   const relayHeading = await within(drawer).findByRole('heading', { name: 'kukuri:topic:relay' });
   const relaySection = closestSection(relayHeading);
-  expect(within(relaySection).getByText('relay-assisted sync available via 1 peer(s)')).toBeInTheDocument();
+  expect(
+    within(relaySection).getByText(
+      'docs-assisted recovery is in progress via 1 peer(s); live topic delivery is unavailable'
+    )
+  ).toBeInTheDocument();
 });
 
 test('desktop shell renders diagnostics error reasons', async () => {

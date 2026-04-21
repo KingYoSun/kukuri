@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
 use kukuri_cn_core::{
     AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
@@ -629,6 +629,10 @@ impl DesktopRuntime {
         access_token: &str,
     ) -> std::result::Result<CommunityNodeNodeConfig, CommunityNodeRequestError> {
         let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
+        let local_seed_peer_before = self
+            .local_community_node_seed_peer("metadata-refresh-baseline")
+            .await
+            .ok();
         let config = self.community_node_config.lock().await.clone();
         let Some(index) = config
             .nodes
@@ -696,6 +700,22 @@ impl DesktopRuntime {
         self.apply_effective_seed_peers()
             .await
             .map_err(CommunityNodeRequestError::Other)?;
+        let local_seed_peer_after = self
+            .local_community_node_seed_peer("metadata-refresh-post-apply")
+            .await
+            .ok();
+        if local_seed_peer_before != local_seed_peer_after {
+            self.community_node_heartbeat_deadlines
+                .lock()
+                .await
+                .remove(base_url.as_str());
+            debug!(
+                %base_url,
+                before = ?local_seed_peer_before,
+                after = ?local_seed_peer_after,
+                "scheduled immediate community-node heartbeat after local seed peer changed during metadata sync"
+            );
+        }
         normalized
             .nodes
             .iter()
@@ -848,76 +868,11 @@ impl DesktopRuntime {
         }
     }
 
-    pub(crate) async fn sync_community_node_bootstrap_metadata_with_retry(
-        &self,
-        base_url: &str,
-        token: &mut StoredCommunityNodeToken,
-        auto_approve: bool,
-    ) -> Result<CommunityNodeNodeConfig> {
-        match self
-            .sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
-            .await
-        {
-            Ok(node) => Ok(node),
-            Err(CommunityNodeRequestError::AuthRequired) => {
-                self.set_community_node_session_phase(
-                    base_url,
-                    CommunityNodeSessionPhase::Authenticating,
-                )
-                .await;
-                *token = self
-                    .request_community_node_authentication_token(base_url)
-                    .await?;
-                let consent_status = self
-                    .fetch_community_node_consent_status_with_retry(base_url, token, false)
-                    .await?;
-                self.set_community_node_cached_consent(base_url, Some(consent_status.clone()))
-                    .await;
-                if !consent_status.all_required_accepted {
-                    if !auto_approve {
-                        bail!("community node consent is required");
-                    }
-                    self.set_community_node_session_phase(
-                        base_url,
-                        CommunityNodeSessionPhase::Accepting,
-                    )
-                    .await;
-                    let accepted = self
-                        .accept_community_node_consents_with_retry(base_url, token, &[])
-                        .await?;
-                    self.set_community_node_cached_consent(base_url, Some(accepted))
-                        .await;
-                }
-                self.sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
-                    .await
-                    .map_err(CommunityNodeRequestError::into_anyhow)
-            }
-            Err(CommunityNodeRequestError::ConsentRequired) if auto_approve => {
-                self.set_community_node_session_phase(
-                    base_url,
-                    CommunityNodeSessionPhase::Accepting,
-                )
-                .await;
-                let accepted = self
-                    .accept_community_node_consents_with_retry(base_url, token, &[])
-                    .await?;
-                self.set_community_node_cached_consent(base_url, Some(accepted))
-                    .await;
-                self.sync_community_node_bootstrap_metadata(base_url, token.access_token.as_str())
-                    .await
-                    .map_err(CommunityNodeRequestError::into_anyhow)
-            }
-            Err(CommunityNodeRequestError::ConsentRequired) => {
-                bail!("community node consent is required")
-            }
-            Err(error) => Err(error.into_anyhow()),
-        }
-    }
-
     async fn refresh_community_node_registration_with_token_if_due_once(
         &self,
         base_url: &str,
         access_token: &str,
+        force_heartbeat: bool,
     ) -> std::result::Result<(), CommunityNodeRequestError> {
         let base_url = normalize_http_url(base_url).map_err(CommunityNodeRequestError::Other)?;
         let now = Utc::now().timestamp();
@@ -928,7 +883,7 @@ impl DesktopRuntime {
             .get(base_url.as_str())
             .copied()
             .unwrap_or_default();
-        if next_due_at > now {
+        if !force_heartbeat && next_due_at > now {
             let ready_refresh_pending = self
                 .community_node_ready_refresh_pending
                 .lock()
@@ -980,6 +935,14 @@ impl DesktopRuntime {
                     Err(error)
                 }
             };
+        }
+        if force_heartbeat && next_due_at > now {
+            info!(
+                %base_url,
+                next_due_at,
+                now,
+                "forcing community-node heartbeat before bootstrap metadata refresh"
+            );
         }
         let seed_peer = self
             .local_community_node_seed_peer("heartbeat")
@@ -1074,11 +1037,13 @@ impl DesktopRuntime {
         base_url: &str,
         token: &mut StoredCommunityNodeToken,
         auto_approve: bool,
+        force_heartbeat: bool,
     ) -> Result<()> {
         match self
             .refresh_community_node_registration_with_token_if_due_once(
                 base_url,
                 token.access_token.as_str(),
+                force_heartbeat,
             )
             .await
         {
@@ -1120,6 +1085,7 @@ impl DesktopRuntime {
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
                     token.access_token.as_str(),
+                    force_heartbeat,
                 )
                 .await
                 .map_err(CommunityNodeRequestError::into_anyhow)
@@ -1138,6 +1104,7 @@ impl DesktopRuntime {
                 self.refresh_community_node_registration_with_token_if_due_once(
                     base_url,
                     token.access_token.as_str(),
+                    force_heartbeat,
                 )
                 .await
                 .map_err(CommunityNodeRequestError::into_anyhow)
@@ -1260,6 +1227,7 @@ impl DesktopRuntime {
             base_url.as_str(),
             &mut token,
             auto_approve,
+            false,
         )
         .await?;
         self.clear_community_node_retry_state(base_url.as_str())

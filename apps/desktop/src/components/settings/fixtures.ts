@@ -82,13 +82,14 @@ export function createConnectivityPanelFixture(): ConnectivityPanelView {
       {
         topic: 'kukuri:topic:relay',
         summary: i18n.t('settings:connectivity.summary', {
-          status: i18n.t('common:states.relayAssisted'),
-          count: 1,
+          status: 'recovering',
+          count: 0,
         }),
         lastReceivedLabel: i18n.t('common:fallbacks.noEvents'),
         expectedPeerCount: 0,
         missingPeerCount: 0,
-        statusDetail: 'relay-assisted sync available via 1 peer(s)',
+        statusDetail:
+          'docs-assisted recovery is in progress via 1 peer(s); live topic delivery is unavailable',
         connectedPeersLabel: i18n.t('common:fallbacks.none'),
         relayAssistedPeersLabel: 'relay-peer',
         configuredPeersLabel: i18n.t('common:fallbacks.none'),

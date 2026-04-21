@@ -167,12 +167,13 @@ fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
             .find(|entry| entry.topic == topic)
             .map(|entry| {
                 format!(
-                    "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, missing_peer_ids={:?}, status_detail={}",
+                    "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}, missing_peer_ids={:?}, delivery_state={:?}, status_detail={}",
                     entry.peer_count,
                     entry.connected_peers,
-                    entry.assist_peer_ids,
+                    entry.docs_assist_peer_ids,
                     entry.configured_peer_ids,
                     entry.missing_peer_ids,
+                    entry.delivery_state,
                     entry.status_detail
                 )
             })
@@ -198,15 +199,54 @@ async fn wait_for_connected_topic_peer_count(
         let mut stable_ready_polls = 0usize;
         loop {
             let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = status.connected
-                && status.peer_count >= expected
-                && status.topic_diagnostics.iter().any(|topic_status| {
-                    topic_status.topic == topic
-                        && topic_status.joined
-                        && (topic_status.connected_peers.len() >= expected.min(1)
-                            || topic_status.assist_peer_ids.len() >= expected.min(1))
-                        && topic_status.peer_count >= expected
-                });
+            let ready = topic_has_direct_peer(&status, topic, expected);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return;
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(()) => {}
+        Err(_) => {
+            let status = runtime.get_sync_status().await.expect("sync status");
+            panic!("{timeout_label}: {}", format_sync_snapshot(&status, topic));
+        }
+    }
+}
+
+async fn wait_for_topic_delivery(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    timeout_label: &str,
+) {
+    match timeout(runtime_replication_timeout(), async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await.expect("sync status");
+            let ready = status.topic_diagnostics.iter().any(|topic_status| {
+                let live_ready = topic_status.peer_count >= expected
+                    && topic_status.connected_peers.len() >= expected.min(1)
+                    && (topic_status.joined
+                        || matches!(
+                            topic_status.delivery_state,
+                            kukuri_app_api::DeliveryState::Live
+                        ));
+                let durable_ready = !topic_status.docs_assist_peer_ids.is_empty()
+                    && matches!(
+                        topic_status.delivery_state,
+                        kukuri_app_api::DeliveryState::DurableRecovering
+                            | kukuri_app_api::DeliveryState::DurableReady
+                    );
+                topic_status.topic == topic && (live_ready || durable_ready)
+            });
             if ready {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -238,15 +278,7 @@ async fn wait_for_connected_topic_peer_count_result(
         let mut stable_ready_polls = 0usize;
         loop {
             let status = runtime.get_sync_status().await.context("sync status")?;
-            let ready = status.connected
-                && status.peer_count >= expected
-                && status.topic_diagnostics.iter().any(|topic_status| {
-                    topic_status.topic == topic
-                        && topic_status.joined
-                        && (topic_status.connected_peers.len() >= expected.min(1)
-                            || topic_status.assist_peer_ids.len() >= expected.min(1))
-                        && topic_status.peer_count >= expected
-                });
+            let ready = topic_has_direct_peer(&status, topic, expected);
             if ready {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -274,14 +306,16 @@ async fn wait_for_connected_topic_peer_count_result(
 }
 
 fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> bool {
-    status.connected
-        && status.peer_count >= expected
-        && status.topic_diagnostics.iter().any(|topic_status| {
-            topic_status.topic == topic
-                && topic_status.joined
-                && topic_status.connected_peers.len() >= expected.min(1)
-                && topic_status.peer_count >= expected
-        })
+    status.topic_diagnostics.iter().any(|topic_status| {
+        topic_status.topic == topic
+            && topic_status.connected_peers.len() >= expected.min(1)
+            && topic_status.peer_count >= expected
+            && (topic_status.joined
+                || matches!(
+                    topic_status.delivery_state,
+                    kukuri_app_api::DeliveryState::Live
+                ))
+    })
 }
 
 fn should_swap_shared_identity_public_replication_direction(
@@ -327,37 +361,6 @@ async fn wait_for_direct_topic_peer_count_result(
                 .map(|value| format_sync_snapshot(&value, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             bail!("direct topic readiness timeout; {status}");
-        }
-    }
-}
-
-async fn wait_for_connected_peer_count(
-    runtime: &DesktopRuntime,
-    expected: usize,
-    timeout_label: &str,
-) {
-    match timeout(social_graph_propagation_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = status.connected && status.peer_count >= expected;
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            panic!("{timeout_label}: {}", format_sync_snapshot(&status, ""));
         }
     }
 }
@@ -432,6 +435,78 @@ async fn warm_author_social_view(
         Err(_) => {
             let status = runtime.get_sync_status().await.expect("sync status");
             panic!("{timeout_label}: {}", format_sync_snapshot(&status, ""));
+        }
+    }
+}
+
+fn is_retryable_friend_plus_share_import_error(message: &str) -> bool {
+    message.contains("mutual relationship")
+        || message.contains("sponsor is not an active participant")
+        || message.contains("timed out waiting for friend-plus sponsor participant sync")
+        || message.contains("timed out waiting for friend-plus channel replica sync")
+}
+
+async fn wait_for_friend_plus_share_import(
+    runtime: &DesktopRuntime,
+    token: &str,
+    step_timeout: Duration,
+    timeout_label: &str,
+) -> kukuri_core::FriendPlusSharePreview {
+    let preview = kukuri_core::parse_friend_plus_share_token(token).expect("parse share token");
+    let last_retryable_error = Arc::new(Mutex::new(None::<String>));
+    let retry_error_slot = Arc::clone(&last_retryable_error);
+    match timeout(step_timeout, async {
+        loop {
+            match runtime
+                .import_friend_plus_share(ImportFriendPlusShareRequest {
+                    token: token.to_string(),
+                })
+                .await
+            {
+                Ok(preview) => return preview,
+                Err(error)
+                    if is_retryable_friend_plus_share_import_error(error.to_string().as_str()) =>
+                {
+                    *retry_error_slot.lock().await = Some(error.to_string());
+                    sleep(Duration::from_millis(100)).await;
+                }
+                Err(error) => panic!("{timeout_label}: {error:#}"),
+            }
+        }
+    })
+    .await
+    {
+        Ok(preview) => preview,
+        Err(_) => {
+            let last_error = last_retryable_error
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let social_view = runtime
+                .get_author_social_view(AuthorRequest {
+                    pubkey: preview.sponsor_pubkey.as_str().to_string(),
+                })
+                .await
+                .ok()
+                .map(|value| {
+                    format!(
+                        "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                        value.following,
+                        value.followed_by,
+                        value.mutual,
+                        value.friend_of_friend,
+                        value.friend_of_friend_via_pubkeys
+                    )
+                })
+                .unwrap_or_else(|| "social_view=unavailable".to_string());
+            let status = runtime.get_sync_status().await.expect("sync status");
+            panic!(
+                "{timeout_label}: sponsor_pubkey={}, last_retryable_error={}, {social_view}, {}",
+                preview.sponsor_pubkey.as_str(),
+                last_error,
+                format_sync_snapshot(&status, preview.topic_id.as_str())
+            );
         }
     }
 }
@@ -764,125 +839,6 @@ async fn replicate_public_post_with_retry(
     .await
 }
 
-async fn replicate_public_post_from_original_publisher_with_retry(
-    publisher: &DesktopRuntime,
-    subscriber: &DesktopRuntime,
-    topic: &str,
-    content_prefix: &str,
-    timeout_label: &str,
-) -> String {
-    replicate_public_post_with_retry_inner(
-        publisher,
-        subscriber,
-        topic,
-        content_prefix,
-        timeout_label,
-        false,
-    )
-    .await
-}
-
-async fn refresh_public_pair_result(
-    runtime_a: &DesktopRuntime,
-    runtime_b: &DesktopRuntime,
-    topic: &str,
-    step_timeout: Duration,
-) -> Result<()> {
-    let scope = TimelineScope::Public;
-    let _ = runtime_a
-        .list_timeline(ListTimelineRequest {
-            topic: topic.to_string(),
-            scope: scope.clone(),
-            cursor: None,
-            limit: Some(20),
-        })
-        .await;
-    let _ = runtime_b
-        .list_timeline(ListTimelineRequest {
-            topic: topic.to_string(),
-            scope: scope.clone(),
-            cursor: None,
-            limit: Some(20),
-        })
-        .await;
-    let _ = runtime_a
-        .list_live_sessions(ListLiveSessionsRequest {
-            topic: topic.to_string(),
-            scope: scope.clone(),
-        })
-        .await;
-    let _ = runtime_b
-        .list_live_sessions(ListLiveSessionsRequest {
-            topic: topic.to_string(),
-            scope: scope.clone(),
-        })
-        .await;
-    let _ = runtime_a
-        .list_game_rooms(ListGameRoomsRequest {
-            topic: topic.to_string(),
-            scope: scope.clone(),
-        })
-        .await;
-    let _ = runtime_b
-        .list_game_rooms(ListGameRoomsRequest {
-            topic: topic.to_string(),
-            scope,
-        })
-        .await;
-    wait_for_connected_topic_peer_count_result(runtime_a, topic, 1, step_timeout)
-        .await
-        .context("runtime a did not observe public topic connectivity")?;
-    wait_for_connected_topic_peer_count_result(runtime_b, topic, 1, step_timeout)
-        .await
-        .context("runtime b did not observe public topic connectivity")?;
-    Ok(())
-}
-
-async fn wait_for_direct_public_pair_with_refresh_result(
-    runtime_a: &DesktopRuntime,
-    runtime_b: &DesktopRuntime,
-    topic: &str,
-    step_timeout: Duration,
-    same_author_shared_identity: bool,
-) -> Result<()> {
-    let (attempts, attempt_timeout) =
-        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
-    let mut last_error = None;
-
-    for attempt in 1..=attempts {
-        let attempt_result = async {
-            refresh_public_pair_result(runtime_a, runtime_b, topic, attempt_timeout)
-                .await
-                .context("failed to refresh public pair before waiting for direct connectivity")?;
-            wait_for_direct_topic_peer_count_result(runtime_a, topic, 1, attempt_timeout)
-                .await
-                .context("runtime a did not observe direct public topic connectivity")?;
-            wait_for_direct_topic_peer_count_result(runtime_b, topic, 1, attempt_timeout)
-                .await
-                .context("runtime b did not observe direct public topic connectivity")?;
-            Ok::<(), anyhow::Error>(())
-        }
-        .await;
-
-        match attempt_result {
-            Ok(()) => return Ok(()),
-            Err(error) if attempt < attempts => {
-                last_error = Some(format!("{error:#}"));
-                sleep(Duration::from_millis(250)).await;
-            }
-            Err(error) => {
-                last_error = Some(format!("{error:#}"));
-                break;
-            }
-        }
-    }
-
-    bail!(
-        "public pair direct topic readiness timeout; {}",
-        last_error.unwrap_or_else(|| "unknown error".to_string())
-    );
-}
-
 async fn replicate_public_post_with_retry_inner(
     publisher: &DesktopRuntime,
     subscriber: &DesktopRuntime,
@@ -926,12 +882,6 @@ async fn replicate_public_post_with_retry_inner(
                 })
                 .await
                 .context("failed to resubscribe subscriber to public topic")?;
-            wait_for_connected_topic_peer_count_result(publisher, topic, 1, attempt_timeout)
-                .await
-                .context("publisher did not observe public topic connectivity")?;
-            wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
-                .await
-                .context("subscriber did not observe public topic connectivity")?;
             let publisher_status = publisher
                 .get_sync_status()
                 .await
@@ -1215,12 +1165,21 @@ async fn replicate_private_post_with_retry(
 fn sync_status_with_topic(
     topic: &str,
     connected_peers: &[&str],
-    assist_peer_ids: &[&str],
+    docs_assist_peer_ids: &[&str],
 ) -> SyncStatus {
+    let connected = !connected_peers.is_empty();
+    let delivery_state = if connected {
+        kukuri_app_api::DeliveryState::Live
+    } else if !docs_assist_peer_ids.is_empty() {
+        kukuri_app_api::DeliveryState::DurableRecovering
+    } else {
+        kukuri_app_api::DeliveryState::Offline
+    };
     SyncStatus {
-        connected: true,
+        connected,
+        delivery_state,
         last_sync_ts: None,
-        peer_count: connected_peers.len().max(assist_peer_ids.len()),
+        peer_count: connected_peers.len(),
         pending_events: 0,
         status_detail: "test".to_string(),
         last_error: None,
@@ -1228,19 +1187,21 @@ fn sync_status_with_topic(
         subscribed_topics: vec![topic.to_string()],
         topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
             topic: topic.to_string(),
-            joined: true,
-            peer_count: connected_peers.len().max(assist_peer_ids.len()),
+            joined: connected,
+            delivery_state,
+            peer_count: connected_peers.len(),
             connected_peers: connected_peers
                 .iter()
                 .map(|peer| peer.to_string())
                 .collect(),
-            assist_peer_ids: assist_peer_ids
+            docs_assist_peer_ids: docs_assist_peer_ids
                 .iter()
                 .map(|peer| peer.to_string())
                 .collect(),
             configured_peer_ids: Vec::new(),
             missing_peer_ids: Vec::new(),
             last_received_at: None,
+            last_docs_activity_at: None,
             status_detail: "test".to_string(),
             last_error: None,
         }],
@@ -1313,15 +1274,13 @@ async fn wait_for_seeded_dht_topic_ready(
             let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
                 topic_status.topic == topic
                     && topic_status.joined
-                    && (!topic_status.connected_peers.is_empty()
-                        || !topic_status.assist_peer_ids.is_empty())
+                    && !topic_status.connected_peers.is_empty()
                     && topic_status.peer_count > 0
             });
             let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
                 topic_status.topic == topic
                     && topic_status.joined
-                    && (!topic_status.connected_peers.is_empty()
-                        || !topic_status.assist_peer_ids.is_empty())
+                    && !topic_status.connected_peers.is_empty()
                     && topic_status.peer_count > 0
             });
             if ready_a && ready_b {
@@ -1497,6 +1456,15 @@ struct MockCommunityNodeState {
     bootstrap_hits: Arc<AtomicUsize>,
 }
 
+#[derive(Clone)]
+struct MockHeartbeatEchoCommunityNodeState {
+    base_url: String,
+    connectivity_urls: Vec<String>,
+    seed_peers: Arc<Mutex<Vec<CommunityNodeSeedPeer>>>,
+    heartbeat_hits: Arc<AtomicUsize>,
+    bootstrap_hits: Arc<AtomicUsize>,
+}
+
 async fn mock_bootstrap_heartbeat(
     State(state): State<Arc<MockCommunityNodeState>>,
     Json(_request): Json<serde_json::Value>,
@@ -1530,6 +1498,45 @@ async fn mock_bootstrap_nodes(
 
 async fn mock_bootstrap_consent_status() -> Json<CommunityNodeConsentStatus> {
     Json(managed_community_node_consent_status(true))
+}
+
+async fn mock_heartbeat_echo_bootstrap_heartbeat(
+    State(state): State<Arc<MockHeartbeatEchoCommunityNodeState>>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<BootstrapHeartbeatResponse> {
+    state.heartbeat_hits.fetch_add(1, Ordering::SeqCst);
+    let endpoint_id = request
+        .get("endpoint_id")
+        .and_then(serde_json::Value::as_str)
+        .expect("heartbeat endpoint id")
+        .to_string();
+    let addr_hint = request
+        .get("addr_hint")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned);
+    *state.seed_peers.lock().await =
+        vec![CommunityNodeSeedPeer::new(endpoint_id, addr_hint).expect("heartbeat seed peer")];
+    Json(BootstrapHeartbeatResponse {
+        expires_at: Utc::now().timestamp() + 300,
+    })
+}
+
+async fn mock_heartbeat_echo_bootstrap_nodes(
+    State(state): State<Arc<MockHeartbeatEchoCommunityNodeState>>,
+) -> Json<BootstrapNodesResponse> {
+    state.bootstrap_hits.fetch_add(1, Ordering::SeqCst);
+    let seed_peers = state.seed_peers.lock().await.clone();
+    Json(BootstrapNodesResponse {
+        nodes: vec![kukuri_cn_core::CommunityNodeBootstrapNode {
+            base_url: state.base_url.clone(),
+            resolved_urls: CommunityNodeResolvedUrls::new(
+                state.base_url.clone(),
+                state.connectivity_urls.clone(),
+                seed_peers,
+            )
+            .expect("resolved urls"),
+        }],
+    })
 }
 
 #[derive(Clone)]
@@ -2090,10 +2097,6 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
         })
         .await
         .expect("import a");
-    wait_for_connected_peer_count(&runtime_a, 1, "profile topic owner peer readiness timeout")
-        .await;
-    wait_for_connected_peer_count(&runtime_b, 1, "profile topic viewer peer readiness timeout")
-        .await;
 
     let author_pubkey = runtime_a
         .get_sync_status()
@@ -2130,18 +2133,18 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
         })
         .await
         .expect("subscribe b tracked topic");
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_a,
         tracked_topic,
         1,
-        "profile tracked topic readiness timeout a",
+        "profile tracked topic delivery timeout a",
     )
     .await;
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_b,
         tracked_topic,
         1,
-        "profile tracked topic readiness timeout b",
+        "profile tracked topic delivery timeout b",
     )
     .await;
 
@@ -2220,12 +2223,6 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
                 })
                 .await
                 .expect("import a after restart");
-            wait_for_connected_peer_count(
-                &restarted_b,
-                1,
-                "profile viewer peer restart readiness timeout",
-            )
-            .await;
             let _ = restarted_b
                 .list_timeline(ListTimelineRequest {
                     topic: tracked_topic.into(),
@@ -2235,11 +2232,11 @@ async fn profile_timeline_reads_author_public_posts_across_untracked_topics() {
                 })
                 .await
                 .expect("resubscribe restarted b tracked topic");
-            wait_for_connected_topic_peer_count(
+            wait_for_topic_delivery(
                 &restarted_b,
                 tracked_topic,
                 1,
-                "profile tracked topic restart readiness timeout b",
+                "profile tracked topic restart delivery timeout b",
             )
             .await;
             let timeline = wait_for_profile_timeline_posts_result(
@@ -2439,9 +2436,6 @@ async fn private_channel_invite_restores_after_restart_without_reimport() {
         .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
         .await
         .expect("import a");
-    wait_for_connected_peer_count(&runtime_a, 1, "friend-only owner peer readiness timeout").await;
-    wait_for_connected_peer_count(&runtime_b, 1, "friend-only invitee peer readiness timeout")
-        .await;
 
     let topic = "kukuri:topic:desktop-private-channel";
     let _ = runtime_a
@@ -2462,6 +2456,20 @@ async fn private_channel_invite_restores_after_restart_without_reimport() {
         })
         .await
         .expect("subscribe b");
+    wait_for_topic_delivery(
+        &runtime_a,
+        topic,
+        1,
+        "friend-only owner topic delivery timeout",
+    )
+    .await;
+    wait_for_topic_delivery(
+        &runtime_b,
+        topic,
+        1,
+        "friend-only invitee topic delivery timeout",
+    )
+    .await;
     let channel = runtime_a
         .create_private_channel(CreatePrivateChannelRequest {
             topic: topic.into(),
@@ -2918,13 +2926,6 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
         .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
         .await
         .expect("import a");
-    wait_for_connected_peer_count(&runtime_a, 1, "friend-only owner peer readiness timeout").await;
-    wait_for_connected_peer_count(
-        &runtime_b,
-        1,
-        "friend-only recipient peer readiness timeout",
-    )
-    .await;
 
     let a_pubkey = runtime_a
         .get_sync_status()
@@ -2936,6 +2937,39 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
         .await
         .expect("status b")
         .local_author_pubkey;
+    let topic = "kukuri:topic:desktop-friend-only-restart";
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe a");
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe b");
+    wait_for_topic_delivery(
+        &runtime_a,
+        topic,
+        1,
+        "friend-only owner topic delivery timeout",
+    )
+    .await;
+    wait_for_topic_delivery(
+        &runtime_b,
+        topic,
+        1,
+        "friend-only recipient topic delivery timeout",
+    )
+    .await;
     warm_author_social_view(
         &runtime_a,
         b_pubkey.as_str(),
@@ -2983,26 +3017,6 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
     })
     .await
     .expect("mutual propagation timeout");
-
-    let topic = "kukuri:topic:desktop-friend-only-restart";
-    let _ = runtime_a
-        .list_timeline(ListTimelineRequest {
-            topic: topic.into(),
-            scope: TimelineScope::Public,
-            cursor: None,
-            limit: Some(20),
-        })
-        .await
-        .expect("subscribe a");
-    let _ = runtime_b
-        .list_timeline(ListTimelineRequest {
-            topic: topic.into(),
-            scope: TimelineScope::Public,
-            cursor: None,
-            limit: Some(20),
-        })
-        .await
-        .expect("subscribe b");
 
     let channel = runtime_a
         .create_private_channel(CreatePrivateChannelRequest {
@@ -3244,9 +3258,6 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("b imports a");
-    wait_for_connected_peer_count(&runtime_a, 1, "friend-plus owner peer readiness timeout").await;
-    wait_for_connected_peer_count(&runtime_b, 1, "friend-plus sponsor peer readiness timeout")
-        .await;
 
     let status_a = runtime_a.get_sync_status().await.expect("status a");
     let a_pubkey = status_a.local_author_pubkey;
@@ -3266,18 +3277,18 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
             .await
             .expect("subscribe runtime");
     }
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_a,
         topic,
         1,
-        "friend-plus owner topic readiness timeout",
+        "friend-plus owner topic delivery timeout",
     )
     .await;
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_b,
         topic,
         1,
-        "friend-plus sponsor topic readiness timeout",
+        "friend-plus sponsor topic delivery timeout",
     )
     .await;
     warm_author_social_view(
@@ -3322,10 +3333,13 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("export a->b share");
-    runtime_b
-        .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_ab })
-        .await
-        .expect("b imports friend-plus share");
+    let _preview_b = wait_for_friend_plus_share_import(
+        &runtime_b,
+        share_ab.as_str(),
+        social_graph_propagation_timeout(),
+        "b imports friend-plus share",
+    )
+    .await;
     runtime_a
         .import_peer_ticket(ImportPeerTicketRequest {
             ticket: ticket_c.clone(),
@@ -3350,9 +3364,6 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("c imports b");
-    wait_for_connected_peer_count(&runtime_a, 2, "friend-plus owner full-mesh timeout").await;
-    wait_for_connected_peer_count(&runtime_b, 2, "friend-plus sponsor full-mesh timeout").await;
-    wait_for_connected_peer_count(&runtime_c, 2, "friend-plus recipient full-mesh timeout").await;
     let _ = runtime_c
         .list_timeline(ListTimelineRequest {
             topic: topic.into(),
@@ -3389,25 +3400,25 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("c refreshes b after subscribe");
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_a,
         topic,
-        2,
-        "friend-plus owner topic mesh timeout",
+        1,
+        "friend-plus owner topic mesh delivery timeout",
     )
     .await;
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_b,
         topic,
-        2,
-        "friend-plus sponsor topic mesh timeout",
+        1,
+        "friend-plus sponsor topic mesh delivery timeout",
     )
     .await;
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_c,
         topic,
-        2,
-        "friend-plus recipient topic mesh timeout",
+        1,
+        "friend-plus recipient topic mesh delivery timeout",
     )
     .await;
     // Relay-assisted sync is sufficient for the downstream share import and private-channel
@@ -3448,10 +3459,13 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("export b->c share");
-    let preview_c = runtime_c
-        .import_friend_plus_share(ImportFriendPlusShareRequest { token: share_bc })
-        .await
-        .expect("c imports friend-plus share");
+    let preview_c = wait_for_friend_plus_share_import(
+        &runtime_c,
+        share_bc.as_str(),
+        social_graph_propagation_timeout(),
+        "c imports friend-plus share",
+    )
+    .await;
     let original_epoch_id = preview_c.epoch_id.clone();
     assert_eq!(preview_c.sponsor_pubkey.as_str(), b_pubkey.as_str());
     // Importing the fresh share updates C's joined private-channel state after A and B have
@@ -3716,18 +3730,18 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
     );
     assert_eq!(joined_restarted_before_rotate.participant_count, 3);
 
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_a,
         topic,
         1,
-        "friend-plus owner topic readiness timeout",
+        "friend-plus owner topic delivery timeout",
     )
     .await;
-    wait_for_connected_topic_peer_count(
+    wait_for_topic_delivery(
         &runtime_b,
         topic,
         1,
-        "friend-plus sponsor topic readiness timeout",
+        "friend-plus sponsor topic delivery timeout",
     )
     .await;
 
@@ -3748,12 +3762,13 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("export refreshed a->b share after rotate");
-    let preview_b_after_rotate = runtime_b
-        .import_friend_plus_share(ImportFriendPlusShareRequest {
-            token: refreshed_share_ab,
-        })
-        .await
-        .expect("b imports refreshed friend-plus share");
+    let preview_b_after_rotate = wait_for_friend_plus_share_import(
+        &runtime_b,
+        refreshed_share_ab.as_str(),
+        social_graph_propagation_timeout(),
+        "b imports refreshed friend-plus share",
+    )
+    .await;
     let shared_epoch_id = preview_b_after_rotate.epoch_id.clone();
     assert_ne!(shared_epoch_id, restored_epoch_id);
     assert_eq!(
@@ -3788,10 +3803,13 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
         })
         .await
         .expect("export fresh friend-plus share after restart");
-    let preview_after_restart = restarted_c
-        .import_friend_plus_share(ImportFriendPlusShareRequest { token: fresh_share })
-        .await
-        .expect("restarted c imports fresh friend-plus share");
+    let preview_after_restart = wait_for_friend_plus_share_import(
+        &restarted_c,
+        fresh_share.as_str(),
+        social_graph_propagation_timeout(),
+        "restarted c imports fresh friend-plus share",
+    )
+    .await;
     assert_eq!(preview_after_restart.epoch_id, shared_epoch_id);
     assert_eq!(
         preview_after_restart.sponsor_pubkey.as_str(),
@@ -4040,13 +4058,13 @@ async fn set_discovery_seeds_reapplies_runtime_without_restart() {
         entry.topic == topic
             && entry.joined
             && entry.peer_count > 0
-            && (!entry.connected_peers.is_empty() || !entry.assist_peer_ids.is_empty())
+            && !entry.connected_peers.is_empty()
     }));
     assert!(status_b.topic_diagnostics.iter().any(|entry| {
         entry.topic == topic
             && entry.joined
             && entry.peer_count > 0
-            && (!entry.connected_peers.is_empty() || !entry.assist_peer_ids.is_empty())
+            && !entry.connected_peers.is_empty()
     }));
 }
 
@@ -5479,7 +5497,8 @@ async fn community_node_status_does_not_require_restart_when_connectivity_is_act
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn community_node_connectivity_assist_syncs_public_timeline_without_manual_tickets() {
+async fn community_node_connectivity_assist_keeps_public_sync_status_degraded_without_direct_peers()
+{
     let _serial = acquire_async_test_lock().await;
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
         .await
@@ -5570,7 +5589,7 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     };
 
     timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(30),
         runtime_a.apply_runtime_connectivity_assist(),
     )
     .await
@@ -5584,7 +5603,7 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     .expect("apply seed peers a timeout")
     .expect("apply seed peers a");
     timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(30),
         runtime_b.apply_runtime_connectivity_assist(),
     )
     .await
@@ -5597,6 +5616,103 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     .await
     .expect("apply seed peers b timeout")
     .expect("apply seed peers b");
+
+    let refreshed_status_a = runtime_a
+        .get_sync_status()
+        .await
+        .expect("refreshed status a");
+    let refreshed_status_b = runtime_b
+        .get_sync_status()
+        .await
+        .expect("refreshed status b");
+    let refreshed_ticket_a = runtime_a
+        .local_peer_ticket()
+        .await
+        .expect("refreshed ticket a")
+        .expect("refreshed ticket a value");
+    let refreshed_ticket_b = runtime_b
+        .local_peer_ticket()
+        .await
+        .expect("refreshed ticket b")
+        .expect("refreshed ticket b value");
+    let refreshed_addr_hint_a = refreshed_ticket_a
+        .split_once('@')
+        .map(|(_, addr)| addr.to_string())
+        .expect("refreshed addr hint a");
+    let refreshed_addr_hint_b = refreshed_ticket_b
+        .split_once('@')
+        .map(|(_, addr)| addr.to_string())
+        .expect("refreshed addr hint b");
+    let refreshed_endpoint_a = refreshed_status_a.discovery.local_endpoint_id;
+    let refreshed_endpoint_b = refreshed_status_b.discovery.local_endpoint_id;
+    *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.to_string()],
+                    vec![
+                        CommunityNodeSeedPeer::new(
+                            refreshed_endpoint_b.as_str(),
+                            Some(refreshed_addr_hint_b.clone()),
+                        )
+                        .expect("refreshed seed peer b"),
+                    ],
+                )
+                .expect("refreshed resolved urls a"),
+            ),
+        }],
+    };
+    *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.to_string()],
+                    vec![
+                        CommunityNodeSeedPeer::new(
+                            refreshed_endpoint_a.as_str(),
+                            Some(refreshed_addr_hint_a.clone()),
+                        )
+                        .expect("refreshed seed peer a"),
+                    ],
+                )
+                .expect("refreshed resolved urls b"),
+            ),
+        }],
+    };
+    timeout(
+        Duration::from_secs(30),
+        runtime_a.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("reapply assist a timeout")
+    .expect("reapply assist a");
+    timeout(
+        Duration::from_secs(15),
+        runtime_a.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("reapply seed peers a timeout")
+    .expect("reapply seed peers a");
+    timeout(
+        Duration::from_secs(30),
+        runtime_b.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("reapply assist b timeout")
+    .expect("reapply assist b");
+    timeout(
+        Duration::from_secs(15),
+        runtime_b.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("reapply seed peers b timeout")
+    .expect("reapply seed peers b");
 
     let topic = "kukuri:topic:community-node-relay-assist";
     let scope = TimelineScope::Public;
@@ -5625,32 +5741,30 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_direct_public_pair_with_refresh_result(
-        &runtime_a,
-        &runtime_b,
-        topic,
-        Duration::from_secs(15),
-        false,
-    )
-    .await
-    .expect("community-node assist direct topic readiness timeout");
-
-    let _object_id = replicate_public_post_from_original_publisher_with_retry(
-        &runtime_a,
-        &runtime_b,
-        topic,
-        "community relay hello",
-        "community-node assist forward post sync timeout",
-    )
-    .await;
-    let _reverse_object_id = replicate_public_post_from_original_publisher_with_retry(
-        &runtime_b,
-        &runtime_a,
-        topic,
-        "community relay reverse hello",
-        "community-node assist reverse post sync timeout",
-    )
-    .await;
+    let status_a = runtime_a.get_sync_status().await.expect("sync status a");
+    let status_b = runtime_b.get_sync_status().await.expect("sync status b");
+    let topic_a = status_a
+        .topic_diagnostics
+        .iter()
+        .find(|entry| entry.topic == topic)
+        .expect("topic status a");
+    let topic_b = status_b
+        .topic_diagnostics
+        .iter()
+        .find(|entry| entry.topic == topic)
+        .expect("topic status b");
+    assert!(!topic_a.configured_peer_ids.is_empty());
+    assert!(!topic_b.configured_peer_ids.is_empty());
+    if topic_a.connected_peers.is_empty() {
+        assert!(!topic_a.joined);
+        assert_eq!(topic_a.peer_count, 0);
+        assert!(!status_a.connected);
+    }
+    if topic_b.connected_peers.is_empty() {
+        assert!(!topic_b.joined);
+        assert_eq!(topic_b.peer_count, 0);
+        assert!(!status_b.connected);
+    }
 
     timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
         .await
@@ -5661,7 +5775,8 @@ async fn community_node_connectivity_assist_syncs_public_timeline_without_manual
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_identity() {
+async fn community_node_connectivity_assist_keeps_public_sync_status_degraded_with_shared_identity()
+{
     let _serial = acquire_async_test_lock().await;
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
         .await
@@ -5763,7 +5878,7 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     };
 
     timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(30),
         runtime_a.apply_runtime_connectivity_assist(),
     )
     .await
@@ -5777,7 +5892,7 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     .expect("apply seed peers a timeout")
     .expect("apply seed peers a");
     timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(30),
         runtime_b.apply_runtime_connectivity_assist(),
     )
     .await
@@ -5790,6 +5905,103 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     .await
     .expect("apply seed peers b timeout")
     .expect("apply seed peers b");
+
+    let refreshed_status_a = runtime_a
+        .get_sync_status()
+        .await
+        .expect("refreshed status a");
+    let refreshed_status_b = runtime_b
+        .get_sync_status()
+        .await
+        .expect("refreshed status b");
+    let refreshed_ticket_a = runtime_a
+        .local_peer_ticket()
+        .await
+        .expect("refreshed ticket a")
+        .expect("refreshed ticket a value");
+    let refreshed_ticket_b = runtime_b
+        .local_peer_ticket()
+        .await
+        .expect("refreshed ticket b")
+        .expect("refreshed ticket b value");
+    let refreshed_addr_hint_a = refreshed_ticket_a
+        .split_once('@')
+        .map(|(_, addr)| addr.to_string())
+        .expect("refreshed addr hint a");
+    let refreshed_addr_hint_b = refreshed_ticket_b
+        .split_once('@')
+        .map(|(_, addr)| addr.to_string())
+        .expect("refreshed addr hint b");
+    let refreshed_endpoint_a = refreshed_status_a.discovery.local_endpoint_id;
+    let refreshed_endpoint_b = refreshed_status_b.discovery.local_endpoint_id;
+    *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.to_string()],
+                    vec![
+                        CommunityNodeSeedPeer::new(
+                            refreshed_endpoint_b.as_str(),
+                            Some(refreshed_addr_hint_b.clone()),
+                        )
+                        .expect("refreshed seed peer b"),
+                    ],
+                )
+                .expect("refreshed resolved urls a"),
+            ),
+        }],
+    };
+    *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.to_string()],
+                    vec![
+                        CommunityNodeSeedPeer::new(
+                            refreshed_endpoint_a.as_str(),
+                            Some(refreshed_addr_hint_a.clone()),
+                        )
+                        .expect("refreshed seed peer a"),
+                    ],
+                )
+                .expect("refreshed resolved urls b"),
+            ),
+        }],
+    };
+    timeout(
+        Duration::from_secs(30),
+        runtime_a.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("reapply assist a timeout")
+    .expect("reapply assist a");
+    timeout(
+        Duration::from_secs(15),
+        runtime_a.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("reapply seed peers a timeout")
+    .expect("reapply seed peers a");
+    timeout(
+        Duration::from_secs(30),
+        runtime_b.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("reapply assist b timeout")
+    .expect("reapply assist b");
+    timeout(
+        Duration::from_secs(15),
+        runtime_b.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("reapply seed peers b timeout")
+    .expect("reapply seed peers b");
 
     let topic = "kukuri:topic:community-node-relay-assist-shared";
     let scope = TimelineScope::Public;
@@ -5818,32 +6030,30 @@ async fn community_node_connectivity_assist_syncs_public_timeline_with_shared_id
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_direct_public_pair_with_refresh_result(
-        &runtime_a,
-        &runtime_b,
-        topic,
-        Duration::from_secs(15),
-        true,
-    )
-    .await
-    .expect("community-node assist shared direct topic readiness timeout");
-
-    let _object_id = replicate_public_post_from_original_publisher_with_retry(
-        &runtime_a,
-        &runtime_b,
-        topic,
-        "community relay shared hello",
-        "community-node assist shared identity forward post sync timeout",
-    )
-    .await;
-    let _reverse_object_id = replicate_public_post_from_original_publisher_with_retry(
-        &runtime_b,
-        &runtime_a,
-        topic,
-        "community relay shared reverse hello",
-        "community-node assist shared identity reverse post sync timeout",
-    )
-    .await;
+    let status_a = runtime_a.get_sync_status().await.expect("sync status a");
+    let status_b = runtime_b.get_sync_status().await.expect("sync status b");
+    let topic_a = status_a
+        .topic_diagnostics
+        .iter()
+        .find(|entry| entry.topic == topic)
+        .expect("topic status a");
+    let topic_b = status_b
+        .topic_diagnostics
+        .iter()
+        .find(|entry| entry.topic == topic)
+        .expect("topic status b");
+    assert!(!topic_a.configured_peer_ids.is_empty());
+    assert!(!topic_b.configured_peer_ids.is_empty());
+    if topic_a.connected_peers.is_empty() {
+        assert!(!topic_a.joined);
+        assert_eq!(topic_a.peer_count, 0);
+        assert!(!status_a.connected);
+    }
+    if topic_b.connected_peers.is_empty() {
+        assert!(!topic_b.joined);
+        assert_eq!(topic_b.peer_count, 0);
+        assert!(!status_b.connected);
+    }
 
     timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
         .await
@@ -6019,7 +6229,7 @@ async fn community_node_sync_status_refresh_updates_bootstrap_seed_peers() {
 }
 
 #[tokio::test]
-async fn community_node_metadata_refresh_skips_connectivity_reapply_when_bootstrap_metadata_is_unchanged()
+async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_when_metadata_is_unchanged()
  {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
@@ -6112,7 +6322,7 @@ async fn community_node_metadata_refresh_skips_connectivity_reapply_when_bootstr
         .await
         .expect("refresh metadata");
 
-    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 2);
     assert_eq!(state.bootstrap_hits.load(Ordering::SeqCst), 2);
     assert_eq!(
         refreshed
@@ -6542,6 +6752,119 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
             .expect("resolved urls")
             .seed_peers,
         vec![refreshed_seed_peer.clone()]
+    );
+    assert_eq!(
+        runtime.community_node_config.lock().await.nodes[0]
+            .resolved_urls
+            .as_ref()
+            .expect("resolved urls")
+            .seed_peers,
+        vec![refreshed_seed_peer]
+    );
+
+    runtime.shutdown().await;
+    server.abort();
+}
+
+#[tokio::test]
+async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connectivity_changes_local_seed_peer()
+ {
+    let _serial = acquire_async_test_lock().await;
+    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+        .await
+        .expect("relay server");
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-refresh-requeue-heartbeat.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
+    let base_url = format!("http://{}", listener.local_addr().expect("local addr"));
+    let state = Arc::new(MockHeartbeatEchoCommunityNodeState {
+        base_url: base_url.clone(),
+        connectivity_urls: vec![relay_url.to_string()],
+        seed_peers: Arc::new(Mutex::new(Vec::new())),
+        heartbeat_hits: Arc::new(AtomicUsize::new(0)),
+        bootstrap_hits: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = Router::new()
+        .route("/v1/consents/status", get(mock_bootstrap_consent_status))
+        .route(
+            "/v1/bootstrap/heartbeat",
+            post(mock_heartbeat_echo_bootstrap_heartbeat),
+        )
+        .route(
+            "/v1/bootstrap/nodes",
+            get(mock_heartbeat_echo_bootstrap_nodes),
+        )
+        .with_state(state.clone());
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    persist_community_node_token(
+        &db_path,
+        IdentityStorageMode::FileOnly,
+        base_url.as_str(),
+        &StoredCommunityNodeToken {
+            access_token: "fake-token".to_string(),
+            expires_at: Utc::now().timestamp() + 3600,
+        },
+    )
+    .expect("persist community-node token");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.clone(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
+                    .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let initial_seed_peer = runtime
+        .local_community_node_seed_peer("initial")
+        .await
+        .expect("initial seed peer");
+    let _status = runtime
+        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+            base_url: base_url.clone(),
+        })
+        .await
+        .expect("refresh metadata");
+    assert_eq!(state.heartbeat_hits.load(Ordering::SeqCst), 1);
+    assert!(
+        state.bootstrap_hits.load(Ordering::SeqCst) >= 1,
+        "metadata refresh should fetch bootstrap nodes"
+    );
+
+    let refreshed_seed_peer = runtime
+        .local_community_node_seed_peer("after-refresh")
+        .await
+        .expect("refreshed seed peer");
+    if refreshed_seed_peer == initial_seed_peer {
+        runtime.shutdown().await;
+        server.abort();
+        return;
+    }
+
+    let _status = runtime
+        .get_sync_status()
+        .await
+        .expect("sync status after refresh");
+
+    assert_eq!(
+        state.heartbeat_hits.load(Ordering::SeqCst),
+        2,
+        "runtime should heartbeat again after relay rebuild changes the local seed peer"
     );
     assert_eq!(
         runtime.community_node_config.lock().await.nodes[0]

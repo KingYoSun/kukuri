@@ -317,6 +317,7 @@ function parseInitialSettingsSection(): {
 
 export const DEFAULT_SYNC_STATUS: SyncStatus = {
   connected: false,
+  delivery_state: 'Offline',
   peer_count: 0,
   pending_events: 0,
   status_detail: '',
@@ -333,7 +334,8 @@ export const DEFAULT_SYNC_STATUS: SyncStatus = {
     bootstrap_seed_peer_ids: [],
     manual_ticket_peer_ids: [],
     connected_peer_ids: [],
-    assist_peer_ids: [],
+    docs_assist_peer_ids: [],
+    blob_assist_peer_ids: [],
     local_endpoint_id: '',
     last_discovery_error: null,
   },

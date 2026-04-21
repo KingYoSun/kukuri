@@ -1057,6 +1057,7 @@ impl DesktopRuntime {
                 base_url.as_str(),
                 &mut token,
                 node.auto_approve,
+                false,
             )
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
@@ -1179,6 +1180,7 @@ impl DesktopRuntime {
                 base_url.as_str(),
                 &mut token,
                 node.auto_approve,
+                false,
             )
             .await?;
             self.clear_community_node_retry_state(base_url.as_str())
@@ -1201,8 +1203,6 @@ impl DesktopRuntime {
     ) -> Result<CommunityNodeNodeStatus> {
         let base_url = normalize_http_url(request.base_url.as_str())?;
         let node = self.require_community_node(base_url.as_str()).await?;
-        self.ensure_community_node_session(base_url.as_str())
-            .await?;
         let mut token =
             load_community_node_token(&self.db_path, self.identity_mode, base_url.as_str())?
                 .ok_or_else(|| anyhow!("community node authentication is required"))?;
@@ -1211,17 +1211,18 @@ impl DesktopRuntime {
             CommunityNodeSessionPhase::Refreshing,
         )
         .await;
-        let refreshed = self
-            .sync_community_node_bootstrap_metadata_with_retry(
-                base_url.as_str(),
-                &mut token,
-                node.auto_approve,
-            )
-            .await?;
+        self.refresh_community_node_registration_with_token_if_due(
+            base_url.as_str(),
+            &mut token,
+            node.auto_approve,
+            true,
+        )
+        .await?;
         self.clear_community_node_retry_state(base_url.as_str())
             .await;
         self.set_community_node_session_ready(base_url.as_str(), false)
             .await;
+        let refreshed = self.require_community_node(base_url.as_str()).await?;
         self.community_node_status(refreshed, None, None).await
     }
 

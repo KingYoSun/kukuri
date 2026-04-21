@@ -466,13 +466,22 @@ impl BoundIrohStack {
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
+        let relay_config = relay_config.normalized();
+        let initial_relay_config = if relay_config.iroh_relay_urls.is_empty() {
+            relay_config.clone()
+        } else {
+            TransportRelayConfig::default()
+        };
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             network_config.clone(),
             dht_options,
-            relay_config.clone(),
+            initial_relay_config,
         )
         .await?;
+        if !relay_config.iroh_relay_urls.is_empty() {
+            node.apply_relay_config(relay_config.clone()).await?;
+        }
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
             node.endpoint().clone(),
             node.gossip().clone(),
@@ -480,6 +489,9 @@ impl BoundIrohStack {
             network_config,
             relay_config.clone(),
         )?);
+        if !relay_config.iroh_relay_urls.is_empty() {
+            transport.update_relay_config(relay_config.clone()).await?;
+        }
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
         transport
