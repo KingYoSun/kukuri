@@ -1,0 +1,6 @@
+[test-groups]
+harness-serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "package(kukuri-harness)"
+test-group = "harness-serial"

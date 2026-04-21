@@ -440,22 +440,20 @@ pub(crate) async fn run_community_node_connectivity(
             identity_mode == CommunityNodeIdentityMode::SharedIdentity,
         )
         .await?;
-        let post_id = runtime_a
-            .create_post(CreatePostRequest {
-                topic: topic.to_string(),
-                content: "community node scenario post".to_string(),
-                reply_to: None,
-                channel_ref: ChannelRef::Public,
-                attachments: Vec::new(),
-            })
-            .await
-            .context("failed to create scenario post on desktop a")?;
-        wait_for_topic_doc_index_entry(&runtime_a, topic, post_id.as_str(), step_timeout)
-            .await
-            .context("desktop a did not persist community post into docs index")?;
-        wait_for_timeline_object(&runtime_b, topic, post_id.as_str(), step_timeout)
-            .await
-            .context("desktop b did not receive community post in timeline")?;
+        let post_id = replicate_public_post_with_retry(
+            &runtime_a,
+            &runtime_b,
+            topic,
+            "community node scenario post",
+            step_timeout,
+            PublicReplicationDirection::PreferOriginalPublisher,
+            PublicReplicationLabels {
+                failure: "community post in timeline",
+                publisher: "desktop a",
+                subscriber: "desktop b",
+            },
+        )
+        .await?;
         push_named_step(&mut steps, "post", started_at);
 
         let started_at = Instant::now();

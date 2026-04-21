@@ -809,11 +809,12 @@ async fn friend_plus_share_freeze_rotate_and_new_epoch_visibility() {
     wait_for_mutual_author_view(&app_b, d_pubkey.as_str(), topic).await;
     wait_for_mutual_author_view(&app_d, b_pubkey.as_str(), topic).await;
 
-    let freeze_error = app_d
-        .import_friend_plus_share(stale_share_for_d.as_str())
-        .await
-        .expect_err("frozen share should fail");
-    let freeze_error_message = freeze_error.to_string();
+    let freeze_error_message = wait_for_friend_plus_share_rejection(
+        &app_d,
+        stale_share_for_d.as_str(),
+        replication_timeout,
+    )
+    .await;
     assert!(
         freeze_error_message.contains("no longer open"),
         "unexpected frozen share error: {freeze_error_message}"

@@ -12,24 +12,40 @@ cargo xtask doctor
 ```bash
 cargo xtask check
 cargo xtask test
-cargo xtask e2e-smoke
 cargo xtask desktop-ui-check
 cargo xtask cn-check
 cargo xtask cn-test
+cargo xtask e2e-smoke
 cargo xtask scenario community_node_public_connectivity
 cargo xtask scenario community_node_multi_device_connectivity
+cargo xtask rust-check
+cargo xtask rust-test
+cargo xtask tauri-check
+cargo xtask desktop-lint
+cargo xtask desktop-test
+cargo xtask desktop-storybook
+cargo xtask desktop-browser-test
 ```
 
-`cargo xtask check` は workspace lint/test に加えて `apps/desktop/src-tauri` の Tauri backend compile も確認する。
+`cargo xtask check` は non-CN Rust check、`apps/desktop/src-tauri` の Tauri backend compile、frontend lint/typecheck をまとめた日常 fast path。
 
-`cargo xtask desktop-ui-check` は `apps/desktop` の `lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser` をまとめて流す frontend 専用 gate。
+`cargo xtask test` は non-CN Rust test と `apps/desktop` の Vitest をまとめた日常 regression path。
 
-`cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
+`cargo xtask desktop-ui-check` は `apps/desktop` の `lint`, `typecheck`, `test`, `storybook:build`, `test:e2e:browser` をまとめて流す browser-aware frontend gate。
 
-- `cargo xtask test` は workspace 全体を通すが、Postgres が必要な `cn-*` integration test は実行しない。
+- `cargo xtask rust-test` は `cargo-nextest` を優先して non-CN package を流し、`kukuri-harness` は serial 実行、doctest は `cargo test --doc` で補完する。local で `cargo-nextest` が無い場合だけ `cargo test` に fallback する。
+- `cargo xtask tauri-check` は `CARGO_TARGET_DIR=target/desktop-tauri-check` を使って `apps/desktop/src-tauri` を warm cache 向けに compile する。
+- `cargo xtask desktop-lint` / `desktop-test` / `desktop-storybook` / `desktop-browser-test` は targeted rerun 用。workflow とローカル rerun のどちらでも同じ entrypoint を使う。
+- `cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
 - `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
 - `cargo xtask scenario community_node_multi_device_connectivity` は same-author 2 desktop の endpoint-bound bootstrap で `post -> reply/thread -> reconnect` を確認する。
+
+### 推奨フロー
+- 通常変更: `cargo xtask check` + `cargo xtask test`
+- browser-level UI change: 追加で `cargo xtask desktop-ui-check`
+- community-node / Postgres 変更: 追加で `cargo xtask cn-check` + `cargo xtask cn-test`
+- runtime / end-to-end 変更: 追加で `cargo xtask e2e-smoke` または対象 `cargo xtask scenario ...`
 
 ## community-node compose
 ```bash
