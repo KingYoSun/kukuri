@@ -450,7 +450,8 @@ impl AppService {
             )
             .await?;
         }
-        self.hint_transport
+        if let Err(error) = self
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, effective_channel_id.as_ref()),
                 GossipHint::TopicObjectsChanged {
@@ -461,7 +462,15 @@ impl AppService {
                     }],
                 },
             )
-            .await?;
+            .await
+        {
+            warn!(
+                topic = %topic_id,
+                object_id = %envelope.id.0,
+                error = %error,
+                "failed to publish post hint; durable docs state was already persisted"
+            );
+        }
         if effective_channel_id.is_none() {
             self.maybe_restart_replica_sync(topic_id, &topic_replica_id(topic_id))
                 .await;
@@ -472,18 +481,17 @@ impl AppService {
                         .iter()
                         .find(|entry| entry.topic == topic_id)
                     {
-                        let connectivity_shape = if !topic_status.connected_peers.is_empty() {
-                            "direct"
-                        } else if !topic_status.assist_peer_ids.is_empty() {
-                            "assist-only"
-                        } else {
-                            "disconnected"
+                        let connectivity_shape = match topic_status.delivery_state {
+                            DeliveryState::Live => "live",
+                            DeliveryState::DurableReady => "durable-ready",
+                            DeliveryState::DurableRecovering => "durable-recovering",
+                            DeliveryState::Offline => "offline",
                         };
                         info!(
                             topic = %topic_id,
                             connectivity_shape,
                             direct_peer_count = topic_status.connected_peers.len(),
-                            assist_peer_count = topic_status.assist_peer_ids.len(),
+                            docs_assist_peer_count = topic_status.docs_assist_peer_ids.len(),
                             "public topic connectivity snapshot after local post"
                         );
                     }

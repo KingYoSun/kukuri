@@ -63,6 +63,9 @@ fn initial_topic_join_timeout() -> Duration {
 }
 
 fn direct_warmup_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
+    if endpoint_addr.relay_urls().next().is_some() {
+        return endpoint_addr.clone();
+    }
     let direct_addrs = endpoint_addr
         .ip_addrs()
         .copied()
@@ -1542,6 +1545,163 @@ mod tests {
         .expect("custom relay seed connect timeout");
 
         drop(connection);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_custom_relay_static_peer_seed_peers_with_addr_hints_sync_hints() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("transport b");
+        let topic = TopicId::new("kukuri:topic:relay-seed-hint-roundtrip");
+        let peer_id_a = transport_a.endpoint.id().to_string();
+        let peer_id_b = transport_b.endpoint.id().to_string();
+        let (mut stream_a, mut stream_b) = tokio::try_join!(
+            transport_a.subscribe_hints(&topic),
+            transport_b.subscribe_hints(&topic)
+        )
+        .expect("subscribe hints");
+
+        let ticket_a = transport_a
+            .export_ticket()
+            .await
+            .expect("ticket a")
+            .expect("ticket a value");
+        let ticket_b = transport_b
+            .export_ticket()
+            .await
+            .expect("ticket b")
+            .expect("ticket b value");
+
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![seed_peer_from_ticket(&ticket_b)],
+                Vec::new(),
+            )
+            .await
+            .expect("configure a");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![seed_peer_from_ticket(&ticket_a)],
+                Vec::new(),
+            )
+            .await
+            .expect("configure b");
+
+        wait_for_hint_roundtrip(
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut stream_a,
+                expected_source_peer: Some(peer_id_a.as_str()),
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: Some(peer_id_b.as_str()),
+            },
+            &topic,
+            Duration::from_secs(20),
+            "custom relay static peer with addr hints",
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn transport_custom_relay_static_peer_seed_peers_ignore_stale_addr_hints() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        }
+        .normalized();
+        let config = TransportNetworkConfig::loopback();
+        let transport_a = IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        )
+        .await
+        .expect("transport a");
+        let transport_b = IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("transport b");
+        let topic = TopicId::new("kukuri:topic:relay-seed-stale-addr-hint-roundtrip");
+        let peer_id_a = transport_a.endpoint.id().to_string();
+        let peer_id_b = transport_b.endpoint.id().to_string();
+        let (mut stream_a, mut stream_b) = tokio::try_join!(
+            transport_a.subscribe_hints(&topic),
+            transport_b.subscribe_hints(&topic)
+        )
+        .expect("subscribe hints");
+
+        transport_a
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: peer_id_b.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                }],
+                Vec::new(),
+            )
+            .await
+            .expect("configure a");
+        transport_b
+            .configure_discovery(
+                DiscoveryMode::StaticPeer,
+                false,
+                vec![SeedPeer {
+                    endpoint_id: peer_id_a.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                }],
+                Vec::new(),
+            )
+            .await
+            .expect("configure b");
+
+        wait_for_hint_roundtrip(
+            HintRoundtripParticipant {
+                transport: &transport_a,
+                stream: &mut stream_a,
+                expected_source_peer: Some(peer_id_a.as_str()),
+            },
+            HintRoundtripParticipant {
+                transport: &transport_b,
+                stream: &mut stream_b,
+                expected_source_peer: Some(peer_id_b.as_str()),
+            },
+            &topic,
+            Duration::from_secs(20),
+            "custom relay static peer with stale addr hints",
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

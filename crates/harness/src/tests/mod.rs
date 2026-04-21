@@ -31,12 +31,21 @@ fn social_graph_propagation_timeout() -> Duration {
 fn sync_status_with_topic(
     topic: &str,
     connected_peers: &[&str],
-    assist_peer_ids: &[&str],
+    docs_assist_peer_ids: &[&str],
 ) -> SyncStatus {
+    let connected = !connected_peers.is_empty();
+    let delivery_state = if connected {
+        kukuri_app_api::DeliveryState::Live
+    } else if !docs_assist_peer_ids.is_empty() {
+        kukuri_app_api::DeliveryState::DurableRecovering
+    } else {
+        kukuri_app_api::DeliveryState::Offline
+    };
     SyncStatus {
-        connected: true,
+        connected,
+        delivery_state,
         last_sync_ts: None,
-        peer_count: connected_peers.len().max(assist_peer_ids.len()),
+        peer_count: connected_peers.len(),
         pending_events: 0,
         status_detail: "test".to_string(),
         last_error: None,
@@ -44,39 +53,27 @@ fn sync_status_with_topic(
         subscribed_topics: vec![topic.to_string()],
         topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
             topic: topic.to_string(),
-            joined: true,
-            peer_count: connected_peers.len().max(assist_peer_ids.len()),
+            joined: connected,
+            delivery_state,
+            peer_count: connected_peers.len(),
             connected_peers: connected_peers
                 .iter()
                 .map(|peer| peer.to_string())
                 .collect(),
-            assist_peer_ids: assist_peer_ids
+            docs_assist_peer_ids: docs_assist_peer_ids
                 .iter()
                 .map(|peer| peer.to_string())
                 .collect(),
             configured_peer_ids: Vec::new(),
             missing_peer_ids: Vec::new(),
             last_received_at: None,
+            last_docs_activity_at: None,
             status_detail: "test".to_string(),
             last_error: None,
         }],
         local_author_pubkey: "author".to_string(),
         discovery: Default::default(),
     }
-}
-
-async fn wait_for_connected_peer_count(runtime: &DesktopRuntime, expected: usize) {
-    timeout(social_graph_propagation_timeout(), async {
-        loop {
-            let status = runtime.get_sync_status().await.expect("sync status");
-            if status.connected && status.peer_count >= expected {
-                return;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .expect("peer connection timeout");
 }
 
 async fn warm_author_social_view(runtime: &DesktopRuntime, author_pubkey: &str) {

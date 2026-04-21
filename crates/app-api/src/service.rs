@@ -65,6 +65,8 @@ pub(crate) use tracing::{info, warn};
 
 pub(crate) const REPLICA_SYNC_RESTART_RETRY_SECONDS: i64 = 5;
 pub(crate) const DIRECT_MESSAGE_SUBSCRIPTION_RESTART_RETRY_SECONDS: i64 = 5;
+pub(crate) const PUBLIC_TOPIC_RECOVERY_GRACE_MS: i64 = 3_000;
+pub(crate) const PUBLIC_TOPIC_RECOVERY_BACKOFF_MS: [i64; 3] = [3_000, 10_000, 30_000];
 pub(crate) const PUBLIC_CHANNEL_ID: &str = "public";
 pub(crate) const DIRECT_MESSAGE_FRAME_MIME: &str =
     "application/vnd.kukuri.direct-message-frame+json";
@@ -99,6 +101,41 @@ pub(crate) async fn maybe_restart_replica_sync_with_cooldown(
             "failed to restart replica sync"
         );
     }
+}
+
+pub(crate) async fn record_public_topic_docs_activity_if_current(
+    delivery: &Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
+    topic_id: &str,
+    generation: u64,
+    at_ms: i64,
+) {
+    let mut guard = delivery.lock().await;
+    if let Some(entry) = guard.get_mut(topic_id)
+        && entry.generation == generation
+    {
+        entry.last_docs_activity_at = Some(at_ms);
+    }
+}
+
+pub(crate) async fn restart_replica_sync_with_backoff(
+    docs_sync: &dyn DocsSync,
+    topic_id: &str,
+    replica: &ReplicaId,
+    backoff: &mut SubscriptionRecoveryBackoff,
+) {
+    let now_ms = Utc::now().timestamp_millis();
+    if !backoff.ready(now_ms) {
+        return;
+    }
+    if let Err(error) = docs_sync.restart_replica_sync(replica).await {
+        warn!(
+            topic = %topic_id,
+            replica = %replica.as_str(),
+            error = %error,
+            "failed to restart replica sync"
+        );
+    }
+    backoff.schedule(now_ms);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,9 +180,44 @@ pub struct AppService {
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
+    pub(crate) subscription_generations: Arc<Mutex<HashMap<String, u64>>>,
+    pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
     pub(crate) direct_message_subscription_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PublicTopicDeliveryStatus {
+    pub(crate) generation: u64,
+    pub(crate) last_docs_activity_at: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SubscriptionRecoveryBackoff {
+    pub(crate) next_retry_at_ms: i64,
+    pub(crate) step: usize,
+}
+
+impl SubscriptionRecoveryBackoff {
+    pub(crate) fn reset(&mut self) {
+        self.next_retry_at_ms = 0;
+        self.step = 0;
+    }
+
+    pub(crate) fn ready(&self, now_ms: i64) -> bool {
+        self.next_retry_at_ms <= now_ms
+    }
+
+    pub(crate) fn schedule(&mut self, now_ms: i64) {
+        let delay_ms = PUBLIC_TOPIC_RECOVERY_BACKOFF_MS[self
+            .step
+            .min(PUBLIC_TOPIC_RECOVERY_BACKOFF_MS.len().saturating_sub(1))];
+        self.next_retry_at_ms = now_ms.saturating_add(delay_ms);
+        if self.step + 1 < PUBLIC_TOPIC_RECOVERY_BACKOFF_MS.len() {
+            self.step += 1;
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -258,6 +330,8 @@ impl AppService {
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
+            subscription_generations: Arc::new(Mutex::new(HashMap::new())),
+            public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),
             direct_message_subscription_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
@@ -370,15 +444,95 @@ impl AppService {
         Ok(None)
     }
 
-    pub(crate) async fn assisted_peer_ids(&self) -> Result<Vec<String>> {
-        Ok(merge_peer_ids(
-            self.docs_sync.assist_peer_ids().await?,
-            self.blob_service.assist_peer_ids().await?,
-        ))
-    }
-
     pub(crate) async fn docs_assisted_peer_ids(&self) -> Result<Vec<String>> {
         self.docs_sync.assist_peer_ids().await
+    }
+
+    pub(crate) async fn blob_assisted_peer_ids(&self) -> Result<Vec<String>> {
+        self.blob_service.assist_peer_ids().await
+    }
+
+    pub(crate) async fn next_subscription_generation(&self, key: &str) -> u64 {
+        let mut generations = self.subscription_generations.lock().await;
+        let generation = generations
+            .get(key)
+            .copied()
+            .unwrap_or_default()
+            .saturating_add(1);
+        generations.insert(key.to_string(), generation);
+        generation
+    }
+
+    pub(crate) async fn reset_public_topic_delivery_generation(
+        &self,
+        topic_id: &str,
+        generation: u64,
+    ) {
+        self.public_topic_delivery.lock().await.insert(
+            topic_id.to_string(),
+            PublicTopicDeliveryStatus {
+                generation,
+                last_docs_activity_at: None,
+            },
+        );
+    }
+
+    pub(crate) async fn clear_public_topic_delivery(&self, topic_id: &str) {
+        self.public_topic_delivery.lock().await.remove(topic_id);
+    }
+
+    pub(crate) async fn public_topic_delivery_status(
+        &self,
+        topic_id: &str,
+    ) -> Option<PublicTopicDeliveryStatus> {
+        self.public_topic_delivery
+            .lock()
+            .await
+            .get(topic_id)
+            .copied()
+    }
+
+    pub(crate) async fn restart_active_subscriptions(&self) -> Result<()> {
+        let topics = self
+            .subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for topic in topics {
+            self.restart_topic_subscription(topic.as_str()).await?;
+        }
+
+        let private_channels = self
+            .joined_private_channels
+            .lock()
+            .await
+            .values()
+            .map(|state| {
+                (
+                    state.topic_id.clone(),
+                    state.channel_id.as_str().to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (topic_id, channel_id) in private_channels {
+            self.restart_private_channel_subscription(topic_id.as_str(), channel_id.as_str())
+                .await?;
+        }
+
+        let authors = self
+            .author_subscriptions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for author in authors {
+            self.restart_author_subscription(author.as_str()).await?;
+        }
+        self.restart_direct_message_subscriptions().await?;
+        Ok(())
     }
 
     pub async fn shutdown(&self) {
@@ -1040,16 +1194,28 @@ impl AppService {
         let docs_sync = Arc::clone(&self.docs_sync);
         let blob_service = Arc::clone(&self.blob_service);
         let hint_transport = Arc::clone(&self.hint_transport);
+        let transport = Arc::clone(&self.transport);
         let last_sync = Arc::clone(&self.last_sync_ts);
-        let replica_sync_restart_deadlines = Arc::clone(&self.replica_sync_restart_deadlines);
+        let public_topic_delivery = Arc::clone(&self.public_topic_delivery);
         let topic = topic_id.to_string();
         let storage_channel_id = channel_storage_id(channel_id.as_ref());
         let local_author_pubkey = self.current_author_pubkey();
+        let subscription_key = private_key.clone().unwrap_or_else(|| topic_id.to_string());
+        let generation = self
+            .next_subscription_generation(subscription_key.as_str())
+            .await;
+        let is_public_topic = channel_id.is_none() && private_key.is_none();
+        if is_public_topic {
+            self.reset_public_topic_delivery_generation(topic_id, generation)
+                .await;
+        }
         docs_sync.open_replica(&replica).await?;
         let notification_baseline =
             snapshot_object_notification_baseline(docs_sync.as_ref(), &replica).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
+        let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+        recovery_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let replica_for_task = replica.clone();
         let hint_topic_for_task = hint_topic.clone();
         let handle = tokio::spawn(async move {
@@ -1061,10 +1227,16 @@ impl AppService {
                 &replica_for_task,
             )
             .await;
+            let mut recovery_backoff = SubscriptionRecoveryBackoff::default();
+            let mut last_docs_activity_at = None;
+            let mut recovery_probe_due_at = Utc::now()
+                .timestamp_millis()
+                .saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
                         if let Ok(event) = event {
+                            let now = Utc::now().timestamp_millis();
                             if let Some(source_peer) = event.source_peer.as_deref()
                             {
                                 if let Err(error) = docs_sync.learn_peer(source_peer).await {
@@ -1093,7 +1265,7 @@ impl AppService {
                                 &event,
                             ).await {
                                 Ok(true) => {
-                                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                    *last_sync.lock().await = Some(now);
                                 }
                                 Ok(false) => {}
                                 Err(error) => {
@@ -1115,7 +1287,20 @@ impl AppService {
                             ).await
                             && count > 0
                             {
-                                *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                if is_public_topic && event.source_peer.is_some() {
+                                    record_public_topic_docs_activity_if_current(
+                                        &public_topic_delivery,
+                                        topic.as_str(),
+                                        generation,
+                                        now,
+                                    )
+                                    .await;
+                                    last_docs_activity_at = Some(now);
+                                    recovery_backoff.reset();
+                                    recovery_probe_due_at =
+                                        now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
+                                }
+                                *last_sync.lock().await = Some(now);
                             }
                         }
                     }
@@ -1157,7 +1342,7 @@ impl AppService {
                                     *last_sync.lock().await = Some(now);
                                 }
                                 _ => {
-                                    let hydrated = match hydrate_subscription_hint_with_services(
+                                    let mut hydrated = match hydrate_subscription_hint_with_services(
                                         docs_sync.as_ref(),
                                         blob_service.as_ref(),
                                         projection_store.as_ref(),
@@ -1176,21 +1361,148 @@ impl AppService {
                                             0
                                         }
                                     };
-                                    if hydrated == 0
-                                    {
-                                        maybe_restart_replica_sync_with_cooldown(
+                                    let now = Utc::now().timestamp_millis();
+                                    if hydrated == 0 && is_public_topic {
+                                        hydrated = match hydrate_subscription_state_with_services(
                                             docs_sync.as_ref(),
-                                            &replica_sync_restart_deadlines,
+                                            blob_service.as_ref(),
+                                            projection_store.as_ref(),
                                             topic.as_str(),
                                             &replica_for_task,
                                         )
-                                        .await;
+                                        .await {
+                                            Ok(count) => count,
+                                            Err(error) => {
+                                                warn!(
+                                                    topic = %topic,
+                                                    error = %error,
+                                                    "failed to hydrate subscription from docs-first recovery probe"
+                                                );
+                                                0
+                                            }
+                                        };
                                     }
                                     if hydrated > 0 {
-                                        *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                                        if is_public_topic && !event.source_peer.is_empty() {
+                                            record_public_topic_docs_activity_if_current(
+                                                &public_topic_delivery,
+                                                topic.as_str(),
+                                                generation,
+                                                now,
+                                            )
+                                            .await;
+                                            last_docs_activity_at = Some(now);
+                                            recovery_backoff.reset();
+                                            recovery_probe_due_at =
+                                                now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
+                                        }
+                                        *last_sync.lock().await = Some(now);
+                                    } else {
+                                        restart_replica_sync_with_backoff(
+                                            docs_sync.as_ref(),
+                                            topic.as_str(),
+                                            &replica_for_task,
+                                            &mut recovery_backoff,
+                                        )
+                                        .await;
+                                        recovery_probe_due_at =
+                                            now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
                                     }
                                 }
                             }
+                        }
+                    }
+                    _ = recovery_tick.tick(), if is_public_topic => {
+                        let now = Utc::now().timestamp_millis();
+                        if last_docs_activity_at.is_some() || recovery_probe_due_at > now {
+                            continue;
+                        }
+                        let (has_live_topic_peer, has_configured_topic_peer) =
+                            match transport.peers().await {
+                            Ok(snapshot) => snapshot
+                                .topic_diagnostics
+                                .iter()
+                                .find(|diagnostic| {
+                                    normalize_topic_name(diagnostic.topic.clone()).as_deref()
+                                        == Some(topic.as_str())
+                                })
+                                .map(|diagnostic| {
+                                    (
+                                        diagnostic.joined
+                                            && !diagnostic.connected_peers.is_empty(),
+                                        !diagnostic.configured_peer_ids.is_empty(),
+                                    )
+                                })
+                                .unwrap_or((false, false)),
+                            Err(error) => {
+                                warn!(
+                                    topic = %topic,
+                                    error = %error,
+                                    "failed to inspect live topic peer state during recovery tick"
+                                );
+                                (false, false)
+                            }
+                        };
+                        if has_live_topic_peer {
+                            continue;
+                        }
+                        let docs_assist_peer_count = match docs_sync.assist_peer_ids().await {
+                            Ok(peer_ids) => peer_ids.len(),
+                            Err(error) => {
+                                warn!(
+                                    topic = %topic,
+                                    error = %error,
+                                    "failed to inspect docs-assisted peers during recovery tick"
+                                );
+                                0
+                            }
+                        };
+                        if docs_assist_peer_count == 0 && !has_configured_topic_peer {
+                            continue;
+                        }
+                        let hydrated = match hydrate_subscription_state_with_services(
+                            docs_sync.as_ref(),
+                            blob_service.as_ref(),
+                            projection_store.as_ref(),
+                            topic.as_str(),
+                            &replica_for_task,
+                        )
+                        .await {
+                            Ok(count) => count,
+                            Err(error) => {
+                                warn!(
+                                    topic = %topic,
+                                    error = %error,
+                                    "failed to hydrate subscription during periodic docs-first recovery"
+                                );
+                                0
+                            }
+                        };
+                        if hydrated > 0 {
+                            if docs_assist_peer_count > 0 {
+                                record_public_topic_docs_activity_if_current(
+                                    &public_topic_delivery,
+                                    topic.as_str(),
+                                    generation,
+                                    now,
+                                )
+                                .await;
+                                last_docs_activity_at = Some(now);
+                            }
+                            recovery_backoff.reset();
+                            recovery_probe_due_at =
+                                now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
+                            *last_sync.lock().await = Some(now);
+                        } else {
+                            restart_replica_sync_with_backoff(
+                                docs_sync.as_ref(),
+                                topic.as_str(),
+                                &replica_for_task,
+                                &mut recovery_backoff,
+                            )
+                            .await;
+                            recovery_probe_due_at =
+                                now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
                         }
                     }
                     else => {
@@ -6863,40 +7175,81 @@ pub(crate) fn normalize_topic_diagnostics(
     merged.into_values().collect()
 }
 
-pub(crate) fn merge_peer_ids(left: Vec<String>, right: Vec<String>) -> Vec<String> {
-    left.into_iter()
-        .chain(right)
-        .filter(|peer| !peer.trim().is_empty())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
+pub(crate) fn merge_optional_timestamp(left: Option<i64>, right: Option<i64>) -> Option<i64> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (None, value) | (value, None) => value,
+    }
+}
+
+pub(crate) fn combine_delivery_states(left: DeliveryState, right: DeliveryState) -> DeliveryState {
+    use DeliveryState::*;
+
+    match (left, right) {
+        (Live, _) | (_, Live) => Live,
+        (DurableReady, _) | (_, DurableReady) => DurableReady,
+        (DurableRecovering, _) | (_, DurableRecovering) => DurableRecovering,
+        _ => Offline,
+    }
+}
+
+pub(crate) fn delivery_state_for_topic(
+    gossip_peer_count: usize,
+    docs_assist_peer_count: usize,
+    last_docs_activity_at: Option<i64>,
+) -> DeliveryState {
+    if gossip_peer_count > 0 {
+        DeliveryState::Live
+    } else if last_docs_activity_at.is_some() {
+        DeliveryState::DurableReady
+    } else if docs_assist_peer_count > 0 {
+        DeliveryState::DurableRecovering
+    } else {
+        DeliveryState::Offline
+    }
 }
 
 pub(crate) fn effective_sync_status_detail(
     base: &str,
-    gossip_peer_count: usize,
-    assist_peer_count: usize,
+    delivery_state: DeliveryState,
+    docs_assist_peer_count: usize,
     subscribed_topic_count: usize,
 ) -> String {
-    if gossip_peer_count > 0 || assist_peer_count == 0 {
-        return base.to_string();
-    }
-    if subscribed_topic_count > 0 {
-        format!("relay-assisted sync available via {assist_peer_count} peer(s)")
-    } else {
-        format!("relay-assisted connectivity available via {assist_peer_count} peer(s)")
+    match delivery_state {
+        DeliveryState::Live | DeliveryState::Offline => base.to_string(),
+        DeliveryState::DurableRecovering => {
+            if subscribed_topic_count > 0 {
+                format!(
+                    "docs-assisted recovery is in progress via {docs_assist_peer_count} peer(s); live topic delivery is unavailable"
+                )
+            } else {
+                format!(
+                    "docs-assisted recovery is in progress via {docs_assist_peer_count} peer(s)"
+                )
+            }
+        }
+        DeliveryState::DurableReady => {
+            format!(
+                "docs-assisted durable sync is available via {docs_assist_peer_count} peer(s); live topic delivery is unavailable"
+            )
+        }
     }
 }
 
 pub(crate) fn effective_topic_status_detail(
     base: &str,
-    gossip_peer_count: usize,
-    assist_peer_count: usize,
+    delivery_state: DeliveryState,
+    docs_assist_peer_count: usize,
 ) -> String {
-    if gossip_peer_count > 0 || assist_peer_count == 0 {
-        return base.to_string();
+    match delivery_state {
+        DeliveryState::Live | DeliveryState::Offline => base.to_string(),
+        DeliveryState::DurableRecovering => format!(
+            "docs-assisted recovery is in progress via {docs_assist_peer_count} peer(s); live topic delivery is unavailable"
+        ),
+        DeliveryState::DurableReady => format!(
+            "docs-assisted durable sync is available via {docs_assist_peer_count} peer(s); live topic delivery is unavailable"
+        ),
     }
-    format!("relay-assisted sync available via {assist_peer_count} peer(s)")
 }
 
 impl Drop for AppService {

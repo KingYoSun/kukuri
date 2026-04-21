@@ -316,10 +316,15 @@ export function useDesktopShellViewModels({
       [
         ...new Set([
           ...syncStatus.topic_diagnostics.flatMap((diagnostic) => diagnostic.connected_peers),
-          ...syncStatus.discovery.assist_peer_ids,
+          ...syncStatus.discovery.docs_assist_peer_ids,
+          ...syncStatus.discovery.blob_assist_peer_ids,
         ]),
       ],
-    [syncStatus.discovery.assist_peer_ids, syncStatus.topic_diagnostics]
+    [
+      syncStatus.discovery.blob_assist_peer_ids,
+      syncStatus.discovery.docs_assist_peer_ids,
+      syncStatus.topic_diagnostics,
+    ]
   );
 
   const buildPostCardView = useCallback(
@@ -678,7 +683,7 @@ export function useDesktopShellViewModels({
           statusDetail:
             diagnostic?.status_detail ?? t('settings:connectivity.summaryDetailFallback'),
           connectedPeersLabel: formatListLabel(diagnostic?.connected_peers ?? []),
-          relayAssistedPeersLabel: formatListLabel(diagnostic?.assist_peer_ids ?? []),
+          relayAssistedPeersLabel: formatListLabel(diagnostic?.docs_assist_peer_ids ?? []),
           configuredPeersLabel: formatListLabel(diagnostic?.configured_peer_ids ?? []),
           missingPeersLabel: formatListLabel(diagnostic?.missing_peer_ids ?? []),
           lastError: diagnostic?.last_error ?? null,
@@ -760,8 +765,13 @@ export function useDesktopShellViewModels({
           monospace: true,
         },
         {
-          label: t('settings:discovery.diagnostics.relayAssistedPeers'),
-          value: formatListLabel(syncStatus.discovery.assist_peer_ids),
+          label: 'Docs Assist Peers',
+          value: formatListLabel(syncStatus.discovery.docs_assist_peer_ids),
+          monospace: true,
+        },
+        {
+          label: 'Blob Assist Peers',
+          value: formatListLabel(syncStatus.discovery.blob_assist_peer_ids),
           monospace: true,
         },
         {
@@ -800,11 +810,12 @@ export function useDesktopShellViewModels({
       discoveryEditorDirty,
       discoveryError,
       discoverySeedInput,
-      syncStatus.discovery.assist_peer_ids,
+      syncStatus.discovery.blob_assist_peer_ids,
       syncStatus.discovery.bootstrap_seed_peer_ids,
       syncStatus.discovery.configured_seed_peer_ids,
       syncStatus.discovery.connect_mode,
       syncStatus.discovery.connected_peer_ids,
+      syncStatus.discovery.docs_assist_peer_ids,
       syncStatus.discovery.last_discovery_error,
       syncStatus.discovery.local_endpoint_id,
       syncStatus.discovery.manual_ticket_peer_ids,

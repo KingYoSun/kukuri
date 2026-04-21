@@ -431,7 +431,7 @@ async fn reply_posts_include_parent_preview_in_timeline_views() {
 }
 
 #[tokio::test]
-async fn reply_preview_is_omitted_when_parent_projection_is_unavailable() {
+async fn reply_preview_is_restored_from_docs_when_parent_projection_is_unavailable() {
     let (app, store, _, _) = local_app_with_memory_services();
     let topic = "kukuri:topic:reply-preview-fallback";
 
@@ -459,9 +459,12 @@ async fn reply_preview_is_omitted_when_parent_projection_is_unavailable() {
         .iter()
         .find(|post| post.object_id == reply_id)
         .expect("reply post in timeline");
+    let preview = reply.reply_preview.as_ref().expect("reply preview");
 
     assert_eq!(reply.reply_to.as_deref(), Some(root_id.as_str()));
-    assert!(reply.reply_preview.is_none());
+    assert_eq!(preview.object_id, root_id);
+    assert_eq!(preview.topic, topic);
+    assert_eq!(preview.content, "root body");
 }
 
 #[tokio::test]

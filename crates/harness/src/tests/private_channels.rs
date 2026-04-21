@@ -111,10 +111,6 @@ async fn friend_only_rotate_requires_fresh_grant() {
         .expect("status c")
         .local_author_pubkey;
 
-    wait_for_connected_peer_count(&runtime_a, 1).await;
-    wait_for_connected_peer_count(&runtime_b, 1).await;
-    wait_for_connected_peer_count(&runtime_c, 1).await;
-
     runtime_a
         .follow_author(AuthorRequest {
             pubkey: b_pubkey.clone(),
@@ -170,13 +166,13 @@ async fn friend_only_rotate_requires_fresh_grant() {
         .await
         .expect("subscribe c");
     let topic_timeout = social_graph_propagation_timeout();
-    wait_for_topic_peer_count(&runtime_a, topic, 1, topic_timeout)
+    wait_for_topic_delivery(&runtime_a, topic, 1, topic_timeout)
         .await
         .expect("desktop a did not observe public topic connectivity");
-    wait_for_topic_peer_count(&runtime_b, topic, 1, topic_timeout)
+    wait_for_topic_delivery(&runtime_b, topic, 1, topic_timeout)
         .await
         .expect("desktop b did not observe public topic connectivity");
-    wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
+    wait_for_topic_delivery(&runtime_c, topic, 1, topic_timeout)
         .await
         .expect("desktop c did not observe public topic connectivity");
     warm_author_social_view(&runtime_a, b_pubkey.as_str()).await;
@@ -323,10 +319,10 @@ async fn friend_only_rotate_requires_fresh_grant() {
         })
         .await
         .expect("resubscribe c before fresh grant");
-    wait_for_topic_peer_count(&runtime_a, topic, 1, topic_timeout)
+    wait_for_topic_delivery(&runtime_a, topic, 1, topic_timeout)
         .await
         .expect("desktop a did not observe public topic connectivity after rotate");
-    wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
+    wait_for_topic_delivery(&runtime_c, topic, 1, topic_timeout)
         .await
         .expect("desktop c did not observe public topic connectivity after rotate");
     runtime_a
@@ -523,10 +519,31 @@ async fn friend_plus_share_freeze_rotate_connectivity() {
         .local_author_pubkey;
     let topic = "kukuri:topic:harness-friend-plus";
 
-    wait_for_connected_peer_count(&runtime_a, 1).await;
-    wait_for_connected_peer_count(&runtime_b, 1).await;
-    wait_for_connected_peer_count(&runtime_c, 1).await;
-    wait_for_connected_peer_count(&runtime_d, 1).await;
+    let public_scope = TimelineScope::Public;
+    for runtime in [&runtime_a, &runtime_b, &runtime_c, &runtime_d] {
+        let _ = runtime
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: public_scope.clone(),
+                cursor: None,
+                limit: Some(20),
+            })
+            .await
+            .expect("subscribe runtime");
+    }
+    let topic_timeout = social_graph_propagation_timeout();
+    wait_for_topic_peer_count(&runtime_a, topic, 1, topic_timeout)
+        .await
+        .expect("desktop a did not observe public topic connectivity");
+    wait_for_topic_peer_count(&runtime_b, topic, 1, topic_timeout)
+        .await
+        .expect("desktop b did not observe public topic connectivity");
+    wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
+        .await
+        .expect("desktop c did not observe public topic connectivity");
+    wait_for_topic_peer_count(&runtime_d, topic, 1, topic_timeout)
+        .await
+        .expect("desktop d did not observe public topic connectivity");
 
     runtime_a
         .follow_author(AuthorRequest {
@@ -568,32 +585,6 @@ async fn friend_plus_share_freeze_rotate_connectivity() {
     wait_for_mutual_author_view(&runtime_b, a_pubkey.as_str(), topic).await;
     wait_for_mutual_author_view(&runtime_c, b_pubkey.as_str(), topic).await;
     wait_for_mutual_author_view(&runtime_d, b_pubkey.as_str(), topic).await;
-
-    let public_scope = TimelineScope::Public;
-    for runtime in [&runtime_a, &runtime_b, &runtime_c, &runtime_d] {
-        let _ = runtime
-            .list_timeline(ListTimelineRequest {
-                topic: topic.to_string(),
-                scope: public_scope.clone(),
-                cursor: None,
-                limit: Some(20),
-            })
-            .await
-            .expect("subscribe runtime");
-    }
-    let topic_timeout = social_graph_propagation_timeout();
-    wait_for_topic_peer_count(&runtime_a, topic, 1, topic_timeout)
-        .await
-        .expect("desktop a did not observe public topic connectivity");
-    wait_for_topic_peer_count(&runtime_b, topic, 1, topic_timeout)
-        .await
-        .expect("desktop b did not observe public topic connectivity");
-    wait_for_topic_peer_count(&runtime_c, topic, 1, topic_timeout)
-        .await
-        .expect("desktop c did not observe public topic connectivity");
-    wait_for_topic_peer_count(&runtime_d, topic, 1, topic_timeout)
-        .await
-        .expect("desktop d did not observe public topic connectivity");
 
     let channel = runtime_a
         .create_private_channel(CreatePrivateChannelRequest {

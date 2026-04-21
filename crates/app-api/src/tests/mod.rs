@@ -72,17 +72,18 @@ fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
     let topic_status = status
         .topic_diagnostics
         .iter()
-        .find(|entry| entry.topic == topic)
-        .map(|entry| {
-            format!(
-                "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, status_detail={}",
-                entry.peer_count,
-                entry.connected_peers,
-                entry.assist_peer_ids,
-                entry.configured_peer_ids,
-                entry.status_detail
-            )
-        })
+            .find(|entry| entry.topic == topic)
+            .map(|entry| {
+                format!(
+                    "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}, delivery_state={:?}, status_detail={}",
+                    entry.peer_count,
+                    entry.connected_peers,
+                    entry.docs_assist_peer_ids,
+                    entry.configured_peer_ids,
+                    entry.delivery_state,
+                    entry.status_detail
+                )
+            })
         .unwrap_or_else(|| "topic_status=missing".to_string());
     format!(
         "connected={}, peer_count={}, status_detail={}, last_error={:?}, discovery_connected_peers={:?}, {}",
@@ -95,50 +96,16 @@ fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
     )
 }
 
-async fn wait_for_connected_peer_count(app: &AppService, expected: usize) {
-    match timeout(social_graph_propagation_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = app.get_sync_status().await.expect("sync status");
-            if status.connected && status.peer_count >= expected {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let status = app.get_sync_status().await.expect("sync status");
-            panic!(
-                "peer connection timeout; connected={}, peer_count={}, status_detail={}, last_error={:?}, discovery_connected_peers={:?}",
-                status.connected,
-                status.peer_count,
-                status.status_detail,
-                status.last_error,
-                status.discovery.connected_peer_ids
-            );
-        }
-    }
-}
-
 async fn wait_for_topic_peer_count(app: &AppService, topic: &str, expected: usize) {
     match timeout(social_graph_propagation_timeout(), async {
         let mut stable_ready_polls = 0usize;
         loop {
             let status = app.get_sync_status().await.expect("sync status");
             let ready = status.topic_diagnostics.iter().any(|entry| {
-                let relay_assisted_ready = entry.assist_peer_ids.len() >= expected;
                 entry.topic == topic
                     && entry.joined
                     && entry.peer_count >= expected
-                    && (entry.connected_peers.len() >= expected || relay_assisted_ready)
+                    && entry.connected_peers.len() >= expected
             });
             if ready {
                 stable_ready_polls += 1;
@@ -161,6 +128,47 @@ async fn wait_for_topic_peer_count(app: &AppService, topic: &str, expected: usiz
                 .map(|status| format_sync_snapshot(&status, topic))
                 .unwrap_or_else(|_| "failed to read sync status".to_string());
             panic!("topic connected-peer timeout for {topic}; {snapshot}");
+        }
+    }
+}
+
+async fn wait_for_topic_delivery(app: &AppService, topic: &str, expected: usize) {
+    match timeout(social_graph_propagation_timeout(), async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = app.get_sync_status().await.expect("sync status");
+            let ready = status.topic_diagnostics.iter().any(|entry| {
+                let live_ready = entry.peer_count >= expected
+                    && entry.connected_peers.len() >= expected.min(1)
+                    && (entry.joined || matches!(entry.delivery_state, DeliveryState::Live));
+                let durable_ready = !entry.docs_assist_peer_ids.is_empty()
+                    && matches!(
+                        entry.delivery_state,
+                        DeliveryState::DurableRecovering | DeliveryState::DurableReady
+                    );
+                entry.topic == topic && (live_ready || durable_ready)
+            });
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return;
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(()) => {}
+        Err(_) => {
+            let snapshot = app
+                .get_sync_status()
+                .await
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|_| "failed to read sync status".to_string());
+            panic!("topic delivery timeout for {topic}; {snapshot}");
         }
     }
 }

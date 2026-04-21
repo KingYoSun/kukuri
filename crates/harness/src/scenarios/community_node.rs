@@ -237,20 +237,42 @@ pub(crate) async fn run_community_node_connectivity(
         push_named_step(&mut steps, "accept_consents", started_at);
 
         let started_at = Instant::now();
-        let refreshed_a = runtime_a
-            .get_community_node_statuses()
-            .await
-            .context("failed to load community-node status for desktop a after consent")?
-            .into_iter()
-            .next()
-            .context("missing community-node status for desktop a after consent")?;
-        let refreshed_b = runtime_b
-            .get_community_node_statuses()
-            .await
-            .context("failed to load community-node status for desktop b after consent")?
-            .into_iter()
-            .next()
-            .context("missing community-node status for desktop b after consent")?;
+        let (refreshed_a, refreshed_b, sync_a, sync_b) = timeout(step_timeout, async {
+            loop {
+                runtime_a
+                    .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                        base_url: stack.base_url.clone(),
+                    })
+                    .await?;
+                runtime_b
+                    .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                        base_url: stack.base_url.clone(),
+                    })
+                    .await?;
+                let refreshed_a = runtime_a
+                    .get_community_node_statuses()
+                    .await?
+                    .into_iter()
+                    .next()
+                    .context("missing community-node status for desktop a after consent")?;
+                let refreshed_b = runtime_b
+                    .get_community_node_statuses()
+                    .await?
+                    .into_iter()
+                    .next()
+                    .context("missing community-node status for desktop b after consent")?;
+                let sync_a = runtime_a.get_sync_status().await?;
+                let sync_b = runtime_b.get_sync_status().await?;
+                if !sync_a.discovery.bootstrap_seed_peer_ids.is_empty()
+                    && !sync_b.discovery.bootstrap_seed_peer_ids.is_empty()
+                {
+                    return Ok::<_, anyhow::Error>((refreshed_a, refreshed_b, sync_a, sync_b));
+                }
+                sleep(Duration::from_millis(250)).await;
+            }
+        })
+        .await
+        .context("community-node bootstrap seed refresh timeout after consent")??;
         assert!(refreshed_a.auth_state.authenticated);
         assert!(refreshed_b.auth_state.authenticated);
         assert!(!refreshed_a.restart_required);
@@ -271,14 +293,6 @@ pub(crate) async fn run_community_node_connectivity(
                 .connectivity_urls,
             vec![stack.iroh_relay_url.clone()]
         );
-        let sync_a = runtime_a
-            .get_sync_status()
-            .await
-            .context("failed to load sync status for desktop a after consent")?;
-        let sync_b = runtime_b
-            .get_sync_status()
-            .await
-            .context("failed to load sync status for desktop b after consent")?;
         match identity_mode {
             CommunityNodeIdentityMode::DistinctUsers => {
                 assert_ne!(sync_a.local_author_pubkey, sync_b.local_author_pubkey);
@@ -293,30 +307,9 @@ pub(crate) async fn run_community_node_connectivity(
 
         let topic = scenario.fixtures.topic.as_str();
         let started_at = Instant::now();
-        let _ = runtime_a
-            .list_timeline(ListTimelineRequest {
-                topic: topic.to_string(),
-                scope: TimelineScope::Public,
-                cursor: None,
-                limit: Some(20),
-            })
+        refresh_public_pair(&runtime_a, &runtime_b, topic, step_timeout)
             .await
-            .context("failed to subscribe desktop a to scenario topic")?;
-        let _ = runtime_b
-            .list_timeline(ListTimelineRequest {
-                topic: topic.to_string(),
-                scope: TimelineScope::Public,
-                cursor: None,
-                limit: Some(20),
-            })
-            .await
-            .context("failed to subscribe desktop b to scenario topic")?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
-            .await
-            .context("desktop a did not observe initial topic peer connectivity")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
-            .await
-            .context("desktop b did not observe initial community-node topic peer connectivity")?;
+            .context("desktop pair did not warm initial community-node topic delivery")?;
         push_named_step(&mut steps, "community_node_connectivity", started_at);
 
         if identity_mode == CommunityNodeIdentityMode::DistinctUsers {
@@ -432,14 +425,7 @@ pub(crate) async fn run_community_node_connectivity(
         }
 
         let started_at = Instant::now();
-        wait_for_direct_public_pair_with_refresh(
-            &runtime_a,
-            &runtime_b,
-            topic,
-            step_timeout,
-            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
-        )
-        .await?;
+        refresh_public_pair(&runtime_a, &runtime_b, topic, step_timeout).await?;
         let post_id = replicate_public_post_with_retry(
             &runtime_a,
             &runtime_b,
@@ -959,20 +945,12 @@ pub(crate) async fn run_community_node_connectivity(
         refresh_public_pair(&runtime_a, &runtime_b, topic, reconnect_timeout)
             .await
             .context("failed to refresh public topic after desktop b restart")?;
-        wait_for_direct_topic_peer_count_without_pending_join(
-            &runtime_b,
-            topic,
-            1,
-            reconnect_timeout,
-        )
-        .await
-        .context("desktop b did not clear reconnect topic-join pending state")?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, reconnect_timeout)
+        wait_for_topic_delivery(&runtime_a, topic, 1, reconnect_timeout)
             .await
-            .context("desktop a did not restore topic peer connectivity after desktop b restart")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, reconnect_timeout)
+            .context("desktop a did not restore topic delivery after desktop b restart")?;
+        wait_for_topic_delivery(&runtime_b, topic, 1, reconnect_timeout)
             .await
-            .context("desktop b did not restore topic peer connectivity after restart")?;
+            .context("desktop b did not restore topic delivery after restart")?;
         let _reconnect_probe_post = replicate_public_post_with_retry(
             &runtime_b,
             &runtime_a,
@@ -987,13 +965,13 @@ pub(crate) async fn run_community_node_connectivity(
             },
         )
         .await?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, reconnect_timeout)
+        wait_for_topic_delivery(&runtime_a, topic, 1, reconnect_timeout)
             .await
-            .context("desktop a lost topic peer connectivity after reconnect probe")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, reconnect_timeout)
+            .context("desktop a lost topic delivery after reconnect probe")?;
+        wait_for_topic_delivery(&runtime_b, topic, 1, reconnect_timeout)
             .await
-            .context("desktop b lost topic peer connectivity after reconnect probe")?;
-        let _reconnect_post = replicate_public_post_with_retry(
+            .context("desktop b lost topic delivery after reconnect probe")?;
+        let reconnect_post = replicate_public_post_with_retry(
             &runtime_a,
             &runtime_b,
             topic,
@@ -1007,6 +985,31 @@ pub(crate) async fn run_community_node_connectivity(
             },
         )
         .await?;
+        runtime_b
+            .toggle_reaction(ToggleReactionRequest {
+                target_topic_id: topic.to_string(),
+                target_object_id: reconnect_post.clone(),
+                reaction_key: ReactionKeyRequest::Emoji {
+                    emoji: "⟳".to_string(),
+                },
+                channel_ref: None,
+            })
+            .await
+            .context("failed to toggle reconnect reaction on desktop b")?;
+        wait_for_public_reaction_summary_with_refresh(
+            PublicReactionSummaryWait {
+                runtime_a: &runtime_a,
+                runtime_b: &runtime_b,
+                topic,
+                object_id: reconnect_post.as_str(),
+                normalized_reaction_key: "emoji:⟳",
+                expected_count: 1,
+            },
+            reconnect_timeout,
+            identity_mode == CommunityNodeIdentityMode::SharedIdentity,
+        )
+        .await
+        .context("desktop a did not receive reconnect reaction summary")?;
         let metrics_snapshot = if scenario.artifacts.metrics_snapshot {
             Some(
                 runtime_b

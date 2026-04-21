@@ -323,7 +323,7 @@ function cloneSyncStatus(syncStatus: SyncStatus): SyncStatus {
     topic_diagnostics: syncStatus.topic_diagnostics.map((diagnostic) => ({
       ...diagnostic,
       connected_peers: [...diagnostic.connected_peers],
-      assist_peer_ids: [...diagnostic.assist_peer_ids],
+      docs_assist_peer_ids: [...diagnostic.docs_assist_peer_ids],
       configured_peer_ids: [...diagnostic.configured_peer_ids],
       missing_peer_ids: [...diagnostic.missing_peer_ids],
     })),
@@ -333,7 +333,8 @@ function cloneSyncStatus(syncStatus: SyncStatus): SyncStatus {
       bootstrap_seed_peer_ids: [...syncStatus.discovery.bootstrap_seed_peer_ids],
       manual_ticket_peer_ids: [...syncStatus.discovery.manual_ticket_peer_ids],
       connected_peer_ids: [...syncStatus.discovery.connected_peer_ids],
-      assist_peer_ids: [...syncStatus.discovery.assist_peer_ids],
+      docs_assist_peer_ids: [...syncStatus.discovery.docs_assist_peer_ids],
+      blob_assist_peer_ids: [...syncStatus.discovery.blob_assist_peer_ids],
     },
   };
 }
@@ -521,6 +522,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
   ];
   const syncStatus: SyncStatus = {
     connected: true,
+    delivery_state: 'Live',
     last_sync_ts: 1,
     peer_count: effectivePeerIds.length,
     pending_events: 0,
@@ -531,12 +533,14 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     topic_diagnostics: starterTopics.map((topic) => ({
       topic,
       joined: true,
+      delivery_state: 'Live',
       peer_count: effectivePeerIds.length,
       connected_peers: ['peer-a'],
-      assist_peer_ids: assistPeerIds,
+      docs_assist_peer_ids: assistPeerIds,
       configured_peer_ids: ['peer-a'],
       missing_peer_ids: [],
       last_received_at: topic === 'kukuri:topic:demo' ? 1 : null,
+      last_docs_activity_at: topic === 'kukuri:topic:demo' ? 1 : null,
       status_detail: 'Connected to all configured peers for this topic',
       last_error: topic === 'kukuri:topic:demo' ? options?.topicLastError ?? null : null,
     })),
@@ -549,7 +553,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       bootstrap_seed_peer_ids: [],
       manual_ticket_peer_ids: [],
       connected_peer_ids: ['peer-a'],
-      assist_peer_ids: assistPeerIds,
+      docs_assist_peer_ids: assistPeerIds,
+      blob_assist_peer_ids: assistPeerIds,
       local_endpoint_id: 'local-endpoint-a',
       last_discovery_error: null,
     },
@@ -736,12 +741,14 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         syncStatus.topic_diagnostics.push({
           topic,
           joined: true,
+          delivery_state: 'Live',
           peer_count: 1,
           connected_peers: ['peer-a'],
-          assist_peer_ids: assistPeerIds,
+          docs_assist_peer_ids: assistPeerIds,
           configured_peer_ids: ['peer-a'],
           missing_peer_ids: [],
           last_received_at: sequence,
+          last_docs_activity_at: sequence,
           status_detail: 'Connected to all configured peers for this topic',
           last_error: null,
         });
@@ -970,15 +977,17 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
         syncStatus.topic_diagnostics.push({
           topic,
           joined: false,
-          peer_count: assistPeerIds.length,
+          delivery_state: assistPeerIds.length > 0 ? 'DurableRecovering' : 'Offline',
+          peer_count: 0,
           connected_peers: [],
-          assist_peer_ids: assistPeerIds,
+          docs_assist_peer_ids: assistPeerIds,
           configured_peer_ids: [],
           missing_peer_ids: [],
           last_received_at: null,
+          last_docs_activity_at: null,
           status_detail:
             assistPeerIds.length > 0
-              ? `relay-assisted sync available via ${assistPeerIds.length} peer(s)`
+              ? `docs-assisted recovery is in progress via ${assistPeerIds.length} peer(s); live topic delivery is unavailable`
               : 'No peers configured for this topic',
           last_error: null,
         });

@@ -79,10 +79,10 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("failed to subscribe desktop b to public topic")?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
+        wait_for_topic_delivery(&runtime_a, topic, 1, step_timeout)
             .await
             .context("desktop a did not observe public topic connectivity")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
+        wait_for_topic_delivery(&runtime_b, topic, 1, step_timeout)
             .await
             .context("desktop b did not observe public topic connectivity")?;
         push_named_step(&mut steps, "connect", started_at);
@@ -284,10 +284,10 @@ pub(crate) async fn run_pairwise_direct_message_connectivity(
             })
             .await
             .context("failed to refresh desktop b public topic after restart")?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
+        wait_for_topic_delivery(&runtime_a, topic, 1, step_timeout)
             .await
             .context("desktop a did not reconnect to public topic after restart")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
+        wait_for_topic_delivery(&runtime_b, topic, 1, step_timeout)
             .await
             .context("desktop b did not reconnect to public topic after restart")?;
         wait_for_author_social_view(&runtime_a, b_pubkey.as_str(), step_timeout)

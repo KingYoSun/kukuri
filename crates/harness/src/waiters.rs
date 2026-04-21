@@ -7,11 +7,12 @@ pub(crate) fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
         .find(|entry| entry.topic == topic)
         .map(|entry| {
             format!(
-                "topic_peers={}, connected_peers={:?}, assist_peer_ids={:?}, configured_peer_ids={:?}, status_detail={}",
+                "topic_peers={}, connected_peers={:?}, docs_assist_peer_ids={:?}, configured_peer_ids={:?}, delivery_state={:?}, status_detail={}",
                 entry.peer_count,
                 entry.connected_peers,
-                entry.assist_peer_ids,
+                entry.docs_assist_peer_ids,
                 entry.configured_peer_ids,
+                entry.delivery_state,
                 entry.status_detail
             )
         })
@@ -169,11 +170,10 @@ pub(crate) async fn wait_for_topic_peer_count(
         loop {
             let status = runtime.get_sync_status().await?;
             let ready = status.topic_diagnostics.iter().any(|entry| {
-                let relay_assisted_ready = entry.assist_peer_ids.len() >= expected.min(1);
                 entry.topic == topic
                     && entry.joined
                     && entry.peer_count >= expected
-                    && (entry.connected_peers.len() >= expected.min(1) || relay_assisted_ready)
+                    && entry.connected_peers.len() >= expected.min(1)
             });
             if ready {
                 stable_ready_polls += 1;
@@ -201,6 +201,44 @@ pub(crate) async fn wait_for_topic_peer_count(
     }
 }
 
+pub(crate) async fn wait_for_topic_delivery(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    match timeout(step_timeout, async {
+        let mut stable_ready_polls = 0usize;
+        loop {
+            let status = runtime.get_sync_status().await?;
+            let ready = topic_has_direct_peer(&status, topic, expected)
+                || topic_has_durable_delivery(&status, topic);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read sync status".to_string());
+            anyhow::bail!("topic delivery assertion timeout; {snapshot}");
+        }
+    }
+}
+
 pub(crate) fn ci_timeout_floor(step_timeout: Duration, floor: Duration) -> Duration {
     if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
         step_timeout.max(floor)
@@ -210,16 +248,27 @@ pub(crate) fn ci_timeout_floor(step_timeout: Duration, floor: Duration) -> Durat
 }
 
 pub(crate) fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> bool {
-    status.connected
-        && status.peer_count >= expected
-        && status.topic_diagnostics.iter().any(|entry| {
-            entry.topic == topic
-                && entry.joined
-                && entry.peer_count >= expected
-                && entry.connected_peers.len() >= expected.min(1)
-        })
+    status.topic_diagnostics.iter().any(|entry| {
+        entry.topic == topic
+            && entry.peer_count >= expected
+            && entry.connected_peers.len() >= expected.min(1)
+            && (entry.joined || matches!(entry.delivery_state, kukuri_app_api::DeliveryState::Live))
+    })
 }
 
+pub(crate) fn topic_has_durable_delivery(status: &SyncStatus, topic: &str) -> bool {
+    status.topic_diagnostics.iter().any(|entry| {
+        entry.topic == topic
+            && !entry.docs_assist_peer_ids.is_empty()
+            && matches!(
+                entry.delivery_state,
+                kukuri_app_api::DeliveryState::DurableRecovering
+                    | kukuri_app_api::DeliveryState::DurableReady
+            )
+    })
+}
+
+#[cfg(test)]
 pub(crate) fn topic_has_direct_peer_without_pending_join(
     status: &SyncStatus,
     topic: &str,
@@ -331,43 +380,6 @@ pub(crate) async fn wait_for_direct_topic_peer_count(
                 .map(|status| format_sync_snapshot(&status, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
             anyhow::bail!("direct topic connected-peer assertion timeout; {snapshot}");
-        }
-    }
-}
-
-pub(crate) async fn wait_for_direct_topic_peer_count_without_pending_join(
-    runtime: &DesktopRuntime,
-    topic: &str,
-    expected: usize,
-    step_timeout: Duration,
-) -> Result<()> {
-    match timeout(step_timeout, async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = runtime.get_sync_status().await?;
-            let ready = topic_has_direct_peer_without_pending_join(&status, topic, expected);
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return Ok::<(), anyhow::Error>(());
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => {
-            let snapshot = runtime
-                .get_sync_status()
-                .await
-                .ok()
-                .map(|status| format_sync_snapshot(&status, topic))
-                .unwrap_or_else(|| "failed to read sync status".to_string());
-            anyhow::bail!("direct topic readiness timeout; {snapshot}");
         }
     }
 }
@@ -998,12 +1010,12 @@ pub(crate) async fn replicate_public_post_with_retry(
                 })
                 .await
                 .context("failed to resubscribe subscriber to public topic")?;
-            wait_for_topic_peer_count(publisher, topic, 1, attempt_timeout)
+            wait_for_topic_delivery(publisher, topic, 1, attempt_timeout)
                 .await
-                .context("publisher did not observe public topic connectivity")?;
-            wait_for_topic_peer_count(subscriber, topic, 1, attempt_timeout)
+                .context("publisher did not observe public topic delivery readiness")?;
+            wait_for_topic_delivery(subscriber, topic, 1, attempt_timeout)
                 .await
-                .context("subscriber did not observe public topic connectivity")?;
+                .context("subscriber did not observe public topic delivery readiness")?;
             let publisher_status = publisher
                 .get_sync_status()
                 .await
@@ -1185,54 +1197,9 @@ pub(crate) async fn refresh_public_pair(
             scope: TimelineScope::Public,
         })
         .await;
-    wait_for_topic_peer_count(runtime_a, topic, 1, step_timeout).await?;
-    wait_for_topic_peer_count(runtime_b, topic, 1, step_timeout).await?;
+    wait_for_topic_delivery(runtime_a, topic, 1, step_timeout).await?;
+    wait_for_topic_delivery(runtime_b, topic, 1, step_timeout).await?;
     Ok(())
-}
-
-pub(crate) async fn wait_for_direct_public_pair_with_refresh(
-    runtime_a: &DesktopRuntime,
-    runtime_b: &DesktopRuntime,
-    topic: &str,
-    step_timeout: Duration,
-    same_author_shared_identity: bool,
-) -> Result<()> {
-    let (attempts, attempt_timeout) =
-        public_replication_retry_schedule(step_timeout, same_author_shared_identity);
-    let mut last_error = None;
-
-    for attempt in 1..=attempts {
-        let attempt_result = async {
-            refresh_public_pair(runtime_a, runtime_b, topic, attempt_timeout)
-                .await
-                .context("failed to refresh public topic before waiting for direct connectivity")?;
-            wait_for_direct_topic_peer_count(runtime_a, topic, 1, attempt_timeout)
-                .await
-                .context("desktop a did not observe direct public topic connectivity")?;
-            wait_for_direct_topic_peer_count(runtime_b, topic, 1, attempt_timeout)
-                .await
-                .context("desktop b did not observe direct public topic connectivity")?;
-            Ok::<(), anyhow::Error>(())
-        }
-        .await;
-
-        match attempt_result {
-            Ok(()) => return Ok(()),
-            Err(error) if attempt < attempts => {
-                last_error = Some(format!("{error:#}"));
-                sleep(Duration::from_millis(250)).await;
-            }
-            Err(error) => {
-                last_error = Some(format!("{error:#}"));
-                break;
-            }
-        }
-    }
-
-    anyhow::bail!(
-        "public pair did not observe direct topic connectivity before public events: {}",
-        last_error.unwrap_or_else(|| "unknown error".to_string())
-    );
 }
 
 pub(crate) async fn refresh_direct_message_pair(

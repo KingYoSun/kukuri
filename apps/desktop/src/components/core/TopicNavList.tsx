@@ -66,9 +66,7 @@ export function TopicNavList({
                   status:
                     item.connectionLabel === 'joined'
                       ? t('common:states.joined')
-                      : item.connectionLabel === 'relay-assisted'
-                        ? t('common:states.relayAssisted')
-                        : item.connectionLabel === 'idle'
+                      : item.connectionLabel === 'idle'
                           ? t('common:states.idle')
                           : item.connectionLabel,
                   count: item.peerCount,

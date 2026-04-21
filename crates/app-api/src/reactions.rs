@@ -72,7 +72,8 @@ impl AppService {
                 &target.source_replica_id,
             ))
             .await?;
-        self.hint_transport
+        if let Err(error) = self
+            .hint_transport
             .publish_hint(
                 &channel_hint_topic_for(target_topic_id.as_str(), target_channel_id.as_ref()),
                 GossipHint::TopicObjectsChanged {
@@ -83,7 +84,15 @@ impl AppService {
                     }],
                 },
             )
-            .await?;
+            .await
+        {
+            warn!(
+                topic = %target_topic_id.as_str(),
+                object_id = %target_object_id.as_str(),
+                error = %error,
+                "failed to publish reaction hint; durable docs state was already persisted"
+            );
+        }
         *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
         self.reaction_state_for_target(&target.source_replica_id, &target_object_id)
             .await

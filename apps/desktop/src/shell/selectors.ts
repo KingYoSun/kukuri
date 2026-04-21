@@ -294,29 +294,41 @@ export function syncStatusBadgeTone(
   if (syncStatus.last_error) {
     return 'destructive';
   }
-  return syncStatus.connected ? 'accent' : 'warning';
+  return syncStatus.delivery_state === 'Live' ? 'accent' : 'warning';
 }
 
 export function syncStatusBadgeLabel(syncStatus: SyncStatus): string {
   if (syncStatus.last_error) {
     return translate('common:states.error');
   }
-  return syncStatus.connected
-    ? translate('common:states.connected')
-    : translate('common:states.waiting');
+  switch (syncStatus.delivery_state) {
+    case 'Live':
+      return translate('common:states.connected');
+    case 'DurableReady':
+      return 'durable';
+    case 'DurableRecovering':
+      return 'recovering';
+    case 'Offline':
+    default:
+      return translate('common:states.waiting');
+  }
 }
 
 export function topicConnectionLabel(diagnostic?: TopicSyncStatus): string {
   if (!diagnostic) {
     return 'idle';
   }
-  if (diagnostic.connected_peers.length > 0) {
-    return 'joined';
+  switch (diagnostic.delivery_state) {
+    case 'Live':
+      return 'joined';
+    case 'DurableReady':
+      return 'durable';
+    case 'DurableRecovering':
+      return 'recovering';
+    case 'Offline':
+    default:
+      return diagnostic.joined ? 'joined' : 'idle';
   }
-  if (diagnostic.assist_peer_ids.length > 0) {
-    return 'relay-assisted';
-  }
-  return diagnostic.joined ? 'joined' : 'idle';
 }
 
 export function communityNodeConnectivityUrlsLabel(
@@ -407,8 +419,11 @@ export function translateTopicConnectionText(label: string): string {
   if (label === 'joined') {
     return translate('common:states.joined');
   }
-  if (label === 'relay-assisted') {
-    return translate('common:states.relayAssisted');
+  if (label === 'durable') {
+    return 'durable';
+  }
+  if (label === 'recovering') {
+    return 'recovering';
   }
   if (label === 'idle') {
     return translate('common:states.idle');
