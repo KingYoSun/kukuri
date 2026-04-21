@@ -1082,6 +1082,42 @@ async fn replicate_private_post_with_retry(
                     .ok_or_else(|| anyhow::anyhow!("publisher lost private channel after write"))?
                     .current_epoch_id;
             if pre_write_epoch.as_deref() != Some(post_write_epoch.as_str()) {
+                let mut runtimes = Vec::with_capacity(subscribers.len() + 1);
+                runtimes.push(publisher);
+                runtimes.extend(subscribers.iter().copied());
+                refresh_runtime_peer_tickets(&runtimes)
+                    .await
+                    .context("failed to refresh peer tickets after private channel rotation")?;
+                for runtime in &runtimes {
+                    let _ = runtime
+                        .list_timeline(ListTimelineRequest {
+                            topic: topic.to_string(),
+                            scope: TimelineScope::Public,
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await
+                        .context("failed to refresh public topic after private channel rotation")?;
+                    let _ = runtime
+                        .list_timeline(ListTimelineRequest {
+                            topic: topic.to_string(),
+                            scope: scope.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await
+                        .context(
+                            "failed to refresh private topic after private channel rotation",
+                        )?;
+                    let _ = runtime
+                        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+                            topic: topic.to_string(),
+                        })
+                        .await
+                        .context(
+                            "failed to refresh joined private channels after private channel rotation",
+                        )?;
+                }
                 for subscriber in subscribers {
                     wait_for_joined_private_channel_epoch_result(
                         subscriber,
@@ -1160,6 +1196,38 @@ async fn replicate_private_post_with_retry(
         format_sync_snapshot(&publisher_status, topic),
         subscriber_details.join(" | "),
     );
+}
+
+async fn refresh_runtime_peer_tickets(runtimes: &[&DesktopRuntime]) -> Result<()> {
+    let mut tickets = Vec::with_capacity(runtimes.len());
+    for (index, runtime) in runtimes.iter().enumerate() {
+        let ticket = runtime
+            .local_peer_ticket()
+            .await
+            .with_context(|| format!("failed to load local peer ticket for runtime[{index}]"))?
+            .ok_or_else(|| {
+                anyhow::anyhow!("runtime[{index}] did not expose a local peer ticket")
+            })?;
+        tickets.push(ticket);
+    }
+    for (runtime_index, runtime) in runtimes.iter().enumerate() {
+        for (ticket_index, ticket) in tickets.iter().enumerate() {
+            if runtime_index == ticket_index {
+                continue;
+            }
+            runtime
+                .import_peer_ticket(ImportPeerTicketRequest {
+                    ticket: ticket.clone(),
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to import peer ticket from runtime[{ticket_index}] into runtime[{runtime_index}]"
+                    )
+                })?;
+        }
+    }
+    Ok(())
 }
 
 fn sync_status_with_topic(
