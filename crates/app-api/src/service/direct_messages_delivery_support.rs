@@ -1,16 +1,29 @@
 use super::*;
 
+pub(crate) struct DirectMessageHintServices<'a> {
+    pub(crate) projection_store: &'a dyn ProjectionStore,
+    pub(crate) blob_service: &'a dyn BlobService,
+    pub(crate) hint_transport: &'a dyn HintTransport,
+    pub(crate) keys: &'a KukuriKeys,
+    pub(crate) local_author_pubkey: &'a str,
+    pub(crate) peer_pubkey: &'a str,
+    pub(crate) topic: &'a TopicId,
+}
+
 impl AppService {
     pub(crate) async fn handle_direct_message_hint_with_services(
-        projection_store: &dyn ProjectionStore,
-        blob_service: &dyn BlobService,
-        hint_transport: &dyn HintTransport,
-        keys: &KukuriKeys,
-        local_author_pubkey: &str,
-        peer_pubkey: &str,
-        topic: &TopicId,
+        services: DirectMessageHintServices<'_>,
         hint: &GossipHint,
     ) -> Result<bool> {
+        let DirectMessageHintServices {
+            projection_store,
+            blob_service,
+            hint_transport,
+            keys,
+            local_author_pubkey,
+            peer_pubkey,
+            topic,
+        } = services;
         match hint {
             GossipHint::DirectMessageFrame {
                 dm_id,

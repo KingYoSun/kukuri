@@ -1,4 +1,5 @@
 use super::*;
+use super::direct_messages_delivery_support::DirectMessageHintServices;
 
 impl AppService {
     pub(crate) async fn direct_message_send_enabled(&self, peer_pubkey: &str) -> Result<bool> {
@@ -432,13 +433,15 @@ impl AppService {
                             );
                         }
                         match AppService::handle_direct_message_hint_with_services(
-                            projection_store.as_ref(),
-                            blob_service.as_ref(),
-                            task_hint_transport.as_ref(),
-                            keys.as_ref(),
-                            local_author_pubkey.as_str(),
-                            peer_for_task.as_str(),
-                            &topic_for_task,
+                            DirectMessageHintServices {
+                                projection_store: projection_store.as_ref(),
+                                blob_service: blob_service.as_ref(),
+                                hint_transport: task_hint_transport.as_ref(),
+                                keys: keys.as_ref(),
+                                local_author_pubkey: local_author_pubkey.as_str(),
+                                peer_pubkey: peer_for_task.as_str(),
+                                topic: &topic_for_task,
+                            },
                             &event.hint,
                         ).await {
                             Ok(true) => {
