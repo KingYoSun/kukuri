@@ -19,7 +19,9 @@ use iroh::address_lookup::{
     AddrFilter, AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem,
     MemoryLookup,
 };
-use iroh::endpoint::{Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig};
+use iroh::endpoint::{
+    Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig, presets,
+};
 use iroh::protocol::Router;
 #[cfg(test)]
 use iroh::tls::CaRootsConfig;
@@ -644,7 +646,7 @@ pub(crate) async fn bind_endpoint_with_options(
 ) -> Result<(Endpoint, Arc<MemoryLookup>, Option<JoinHandle<()>>)> {
     let discovery = Arc::new(MemoryLookup::new());
     let mut builder = build_endpoint_builder(
-        Endpoint::empty_builder().relay_mode(relay_config.relay_mode()?),
+        EndpointBuilder::new(presets::Minimal).relay_mode(relay_config.relay_mode()?),
         &discovery,
         Some(dht_options),
         relay_urls,
@@ -930,8 +932,8 @@ pub fn build_endpoint_builder(
         let mut dht_builder = DhtAddressLookup::builder()
             .addr_filter(AddrFilter::unfiltered())
             .no_publish();
-        if let Some(client) = dht_options.client.as_ref() {
-            dht_builder = dht_builder.client(client.clone());
+        if let Some(builder_override) = dht_options.resolved_dht_builder() {
+            dht_builder = dht_builder.dht_builder(builder_override);
         }
         builder = builder.address_lookup(dht_builder);
     }
@@ -983,6 +985,17 @@ mod tests {
         builder.build().expect("pkarr client")
     }
 
+    fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
+        let name = format!("_iroh.{}.", packet.public_key().to_z32());
+        let txt_records = packet.resource_records("_iroh").filter_map(|record| {
+            let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
+                return None;
+            };
+            String::try_from(txt.clone()).ok()
+        });
+        EndpointInfo::from_txt_lookup(name, txt_records).ok()
+    }
+
     async fn publish_endpoint_to_testnet(endpoint: &Endpoint, testnet: &Testnet) {
         let client = dht_test_client(testnet);
         let public_key =
@@ -1021,7 +1034,7 @@ mod tests {
                     .resolve_most_recent(&public_key)
                     .await
                     .as_ref()
-                    .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                    .and_then(endpoint_info_from_resolved_packet)
                     .is_some_and(|packet_info| {
                         packet_info.to_txt_strings() == expected_info.to_txt_strings()
                     })
@@ -1417,13 +1430,13 @@ mod tests {
         let config = TransportNetworkConfig::loopback();
         let transport_a = IrohGossipTransport::bind_with_discovery(
             config.clone(),
-            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+            DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
         )
         .await
         .expect("transport a");
         let transport_b = IrohGossipTransport::bind_with_discovery(
             config,
-            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+            DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
         )
         .await
         .expect("transport b");
@@ -1753,7 +1766,7 @@ mod tests {
         let testnet = Testnet::new(5).expect("testnet");
         let transport = IrohGossipTransport::bind_with_discovery(
             TransportNetworkConfig::loopback(),
-            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+            DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
         )
         .await
         .expect("transport");
@@ -1794,7 +1807,7 @@ mod tests {
         let testnet = Testnet::new(5).expect("testnet");
         let transport = IrohGossipTransport::bind_with_discovery(
             TransportNetworkConfig::loopback(),
-            DhtDiscoveryOptions::with_client(dht_test_client(&testnet)),
+            DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
         )
         .await
         .expect("transport");
@@ -1995,7 +2008,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn gossip_low_level_roundtrip_baseline() {
-        let endpoint_a = Endpoint::empty_builder()
+        let endpoint_a = EndpointBuilder::new(presets::Minimal)
             .relay_mode(RelayMode::Disabled)
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("bind addr a")
@@ -2007,7 +2020,7 @@ mod tests {
             .accept(GOSSIP_ALPN, gossip_a.clone())
             .spawn();
 
-        let endpoint_b = Endpoint::empty_builder()
+        let endpoint_b = EndpointBuilder::new(presets::Minimal)
             .relay_mode(RelayMode::Disabled)
             .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .expect("bind addr b")

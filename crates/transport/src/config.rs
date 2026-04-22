@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use iroh::{RelayMap, RelayMode, RelayUrl};
+use mainline::DhtBuilder;
 use pkarr::Client as PkarrClient;
 use serde::{Deserialize, Serialize};
 
@@ -99,7 +100,7 @@ pub struct DiscoverySnapshot {
 #[derive(Clone, Debug, Default)]
 pub struct DhtDiscoveryOptions {
     pub enabled: bool,
-    pub client: Option<PkarrClient>,
+    pub dht_builder: Option<DhtBuilder>,
 }
 
 impl DhtDiscoveryOptions {
@@ -110,28 +111,44 @@ impl DhtDiscoveryOptions {
     pub fn seeded_dht() -> Self {
         Self {
             enabled: true,
-            client: None,
+            dht_builder: None,
         }
     }
 
-    pub fn with_client(client: PkarrClient) -> Self {
+    pub fn with_bootstrap<T: ToSocketAddrs>(bootstrap: &[T]) -> Self {
+        let mut dht_builder = DhtBuilder::default();
+        dht_builder.bootstrap(bootstrap);
         Self {
             enabled: true,
-            client: Some(client),
+            dht_builder: Some(dht_builder),
         }
+    }
+
+    pub fn with_dht_builder(dht_builder: DhtBuilder) -> Self {
+        Self {
+            enabled: true,
+            dht_builder: Some(dht_builder),
+        }
+    }
+
+    pub(crate) fn resolved_dht_builder(&self) -> Option<DhtBuilder> {
+        if !self.enabled {
+            return None;
+        }
+        Some(self.dht_builder.clone().unwrap_or_default())
     }
 
     pub(crate) fn publish_client(&self) -> Result<Option<PkarrClient>> {
-        if !self.enabled {
+        let Some(dht_builder) = self.resolved_dht_builder() else {
             return Ok(None);
-        }
-        if let Some(client) = self.client.as_ref() {
-            return Ok(Some(client.clone()));
-        }
+        };
         let mut builder = PkarrClient::builder();
         builder.no_default_network();
         builder.cache_size(0);
-        builder.dht(|dht| dht);
+        builder.dht(|dht| {
+            *dht = dht_builder;
+            dht
+        });
         Ok(Some(builder.build().context(
             "failed to build pkarr client for endpoint publication",
         )?))

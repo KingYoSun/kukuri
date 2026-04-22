@@ -96,42 +96,6 @@ fn format_sync_snapshot(status: &SyncStatus, topic: &str) -> String {
     )
 }
 
-async fn wait_for_topic_peer_count(app: &AppService, topic: &str, expected: usize) {
-    match timeout(social_graph_propagation_timeout(), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status = app.get_sync_status().await.expect("sync status");
-            let ready = status.topic_diagnostics.iter().any(|entry| {
-                entry.topic == topic
-                    && entry.joined
-                    && entry.peer_count >= expected
-                    && entry.connected_peers.len() >= expected
-            });
-            if ready {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    {
-        Ok(()) => {}
-        Err(_) => {
-            let snapshot = app
-                .get_sync_status()
-                .await
-                .map(|status| format_sync_snapshot(&status, topic))
-                .unwrap_or_else(|_| "failed to read sync status".to_string());
-            panic!("topic connected-peer timeout for {topic}; {snapshot}");
-        }
-    }
-}
-
 async fn wait_for_topic_delivery(app: &AppService, topic: &str, expected: usize) {
     match timeout(social_graph_propagation_timeout(), async {
         let mut stable_ready_polls = 0usize;
@@ -691,7 +655,7 @@ impl TestIrohStack {
     async fn new_with_dht(root: &std::path::Path, testnet: &Testnet) -> Self {
         let stack = Self::new_with_options(
             root,
-            DhtDiscoveryOptions::with_client(dht_test_client(testnet)),
+            DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
             TransportRelayConfig::default(),
         )
         .await;
@@ -756,6 +720,17 @@ fn dht_test_client(testnet: &Testnet) -> PkarrClient {
     builder.build().expect("pkarr client")
 }
 
+fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
+    let name = format!("_iroh.{}.", packet.public_key().to_z32());
+    let txt_records = packet.resource_records("_iroh").filter_map(|record| {
+        let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
+            return None;
+        };
+        String::try_from(txt.clone()).ok()
+    });
+    EndpointInfo::from_txt_lookup(name, txt_records).ok()
+}
+
 fn build_endpoint_signed_packet_with_timestamp(
     endpoint_info: &EndpointInfo,
     secret_key: &iroh::SecretKey,
@@ -817,7 +792,7 @@ async fn publish_endpoint_to_testnet(endpoint: &iroh::Endpoint, testnet: &Testne
             .resolve_most_recent(&public_key)
             .await
             .as_ref()
-            .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+            .and_then(endpoint_info_from_resolved_packet)
             .is_none_or(|packet_info| {
                 packet_info.to_txt_strings() != expected_info.to_txt_strings()
             })
@@ -830,7 +805,7 @@ async fn publish_endpoint_to_testnet(endpoint: &iroh::Endpoint, testnet: &Testne
                 .resolve_most_recent(&public_key)
                 .await
                 .as_ref()
-                .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                .and_then(endpoint_info_from_resolved_packet)
                 .is_some_and(|packet_info| {
                     packet_info.to_txt_strings() == expected_info.to_txt_strings()
                 })

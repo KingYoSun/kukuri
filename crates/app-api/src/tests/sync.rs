@@ -1336,34 +1336,8 @@ async fn import_peer_ticket_restarts_existing_topic_subscription_and_resumes_del
         .await
         .expect("import a into b");
 
-    timeout(Duration::from_secs(20), async {
-        let mut stable_ready_polls = 0usize;
-        loop {
-            let status_a = app_a.get_sync_status().await.expect("status a");
-            let status_b = app_b.get_sync_status().await.expect("status b");
-            let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic
-                    && topic_status.joined
-                    && !topic_status.connected_peers.is_empty()
-            });
-            let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic
-                    && topic_status.joined
-                    && !topic_status.connected_peers.is_empty()
-            });
-            if ready_a && ready_b {
-                stable_ready_polls += 1;
-                if stable_ready_polls >= 3 {
-                    return;
-                }
-            } else {
-                stable_ready_polls = 0;
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .expect("subscription restart timeout");
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
 
     let object_id = app_a
         .create_post(topic, "hello after import", None)
