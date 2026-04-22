@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use futures_util::StreamExt;
 use iroh::address_lookup::MemoryLookup;
+use iroh::endpoint::{Builder as EndpointBuilder, presets};
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, RelayUrl, Watcher};
 use iroh_blobs::api::Store as BlobStore;
@@ -126,7 +127,7 @@ impl IrohDocsNode {
         let relay_config = relay_config.normalized();
         let relay_urls = Arc::new(StdRwLock::new(relay_config.parsed_relay_urls()?));
         let mut endpoint_builder = build_endpoint_builder(
-            Endpoint::empty_builder().relay_mode(relay_config.relay_mode()?),
+            EndpointBuilder::new(presets::Minimal).relay_mode(relay_config.relay_mode()?),
             &discovery,
             Some(&dht_options),
             Arc::clone(&relay_urls),

@@ -254,12 +254,25 @@ fn cn_test() -> Result<()> {
 
 fn e2e_smoke(name: &str) -> Result<()> {
     run_timed_step(format!("scenario {name}"), || {
-        let runtime = tokio::runtime::Runtime::new().context("failed to build tokio runtime")?;
-        let result = runtime.block_on(kukuri_harness::run_named_scenario(
-            &root_dir(),
-            name,
-            &artifacts_dir(name),
-        ))?;
+        let root = root_dir();
+        let artifacts = artifacts_dir(name);
+        let name = name.to_string();
+        let handle = std::thread::Builder::new()
+            .name(format!("scenario-{name}"))
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || -> Result<_> {
+                let runtime =
+                    tokio::runtime::Runtime::new().context("failed to build tokio runtime")?;
+                runtime.block_on(kukuri_harness::run_named_scenario(
+                    &root,
+                    name.as_str(),
+                    &artifacts,
+                ))
+            })
+            .context("failed to spawn scenario runner thread")?;
+        let result = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("scenario runner thread panicked"))??;
         let metrics = kukuri_harness::summarize_metrics(&result);
         for (key, value) in metrics {
             println!("{key}={value}");

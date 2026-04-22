@@ -183,6 +183,17 @@ mod tests {
         builder.build().expect("pkarr client")
     }
 
+    fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
+        let name = format!("_iroh.{}.", packet.public_key().to_z32());
+        let txt_records = packet.resource_records("_iroh").filter_map(|record| {
+            let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
+                return None;
+            };
+            String::try_from(txt.clone()).ok()
+        });
+        EndpointInfo::from_txt_lookup(name, txt_records).ok()
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn transport_relay_backed_dht_publish_replaces_newer_stale_packet() {
         let testnet = Testnet::new(5).expect("testnet");
@@ -197,7 +208,7 @@ mod tests {
         let client = dht_test_client(&testnet);
         let stale_info = EndpointInfo::from_parts(
             secret_key.public(),
-            iroh::address_lookup::EndpointData::new([TransportAddr::Relay(
+            iroh::address_lookup::EndpointData::new(vec![TransportAddr::Relay(
                 "https://stale-relay.invalid"
                     .parse::<RelayUrl>()
                     .expect("stale relay url"),
@@ -223,7 +234,7 @@ mod tests {
                 std::net::Ipv4Addr::LOCALHOST,
                 0,
             )),
-            &DhtDiscoveryOptions::with_client(client.clone()),
+            &DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
             &relay_config,
             relay_urls,
             Some(secret_key.clone()),
@@ -236,7 +247,7 @@ mod tests {
         timeout(Duration::from_secs(6), async {
             loop {
                 if let Some(packet) = client.resolve_most_recent(&public_key).await
-                    && let Ok(info) = EndpointInfo::from_pkarr_signed_packet(&packet)
+                    && let Some(info) = endpoint_info_from_resolved_packet(&packet)
                     && info.relay_urls().any(|candidate| candidate == &relay_url)
                 {
                     return;

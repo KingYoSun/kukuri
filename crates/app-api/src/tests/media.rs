@@ -910,8 +910,8 @@ async fn image_reply_thread_syncs() {
         .list_timeline(topic, None, 20)
         .await
         .expect("subscribe b timeline");
-    wait_for_topic_peer_count(&app_a, topic, 1).await;
-    wait_for_topic_peer_count(&app_b, topic, 1).await;
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
 
     let root_id = app_a
         .create_post_with_attachments(

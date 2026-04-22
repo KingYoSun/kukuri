@@ -1420,6 +1420,17 @@ fn dht_test_client(testnet: &Testnet) -> PkarrClient {
     builder.build().expect("pkarr client")
 }
 
+fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
+    let name = format!("_iroh.{}.", packet.public_key().to_z32());
+    let txt_records = packet.resource_records("_iroh").filter_map(|record| {
+        let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
+            return None;
+        };
+        String::try_from(txt.clone()).ok()
+    });
+    EndpointInfo::from_txt_lookup(name, txt_records).ok()
+}
+
 fn build_endpoint_signed_packet_with_timestamp(
     endpoint_info: &EndpointInfo,
     secret_key: &iroh::SecretKey,
@@ -1492,7 +1503,7 @@ async fn publish_runtime_endpoint_to_testnet(runtime: &DesktopRuntime, testnet: 
                 .resolve_most_recent(&public_key)
                 .await
                 .as_ref()
-                .and_then(|packet| EndpointInfo::from_pkarr_signed_packet(packet).ok())
+                .and_then(endpoint_info_from_resolved_packet)
                 .is_some_and(|packet_info| {
                     packet_info.to_txt_strings() == expected_info.to_txt_strings()
                 })
@@ -1750,7 +1761,7 @@ async fn new_seeded_dht_runtime_with_config(
         TransportNetworkConfig::loopback(),
         IdentityStorageMode::FileOnly,
         discovery_config,
-        DhtDiscoveryOptions::with_client(dht_test_client(testnet)),
+        DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
         false,
     )
     .await
