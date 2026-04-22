@@ -1,14 +1,11 @@
 import {
   startTransition,
   useCallback,
-  useEffect,
-  useMemo,
   useRef,
   type MutableRefObject,
 } from 'react';
 
 import type {
-  AttachmentView,
   DesktopApi,
   DirectMessageMessageView,
   GameRoomView,
@@ -17,26 +14,21 @@ import type {
   PostView,
 } from '@/lib/api';
 
+import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
+import { useDraftMediaHelpers } from '@/shell/data/useDraftMediaHelpers';
+import { useQueuedLoadTopics } from '@/shell/data/useQueuedLoadTopics';
 import {
-  buildImageDraftItem,
-  buildVideoDraftItem,
-  createObjectUrlFromPayload,
-  logMediaDebug,
-  selectPrimaryImage,
-  selectPrimaryImageAttachment,
-  selectVideoManifest,
-  selectVideoManifestAttachment,
-  selectVideoPoster,
-  selectVideoPosterAttachment,
-} from '@/shell/media';
+  hasLoadedOlderAuthoritativePosts,
+  mergeRefreshedVisiblePosts,
+  mergeUniquePosts,
+  postIdentityKey,
+  uniquePostsByIdentity,
+} from '@/shell/data/timelineMerge';
+import { usePreviewableMediaAttachments } from '@/shell/data/usePreviewableMediaAttachments';
 import {
   activeTimelineStorageKey,
-  PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
-  REFRESH_INTERVAL_MS,
-  STATUS_REFRESH_INTERVAL_MS,
   timelineScopeStorageKey,
-  type DraftMediaItem,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
   useDesktopShellStoreApi,
@@ -45,7 +37,6 @@ import { THREAD_TIMELINE_LIMIT, VISIBLE_TIMELINE_LIMIT } from '@/shell/paginatio
 import {
   authorViewFromDirectMessageConversation,
   communityNodesToDraftNodes,
-  createGameEditorDraft,
   mergeCommunityNodeStatuses,
   mergeKnownAuthors,
   messageFromError,
@@ -69,31 +60,6 @@ const EMPTY_POSTS: PostView[] = [];
 const EMPTY_GAME_ROOMS: GameRoomView[] = [];
 const EMPTY_JOINED_CHANNELS: JoinedPrivateChannelView[] = [];
 const EMPTY_DIRECT_MESSAGE_TIMELINE: DirectMessageMessageView[] = [];
-type LoadTopicsArgs = readonly [string[], string, string | null];
-type LoadTopicsWaiter = {
-  resolve: () => void;
-  reject: (error: unknown) => void;
-};
-
-function postIdentityKey(post: Pick<PostView, 'object_id' | 'server_object_id'>): string {
-  return post.server_object_id ?? post.object_id;
-}
-
-function uniquePostsByIdentity(posts: PostView[]): PostView[] {
-  const seen = new Set<string>();
-  const nextPosts: PostView[] = [];
-
-  for (const post of posts) {
-    const key = postIdentityKey(post);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    nextPosts.push(post);
-  }
-
-  return nextPosts;
-}
 
 export function useDesktopShellData({
   api,
@@ -136,9 +102,6 @@ export function useDesktopShellData({
   const activeJoinedChannels = joinedChannelsByTopic[activeTopic] ?? EMPTY_JOINED_CHANNELS;
   const selectedPrivateChannelId = selectedChannelIdByTopic[activeTopic] ?? null;
   const selectedAuthorPubkey = state.selectedAuthorPubkey;
-  const loadTopicsInFlightRef = useRef(false);
-  const queuedLoadTopicsArgsRef = useRef<LoadTopicsArgs | null>(null);
-  const loadTopicsWaitersRef = useRef<LoadTopicsWaiter[]>([]);
   const visibleRefreshInFlightRef = useRef(false);
 
   const setTimelinesByKey = useDesktopShellFieldSetter('timelinesByKey');
@@ -210,187 +173,20 @@ export function useDesktopShellData({
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
   const setError = useDesktopShellFieldSetter('error');
 
-  const previewableMediaAttachments = useMemo(() => {
-    const attachments = new Map<string, AttachmentView>();
-    const tryAddAttachment = (attachment: AttachmentView | null) => {
-      if (!attachment) {
-        return;
-      }
-      const hash = attachment.hash.trim();
-      const mime = attachment.mime.trim();
-      if (!hash || !mime) {
-        logMediaDebug('warn', 'remote media metadata skipped', {
-          hash: attachment.hash || null,
-          mime: attachment.mime || null,
-          role: attachment.role,
-          status: attachment.status,
-        });
-        return;
-      }
-      attachments.set(hash, {
-        ...attachment,
-        hash,
-        mime,
-      });
-    };
-
-    for (const post of [
-      ...activeTimeline,
-      ...activePublicTimeline,
-      ...profileTimeline,
-      ...selectedAuthorTimeline,
-      ...thread,
-    ]) {
-      if (post.author_picture_asset) {
-        tryAddAttachment({
-          hash: post.author_picture_asset.hash,
-          mime: post.author_picture_asset.mime,
-          bytes: post.author_picture_asset.bytes,
-          role: post.author_picture_asset.role,
-          status: 'Available',
-        });
-      }
-      for (const attachment of [
-        selectPrimaryImage(post),
-        selectVideoPoster(post),
-        selectVideoManifest(post),
-      ]) {
-        tryAddAttachment(attachment);
-      }
-      for (const reaction of post.reaction_summary ?? []) {
-        if (!reaction.custom_asset) {
-          continue;
-        }
-        tryAddAttachment({
-          hash: reaction.custom_asset.blob_hash,
-          mime: reaction.custom_asset.mime,
-          bytes: reaction.custom_asset.bytes,
-          role: 'image_original',
-          status: 'Available',
-        });
-      }
-    }
-
-    for (const message of selectedDirectMessageTimeline) {
-      for (const attachment of [
-        selectPrimaryImageAttachment(message.attachments),
-        selectVideoPosterAttachment(message.attachments),
-        selectVideoManifestAttachment(message.attachments),
-      ]) {
-        tryAddAttachment(attachment);
-      }
-    }
-
-    for (const asset of [...ownedReactionAssets, ...bookmarkedReactionAssets]) {
-      tryAddAttachment({
-        hash: asset.blob_hash,
-        mime: asset.mime,
-        bytes: asset.bytes,
-        role: 'image_original',
-        status: 'Available',
-      });
-    }
-
-    for (const reaction of recentReactions) {
-      if (!reaction.custom_asset) {
-        continue;
-      }
-      tryAddAttachment({
-        hash: reaction.custom_asset.blob_hash,
-        mime: reaction.custom_asset.mime,
-        bytes: reaction.custom_asset.bytes,
-        role: 'image_original',
-        status: 'Available',
-      });
-    }
-
-    for (const pictureAsset of [
-      localProfile?.picture_asset ?? null,
-      ...Object.values(knownAuthorsByPubkey).map((author) => author.picture_asset ?? null),
-      ...notifications.map((notification) => notification.actor_picture_asset ?? null),
-    ]) {
-      tryAddAttachment(
-        pictureAsset
-          ? {
-              hash: pictureAsset.hash,
-              mime: pictureAsset.mime,
-              bytes: pictureAsset.bytes,
-              role: pictureAsset.role,
-              status: 'Available',
-            }
-          : null
-      );
-    }
-
-    return [...attachments.values()];
-  }, [
-    activePublicTimeline,
+  const previewableMediaAttachments = usePreviewableMediaAttachments({
     activeTimeline,
-    bookmarkedReactionAssets,
-    knownAuthorsByPubkey,
-    localProfile?.picture_asset,
-    notifications,
-    ownedReactionAssets,
+    activePublicTimeline,
     profileTimeline,
-    recentReactions,
-    selectedDirectMessageTimeline,
     selectedAuthorTimeline,
     thread,
-  ]);
-
-  const mergeUniquePosts = useCallback((current: PostView[], incoming: PostView[]) => {
-    const seen = new Set(current.map((post) => post.object_id));
-    return [...current, ...incoming.filter((post) => !seen.has(post.object_id))];
-  }, []);
-
-  const hasLoadedOlderAuthoritativePosts = useCallback(
-    (current: PostView[], incoming: PostView[]) =>
-      current.filter((post) => !post.local_state).length > incoming.length,
-    []
-  );
-
-  const mergeRefreshedVisiblePosts = useCallback(
-    (current: PostView[], incoming: PostView[], preserveOlderPages: boolean) => {
-      const authoritativeIds = new Set(incoming.map((post) => postIdentityKey(post)));
-      const localPosts = current.filter((post) => {
-        if (!post.local_state) {
-          return false;
-        }
-        const authoritativeId = postIdentityKey(post);
-        return !authoritativeIds.has(authoritativeId);
-      });
-      const nextPosts = [...localPosts];
-      const seenPostIds = new Set(nextPosts.map((post) => postIdentityKey(post)));
-
-      for (const post of incoming) {
-        const postId = postIdentityKey(post);
-        if (seenPostIds.has(postId)) {
-          continue;
-        }
-        nextPosts.push(post);
-        seenPostIds.add(postId);
-      }
-
-      if (!preserveOlderPages) {
-        return nextPosts;
-      }
-
-      for (const post of current) {
-        if (post.local_state) {
-          continue;
-        }
-        const authoritativeId = postIdentityKey(post);
-        if (authoritativeIds.has(authoritativeId) || seenPostIds.has(authoritativeId)) {
-          continue;
-        }
-        nextPosts.push(post);
-        seenPostIds.add(authoritativeId);
-      }
-
-      return nextPosts;
-    },
-    []
-  );
+    selectedDirectMessageTimeline,
+    ownedReactionAssets,
+    bookmarkedReactionAssets,
+    recentReactions,
+    localProfile,
+    knownAuthorsByPubkey,
+    notifications,
+  });
 
   const clearPendingTimeline = useCallback(
     (key: string) => {
@@ -459,8 +255,6 @@ export function useDesktopShellData({
     },
     [
       clearPendingTimeline,
-      hasLoadedOlderAuthoritativePosts,
-      mergeRefreshedVisiblePosts,
       setTimelineNextCursorByKey,
       setTimelinesByKey,
       storeApi,
@@ -605,9 +399,7 @@ export function useDesktopShellData({
     [
       api,
       clearPendingTimeline,
-      hasLoadedOlderAuthoritativePosts,
       loadTopicsRequestRef,
-      mergeRefreshedVisiblePosts,
       setError,
       setJoinedChannelsByTopic,
       setPendingTimelineCountsByKey,
@@ -664,7 +456,6 @@ export function useDesktopShellData({
     },
     [
       api,
-      mergeUniquePosts,
       setTimelineLoadingMoreByKey,
       setTimelineNextCursorByKey,
       setTimelinesByKey,
@@ -701,7 +492,6 @@ export function useDesktopShellData({
     },
     [
       api,
-      mergeUniquePosts,
       setThread,
       setThreadLoadingMoreById,
       setThreadNextCursorById,
@@ -1097,51 +887,7 @@ export function useDesktopShellData({
     ]
   );
 
-  const drainLoadTopicsQueue = useCallback(
-    async (initialArgs: LoadTopicsArgs) => {
-      let nextArgs: LoadTopicsArgs | null = initialArgs;
-      let lastError: unknown = null;
-
-      while (nextArgs) {
-        queuedLoadTopicsArgsRef.current = null;
-        try {
-          await runLoadTopics(...nextArgs);
-          lastError = null;
-        } catch (error) {
-          lastError = error;
-        }
-        nextArgs = queuedLoadTopicsArgsRef.current;
-      }
-
-      loadTopicsInFlightRef.current = false;
-      const waiters = loadTopicsWaitersRef.current;
-      loadTopicsWaitersRef.current = [];
-      for (const waiter of waiters) {
-        if (lastError) {
-          waiter.reject(lastError);
-          continue;
-        }
-        waiter.resolve();
-      }
-    },
-    [runLoadTopics]
-  );
-
-  const loadTopics = useCallback(
-    (currentTopics: string[], currentActiveTopic: string, currentThread: string | null) => {
-      const args: LoadTopicsArgs = [[...currentTopics], currentActiveTopic, currentThread];
-      return new Promise<void>((resolve, reject) => {
-        loadTopicsWaitersRef.current.push({ resolve, reject });
-        if (loadTopicsInFlightRef.current) {
-          queuedLoadTopicsArgsRef.current = args;
-          return;
-        }
-        loadTopicsInFlightRef.current = true;
-        void drainLoadTopicsQueue(args);
-      });
-    },
-    [drainLoadTopicsQueue]
-  );
+  const loadTopics = useQueuedLoadTopics(runLoadTopics);
 
   const refreshVisibleTimelineAfterPublish = useCallback(
     async (topic: string, currentThread: string | null) => {
@@ -1160,665 +906,70 @@ export function useDesktopShellData({
     [applyPendingTimeline, refreshVisibleShellData]
   );
 
-  useEffect(() => {
-    let disposed = false;
-
-    const refresh = async () => {
-      if (
-        disposed ||
-        visibleRefreshInFlightRef.current ||
-        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
-      ) {
-        return;
-      }
-      visibleRefreshInFlightRef.current = true;
-      try {
-        await refreshVisibleShellData(activeTopic, selectedThread, 'buffer');
-      } finally {
-        visibleRefreshInFlightRef.current = false;
-      }
-    };
-
-    void refresh();
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, REFRESH_INTERVAL_MS);
-    const handleFocus = () => {
-      void refresh();
-    };
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        void refresh();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      disposed = true;
-      visibleRefreshInFlightRef.current = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [activeTopic, refreshVisibleShellData, selectedThread]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    const refreshStatus = async () => {
-      if (
-        disposed ||
-        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
-      ) {
-        return;
-      }
-      try {
-        const status = await api.getNotificationStatus();
-        if (!disposed) {
-          setNotificationStatus(status);
-        }
-      } catch {
-        // best effort badge refresh
-      }
-    };
-
-    void refreshStatus();
-    const intervalId = window.setInterval(() => {
-      void refreshStatus();
-    }, STATUS_REFRESH_INTERVAL_MS);
-    return () => {
-      disposed = true;
-      window.clearInterval(intervalId);
-    };
-  }, [api, setNotificationStatus]);
-
-  useEffect(() => {
-    let disposed = false;
-    void (async () => {
-      try {
-        const profile = await api.getMyProfile();
-        if (disposed) {
-          return;
-        }
-        setLocalProfile(profile);
-        if (!storeApi.getState().profileDirty) {
-          setProfileDraft(profileInputFromProfile(profile));
-        }
-      } catch {
-        // best effort background bootstrap
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [api, setLocalProfile, setProfileDraft, storeApi]);
-
-  useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'live') {
-      return;
-    }
-    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
-  }, [activeTopic, loadTopics, selectedThread, shellChromeState.activePrimarySection, trackedTopics]);
-
-  useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'game') {
-      return;
-    }
-    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
-  }, [activeTopic, loadTopics, selectedThread, shellChromeState.activePrimarySection, trackedTopics]);
-
-  useEffect(() => {
-    if (
-      shellChromeState.activePrimarySection !== 'timeline' ||
-      shellChromeState.timelineView !== 'bookmarks'
-    ) {
-      return;
-    }
-    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
-  }, [
-    activeTopic,
-    loadTopics,
-    selectedThread,
-    shellChromeState.activePrimarySection,
-    shellChromeState.timelineView,
-    trackedTopics,
-  ]);
-
-  useEffect(() => {
-    if (!shellChromeState.settingsOpen) {
-      return;
-    }
-    void loadTopics(trackedTopics, activeTopic, selectedThread).catch(() => undefined);
-  }, [
-    activeTopic,
-    loadTopics,
-    selectedThread,
-    shellChromeState.activeSettingsSection,
-    shellChromeState.settingsOpen,
-    trackedTopics,
-  ]);
-
-  useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'profile') {
-      return;
-    }
-    let disposed = false;
-    void (async () => {
-      try {
-        const profile = await api.getMyProfile();
-        if (disposed) {
-          return;
-        }
-        setLocalProfile(profile);
-        if (!storeApi.getState().profileDirty) {
-          setProfileDraft(profileInputFromProfile(profile));
-        }
-        const [timeline, following, followed, muted] = await Promise.all([
-          api.listProfileTimeline(profile.pubkey, null, VISIBLE_TIMELINE_LIMIT),
-          api.listSocialConnections('following'),
-          api.listSocialConnections('followed'),
-          api.listSocialConnections('muted'),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setProfileTimeline(timeline.items);
-          setProfileTimelineNextCursor(timeline.next_cursor ?? null);
-          setProfilePanelState({ status: 'ready', error: null });
-          setProfileError(null);
-          setSocialConnections({
-            following,
-            followed,
-            muted,
-          });
-          setKnownAuthorsByPubkey((current) =>
-            mergeKnownAuthors(current, [...following, ...followed, ...muted])
-          );
-          setSocialConnectionsPanelState({ status: 'ready', error: null });
-        });
-      } catch (error) {
-        if (!disposed) {
-          const message = messageFromError(
-            error,
-            translate('common:errors.failedToLoadProfile')
-          );
-          setProfileError(message);
-          setProfilePanelState({ status: 'error', error: message });
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
+  useDesktopShellDataEffects({
     api,
-    setKnownAuthorsByPubkey,
+    translate,
+    storeApi,
+    trackedTopics,
+    activeTopic,
+    selectedThread,
+    activeGameRooms,
+    activeJoinedChannels,
+    selectedPrivateChannelId,
+    mediaObjectUrls,
+    shellChromeState,
+    selectedAuthorPubkey,
+    previewableMediaAttachments,
+    remoteObjectUrlRef,
+    draftPreviewUrlRef,
+    directMessageDraftPreviewUrlRef,
+    mediaFetchAttemptRef,
+    visibleRefreshInFlightRef,
+    loadTopics,
+    refreshVisibleShellData,
+    setNotificationStatus,
     setLocalProfile,
     setProfileDraft,
-    setProfileError,
-    setProfilePanelState,
+    setKnownAuthorsByPubkey,
     setProfileTimeline,
     setProfileTimelineNextCursor,
+    setProfileError,
+    setProfilePanelState,
     setSocialConnections,
     setSocialConnectionsPanelState,
-    shellChromeState.activePrimarySection,
-    storeApi,
-    translate,
-  ]);
-
-  useEffect(() => {
-    if (!selectedAuthorPubkey) {
-      return;
-    }
-    let disposed = false;
-    void (async () => {
-      try {
-        const [author, timeline] = await Promise.all([
-          api.getAuthorSocialView(selectedAuthorPubkey),
-          api.listProfileTimeline(selectedAuthorPubkey, null, VISIBLE_TIMELINE_LIMIT),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setSelectedAuthor(author);
-          setSelectedAuthorTimeline(timeline.items);
-          setSelectedAuthorTimelineNextCursor(timeline.next_cursor ?? null);
-          setAuthorError(null);
-          if (author) {
-            setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [author]));
-          }
-        });
-      } catch (error) {
-        if (!disposed) {
-          setAuthorError(
-            messageFromError(error, translate('common:errors.failedToLoadAuthor'))
-          );
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    selectedAuthorPubkey,
-    setAuthorError,
-    setKnownAuthorsByPubkey,
     setSelectedAuthor,
     setSelectedAuthorTimeline,
     setSelectedAuthorTimelineNextCursor,
-    translate,
-  ]);
-
-  useEffect(() => {
-    if (
-      shellChromeState.activePrimarySection !== 'messages' &&
-      !storeApi.getState().directMessagePaneOpen
-    ) {
-      return;
-    }
-    let disposed = false;
-    const refresh = async () => {
-      if (
-        disposed ||
-        (typeof document !== 'undefined' && document.visibilityState === 'hidden')
-      ) {
-        return;
-      }
-      try {
-        const directMessages = await api.listDirectMessages();
-        if (disposed) {
-          return;
-        }
-        setDirectMessages(directMessages);
-        setKnownAuthorsByPubkey((current) =>
-          mergeKnownAuthors(current, directMessages.map(authorViewFromDirectMessageConversation))
-        );
-        const selectedPeerPubkey = storeApi.getState().selectedDirectMessagePeerPubkey;
-        if (!selectedPeerPubkey) {
-          setDirectMessageError(null);
-          return;
-        }
-        const [timelineResult, statusResult] = await Promise.allSettled([
-          api.listDirectMessageMessages(selectedPeerPubkey, null, VISIBLE_TIMELINE_LIMIT),
-          api.getDirectMessageStatus(selectedPeerPubkey),
-        ]);
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          if (timelineResult.status === 'fulfilled') {
-            setDirectMessageTimelineByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: timelineResult.value.items,
-            }));
-            setDirectMessageTimelineNextCursorByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: timelineResult.value.next_cursor ?? null,
-            }));
-          }
-          if (statusResult.status === 'fulfilled') {
-            setDirectMessageStatusByPeer((current) => ({
-              ...current,
-              [selectedPeerPubkey]: statusResult.value,
-            }));
-          }
-          setDirectMessageError(
-            timelineResult.status === 'fulfilled' && statusResult.status === 'fulfilled'
-              ? null
-              : messageFromError(
-                  timelineResult.status === 'rejected'
-                    ? timelineResult.reason
-                    : statusResult.status === 'rejected'
-                      ? statusResult.reason
-                      : null,
-                  'failed to load direct messages'
-                )
-          );
-        });
-      } catch (error) {
-        if (!disposed) {
-          setDirectMessageError(messageFromError(error, 'failed to load direct messages'));
-        }
-      }
-    };
-
-    void refresh();
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, REFRESH_INTERVAL_MS);
-    const handleFocus = () => {
-      void refresh();
-    };
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        void refresh();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      disposed = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [
-    api,
-    setDirectMessageError,
+    setAuthorError,
     setDirectMessages,
-    setDirectMessageStatusByPeer,
     setDirectMessageTimelineByPeer,
     setDirectMessageTimelineNextCursorByPeer,
-    setKnownAuthorsByPubkey,
-    shellChromeState.activePrimarySection,
-    storeApi,
-  ]);
-
-  useEffect(() => {
-    if (shellChromeState.activePrimarySection !== 'notifications') {
-      return;
-    }
-    let disposed = false;
-    void (async () => {
-      try {
-        const [status, notificationItems] = await Promise.all([
-          api.getNotificationStatus(),
-          api.listNotifications(),
-        ]);
-        if (disposed) {
-          return;
-        }
-        let nextNotifications = notificationItems;
-        let nextStatus = status;
-        if (notificationItems.some((notification) => !notification.read_at)) {
-          try {
-            nextStatus = await api.markAllNotificationsRead();
-            const readAt = Date.now();
-            nextNotifications = notificationItems.map((notification) =>
-              notification.read_at ? notification : { ...notification, read_at: readAt }
-            );
-            if (!disposed) {
-              setNotificationAutoReadError(null);
-            }
-          } catch (notificationReadError) {
-            if (!disposed) {
-              setNotificationAutoReadError(
-                messageFromError(
-                  notificationReadError,
-                  translate('shell:notifications.errors.failedAutoRead')
-                )
-              );
-            }
-          }
-        }
-        if (disposed) {
-          return;
-        }
-        startTransition(() => {
-          setNotificationStatus(nextStatus);
-          setNotifications(nextNotifications);
-          setNotificationPanelState({ status: 'ready', error: null });
-        });
-      } catch (error) {
-        if (!disposed) {
-          setNotificationPanelState({
-            status: 'error',
-            error: messageFromError(error, translate('shell:notifications.errors.failedToLoad')),
-          });
-        }
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    setNotificationAutoReadError,
-    setNotificationPanelState,
+    setDirectMessageStatusByPeer,
+    setDirectMessageError,
     setNotifications,
-    setNotificationStatus,
-    shellChromeState.activePrimarySection,
-    translate,
-  ]);
-
-  useEffect(() => {
-    const remoteObjectUrls = remoteObjectUrlRef.current;
-    const draftPreviewUrls = draftPreviewUrlRef.current;
-    const directMessageDraftPreviewUrls = directMessageDraftPreviewUrlRef.current;
-
-    return () => {
-      for (const url of remoteObjectUrls.values()) {
-        URL.revokeObjectURL(url);
-      }
-      remoteObjectUrls.clear();
-      for (const url of draftPreviewUrls.values()) {
-        URL.revokeObjectURL(url);
-      }
-      draftPreviewUrls.clear();
-      for (const url of directMessageDraftPreviewUrls.values()) {
-        URL.revokeObjectURL(url);
-      }
-      directMessageDraftPreviewUrls.clear();
-    };
-  }, [directMessageDraftPreviewUrlRef, draftPreviewUrlRef, remoteObjectUrlRef]);
-
-  useEffect(() => {
-    setGameDrafts((current) => {
-      let changed = false;
-      const next = { ...current };
-      for (const room of activeGameRooms) {
-        if (!next[room.room_id]) {
-          next[room.room_id] = createGameEditorDraft(room);
-          changed = true;
-        }
-      }
-      return changed ? next : current;
-    });
-  }, [activeGameRooms, setGameDrafts]);
-
-  useEffect(() => {
-    if (!selectedPrivateChannelId) {
-      return;
-    }
-    const selectedStillJoined = activeJoinedChannels.some(
-      (channel) => channel.channel_id === selectedPrivateChannelId
-    );
-    if (selectedStillJoined) {
-      return;
-    }
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [activeTopic]: null,
-    }));
-    setComposeChannelByTopic((current) =>
-      current[activeTopic]?.kind === 'private_channel' &&
-      current[activeTopic].channel_id === selectedPrivateChannelId
-        ? {
-            ...current,
-            [activeTopic]: PUBLIC_CHANNEL_REF,
-          }
-        : current
-    );
-    setTimelineScopeByTopic((current) =>
-      current[activeTopic]?.kind === 'channel' &&
-      current[activeTopic].channel_id === selectedPrivateChannelId
-        ? {
-            ...current,
-            [activeTopic]: PUBLIC_TIMELINE_SCOPE,
-          }
-        : current
-    );
-  }, [
-    activeJoinedChannels,
-    activeTopic,
-    selectedPrivateChannelId,
-    setComposeChannelByTopic,
+    setNotificationPanelState,
+    setNotificationAutoReadError,
+    setGameDrafts,
     setSelectedChannelIdByTopic,
+    setComposeChannelByTopic,
     setTimelineScopeByTopic,
-  ]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    for (const attachment of previewableMediaAttachments) {
-      if (typeof mediaObjectUrls[attachment.hash] === 'string') {
-        continue;
-      }
-
-      const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
-      mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
-      logMediaDebug('info', 'remote media fetch start', {
-        attempt: nextAttempt,
-        hash: attachment.hash,
-        mime: attachment.mime,
-        role: attachment.role,
-        status: attachment.status,
-      });
-
-      void api
-        .getBlobMediaPayload(attachment.hash, attachment.mime)
-        .then((payload) => {
-          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
-          if (disposed) {
-            if (nextUrl) {
-              URL.revokeObjectURL(nextUrl);
-            }
-            return;
-          }
-          if (!nextUrl) {
-            logMediaDebug('warn', 'remote media fetch missing', {
-              attempt: nextAttempt,
-              hash: attachment.hash,
-              mime: attachment.mime,
-              role: attachment.role,
-              status: attachment.status,
-            });
-            return;
-          }
-
-          logMediaDebug('info', 'remote media fetch hit', {
-            attempt: nextAttempt,
-            bytes_base64_length: payload?.bytes_base64.length ?? 0,
-            hash: attachment.hash,
-            mime: attachment.mime,
-            object_url: nextUrl,
-            role: attachment.role,
-            status: attachment.status,
-          });
-
-          setMediaObjectUrls((current) => {
-            if (current[attachment.hash] !== undefined) {
-              URL.revokeObjectURL(nextUrl);
-              return current;
-            }
-            remoteObjectUrlRef.current.set(attachment.hash, nextUrl);
-            return {
-              ...current,
-              [attachment.hash]: nextUrl,
-            };
-          });
-        })
-        .catch((fetchError: unknown) => {
-          if (disposed) {
-            return;
-          }
-          logMediaDebug('warn', 'remote media fetch error', {
-            attempt: nextAttempt,
-            error: fetchError instanceof Error ? fetchError.message : 'unknown error',
-            hash: attachment.hash,
-            mime: attachment.mime,
-            role: attachment.role,
-            status: attachment.status,
-          });
-        });
-    }
-
-    return () => {
-      disposed = true;
-    };
-  }, [
-    api,
-    mediaFetchAttemptRef,
-    mediaObjectUrls,
-    previewableMediaAttachments,
-    remoteObjectUrlRef,
     setMediaObjectUrls,
-  ]);
+  });
 
-  const nextDraftId = useCallback((): string => {
-    draftSequenceRef.current += 1;
-    return `draft-${draftSequenceRef.current}`;
-  }, [draftSequenceRef]);
-
-  const rememberDraftPreview = useCallback(
-    (item: DraftMediaItem) => {
-      draftPreviewUrlRef.current.set(item.id, item.preview_url);
-    },
-    [draftPreviewUrlRef]
-  );
-
-  const releaseDraftPreview = useCallback(
-    (itemId: string) => {
-      const previewUrl = draftPreviewUrlRef.current.get(itemId);
-      if (!previewUrl) {
-        return;
-      }
-      URL.revokeObjectURL(previewUrl);
-      draftPreviewUrlRef.current.delete(itemId);
-    },
-    [draftPreviewUrlRef]
-  );
-
-  const releaseAllDraftPreviews = useCallback(() => {
-    for (const [itemId, previewUrl] of draftPreviewUrlRef.current.entries()) {
-      URL.revokeObjectURL(previewUrl);
-      draftPreviewUrlRef.current.delete(itemId);
-    }
-  }, [draftPreviewUrlRef]);
-
-  const rememberDirectMessageDraftPreview = useCallback(
-    (item: DraftMediaItem) => {
-      directMessageDraftPreviewUrlRef.current.set(item.id, item.preview_url);
-    },
-    [directMessageDraftPreviewUrlRef]
-  );
-
-  const releaseDirectMessageDraftPreview = useCallback(
-    (itemId: string) => {
-      const previewUrl = directMessageDraftPreviewUrlRef.current.get(itemId);
-      if (!previewUrl) {
-        return;
-      }
-      URL.revokeObjectURL(previewUrl);
-      directMessageDraftPreviewUrlRef.current.delete(itemId);
-    },
-    [directMessageDraftPreviewUrlRef]
-  );
-
-  const releaseAllDirectMessageDraftPreviews = useCallback(() => {
-    for (const [itemId, previewUrl] of directMessageDraftPreviewUrlRef.current.entries()) {
-      URL.revokeObjectURL(previewUrl);
-      directMessageDraftPreviewUrlRef.current.delete(itemId);
-    }
-  }, [directMessageDraftPreviewUrlRef]);
-
-  const buildImageItem = useCallback(
-    async (file: File) => {
-      return await buildImageDraftItem(file, nextDraftId);
-    },
-    [nextDraftId]
-  );
-
-  const buildVideoItem = useCallback(
-    async (file: File) => {
-      return await buildVideoDraftItem(file, nextDraftId);
-    },
-    [nextDraftId]
-  );
+  const {
+    rememberDraftPreview,
+    releaseDraftPreview,
+    releaseAllDraftPreviews,
+    rememberDirectMessageDraftPreview,
+    releaseDirectMessageDraftPreview,
+    releaseAllDirectMessageDraftPreviews,
+    buildImageDraftItem,
+    buildVideoDraftItem,
+  } = useDraftMediaHelpers({
+    draftPreviewUrlRef,
+    directMessageDraftPreviewUrlRef,
+    draftSequenceRef,
+  });
 
   return {
     loadTopics,
@@ -1835,7 +986,7 @@ export function useDesktopShellData({
     rememberDirectMessageDraftPreview,
     releaseDirectMessageDraftPreview,
     releaseAllDirectMessageDraftPreviews,
-    buildImageDraftItem: buildImageItem,
-    buildVideoDraftItem: buildVideoItem,
+    buildImageDraftItem,
+    buildVideoDraftItem,
   };
 }
