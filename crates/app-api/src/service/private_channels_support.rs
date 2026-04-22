@@ -1,32 +1,6 @@
 use super::*;
 
 impl AppService {
-    pub(crate) async fn maybe_redeem_rotation_grants_for_scope(
-        &self,
-        topic_id: &str,
-        scope: &TimelineScope,
-    ) -> Result<()> {
-        match scope {
-            TimelineScope::Public => Ok(()),
-            TimelineScope::AllJoined => self.maybe_redeem_rotation_grants_for_topic(topic_id).await,
-            TimelineScope::Channel { channel_id } => self
-                .maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
-                .await
-                .map(|_| ()),
-        }
-    }
-
-    pub(crate) async fn maybe_redeem_rotation_grants_for_topic(
-        &self,
-        topic_id: &str,
-    ) -> Result<()> {
-        for state in self.joined_private_channel_states_for_topic(topic_id).await {
-            self.maybe_redeem_rotation_grants_for_channel(topic_id, state.channel_id.as_str())
-                .await?;
-        }
-        Ok(())
-    }
-
     pub(crate) async fn maybe_redeem_rotation_grants_for_channel(
         &self,
         topic_id: &str,

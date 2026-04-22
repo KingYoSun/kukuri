@@ -131,7 +131,10 @@ mod tests {
             .parse::<RelayUrl>()
             .expect("relay url");
 
-        assert!(relay_backed_transport_config_for_platform(false, &[relay_url.clone()]).is_none());
+        assert!(
+            relay_backed_transport_config_for_platform(false, std::slice::from_ref(&relay_url))
+                .is_none()
+        );
         assert!(relay_backed_transport_config_for_platform(true, &[]).is_none());
         assert!(relay_backed_transport_config_for_platform(true, &[relay_url]).is_some());
     }

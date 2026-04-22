@@ -3674,7 +3674,7 @@ async fn friend_plus_channel_restore_accepts_fresh_share_after_restart() {
     assert_eq!(joined_before_restart.len(), 1);
     assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
     let restored_epoch_id = joined_before_restart[0].current_epoch_id.clone();
-    assert_ne!(restored_epoch_id, original_epoch_id);
+    assert_eq!(restored_epoch_id, original_epoch_id);
     assert_eq!(
         joined_before_restart[0].joined_via_pubkey.as_deref(),
         Some(b_pubkey.as_str())

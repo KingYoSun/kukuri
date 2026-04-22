@@ -1,21 +1,5 @@
 use super::*;
 
-pub(crate) async fn hydrate_object_projection_from_replica(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    replica: &ReplicaId,
-) -> Result<usize> {
-    hydrate_object_projection_from_replica_with_policy(
-        docs_sync,
-        blob_service,
-        projection_store,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
 pub(crate) async fn hydrate_object_projection_from_replica_with_policy(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -115,20 +99,6 @@ pub(crate) async fn hydrate_object_projection_from_key(
         return Ok(false);
     };
     hydrate_object_projection_from_record(blob_service, projection_store, replica, record).await
-}
-
-pub(crate) async fn hydrate_reaction_cache_from_replica(
-    docs_sync: &dyn DocsSync,
-    projection_store: &dyn ProjectionStore,
-    replica: &ReplicaId,
-) -> Result<usize> {
-    hydrate_reaction_cache_from_replica_with_policy(
-        docs_sync,
-        projection_store,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
 }
 
 pub(crate) async fn hydrate_reaction_cache_from_replica_with_policy(
@@ -306,24 +276,6 @@ pub(crate) async fn hydrate_subscription_state_with_services(
     .await
 }
 
-pub(crate) async fn hydrate_live_sessions_from_replica(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-    replica: &ReplicaId,
-) -> Result<usize> {
-    hydrate_live_sessions_from_replica_with_policy(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
-}
-
 pub(crate) async fn hydrate_live_sessions_from_replica_with_policy(
     docs_sync: &dyn DocsSync,
     blob_service: &dyn BlobService,
@@ -446,24 +398,6 @@ pub(crate) async fn hydrate_live_session_from_key_with_retry(
         }
     }
     Ok(0)
-}
-
-pub(crate) async fn hydrate_game_rooms_from_replica(
-    docs_sync: &dyn DocsSync,
-    blob_service: &dyn BlobService,
-    projection_store: &dyn ProjectionStore,
-    topic_id: &str,
-    replica: &ReplicaId,
-) -> Result<usize> {
-    hydrate_game_rooms_from_replica_with_policy(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-        DocFetchPolicy::LocalThenRemote,
-    )
-    .await
 }
 
 pub(crate) async fn hydrate_game_rooms_from_replica_with_policy(
