@@ -354,10 +354,7 @@ impl AppService {
         }
         match state.audience_kind {
             ChannelAudienceKind::InviteOnly | ChannelAudienceKind::FriendPlus => {
-                if matches!(
-                    action,
-                    PrivateChannelOwnerAction::Write | PrivateChannelOwnerAction::Share
-                ) {
+                if matches!(action, PrivateChannelOwnerAction::Share) {
                     let _ = self
                         .rotate_private_channel(topic_id, channel_id.as_str())
                         .await?;
@@ -566,6 +563,8 @@ impl AppService {
                 .await;
         }
         docs_sync.open_replica(&replica).await?;
+        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
+        let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
         let replica_for_task = replica.clone();
         let hint_topic_for_task = hint_topic.clone();
         let handle = tokio::spawn(async move {
@@ -585,30 +584,6 @@ impl AppService {
                         "failed to snapshot local notification baseline for subscription bootstrap"
                     );
                     NotificationDocEventBaseline::default()
-                }
-            };
-            let mut doc_stream = match docs_sync.subscribe_replica(&replica_for_task).await {
-                Ok(stream) => stream,
-                Err(error) => {
-                    warn!(
-                        topic = %topic,
-                        replica = %replica_for_task.as_str(),
-                        error = %error,
-                        "failed to subscribe to docs replica for background bootstrap"
-                    );
-                    return;
-                }
-            };
-            let mut hint_stream = match hint_transport.subscribe_hints(&hint_topic_for_task).await {
-                Ok(stream) => stream,
-                Err(error) => {
-                    warn!(
-                        topic = %topic,
-                        replica = %replica_for_task.as_str(),
-                        error = %error,
-                        "failed to subscribe to hint topic for background bootstrap"
-                    );
-                    return;
                 }
             };
             let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
@@ -640,6 +615,7 @@ impl AppService {
                     Some(event) = doc_stream.next() => {
                         if let Ok(event) = event {
                             let now = Utc::now().timestamp_millis();
+                            let had_source_peer = event.source_peer.is_some();
                             if let Some(source_peer) = event.source_peer.as_deref()
                             {
                                 if let Err(error) = docs_sync.learn_peer(source_peer).await {
@@ -680,16 +656,48 @@ impl AppService {
                                     );
                                 }
                             }
-                            if let Ok(count) = hydrate_subscription_event_with_services(
+                            let mut hydrated = match hydrate_subscription_event_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
                                 &replica_for_task,
                                 event.key.as_str(),
-                            ).await
-                            && count > 0
-                            {
+                            ).await {
+                                Ok(count) => count,
+                                Err(error) => {
+                                    warn!(
+                                        topic = %topic,
+                                        key = %event.key,
+                                        error = %error,
+                                        "failed to hydrate subscription from docs event"
+                                    );
+                                    0
+                                }
+                            };
+                            if hydrated == 0 && !is_public_topic {
+                                hydrated = match hydrate_subscription_state_with_services(
+                                    docs_sync.as_ref(),
+                                    blob_service.as_ref(),
+                                    projection_store.as_ref(),
+                                    topic.as_str(),
+                                    &replica_for_task,
+                                )
+                                .await {
+                                    Ok(count) => count,
+                                    Err(error) => {
+                                        warn!(
+                                            topic = %topic,
+                                            replica = %replica_for_task.as_str(),
+                                            error = %error,
+                                            "failed to hydrate subscription from docs-event recovery"
+                                        );
+                                        0
+                                    }
+                                };
+                            }
+                            if hydrated > 0 {
+                                recovery_backoff.reset();
                                 if is_public_topic && event.source_peer.is_some() {
                                     record_public_topic_docs_activity_if_current(
                                         &public_topic_delivery,
@@ -704,6 +712,18 @@ impl AppService {
                                         now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
                                 }
                                 *last_sync.lock().await = Some(now);
+                            } else {
+                                restart_replica_sync_with_backoff(
+                                    docs_sync.as_ref(),
+                                    topic.as_str(),
+                                    &replica_for_task,
+                                    &mut recovery_backoff,
+                                )
+                                .await;
+                                if is_public_topic && had_source_peer {
+                                    recovery_probe_due_at =
+                                        now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
+                                }
                             }
                         }
                     }
@@ -765,7 +785,7 @@ impl AppService {
                                         }
                                     };
                                     let now = Utc::now().timestamp_millis();
-                                    if hydrated == 0 && is_public_topic {
+                                    if hydrated == 0 {
                                         hydrated = match hydrate_subscription_state_with_services(
                                             docs_sync.as_ref(),
                                             blob_service.as_ref(),
@@ -786,6 +806,7 @@ impl AppService {
                                         };
                                     }
                                     if hydrated > 0 {
+                                        recovery_backoff.reset();
                                         if is_public_topic && !event.source_peer.is_empty() {
                                             record_public_topic_docs_activity_if_current(
                                                 &public_topic_delivery,

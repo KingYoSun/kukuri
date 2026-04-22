@@ -264,9 +264,9 @@ pub(crate) async fn hydrate_author_state_with_services_with_policy(
         DocQuery::Exact(stable_key("profile", "latest")),
         policy,
     )
-        .await?
-        .into_iter()
-        .next()
+    .await?
+    .into_iter()
+    .next()
     {
         match serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.author_pubkey.as_str() == author_pubkey => {
@@ -309,7 +309,7 @@ pub(crate) async fn hydrate_author_state_with_services_with_policy(
         DocQuery::Prefix("graph/follows/".into()),
         policy,
     )
-        .await?
+    .await?
     {
         match serde_json::from_slice::<FollowEdgeDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
@@ -377,10 +377,9 @@ pub(crate) async fn fetch_author_envelope_by_id_with_policy(
         DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())),
         policy,
     )
-        .await?
-        .into_iter()
-        .next()
-    else {
+    .await?
+    .into_iter()
+    .next() else {
         return Ok(None);
     };
     let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
@@ -441,7 +440,7 @@ pub(crate) async fn load_profile_posts_from_author_replica_with_policy(
         DocQuery::Prefix("profile/posts/".into()),
         policy,
     )
-        .await?
+    .await?
     {
         match serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice()) {
             Ok(doc)
@@ -536,7 +535,7 @@ pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
         DocQuery::Prefix("profile/reposts/".into()),
         policy,
     )
-        .await?
+    .await?
     {
         match serde_json::from_slice::<AuthorProfileRepostDocV1>(record.value.as_slice()) {
             Ok(doc)
@@ -616,9 +615,13 @@ pub(crate) async fn snapshot_object_notification_baseline_with_policy(
     replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<NotificationDocEventBaseline> {
-    let records =
-        query_replica_with_fetch_policy(docs_sync, replica, DocQuery::Prefix("objects/".into()), policy)
-            .await?;
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("objects/".into()),
+        policy,
+    )
+    .await?;
     Ok(NotificationDocEventBaseline::from_records(
         &records
             .into_iter()

@@ -141,7 +141,7 @@ pub(crate) async fn fetch_post_object_for_projection(
         replica_id,
         DocQuery::Exact(source_key.to_string()),
     )
-        .await
+    .await
     else {
         return Ok(None);
     };

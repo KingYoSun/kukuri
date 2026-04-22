@@ -23,9 +23,13 @@ pub(crate) async fn hydrate_object_projection_from_replica_with_policy(
     replica: &ReplicaId,
     policy: DocFetchPolicy,
 ) -> Result<usize> {
-    let records =
-        query_replica_with_fetch_policy(docs_sync, replica, DocQuery::Prefix("objects/".into()), policy)
-            .await?;
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("objects/".into()),
+        policy,
+    )
+    .await?;
     let mut hydrated = 0usize;
     let mut blob_statuses = Vec::new();
     let mut projections = Vec::new();
@@ -255,11 +259,14 @@ pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
         replica,
         policy,
     )
-    .await
-    ?;
-    let reaction_count =
-        hydrate_reaction_cache_from_replica_with_policy(docs_sync, projection_store, replica, policy)
-            .await?;
+    .await?;
+    let reaction_count = hydrate_reaction_cache_from_replica_with_policy(
+        docs_sync,
+        projection_store,
+        replica,
+        policy,
+    )
+    .await?;
     let live_count = hydrate_live_sessions_from_replica_with_policy(
         docs_sync,
         blob_service,

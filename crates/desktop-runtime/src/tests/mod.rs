@@ -5899,8 +5899,14 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
     .await
     .expect("runtime b");
 
-    let status_before = runtime_a.get_sync_status().await.expect("sync status before recovery");
-    assert_eq!(status_before.discovery.connect_mode, ConnectMode::DirectOrRelay);
+    let status_before = runtime_a
+        .get_sync_status()
+        .await
+        .expect("sync status before recovery");
+    assert_eq!(
+        status_before.discovery.connect_mode,
+        ConnectMode::DirectOrRelay
+    );
     assert!(!status_before.connected);
     assert!(matches!(
         status_before.delivery_state,
@@ -6001,7 +6007,10 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
     .await
     .expect("runtime a manual peer propagation timeout");
 
-    let status_after = runtime_a.get_sync_status().await.expect("sync status after recovery");
+    let status_after = runtime_a
+        .get_sync_status()
+        .await
+        .expect("sync status after recovery");
     assert!(status_after.connected);
     assert!(topic_has_direct_peer(&status_after, topic, 1));
 

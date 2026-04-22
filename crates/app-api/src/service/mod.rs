@@ -44,9 +44,8 @@ pub(crate) use kukuri_core::{
 };
 pub(crate) use kukuri_docs_sync::{
     DocEvent, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync,
-    author_replica_id,
-    private_channel_epoch_replica_id, private_channel_hint_topic, private_channel_replica_id,
-    stable_key, topic_replica_id,
+    author_replica_id, private_channel_epoch_replica_id, private_channel_hint_topic,
+    private_channel_replica_id, stable_key, topic_replica_id,
 };
 pub(crate) use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,

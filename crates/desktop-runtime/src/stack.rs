@@ -700,7 +700,12 @@ mod tests {
         let current = current_guard.as_ref().expect("current stack");
         assert_eq!(current.node.relay_urls().await, vec![relay_url.clone()]);
         assert_eq!(
-            current.transport.discovery().await.expect("discovery").connect_mode,
+            current
+                .transport
+                .discovery()
+                .await
+                .expect("discovery")
+                .connect_mode,
             ConnectMode::DirectOrRelay
         );
         drop(current_guard);

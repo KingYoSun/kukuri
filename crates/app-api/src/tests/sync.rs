@@ -1,7 +1,5 @@
 use super::*;
-use kukuri_core::{
-    BlobHash, ChannelAudienceKind, CreatePrivateChannelInput, KukuriKeys, TopicId,
-};
+use kukuri_core::{BlobHash, ChannelAudienceKind, CreatePrivateChannelInput, KukuriKeys, TopicId};
 use std::collections::HashMap;
 
 #[derive(Clone, Default)]
@@ -342,16 +340,22 @@ async fn local_only_bootstrap_reads_return_empty_without_remote_docs() {
     .expect("timeline");
     assert!(timeline.items.is_empty());
 
-    let thread = timeout(Duration::from_secs(2), app.list_thread(topic, "missing-root", None, 20))
-        .await
-        .expect("thread should not wait for remote docs")
-        .expect("thread");
+    let thread = timeout(
+        Duration::from_secs(2),
+        app.list_thread(topic, "missing-root", None, 20),
+    )
+    .await
+    .expect("thread should not wait for remote docs")
+    .expect("thread");
     assert!(thread.items.is_empty());
 
-    let joined = timeout(Duration::from_secs(2), app.list_joined_private_channels(topic))
-        .await
-        .expect("joined channels should not wait for remote docs")
-        .expect("joined channels");
+    let joined = timeout(
+        Duration::from_secs(2),
+        app.list_joined_private_channels(topic),
+    )
+    .await
+    .expect("joined channels should not wait for remote docs")
+    .expect("joined channels");
     assert!(joined.is_empty());
 
     timeout(Duration::from_secs(2), app.warm_social_graph())
@@ -422,17 +426,23 @@ async fn local_only_bootstrap_reads_return_cached_content_without_remote_docs() 
     .expect("timeline");
     assert!(timeline.items.iter().any(|post| post.object_id == root_id));
 
-    let thread = timeout(Duration::from_secs(2), reader.list_thread(topic, root_id.as_str(), None, 20))
-        .await
-        .expect("thread should use cached local docs")
-        .expect("thread");
+    let thread = timeout(
+        Duration::from_secs(2),
+        reader.list_thread(topic, root_id.as_str(), None, 20),
+    )
+    .await
+    .expect("thread should use cached local docs")
+    .expect("thread");
     assert!(thread.items.iter().any(|post| post.object_id == root_id));
     assert!(thread.items.iter().any(|post| post.object_id == reply_id));
 
-    let joined = timeout(Duration::from_secs(2), reader.list_joined_private_channels(topic))
-        .await
-        .expect("joined channels should use cached local docs")
-        .expect("joined channels");
+    let joined = timeout(
+        Duration::from_secs(2),
+        reader.list_joined_private_channels(topic),
+    )
+    .await
+    .expect("joined channels should use cached local docs")
+    .expect("joined channels");
     assert_eq!(joined.len(), 1);
     assert_eq!(joined[0].channel_id, channel.channel_id);
 

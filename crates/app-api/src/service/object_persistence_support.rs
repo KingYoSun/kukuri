@@ -255,10 +255,9 @@ pub(crate) async fn fetch_private_channel_metadata_from_replica_with_policy(
         DocQuery::Exact(stable_key("channels", "metadata")),
         policy,
     )
-        .await?
-        .into_iter()
-        .next()
-    else {
+    .await?
+    .into_iter()
+    .next() else {
         return Ok(None);
     };
     let mut metadata: PrivateChannelMetadataDocV1 = serde_json::from_slice(&record.value)?;
@@ -291,10 +290,9 @@ pub(crate) async fn fetch_private_channel_policy_from_replica_with_policy(
         DocQuery::Exact(stable_key("channels", "policy/envelope")),
         policy,
     )
-        .await?
-        .into_iter()
-        .next()
-    else {
+    .await?
+    .into_iter()
+    .next() else {
         return Ok(None);
     };
     let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)?;
@@ -370,10 +368,9 @@ pub(crate) async fn fetch_private_channel_rotation_grant_from_replica_with_polic
         )),
         policy,
     )
-        .await?
-        .into_iter()
-        .next()
-    else {
+    .await?
+    .into_iter()
+    .next() else {
         return Ok(None);
     };
     let envelope: KukuriEnvelope = serde_json::from_slice(&record.value)?;

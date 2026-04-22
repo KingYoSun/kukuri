@@ -154,6 +154,7 @@ impl AppService {
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
         docs_sync.open_replica(&replica).await?;
+        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
         let handle = tokio::spawn(async move {
             let notification_baseline = match snapshot_follow_notification_baseline_with_policy(
@@ -207,17 +208,6 @@ impl AppService {
                     );
                 }
             }
-            let mut doc_stream = match docs_sync.subscribe_replica(&replica).await {
-                Ok(stream) => stream,
-                Err(error) => {
-                    warn!(
-                        author_pubkey = %author_key_for_task,
-                        error = %error,
-                        "failed to subscribe to author replica for background bootstrap"
-                    );
-                    return;
-                }
-            };
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
