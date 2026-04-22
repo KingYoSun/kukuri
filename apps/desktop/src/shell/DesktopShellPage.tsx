@@ -6,71 +6,27 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, BookPlus, GitBranchPlus, Link2, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { Bell, BookPlus, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
-import { AuthorAvatar } from '@/components/core/AuthorAvatar';
-import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
-import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
-import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
-import { ComposerPanel } from '@/components/core/ComposerPanel';
-import { SmartReferenceText } from '@/components/core/SmartReferenceText';
-import { ThreadPanel } from '@/components/core/ThreadPanel';
-import { TimelineFeed } from '@/components/core/TimelineFeed';
-import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TopicNavList } from '@/components/core/TopicNavList';
-import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
-import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
-import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
-import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
-import { AppearancePanel } from '@/components/settings/AppearancePanel';
-import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
-import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
-import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
-import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
-import { ContextPane } from '@/components/shell/ContextPane';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import { type PrimarySection } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { ImageCropDialog } from '@/components/ui/ImageCropDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Notice } from '@/components/ui/notice';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 
-import {
-  type ChannelAccessTokenPreview,
-  type GameRoomStatus,
-  runtimeApi,
-} from '@/lib/api';
-import i18n, { type SupportedLocale } from '@/i18n';
+import { type ChannelAccessTokenPreview, runtimeApi } from '@/lib/api';
+import i18n from '@/i18n';
 import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
-import {
-  buildGameLink,
-  buildLiveLink,
-  buildTopicLink,
-  type InternalSmartReference,
-} from '@/lib/internalLinks';
+import { buildTopicLink, type InternalSmartReference } from '@/lib/internalLinks';
 import { CLIPBOARD_COPY_EVENT, copyTextToClipboard } from '@/lib/utils';
 import {
-  SHELL_CONTEXT_ID,
   SHELL_NAV_ID,
   SHELL_SETTINGS_ID,
   SHELL_WORKSPACE_ID,
-  timelineScopeStorageKey,
   type DesktopShellPageProps,
   PUBLIC_CHANNEL_REF,
   PUBLIC_TIMELINE_SCOPE,
@@ -78,35 +34,28 @@ import {
   useDesktopShellStore,
 } from '@/shell/store';
 import {
-  selectPrimaryImageAttachment,
-  selectVideoManifestAttachment,
-  selectVideoPosterAttachment,
-} from '@/shell/media';
-import {
   authorDisplayLabel,
-  authorViewFromDirectMessageConversation,
-  communityNodesToDraftNodes,
   formatCount,
-  localizeAudienceLabel,
   messageFromError,
   privateComposeTarget,
   privateTimelineScope,
   resolveProfilePictureSrc,
-  seedPeersToEditorValue,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
   translateAudienceKindLabel,
-  translateGameStatus,
-  translateLiveStatus,
 } from '@/shell/selectors';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
-
-function createCommunityNodeDraftId(): string {
-  return `community-node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import {
+  DesktopShellDetailPaneStack,
+  DesktopShellMessagesWorkspace,
+  DesktopShellNotificationsWorkspace,
+} from '@/shell/page/DesktopShellAuxiliaryPanels';
+import { DesktopShellOverlays } from '@/shell/page/DesktopShellOverlays';
+import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWorkspace';
+import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
 
@@ -132,69 +81,17 @@ export function DesktopShellPage({
     trackedTopics,
     activeTopic,
     topicInput,
-    composer,
-    attachmentInputKey,
-    timelineNextCursorByKey,
-    timelineLoadingMoreByKey,
     selectedThread,
     focusedObjectId,
-    threadNextCursorById,
-    threadLoadingMoreById,
-    replyTarget,
-    repostTarget,
-    discoveryConfig,
-    discoveryEditorDirty,
-    communityNodeConfig,
-    communityNodeEditorDirty,
     mediaObjectUrls,
-    unsupportedVideoManifests,
     syncStatus,
     localProfile,
     knownAuthorsByPubkey,
-    socialConnections,
-    socialConnectionsPanelState,
-    ownedReactionAssets,
-    bookmarkedReactionAssets,
-    bookmarkedPosts,
-    recentReactions,
-    profileDirty,
-    profileError,
-    profilePanelState,
-    profileSaving,
     selectedAuthorPubkey,
-    selectedAuthor,
     notifications,
     notificationStatus,
-    notificationPanelState,
-    notificationAutoReadError,
-    pendingTimelineCountsByKey,
-    selectedDirectMessagePeerPubkey,
     selectedLiveSessionId,
     selectedGameRoomId,
-    directMessages,
-    directMessageComposer,
-    directMessageAttachmentInputKey,
-    directMessageError,
-    directMessageSending,
-    composerError,
-    liveTitle,
-    liveDescription,
-    liveError,
-    liveCreatePending,
-    channelLabelInput,
-    channelAudienceInput,
-    inviteTokenInput,
-    inviteOutput,
-    inviteOutputLabel,
-    channelError,
-    channelActionPending,
-    gameTitle,
-    gameDescription,
-    gameParticipantsInput,
-    gameError,
-    gameCreatePending,
-    gameSavingByRoomId,
-    reactionCreatePending,
     shellChromeState,
   } = useDesktopShellStore();
   const [composeDialogOpen, setComposeDialogOpen] = useState(false);
@@ -297,31 +194,14 @@ export function DesktopShellPage({
   const setTopicInput = useDesktopShellFieldSetter('topicInput');
   const setTrackedTopics = useDesktopShellFieldSetter('trackedTopics');
   const setActiveTopic = useDesktopShellFieldSetter('activeTopic');
-  const setPeerTicket = useDesktopShellFieldSetter('peerTicket');
-  const setDiscoverySeedInput = useDesktopShellFieldSetter('discoverySeedInput');
-  const setDiscoveryEditorDirty = useDesktopShellFieldSetter('discoveryEditorDirty');
-  const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
-  const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
-  const setCommunityNodeEditorDirty = useDesktopShellFieldSetter('communityNodeEditorDirty');
-  const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
-  const setComposer = useDesktopShellFieldSetter('composer');
-  const setDirectMessageComposer = useDesktopShellFieldSetter('directMessageComposer');
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
-  const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
-  const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
-  const setInviteTokenInput = useDesktopShellFieldSetter('inviteTokenInput');
   const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
-  const setLiveTitle = useDesktopShellFieldSetter('liveTitle');
-  const setLiveDescription = useDesktopShellFieldSetter('liveDescription');
-  const setGameTitle = useDesktopShellFieldSetter('gameTitle');
-  const setGameDescription = useDesktopShellFieldSetter('gameDescription');
-  const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
@@ -475,49 +355,7 @@ export function DesktopShellPage({
     buildVideoDraftItem: buildComposerVideoDraftItem,
   });
 
-  const {
-    channelAudienceOptions,
-    privateChannelListItems,
-    floatingActionLabel,
-    showFloatingActionButton,
-    liveSessionListItems,
-    gameDraftViews,
-    profileEditorFields,
-    profileEditorPictureSrc,
-    profileEditorHasPicture,
-    activeTimelinePostViews,
-    bookmarkedTimelinePostViews,
-    profileTimelinePostViews,
-    selectedAuthorTimelinePostViews,
-    threadPostViews,
-    composerSourcePreview,
-    topicNavItems,
-    composerDraftViews,
-    directMessageDraftViews,
-    threadPanelState,
-    authorDetailView,
-    connectivityPanelView,
-    appearancePanelView,
-    discoveryPanelView,
-    communityNodePanelView,
-    reactionsPanelView,
-    primarySectionItems,
-    timelineViewItems,
-    settingsSectionCopy,
-    activeComposeAudienceLabel,
-    activeTimelineScope,
-    activeGameRooms,
-    activeSocialConnectionViews,
-    activeChannelPanelState,
-    activeLivePanelState,
-    activeGamePanelState,
-    selectedDirectMessageTimeline,
-    selectedDirectMessageStatus,
-    selectedDirectMessagePeerLabel,
-    selectedDirectMessagePeerPicture,
-    localDirectMessageAuthorPicture,
-    activePrivateChannel,
-  } = useDesktopShellViewModels({
+  const viewModels = useDesktopShellViewModels({
     t,
     translate,
     locale,
@@ -525,20 +363,13 @@ export function DesktopShellPage({
     profileAvatarPreviewUrl,
   });
 
-  const bookmarkedPostIds = useMemo(
-    () => new Set(bookmarkedPosts.map((item) => item.post.object_id)),
-    [bookmarkedPosts]
-  );
-  const activeTimelineKey = timelineScopeStorageKey(activeTopic, activeTimelineScope);
-  const activeTimelinePendingCount = pendingTimelineCountsByKey[activeTimelineKey] ?? 0;
-  const activeTimelineHasMore = Boolean(timelineNextCursorByKey[activeTimelineKey]);
-  const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
-  const selectedThreadHasMore = selectedThread
-    ? Boolean(threadNextCursorById[selectedThread])
-    : false;
-  const selectedThreadLoadingMore = selectedThread
-    ? (threadLoadingMoreById[selectedThread] ?? false)
-    : false;
+  const {
+    liveSessionListItems,
+    threadPostViews,
+    topicNavItems,
+    activeGameRooms,
+    activePrivateChannel,
+  } = viewModels;
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   const notificationItems = useMemo(
@@ -814,8 +645,6 @@ export function DesktopShellPage({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [activeGameRooms.length, gameFocusKey]);
-  const profileMode = shellChromeState.profileMode;
-  const profileConnectionsView = shellChromeState.profileConnectionsView;
   const notificationAction = (
     <Button
       className='shell-notification-button'
@@ -912,578 +741,66 @@ export function DesktopShellPage({
     </div>
   );
 
-  const settingsSections = [
-    {
-      ...settingsSectionCopy[0],
-      content: (
-        <AppearancePanel
-          view={appearancePanelView}
-          onThemeChange={onThemeChange}
-          onLocaleChange={(nextLocale: SupportedLocale) => {
-            void i18nInstance.changeLanguage(nextLocale);
-          }}
-        />
-      ),
-    },
-    {
-      ...settingsSectionCopy[1],
-      content: (
-        <ConnectivityPanel
-          view={connectivityPanelView}
-          onPeerTicketInputChange={setPeerTicket}
-          onImportPeer={() => void handleImportPeer()}
-        />
-      ),
-    },
-    {
-      ...settingsSectionCopy[2],
-      content: (
-        <DiscoveryPanel
-          view={discoveryPanelView}
-          saveDisabled={discoveryConfig.env_locked || !discoveryEditorDirty}
-          resetDisabled={!discoveryEditorDirty}
-          onSeedPeersChange={(value) => {
-            setDiscoverySeedInput(value);
-            setDiscoveryEditorDirty(true);
-          }}
-          onSave={() => void handleSaveDiscoverySeeds()}
-          onReset={() => {
-            setDiscoverySeedInput(seedPeersToEditorValue(discoveryConfig));
-            setDiscoveryEditorDirty(false);
-            setDiscoveryError(null);
-          }}
-        />
-      ),
-    },
-    {
-      ...settingsSectionCopy[3],
-      content: (
-        <CommunityNodePanel
-          view={communityNodePanelView}
-          saveDisabled={!communityNodeEditorDirty}
-          resetDisabled={!communityNodeEditorDirty}
-          clearDisabled={communityNodeConfig.nodes.length === 0}
-          nodeActionsDisabled={communityNodeEditorDirty}
-          onAddNode={() => {
-            setCommunityNodeInput((current) => [
-              ...current,
-              {
-                id: createCommunityNodeDraftId(),
-                base_url: '',
-                auto_approve: false,
-              },
-            ]);
-            setCommunityNodeEditorDirty(true);
-          }}
-          onNodeBaseUrlChange={(id, value) => {
-            setCommunityNodeInput((current) =>
-              current.map((node) => (node.id === id ? { ...node, base_url: value } : node))
-            );
-            setCommunityNodeEditorDirty(true);
-          }}
-          onNodeAutoApproveChange={(id, value) => {
-            setCommunityNodeInput((current) =>
-              current.map((node) => (node.id === id ? { ...node, auto_approve: value } : node))
-            );
-            setCommunityNodeEditorDirty(true);
-          }}
-          onRemoveNode={(id) => {
-            setCommunityNodeInput((current) => current.filter((node) => node.id !== id));
-            setCommunityNodeEditorDirty(true);
-          }}
-          onSaveNodes={() => void handleSaveCommunityNodes()}
-          onReset={() => {
-            setCommunityNodeInput(communityNodesToDraftNodes(communityNodeConfig));
-            setCommunityNodeEditorDirty(false);
-            setCommunityNodeError(null);
-          }}
-          onClearNodes={() => void handleClearCommunityNodes()}
-          onAuthenticate={(baseUrl) => void handleAuthenticateCommunityNode(baseUrl)}
-          onFetchConsents={(baseUrl) => void handleFetchCommunityNodeConsents(baseUrl)}
-          onAcceptConsents={(baseUrl) => void handleAcceptCommunityNodeConsents(baseUrl)}
-          onRefresh={(baseUrl) => void handleRefreshCommunityNode(baseUrl)}
-          onClearToken={(baseUrl) => void handleClearCommunityNodeToken(baseUrl)}
-        />
-      ),
-    },
-    {
-      ...settingsSectionCopy[4],
-      content: (
-        <ReactionsPanel
-          view={reactionsPanelView}
-          creating={reactionCreatePending}
-          mediaObjectUrls={mediaObjectUrls}
-          onCreateAsset={(file, cropRect, searchKey) =>
-            void handleCreateCustomReactionAsset(file, cropRect, searchKey)
-          }
-          onRemoveBookmark={handleRemoveBookmarkedCustomReaction}
-        />
-      ),
-    },
-  ];
-
   const profileAuthorLabel = authorDisplayLabel(
     syncStatus.local_author_pubkey,
     localProfile?.display_name,
     localProfile?.name
   );
   const messagesWorkspace = (
-    <>
-      <Card className='shell-workspace-card'>
-        <div className='panel-header'>
-          <div>
-            <h3>Messages</h3>
-            <small>{formatCount(directMessages.length)} conversations</small>
-          </div>
-          {selectedDirectMessagePeerPubkey ? (
-            <Button variant='secondary' type='button' onClick={() => openDirectMessageList('replace')}>
-              All
-            </Button>
-          ) : null}
-        </div>
-        {directMessageError ? <Notice tone='destructive'>{directMessageError}</Notice> : null}
-        {directMessages.length === 0 ? (
-          <p className='empty'>No direct messages yet.</p>
-        ) : (
-          <ul className='post-list'>
-            {directMessages.map((conversation) => {
-              const label = authorDisplayLabel(
-                conversation.peer_pubkey,
-                conversation.peer_display_name,
-                conversation.peer_name
-              );
-              const knownAuthor =
-                knownAuthorsByPubkey[conversation.peer_pubkey] ??
-                authorViewFromDirectMessageConversation(conversation);
-              const picture = resolveProfilePictureSrc(knownAuthor, mediaObjectUrls);
-              const selected = conversation.peer_pubkey === selectedDirectMessagePeerPubkey;
-              return (
-                <li key={conversation.peer_pubkey}>
-                  <article className='post-card'>
-                    <div className='post-meta'>
-                      <AuthorIdentityButton
-                        label={label}
-                        picture={picture}
-                        avatarTestId={`dm-conversation-avatar-${conversation.peer_pubkey}`}
-                        onClick={() =>
-                          void openAuthorDetail(conversation.peer_pubkey, {
-                            historyMode: 'push',
-                            preserveDirectMessageContext: true,
-                            directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
-                          })
-                        }
-                      />
-                      <span>
-                        {conversation.last_message_at
-                          ? formatLocalizedTime(conversation.last_message_at, locale)
-                          : t('common:fallbacks.noEvents')}
-                      </span>
-                    </div>
-                    <div className='post-body'>
-                      <strong className='post-title'>
-                        Latest: {conversation.last_message_preview ?? t('common:fallbacks.none')}
-                      </strong>
-                    </div>
-                    <div className='post-actions'>
-                      <Button
-                        variant={selected ? 'primary' : 'secondary'}
-                        type='button'
-                        onClick={() => void openDirectMessagePane(conversation.peer_pubkey)}
-                      >
-                        Open
-                      </Button>
-                    </div>
-                  </article>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-
-      {selectedDirectMessagePeerPubkey ? (
-        <>
-          <Card className='shell-workspace-card'>
-            <div className='shell-workspace-header'>
-              <div className='shell-workspace-summary'>
-                <AuthorIdentityButton
-                  label={selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey}
-                  picture={selectedDirectMessagePeerPicture}
-                  avatarSize='lg'
-                  avatarTestId='dm-active-header-avatar'
-                  className='relationship-badge'
-                  onClick={() =>
-                    void openAuthorDetail(selectedDirectMessagePeerPubkey, {
-                      historyMode: 'push',
-                      preserveDirectMessageContext: true,
-                      directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
-                    })
-                  }
-                />
-                {selectedDirectMessageStatus ? (
-                  <span className='relationship-badge relationship-badge-direct'>
-                    {selectedDirectMessageStatus.send_enabled
-                      ? `peers ${formatCount(selectedDirectMessageStatus.peer_count)}`
-                      : 'send disabled'}
-                  </span>
-                ) : null}
-              </div>
-              <div className='post-actions'>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() =>
-                    void openDirectMessagePane(selectedDirectMessagePeerPubkey, {
-                      historyMode: 'replace',
-                    })
-                  }
-                >
-                  {t('common:actions.refresh')}
-                </Button>
-                <Button
-                  variant='secondary'
-                  type='button'
-                  disabled={selectedDirectMessageTimeline.length === 0}
-                  onClick={() => void handleClearDirectMessage(selectedDirectMessagePeerPubkey)}
-                >
-                  {t('common:actions.clear')}
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          <Card className='shell-workspace-card'>
-            {selectedDirectMessageTimeline.length === 0 ? (
-              <p className='empty'>No messages yet.</p>
-            ) : (
-              <ul className='post-list'>
-                {selectedDirectMessageTimeline.map((message) => {
-                  const image = selectPrimaryImageAttachment(message.attachments);
-                  const poster = selectVideoPosterAttachment(message.attachments);
-                  const video = selectVideoManifestAttachment(message.attachments);
-                  const imageSrc = image ? mediaObjectUrls[image.hash] ?? null : null;
-                  const posterSrc = poster ? mediaObjectUrls[poster.hash] ?? null : null;
-                  const videoSrc = video ? mediaObjectUrls[video.hash] ?? null : null;
-                  const videoUnsupported = Boolean(video && unsupportedVideoManifests[video.hash]);
-                  const authorPubkey = message.outgoing
-                    ? syncStatus.local_author_pubkey
-                    : selectedDirectMessagePeerPubkey;
-                  const authorLabel = message.outgoing
-                    ? profileAuthorLabel
-                    : selectedDirectMessagePeerLabel ?? selectedDirectMessagePeerPubkey;
-                  const authorPicture = message.outgoing
-                    ? localDirectMessageAuthorPicture
-                    : selectedDirectMessagePeerPicture;
-                  return (
-                    <li key={message.message_id}>
-                      <article className='post-card'>
-                        <div className='post-meta'>
-                          <AuthorIdentityButton
-                            label={authorLabel}
-                            picture={authorPicture}
-                            avatarTestId={`dm-message-avatar-${message.message_id}`}
-                            onClick={() =>
-                              void openAuthorDetail(authorPubkey, {
-                                historyMode: 'push',
-                                preserveDirectMessageContext: true,
-                                directMessagePeerPubkey: selectedDirectMessagePeerPubkey,
-                              })
-                            }
-                          />
-                          <span>{formatLocalizedTime(message.created_at, locale)}</span>
-                          <span className='reply-chip'>
-                            {message.delivered ? 'Delivered' : 'Pending'}
-                          </span>
-                        </div>
-                        {message.text ? (
-                          <div className='post-body'>
-                            <strong className='post-title'>{message.text}</strong>
-                          </div>
-                        ) : null}
-                        {image ? (
-                          imageSrc ? (
-                            <div className='draft-preview-frame'>
-                              <img
-                                className='draft-preview-image'
-                                src={imageSrc}
-                                alt={t('common:media.imageAlt')}
-                              />
-                            </div>
-                          ) : (
-                            <small>{t('common:media.syncingImage')}</small>
-                          )
-                        ) : null}
-                        {video ? (
-                          videoSrc && !videoUnsupported ? (
-                            <video
-                              className='post-card-video'
-                              controls
-                              playsInline
-                              poster={posterSrc ?? undefined}
-                              src={videoSrc}
-                            />
-                          ) : posterSrc ? (
-                            <div className='draft-preview-frame'>
-                              <img
-                                className='draft-preview-image'
-                                src={posterSrc}
-                                alt={t('common:media.videoPosterAlt')}
-                              />
-                            </div>
-                          ) : (
-                            <small>{t('common:media.syncingPoster')}</small>
-                          )
-                        ) : null}
-                        <div className='post-actions'>
-                          <Button
-                            variant='secondary'
-                            type='button'
-                            onClick={() =>
-                              void handleDeleteDirectMessageMessage(
-                                selectedDirectMessagePeerPubkey,
-                                message.message_id
-                              )
-                            }
-                          >
-                            {t('common:actions.clear')}
-                          </Button>
-                        </div>
-                      </article>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-
-          <Card className='shell-workspace-card'>
-            {selectedDirectMessageStatus && !selectedDirectMessageStatus.send_enabled ? (
-              <Notice tone='warning'>
-                Direct message send is disabled until the relationship is mutual again.
-              </Notice>
-            ) : null}
-            <form className='composer' onSubmit={(event) => void handleSendDirectMessage(event)}>
-              <Textarea
-                value={directMessageComposer}
-                onChange={(event) => setDirectMessageComposer(event.target.value)}
-                placeholder='Write a message'
-                disabled={
-                  directMessageSending || selectedDirectMessageStatus?.send_enabled === false
-                }
-              />
-              <Label className='file-field file-field-compact'>
-                <span>{t('common:fallbacks.attachment')}</span>
-                <Input
-                  key={directMessageAttachmentInputKey}
-                  aria-label={t('common:fallbacks.attachment')}
-                  type='file'
-                  accept='image/*,video/*'
-                  disabled={
-                    directMessageSending || selectedDirectMessageStatus?.send_enabled === false
-                  }
-                  onChange={(event) => {
-                    void handleDirectMessageAttachmentSelection(event);
-                  }}
-                />
-              </Label>
-              <ComposerDraftPreviewList
-                items={directMessageDraftViews}
-                onRemove={handleRemoveDirectMessageDraftAttachment}
-              />
-              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                <span>
-                  pending outbox {formatCount(selectedDirectMessageStatus?.pending_outbox_count ?? 0)}
-                </span>
-              </div>
-              <Button
-                type='submit'
-                disabled={
-                  directMessageSending || selectedDirectMessageStatus?.send_enabled === false
-                }
-              >
-                {directMessageSending ? 'Sending...' : 'Send'}
-              </Button>
-            </form>
-          </Card>
-        </>
-      ) : null}
-    </>
+    <DesktopShellMessagesWorkspace
+      t={t}
+      locale={locale}
+      viewModels={viewModels}
+      openDirectMessageList={openDirectMessageList}
+      openDirectMessagePane={openDirectMessagePane}
+      openAuthorDetail={openAuthorDetail}
+      handleClearDirectMessage={handleClearDirectMessage}
+      handleDeleteDirectMessageMessage={handleDeleteDirectMessageMessage}
+      handleDirectMessageAttachmentSelection={handleDirectMessageAttachmentSelection}
+      handleRemoveDirectMessageDraftAttachment={handleRemoveDirectMessageDraftAttachment}
+      handleSendDirectMessage={handleSendDirectMessage}
+    />
   );
   const notificationsWorkspace = (
-    <>
-      <Card className='shell-workspace-card'>
-        <div className='shell-workspace-header'>
-          <div>
-            <h3>{t('shell:notifications.title')}</h3>
-            <small>
-              {t('shell:notifications.summary', {
-                count: notifications.length,
-                unread: notificationStatus.unread_count,
-              })}
-            </small>
-          </div>
-          <Button
-            variant='secondary'
-            type='button'
-            onClick={() => {
-              setNotificationAutoReadError(null);
-              setNotificationPanelState({
-                status: 'loading',
-                error: null,
-              });
-              void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
-            }}
-          >
-            {t('common:actions.refresh')}
-          </Button>
-        </div>
-        {notificationPanelState.status === 'loading' ? (
-          <Notice>{t('shell:notifications.loading')}</Notice>
-        ) : null}
-        {notificationPanelState.status === 'error' && notificationPanelState.error ? (
-          <Notice tone='destructive'>{notificationPanelState.error}</Notice>
-        ) : null}
-        {notificationAutoReadError ? <Notice tone='warning'>{notificationAutoReadError}</Notice> : null}
-      </Card>
-
-      <Card className='shell-workspace-card'>
-        {notificationPanelState.status === 'ready' && notificationItems.length === 0 ? (
-          <p className='empty-state'>{t('shell:notifications.empty')}</p>
-        ) : null}
-        {notificationItems.length > 0 ? (
-          <ul className='notification-list' aria-label={t('shell:notifications.title')}>
-            {notificationItems.map((notification) => (
-              <li key={notification.notification_id}>
-                <button
-                  className='notification-item'
-                  data-unread={notification.unread}
-                  type='button'
-                  onClick={() => void handleOpenNotification(notification)}
-                >
-                  <div className='notification-item-header'>
-                    <div className='notification-item-author'>
-                      <AuthorAvatar
-                        label={notification.actorLabel}
-                        picture={notification.actorPicture}
-                        testId={`notification-avatar-${notification.notification_id}`}
-                      />
-                      <div className='notification-item-copy'>
-                        <span className='notification-item-author-label'>
-                          {notification.actorLabel}
-                        </span>
-                        <div className='notification-item-badges'>
-                          <Badge tone={notification.unread ? 'accent' : 'neutral'}>
-                            {notification.kindLabel}
-                          </Badge>
-                          {notification.unread ? (
-                            <Badge tone='warning'>
-                              {t('shell:notifications.unread')}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <span className='notification-item-time'>{notification.receivedLabel}</span>
-                  </div>
-                  <div className='notification-item-body'>
-                    <p className='notification-item-preview'>{notification.previewText}</p>
-                    <small className='notification-item-context'>{notification.contextLabel}</small>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Card>
-    </>
+    <DesktopShellNotificationsWorkspace
+      t={t}
+      notificationItems={notificationItems}
+      onRefresh={() => {
+        setNotificationAutoReadError(null);
+        setNotificationPanelState({
+          status: 'loading',
+          error: null,
+        });
+        void loadTopics(trackedTopics, activeTopic, null).catch(() => undefined);
+      }}
+      handleOpenNotification={handleOpenNotification}
+    />
   );
   const detailPaneStack = (
-    <>
-      {selectedThread ? (
-        <ContextPane
-          paneId={`${SHELL_CONTEXT_ID}-thread`}
-          title={t('shell:context.thread')}
-          summary={threadPanelState.summary}
-          showBackdrop={!selectedAuthorPubkey}
-          stackIndex={0}
-            onClose={closeThreadPane}
-          >
-            <ThreadPanel
-              state={threadPanelState}
-              posts={threadPostViews}
-              hasMore={selectedThreadHasMore}
-              loadingMore={selectedThreadLoadingMore}
-              onLoadMore={
-                selectedThread ? () => void loadMoreThread(activeTopic, selectedThread) : undefined
-              }
-              onOpenAuthor={(authorPubkey) =>
-                void openAuthorDetail(authorPubkey, {
-                  fromThread: true,
-                threadId: selectedThread,
-              })
-            }
-            onOpenThread={(threadId) => void openThread(threadId)}
-            onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-            onReply={beginReply}
-            onRepost={(post) => void handleSimpleRepost(post)}
-                onQuoteRepost={beginQuoteRepost}
-                onRetryLocalPost={handleRetryLocalPost}
-                onRestoreLocalPost={handleRestoreLocalPost}
-                localAuthorPubkey={syncStatus.local_author_pubkey}
-                mediaObjectUrls={mediaObjectUrls}
-                ownedReactionAssets={ownedReactionAssets}
-                bookmarkedReactionAssets={bookmarkedReactionAssets}
-                recentReactions={recentReactions}
-                onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-                onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                onReactionPickerOpen={() => void loadReactionCatalogData()}
-                onActivateReference={(reference) => void handleActivateReference(reference)}
-                onCopyPostLink={handleCopyInternalLink}
-                focusedPostObjectId={focusedObjectId}
-              />
-        </ContextPane>
-      ) : null}
-      {selectedAuthorPubkey ? (
-        <ContextPane
-          paneId={`${SHELL_CONTEXT_ID}-author`}
-          title={t('shell:context.author')}
-          summary={
-            selectedAuthor
-              ? authorDetailView.displayLabel
-              : t('common:fallbacks.selectAuthor')
-          }
-          showBackdrop={true}
-          stackIndex={selectedThread ? 1 : 0}
-          onClose={closeAuthorPane}
-        >
-          <div className='shell-main-stack'>
-            <AuthorDetailCard
-              view={authorDetailView}
-              localAuthorPubkey={syncStatus.local_author_pubkey}
-              onToggleRelationship={(authorPubkey, following) =>
-                void handleRelationshipAction(authorPubkey, following)
-              }
-              onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
-              onOpenDirectMessage={(authorPubkey) => void openDirectMessagePane(authorPubkey)}
-            />
-            <Card className='shell-workspace-card'>
-              <TimelineFeed
-                posts={selectedAuthorTimelinePostViews}
-                emptyCopy={t('profile:feed.noAuthorPosts')}
-                onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                onOpenThread={(threadId) => void openThread(threadId)}
-                onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                onReply={beginReply}
-                readOnly={true}
-                onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
-                onActivateReference={(reference) => void handleActivateReference(reference)}
-                onCopyPostLink={handleCopyInternalLink}
-              />
-            </Card>
-          </div>
-        </ContextPane>
-      ) : null}
-    </>
+    <DesktopShellDetailPaneStack
+      t={t}
+      activeTopic={activeTopic}
+      viewModels={viewModels}
+      closeAuthorPane={closeAuthorPane}
+      closeThreadPane={closeThreadPane}
+      loadMoreThread={loadMoreThread}
+      loadReactionCatalogData={loadReactionCatalogData}
+      openAuthorDetail={openAuthorDetail}
+      openDirectMessagePane={openDirectMessagePane}
+      openThread={openThread}
+      beginReply={beginReply}
+      handleSimpleRepost={handleSimpleRepost}
+      beginQuoteRepost={beginQuoteRepost}
+      handleRetryLocalPost={handleRetryLocalPost}
+      handleRestoreLocalPost={handleRestoreLocalPost}
+      handleToggleReaction={handleToggleReaction}
+      handleBookmarkCustomReaction={handleBookmarkCustomReaction}
+      handleActivateReference={handleActivateReference}
+      handleCopyPostLink={handleCopyInternalLink}
+      handleRelationshipAction={handleRelationshipAction}
+      handleMuteAction={handleMuteAction}
+      handleOpenOriginalTopic={handleOpenOriginalTopic}
+    />
   );
 
   return (
@@ -1529,480 +846,53 @@ export function DesktopShellPage({
           />
         }
         workspace={
-          <div className='shell-main-stack'>
-            {shellChromeState.activePrimarySection !== 'notifications' ? (
-              <Card className='shell-workspace-card shell-workspace-header-card'>
-                <TimelineWorkspaceHeader
-                  activeSection={shellChromeState.activePrimarySection}
-                  items={primarySectionItems}
-                  onSelectSection={focusPrimarySection}
-                />
-              </Card>
-            ) : null}
-
-            <section
-              className='shell-section'
-              ref={setPrimarySectionRef(shellChromeState.activePrimarySection)}
-              tabIndex={-1}
-              onFocusCapture={() =>
-                setShellChromeState((current) => ({
-                  ...current,
-                  activePrimarySection: routeSection,
-                }))
-              }
-            >
-              {shellChromeState.activePrimarySection === 'timeline' ? (
-                <>
-                  <Card className='shell-workspace-card'>
-                    <div className='shell-workspace-header'>
-                      <div className='shell-workspace-summary'>
-                        <div className='shell-workspace-tabs' role='tablist' aria-label={t('shell:workspace.timelineViews')}>
-                          {timelineViewItems.map((item) => (
-                            <button
-                              key={item.id}
-                              className={`shell-tab${
-                                shellChromeState.timelineView === item.id ? ' shell-tab-active' : ''
-                              }`}
-                              role='tab'
-                              type='button'
-                              aria-selected={shellChromeState.timelineView === item.id}
-                              onClick={() => focusTimelineView(item.id)}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                        {shellChromeState.timelineView === 'bookmarks' ? (
-                          <span className='relationship-badge'>
-                            {t('shell:workspace.savedCount', {
-                              count: bookmarkedTimelinePostViews.length,
-                            })}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    {composerError ? <Notice tone='destructive'>{composerError}</Notice> : null}
-                  </Card>
-                  <Card className='shell-workspace-card'>
-                    {shellChromeState.timelineView === 'feed' ? (
-                      <TimelineFeed
-                        posts={activeTimelinePostViews}
-                        emptyCopy={t('shell:workspace.noPosts')}
-                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                        onOpenThread={(threadId) => void openThread(threadId)}
-                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                        onReply={beginReply}
-                        onRepost={(post) => void handleSimpleRepost(post)}
-                        onQuoteRepost={beginQuoteRepost}
-                        onRetryLocalPost={handleRetryLocalPost}
-                        onRestoreLocalPost={handleRestoreLocalPost}
-                        localAuthorPubkey={syncStatus.local_author_pubkey}
-                        mediaObjectUrls={mediaObjectUrls}
-                        ownedReactionAssets={ownedReactionAssets}
-                        bookmarkedReactionAssets={bookmarkedReactionAssets}
-                        recentReactions={recentReactions}
-                        onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-                        onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                        onReactionPickerOpen={() => void loadReactionCatalogData()}
-                        showBookmarkAction={true}
-                        bookmarkedPostIds={bookmarkedPostIds}
-                        onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
-                        onActivateReference={(reference) => void handleActivateReference(reference)}
-                        onCopyPostLink={handleCopyInternalLink}
-                        hasMore={activeTimelineHasMore}
-                        loadingMore={activeTimelineLoadingMore}
-                        onLoadMore={() => void loadMoreTimeline(activeTopic)}
-                        pendingCount={activeTimelinePendingCount}
-                        onApplyPending={() =>
-                          void refreshTimelineFeed(activeTopic, selectedThread)
-                        }
-                      />
-                    ) : (
-                      <TimelineFeed
-                        posts={bookmarkedTimelinePostViews}
-                        emptyCopy={t('shell:workspace.noBookmarks')}
-                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                        onOpenThread={(threadId) => void openThread(threadId)}
-                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                        onReply={beginReply}
-                        onRepost={(post) => void handleSimpleRepost(post)}
-                        onQuoteRepost={beginQuoteRepost}
-                        onRetryLocalPost={handleRetryLocalPost}
-                        onRestoreLocalPost={handleRestoreLocalPost}
-                        localAuthorPubkey={syncStatus.local_author_pubkey}
-                        mediaObjectUrls={mediaObjectUrls}
-                        ownedReactionAssets={ownedReactionAssets}
-                        bookmarkedReactionAssets={bookmarkedReactionAssets}
-                        recentReactions={recentReactions}
-                        onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-                        onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                        onReactionPickerOpen={() => void loadReactionCatalogData()}
-                        showBookmarkAction={true}
-                        bookmarkedPostIds={bookmarkedPostIds}
-                        onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
-                        onActivateReference={(reference) => void handleActivateReference(reference)}
-                        onCopyPostLink={handleCopyInternalLink}
-                      />
-                    )}
-                  </Card>
-                </>
-              ) : null}
-
-              {shellChromeState.activePrimarySection === 'live' ? (
-                <>
-                  <Card className='shell-workspace-card'>
-                    <div className='panel-header'>
-                      <div>
-                        <h3>{t('live:title')}</h3>
-                        <small>{t('live:summary', { count: liveSessionListItems.length })}</small>
-                      </div>
-                    </div>
-                    {activeLivePanelState.status === 'loading' ? (
-                      <Notice>{t('live:loading')}</Notice>
-                    ) : null}
-                    {activeLivePanelState.status === 'error' &&
-                    (liveError ?? activeLivePanelState.error) ? (
-                      <Notice tone='destructive'>{liveError ?? activeLivePanelState.error}</Notice>
-                    ) : null}
-                  </Card>
-                  <Card className='shell-workspace-card'>
-                    {liveSessionListItems.length === 0 && activeLivePanelState.status === 'ready' ? (
-                      <p className='empty-state'>{t('live:empty')}</p>
-                    ) : null}
-                    <ul className='post-list'>
-                      {liveSessionListItems.map(({ session, isOwner, pending }) => (
-                        <li key={session.session_id}>
-                          <article
-                            className={`post-card${selectedLiveSessionId === session.session_id ? ' post-card-targeted' : ''}`}
-                            aria-busy={pending}
-                            data-live-session-id={session.session_id}
-                            tabIndex={selectedLiveSessionId === session.session_id ? -1 : undefined}
-                          >
-                            <div className='post-meta'>
-                              <span>{session.title}</span>
-                              <span>{translateLiveStatus(session.status)}</span>
-                              <span className='reply-chip'>{localizeAudienceLabel(session.audience_label)}</span>
-                            </div>
-                            <div className='post-body'>
-                              <strong className='post-title post-copy-wrap'>
-                                <SmartReferenceText
-                                  text={session.description || t('common:fallbacks.noDescription')}
-                                  className='post-copy-wrap'
-                                  onActivateReference={(reference) => void handleActivateReference(reference)}
-                                />
-                              </strong>
-                            </div>
-                            <small>{session.session_id}</small>
-                            <div className='topic-diagnostic topic-diagnostic-secondary'>
-                              <span>{t('common:labels.viewers')}: {formatCount(session.viewer_count)}</span>
-                              <span>
-                                {t('common:labels.started')}: {formatLocalizedTime(session.started_at)}
-                              </span>
-                            </div>
-                            {session.ended_at ? (
-                              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                <span>
-                                  {t('common:labels.ended')}: {formatLocalizedTime(session.ended_at)}
-                                </span>
-                              </div>
-                            ) : null}
-                            <div className='post-actions'>
-                              {session.joined_by_me ? (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  disabled={pending}
-                                  onClick={() => void handleLeaveLiveSession(session.session_id)}
-                                >
-                                  {t('common:actions.leave')}
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  disabled={pending || session.status === 'Ended'}
-                                  onClick={() => void handleJoinLiveSession(session.session_id)}
-                                >
-                                  {t('common:actions.join')}
-                                </Button>
-                              )}
-                              {isOwner ? (
-                                <Button
-                                  variant='secondary'
-                                  type='button'
-                                  disabled={pending || session.status === 'Ended'}
-                                  onClick={() => void handleEndLiveSession(session.session_id)}
-                                >
-                                  {t('common:actions.end')}
-                                </Button>
-                              ) : null}
-                              <Button
-                                variant='secondary'
-                                size='icon'
-                                className='post-action-button'
-                                type='button'
-                                aria-label={t('common:actions.copyLink')}
-                                onClick={() =>
-                                  handleCopyInternalLink(
-                                    buildLiveLink(activeTopic, session.session_id, session.channel_id ?? null)
-                                  )
-                                }
-                              >
-                                <Link2 className='size-4' aria-hidden='true' />
-                              </Button>
-                            </div>
-                          </article>
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
-                </>
-              ) : null}
-
-              {shellChromeState.activePrimarySection === 'game' ? (
-                <>
-                  <Card className='shell-workspace-card'>
-                    <div className='panel-header'>
-                      <div>
-                        <h3>{t('game:title')}</h3>
-                        <small>{t('game:summary', { count: activeGameRooms.length })}</small>
-                      </div>
-                    </div>
-                    {activeGamePanelState.status === 'loading' ? (
-                      <Notice>{t('game:loading')}</Notice>
-                    ) : null}
-                    {activeGamePanelState.status === 'error' &&
-                    (gameError ?? activeGamePanelState.error) ? (
-                      <Notice tone='destructive'>{gameError ?? activeGamePanelState.error}</Notice>
-                    ) : null}
-                  </Card>
-                  <Card className='shell-workspace-card'>
-                    {activeGameRooms.length === 0 && activeGamePanelState.status === 'ready' ? (
-                      <p className='empty-state'>{t('game:empty')}</p>
-                    ) : null}
-                    <ul className='post-list'>
-                      {activeGameRooms.map((room) => {
-                        const draft = gameDraftViews[room.room_id];
-                        const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
-                        const pending = Boolean(gameSavingByRoomId[room.room_id]);
-
-                        return (
-                          <li key={room.room_id}>
-                            <article
-                              className={`post-card${selectedGameRoomId === room.room_id ? ' post-card-targeted' : ''}`}
-                              aria-busy={pending}
-                              data-game-room-id={room.room_id}
-                              tabIndex={selectedGameRoomId === room.room_id ? -1 : undefined}
-                            >
-                              <div className='post-meta'>
-                                <span>{room.title}</span>
-                                <span>{translateGameStatus(room.status)}</span>
-                                <span className='reply-chip'>{localizeAudienceLabel(room.audience_label)}</span>
-                              </div>
-                              <div className='post-body'>
-                                <strong className='post-title post-copy-wrap'>
-                                  <SmartReferenceText
-                                    text={room.description || t('common:fallbacks.noDescription')}
-                                    className='post-copy-wrap'
-                                    onActivateReference={(reference) => void handleActivateReference(reference)}
-                                  />
-                                </strong>
-                              </div>
-                              <small>{room.room_id}</small>
-                              <div className='topic-diagnostic topic-diagnostic-secondary'>
-                                <span>{t('common:labels.phase')}: {room.phase_label ?? t('common:fallbacks.none')}</span>
-                                <span>
-                                  {t('common:labels.updated')}: {formatLocalizedTime(room.updated_at)}
-                                </span>
-                              </div>
-                              <ul className='draft-attachment-list'>
-                                {room.scores.map((score) => (
-                                  <li
-                                    key={score.participant_id}
-                                    className='draft-attachment-item score-row'
-                                  >
-                                    <div className='draft-attachment-content'>
-                                      <strong>{score.label}</strong>
-                                    </div>
-                                    {isOwner ? (
-                                      <Input
-                                        aria-label={`${room.room_id}-${score.label}-score`}
-                                        value={
-                                          draft?.scores[score.participant_id] ?? String(score.score)
-                                        }
-                                        disabled={pending}
-                                        onChange={(event) =>
-                                          updateGameDraft(room.room_id, (current) => ({
-                                            ...current,
-                                            scores: {
-                                              ...current.scores,
-                                              [score.participant_id]: event.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    ) : (
-                                      <span>{score.score}</span>
-                                    )}
-                                  </li>
-                                ))}
-                              </ul>
-                              {isOwner && draft ? (
-                                <div className='composer composer-compact'>
-                                  <Label>
-                                    <span>{t('game:fields.status')}</span>
-                                    <Select
-                                      aria-label={`${room.room_id}-status`}
-                                      value={draft.status}
-                                      disabled={pending}
-                                      onChange={(event) =>
-                                        updateGameDraft(room.room_id, (current) => ({
-                                          ...current,
-                                          status: event.target.value as GameRoomStatus,
-                                        }))
-                                      }
-                                    >
-                                      <option value='Waiting'>{t('game:statuses.Waiting')}</option>
-                                      <option value='Running'>{t('game:statuses.Running')}</option>
-                                      <option value='Paused'>{t('game:statuses.Paused')}</option>
-                                      <option value='Ended'>{t('game:statuses.Ended')}</option>
-                                    </Select>
-                                  </Label>
-                                  <Label>
-                                    <span>{t('game:fields.phase')}</span>
-                                    <Input
-                                      aria-label={`${room.room_id}-phase`}
-                                      value={draft.phaseLabel}
-                                      disabled={pending}
-                                      onChange={(event) =>
-                                        updateGameDraft(room.room_id, (current) => ({
-                                          ...current,
-                                          phase_label: event.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </Label>
-                                  <Button
-                                    variant='secondary'
-                                    type='button'
-                                    disabled={pending}
-                                    onClick={() => void handleUpdateGameRoom(room.room_id)}
-                                  >
-                                    {t('game:actions.saveRoom')}
-                                  </Button>
-                                </div>
-                              ) : null}
-                              <div className='post-actions'>
-                                <Button
-                                  variant='secondary'
-                                  size='icon'
-                                  className='post-action-button'
-                                  type='button'
-                                  aria-label={t('common:actions.copyLink')}
-                                  onClick={() =>
-                                    handleCopyInternalLink(
-                                      buildGameLink(activeTopic, room.room_id, room.channel_id ?? null)
-                                    )
-                                  }
-                                >
-                                  <Link2 className='size-4' aria-hidden='true' />
-                                </Button>
-                              </div>
-                            </article>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </Card>
-                </>
-              ) : null}
-
-              {shellChromeState.activePrimarySection === 'notifications'
-                ? notificationsWorkspace
-                : null}
-
-              {shellChromeState.activePrimarySection === 'messages' ? messagesWorkspace : null}
-
-              {shellChromeState.activePrimarySection === 'profile' ? (
-                <>
-                  {profileMode === 'edit' ? (
-                    <ProfileEditorPanel
-                      authorLabel={profileAuthorLabel}
-                      status={profilePanelState.status}
-                      saving={profileSaving}
-                      dirty={profileDirty}
-                      error={profileError ?? profilePanelState.error}
-                      fields={profileEditorFields}
-                      picturePreviewSrc={profileEditorPictureSrc}
-                      hasPicture={profileEditorHasPicture}
-                      pictureInputKey={profileAvatarInputKey}
-                      onFieldChange={handleProfileFieldChange}
-                      onPictureSelect={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        if (!file) {
-                          return;
-                        }
-                        setProfileAvatarCropFile(file);
-                        setProfileAvatarCropOpen(true);
-                      }}
-                      onPictureClear={handleClearProfileAvatar}
-                      onBack={openProfileOverview}
-                      onSave={handleSaveProfile}
-                      onReset={resetProfileDraft}
-                    />
-                  ) : profileMode === 'connections' ? (
-                    <ProfileConnectionsPanel
-                      activeView={profileConnectionsView}
-                      items={activeSocialConnectionViews}
-                      localAuthorPubkey={syncStatus.local_author_pubkey}
-                      status={socialConnectionsPanelState.status}
-                      error={socialConnectionsPanelState.error}
-                      onSelectView={openProfileConnections}
-                      onToggleRelationship={(authorPubkey, following) =>
-                        void handleRelationshipAction(authorPubkey, following)
-                      }
-                      onToggleMute={(authorPubkey, muted) =>
-                        void handleMuteAction(authorPubkey, muted)
-                      }
-                      onBack={openProfileOverview}
-                    />
-                  ) : (
-                    <ProfileOverviewPanel
-                      authorLabel={profileAuthorLabel}
-                      about={localProfile?.about ?? null}
-                      picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)}
-                      status={profilePanelState.status}
-                      error={profileError ?? profilePanelState.error}
-                      postCount={profileTimelinePostViews.length}
-                      followingCount={socialConnections.following.length}
-                      followedCount={socialConnections.followed.length}
-                      mutedCount={socialConnections.muted.length}
-                      onEdit={openProfileEditor}
-                      onOpenFollowing={() => openProfileConnections('following')}
-                      onOpenFollowed={() => openProfileConnections('followed')}
-                      onOpenMuted={() => openProfileConnections('muted')}
-                    />
-                  )}
-                  {profileMode !== 'connections' ? (
-                    <Card className='shell-workspace-card'>
-                      <TimelineFeed
-                        posts={profileTimelinePostViews}
-                        emptyCopy={t('profile:feed.noOwnPosts')}
-                        onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                        onOpenThread={(threadId) => void openThread(threadId)}
-                        onOpenThreadInTopic={(threadId, topicId) => void openThread(threadId, { topic: topicId })}
-                        onReply={beginReply}
-                        readOnly={true}
-                        onOpenOriginalTopic={(topicId) => void handleOpenOriginalTopic(topicId)}
-                        onActivateReference={(reference) => void handleActivateReference(reference)}
-                        onCopyPostLink={handleCopyInternalLink}
-                      />
-                    </Card>
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-          </div>
+          <DesktopShellPrimaryWorkspace
+            t={t}
+            locale={locale}
+            routeSection={routeSection}
+            profileAuthorLabel={profileAuthorLabel}
+            profileAvatarInputKey={profileAvatarInputKey}
+            messagesWorkspace={messagesWorkspace}
+            notificationsWorkspace={notificationsWorkspace}
+            viewModels={viewModels}
+            setPrimarySectionRef={setPrimarySectionRef}
+            focusPrimarySection={focusPrimarySection}
+            focusTimelineView={focusTimelineView}
+            loadReactionCatalogData={loadReactionCatalogData}
+            refreshTimelineFeed={refreshTimelineFeed}
+            loadMoreTimeline={loadMoreTimeline}
+            openAuthorDetail={openAuthorDetail}
+            openThread={openThread}
+            beginReply={beginReply}
+            handleSimpleRepost={handleSimpleRepost}
+            beginQuoteRepost={beginQuoteRepost}
+            handleRetryLocalPost={handleRetryLocalPost}
+            handleRestoreLocalPost={handleRestoreLocalPost}
+            handleToggleReaction={handleToggleReaction}
+            handleBookmarkCustomReaction={handleBookmarkCustomReaction}
+            handleToggleBookmarkedPost={handleToggleBookmarkedPost}
+            handleActivateReference={handleActivateReference}
+            handleCopyInternalLink={handleCopyInternalLink}
+            handleJoinLiveSession={handleJoinLiveSession}
+            handleLeaveLiveSession={handleLeaveLiveSession}
+            handleEndLiveSession={handleEndLiveSession}
+            updateGameDraft={updateGameDraft}
+            handleUpdateGameRoom={handleUpdateGameRoom}
+            openProfileOverview={openProfileOverview}
+            openProfileEditor={openProfileEditor}
+            openProfileConnections={openProfileConnections}
+            handleProfileFieldChange={handleProfileFieldChange}
+            onProfilePictureSelect={(file) => {
+              setProfileAvatarCropFile(file);
+              setProfileAvatarCropOpen(true);
+            }}
+            handleClearProfileAvatar={handleClearProfileAvatar}
+            handleSaveProfile={handleSaveProfile}
+            resetProfileDraft={resetProfileDraft}
+            handleRelationshipAction={handleRelationshipAction}
+            handleMuteAction={handleMuteAction}
+            handleOpenOriginalTopic={handleOpenOriginalTopic}
+          />
         }
         detailPaneStack={detailPaneStack}
         detailPaneCount={(selectedThread ? 1 : 0) + (selectedAuthorPubkey ? 1 : 0)}
@@ -2027,344 +917,74 @@ export function DesktopShellPage({
         }
       />
 
-      <ImageCropDialog
-        open={profileAvatarCropOpen}
-        file={profileAvatarCropFile}
-        title={t('profile:editor.picture')}
-        description={t('profile:editor.pictureCropDescription', {
-          defaultValue: 'Drag and zoom to choose the visible square for your avatar.',
-        })}
-        confirmLabel={t('common:actions.save')}
-        onOpenChange={(open) => {
-          setProfileAvatarCropOpen(open);
-          if (!open) {
-            setProfileAvatarCropFile(null);
-          }
-        }}
-        onConfirm={async ({ croppedFile }) => {
-          await handleProfileAvatarFile(croppedFile);
-          setProfileAvatarCropOpen(false);
-          setProfileAvatarCropFile(null);
-        }}
+      <DesktopShellOverlays
+        t={t}
+        activeTopic={activeTopic}
+        viewModels={viewModels}
+        profileAvatarCropOpen={profileAvatarCropOpen}
+        profileAvatarCropFile={profileAvatarCropFile}
+        setProfileAvatarCropOpen={setProfileAvatarCropOpen}
+        setProfileAvatarCropFile={setProfileAvatarCropFile}
+        handleProfileAvatarFile={handleProfileAvatarFile}
+        channelDialogOpen={channelDialogOpen}
+        setChannelDialogOpen={setChannelDialogOpen}
+        sharePreviewOpen={sharePreviewOpen}
+        setSharePreviewOpen={setSharePreviewOpen}
+        sharePreviewToken={sharePreviewToken}
+        setSharePreviewToken={setSharePreviewToken}
+        sharePreviewData={sharePreviewData}
+        setSharePreviewData={setSharePreviewData}
+        sharePreviewLoading={sharePreviewLoading}
+        sharePreviewError={sharePreviewError}
+        setSharePreviewError={setSharePreviewError}
+        sharePreviewShowRaw={sharePreviewShowRaw}
+        setSharePreviewShowRaw={setSharePreviewShowRaw}
+        shareImportPending={shareImportPending}
+        handleConfirmShareImport={handleConfirmShareImport}
+        handleCreatePrivateChannel={handleCreatePrivateChannel}
+        handleJoinChannelAccess={handleJoinChannelAccess}
+        handleSelectPrivateChannel={handleSelectPrivateChannel}
+        handleShareChannelAccess={handleShareChannelAccess}
+        handleActivateReference={handleActivateReference}
+        handleCopyInternalLink={handleCopyInternalLink}
+        composeDialogOpen={composeDialogOpen}
+        setComposeDialogOpen={setComposeDialogOpen}
+        handlePublish={handlePublish}
+        handleAttachmentSelection={handleAttachmentSelection}
+        handleRemoveDraftAttachment={handleRemoveDraftAttachment}
+        clearReply={clearReply}
+        clearRepost={clearRepost}
+        liveCreateDialogOpen={liveCreateDialogOpen}
+        setLiveCreateDialogOpen={setLiveCreateDialogOpen}
+        handleCreateLiveSession={handleCreateLiveSession}
+        gameCreateDialogOpen={gameCreateDialogOpen}
+        setGameCreateDialogOpen={setGameCreateDialogOpen}
+        handleCreateGameRoom={handleCreateGameRoom}
+        openFloatingActionDialog={openFloatingActionDialog}
+        clipboardToastId={clipboardToastId}
       />
 
-      <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('channels:title')}</DialogTitle>
-            <DialogDescription>{activeTopic}</DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <PrivateChannelPanel
-              status={activeChannelPanelState.status}
-              error={channelError ?? activeChannelPanelState.error}
-              pendingAction={channelActionPending}
-              channelLabel={channelLabelInput}
-              channelAudience={channelAudienceInput}
-              channelAudienceOptions={channelAudienceOptions}
-              inviteTokenInput={inviteTokenInput}
-              inviteOutput={inviteOutput}
-              inviteOutputLabel={inviteOutputLabel}
-              channels={privateChannelListItems}
-              selectedChannel={activePrivateChannel}
-              onChannelLabelChange={setChannelLabelInput}
-              onChannelAudienceChange={setChannelAudienceInput}
-              onInviteTokenChange={setInviteTokenInput}
-              onCreateChannel={(event) => void handleCreatePrivateChannel(event)}
-              onJoin={(event) => void handleJoinChannelAccess(event)}
-              onSelectChannel={(channelId) => handleSelectPrivateChannel(activeTopic, channelId)}
-              onShare={() => void handleShareChannelAccess()}
-              onActivateReference={(reference) => void handleActivateReference(reference)}
-              onCopyInviteOutput={handleCopyInternalLink}
-            />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={sharePreviewOpen}
-        onOpenChange={(open) => {
-          setSharePreviewOpen(open);
-          if (!open) {
-            setSharePreviewShowRaw(false);
-            setSharePreviewError(null);
-            setSharePreviewData(null);
-            setSharePreviewToken(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('channels:previewDialog.title')}</DialogTitle>
-            <DialogDescription>{t('channels:previewDialog.description')}</DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            {sharePreviewLoading ? <Notice>{t('channels:loading')}</Notice> : null}
-            {sharePreviewError ? <Notice tone='destructive'>{sharePreviewError}</Notice> : null}
-            {sharePreviewData ? (
-              <>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>{t('common:labels.policy')}: {t(`channels:previewDialog.tokenKinds.${sharePreviewData.kind}`)}</span>
-                  <span>{t('common:labels.epoch')}: {sharePreviewData.epoch_id}</span>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>{t('common:labels.owner')}: {sharePreviewData.owner_pubkey}</span>
-                  <span>{t('common:labels.sourceTopic')}: {sharePreviewData.topic_id}</span>
-                </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>{t('channels:previewDialog.channel')}: {sharePreviewData.channel_label}</span>
-                  <span>{t('channels:previewDialog.channelId')}: {sharePreviewData.channel_id}</span>
-                </div>
-                {sharePreviewData.inviter_pubkey ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>{t('channels:previewDialog.inviter')}: {sharePreviewData.inviter_pubkey}</span>
-                  </div>
-                ) : null}
-                {sharePreviewData.sponsor_pubkey ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>{t('channels:previewDialog.sponsor')}: {sharePreviewData.sponsor_pubkey}</span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            {sharePreviewShowRaw && sharePreviewToken ? (
-              <code className='extended-inline-code'>{sharePreviewToken}</code>
-            ) : null}
-            <div className='ui-dialog-footer'>
-              {sharePreviewToken ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => handleCopyInternalLink(sharePreviewToken)}
-                >
-                  {t('channels:previewDialog.copyToken')}
-                </Button>
-              ) : null}
-              {sharePreviewToken ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => setSharePreviewShowRaw((current) => !current)}
-                >
-                  {sharePreviewShowRaw
-                    ? t('channels:previewDialog.hideRaw')
-                    : t('channels:previewDialog.showRaw')}
-                </Button>
-              ) : null}
-              <Button
-                variant='secondary'
-                type='button'
-                onClick={() => setSharePreviewOpen(false)}
-              >
-                {t('common:actions.cancel')}
-              </Button>
-              <Button
-                type='button'
-                disabled={sharePreviewLoading || shareImportPending || !sharePreviewData}
-                onClick={() => void handleConfirmShareImport()}
-              >
-                {shareImportPending ? t('common:actions.join') : t('channels:previewDialog.import')}
-              </Button>
-            </div>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={composeDialogOpen} onOpenChange={setComposeDialogOpen}>
-        <DialogContent className='shell-compose-dialog'>
-          <DialogHeader>
-            <DialogTitle>
-              {replyTarget
-                ? t('common:actions.reply')
-                : repostTarget
-                  ? t('common:actions.quoteRepost')
-                  : t('common:actions.publish')}
-            </DialogTitle>
-            <DialogDescription>
-              {t('common:labels.audience')}: {activeComposeAudienceLabel}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <ComposerPanel
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onSubmit={handlePublish}
-              attachmentInputKey={attachmentInputKey}
-              onAttachmentSelection={(event) => {
-                void handleAttachmentSelection(event);
-              }}
-              draftMediaItems={composerDraftViews}
-              onRemoveDraftAttachment={handleRemoveDraftAttachment}
-              composerError={composerError}
-              audienceLabel={activeComposeAudienceLabel}
-              sourcePreview={composerSourcePreview}
-              replyTarget={
-                replyTarget
-                  ? {
-                      content: replyTarget.content,
-                      audienceLabel: replyTarget.audience_label,
-                    }
-                  : null
-              }
-              repostTarget={
-                repostTarget
-                  ? {
-                      content: repostTarget.content,
-                      authorLabel: authorDisplayLabel(
-                        repostTarget.author_pubkey,
-                        repostTarget.author_display_name,
-                        repostTarget.author_name
-                      ),
-                    }
-                  : null
-              }
-              onClearReply={clearReply}
-              onClearRepost={clearRepost}
-              attachmentsDisabled={Boolean(repostTarget)}
-            />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={liveCreateDialogOpen} onOpenChange={setLiveCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('live:actions.start')}</DialogTitle>
-            <DialogDescription>
-              {t('common:labels.audience')}: {activeComposeAudienceLabel}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <form
-              className='composer composer-compact'
-              onSubmit={handleCreateLiveSession}
-              aria-busy={liveCreatePending}
-            >
-              <Label>
-                <span>{t('live:fields.title')}</span>
-                <Input
-                  value={liveTitle}
-                  onChange={(event) => setLiveTitle(event.target.value)}
-                  placeholder={t('live:fields.placeholders.title')}
-                  disabled={liveCreatePending}
-                />
-              </Label>
-              <Label>
-                <span>{t('live:fields.description')}</span>
-                <Textarea
-                  value={liveDescription}
-                  onChange={(event) => setLiveDescription(event.target.value)}
-                  placeholder={t('live:fields.placeholders.description')}
-                  disabled={liveCreatePending}
-                />
-              </Label>
-              {liveError ? <p className='error error-inline'>{liveError}</p> : null}
-              <Button type='submit' disabled={liveCreatePending}>
-                {t('live:actions.start')}
-              </Button>
-            </form>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={gameCreateDialogOpen} onOpenChange={setGameCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('game:actions.createRoom')}</DialogTitle>
-            <DialogDescription>
-              {t('common:labels.audience')}: {activeComposeAudienceLabel}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            <form
-              className='composer composer-compact'
-              onSubmit={handleCreateGameRoom}
-              aria-busy={gameCreatePending}
-            >
-              <Label>
-                <span>{t('game:fields.title')}</span>
-                <Input
-                  value={gameTitle}
-                  onChange={(event) => setGameTitle(event.target.value)}
-                  placeholder={t('game:fields.placeholders.title')}
-                  disabled={gameCreatePending}
-                />
-              </Label>
-              <Label>
-                <span>{t('game:fields.description')}</span>
-                <Textarea
-                  value={gameDescription}
-                  onChange={(event) => setGameDescription(event.target.value)}
-                  placeholder={t('game:fields.placeholders.description')}
-                  disabled={gameCreatePending}
-                />
-              </Label>
-              <Label>
-                <span>{t('game:fields.participants')}</span>
-                <Input
-                  value={gameParticipantsInput}
-                  onChange={(event) => setGameParticipantsInput(event.target.value)}
-                  placeholder={t('game:fields.placeholders.participants')}
-                  disabled={gameCreatePending}
-                />
-              </Label>
-              {gameError ? <p className='error error-inline'>{gameError}</p> : null}
-              <Button type='submit' disabled={gameCreatePending}>
-                {t('game:actions.createRoom')}
-              </Button>
-            </form>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      {showFloatingActionButton ? (
-        <Button
-          className='shell-fab'
-          variant='primary'
-          size='icon'
-          type='button'
-          data-testid='shell-fab'
-          aria-label={floatingActionLabel}
-          onClick={openFloatingActionDialog}
-        >
-          <Plus className='size-5' aria-hidden='true' />
-        </Button>
-      ) : null}
-
-      <SettingsDrawer
+      <DesktopShellSettingsDrawer
         drawerId={SHELL_SETTINGS_ID}
-        open={shellChromeState.settingsOpen}
-        onOpenChange={(open) => setSettingsOpen(open, !open)}
-        activeSection={shellChromeState.activeSettingsSection}
-        onSectionChange={(section) =>
-          {
-            setShellChromeState((current) => ({
-              ...current,
-              activeSettingsSection: section,
-            }));
-            syncRoute('replace', {
-              settingsOpen: true,
-              settingsSection: section,
-            });
-          }
-        }
-        sections={settingsSections}
+        onThemeChange={onThemeChange}
+        onLocaleChange={(nextLocale) => {
+          void i18nInstance.changeLanguage(nextLocale);
+        }}
+        syncRoute={syncRoute}
+        setSettingsOpen={setSettingsOpen}
+        viewModels={viewModels}
+        handleImportPeer={handleImportPeer}
+        handleSaveDiscoverySeeds={handleSaveDiscoverySeeds}
+        handleSaveCommunityNodes={handleSaveCommunityNodes}
+        handleClearCommunityNodes={handleClearCommunityNodes}
+        handleAuthenticateCommunityNode={handleAuthenticateCommunityNode}
+        handleFetchCommunityNodeConsents={handleFetchCommunityNodeConsents}
+        handleAcceptCommunityNodeConsents={handleAcceptCommunityNodeConsents}
+        handleRefreshCommunityNode={handleRefreshCommunityNode}
+        handleClearCommunityNodeToken={handleClearCommunityNodeToken}
+        handleCreateCustomReactionAsset={handleCreateCustomReactionAsset}
+        handleRemoveBookmarkedCustomReaction={handleRemoveBookmarkedCustomReaction}
       />
-
-      {clipboardToastId > 0 ? (
-        <div className='pointer-events-none fixed right-4 bottom-4 z-[90] w-[calc(100vw-2rem)] max-w-xs'>
-          <Notice
-            key={clipboardToastId}
-            role='status'
-            aria-live='polite'
-            aria-atomic='true'
-            tone='accent'
-            className='pointer-events-auto'
-          >
-            {t('common:feedback.copiedToClipboard')}
-          </Notice>
-        </div>
-      ) : null}
     </>
   );
 }
