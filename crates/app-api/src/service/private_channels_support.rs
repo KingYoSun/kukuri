@@ -580,7 +580,6 @@ impl AppService {
                 );
             }
             let mut recovery_backoff = SubscriptionRecoveryBackoff::default();
-            let mut last_docs_activity_at = None;
             let mut recovery_probe_due_at = Utc::now()
                 .timestamp_millis()
                 .saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
@@ -680,7 +679,6 @@ impl AppService {
                                         now,
                                     )
                                     .await;
-                                    last_docs_activity_at = Some(now);
                                     recovery_backoff.reset();
                                     recovery_probe_due_at =
                                         now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
@@ -789,7 +787,6 @@ impl AppService {
                                                 now,
                                             )
                                             .await;
-                                            last_docs_activity_at = Some(now);
                                             recovery_backoff.reset();
                                             recovery_probe_due_at =
                                                 now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
@@ -812,7 +809,7 @@ impl AppService {
                     }
                     _ = recovery_tick.tick(), if is_public_topic => {
                         let now = Utc::now().timestamp_millis();
-                        if last_docs_activity_at.is_some() || recovery_probe_due_at > now {
+                        if recovery_probe_due_at > now {
                             continue;
                         }
                         let (has_live_topic_peer, has_configured_topic_peer) =
@@ -885,7 +882,6 @@ impl AppService {
                                     now,
                                 )
                                 .await;
-                                last_docs_activity_at = Some(now);
                             }
                             recovery_backoff.reset();
                             recovery_probe_due_at =

@@ -208,6 +208,61 @@ impl AppService {
                     );
                 }
             }
+            let recovery_store = Arc::clone(&store);
+            let recovery_projection_store = Arc::clone(&projection_store);
+            let recovery_docs_sync = Arc::clone(&docs_sync);
+            let recovery_blob_service = Arc::clone(&blob_service);
+            let recovery_hint_transport = Arc::clone(&hint_transport);
+            let recovery_transport = Arc::clone(&transport);
+            let recovery_keys = Arc::clone(&keys);
+            let recovery_last_sync = Arc::clone(&last_sync);
+            let recovery_direct_message_subscriptions = Arc::clone(&direct_message_subscriptions);
+            let recovery_local_author_pubkey = local_author_pubkey.clone();
+            let recovery_author_pubkey = author_key_for_task.clone();
+            tokio::spawn(async move {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    hydrate_author_state_with_services(
+                        recovery_docs_sync.as_ref(),
+                        recovery_store.as_ref(),
+                        recovery_projection_store.as_ref(),
+                        recovery_local_author_pubkey.as_str(),
+                        recovery_author_pubkey.as_str(),
+                    ),
+                )
+                .await
+                {
+                    Ok(Ok(initial_count)) if initial_count > 0 => {
+                        *recovery_last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                        schedule_direct_message_reconcile_with_services(
+                            Arc::clone(&recovery_store),
+                            Arc::clone(&recovery_projection_store),
+                            Arc::clone(&recovery_blob_service),
+                            Arc::clone(&recovery_hint_transport),
+                            Arc::clone(&recovery_transport),
+                            Arc::clone(&recovery_keys),
+                            Arc::clone(&recovery_last_sync),
+                            Arc::clone(&recovery_direct_message_subscriptions),
+                            recovery_local_author_pubkey,
+                            recovery_author_pubkey,
+                        );
+                    }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => {
+                        warn!(
+                            author_pubkey = %recovery_author_pubkey,
+                            error = %error,
+                            "failed to hydrate remote author cache during bootstrap recovery"
+                        );
+                    }
+                    Err(_) => {
+                        warn!(
+                            author_pubkey = %recovery_author_pubkey,
+                            "timed out hydrating remote author cache during bootstrap recovery"
+                        );
+                    }
+                }
+            });
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {
