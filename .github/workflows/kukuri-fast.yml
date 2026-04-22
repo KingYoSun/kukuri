@@ -83,6 +83,9 @@ jobs:
       - name: Doctor
         run: cargo xtask doctor
 
+      - name: Oversized file report
+        run: cargo xtask oversized-files
+
       - name: Rust checks
         run: cargo xtask rust-check
 
@@ -484,6 +487,9 @@ jobs:
 
       - name: Doctor
         run: cargo xtask doctor
+
+      - name: Oversized file report
+        run: cargo xtask oversized-files
 
       - name: Windows Tauri compile check
         timeout-minutes: 20
