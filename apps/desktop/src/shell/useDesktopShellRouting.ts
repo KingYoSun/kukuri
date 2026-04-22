@@ -34,6 +34,7 @@ import {
   useDesktopShellStore,
   useDesktopShellStoreApi,
 } from '@/shell/store';
+import { THREAD_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
   isHex64,
@@ -96,6 +97,7 @@ export function useDesktopShellRouting({
   const setSelectedThread = useDesktopShellFieldSetter('selectedThread');
   const setFocusedObjectId = useDesktopShellFieldSetter('focusedObjectId');
   const setThread = useDesktopShellFieldSetter('thread');
+  const setThreadNextCursorById = useDesktopShellFieldSetter('threadNextCursorById');
   const setReplyTarget = useDesktopShellFieldSetter('replyTarget');
   const setRepostTarget = useDesktopShellFieldSetter('repostTarget');
   const setSelectedAuthorPubkey = useDesktopShellFieldSetter('selectedAuthorPubkey');
@@ -426,7 +428,7 @@ export function useDesktopShellRouting({
     async (threadId: string, options?: OpenThreadOptions) => {
       const topic = options?.topic ?? activeTopic;
       try {
-        const threadView = await api.listThread(topic, threadId, null, 50);
+        const threadView = await api.listThread(topic, threadId, null, THREAD_TIMELINE_LIMIT);
         const nextFocusedObjectId =
           options?.focusObjectId &&
           threadView.items.some((item) => item.object_id === options.focusObjectId)
@@ -470,6 +472,10 @@ export function useDesktopShellRouting({
           setSelectedThread(threadId);
           setFocusedObjectId(nextFocusedObjectId);
           setThread(threadView.items);
+          setThreadNextCursorById((current) => ({
+            ...current,
+            [threadId]: threadView.next_cursor ?? null,
+          }));
           setSelectedAuthorPubkey(null);
           setSelectedAuthor(null);
           setAuthorError(null);
@@ -542,6 +548,7 @@ export function useDesktopShellRouting({
       setSelectedThread,
       setShellChromeState,
       setThread,
+      setThreadNextCursorById,
       syncRoute,
       translate,
     ]

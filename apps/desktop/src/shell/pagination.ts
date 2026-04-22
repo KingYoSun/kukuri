@@ -1,0 +1,2 @@
+export const VISIBLE_TIMELINE_LIMIT = 20;
+export const THREAD_TIMELINE_LIMIT = 30;
