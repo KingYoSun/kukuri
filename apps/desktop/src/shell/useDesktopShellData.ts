@@ -41,6 +41,7 @@ import {
   useDesktopShellStore,
   useDesktopShellStoreApi,
 } from '@/shell/store';
+import { THREAD_TIMELINE_LIMIT, VISIBLE_TIMELINE_LIMIT } from '@/shell/pagination';
 import {
   authorViewFromDirectMessageConversation,
   communityNodesToDraftNodes,
@@ -68,8 +69,6 @@ const EMPTY_POSTS: PostView[] = [];
 const EMPTY_GAME_ROOMS: GameRoomView[] = [];
 const EMPTY_JOINED_CHANNELS: JoinedPrivateChannelView[] = [];
 const EMPTY_DIRECT_MESSAGE_TIMELINE: DirectMessageMessageView[] = [];
-const VISIBLE_TIMELINE_LIMIT = 20;
-const THREAD_TIMELINE_LIMIT = 30;
 type LoadTopicsArgs = readonly [string[], string, string | null];
 type LoadTopicsWaiter = {
   resolve: () => void;
