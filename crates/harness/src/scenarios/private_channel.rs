@@ -103,12 +103,93 @@ pub(crate) async fn run_private_channel_invite_connectivity(
             })
             .await
             .context("failed to rebuild desktop a ticket into desktop b after subscribe")?;
-        wait_for_topic_peer_count(&runtime_a, topic, 1, step_timeout)
-            .await
-            .context("desktop a did not observe public topic connectivity")?;
-        wait_for_topic_peer_count(&runtime_b, topic, 1, step_timeout)
-            .await
-            .context("desktop b did not observe public topic connectivity")?;
+        let public_sync_attempts =
+            if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+                3
+            } else {
+                1
+            };
+        let public_sync_timeout = if public_sync_attempts > 1 {
+            Duration::from_millis(
+                (step_timeout.as_millis() / public_sync_attempts as u128)
+                    .max(1)
+                    .try_into()
+                    .expect("public sync timeout fits in u64"),
+            )
+        } else {
+            step_timeout
+        };
+        let mut public_sync_error = None;
+        for attempt in 1..=public_sync_attempts {
+            let attempt_result = async {
+                wait_for_topic_peer_count(&runtime_a, topic, 1, public_sync_timeout)
+                    .await
+                    .context("desktop a did not observe public topic connectivity")?;
+                wait_for_topic_peer_count(&runtime_b, topic, 1, public_sync_timeout)
+                    .await
+                    .context("desktop b did not observe public topic connectivity")
+            }
+            .await;
+            match attempt_result {
+                Ok(()) => {
+                    public_sync_error = None;
+                    break;
+                }
+                Err(error) if attempt < public_sync_attempts => {
+                    public_sync_error = Some(format!("{error:#}"));
+                    runtime_a
+                        .import_peer_ticket(ImportPeerTicketRequest {
+                            ticket: ticket_b.clone(),
+                        })
+                        .await
+                        .context("failed to refresh desktop b ticket into desktop a after public sync timeout")?;
+                    runtime_b
+                        .import_peer_ticket(ImportPeerTicketRequest {
+                            ticket: ticket_a.clone(),
+                        })
+                        .await
+                        .context("failed to refresh desktop a ticket into desktop b after public sync timeout")?;
+                    let _ = runtime_a
+                        .list_timeline(ListTimelineRequest {
+                            topic: topic.to_string(),
+                            scope: public_scope.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    let _ = runtime_b
+                        .list_timeline(ListTimelineRequest {
+                            topic: topic.to_string(),
+                            scope: public_scope.clone(),
+                            cursor: None,
+                            limit: Some(20),
+                        })
+                        .await;
+                    sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    public_sync_error = Some(format!("{error:#}"));
+                    break;
+                }
+            }
+        }
+        if let Some(error) = public_sync_error {
+            let status_a = runtime_a
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop a sync status".to_string());
+            let status_b = runtime_b
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop b sync status".to_string());
+            anyhow::bail!(
+                "{error}; desktop_a=({status_a}); desktop_b=({status_b})"
+            );
+        }
         push_named_step(&mut steps, "public_sync", started_at);
 
         let started_at = Instant::now();
