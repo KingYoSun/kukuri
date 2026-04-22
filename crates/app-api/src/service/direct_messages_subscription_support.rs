@@ -1,5 +1,5 @@
-use super::*;
 use super::direct_messages_delivery_support::DirectMessageHintServices;
+use super::*;
 
 impl AppService {
     pub(crate) async fn direct_message_send_enabled(&self, peer_pubkey: &str) -> Result<bool> {
