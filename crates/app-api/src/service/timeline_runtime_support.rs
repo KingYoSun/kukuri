@@ -175,8 +175,6 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<()> {
-        self.maybe_redeem_rotation_grants_for_scope(topic_id, scope)
-            .await?;
         self.ensure_topic_subscription(topic_id).await?;
         match scope {
             TimelineScope::Public => Ok(()),
@@ -248,11 +246,12 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<usize> {
-        let mut hydrated = hydrate_topic_state_with_services(
+        let mut hydrated = hydrate_topic_state_with_services_with_policy(
             self.docs_sync.as_ref(),
             self.blob_service.as_ref(),
             self.projection_store.as_ref(),
             topic_id,
+            DocFetchPolicy::LocalOnly,
         )
         .await?;
         match scope {
@@ -269,12 +268,13 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
+                        hydrated += hydrate_subscription_state_with_services_with_policy(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),
                             topic_id,
                             &replica,
+                            DocFetchPolicy::LocalOnly,
                         )
                         .await?;
                     }
@@ -297,12 +297,13 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
+                        hydrated += hydrate_subscription_state_with_services_with_policy(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),
                             topic_id,
                             &replica,
+                            DocFetchPolicy::LocalOnly,
                         )
                         .await?;
                     }
@@ -520,7 +521,11 @@ impl AppService {
             None => None,
         };
         let reply_preview = self
-            .reply_preview_for_object_id(row.reply_to_object_id.as_ref(), profiles)
+            .reply_preview_for_object_id(
+                row.reply_to_object_id.as_ref(),
+                Some(&row.source_replica_id),
+                profiles,
+            )
             .await?;
         let audience_label = self
             .audience_label_for_storage(row.topic_id.as_str(), row.channel_id.as_str())
@@ -568,17 +573,55 @@ impl AppService {
         })
     }
 
+    pub(crate) async fn hydrate_reply_preview_row(
+        &self,
+        object_id: &EnvelopeId,
+        source_replica_id: Option<&ReplicaId>,
+    ) -> Result<Option<ObjectProjectionRow>> {
+        if let Some(row) = self
+            .projection_store
+            .get_object_projection(object_id)
+            .await?
+        {
+            return Ok(Some(row));
+        }
+        let Some(source_replica_id) = source_replica_id else {
+            return Ok(None);
+        };
+        let source_key = stable_key("objects", &format!("{}/state", object_id.as_str()));
+        let Some(header) = fetch_post_object_for_projection(
+            self.docs_sync.as_ref(),
+            source_replica_id,
+            source_key.as_str(),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        let content = match &header.payload_ref {
+            PayloadRef::InlineText { text } => Some(text.clone()),
+            PayloadRef::BlobText { hash, .. } => {
+                fetch_projection_blob_text(self.blob_service.as_ref(), hash).await
+            }
+        };
+        let row = projection_row_from_header(&header, content, source_replica_id);
+        self.projection_store
+            .put_object_projection(row.clone())
+            .await?;
+        Ok(Some(row))
+    }
+
     pub(crate) async fn reply_preview_for_object_id(
         &self,
         object_id: Option<&EnvelopeId>,
+        source_replica_id: Option<&ReplicaId>,
         profiles: &HashMap<String, Profile>,
     ) -> Result<Option<ReplyPreviewView>> {
         let Some(object_id) = object_id else {
             return Ok(None);
         };
         let Some(row) = self
-            .projection_store
-            .get_object_projection(object_id)
+            .hydrate_reply_preview_row(object_id, source_replica_id)
             .await?
         else {
             return Ok(None);
@@ -667,7 +710,11 @@ impl AppService {
             .await?;
         let empty_profiles = HashMap::new();
         let reply_preview = self
-            .reply_preview_for_object_id(row.reply_to_object_id.as_ref(), &empty_profiles)
+            .reply_preview_for_object_id(
+                row.reply_to_object_id.as_ref(),
+                Some(&row.source_replica_id),
+                &empty_profiles,
+            )
             .await?;
 
         Ok(BookmarkedPostView {
@@ -724,8 +771,13 @@ impl AppService {
             )
             .await?;
         let empty_profiles = HashMap::new();
+        let source_replica_id = topic_replica_id(profile_post.published_topic_id.as_str());
         let reply_preview = self
-            .reply_preview_for_object_id(profile_post.reply_to_object_id.as_ref(), &empty_profiles)
+            .reply_preview_for_object_id(
+                profile_post.reply_to_object_id.as_ref(),
+                Some(&source_replica_id),
+                &empty_profiles,
+            )
             .await?;
 
         Ok(PostView {

@@ -107,6 +107,9 @@
     "savedCount": "{{count}} saved",
     "tabs": "Workspaces",
     "timelineViews": "Timeline views",
+    "communityNodeUnavailableAction": "Open Community Node Settings",
+    "communityNodeUnavailableBody": "A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.",
+    "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "View Scope"
   }
 }

@@ -237,18 +237,46 @@ pub(crate) async fn hydrate_author_state_with_services(
     local_author_pubkey: &str,
     author_pubkey: &str,
 ) -> Result<usize> {
+    hydrate_author_state_with_services_with_policy(
+        docs_sync,
+        store,
+        projection_store,
+        local_author_pubkey,
+        author_pubkey,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_author_state_with_services_with_policy(
+    docs_sync: &dyn DocsSync,
+    store: &dyn Store,
+    projection_store: &dyn ProjectionStore,
+    local_author_pubkey: &str,
+    author_pubkey: &str,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
     let replica = author_replica_id(author_pubkey);
     let mut count = 0usize;
-    if let Some(record) = docs_sync
-        .query_replica(&replica, DocQuery::Exact(stable_key("profile", "latest")))
-        .await?
-        .into_iter()
-        .next()
+    if let Some(record) = query_replica_with_fetch_policy(
+        docs_sync,
+        &replica,
+        DocQuery::Exact(stable_key("profile", "latest")),
+        policy,
+    )
+    .await?
+    .into_iter()
+    .next()
     {
         match serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.author_pubkey.as_str() == author_pubkey => {
-                if let Some(envelope) =
-                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
+                    docs_sync,
+                    &replica,
+                    &doc.envelope_id,
+                    policy,
+                )
+                .await?
                 {
                     store.put_envelope(envelope.clone()).await?;
                     if let Some(profile) = parse_profile(&envelope)? {
@@ -275,14 +303,23 @@ pub(crate) async fn hydrate_author_state_with_services(
         }
     }
 
-    for record in docs_sync
-        .query_replica(&replica, DocQuery::Prefix("graph/follows/".into()))
-        .await?
+    for record in query_replica_with_fetch_policy(
+        docs_sync,
+        &replica,
+        DocQuery::Prefix("graph/follows/".into()),
+        policy,
+    )
+    .await?
     {
         match serde_json::from_slice::<FollowEdgeDocV1>(record.value.as_slice()) {
             Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
-                if let Some(envelope) =
-                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
+                    docs_sync,
+                    &replica,
+                    &doc.envelope_id,
+                    policy,
+                )
+                .await?
                     && let Some(edge) = parse_follow_edge(&envelope)?
                     && edge.target_pubkey == doc.target_pubkey
                     && edge.status == doc.status
@@ -319,15 +356,30 @@ pub(crate) async fn fetch_author_envelope_by_id(
     replica: &ReplicaId,
     envelope_id: &EnvelopeId,
 ) -> Result<Option<KukuriEnvelope>> {
-    let Some(record) = docs_sync
-        .query_replica(
-            replica,
-            DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())),
-        )
-        .await?
-        .into_iter()
-        .next()
-    else {
+    fetch_author_envelope_by_id_with_policy(
+        docs_sync,
+        replica,
+        envelope_id,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn fetch_author_envelope_by_id_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    envelope_id: &EnvelopeId,
+    policy: DocFetchPolicy,
+) -> Result<Option<KukuriEnvelope>> {
+    let Some(record) = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())),
+        policy,
+    )
+    .await?
+    .into_iter()
+    .next() else {
         return Ok(None);
     };
     let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
@@ -359,9 +411,10 @@ pub(crate) async fn load_custom_reaction_assets_from_author_replica(
     Ok(items)
 }
 
-pub(crate) async fn load_profile_posts_from_author_replica(
+pub(crate) async fn load_profile_posts_from_author_replica_with_policy(
     docs_sync: &dyn DocsSync,
     author_pubkey: &str,
+    policy: DocFetchPolicy,
 ) -> Result<Vec<ProfilePost>> {
     let author_pubkey = normalize_author_pubkey(author_pubkey)?;
     let replica = author_replica_id(author_pubkey.as_str());
@@ -369,17 +422,26 @@ pub(crate) async fn load_profile_posts_from_author_replica(
     let mut items = Vec::new();
     let mut seen_object_ids = BTreeSet::new();
 
-    for record in docs_sync
-        .query_replica(&replica, DocQuery::Prefix("profile/posts/".into()))
-        .await?
+    for record in query_replica_with_fetch_policy(
+        docs_sync,
+        &replica,
+        DocQuery::Prefix("profile/posts/".into()),
+        policy,
+    )
+    .await?
     {
         match serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice()) {
             Ok(doc)
                 if doc.author_pubkey.as_str() == author_pubkey
                     && doc.profile_topic_id == expected_profile_topic_id =>
             {
-                if let Some(envelope) =
-                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
+                    docs_sync,
+                    &replica,
+                    &doc.envelope_id,
+                    policy,
+                )
+                .await?
                 {
                     match parse_profile_post(&envelope) {
                         Ok(Some(profile_post))
@@ -432,9 +494,10 @@ pub(crate) async fn load_profile_posts_from_author_replica(
     Ok(items)
 }
 
-pub(crate) async fn load_profile_reposts_from_author_replica(
+pub(crate) async fn load_profile_reposts_from_author_replica_with_policy(
     docs_sync: &dyn DocsSync,
     author_pubkey: &str,
+    policy: DocFetchPolicy,
 ) -> Result<Vec<ProfileRepost>> {
     let author_pubkey = normalize_author_pubkey(author_pubkey)?;
     let replica = author_replica_id(author_pubkey.as_str());
@@ -442,17 +505,26 @@ pub(crate) async fn load_profile_reposts_from_author_replica(
     let mut items = Vec::new();
     let mut seen_object_ids = BTreeSet::new();
 
-    for record in docs_sync
-        .query_replica(&replica, DocQuery::Prefix("profile/reposts/".into()))
-        .await?
+    for record in query_replica_with_fetch_policy(
+        docs_sync,
+        &replica,
+        DocQuery::Prefix("profile/reposts/".into()),
+        policy,
+    )
+    .await?
     {
         match serde_json::from_slice::<AuthorProfileRepostDocV1>(record.value.as_slice()) {
             Ok(doc)
                 if doc.author_pubkey.as_str() == author_pubkey
                     && doc.profile_topic_id == expected_profile_topic_id =>
             {
-                if let Some(envelope) =
-                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                if let Some(envelope) = fetch_author_envelope_by_id_with_policy(
+                    docs_sync,
+                    &replica,
+                    &doc.envelope_id,
+                    policy,
+                )
+                .await?
                 {
                     match parse_profile_repost(&envelope) {
                         Ok(Some(profile_repost))
@@ -502,13 +574,31 @@ pub(crate) async fn load_profile_reposts_from_author_replica(
     Ok(items)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn snapshot_object_notification_baseline(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
 ) -> Result<NotificationDocEventBaseline> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("objects/".into()))
-        .await?;
+    snapshot_object_notification_baseline_with_policy(
+        docs_sync,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn snapshot_object_notification_baseline_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<NotificationDocEventBaseline> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("objects/".into()),
+        policy,
+    )
+    .await?;
     Ok(NotificationDocEventBaseline::from_records(
         &records
             .into_iter()
@@ -517,13 +607,31 @@ pub(crate) async fn snapshot_object_notification_baseline(
     ))
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn snapshot_follow_notification_baseline(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
 ) -> Result<NotificationDocEventBaseline> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("graph/follows/".into()))
-        .await?;
+    snapshot_follow_notification_baseline_with_policy(
+        docs_sync,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn snapshot_follow_notification_baseline_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<NotificationDocEventBaseline> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("graph/follows/".into()),
+        policy,
+    )
+    .await?;
     Ok(NotificationDocEventBaseline::from_records(&records))
 }
 

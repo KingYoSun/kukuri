@@ -43,9 +43,9 @@ pub(crate) use kukuri_core::{
     parse_profile_post, parse_profile_repost, parse_reaction, timeline_sort_key,
 };
 pub(crate) use kukuri_docs_sync::{
-    DocEvent, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync, author_replica_id,
-    private_channel_epoch_replica_id, private_channel_hint_topic, private_channel_replica_id,
-    stable_key, topic_replica_id,
+    DocEvent, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync,
+    author_replica_id, private_channel_epoch_replica_id, private_channel_hint_topic,
+    private_channel_replica_id, stable_key, topic_replica_id,
 };
 pub(crate) use kukuri_store::{
     AuthorRelationshipProjectionRow, BlobCacheStatus, BookmarkedCustomReactionRow,
@@ -124,6 +124,25 @@ pub(crate) async fn maybe_restart_replica_sync_with_cooldown(
             "failed to restart replica sync"
         );
     }
+}
+
+pub(crate) async fn query_replica_with_fetch_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    query: DocQuery,
+    policy: DocFetchPolicy,
+) -> Result<Vec<DocRecord>> {
+    docs_sync
+        .query_replica_with_policy(replica, query, policy)
+        .await
+}
+
+pub(crate) async fn query_replica_local_only(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    query: DocQuery,
+) -> Result<Vec<DocRecord>> {
+    query_replica_with_fetch_policy(docs_sync, replica, query, DocFetchPolicy::LocalOnly).await
 }
 
 pub(crate) async fn record_public_topic_docs_activity_if_current(

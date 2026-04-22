@@ -1,5 +1,5 @@
 use super::*;
-use kukuri_core::BlobHash;
+use kukuri_core::{BlobHash, ChannelAudienceKind, CreatePrivateChannelInput, KukuriKeys, TopicId};
 use std::collections::HashMap;
 
 #[derive(Clone, Default)]
@@ -42,16 +42,71 @@ impl DocsSync for CountingDocsSync {
         self.inner.apply_doc_op(replica_id, op).await
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         replica_id: &ReplicaId,
         query: DocQuery,
+        _policy: kukuri_docs_sync::DocFetchPolicy,
     ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
         self.queries
             .lock()
             .await
             .push((replica_id.as_str().to_string(), query.clone()));
         self.inner.query_replica(replica_id, query).await
+    }
+
+    async fn subscribe_replica(
+        &self,
+        replica_id: &ReplicaId,
+    ) -> Result<kukuri_docs_sync::DocEventStream> {
+        self.inner.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[derive(Clone, Default)]
+struct HangingRemoteOnMissDocsSync {
+    inner: kukuri_docs_sync::MemoryDocsSync,
+}
+
+#[async_trait]
+impl DocsSync for HangingRemoteOnMissDocsSync {
+    async fn open_replica(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.open_replica(replica_id).await
+    }
+
+    async fn register_private_replica_secret(
+        &self,
+        replica_id: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.inner
+            .register_private_replica_secret(replica_id, namespace_secret_hex)
+            .await
+    }
+
+    async fn remove_private_replica_secret(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.inner.remove_private_replica_secret(replica_id).await
+    }
+
+    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()> {
+        self.inner.apply_doc_op(replica_id, op).await
+    }
+
+    async fn query_replica_with_policy(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+        policy: kukuri_docs_sync::DocFetchPolicy,
+    ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
+        let records = self.inner.query_replica(replica_id, query).await?;
+        if records.is_empty() && policy == kukuri_docs_sync::DocFetchPolicy::LocalThenRemote {
+            sleep(Duration::from_secs(30)).await;
+        }
+        Ok(records)
     }
 
     async fn subscribe_replica(
@@ -196,6 +251,23 @@ async fn iroh_sync_diagnostics(
     )
 }
 
+fn app_with_hanging_remote_docs(
+    store: Arc<MemoryStore>,
+    docs_sync: Arc<HangingRemoteOnMissDocsSync>,
+    blob_service: Arc<MemoryBlobService>,
+    keys: KukuriKeys,
+) -> AppService {
+    AppService::new_with_services(
+        store.clone(),
+        store,
+        Arc::new(StaticTransport::new(PeerSnapshot::default())),
+        Arc::new(NoopHintTransport),
+        docs_sync,
+        blob_service,
+        keys,
+    )
+}
+
 #[tokio::test]
 async fn tracking_multiple_topics_updates_sync_status() {
     let store = Arc::new(MemoryStore::default());
@@ -249,6 +321,152 @@ async fn tracking_multiple_topics_updates_sync_status() {
             .iter()
             .all(|topic| topic.last_error.is_none())
     );
+}
+
+#[tokio::test]
+async fn local_only_bootstrap_reads_return_empty_without_remote_docs() {
+    let docs_sync = Arc::new(HangingRemoteOnMissDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let store = Arc::new(MemoryStore::default());
+    let app = app_with_hanging_remote_docs(store, docs_sync, blob_service, generate_keys());
+    let topic = "kukuri:topic:local-only-empty";
+
+    let timeline = timeout(
+        Duration::from_secs(2),
+        app.list_timeline_scoped(topic, TimelineScope::Public, None, 20),
+    )
+    .await
+    .expect("timeline should not wait for remote docs")
+    .expect("timeline");
+    assert!(timeline.items.is_empty());
+
+    let thread = timeout(
+        Duration::from_secs(2),
+        app.list_thread(topic, "missing-root", None, 20),
+    )
+    .await
+    .expect("thread should not wait for remote docs")
+    .expect("thread");
+    assert!(thread.items.is_empty());
+
+    let joined = timeout(
+        Duration::from_secs(2),
+        app.list_joined_private_channels(topic),
+    )
+    .await
+    .expect("joined channels should not wait for remote docs")
+    .expect("joined channels");
+    assert!(joined.is_empty());
+
+    timeout(Duration::from_secs(2), app.warm_social_graph())
+        .await
+        .expect("warm social graph should not wait for remote docs")
+        .expect("warm social graph");
+
+    app.shutdown().await;
+}
+
+#[tokio::test]
+async fn local_only_bootstrap_reads_return_cached_content_without_remote_docs() {
+    let docs_sync = Arc::new(HangingRemoteOnMissDocsSync::default());
+    let blob_service = Arc::new(MemoryBlobService::default());
+    let keys = generate_keys();
+    let writer = app_with_hanging_remote_docs(
+        Arc::new(MemoryStore::default()),
+        docs_sync.clone(),
+        blob_service.clone(),
+        keys.clone(),
+    );
+    let topic = "kukuri:topic:local-only-cached";
+    let followed_pubkey = generate_keys().public_key_hex();
+
+    let root_id = writer
+        .create_post(topic, "cached root", None)
+        .await
+        .expect("create cached root");
+    let reply_id = writer
+        .create_post(topic, "cached reply", Some(root_id.as_str()))
+        .await
+        .expect("create cached reply");
+    let channel = writer
+        .create_private_channel(CreatePrivateChannelInput {
+            topic_id: TopicId::new(topic),
+            label: "cached".into(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+    let capability = writer
+        .get_private_channel_capability(topic, channel.channel_id.as_str())
+        .await
+        .expect("get capability")
+        .expect("capability");
+    writer
+        .follow_author(followed_pubkey.as_str())
+        .await
+        .expect("follow author");
+
+    let reader = app_with_hanging_remote_docs(
+        Arc::new(MemoryStore::default()),
+        docs_sync,
+        blob_service,
+        keys,
+    );
+    reader
+        .restore_private_channel_capability(capability)
+        .await
+        .expect("restore capability");
+
+    let timeline = timeout(
+        Duration::from_secs(2),
+        reader.list_timeline_scoped(topic, TimelineScope::Public, None, 20),
+    )
+    .await
+    .expect("timeline should use cached local docs")
+    .expect("timeline");
+    assert!(timeline.items.iter().any(|post| post.object_id == root_id));
+
+    let thread = timeout(
+        Duration::from_secs(2),
+        reader.list_thread(topic, root_id.as_str(), None, 20),
+    )
+    .await
+    .expect("thread should use cached local docs")
+    .expect("thread");
+    assert!(thread.items.iter().any(|post| post.object_id == root_id));
+    assert!(thread.items.iter().any(|post| post.object_id == reply_id));
+
+    let joined = timeout(
+        Duration::from_secs(2),
+        reader.list_joined_private_channels(topic),
+    )
+    .await
+    .expect("joined channels should use cached local docs")
+    .expect("joined channels");
+    assert_eq!(joined.len(), 1);
+    assert_eq!(joined[0].channel_id, channel.channel_id);
+
+    timeout(Duration::from_secs(2), reader.warm_social_graph())
+        .await
+        .expect("warm social graph should use cached local docs")
+        .expect("warm social graph");
+    timeout(Duration::from_secs(2), async {
+        loop {
+            let view = reader
+                .get_author_social_view(followed_pubkey.as_str())
+                .await
+                .expect("author social view");
+            if view.following {
+                return;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("follow relationship should hydrate from cached local docs");
+
+    writer.shutdown().await;
+    reader.shutdown().await;
 }
 
 #[tokio::test]

@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_core::{BlobHash, GossipHint, ReplicaId, TopicId};
 use kukuri_docs_sync::{
-    DocEventStream, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode, IrohDocsSync,
+    DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, IrohDocsNode,
+    IrohDocsSync,
 };
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, HintStream, HintTransport,
@@ -172,12 +173,16 @@ impl DocsSync for ReloadableDocsSync {
         self.current().await.apply_doc_op(replica_id, op).await
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         replica_id: &ReplicaId,
         query: DocQuery,
+        policy: DocFetchPolicy,
     ) -> Result<Vec<DocRecord>> {
-        self.current().await.query_replica(replica_id, query).await
+        self.current()
+            .await
+            .query_replica_with_policy(replica_id, query, policy)
+            .await
     }
 
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream> {
@@ -467,21 +472,13 @@ impl BoundIrohStack {
         relay_config: TransportRelayConfig,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
-        let initial_relay_config = if relay_config.iroh_relay_urls.is_empty() {
-            relay_config.clone()
-        } else {
-            TransportRelayConfig::default()
-        };
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             network_config.clone(),
             dht_options,
-            initial_relay_config,
+            relay_config.clone(),
         )
         .await?;
-        if !relay_config.iroh_relay_urls.is_empty() {
-            node.apply_relay_config(relay_config.clone()).await?;
-        }
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
             node.endpoint().clone(),
             node.gossip().clone(),
@@ -489,9 +486,6 @@ impl BoundIrohStack {
             network_config,
             relay_config.clone(),
         )?);
-        if !relay_config.iroh_relay_urls.is_empty() {
-            transport.update_relay_config(relay_config.clone()).await?;
-        }
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
         transport
@@ -679,5 +673,45 @@ mod tests {
         timeout(Duration::from_secs(30), stack_b.shutdown())
             .await
             .expect("stack b shutdown timeout");
+    }
+
+    #[tokio::test]
+    async fn shared_stack_initializes_with_configured_relay_on_first_bind() {
+        let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+            .await
+            .expect("relay server");
+        let dir = tempdir().expect("tempdir");
+        let discovery_config = DiscoveryConfig::static_peer_default();
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: vec![relay_url.to_string()],
+        };
+        let stack = SharedIrohStack::new(
+            &dir.path().join("stack-relay"),
+            TransportNetworkConfig::loopback(),
+            &discovery_config,
+            &[],
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+        .await
+        .expect("stack");
+
+        let current_guard = stack.current.lock().await;
+        let current = current_guard.as_ref().expect("current stack");
+        assert_eq!(current.node.relay_urls().await, vec![relay_url.clone()]);
+        assert_eq!(
+            current
+                .transport
+                .discovery()
+                .await
+                .expect("discovery")
+                .connect_mode,
+            ConnectMode::DirectOrRelay
+        );
+        drop(current_guard);
+
+        timeout(Duration::from_secs(30), stack.shutdown())
+            .await
+            .expect("stack shutdown timeout");
     }
 }

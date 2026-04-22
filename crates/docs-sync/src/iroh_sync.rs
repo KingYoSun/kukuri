@@ -20,7 +20,9 @@ use tracing::{info, warn};
 use crate::access::parse_namespace_secret_hex;
 use crate::node::IrohDocsNode;
 use crate::replicas::public_replica_secret;
-use crate::types::{DocEvent, DocEventStream, DocOp, DocQuery, DocRecord, DocsSync};
+use crate::types::{
+    DocEvent, DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync,
+};
 
 struct ReplicaHandle {
     doc: Doc,
@@ -308,11 +310,23 @@ impl IrohDocsSync {
         Ok(sender)
     }
 
-    async fn fetch_entry_bytes(&self, content_hash: &str) -> Result<Option<Vec<u8>>> {
+    async fn fetch_entry_bytes(
+        &self,
+        content_hash: &str,
+        policy: DocFetchPolicy,
+    ) -> Result<Option<Vec<u8>>> {
         let hash = iroh_blobs::Hash::from_str(content_hash)?;
         match self.node.blobs().blobs().get_bytes(hash).await {
             Ok(bytes) => Ok(Some(bytes.to_vec())),
             Err(error) => {
+                if policy == DocFetchPolicy::LocalOnly {
+                    info!(
+                        hash = %content_hash,
+                        error = %error,
+                        "docs entry fetch local miss under local-only policy"
+                    );
+                    return Ok(None);
+                }
                 let peers = self.sync_peers().await;
                 info!(
                     hash = %content_hash,
@@ -440,10 +454,11 @@ impl DocsSync for IrohDocsSync {
         Ok(())
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         replica_id: &ReplicaId,
         query: DocQuery,
+        policy: DocFetchPolicy,
     ) -> Result<Vec<DocRecord>> {
         let doc = self.ensure_replica(replica_id).await?;
         let query = match query {
@@ -458,7 +473,10 @@ impl DocsSync for IrohDocsSync {
             let entry = entry?;
             let key = String::from_utf8(entry.key().to_vec()).context("docs key is not utf8")?;
             let content_hash = entry.content_hash().to_string();
-            let Some(value) = self.fetch_entry_bytes(content_hash.as_str()).await? else {
+            let Some(value) = self
+                .fetch_entry_bytes(content_hash.as_str(), policy)
+                .await?
+            else {
                 continue;
             };
             records.push(DocRecord {

@@ -15,4 +15,4 @@ pub use replicas::{
     private_channel_hint_topic, private_channel_replica_id, stable_key, topic_replica_id,
     value_hash,
 };
-pub use types::{DocEvent, DocEventStream, DocOp, DocQuery, DocRecord, DocsSync};
+pub use types::{DocEvent, DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync};

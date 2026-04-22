@@ -1,32 +1,6 @@
 use super::*;
 
 impl AppService {
-    pub(crate) async fn maybe_redeem_rotation_grants_for_scope(
-        &self,
-        topic_id: &str,
-        scope: &TimelineScope,
-    ) -> Result<()> {
-        match scope {
-            TimelineScope::Public => Ok(()),
-            TimelineScope::AllJoined => self.maybe_redeem_rotation_grants_for_topic(topic_id).await,
-            TimelineScope::Channel { channel_id } => self
-                .maybe_redeem_rotation_grants_for_channel(topic_id, channel_id.as_str())
-                .await
-                .map(|_| ()),
-        }
-    }
-
-    pub(crate) async fn maybe_redeem_rotation_grants_for_topic(
-        &self,
-        topic_id: &str,
-    ) -> Result<()> {
-        for state in self.joined_private_channel_states_for_topic(topic_id).await {
-            self.maybe_redeem_rotation_grants_for_channel(topic_id, state.channel_id.as_str())
-                .await?;
-        }
-        Ok(())
-    }
-
     pub(crate) async fn maybe_redeem_rotation_grants_for_channel(
         &self,
         topic_id: &str,
@@ -185,14 +159,20 @@ impl AppService {
         state: &JoinedPrivateChannelState,
     ) -> Result<PrivateChannelDiagnostics> {
         let replica = current_private_channel_replica_id(state);
-        let sharing_state =
-            fetch_private_channel_policy_from_replica(self.docs_sync.as_ref(), &replica)
-                .await?
-                .map(|policy| policy.sharing_state)
-                .unwrap_or(ChannelSharingState::Open);
-        let participants =
-            fetch_private_channel_participants_from_replica(self.docs_sync.as_ref(), &replica)
-                .await?;
+        let sharing_state = fetch_private_channel_policy_from_replica_with_policy(
+            self.docs_sync.as_ref(),
+            &replica,
+            DocFetchPolicy::LocalOnly,
+        )
+        .await?
+        .map(|policy| policy.sharing_state)
+        .unwrap_or(ChannelSharingState::Open);
+        let participants = fetch_private_channel_participants_from_replica_with_policy(
+            self.docs_sync.as_ref(),
+            &replica,
+            DocFetchPolicy::LocalOnly,
+        )
+        .await?;
         let participant_count = participants.len();
         let mut stale_participant_count = 0usize;
         if state.audience_kind == ChannelAudienceKind::FriendOnly
@@ -348,10 +328,7 @@ impl AppService {
         }
         match state.audience_kind {
             ChannelAudienceKind::InviteOnly | ChannelAudienceKind::FriendPlus => {
-                if matches!(
-                    action,
-                    PrivateChannelOwnerAction::Write | PrivateChannelOwnerAction::Share
-                ) {
+                if matches!(action, PrivateChannelOwnerAction::Share) {
                     let _ = self
                         .rotate_private_channel(topic_id, channel_id.as_str())
                         .await?;
@@ -560,25 +537,49 @@ impl AppService {
                 .await;
         }
         docs_sync.open_replica(&replica).await?;
-        let notification_baseline =
-            snapshot_object_notification_baseline(docs_sync.as_ref(), &replica).await?;
         let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let mut hint_stream = hint_transport.subscribe_hints(&hint_topic).await?;
-        let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
-        recovery_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let replica_for_task = replica.clone();
         let hint_topic_for_task = hint_topic.clone();
         let handle = tokio::spawn(async move {
-            let _ = hydrate_subscription_state_with_services(
+            let notification_baseline = match snapshot_object_notification_baseline_with_policy(
+                docs_sync.as_ref(),
+                &replica_for_task,
+                DocFetchPolicy::LocalOnly,
+            )
+            .await
+            {
+                Ok(baseline) => baseline,
+                Err(error) => {
+                    warn!(
+                        topic = %topic,
+                        replica = %replica_for_task.as_str(),
+                        error = %error,
+                        "failed to snapshot local notification baseline for subscription bootstrap"
+                    );
+                    NotificationDocEventBaseline::default()
+                }
+            };
+            let mut recovery_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+            recovery_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            if let Err(error) = hydrate_subscription_state_with_services_with_policy(
                 docs_sync.as_ref(),
                 blob_service.as_ref(),
                 projection_store.as_ref(),
                 topic.as_str(),
                 &replica_for_task,
+                DocFetchPolicy::LocalOnly,
             )
-            .await;
+            .await
+            {
+                warn!(
+                    topic = %topic,
+                    replica = %replica_for_task.as_str(),
+                    error = %error,
+                    "failed to hydrate local subscription cache during background bootstrap"
+                );
+            }
             let mut recovery_backoff = SubscriptionRecoveryBackoff::default();
-            let mut last_docs_activity_at = None;
             let mut recovery_probe_due_at = Utc::now()
                 .timestamp_millis()
                 .saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
@@ -587,6 +588,7 @@ impl AppService {
                     Some(event) = doc_stream.next() => {
                         if let Ok(event) = event {
                             let now = Utc::now().timestamp_millis();
+                            let had_source_peer = event.source_peer.is_some();
                             if let Some(source_peer) = event.source_peer.as_deref()
                             {
                                 if let Err(error) = docs_sync.learn_peer(source_peer).await {
@@ -627,16 +629,48 @@ impl AppService {
                                     );
                                 }
                             }
-                            if let Ok(count) = hydrate_subscription_event_with_services(
+                            let mut hydrated = match hydrate_subscription_event_with_services(
                                 docs_sync.as_ref(),
                                 blob_service.as_ref(),
                                 projection_store.as_ref(),
                                 topic.as_str(),
                                 &replica_for_task,
                                 event.key.as_str(),
-                            ).await
-                            && count > 0
-                            {
+                            ).await {
+                                Ok(count) => count,
+                                Err(error) => {
+                                    warn!(
+                                        topic = %topic,
+                                        key = %event.key,
+                                        error = %error,
+                                        "failed to hydrate subscription from docs event"
+                                    );
+                                    0
+                                }
+                            };
+                            if hydrated == 0 && !is_public_topic {
+                                hydrated = match hydrate_subscription_state_with_services(
+                                    docs_sync.as_ref(),
+                                    blob_service.as_ref(),
+                                    projection_store.as_ref(),
+                                    topic.as_str(),
+                                    &replica_for_task,
+                                )
+                                .await {
+                                    Ok(count) => count,
+                                    Err(error) => {
+                                        warn!(
+                                            topic = %topic,
+                                            replica = %replica_for_task.as_str(),
+                                            error = %error,
+                                            "failed to hydrate subscription from docs-event recovery"
+                                        );
+                                        0
+                                    }
+                                };
+                            }
+                            if hydrated > 0 {
+                                recovery_backoff.reset();
                                 if is_public_topic && event.source_peer.is_some() {
                                     record_public_topic_docs_activity_if_current(
                                         &public_topic_delivery,
@@ -645,12 +679,23 @@ impl AppService {
                                         now,
                                     )
                                     .await;
-                                    last_docs_activity_at = Some(now);
                                     recovery_backoff.reset();
                                     recovery_probe_due_at =
                                         now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
                                 }
                                 *last_sync.lock().await = Some(now);
+                            } else {
+                                restart_replica_sync_with_backoff(
+                                    docs_sync.as_ref(),
+                                    topic.as_str(),
+                                    &replica_for_task,
+                                    &mut recovery_backoff,
+                                )
+                                .await;
+                                if is_public_topic && had_source_peer {
+                                    recovery_probe_due_at =
+                                        now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
+                                }
                             }
                         }
                     }
@@ -712,7 +757,7 @@ impl AppService {
                                         }
                                     };
                                     let now = Utc::now().timestamp_millis();
-                                    if hydrated == 0 && is_public_topic {
+                                    if hydrated == 0 {
                                         hydrated = match hydrate_subscription_state_with_services(
                                             docs_sync.as_ref(),
                                             blob_service.as_ref(),
@@ -733,6 +778,7 @@ impl AppService {
                                         };
                                     }
                                     if hydrated > 0 {
+                                        recovery_backoff.reset();
                                         if is_public_topic && !event.source_peer.is_empty() {
                                             record_public_topic_docs_activity_if_current(
                                                 &public_topic_delivery,
@@ -741,7 +787,6 @@ impl AppService {
                                                 now,
                                             )
                                             .await;
-                                            last_docs_activity_at = Some(now);
                                             recovery_backoff.reset();
                                             recovery_probe_due_at =
                                                 now.saturating_add(PUBLIC_TOPIC_RECOVERY_GRACE_MS);
@@ -764,7 +809,7 @@ impl AppService {
                     }
                     _ = recovery_tick.tick(), if is_public_topic => {
                         let now = Utc::now().timestamp_millis();
-                        if last_docs_activity_at.is_some() || recovery_probe_due_at > now {
+                        if recovery_probe_due_at > now {
                             continue;
                         }
                         let (has_live_topic_peer, has_configured_topic_peer) =
@@ -837,7 +882,6 @@ impl AppService {
                                     now,
                                 )
                                 .await;
-                                last_docs_activity_at = Some(now);
                             }
                             recovery_backoff.reset();
                             recovery_probe_due_at =

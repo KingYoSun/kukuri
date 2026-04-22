@@ -70,7 +70,7 @@ async fn private_channel_invite_scopes_posts_and_replies() {
         .await
         .expect("create private post");
 
-    let received = timeout(p2p_replication_timeout(), async {
+    let received = match timeout(p2p_replication_timeout(), async {
         loop {
             let public = app_b
                 .list_timeline_scoped(topic, TimelineScope::Public, None, 20)
@@ -95,7 +95,30 @@ async fn private_channel_invite_scopes_posts_and_replies() {
         }
     })
     .await
-    .expect("private timeline timeout");
+    {
+        Ok(post) => post,
+        Err(_) => {
+            let public = app_b
+                .list_timeline_scoped(topic, TimelineScope::Public, None, 20)
+                .await
+                .expect("public timeline diagnostics");
+            let private = app_b
+                .list_timeline_scoped(topic, private_scope.clone(), None, 20)
+                .await
+                .expect("private timeline diagnostics");
+            let joined = app_b
+                .list_joined_private_channels(topic)
+                .await
+                .expect("joined private channels diagnostics");
+            let status = app_b
+                .get_sync_status()
+                .await
+                .expect("sync status diagnostics");
+            panic!(
+                "private timeline timeout; public={public:?}; private={private:?}; joined={joined:?}; status={status:?}"
+            );
+        }
+    };
     assert_eq!(
         received.channel_id.as_deref(),
         Some(channel.channel_id.as_str())

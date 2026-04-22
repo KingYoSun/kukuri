@@ -274,8 +274,14 @@ export function useDesktopShellData({
       const timelineScope = privateTimelineScope(selectedChannelId);
       const timelineKey = timelineScopeStorageKey(topic, timelineScope);
 
-      try {
-        const [timeline, publicTimeline, joinedChannels, threadView, status] = await Promise.all([
+      const [
+        timelineResult,
+        publicTimelineResult,
+        joinedChannelsResult,
+        threadViewResult,
+        statusResult,
+        communityNodeStatusesResult,
+      ] = await Promise.allSettled([
           api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, timelineScope),
           api.listTimeline(topic, null, VISIBLE_TIMELINE_LIMIT, PUBLIC_TIMELINE_SCOPE),
           api.listJoinedPrivateChannels(topic),
@@ -283,14 +289,26 @@ export function useDesktopShellData({
             ? api.listThread(topic, currentThread, null, THREAD_TIMELINE_LIMIT)
             : Promise.resolve(null),
           api.getSyncStatus(),
+          api.getCommunityNodeStatuses(),
         ]);
 
-        if (requestId !== loadTopicsRequestRef.current) {
-          return;
-        }
+      if (requestId !== loadTopicsRequestRef.current) {
+        return;
+      }
 
-        startTransition(() => {
-          const currentState = storeApi.getState();
+      const firstCoreFailure = [
+        timelineResult,
+        publicTimelineResult,
+        joinedChannelsResult,
+        threadViewResult,
+        statusResult,
+      ].find((result) => result.status === 'rejected');
+
+      startTransition(() => {
+        const currentState = storeApi.getState();
+
+        if (timelineResult.status === 'fulfilled') {
+          const timeline = timelineResult.value;
           const normalizedTimelineItems = uniquePostsByIdentity(timeline.items);
           const baselinePosts = currentState.timelinesByKey[timelineKey] ?? EMPTY_POSTS;
           const preserveTimelinePages =
@@ -299,13 +317,6 @@ export function useDesktopShellData({
           const resolvedTimelineCursor = preserveTimelinePages
             ? (currentState.timelineNextCursorByKey[timelineKey] ?? null)
             : (timeline.next_cursor ?? null);
-          const baselinePublicTimeline = currentState.publicTimelinesByTopic[topic] ?? EMPTY_POSTS;
-          const preservePublicTimelinePages =
-            mode === 'buffer' &&
-            hasLoadedOlderAuthoritativePosts(baselinePublicTimeline, publicTimeline.items);
-          const resolvedPublicTimelineCursor = preservePublicTimelinePages
-            ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
-            : (publicTimeline.next_cursor ?? null);
           const visiblePostIds = new Set(baselinePosts.map((post) => postIdentityKey(post)));
           const authoritativeIds = new Set(
             baselinePosts
@@ -347,6 +358,17 @@ export function useDesktopShellData({
             }));
             clearPendingTimeline(timelineKey);
           }
+        }
+
+        if (publicTimelineResult.status === 'fulfilled') {
+          const publicTimeline = publicTimelineResult.value;
+          const baselinePublicTimeline = currentState.publicTimelinesByTopic[topic] ?? EMPTY_POSTS;
+          const preservePublicTimelinePages =
+            mode === 'buffer' &&
+            hasLoadedOlderAuthoritativePosts(baselinePublicTimeline, publicTimeline.items);
+          const resolvedPublicTimelineCursor = preservePublicTimelinePages
+            ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
+            : (publicTimeline.next_cursor ?? null);
           setPublicTimelinesByTopic((current) => ({
             ...current,
             [topic]: mergeRefreshedVisiblePosts(
@@ -359,11 +381,18 @@ export function useDesktopShellData({
             ...current,
             [topic]: resolvedPublicTimelineCursor,
           }));
+        }
+
+        if (joinedChannelsResult.status === 'fulfilled') {
           setJoinedChannelsByTopic((current) => ({
             ...current,
-            [topic]: joinedChannels,
+            [topic]: joinedChannelsResult.value,
           }));
-          if (currentThread) {
+        }
+
+        if (currentThread) {
+          if (threadViewResult.status === 'fulfilled') {
+            const threadView = threadViewResult.value;
             const incomingThreadItems = threadView?.items ?? [];
             const currentThreadPosts = currentState.thread;
             const preserveThreadPages =
@@ -379,27 +408,33 @@ export function useDesktopShellData({
               ...current,
               [currentThread]: resolvedThreadCursor,
             }));
-          } else {
-            setThread([]);
           }
-          setSyncStatus(status);
-          setError(null);
-        });
-      } catch (refreshError) {
-        if (requestId !== loadTopicsRequestRef.current) {
-          return;
+        } else {
+          setThread([]);
         }
+
+        if (statusResult.status === 'fulfilled') {
+          setSyncStatus(statusResult.value);
+        }
+
+        if (communityNodeStatusesResult.status === 'fulfilled') {
+          setCommunityNodeStatuses((current) =>
+            mergeCommunityNodeStatuses(current, communityNodeStatusesResult.value)
+          );
+        }
+
         setError(
-          refreshError instanceof Error
-            ? refreshError.message
-            : translate('common:errors.failedToLoadTopic')
+          firstCoreFailure && firstCoreFailure.status === 'rejected'
+            ? messageFromError(firstCoreFailure.reason, translate('common:errors.failedToLoadTopic'))
+            : null
         );
-      }
+      });
     },
     [
       api,
       clearPendingTimeline,
       loadTopicsRequestRef,
+      setCommunityNodeStatuses,
       setError,
       setJoinedChannelsByTopic,
       setPendingTimelineCountsByKey,
