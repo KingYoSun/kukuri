@@ -175,8 +175,6 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<()> {
-        self.maybe_redeem_rotation_grants_for_scope(topic_id, scope)
-            .await?;
         self.ensure_topic_subscription(topic_id).await?;
         match scope {
             TimelineScope::Public => Ok(()),
@@ -248,11 +246,12 @@ impl AppService {
         topic_id: &str,
         scope: &TimelineScope,
     ) -> Result<usize> {
-        let mut hydrated = hydrate_topic_state_with_services(
+        let mut hydrated = hydrate_topic_state_with_services_with_policy(
             self.docs_sync.as_ref(),
             self.blob_service.as_ref(),
             self.projection_store.as_ref(),
             topic_id,
+            DocFetchPolicy::LocalOnly,
         )
         .await?;
         match scope {
@@ -269,12 +268,13 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
+                        hydrated += hydrate_subscription_state_with_services_with_policy(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),
                             topic_id,
                             &replica,
+                            DocFetchPolicy::LocalOnly,
                         )
                         .await?;
                     }
@@ -297,12 +297,13 @@ impl AppService {
                                 )
                             })
                     {
-                        hydrated += hydrate_subscription_state_with_services(
+                        hydrated += hydrate_subscription_state_with_services_with_policy(
                             self.docs_sync.as_ref(),
                             self.blob_service.as_ref(),
                             self.projection_store.as_ref(),
                             topic_id,
                             &replica,
+                            DocFetchPolicy::LocalOnly,
                         )
                         .await?;
                     }

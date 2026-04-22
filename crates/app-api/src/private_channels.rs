@@ -869,8 +869,6 @@ impl AppService {
             .await?;
         self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
             .await;
-        self.maybe_redeem_rotation_grants_for_topic(topic_id)
-            .await?;
         let mut items = Vec::new();
         for state in self.joined_private_channel_states_for_topic(topic_id).await {
             items.push(self.joined_private_channel_view_for_state(&state).await?);

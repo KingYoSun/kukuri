@@ -12,14 +12,16 @@ impl AppService {
         self.ensure_author_subscription(author_pubkey.as_str())
             .await?;
         let load_profile_items = || async {
-            let posts = load_profile_posts_from_author_replica(
+            let posts = load_profile_posts_from_author_replica_with_policy(
                 self.docs_sync.as_ref(),
                 author_pubkey.as_str(),
+                DocFetchPolicy::LocalOnly,
             )
             .await?;
-            let reposts = load_profile_reposts_from_author_replica(
+            let reposts = load_profile_reposts_from_author_replica_with_policy(
                 self.docs_sync.as_ref(),
                 author_pubkey.as_str(),
+                DocFetchPolicy::LocalOnly,
             )
             .await?;
             Ok::<_, anyhow::Error>((posts, reposts))

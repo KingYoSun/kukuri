@@ -236,8 +236,25 @@ pub(crate) async fn fetch_private_channel_metadata_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
 ) -> Result<Option<PrivateChannelMetadataDocV1>> {
-    let Some(record) = docs_sync
-        .query_replica(replica, DocQuery::Exact(stable_key("channels", "metadata")))
+    fetch_private_channel_metadata_from_replica_with_policy(
+        docs_sync,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn fetch_private_channel_metadata_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<Option<PrivateChannelMetadataDocV1>> {
+    let Some(record) = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Exact(stable_key("channels", "metadata")),
+        policy,
+    )
         .await?
         .into_iter()
         .next()
@@ -255,11 +272,25 @@ pub(crate) async fn fetch_private_channel_policy_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
 ) -> Result<Option<PrivateChannelPolicyDocV1>> {
-    let Some(record) = docs_sync
-        .query_replica(
-            replica,
-            DocQuery::Exact(stable_key("channels", "policy/envelope")),
-        )
+    fetch_private_channel_policy_from_replica_with_policy(
+        docs_sync,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn fetch_private_channel_policy_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<Option<PrivateChannelPolicyDocV1>> {
+    let Some(record) = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Exact(stable_key("channels", "policy/envelope")),
+        policy,
+    )
         .await?
         .into_iter()
         .next()
@@ -275,12 +306,26 @@ pub(crate) async fn fetch_private_channel_participants_from_replica(
     docs_sync: &dyn DocsSync,
     replica: &ReplicaId,
 ) -> Result<Vec<PrivateChannelParticipantDocV1>> {
-    let records = docs_sync
-        .query_replica(
-            replica,
-            DocQuery::Prefix(stable_key("channels/participants", "")),
-        )
-        .await?;
+    fetch_private_channel_participants_from_replica_with_policy(
+        docs_sync,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn fetch_private_channel_participants_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<Vec<PrivateChannelParticipantDocV1>> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix(stable_key("channels/participants", "")),
+        policy,
+    )
+    .await?;
     let mut items = Vec::new();
     for record in records {
         if !record.key.ends_with("/envelope") {
@@ -301,14 +346,30 @@ pub(crate) async fn fetch_private_channel_rotation_grant_from_replica(
     replica: &ReplicaId,
     recipient_pubkey: &str,
 ) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
-    let Some(record) = docs_sync
-        .query_replica(
-            replica,
-            DocQuery::Exact(stable_key(
-                "channels/rotation-grants",
-                &format!("{recipient_pubkey}/envelope"),
-            )),
-        )
+    fetch_private_channel_rotation_grant_from_replica_with_policy(
+        docs_sync,
+        replica,
+        recipient_pubkey,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn fetch_private_channel_rotation_grant_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    recipient_pubkey: &str,
+    policy: DocFetchPolicy,
+) -> Result<Option<PrivateChannelEpochHandoffGrantDocV1>> {
+    let Some(record) = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Exact(stable_key(
+            "channels/rotation-grants",
+            &format!("{recipient_pubkey}/envelope"),
+        )),
+        policy,
+    )
         .await?
         .into_iter()
         .next()
@@ -393,7 +454,15 @@ pub(crate) async fn fetch_manifest_blob<T: DeserializeOwned>(
     blob_service: &dyn BlobService,
     blob_ref: &ManifestBlobRef,
 ) -> Result<Option<T>> {
-    let Some(bytes) = blob_service.fetch_blob(&blob_ref.hash).await? else {
+    let Some(bytes) = (match tokio::time::timeout(
+        projection_blob_fetch_timeout(),
+        blob_service.fetch_blob(&blob_ref.hash),
+    )
+    .await
+    {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(_)) | Err(_) => None,
+    }) else {
         return Ok(None);
     };
     Ok(Some(serde_json::from_slice(&bytes)?))

@@ -102,6 +102,9 @@
     "noPublicPosts": "你在该主题下还没有公开帖子。",
     "refresh": "刷新",
     "tabs": "工作区",
+    "communityNodeUnavailableAction": "打开 Community Node 设置",
+    "communityNodeUnavailableBody": "已配置的 community node 当前不可用。客户端会继续启动，direct P2P 连接仍然可用。",
+    "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "查看范围"
   }
 }

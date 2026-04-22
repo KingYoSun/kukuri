@@ -31,6 +31,12 @@ pub enum DocQuery {
     All,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DocFetchPolicy {
+    LocalOnly,
+    LocalThenRemote,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocRecord {
     pub key: String,
@@ -61,11 +67,20 @@ pub trait DocsSync: Send + Sync {
         Ok(())
     }
     async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> Result<()>;
+    async fn query_replica_with_policy(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+        policy: DocFetchPolicy,
+    ) -> Result<Vec<DocRecord>>;
     async fn query_replica(
         &self,
         replica_id: &ReplicaId,
         query: DocQuery,
-    ) -> Result<Vec<DocRecord>>;
+    ) -> Result<Vec<DocRecord>> {
+        self.query_replica_with_policy(replica_id, query, DocFetchPolicy::LocalThenRemote)
+            .await
+    }
     async fn subscribe_replica(&self, replica_id: &ReplicaId) -> Result<DocEventStream>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
     async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {

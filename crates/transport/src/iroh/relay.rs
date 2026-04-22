@@ -37,8 +37,11 @@ impl AddressLookup for RelayFallbackLookup {
         })))
     }
 }
-fn relay_backed_windows_transport_config(relay_urls: &[RelayUrl]) -> Option<QuicTransportConfig> {
-    if !cfg!(target_os = "windows") || relay_urls.is_empty() {
+fn relay_backed_transport_config_for_platform(
+    is_windows: bool,
+    relay_urls: &[RelayUrl],
+) -> Option<QuicTransportConfig> {
+    if !is_windows || relay_urls.is_empty() {
         return None;
     }
     Some(
@@ -51,6 +54,10 @@ fn relay_backed_windows_transport_config(relay_urls: &[RelayUrl]) -> Option<Quic
             .receive_observed_address_reports(false)
             .build(),
     )
+}
+
+fn relay_backed_windows_transport_config(relay_urls: &[RelayUrl]) -> Option<QuicTransportConfig> {
+    relay_backed_transport_config_for_platform(cfg!(target_os = "windows"), relay_urls)
 }
 pub fn build_endpoint_builder(
     builder: EndpointBuilder,
@@ -111,5 +118,21 @@ impl IrohGossipTransport {
             .expect("transport relay urls poisoned") = relay_urls;
         *self.last_error.lock().await = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relay_backed_transport_config_requires_windows_and_relay_urls() {
+        let relay_url = "https://relay.example.com"
+            .parse::<RelayUrl>()
+            .expect("relay url");
+
+        assert!(relay_backed_transport_config_for_platform(false, &[relay_url.clone()]).is_none());
+        assert!(relay_backed_transport_config_for_platform(true, &[]).is_none());
+        assert!(relay_backed_transport_config_for_platform(true, &[relay_url]).is_some());
     }
 }

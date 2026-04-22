@@ -136,8 +136,11 @@ pub(crate) async fn fetch_post_object_for_projection(
     replica_id: &ReplicaId,
     source_key: &str,
 ) -> Result<Option<CanonicalPostHeader>> {
-    let Ok(records) = docs_sync
-        .query_replica(replica_id, DocQuery::Exact(source_key.to_string()))
+    let Ok(records) = query_replica_local_only(
+        docs_sync,
+        replica_id,
+        DocQuery::Exact(source_key.to_string()),
+    )
         .await
     else {
         return Ok(None);

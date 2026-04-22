@@ -10,7 +10,9 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::access::{ensure_private_replica_access, parse_namespace_secret_hex};
 use crate::replicas::value_hash;
-use crate::types::{DocEvent, DocEventStream, DocOp, DocQuery, DocRecord, DocsSync};
+use crate::types::{
+    DocEvent, DocEventStream, DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync,
+};
 
 type ReplicaRecords = HashMap<String, Vec<u8>>;
 type MemoryReplicaMap = HashMap<String, ReplicaRecords>;
@@ -85,10 +87,11 @@ impl DocsSync for MemoryDocsSync {
         Ok(())
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         replica_id: &ReplicaId,
         query: DocQuery,
+        _policy: DocFetchPolicy,
     ) -> Result<Vec<DocRecord>> {
         self.open_replica(replica_id).await?;
         let records = self.records.lock().await;

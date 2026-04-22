@@ -6,9 +6,26 @@ pub(crate) async fn hydrate_object_projection_from_replica(
     projection_store: &dyn ProjectionStore,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("objects/".into()))
-        .await?;
+    hydrate_object_projection_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_object_projection_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let records =
+        query_replica_with_fetch_policy(docs_sync, replica, DocQuery::Prefix("objects/".into()), policy)
+            .await?;
     let mut hydrated = 0usize;
     let mut blob_statuses = Vec::new();
     let mut projections = Vec::new();
@@ -101,9 +118,28 @@ pub(crate) async fn hydrate_reaction_cache_from_replica(
     projection_store: &dyn ProjectionStore,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("reactions/".into()))
-        .await?;
+    hydrate_reaction_cache_from_replica_with_policy(
+        docs_sync,
+        projection_store,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_reaction_cache_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    projection_store: &dyn ProjectionStore,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("reactions/".into()),
+        policy,
+    )
+    .await?;
     let mut hydrated = 0usize;
     for record in records {
         if !record.key.ends_with("/state") {
@@ -176,14 +212,73 @@ pub(crate) async fn hydrate_topic_state_with_services(
     projection_store: &dyn ProjectionStore,
     topic_id: &str,
 ) -> Result<usize> {
-    hydrate_subscription_state_with_services(
+    hydrate_topic_state_with_services_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_topic_state_with_services_with_policy(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    hydrate_subscription_state_with_services_with_policy(
         docs_sync,
         blob_service,
         projection_store,
         topic_id,
         &topic_replica_id(topic_id),
+        policy,
     )
     .await
+}
+
+pub(crate) async fn hydrate_subscription_state_with_services_with_policy(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let post_count = hydrate_object_projection_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        replica,
+        policy,
+    )
+    .await
+    ?;
+    let reaction_count =
+        hydrate_reaction_cache_from_replica_with_policy(docs_sync, projection_store, replica, policy)
+            .await?;
+    let live_count = hydrate_live_sessions_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+        policy,
+    )
+    .await?;
+    let game_count = hydrate_game_rooms_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+        policy,
+    )
+    .await?;
+    Ok(post_count + reaction_count + live_count + game_count)
 }
 
 pub(crate) async fn hydrate_subscription_state_with_services(
@@ -193,28 +288,15 @@ pub(crate) async fn hydrate_subscription_state_with_services(
     topic_id: &str,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let post_count =
-        hydrate_object_projection_from_replica(docs_sync, blob_service, projection_store, replica)
-            .await?;
-    let reaction_count =
-        hydrate_reaction_cache_from_replica(docs_sync, projection_store, replica).await?;
-    let live_count = hydrate_live_sessions_from_replica(
+    hydrate_subscription_state_with_services_with_policy(
         docs_sync,
         blob_service,
         projection_store,
         topic_id,
         replica,
+        DocFetchPolicy::LocalThenRemote,
     )
-    .await?;
-    let game_count = hydrate_game_rooms_from_replica(
-        docs_sync,
-        blob_service,
-        projection_store,
-        topic_id,
-        replica,
-    )
-    .await?;
-    Ok(post_count + reaction_count + live_count + game_count)
+    .await
 }
 
 pub(crate) async fn hydrate_live_sessions_from_replica(
@@ -224,9 +306,32 @@ pub(crate) async fn hydrate_live_sessions_from_replica(
     topic_id: &str,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("sessions/live/".into()))
-        .await?;
+    hydrate_live_sessions_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_live_sessions_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("sessions/live/".into()),
+        policy,
+    )
+    .await?;
     let mut hydrated = 0usize;
     for record in records {
         let state: LiveSessionStateDocV1 = serde_json::from_slice(&record.value)?;
@@ -343,9 +448,32 @@ pub(crate) async fn hydrate_game_rooms_from_replica(
     topic_id: &str,
     replica: &ReplicaId,
 ) -> Result<usize> {
-    let records = docs_sync
-        .query_replica(replica, DocQuery::Prefix("sessions/game/".into()))
-        .await?;
+    hydrate_game_rooms_from_replica_with_policy(
+        docs_sync,
+        blob_service,
+        projection_store,
+        topic_id,
+        replica,
+        DocFetchPolicy::LocalThenRemote,
+    )
+    .await
+}
+
+pub(crate) async fn hydrate_game_rooms_from_replica_with_policy(
+    docs_sync: &dyn DocsSync,
+    blob_service: &dyn BlobService,
+    projection_store: &dyn ProjectionStore,
+    topic_id: &str,
+    replica: &ReplicaId,
+    policy: DocFetchPolicy,
+) -> Result<usize> {
+    let records = query_replica_with_fetch_policy(
+        docs_sync,
+        replica,
+        DocQuery::Prefix("sessions/game/".into()),
+        policy,
+    )
+    .await?;
     let mut hydrated = 0usize;
     for record in records {
         let state: GameRoomStateDocV1 = serde_json::from_slice(&record.value)?;

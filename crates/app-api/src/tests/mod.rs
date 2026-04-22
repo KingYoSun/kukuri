@@ -436,10 +436,11 @@ impl DocsSync for AssistedDocsSync {
         Ok(())
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         _replica_id: &ReplicaId,
         _query: DocQuery,
+        _policy: kukuri_docs_sync::DocFetchPolicy,
     ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
         Ok(Vec::new())
     }
@@ -479,10 +480,11 @@ impl DocsSync for TrackingDocsSync {
         Ok(())
     }
 
-    async fn query_replica(
+    async fn query_replica_with_policy(
         &self,
         _replica_id: &ReplicaId,
         _query: DocQuery,
+        _policy: kukuri_docs_sync::DocFetchPolicy,
     ) -> Result<Vec<kukuri_docs_sync::DocRecord>> {
         Ok(Vec::new())
     }
@@ -669,24 +671,14 @@ impl TestIrohStack {
         relay_config: TransportRelayConfig,
     ) -> Self {
         let relay_config = relay_config.normalized();
-        let initial_relay_config = if relay_config.iroh_relay_urls.is_empty() {
-            relay_config.clone()
-        } else {
-            TransportRelayConfig::default()
-        };
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
             kukuri_transport::TransportNetworkConfig::loopback(),
             dht_options,
-            initial_relay_config,
+            relay_config.clone(),
         )
         .await
         .expect("iroh docs node");
-        if !relay_config.iroh_relay_urls.is_empty() {
-            node.apply_relay_config(relay_config.clone())
-                .await
-                .expect("apply relay config");
-        }
         let transport = Arc::new(
             IrohGossipTransport::from_shared_parts(
                 node.endpoint().clone(),
@@ -697,12 +689,6 @@ impl TestIrohStack {
             )
             .expect("transport"),
         );
-        if !relay_config.iroh_relay_urls.is_empty() {
-            transport
-                .update_relay_config(relay_config.clone())
-                .await
-                .expect("update relay config");
-        }
         let docs_sync = Arc::new(IrohDocsSync::new(node.clone()));
         let blob_service = Arc::new(IrohBlobService::new(node.clone()));
         Self {

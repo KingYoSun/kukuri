@@ -107,6 +107,9 @@
     "savedCount": "{{count}} 件保存済み",
     "tabs": "ワークスペース",
     "timelineViews": "タイムライン表示",
+    "communityNodeUnavailableAction": "Community Node 設定を開く",
+    "communityNodeUnavailableBody": "設定済みの community node に現在接続できません。起動は継続し、direct P2P 接続は引き続き利用できます。",
+    "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "表示範囲"
   }
 }

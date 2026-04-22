@@ -154,34 +154,70 @@ impl AppService {
         let local_author_pubkey = self.current_author_pubkey();
         let replica = author_replica_id(author_key.as_str());
         docs_sync.open_replica(&replica).await?;
-        let notification_baseline =
-            snapshot_follow_notification_baseline(docs_sync.as_ref(), &replica).await?;
-        let initial_count = hydrate_author_state_with_services(
-            docs_sync.as_ref(),
-            store.as_ref(),
-            projection_store.as_ref(),
-            local_author_pubkey.as_str(),
-            author_key.as_str(),
-        )
-        .await?;
-        if initial_count > 0 {
-            *self.last_sync_ts.lock().await = Some(Utc::now().timestamp_millis());
-            schedule_direct_message_reconcile_with_services(
-                Arc::clone(&store),
-                Arc::clone(&projection_store),
-                Arc::clone(&blob_service),
-                Arc::clone(&hint_transport),
-                Arc::clone(&transport),
-                Arc::clone(&keys),
-                Arc::clone(&last_sync),
-                Arc::clone(&direct_message_subscriptions),
-                local_author_pubkey.clone(),
-                author_key.clone(),
-            )
-        }
-        let mut doc_stream = docs_sync.subscribe_replica(&replica).await?;
         let author_key_for_task = author_key.clone();
         let handle = tokio::spawn(async move {
+            let notification_baseline = match snapshot_follow_notification_baseline_with_policy(
+                docs_sync.as_ref(),
+                &replica,
+                DocFetchPolicy::LocalOnly,
+            )
+            .await
+            {
+                Ok(baseline) => baseline,
+                Err(error) => {
+                    warn!(
+                        author_pubkey = %author_key_for_task,
+                        error = %error,
+                        "failed to snapshot local follow baseline for author bootstrap"
+                    );
+                    NotificationDocEventBaseline::default()
+                }
+            };
+            match hydrate_author_state_with_services_with_policy(
+                docs_sync.as_ref(),
+                store.as_ref(),
+                projection_store.as_ref(),
+                local_author_pubkey.as_str(),
+                author_key_for_task.as_str(),
+                DocFetchPolicy::LocalOnly,
+            )
+            .await
+            {
+                Ok(initial_count) if initial_count > 0 => {
+                    *last_sync.lock().await = Some(Utc::now().timestamp_millis());
+                    schedule_direct_message_reconcile_with_services(
+                        Arc::clone(&store),
+                        Arc::clone(&projection_store),
+                        Arc::clone(&blob_service),
+                        Arc::clone(&hint_transport),
+                        Arc::clone(&transport),
+                        Arc::clone(&keys),
+                        Arc::clone(&last_sync),
+                        Arc::clone(&direct_message_subscriptions),
+                        local_author_pubkey.clone(),
+                        author_key_for_task.clone(),
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    warn!(
+                        author_pubkey = %author_key_for_task,
+                        error = %error,
+                        "failed to hydrate local author cache during bootstrap"
+                    );
+                }
+            }
+            let mut doc_stream = match docs_sync.subscribe_replica(&replica).await {
+                Ok(stream) => stream,
+                Err(error) => {
+                    warn!(
+                        author_pubkey = %author_key_for_task,
+                        error = %error,
+                        "failed to subscribe to author replica for background bootstrap"
+                    );
+                    return;
+                }
+            };
             loop {
                 tokio::select! {
                     Some(event) = doc_stream.next() => {

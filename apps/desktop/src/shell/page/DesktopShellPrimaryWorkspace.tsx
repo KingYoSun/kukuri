@@ -163,6 +163,7 @@ export function DesktopShellPrimaryWorkspace({
     liveError,
     localProfile,
     mediaObjectUrls,
+    communityNodeStatuses,
     ownedReactionAssets,
     pendingTimelineCountsByKey,
     profileDirty,
@@ -191,9 +192,39 @@ export function DesktopShellPrimaryWorkspace({
   const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
+  const unavailableCommunityNodeCount = communityNodeStatuses.filter(
+    (status) => Boolean(status.last_error)
+  ).length;
+  const showCommunityNodeUnavailableNotice =
+    communityNodeStatuses.length > 0 && unavailableCommunityNodeCount > 0;
 
   return (
     <div className='shell-main-stack'>
+      {showCommunityNodeUnavailableNotice ? (
+        <Notice
+          tone='warning'
+          className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'
+          data-testid='community-node-unavailable-notice'
+        >
+          <div className='space-y-1'>
+            <p className='font-semibold'>{t('shell:workspace.communityNodeUnavailableTitle')}</p>
+            <p>{t('shell:workspace.communityNodeUnavailableBody')}</p>
+          </div>
+          <Button
+            variant='secondary'
+            type='button'
+            onClick={() =>
+              setShellChromeState((current) => ({
+                ...current,
+                settingsOpen: true,
+                activeSettingsSection: 'community-node',
+              }))
+            }
+          >
+            {t('shell:workspace.communityNodeUnavailableAction')}
+          </Button>
+        </Notice>
+      ) : null}
       {shellChromeState.activePrimarySection !== 'notifications' ? (
         <Card className='shell-workspace-card shell-workspace-header-card'>
           <TimelineWorkspaceHeader

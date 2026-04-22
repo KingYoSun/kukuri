@@ -5854,6 +5854,162 @@ async fn community_node_connectivity_assist_keeps_public_sync_status_degraded_wi
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_peer() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_a = dir.path().join("community-unreachable-a.db");
+    let db_b = dir.path().join("community-unreachable-b.db");
+    let community_base_url = "http://127.0.0.1:1";
+    let relay_url = "https://127.0.0.1:1";
+    save_community_node_config(
+        &db_a,
+        &CommunityNodeConfig {
+            nodes: vec![CommunityNodeNodeConfig {
+                base_url: community_base_url.to_string(),
+                auto_approve: true,
+                resolved_urls: Some(
+                    CommunityNodeResolvedUrls::new(
+                        community_base_url,
+                        vec![relay_url.to_string()],
+                        Vec::new(),
+                    )
+                    .expect("resolved urls"),
+                ),
+            }],
+        },
+    )
+    .expect("save community-node config");
+
+    let runtime_a = timeout(
+        Duration::from_secs(40),
+        DesktopRuntime::new_with_config_and_identity(
+            &db_a,
+            TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        ),
+    )
+    .await
+    .expect("runtime a init timeout")
+    .expect("runtime a");
+    let runtime_b = DesktopRuntime::new_with_config_and_identity(
+        &db_b,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime b");
+
+    let status_before = runtime_a.get_sync_status().await.expect("sync status before recovery");
+    assert_eq!(status_before.discovery.connect_mode, ConnectMode::DirectOrRelay);
+    assert!(!status_before.connected);
+    assert!(matches!(
+        status_before.delivery_state,
+        kukuri_app_api::DeliveryState::Offline | kukuri_app_api::DeliveryState::DurableRecovering
+    ));
+
+    let community_statuses = runtime_a
+        .get_community_node_statuses()
+        .await
+        .expect("community node statuses");
+    assert_eq!(community_statuses.len(), 1);
+    assert!(
+        community_statuses[0].last_error.is_some(),
+        "expected unreachable community node error, got {community_statuses:?}"
+    );
+
+    let ticket_a = runtime_a
+        .local_peer_ticket()
+        .await
+        .expect("ticket a")
+        .expect("ticket a value");
+    let ticket_b = runtime_b
+        .local_peer_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
+    runtime_a
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_b.clone(),
+        })
+        .await
+        .expect("import b into a");
+    runtime_b
+        .import_peer_ticket(ImportPeerTicketRequest {
+            ticket: ticket_a.clone(),
+        })
+        .await
+        .expect("import a into b");
+
+    let topic = "kukuri:topic:community-node-unreachable-direct";
+    let scope = TimelineScope::Public;
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: scope.clone(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe a");
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: scope.clone(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe b");
+    wait_for_direct_topic_peer_count_result(&runtime_a, topic, 1, Duration::from_secs(30))
+        .await
+        .expect("runtime a direct peer recovery");
+    wait_for_direct_topic_peer_count_result(&runtime_b, topic, 1, Duration::from_secs(30))
+        .await
+        .expect("runtime b direct peer recovery");
+
+    let object_id = runtime_b
+        .create_post(CreatePostRequest {
+            topic: topic.into(),
+            content: "direct recovery".into(),
+            reply_to: None,
+            channel_ref: ChannelRef::Public,
+            attachments: vec![],
+        })
+        .await
+        .expect("create recovery post");
+    timeout(Duration::from_secs(30), async {
+        loop {
+            let timeline = runtime_a
+                .list_timeline(ListTimelineRequest {
+                    topic: topic.into(),
+                    scope: scope.clone(),
+                    cursor: None,
+                    limit: Some(20),
+                })
+                .await
+                .expect("timeline a");
+            if timeline
+                .items
+                .iter()
+                .any(|post| post.object_id == object_id)
+            {
+                return;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("runtime a manual peer propagation timeout");
+
+    let status_after = runtime_a.get_sync_status().await.expect("sync status after recovery");
+    assert!(status_after.connected);
+    assert!(topic_has_direct_peer(&status_after, topic, 1));
+
+    runtime_a.shutdown().await;
+    runtime_b.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn community_node_connectivity_assist_keeps_public_sync_status_degraded_with_shared_identity()
 {
     let _serial = acquire_async_test_lock().await;
