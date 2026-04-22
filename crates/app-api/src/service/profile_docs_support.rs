@@ -1,0 +1,546 @@
+use super::*;
+
+pub(crate) async fn persist_profile_doc(
+    docs_sync: &dyn DocsSync,
+    profile: &Profile,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile.pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile", "latest"),
+                value: serde_json::to_value(AuthorProfileDocV1 {
+                    author_pubkey: profile.pubkey.clone(),
+                    name: profile.name.clone(),
+                    display_name: profile.display_name.clone(),
+                    about: profile.about.clone(),
+                    picture: profile.picture.clone(),
+                    picture_asset: profile.picture_asset.clone(),
+                    updated_at: profile.updated_at,
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn persist_profile_post_doc(
+    docs_sync: &dyn DocsSync,
+    profile_post: &ProfilePost,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile_post.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile/posts", profile_post.object_id.as_str()),
+                value: serde_json::to_value(AuthorProfilePostDocV1 {
+                    author_pubkey: profile_post.author_pubkey.clone(),
+                    profile_topic_id: profile_post.profile_topic_id.clone(),
+                    published_topic_id: profile_post.published_topic_id.clone(),
+                    object_id: profile_post.object_id.clone(),
+                    created_at: profile_post.created_at,
+                    object_kind: profile_post.object_kind.clone(),
+                    content: profile_post.content.clone(),
+                    attachments: profile_post.attachments.clone(),
+                    reply_to_object_id: profile_post.reply_to_object_id.clone(),
+                    root_id: profile_post.root_id.clone(),
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn persist_profile_repost_doc(
+    docs_sync: &dyn DocsSync,
+    profile_repost: &ProfileRepost,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(profile_repost.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("profile/reposts", profile_repost.object_id.as_str()),
+                value: serde_json::to_value(AuthorProfileRepostDocV1 {
+                    author_pubkey: profile_repost.author_pubkey.clone(),
+                    profile_topic_id: profile_repost.profile_topic_id.clone(),
+                    published_topic_id: profile_repost.published_topic_id.clone(),
+                    object_id: profile_repost.object_id.clone(),
+                    created_at: profile_repost.created_at,
+                    commentary: profile_repost.commentary.clone(),
+                    repost_of: profile_repost.repost_of.clone(),
+                    envelope_id: envelope.id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn persist_follow_edge_doc(
+    docs_sync: &dyn DocsSync,
+    edge: &FollowEdge,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(edge.subject_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("graph/follows", edge.target_pubkey.as_str()),
+                value: serde_json::to_value(FollowEdgeDocV1 {
+                    subject_pubkey: edge.subject_pubkey.clone(),
+                    target_pubkey: edge.target_pubkey.clone(),
+                    status: edge.status.clone(),
+                    updated_at: edge.updated_at,
+                    envelope_id: edge.envelope_id.clone(),
+                })?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn persist_custom_reaction_asset_doc(
+    docs_sync: &dyn DocsSync,
+    asset: &CustomReactionAssetDocV1,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    let replica = author_replica_id(asset.author_pubkey.as_str());
+    docs_sync.open_replica(&replica).await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("reactions/assets", &format!("{}/state", asset.asset_id)),
+                value: serde_json::to_value(asset)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("reactions/assets", &format!("{}/envelope", asset.asset_id)),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            &replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn persist_reaction_doc(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    reaction: &ReactionDocV1,
+    envelope: &KukuriEnvelope,
+) -> Result<()> {
+    docs_sync.open_replica(replica).await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "reactions",
+                    &format!(
+                        "{}/{}/state",
+                        reaction.target_object_id.as_str(),
+                        reaction.reaction_id.as_str()
+                    ),
+                ),
+                value: serde_json::to_value(reaction)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key(
+                    "reactions",
+                    &format!(
+                        "{}/{}/envelope",
+                        reaction.target_object_id.as_str(),
+                        reaction.reaction_id.as_str()
+                    ),
+                ),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await?;
+    docs_sync
+        .apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("envelopes", envelope.id.as_str()),
+                value: serde_json::to_value(envelope)?,
+            },
+        )
+        .await
+}
+
+pub(crate) async fn hydrate_author_state_with_services(
+    docs_sync: &dyn DocsSync,
+    store: &dyn Store,
+    projection_store: &dyn ProjectionStore,
+    local_author_pubkey: &str,
+    author_pubkey: &str,
+) -> Result<usize> {
+    let replica = author_replica_id(author_pubkey);
+    let mut count = 0usize;
+    if let Some(record) = docs_sync
+        .query_replica(&replica, DocQuery::Exact(stable_key("profile", "latest")))
+        .await?
+        .into_iter()
+        .next()
+    {
+        match serde_json::from_slice::<AuthorProfileDocV1>(record.value.as_slice()) {
+            Ok(doc) if doc.author_pubkey.as_str() == author_pubkey => {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    store.put_envelope(envelope.clone()).await?;
+                    if let Some(profile) = parse_profile(&envelope)? {
+                        projection_store.upsert_profile_cache(profile).await?;
+                    }
+                    count += 1;
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile doc with mismatched author"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode author profile doc"
+                );
+            }
+        }
+    }
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("graph/follows/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<FollowEdgeDocV1>(record.value.as_slice()) {
+            Ok(doc) if doc.subject_pubkey.as_str() == author_pubkey => {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                    && let Some(edge) = parse_follow_edge(&envelope)?
+                    && edge.target_pubkey == doc.target_pubkey
+                    && edge.status == doc.status
+                {
+                    store.put_envelope(envelope).await?;
+                    count += 1;
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring follow doc with mismatched subject"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode follow edge doc"
+                );
+            }
+        }
+    }
+
+    rebuild_author_relationships_with_services(store, projection_store, local_author_pubkey)
+        .await?;
+    Ok(count)
+}
+
+pub(crate) async fn fetch_author_envelope_by_id(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+    envelope_id: &EnvelopeId,
+) -> Result<Option<KukuriEnvelope>> {
+    let Some(record) = docs_sync
+        .query_replica(
+            replica,
+            DocQuery::Exact(stable_key("envelopes", envelope_id.as_str())),
+        )
+        .await?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    let envelope: KukuriEnvelope = serde_json::from_slice(record.value.as_slice())?;
+    envelope.verify()?;
+    Ok(Some(envelope))
+}
+
+pub(crate) async fn load_custom_reaction_assets_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<CustomReactionAssetDocV1>> {
+    let replica = author_replica_id(author_pubkey);
+    let mut items = Vec::new();
+    for record in docs_sync
+        .query_replica(
+            &replica,
+            DocQuery::Prefix(stable_key("reactions/assets", "")),
+        )
+        .await?
+    {
+        if !record.key.ends_with("/state") {
+            continue;
+        }
+        let doc: CustomReactionAssetDocV1 = serde_json::from_slice(record.value.as_slice())?;
+        if doc.author_pubkey.as_str() == author_pubkey {
+            items.push(doc);
+        }
+    }
+    Ok(items)
+}
+
+pub(crate) async fn load_profile_posts_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<ProfilePost>> {
+    let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+    let replica = author_replica_id(author_pubkey.as_str());
+    let expected_profile_topic_id = author_profile_topic_id(author_pubkey.as_str());
+    let mut items = Vec::new();
+    let mut seen_object_ids = BTreeSet::new();
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("profile/posts/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<AuthorProfilePostDocV1>(record.value.as_slice()) {
+            Ok(doc)
+                if doc.author_pubkey.as_str() == author_pubkey
+                    && doc.profile_topic_id == expected_profile_topic_id =>
+            {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    match parse_profile_post(&envelope) {
+                        Ok(Some(profile_post))
+                            if profile_post.author_pubkey == doc.author_pubkey
+                                && profile_post.profile_topic_id == doc.profile_topic_id
+                                && profile_post.published_topic_id == doc.published_topic_id
+                                && profile_post.object_id == doc.object_id
+                                && profile_post.created_at == doc.created_at
+                                && profile_post.object_kind == doc.object_kind
+                                && profile_post.content == doc.content
+                                && profile_post.attachments == doc.attachments
+                                && profile_post.reply_to_object_id == doc.reply_to_object_id
+                                && profile_post.root_id == doc.root_id =>
+                        {
+                            if seen_object_ids.insert(profile_post.object_id.clone()) {
+                                items.push(profile_post);
+                            }
+                        }
+                        Ok(Some(_)) | Ok(None) => {}
+                        Err(error) => {
+                            warn!(
+                                author_pubkey = %author_pubkey,
+                                key = %record.key,
+                                envelope_id = %doc.envelope_id.as_str(),
+                                error = %error,
+                                "ignoring invalid profile post envelope"
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile post doc with mismatched author or topic"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode profile post doc"
+                );
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+pub(crate) async fn load_profile_reposts_from_author_replica(
+    docs_sync: &dyn DocsSync,
+    author_pubkey: &str,
+) -> Result<Vec<ProfileRepost>> {
+    let author_pubkey = normalize_author_pubkey(author_pubkey)?;
+    let replica = author_replica_id(author_pubkey.as_str());
+    let expected_profile_topic_id = author_profile_topic_id(author_pubkey.as_str());
+    let mut items = Vec::new();
+    let mut seen_object_ids = BTreeSet::new();
+
+    for record in docs_sync
+        .query_replica(&replica, DocQuery::Prefix("profile/reposts/".into()))
+        .await?
+    {
+        match serde_json::from_slice::<AuthorProfileRepostDocV1>(record.value.as_slice()) {
+            Ok(doc)
+                if doc.author_pubkey.as_str() == author_pubkey
+                    && doc.profile_topic_id == expected_profile_topic_id =>
+            {
+                if let Some(envelope) =
+                    fetch_author_envelope_by_id(docs_sync, &replica, &doc.envelope_id).await?
+                {
+                    match parse_profile_repost(&envelope) {
+                        Ok(Some(profile_repost))
+                            if profile_repost.author_pubkey == doc.author_pubkey
+                                && profile_repost.profile_topic_id == doc.profile_topic_id
+                                && profile_repost.published_topic_id == doc.published_topic_id
+                                && profile_repost.object_id == doc.object_id
+                                && profile_repost.created_at == doc.created_at
+                                && profile_repost.commentary == doc.commentary
+                                && profile_repost.repost_of == doc.repost_of =>
+                        {
+                            if seen_object_ids.insert(profile_repost.object_id.clone()) {
+                                items.push(profile_repost);
+                            }
+                        }
+                        Ok(Some(_)) | Ok(None) => {}
+                        Err(error) => {
+                            warn!(
+                                author_pubkey = %author_pubkey,
+                                key = %record.key,
+                                envelope_id = %doc.envelope_id.as_str(),
+                                error = %error,
+                                "ignoring invalid profile repost envelope"
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    "ignoring profile repost doc with mismatched author or topic"
+                );
+            }
+            Err(error) => {
+                warn!(
+                    author_pubkey = %author_pubkey,
+                    key = %record.key,
+                    error = %error,
+                    "failed to decode profile repost doc"
+                );
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+pub(crate) async fn snapshot_object_notification_baseline(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+) -> Result<NotificationDocEventBaseline> {
+    let records = docs_sync
+        .query_replica(replica, DocQuery::Prefix("objects/".into()))
+        .await?;
+    Ok(NotificationDocEventBaseline::from_records(
+        &records
+            .into_iter()
+            .filter(|record| record.key.ends_with("/state"))
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub(crate) async fn snapshot_follow_notification_baseline(
+    docs_sync: &dyn DocsSync,
+    replica: &ReplicaId,
+) -> Result<NotificationDocEventBaseline> {
+    let records = docs_sync
+        .query_replica(replica, DocQuery::Prefix("graph/follows/".into()))
+        .await?;
+    Ok(NotificationDocEventBaseline::from_records(&records))
+}
+
+pub(crate) fn merge_seed_peers(
+    configured_seed_peers: Vec<SeedPeer>,
+    bootstrap_seed_peers: Vec<SeedPeer>,
+) -> Vec<SeedPeer> {
+    let mut deduped = BTreeMap::new();
+    for seed_peer in configured_seed_peers
+        .into_iter()
+        .chain(bootstrap_seed_peers.into_iter())
+    {
+        let key = match seed_peer.addr_hint.as_deref() {
+            Some(addr_hint) => format!("{}@{}", seed_peer.endpoint_id, addr_hint),
+            None => seed_peer.endpoint_id.clone(),
+        };
+        deduped.insert(key, seed_peer);
+    }
+    deduped.into_values().collect()
+}

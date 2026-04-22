@@ -1,89 +1,45 @@
-import {
-  type ChangeEvent,
-  type Dispatch,
-  type FormEvent,
-  type SetStateAction,
-} from 'react';
+import { type Dispatch, type FormEvent, type SetStateAction } from 'react';
 
 import type {
   AttachmentView,
-  CustomReactionCropRect,
   DesktopApi,
-  DirectMessageConversationView,
-  DirectMessageMessageView,
-  GameScoreView,
-  JoinedPrivateChannelView,
   LocalDraftMediaItem,
   LocalPostDraft,
-  NotificationView,
   PostView,
-  ProfileInput,
-  ReactionKeyInput,
 } from '@/lib/api';
-import { fileToCreateAttachment } from '@/lib/attachments';
 
 import {
   activeTimelineStorageKey,
-  DEFAULT_COMMUNITY_NODE_CONFIG,
   PUBLIC_CHANNEL_REF,
-  PUBLIC_TIMELINE_SCOPE,
   timelineStorageKeyForChannel,
   type DraftMediaItem,
-  type GameEditorDraft,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
   useDesktopShellStoreApi,
 } from '@/shell/store';
-import {
-  canCreateRepostFromPost,
-  communityNodeDraftNodesToConfigInput,
-  communityNodesToDraftNodes,
-  createGameEditorDraft,
-  joinedChannelFromAccessTokenPreview,
-  mergeKnownAuthors,
-  messageFromError,
-  patchReactionStateIntoPosts,
-  privateComposeTarget,
-  privateTimelineScope,
-  profileInputFromProfile,
-  publishedTopicIdForPost,
-  seedPeersToEditorValue,
-  syncCommunityNodeConfigWithStatus,
-  upsertCommunityNodeStatus,
-  upsertJoinedChannel,
-} from '@/shell/selectors';
-import type { OpenThreadOptions } from '@/shell/routes';
+import { publishedTopicIdForPost } from '@/shell/selectors';
+import { createComposeInteractionsActions } from './actions/composeInteractions';
+import { createDirectMessageActions } from './actions/directMessages';
+import { createLiveGameActions } from './actions/liveGame';
+import { createMessageReactionSocialActions } from './actions/messageReactionSocial';
+import { createProfileTopicChannelActions } from './actions/profileTopicChannel';
+import type {
+  OpenAuthorDetail,
+  OpenDirectMessagePane,
+  OpenThread,
+  SyncRoute,
+  Translate,
+} from './actions/shared';
 
 type UseDesktopShellActionsArgs = {
   api: DesktopApi;
-  translate: (key: string, options?: Record<string, unknown>) => string;
+  translate: Translate;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
-  refreshVisibleTimelineAfterPublish: (
-    topic: string,
-    currentThread: string | null
-  ) => Promise<void>;
-  syncRoute: (mode?: 'push' | 'replace', overrides?: Record<string, unknown>) => void;
-  openDirectMessagePane: (
-    peerPubkey: string,
-    options?: {
-      historyMode?: 'push' | 'replace';
-      normalizeOnError?: boolean;
-      preserveAuthorPane?: boolean;
-      preservedAuthorPubkey?: string | null;
-    }
-  ) => Promise<void>;
-  openAuthorDetail: (
-    authorPubkey: string,
-    options?: {
-      fromThread?: boolean;
-      historyMode?: 'push' | 'replace';
-      normalizeOnError?: boolean;
-      threadId?: string | null;
-      preserveDirectMessageContext?: boolean;
-      directMessagePeerPubkey?: string | null;
-    }
-  ) => Promise<void>;
-  openThread: (threadId: string, options?: OpenThreadOptions) => Promise<void>;
+  refreshVisibleTimelineAfterPublish: (topic: string, currentThread: string | null) => Promise<void>;
+  syncRoute: SyncRoute;
+  openDirectMessagePane: OpenDirectMessagePane;
+  openAuthorDetail: OpenAuthorDetail;
+  openThread: OpenThread;
   setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
   setLiveCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
   setGameCreateDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -377,13 +333,14 @@ export function useDesktopShellActions({
   }
 
   function createOptimisticPost(args: {
+    createdAt: number;
     localId: string;
     draft: LocalPostDraft;
     draftMedia: LocalDraftMediaItem[];
     replyPost?: PostView | null;
     repostPost?: PostView | null;
   }): PostView {
-    const { localId, draft, draftMedia, replyPost = null, repostPost = null } = args;
+    const { createdAt, localId, draft, draftMedia, replyPost = null, repostPost = null } = args;
     const isRepost = draft.kind === 'repost' && repostPost;
     const channelId =
       draft.kind === 'post' && draft.channel_ref?.kind === 'private_channel'
@@ -404,7 +361,7 @@ export function useDesktopShellActions({
       content: draft.content,
       content_status: 'Available',
       attachments: attachmentViewsFromDraftMediaItems(localId, draftMedia),
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: createdAt,
       reply_to: replyPost?.object_id ?? null,
       reply_preview: replyPost
         ? {
@@ -576,439 +533,242 @@ export function useDesktopShellActions({
     setDirectMessageError(null);
   }
 
-  function directMessagePreviewFromAttachments(attachments: AttachmentView[]) {
-    if (attachments.some((attachment) => attachment.role === 'video_manifest')) {
-      return '[Video]';
-    }
-    if (attachments.length > 0) {
-      return '[Image]';
-    }
-    return null;
-  }
+  const {
+    handleProfileFieldChange,
+    handleProfileAvatarFile,
+    handleClearProfileAvatar,
+    resetProfileDraft,
+    handleSelectPrivateChannel,
+    handleSaveProfile,
+    handleAddTopic,
+    handleSelectTopic,
+    handleOpenOriginalTopic,
+    handleRemoveTopic,
+    handleCreatePrivateChannel,
+    handleShareChannelAccess,
+    handleJoinChannelAccess,
+    handleImportChannelAccessToken,
+    handleSaveDiscoverySeeds,
+    handleSaveCommunityNodes,
+    handleClearCommunityNodes,
+    handleAuthenticateCommunityNode,
+    handleClearCommunityNodeToken,
+    handleRefreshCommunityNode,
+    handleFetchCommunityNodeConsents,
+    handleAcceptCommunityNodeConsents,
+  } = createProfileTopicChannelActions({
+    api,
+    translate,
+    loadTopics,
+    syncRoute,
+    activePrivateChannel,
+    activeTopic,
+    channelAudienceInput,
+    channelLabelInput,
+    communityNodeInput,
+    discoverySeedInput,
+    inviteTokenInput,
+    localProfile,
+    profileDraft,
+    selectedChannelIdByTopic,
+    selectedThread,
+    topicInput,
+    trackedTopics,
+    clearThreadContext,
+    setProfileAvatarPreviewUrl,
+    setProfileAvatarInputKey,
+    setTrackedTopics,
+    setActiveTopic,
+    setTopicInput,
+    setTimelineScopeByTopic,
+    setComposeChannelByTopic,
+    setSelectedChannelIdByTopic,
+    setShellChromeState,
+    setProfileDraft,
+    setProfileDirty,
+    setProfileError,
+    setProfilePanelState,
+    setProfileSaving,
+    setLocalProfile,
+    setChannelLabelInput,
+    setChannelAudienceInput,
+    setInviteTokenInput,
+    setInviteOutput,
+    setInviteOutputLabel,
+    setChannelError,
+    setChannelPanelStateByTopic,
+    setChannelActionPending,
+    setJoinedChannelsByTopic,
+    setCommunityNodeConfig,
+    setCommunityNodeStatuses,
+    setCommunityNodeInput,
+    setCommunityNodeEditorDirty,
+    setCommunityNodeError,
+    setDiscoveryConfig,
+    setDiscoverySeedInput,
+    setDiscoveryEditorDirty,
+    setDiscoveryError,
+  });
 
-  function handleProfileFieldChange(field: 'displayName' | 'name' | 'about', value: string) {
-    const nextField: keyof ProfileInput = field === 'displayName' ? 'display_name' : field;
-    setProfileDraft((current) => ({
-      ...current,
-      [nextField]: value,
-    }));
-    setProfileDirty(true);
-  }
+  const {
+    handleDeleteDirectMessageMessage,
+    handleClearDirectMessage,
+    handleOpenNotification,
+    handleToggleReaction,
+    handleCreateCustomReactionAsset,
+    handleBookmarkCustomReaction,
+    handleRemoveBookmarkedCustomReaction,
+    handleToggleBookmarkedPost,
+    handleRelationshipAction,
+    handleMuteAction,
+  } = createMessageReactionSocialActions({
+    api,
+    translate,
+    loadTopics,
+    syncRoute,
+    openDirectMessagePane,
+    openAuthorDetail,
+    openThread,
+    activeTopic,
+    bookmarkedPostIds,
+    selectedAuthorPubkey,
+    selectedThread,
+    trackedTopics,
+    clearAuxiliaryPanels,
+    setTrackedTopics,
+    setActiveTopic,
+    setSelectedChannelIdByTopic,
+    setTimelineScopeByTopic,
+    setComposeChannelByTopic,
+    setTimelinesByKey,
+    setPublicTimelinesByTopic,
+    setThread,
+    setProfileTimeline,
+    setSelectedAuthorTimeline,
+    setKnownAuthorsByPubkey,
+    setOwnedReactionAssets,
+    setBookmarkedReactionAssets,
+    setBookmarkedPosts,
+    setRecentReactions,
+    setSelectedAuthor,
+    setAuthorError,
+    setDirectMessageError,
+    setReactionPanelState,
+    setReactionCreatePending,
+    setShellChromeState,
+    setError,
+  });
 
-  async function handleProfileAvatarFile(file: File) {
-    const pictureUpload = await fileToCreateAttachment(file, 'profile_avatar');
-    const nextPreviewUrl = URL.createObjectURL(file);
-    setProfileAvatarPreviewUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      return nextPreviewUrl;
-    });
-    setProfileAvatarInputKey((value) => value + 1);
-    setProfileDraft((current) => ({
-      ...current,
-      picture: null,
-      picture_upload: pictureUpload,
-      clear_picture: false,
-    }));
-    setProfileDirty(true);
-    setProfileError(null);
-  }
+  const {
+    handleImportPeer,
+    handleCreateLiveSession,
+    handleJoinLiveSession,
+    handleLeaveLiveSession,
+    handleEndLiveSession,
+    handleCreateGameRoom,
+    updateGameDraft,
+    handleUpdateGameRoom,
+  } = createLiveGameActions({
+    api,
+    translate,
+    loadTopics,
+    syncRoute,
+    activeComposeChannel,
+    activeGameRooms,
+    activeTopic,
+    gameDescription,
+    gameDrafts,
+    gameParticipantsInput,
+    gameTitle,
+    liveDescription,
+    liveTitle,
+    peerTicket,
+    selectedThread,
+    trackedTopics,
+    setPeerTicket,
+    setLiveTitle,
+    setLiveDescription,
+    setLiveError,
+    setLivePendingBySessionId,
+    setLiveCreatePending,
+    setShellChromeState,
+    setGameTitle,
+    setGameDescription,
+    setGameParticipantsInput,
+    setGameError,
+    setGameDrafts,
+    setGameSavingByRoomId,
+    setGameCreatePending,
+    setError,
+    setLiveCreateDialogOpen,
+    setGameCreateDialogOpen,
+  });
 
-  function handleClearProfileAvatar() {
-    setProfileAvatarPreviewUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      return null;
-    });
-    setProfileAvatarInputKey((value) => value + 1);
-    setProfileDraft((current) => ({
-      ...current,
-      picture: null,
-      picture_upload: null,
-      clear_picture: true,
-    }));
-    setProfileDirty(true);
-    setProfileError(null);
-  }
+  const {
+    handleAttachmentSelection,
+    handleRemoveDraftAttachment,
+    handleDirectMessageAttachmentSelection,
+    handleRemoveDirectMessageDraftAttachment,
+    beginReply,
+    clearReply,
+    clearRepost,
+    openNewPostDialog,
+    openFloatingActionDialog,
+    handleSimpleRepost,
+    handleRestoreLocalPost,
+    handleRetryLocalPost,
+    beginQuoteRepost,
+  } = createComposeInteractionsActions({
+    activeTopic,
+    buildImageDraftItem,
+    buildVideoDraftItem,
+    createOptimisticPost,
+    insertOptimisticPost,
+    openThread,
+    releaseAllDirectMessageDraftPreviews,
+    releaseAllDraftPreviews,
+    releaseDirectMessageDraftPreview,
+    releaseDraftPreview,
+    rememberDirectMessageDraftPreview,
+    rememberDraftPreview,
+    restoreLocalDraft,
+    shellChromeState,
+    submitOptimisticPost,
+    syncRoute,
+    translate,
+    setAttachmentInputKey,
+    setAuthorError,
+    setComposer,
+    setComposerError,
+    setDirectMessageAttachmentInputKey,
+    setDirectMessageDraftMediaItems,
+    setDirectMessageError,
+    setDraftMediaItems,
+    setReplyTarget,
+    setRepostTarget,
+    setSelectedAuthor,
+    setSelectedAuthorPubkey,
+    setSelectedThread,
+    setShellChromeState,
+    setThread,
+    setComposeDialogOpen,
+    setGameCreateDialogOpen,
+    setLiveCreateDialogOpen,
+  });
 
-  function resetProfileDraft() {
-    if (!localProfile) {
-      return;
-    }
-    setProfileAvatarPreviewUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      return null;
-    });
-    setProfileAvatarInputKey((value) => value + 1);
-    setProfileDraft(profileInputFromProfile(localProfile));
-    setProfileDirty(false);
-    setProfileError(null);
-    setProfilePanelState({
-      status: 'ready',
-      error: null,
-    });
-  }
-
-  function handleSelectPrivateChannel(topicId: string, channelId: string) {
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topicId]: channelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topicId]: {
-        kind: 'channel',
-        channel_id: channelId,
-      },
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topicId]: {
-        kind: 'private_channel',
-        channel_id: channelId,
-      },
-    }));
-    setActiveTopic(topicId);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
-    }));
-    syncRoute('replace', {
-      activeTopic: topicId,
-      primarySection: 'timeline',
-      timelineScope: {
-        kind: 'channel',
-        channel_id: channelId,
-      },
-      composeTarget: {
-        kind: 'private_channel',
-        channel_id: channelId,
-      },
-    });
-  }
-
-  async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setProfileSaving(true);
-    try {
-      const profile = await api.setMyProfile(profileDraft);
-      setProfileAvatarPreviewUrl((current) => {
-        if (current) {
-          URL.revokeObjectURL(current);
-        }
-        return null;
-      });
-      setProfileAvatarInputKey((value) => value + 1);
-      setLocalProfile(profile);
-      setProfileDraft(profileInputFromProfile(profile));
-      setProfileDirty(false);
-      setProfileError(null);
-      setProfilePanelState({
-        status: 'ready',
-        error: null,
-      });
-      setShellChromeState((current) => ({
-        ...current,
-        profileMode: 'overview',
-      }));
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-      syncRoute('replace', {
-        primarySection: 'profile',
-        profileMode: 'overview',
-      });
-    } catch (saveError) {
-      const nextProfileError = messageFromError(
-        saveError,
-        translate('common:errors.failedToSaveProfile')
-      );
-      setProfileError(nextProfileError);
-      setProfilePanelState({
-        status: 'error',
-        error: nextProfileError,
-      });
-    } finally {
-      setProfileSaving(false);
-    }
-  }
-
-  async function handleAddTopic() {
-    const nextTopic = topicInput.trim();
-    if (!nextTopic) {
-      return;
-    }
-    const nextTopics = trackedTopics.includes(nextTopic)
-      ? trackedTopics
-      : [...trackedTopics, nextTopic];
-    setTrackedTopics(nextTopics);
-    setActiveTopic(nextTopic);
-    setTopicInput('');
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
-    }));
-    clearThreadContext();
-    syncRoute('replace', {
-      activeTopic: nextTopic,
-      primarySection: 'timeline',
-    });
-    await loadTopics(nextTopics, nextTopic, null);
-  }
-
-  async function handleSelectTopic(topic: string) {
-    setActiveTopic(topic);
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topic]: null,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topic]: PUBLIC_TIMELINE_SCOPE,
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topic]: PUBLIC_CHANNEL_REF,
-    }));
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
-    }));
-    clearThreadContext();
-    syncRoute('replace', {
-      activeTopic: topic,
-      primarySection: 'timeline',
-      timelineScope: PUBLIC_TIMELINE_SCOPE,
-      composeTarget: PUBLIC_CHANNEL_REF,
-    });
-    await loadTopics(trackedTopics, topic, null);
-  }
-
-  async function handleOpenOriginalTopic(topicId: string) {
-    const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
-    setTrackedTopics(nextTopics);
-    setActiveTopic(topicId);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
-    }));
-    clearThreadContext();
-    syncRoute('replace', {
-      activeTopic: topicId,
-      primarySection: 'timeline',
-      timelineScope: privateTimelineScope(selectedChannelIdByTopic[topicId] ?? null),
-      composeTarget: privateComposeTarget(selectedChannelIdByTopic[topicId] ?? null),
-      selectedAuthorPubkey: null,
-      selectedThread: null,
-    });
-    await loadTopics(nextTopics, topicId, null);
-  }
-
-  async function handleRemoveTopic(topic: string) {
-    if (trackedTopics.length === 1) {
-      return;
-    }
-    const nextTopics = trackedTopics.filter((value) => value !== topic);
-    const nextActiveTopic = activeTopic === topic ? nextTopics[0] : activeTopic;
-    await api.unsubscribeTopic(topic);
-    setTrackedTopics(nextTopics);
-    setActiveTopic(nextActiveTopic);
-    setShellChromeState((current) => ({
-      ...current,
-      navOpen: false,
-    }));
-    clearThreadContext();
-    syncRoute('replace', {
-      activeTopic: nextActiveTopic,
-    });
-    await loadTopics(nextTopics, nextActiveTopic, null);
-  }
-
-  async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!channelLabelInput.trim()) {
-      setChannelError(translate('channels:errors.channelLabelRequired'));
-      return;
-    }
-    setChannelActionPending('create');
-    try {
-      const channel = await api.createPrivateChannel(
-        activeTopic,
-        channelLabelInput.trim(),
-        channelAudienceInput
-      );
-      setJoinedChannelsByTopic((current) => ({
-        ...current,
-        [activeTopic]: upsertJoinedChannel(current[activeTopic] ?? [], channel),
-      }));
-      setChannelPanelStateByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
-          status: 'ready',
-          error: null,
-        },
-      }));
-      setChannelLabelInput('');
-      setChannelAudienceInput('invite_only');
-      setChannelError(null);
-      setTimelineScopeByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
-          kind: 'channel',
-          channel_id: channel.channel_id,
-        },
-      }));
-      setSelectedChannelIdByTopic((current) => ({
-        ...current,
-        [activeTopic]: channel.channel_id,
-      }));
-      setComposeChannelByTopic((current) => ({
-        ...current,
-        [activeTopic]: {
-          kind: 'private_channel',
-          channel_id: channel.channel_id,
-        },
-      }));
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-        navOpen: false,
-      }));
-      syncRoute('replace', {
-        activeTopic,
-        composeTarget: {
-          kind: 'private_channel',
-          channel_id: channel.channel_id,
-        },
-        primarySection: 'timeline',
-        timelineScope: {
-          kind: 'channel',
-          channel_id: channel.channel_id,
-        },
-      });
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (channelCreateError) {
-      setChannelError(
-        messageFromError(channelCreateError, translate('channels:errors.failedCreateChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function handleShareChannelAccess() {
-    if (!activePrivateChannel) {
-      setChannelError(translate('channels:errors.selectChannelForShare'));
-      return;
-    }
-    setChannelActionPending('share');
-    try {
-      const access = await api.exportChannelAccessToken(activeTopic, activePrivateChannel.channel_id, null);
-      setInviteOutput(access.token);
-      setInviteOutputLabel(access.kind);
-      setChannelError(null);
-    } catch (shareError) {
-      setChannelError(
-        messageFromError(shareError, translate('channels:errors.failedShareChannel'))
-      );
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
-
-  async function activateImportedPrivateChannel(
-    topicId: string,
-    channelId: string,
-    placeholderChannel?: JoinedPrivateChannelView
-  ) {
-    const nextTopics = trackedTopics.includes(topicId) ? trackedTopics : [...trackedTopics, topicId];
-    setTrackedTopics(nextTopics);
-    setActiveTopic(topicId);
-    if (placeholderChannel) {
-      setJoinedChannelsByTopic((current) => ({
-        ...current,
-        [topicId]: upsertJoinedChannel(current[topicId] ?? [], placeholderChannel),
-      }));
-      setChannelPanelStateByTopic((current) => ({
-        ...current,
-        [topicId]: {
-          status: 'ready',
-          error: null,
-        },
-      }));
-    }
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [topicId]: channelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [topicId]: {
-        kind: 'channel',
-        channel_id: channelId,
-      },
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [topicId]: {
-        kind: 'private_channel',
-        channel_id: channelId,
-      },
-    }));
-    setInviteTokenInput('');
-    setInviteOutput(null);
-    setChannelError(null);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      navOpen: false,
-    }));
-    clearThreadContext();
-    syncRoute('replace', {
-      activeTopic: topicId,
-      composeTarget: {
-        kind: 'private_channel',
-        channel_id: channelId,
-      },
-      primarySection: 'timeline',
-      timelineScope: {
-        kind: 'channel',
-        channel_id: channelId,
-      },
-    });
-    await loadTopics(nextTopics, topicId, null);
-  }
-
-  async function handleJoinChannelAccess(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!inviteTokenInput.trim()) {
-      setChannelError(translate('channels:errors.inviteTokenRequired'));
-      return;
-    }
-    await handleImportChannelAccessToken(inviteTokenInput.trim());
-  }
-
-  async function handleImportChannelAccessToken(token: string) {
-    setChannelActionPending('join');
-    try {
-      const preview = await api.importChannelAccessToken(token.trim());
-      await activateImportedPrivateChannel(
-        preview.topic_id,
-        preview.channel_id,
-        joinedChannelFromAccessTokenPreview(preview)
-      );
-    } catch (joinError) {
-      setChannelError(messageFromError(joinError, translate('channels:errors.failedJoinChannel')));
-    } finally {
-      setChannelActionPending(null);
-    }
-  }
+  const { handleSendDirectMessage } = createDirectMessageActions({
+    api,
+    getState: storeApi.getState,
+    openDirectMessagePane,
+    releaseAllDirectMessageDraftPreviews,
+    setDirectMessageTimelineByPeer,
+    setDirectMessages,
+    setDirectMessageComposer,
+    setDirectMessageDraftMediaItems,
+    setDirectMessageAttachmentInputKey,
+    setDirectMessageError,
+    setDirectMessageSending,
+  });
 
   async function handlePublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1025,8 +785,10 @@ export function useDesktopShellActions({
         setComposerError(translate('common:errors.quoteRepostRequiresCommentary'));
         return;
       }
+      const createdAt = Math.floor(Date.now() / 1000);
       const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
       const optimisticPost = createOptimisticPost({
+        createdAt,
         localId,
         draft: {
           kind: 'repost',
@@ -1065,8 +827,10 @@ export function useDesktopShellActions({
       return;
     }
 
+    const createdAt = Math.floor(Date.now() / 1000);
     const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
     const optimisticPost = createOptimisticPost({
+      createdAt,
       localId,
       draft: {
         kind: 'post',
@@ -1095,938 +859,6 @@ export function useDesktopShellActions({
       primarySection: 'timeline',
     });
     void submitOptimisticPost(optimisticPost);
-  }
-
-  async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    if (files.length === 0) {
-      return;
-    }
-
-    const nextItems: DraftMediaItem[] = [];
-    const failures: string[] = [];
-
-    for (const file of files) {
-      try {
-        if (file.type.startsWith('image/')) {
-          nextItems.push(await buildImageDraftItem(file));
-          continue;
-        }
-        if (file.type.startsWith('video/')) {
-          nextItems.push(await buildVideoDraftItem(file));
-          continue;
-        }
-        failures.push(translate('common:errors.unsupportedAttachmentType', { name: file.name }));
-      } catch (attachmentError) {
-        failures.push(
-          attachmentError instanceof Error
-            ? attachmentError.message
-            : translate('common:errors.failedToGenerateVideoPoster')
-        );
-      }
-    }
-
-    if (nextItems.length > 0) {
-      nextItems.forEach(rememberDraftPreview);
-      setDraftMediaItems((current) => [...current, ...nextItems]);
-    }
-
-    setComposerError(failures.length > 0 ? failures[0] : null);
-    setAttachmentInputKey((value) => value + 1);
-  }
-
-  function handleRemoveDraftAttachment(itemId: string) {
-    releaseDraftPreview(itemId);
-    setDraftMediaItems((current) => current.filter((item) => item.id !== itemId));
-  }
-
-  async function handleDirectMessageAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const nextItem = file.type.startsWith('image/')
-        ? await buildImageDraftItem(file)
-        : file.type.startsWith('video/')
-          ? await buildVideoDraftItem(file)
-          : null;
-      if (!nextItem) {
-        setDirectMessageError(
-          translate('common:errors.unsupportedAttachmentType', { name: file.name })
-        );
-      } else {
-        releaseAllDirectMessageDraftPreviews();
-        rememberDirectMessageDraftPreview(nextItem);
-        setDirectMessageDraftMediaItems([nextItem]);
-        setDirectMessageError(null);
-      }
-    } catch (attachmentError) {
-      setDirectMessageError(
-        messageFromError(attachmentError, translate('common:errors.failedToGenerateVideoPoster'))
-      );
-    } finally {
-      setDirectMessageAttachmentInputKey((value) => value + 1);
-    }
-  }
-
-  function handleRemoveDirectMessageDraftAttachment(itemId: string) {
-    releaseDirectMessageDraftPreview(itemId);
-    setDirectMessageDraftMediaItems((current) => current.filter((item) => item.id !== itemId));
-  }
-
-  async function handleSendDirectMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const currentState = storeApi.getState();
-    const peerPubkey = currentState.selectedDirectMessagePeerPubkey;
-    if (!peerPubkey) {
-      return;
-    }
-    const composerField = event.currentTarget.querySelector('textarea');
-    const composerValue = composerField?.value ?? currentState.directMessageComposer;
-    const trimmedComposer = composerValue.trim();
-    const attachments = currentState.directMessageDraftMediaItems.flatMap(
-      (item) => item.attachments
-    );
-    if (!trimmedComposer && attachments.length === 0) {
-      return;
-    }
-    setDirectMessageSending(true);
-    try {
-      const messageId = await api.sendDirectMessage(
-        peerPubkey,
-        trimmedComposer || null,
-        attachments,
-        null
-      );
-      const existingConversation =
-        currentState.directMessages.find((conversation) => conversation.peer_pubkey === peerPubkey) ??
-        null;
-      const existingStatus =
-        existingConversation?.status ?? currentState.directMessageStatusByPeer[peerPubkey] ?? null;
-      const knownPeerAuthor =
-        currentState.knownAuthorsByPubkey[peerPubkey] ?? currentState.selectedAuthor ?? null;
-      const createdAt = Date.now();
-      const optimisticAttachments: AttachmentView[] = attachments.map((attachment, index) => ({
-        hash: `${messageId}-attachment-${index}`,
-        mime: attachment.mime,
-        bytes: attachment.byte_size,
-        role: attachment.role ?? 'image_original',
-        status: 'Available',
-      }));
-      const optimisticMessage = {
-        dm_id:
-          existingConversation?.dm_id ??
-          existingStatus?.dm_id ??
-          [currentState.syncStatus.local_author_pubkey, peerPubkey].sort().join(':'),
-        message_id: messageId,
-        sender_pubkey: currentState.syncStatus.local_author_pubkey,
-        recipient_pubkey: peerPubkey,
-        created_at: createdAt,
-        text: trimmedComposer,
-        reply_to_message_id: null,
-        attachments: optimisticAttachments,
-        outgoing: true,
-        delivered: true,
-      } satisfies DirectMessageMessageView;
-      const optimisticConversation = {
-        dm_id: optimisticMessage.dm_id,
-        peer_pubkey: peerPubkey,
-        peer_name: knownPeerAuthor?.name ?? existingConversation?.peer_name ?? null,
-        peer_display_name:
-          knownPeerAuthor?.display_name ?? existingConversation?.peer_display_name ?? null,
-        peer_picture: knownPeerAuthor?.picture ?? existingConversation?.peer_picture ?? null,
-        peer_picture_asset:
-          knownPeerAuthor?.picture_asset ?? existingConversation?.peer_picture_asset ?? null,
-        updated_at: createdAt,
-        last_message_at: createdAt,
-        last_message_id: messageId,
-        last_message_preview:
-          trimmedComposer || directMessagePreviewFromAttachments(optimisticAttachments),
-        status:
-          existingStatus ??
-          existingConversation?.status ?? {
-            peer_pubkey: peerPubkey,
-            dm_id: optimisticMessage.dm_id,
-            mutual: true,
-            send_enabled: true,
-            peer_count: 1,
-            pending_outbox_count: 0,
-          },
-      } satisfies DirectMessageConversationView;
-      setDirectMessageTimelineByPeer((current) => ({
-        ...current,
-        [peerPubkey]: [
-          optimisticMessage,
-          ...(current[peerPubkey] ?? []).filter(
-            (message) => message.message_id !== messageId
-          ),
-        ],
-      }));
-      setDirectMessages((current) => {
-        const remaining = current.filter(
-          (conversation) => conversation.peer_pubkey !== peerPubkey
-        );
-        return [optimisticConversation, ...remaining];
-      });
-      releaseAllDirectMessageDraftPreviews();
-      setDirectMessageComposer('');
-      setDirectMessageDraftMediaItems([]);
-      setDirectMessageAttachmentInputKey((value) => value + 1);
-      setDirectMessageError(null);
-      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
-    } catch (sendError) {
-      setDirectMessageError(messageFromError(sendError, 'failed to send direct message'));
-    } finally {
-      setDirectMessageSending(false);
-    }
-  }
-
-  async function handleDeleteDirectMessageMessage(peerPubkey: string, messageId: string) {
-    try {
-      await api.deleteDirectMessageMessage(peerPubkey, messageId);
-      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
-    } catch (deleteError) {
-      setDirectMessageError(messageFromError(deleteError, 'failed to delete direct message'));
-    }
-  }
-
-  async function handleClearDirectMessage(peerPubkey: string) {
-    try {
-      await api.clearDirectMessage(peerPubkey);
-      await openDirectMessagePane(peerPubkey, { historyMode: 'replace' });
-    } catch (clearError) {
-      setDirectMessageError(messageFromError(clearError, 'failed to clear direct message'));
-    }
-  }
-
-  async function handleOpenNotification(notification: NotificationView) {
-    if (notification.kind === 'direct_message') {
-      await openDirectMessagePane(notification.actor_pubkey, {
-        historyMode: 'push',
-      });
-      return;
-    }
-
-    if (notification.kind === 'followed') {
-      clearAuxiliaryPanels();
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'timeline',
-        timelineView: 'feed',
-        navOpen: false,
-      }));
-      syncRoute('push', {
-        primarySection: 'timeline',
-        timelineView: 'feed',
-        selectedAuthorPubkey: null,
-        selectedDirectMessagePeerPubkey: null,
-        selectedThread: null,
-      });
-      await openAuthorDetail(notification.actor_pubkey, {
-        historyMode: 'replace',
-      });
-      return;
-    }
-
-    const targetTopic = notification.topic_id?.trim() || activeTopic;
-    const nextTopics = trackedTopics.includes(targetTopic)
-      ? trackedTopics
-      : [...trackedTopics, targetTopic];
-    const nextChannelId = notification.channel_id ?? null;
-    const threadTargetId = notification.thread_root_object_id ?? notification.object_id ?? null;
-
-    setTrackedTopics(nextTopics);
-    setActiveTopic(targetTopic);
-    setSelectedChannelIdByTopic((current) => ({
-      ...current,
-      [targetTopic]: nextChannelId,
-    }));
-    setTimelineScopeByTopic((current) => ({
-      ...current,
-      [targetTopic]: privateTimelineScope(nextChannelId),
-    }));
-    setComposeChannelByTopic((current) => ({
-      ...current,
-      [targetTopic]: privateComposeTarget(nextChannelId),
-    }));
-    clearAuxiliaryPanels();
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-      timelineView: 'feed',
-      navOpen: false,
-    }));
-
-    await loadTopics(nextTopics, targetTopic, threadTargetId);
-
-    if (threadTargetId) {
-      await openThread(threadTargetId, {
-        historyMode: 'replace',
-        topic: targetTopic,
-      });
-      return;
-    }
-
-    syncRoute('replace', {
-      activeTopic: targetTopic,
-      composeTarget: privateComposeTarget(nextChannelId),
-      primarySection: 'timeline',
-      selectedAuthorPubkey: null,
-      selectedDirectMessagePeerPubkey: null,
-      selectedThread: null,
-      timelineScope: privateTimelineScope(nextChannelId),
-      timelineView: 'feed',
-    });
-  }
-
-  function patchReactionState(reactionState: Parameters<typeof patchReactionStateIntoPosts>[1]) {
-    setTimelinesByKey((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([key, posts]) => [
-          key,
-          patchReactionStateIntoPosts(posts, reactionState),
-        ])
-      )
-    );
-    setPublicTimelinesByTopic((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([topic, posts]) => [
-          topic,
-          patchReactionStateIntoPosts(posts, reactionState),
-        ])
-      )
-    );
-    setThread((current) => patchReactionStateIntoPosts(current, reactionState));
-    setProfileTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
-    setSelectedAuthorTimeline((current) => patchReactionStateIntoPosts(current, reactionState));
-  }
-
-  async function handleToggleReaction(post: PostView, reactionKey: ReactionKeyInput) {
-    const topicId = publishedTopicIdForPost(post);
-    if (!topicId) {
-      setError(translate('common:errors.failedToPublish'));
-      return;
-    }
-    try {
-      const nextState = await api.toggleReaction(
-        topicId,
-        post.object_id,
-        reactionKey,
-        post.channel_id ? { kind: 'private_channel', channel_id: post.channel_id } : { kind: 'public' }
-      );
-      patchReactionState(nextState);
-      try {
-        setRecentReactions(await api.listRecentReactions(8));
-      } catch {
-        // Keep the toggled state even if the quick-reaction history refresh misses.
-      }
-      setError(null);
-    } catch (reactionError) {
-      setError(messageFromError(reactionError, translate('common:errors.failedToPublish')));
-    }
-  }
-
-  async function handleCreateCustomReactionAsset(
-    file: File,
-    cropRect: CustomReactionCropRect,
-    searchKey: string
-  ) {
-    setReactionCreatePending(true);
-    try {
-      const upload = await fileToCreateAttachment(file, 'image_original');
-      const asset = await api.createCustomReactionAsset(upload, cropRect, searchKey);
-      setOwnedReactionAssets((current) => [
-        asset,
-        ...current.filter((item) => item.asset_id !== asset.asset_id),
-      ]);
-      setReactionPanelState({
-        status: 'ready',
-        error: null,
-      });
-    } catch (reactionError) {
-      setReactionPanelState({
-        status: 'error',
-        error: messageFromError(reactionError, translate('common:errors.failedToPublish')),
-      });
-    } finally {
-      setReactionCreatePending(false);
-    }
-  }
-
-  async function handleBookmarkCustomReaction(asset: Parameters<DesktopApi['bookmarkCustomReaction']>[0]) {
-    try {
-      const bookmarked = await api.bookmarkCustomReaction(asset);
-      setBookmarkedReactionAssets((current) => [
-        bookmarked,
-        ...current.filter((item) => item.asset_id !== bookmarked.asset_id),
-      ]);
-      setReactionPanelState({
-        status: 'ready',
-        error: null,
-      });
-    } catch (bookmarkError) {
-      setReactionPanelState({
-        status: 'error',
-        error: messageFromError(bookmarkError, translate('common:errors.failedToPublish')),
-      });
-    }
-  }
-
-  async function handleRemoveBookmarkedCustomReaction(assetId: string) {
-    try {
-      await api.removeBookmarkedCustomReaction(assetId);
-      setBookmarkedReactionAssets((current) => current.filter((item) => item.asset_id !== assetId));
-      setReactionPanelState({
-        status: 'ready',
-        error: null,
-      });
-    } catch (bookmarkError) {
-      setReactionPanelState({
-        status: 'error',
-        error: messageFromError(bookmarkError, translate('common:errors.failedToPublish')),
-      });
-    }
-  }
-
-  async function handleToggleBookmarkedPost(post: PostView) {
-    const topicId = publishedTopicIdForPost(post);
-    if (!topicId) {
-      setError(translate('common:errors.failedToUpdateBookmark'));
-      return;
-    }
-    try {
-      if (bookmarkedPostIds.has(post.object_id)) {
-        await api.removeBookmarkedPost(post.object_id);
-        setBookmarkedPosts((current) =>
-          current.filter((item) => item.post.object_id !== post.object_id)
-        );
-      } else {
-        const bookmarked = await api.bookmarkPost(topicId, post.object_id);
-        setBookmarkedPosts((current) => [
-          bookmarked,
-          ...current.filter((item) => item.post.object_id !== bookmarked.post.object_id),
-        ]);
-      }
-      setError(null);
-    } catch (bookmarkError) {
-      setError(messageFromError(bookmarkError, translate('common:errors.failedToUpdateBookmark')));
-    }
-  }
-
-  function beginReply(post: PostView) {
-    const threadId = post.root_id ?? post.object_id;
-    setRepostTarget(null);
-    setReplyTarget(post);
-    setComposeDialogOpen(true);
-    setSelectedThread(threadId);
-    setSelectedAuthorPubkey(null);
-    setSelectedAuthor(null);
-    setAuthorError(null);
-    syncRoute('push', {
-      selectedThread: threadId,
-      selectedAuthorPubkey: null,
-    });
-    void openThread(threadId, { historyMode: 'replace' });
-  }
-
-  function clearReply() {
-    setReplyTarget(null);
-    setRepostTarget(null);
-  }
-
-  function clearRepost() {
-    setRepostTarget(null);
-  }
-
-  function openNewPostDialog() {
-    clearReply();
-    clearRepost();
-    setComposeDialogOpen(true);
-  }
-
-  function openFloatingActionDialog() {
-    if (shellChromeState.activePrimarySection === 'live') {
-      setLiveCreateDialogOpen(true);
-      return;
-    }
-    if (shellChromeState.activePrimarySection === 'game') {
-      setGameCreateDialogOpen(true);
-      return;
-    }
-    openNewPostDialog();
-  }
-
-  async function handleSimpleRepost(post: PostView) {
-    const sourceTopic = publishedTopicIdForPost(post);
-    if (!sourceTopic || !canCreateRepostFromPost(post)) {
-      setComposerError(translate('common:errors.failedToPublish'));
-      return;
-    }
-    const localId = `local-post:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-    const optimisticPost = createOptimisticPost({
-      localId,
-      draft: {
-        kind: 'repost',
-        topic: activeTopic,
-        content: '',
-        source_topic: sourceTopic,
-        source_object_id: post.object_id,
-        channel_ref: PUBLIC_CHANNEL_REF,
-      },
-      draftMedia: [],
-      repostPost: post,
-    });
-    insertOptimisticPost(optimisticPost);
-    setComposerError(null);
-    setReplyTarget(null);
-    setRepostTarget(null);
-    setSelectedThread(null);
-    setThread([]);
-    setShellChromeState((current) => ({
-      ...current,
-      activePrimarySection: 'timeline',
-    }));
-    syncRoute('replace', {
-      primarySection: 'timeline',
-      selectedThread: null,
-    });
-    void submitOptimisticPost(optimisticPost);
-  }
-
-  function handleRestoreLocalPost(post: PostView) {
-    restoreLocalDraft(post);
-  }
-
-  function handleRetryLocalPost(post: PostView) {
-    if (post.local_state !== 'failed') {
-      return;
-    }
-    setComposerError(null);
-    void submitOptimisticPost(post);
-  }
-
-  function beginQuoteRepost(post: PostView) {
-    if (!canCreateRepostFromPost(post)) {
-      return;
-    }
-    releaseAllDraftPreviews();
-    setDraftMediaItems([]);
-    setAttachmentInputKey((value) => value + 1);
-    setComposer('');
-    setComposerError(null);
-    setReplyTarget(null);
-    setRepostTarget(post);
-    setComposeDialogOpen(true);
-    setSelectedAuthorPubkey(null);
-    setSelectedAuthor(null);
-    setAuthorError(null);
-    syncRoute('replace', {
-      selectedAuthorPubkey: null,
-    });
-  }
-
-  async function handleRelationshipAction(authorPubkey: string, following: boolean) {
-    try {
-      const nextView = following
-        ? await api.unfollowAuthor(authorPubkey)
-        : await api.followAuthor(authorPubkey);
-      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [nextView]));
-      if (selectedAuthorPubkey === authorPubkey) {
-        setSelectedAuthor(nextView);
-        setAuthorError(null);
-      }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (relationshipError) {
-      setAuthorError(
-        relationshipError instanceof Error
-          ? relationshipError.message
-          : translate('common:errors.failedToUpdateFollowState')
-      );
-    }
-  }
-
-  async function handleMuteAction(authorPubkey: string, muted: boolean) {
-    try {
-      const nextView = muted
-        ? await api.unmuteAuthor(authorPubkey)
-        : await api.muteAuthor(authorPubkey);
-      setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, [nextView]));
-      if (selectedAuthorPubkey === authorPubkey) {
-        setSelectedAuthor(nextView);
-        setAuthorError(null);
-      }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (muteError) {
-      setAuthorError(
-        muteError instanceof Error
-          ? muteError.message
-          : translate('common:errors.failedToUpdateMuteState')
-      );
-    }
-  }
-
-  async function handleSaveDiscoverySeeds() {
-    try {
-      const seedEntries = discoverySeedInput
-        .split('\n')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-      const nextConfig = await api.setDiscoverySeeds(seedEntries);
-      setDiscoveryConfig(nextConfig);
-      setDiscoverySeedInput(seedPeersToEditorValue(nextConfig));
-      setDiscoveryEditorDirty(false);
-      setDiscoveryError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-      syncRoute('replace');
-    } catch (saveError) {
-      setDiscoveryError(
-        saveError instanceof Error
-          ? saveError.message
-          : translate('common:errors.failedToUpdateDiscoverySeeds')
-      );
-    }
-  }
-
-  async function handleSaveCommunityNodes() {
-    try {
-      const nextConfig = await api.setCommunityNodeConfig(
-        communityNodeDraftNodesToConfigInput(communityNodeInput)
-      );
-      setCommunityNodeConfig(nextConfig);
-      setCommunityNodeInput(communityNodesToDraftNodes(nextConfig));
-      setCommunityNodeEditorDirty(false);
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-      syncRoute('replace');
-    } catch (saveError) {
-      setCommunityNodeError(
-        saveError instanceof Error
-          ? saveError.message
-          : translate('common:errors.failedToUpdateCommunityNodes')
-      );
-    }
-  }
-
-  async function handleClearCommunityNodes() {
-    try {
-      await api.clearCommunityNodeConfig();
-      setCommunityNodeConfig(DEFAULT_COMMUNITY_NODE_CONFIG);
-      setCommunityNodeStatuses([]);
-      setCommunityNodeInput([]);
-      setCommunityNodeEditorDirty(false);
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-      syncRoute('replace');
-    } catch (clearError) {
-      setCommunityNodeError(
-        clearError instanceof Error
-          ? clearError.message
-          : translate('common:errors.failedToClearCommunityNodes')
-      );
-    }
-  }
-
-  async function handleAuthenticateCommunityNode(baseUrl: string) {
-    try {
-      const nextStatus = await api.authenticateCommunityNode(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (authError) {
-      setCommunityNodeError(
-        authError instanceof Error
-          ? authError.message
-          : translate('common:errors.failedToAuthenticateCommunityNode')
-      );
-    }
-  }
-
-  async function handleClearCommunityNodeToken(baseUrl: string) {
-    try {
-      const nextStatus = await api.clearCommunityNodeToken(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (clearError) {
-      setCommunityNodeError(
-        clearError instanceof Error
-          ? clearError.message
-          : translate('common:errors.failedToClearCommunityNodeToken')
-      );
-    }
-  }
-
-  async function handleRefreshCommunityNode(baseUrl: string) {
-    try {
-      const nextStatus = await api.refreshCommunityNodeMetadata(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (refreshError) {
-      setCommunityNodeError(
-        refreshError instanceof Error
-          ? refreshError.message
-          : translate('common:errors.failedToRefreshCommunityNode')
-      );
-    }
-  }
-
-  async function handleFetchCommunityNodeConsents(baseUrl: string) {
-    try {
-      const nextStatus = await api.getCommunityNodeConsentStatus(baseUrl);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (consentError) {
-      setCommunityNodeError(
-        consentError instanceof Error
-          ? consentError.message
-          : translate('common:errors.failedToFetchConsentStatus')
-      );
-    }
-  }
-
-  async function handleAcceptCommunityNodeConsents(baseUrl: string) {
-    try {
-      const nextStatus = await api.acceptCommunityNodeConsents(baseUrl, []);
-      setCommunityNodeStatuses((current) => upsertCommunityNodeStatus(current, nextStatus));
-      setCommunityNodeConfig((current) => syncCommunityNodeConfigWithStatus(current, nextStatus));
-      setCommunityNodeError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (consentError) {
-      setCommunityNodeError(
-        consentError instanceof Error
-          ? consentError.message
-          : translate('common:errors.failedToAcceptConsents')
-      );
-    }
-  }
-
-  async function handleImportPeer() {
-    if (!peerTicket.trim()) {
-      return;
-    }
-    try {
-      await api.importPeerTicket(peerTicket.trim());
-      setPeerTicket('');
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (importError) {
-      setError(
-        importError instanceof Error
-          ? importError.message
-          : translate('common:errors.failedToImportPeer')
-      );
-    }
-  }
-
-  async function handleCreateLiveSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!liveTitle.trim()) {
-      setLiveError(translate('live:errors.titleRequired'));
-      return;
-    }
-    setLiveCreatePending(true);
-    try {
-      await api.createLiveSession(
-        activeTopic,
-        liveTitle.trim(),
-        liveDescription.trim(),
-        activeComposeChannel
-      );
-      setLiveTitle('');
-      setLiveDescription('');
-      setLiveError(null);
-      setLiveCreateDialogOpen(false);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'live',
-      }));
-      syncRoute('replace', {
-        primarySection: 'live',
-      });
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (liveCreateError) {
-      setLiveError(messageFromError(liveCreateError, translate('live:errors.failedCreate')));
-    } finally {
-      setLiveCreatePending(false);
-    }
-  }
-
-  async function handleJoinLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
-    try {
-      await api.joinLiveSession(activeTopic, sessionId);
-      setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (joinError) {
-      setLiveError(messageFromError(joinError, translate('live:errors.failedJoin')));
-    } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
-    }
-  }
-
-  async function handleLeaveLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
-    try {
-      await api.leaveLiveSession(activeTopic, sessionId);
-      setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (leaveError) {
-      setLiveError(messageFromError(leaveError, translate('live:errors.failedLeave')));
-    } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
-    }
-  }
-
-  async function handleEndLiveSession(sessionId: string) {
-    setLivePendingBySessionId((current) => ({
-      ...current,
-      [sessionId]: true,
-    }));
-    try {
-      await api.endLiveSession(activeTopic, sessionId);
-      setLiveError(null);
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (endError) {
-      setLiveError(messageFromError(endError, translate('live:errors.failedEnd')));
-    } finally {
-      setLivePendingBySessionId((current) => {
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      });
-    }
-  }
-
-  async function handleCreateGameRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const participants = Array.from(
-      new Set(
-        gameParticipantsInput
-          .split(',')
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0)
-      )
-    );
-    if (!gameTitle.trim()) {
-      setGameError(translate('game:errors.titleRequired'));
-      return;
-    }
-    if (participants.length < 2) {
-      setGameError(translate('game:errors.participantsRequired'));
-      return;
-    }
-    setGameCreatePending(true);
-    try {
-      await api.createGameRoom(
-        activeTopic,
-        gameTitle.trim(),
-        gameDescription.trim(),
-        participants,
-        activeComposeChannel
-      );
-      setGameTitle('');
-      setGameDescription('');
-      setGameParticipantsInput('');
-      setGameError(null);
-      setGameCreateDialogOpen(false);
-      setShellChromeState((current) => ({
-        ...current,
-        activePrimarySection: 'game',
-      }));
-      syncRoute('replace', {
-        primarySection: 'game',
-      });
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (createError) {
-      setGameError(messageFromError(createError, translate('game:errors.failedCreate')));
-    } finally {
-      setGameCreatePending(false);
-    }
-  }
-
-  function updateGameDraft(roomId: string, update: (draft: GameEditorDraft) => GameEditorDraft) {
-    setGameDrafts((current) => {
-      const existingRoom = activeGameRooms.find((room) => room.room_id === roomId);
-      const draft = current[roomId] ?? (existingRoom ? createGameEditorDraft(existingRoom) : null);
-      if (!draft) {
-        return current;
-      }
-      return {
-        ...current,
-        [roomId]: update(draft),
-      };
-    });
-  }
-
-  async function handleUpdateGameRoom(roomId: string) {
-    const room = activeGameRooms.find((candidate) => candidate.room_id === roomId);
-    if (!room) {
-      return;
-    }
-    const draft = gameDrafts[room.room_id] ?? createGameEditorDraft(room);
-    const scores: GameScoreView[] = [];
-    for (const score of room.scores) {
-      const rawScore = draft.scores[score.participant_id] ?? String(score.score);
-      const parsed = Number.parseInt(rawScore, 10);
-      if (Number.isNaN(parsed)) {
-        setGameError(translate('game:errors.invalidScore', { label: score.label }));
-        return;
-      }
-      scores.push({
-        participant_id: score.participant_id,
-        label: score.label,
-        score: parsed,
-      });
-    }
-    setGameSavingByRoomId((current) => ({
-      ...current,
-      [room.room_id]: true,
-    }));
-    try {
-      await api.updateGameRoom(
-        activeTopic,
-        room.room_id,
-        draft.status,
-        draft.phase_label.trim() || null,
-        scores
-      );
-      setGameError(null);
-      setGameDrafts((current) => {
-        const next = { ...current };
-        delete next[room.room_id];
-        return next;
-      });
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
-    } catch (updateError) {
-      setGameError(messageFromError(updateError, translate('game:errors.failedUpdate')));
-    } finally {
-      setGameSavingByRoomId((current) => {
-        const next = { ...current };
-        delete next[room.room_id];
-        return next;
-      });
-    }
   }
 
   return {
