@@ -1847,6 +1847,177 @@ test('timeline buffers remote posts until the pending banner is applied', async 
   });
 });
 
+test('applying a pending timeline does not re-count the same post when a stale refresh completes later', async () => {
+  const user = userEvent.setup();
+  const olderPost: PostView = {
+    object_id: 'post-old',
+    envelope_id: 'envelope-old',
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: 'post',
+    content: 'older post',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'post-old',
+    channel_id: null,
+    audience_label: 'Public',
+  };
+  const newerPost: PostView = {
+    ...olderPost,
+    object_id: 'post-new',
+    envelope_id: 'envelope-new',
+    content: 'newer post',
+    created_at: 2,
+    root_id: 'post-new',
+  };
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': [olderPost],
+    },
+  });
+  const inFlightRefresh = createDeferred<TimelineView>();
+  let refreshPhase: 'initial' | 'buffered' | 'stale-in-flight' = 'initial';
+  let staleRefreshStarted = 0;
+  const api: DesktopApi = {
+    ...baseApi,
+    async listTimeline(topic, cursor, limit, scope) {
+      if (topic !== 'kukuri:topic:demo') {
+        return baseApi.listTimeline(topic, cursor, limit, scope);
+      }
+      if (refreshPhase === 'stale-in-flight') {
+        staleRefreshStarted += 1;
+        return inFlightRefresh.promise;
+      }
+      const items = refreshPhase === 'buffered' ? [newerPost, olderPost] : [olderPost];
+      return {
+        items: items.map((item) => ({ ...item, attachments: [...item.attachments] })),
+        next_cursor: null,
+      };
+    },
+  };
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('older post')).toBeInTheDocument();
+
+  refreshPhase = 'buffered';
+  window.dispatchEvent(new Event('focus'));
+
+  const pendingButton = await screen.findByRole('button', { name: 'Show 1 new post' });
+  expect(screen.queryByText('newer post')).not.toBeInTheDocument();
+
+  refreshPhase = 'stale-in-flight';
+  window.dispatchEvent(new Event('focus'));
+
+  await waitFor(() => {
+    expect(staleRefreshStarted).toBeGreaterThan(0);
+  });
+
+  await user.click(pendingButton);
+
+  await waitFor(() => {
+    expect(screen.getByText('newer post')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Show 1 new post' })
+    ).not.toBeInTheDocument();
+  });
+
+  inFlightRefresh.resolve({
+    items: [newerPost, olderPost].map((item) => ({ ...item, attachments: [...item.attachments] })),
+    next_cursor: null,
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText('newer post')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Show 1 new post' })
+    ).not.toBeInTheDocument();
+  });
+});
+
+test('authoritative replacements for syncing posts do not increment the pending banner', async () => {
+  const olderPost: PostView = {
+    object_id: 'post-old',
+    envelope_id: 'envelope-old',
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: 'post',
+    content: 'older post',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'post-old',
+    channel_id: null,
+    audience_label: 'Public',
+  };
+  const syncingPost: PostView = {
+    ...olderPost,
+    object_id: 'local-syncing-post',
+    envelope_id: 'local-syncing-envelope',
+    content: 'syncing placeholder',
+    created_at: 3,
+    root_id: 'local-syncing-post',
+    local_id: 'local-syncing-post',
+    local_state: 'syncing',
+    server_object_id: 'server-post',
+  };
+  const authoritativeReplacement: PostView = {
+    ...olderPost,
+    object_id: 'server-post',
+    envelope_id: 'server-envelope',
+    content: 'authoritative replacement',
+    created_at: 3,
+    root_id: 'server-post',
+  };
+  let timelineItems = [syncingPost, olderPost];
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': timelineItems,
+    },
+  });
+  const api: DesktopApi = {
+    ...baseApi,
+    async listTimeline(topic, cursor, limit, scope) {
+      if (topic !== 'kukuri:topic:demo') {
+        return baseApi.listTimeline(topic, cursor, limit, scope);
+      }
+      return {
+        items: timelineItems.map((item) => ({ ...item, attachments: [...item.attachments] })),
+        next_cursor: null,
+      };
+    },
+  };
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('syncing placeholder')).toBeInTheDocument();
+  expect(screen.getByText('older post')).toBeInTheDocument();
+
+  timelineItems = [authoritativeReplacement, olderPost];
+  window.dispatchEvent(new Event('focus'));
+
+  await waitFor(() => {
+    expect(screen.getByText('authoritative replacement')).toBeInTheDocument();
+    expect(screen.queryByText('syncing placeholder')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Show 1 new post' })
+    ).not.toBeInTheDocument();
+  });
+});
+
 test('private channel timeline keeps scope-separated posts and pending counts from public', async () => {
   const user = userEvent.setup();
   const publicPost: PostView = {

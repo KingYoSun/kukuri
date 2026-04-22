@@ -76,6 +76,26 @@ type LoadTopicsWaiter = {
   reject: (error: unknown) => void;
 };
 
+function postIdentityKey(post: Pick<PostView, 'object_id' | 'server_object_id'>): string {
+  return post.server_object_id ?? post.object_id;
+}
+
+function uniquePostsByIdentity(posts: PostView[]): PostView[] {
+  const seen = new Set<string>();
+  const nextPosts: PostView[] = [];
+
+  for (const post of posts) {
+    const key = postIdentityKey(post);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    nextPosts.push(post);
+  }
+
+  return nextPosts;
+}
+
 export function useDesktopShellData({
   api,
   translate,
@@ -332,25 +352,24 @@ export function useDesktopShellData({
 
   const mergeRefreshedVisiblePosts = useCallback(
     (current: PostView[], incoming: PostView[], preserveOlderPages: boolean) => {
-      const authoritativeIds = new Set(
-        incoming.map((post) => post.server_object_id ?? post.object_id)
-      );
+      const authoritativeIds = new Set(incoming.map((post) => postIdentityKey(post)));
       const localPosts = current.filter((post) => {
         if (!post.local_state) {
           return false;
         }
-        const authoritativeId = post.server_object_id ?? post.object_id;
+        const authoritativeId = postIdentityKey(post);
         return !authoritativeIds.has(authoritativeId);
       });
       const nextPosts = [...localPosts];
-      const seenObjectIds = new Set(nextPosts.map((post) => post.object_id));
+      const seenPostIds = new Set(nextPosts.map((post) => postIdentityKey(post)));
 
       for (const post of incoming) {
-        if (seenObjectIds.has(post.object_id)) {
+        const postId = postIdentityKey(post);
+        if (seenPostIds.has(postId)) {
           continue;
         }
         nextPosts.push(post);
-        seenObjectIds.add(post.object_id);
+        seenPostIds.add(postId);
       }
 
       if (!preserveOlderPages) {
@@ -361,12 +380,12 @@ export function useDesktopShellData({
         if (post.local_state) {
           continue;
         }
-        const authoritativeId = post.server_object_id ?? post.object_id;
-        if (authoritativeIds.has(authoritativeId) || seenObjectIds.has(post.object_id)) {
+        const authoritativeId = postIdentityKey(post);
+        if (authoritativeIds.has(authoritativeId) || seenPostIds.has(authoritativeId)) {
           continue;
         }
         nextPosts.push(post);
-        seenObjectIds.add(post.object_id);
+        seenPostIds.add(authoritativeId);
       }
 
       return nextPosts;
@@ -457,8 +476,8 @@ export function useDesktopShellData({
     ) => {
       const requestId = loadTopicsRequestRef.current + 1;
       loadTopicsRequestRef.current = requestId;
-      const currentState = storeApi.getState();
-      const selectedChannelId = currentState.selectedChannelIdByTopic[topic] ?? null;
+      const requestState = storeApi.getState();
+      const selectedChannelId = requestState.selectedChannelIdByTopic[topic] ?? null;
       const timelineScope = privateTimelineScope(selectedChannelId);
       const timelineKey = timelineScopeStorageKey(topic, timelineScope);
 
@@ -478,10 +497,12 @@ export function useDesktopShellData({
         }
 
         startTransition(() => {
+          const currentState = storeApi.getState();
+          const normalizedTimelineItems = uniquePostsByIdentity(timeline.items);
           const baselinePosts = currentState.timelinesByKey[timelineKey] ?? EMPTY_POSTS;
           const preserveTimelinePages =
             mode === 'buffer' &&
-            hasLoadedOlderAuthoritativePosts(baselinePosts, timeline.items);
+            hasLoadedOlderAuthoritativePosts(baselinePosts, normalizedTimelineItems);
           const resolvedTimelineCursor = preserveTimelinePages
             ? (currentState.timelineNextCursorByKey[timelineKey] ?? null)
             : (timeline.next_cursor ?? null);
@@ -492,21 +513,23 @@ export function useDesktopShellData({
           const resolvedPublicTimelineCursor = preservePublicTimelinePages
             ? (currentState.publicTimelineNextCursorByTopic[topic] ?? null)
             : (publicTimeline.next_cursor ?? null);
+          const visiblePostIds = new Set(baselinePosts.map((post) => postIdentityKey(post)));
           const authoritativeIds = new Set(
             baselinePosts
               .filter((post) => !post.local_state)
-              .map((post) => post.server_object_id ?? post.object_id)
+              .map((post) => postIdentityKey(post))
           );
           const hasAuthoritativeBaseline = authoritativeIds.size > 0;
-          const pendingCount = timeline.items.filter(
-            (post) => !authoritativeIds.has(post.object_id)
-          ).length;
+          const pendingTimelineItems = normalizedTimelineItems.filter(
+            (post) => !visiblePostIds.has(postIdentityKey(post))
+          );
+          const pendingCount = pendingTimelineItems.length;
           const shouldBuffer = mode === 'buffer' && hasAuthoritativeBaseline && pendingCount > 0;
 
           if (shouldBuffer) {
             setPendingTimelineSnapshotsByKey((current) => ({
               ...current,
-              [timelineKey]: timeline.items,
+              [timelineKey]: pendingTimelineItems,
             }));
             setPendingTimelineCountsByKey((current) => ({
               ...current,
@@ -521,7 +544,7 @@ export function useDesktopShellData({
               ...current,
               [timelineKey]: mergeRefreshedVisiblePosts(
                 current[timelineKey] ?? EMPTY_POSTS,
-                timeline.items,
+                normalizedTimelineItems,
                 preserveTimelinePages
               ),
             }));
