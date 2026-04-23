@@ -679,13 +679,9 @@ async fn refresh_public_runtime_for_retry(runtime: &DesktopRuntime, topic: &str)
         })
         .await;
     runtime
-        .apply_runtime_connectivity_assist()
+        .reapply_community_node_connectivity()
         .await
-        .context("apply runtime connectivity assist during public retry")?;
-    runtime
-        .apply_effective_seed_peers()
-        .await
-        .context("apply effective seed peers during public retry")?;
+        .context("reapply community-node connectivity during public retry")?;
     Ok(())
 }
 
@@ -7386,4 +7382,72 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
 
     runtime.shutdown().await;
     server.abort();
+}
+
+#[tokio::test]
+async fn reapply_community_node_connectivity_forces_unchanged_runtime_inputs() {
+    let _serial = acquire_async_test_lock().await;
+    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+        .await
+        .expect("relay server");
+    let dir = tempdir().expect("tempdir");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path().join("community-force-reapply.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    let seed_peer_runtime = DesktopRuntime::new_with_config_and_identity(
+        dir.path().join("community-force-reapply-peer.db"),
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("seed peer runtime");
+    let endpoint_id = seed_peer_runtime
+        .get_sync_status()
+        .await
+        .expect("seed peer status")
+        .discovery
+        .local_endpoint_id;
+
+    apply_relay_backed_community_node_seed_peers(
+        &runtime,
+        "https://community.example.com",
+        relay_url.as_str(),
+        vec![CommunityNodeSeedPeer::new(endpoint_id.as_str(), None).expect("seed peer")],
+    )
+    .await;
+
+    let runtime_connectivity_apply_version = runtime
+        .runtime_connectivity_apply_version
+        .load(Ordering::SeqCst);
+    let effective_seed_peer_apply_version = runtime
+        .effective_seed_peer_apply_version
+        .load(Ordering::SeqCst);
+
+    timeout(
+        Duration::from_secs(30),
+        runtime.reapply_community_node_connectivity(),
+    )
+    .await
+    .expect("force reapply timeout")
+    .expect("force reapply");
+
+    assert_eq!(
+        runtime
+            .runtime_connectivity_apply_version
+            .load(Ordering::SeqCst),
+        runtime_connectivity_apply_version + 1
+    );
+    assert_eq!(
+        runtime
+            .effective_seed_peer_apply_version
+            .load(Ordering::SeqCst),
+        effective_seed_peer_apply_version + 1
+    );
+
+    runtime.shutdown().await;
+    seed_peer_runtime.shutdown().await;
 }

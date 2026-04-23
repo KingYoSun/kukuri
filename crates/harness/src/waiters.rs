@@ -1189,6 +1189,7 @@ pub(crate) async fn refresh_public_pair(
                 }
             }
         }
+        let _ = runtime.reapply_community_node_connectivity().await;
     }
 
     let refresh_interval = Duration::from_secs(5);

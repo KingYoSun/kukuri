@@ -234,12 +234,12 @@ impl DesktopRuntime {
         })
     }
 
-    pub(crate) async fn apply_runtime_connectivity_assist(&self) -> Result<()> {
+    async fn apply_runtime_connectivity_assist_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
         let next_state =
             runtime_connectivity_assist_state(&discovery_config, &community_node_config);
-        {
+        if !force {
             let current_state = self.last_runtime_connectivity_assist_state.lock().await;
             if current_state.as_ref() == Some(&next_state) {
                 debug!(
@@ -272,11 +272,20 @@ impl DesktopRuntime {
         Ok(())
     }
 
-    pub(crate) async fn apply_effective_seed_peers(&self) -> Result<()> {
+    pub(crate) async fn apply_runtime_connectivity_assist(&self) -> Result<()> {
+        self.apply_runtime_connectivity_assist_with_mode(false)
+            .await
+    }
+
+    pub(crate) async fn force_apply_runtime_connectivity_assist(&self) -> Result<()> {
+        self.apply_runtime_connectivity_assist_with_mode(true).await
+    }
+
+    async fn apply_effective_seed_peers_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
         let next_state = effective_seed_peer_apply_state(&discovery_config, &community_node_config);
-        {
+        if !force {
             let current_state = self.last_effective_seed_peer_apply_state.lock().await;
             if current_state.as_ref() == Some(&next_state) {
                 debug!(
@@ -304,5 +313,13 @@ impl DesktopRuntime {
         self.effective_seed_peer_apply_version
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(())
+    }
+
+    pub(crate) async fn apply_effective_seed_peers(&self) -> Result<()> {
+        self.apply_effective_seed_peers_with_mode(false).await
+    }
+
+    pub(crate) async fn force_apply_effective_seed_peers(&self) -> Result<()> {
+        self.apply_effective_seed_peers_with_mode(true).await
     }
 }

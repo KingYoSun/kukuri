@@ -492,8 +492,7 @@ pub(crate) async fn run_community_node_connectivity(
         );
         let mut direct_reply_path_error = None;
         for attempt in 1..=reply_thread_attempts {
-            match wait_for_direct_topic_peer_count(&runtime_b, topic, 1, reply_thread_timeout).await
-            {
+            match wait_for_topic_delivery(&runtime_b, topic, 1, reply_thread_timeout).await {
                 Ok(()) => {
                     direct_reply_path_error = None;
                     break;
@@ -528,7 +527,7 @@ pub(crate) async fn run_community_node_connectivity(
             }
         }
         if let Some(error) = direct_reply_path_error {
-            anyhow::bail!("desktop b did not observe direct public connectivity before community reply: {error}");
+            anyhow::bail!("desktop b did not observe public topic delivery before community reply: {error}");
         }
         let reply_id = runtime_b
             .create_post(CreatePostRequest {
