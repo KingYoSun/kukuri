@@ -300,19 +300,10 @@ impl DesktopRuntime {
                 format!("failed to read local endpoint id for community node {operation}")
             })?
             .local_endpoint_id;
-        let addr_hint = self
-            .local_peer_ticket()
-            .await
-            .with_context(|| {
-                format!("failed to read local peer ticket for community node {operation}")
-            })?
-            .and_then(|ticket| {
-                ticket
-                    .split_once('@')
-                    .map(|(_, addr)| addr.trim().to_string())
-                    .filter(|addr| !addr.is_empty())
-            });
-        CommunityNodeSeedPeer::new(endpoint_id, addr_hint)
+        // Community-node bootstrap metadata should stay relay-first. Publishing local or
+        // private addr hints here causes other clients to spend time on unusable direct
+        // paths before the shared relay-only path has a chance to stabilize.
+        CommunityNodeSeedPeer::new(endpoint_id, None)
     }
 
     pub(crate) async fn fetch_community_node_consent_status_with_retry(

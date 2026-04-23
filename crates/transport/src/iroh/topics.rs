@@ -7,9 +7,20 @@ pub(crate) fn initial_topic_join_timeout() -> Duration {
         Duration::from_secs(15)
     }
 }
+
+fn topic_warmup_retry_delay(attempt: usize) -> Duration {
+    match attempt {
+        0 => Duration::from_millis(250),
+        1 => Duration::from_millis(500),
+        2 => Duration::from_secs(1),
+        3 => Duration::from_secs(2),
+        _ => Duration::from_secs(5),
+    }
+}
+
 fn direct_warmup_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
     if endpoint_addr.relay_urls().next().is_some() {
-        return endpoint_addr.clone();
+        return crate::prefer_relay_endpoint_addr(endpoint_addr);
     }
     let direct_addrs = endpoint_addr
         .ip_addrs()
@@ -95,6 +106,7 @@ impl IrohGossipTransport {
             let gossip = self.gossip.clone();
             tokio::spawn(async move {
                 let join_deadline = tokio::time::Instant::now() + initial_topic_join_timeout();
+                let mut attempt = 0usize;
                 loop {
                     let already_connected = {
                         let guard = neighbors.read().await;
@@ -111,7 +123,9 @@ impl IrohGossipTransport {
                             let _ = gossip.handle_connection(connection).await;
                         }
                     }
-                    sleep(Duration::from_millis(100)).await;
+                    let retry_delay = topic_warmup_retry_delay(attempt);
+                    attempt = attempt.saturating_add(1);
+                    sleep(retry_delay).await;
                 }
             });
         }
@@ -198,6 +212,7 @@ impl IrohGossipTransport {
                 let join_timeout = initial_topic_join_timeout();
                 let warmup_task = tokio::spawn(async move {
                     let join_deadline = tokio::time::Instant::now() + join_timeout;
+                    let mut attempt = 0usize;
                     loop {
                         for peer in &warm_bootstrap_peers {
                             let warmup_addr = direct_warmup_addr(peer);
@@ -210,7 +225,9 @@ impl IrohGossipTransport {
                         if tokio::time::Instant::now() >= join_deadline {
                             return;
                         }
-                        sleep(Duration::from_millis(100)).await;
+                        let retry_delay = topic_warmup_retry_delay(attempt);
+                        attempt = attempt.saturating_add(1);
+                        sleep(retry_delay).await;
                     }
                 });
                 let joined = timeout(join_timeout, receiver.joined())
@@ -359,5 +376,20 @@ impl IrohGossipTransport {
         *state.last_error.lock().await = None;
         *self.last_error.lock().await = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn topic_warmup_retry_delay_backs_off_and_caps() {
+        assert_eq!(topic_warmup_retry_delay(0), Duration::from_millis(250));
+        assert_eq!(topic_warmup_retry_delay(1), Duration::from_millis(500));
+        assert_eq!(topic_warmup_retry_delay(2), Duration::from_secs(1));
+        assert_eq!(topic_warmup_retry_delay(3), Duration::from_secs(2));
+        assert_eq!(topic_warmup_retry_delay(4), Duration::from_secs(5));
+        assert_eq!(topic_warmup_retry_delay(12), Duration::from_secs(5));
     }
 }

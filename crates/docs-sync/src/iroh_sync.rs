@@ -11,7 +11,7 @@ use iroh_docs::api::Doc;
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use kukuri_core::ReplicaId;
-use kukuri_transport::{SeedPeer, parse_endpoint_ticket};
+use kukuri_transport::{SeedPeer, parse_endpoint_ticket, prefer_relay_endpoint_addr};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::BroadcastStream;
@@ -158,21 +158,24 @@ impl IrohDocsSync {
 
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
         let mut candidates = Vec::new();
-        if imported_peer.relay_urls().next().is_some() {
-            candidates.push(imported_peer.clone());
+        let relay_preferred = prefer_relay_endpoint_addr(imported_peer);
+        if relay_preferred.relay_urls().next().is_some() {
+            candidates.push(relay_preferred);
         }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = EndpointAddr::from_parts(
+            let learned_peer = prefer_relay_endpoint_addr(&EndpointAddr::from_parts(
                 remote_info.id(),
                 remote_info.into_addrs().map(|addr| addr.into_addr()),
-            );
+            ));
             if !learned_peer.is_empty() {
                 candidates.push(learned_peer);
             }
         }
-        if !candidates
-            .iter()
-            .any(|candidate| candidate == imported_peer)
+        if candidates.is_empty()
+            || (imported_peer.relay_urls().next().is_none()
+                && !candidates
+                    .iter()
+                    .any(|candidate| candidate == imported_peer))
         {
             candidates.push(imported_peer.clone());
         }
