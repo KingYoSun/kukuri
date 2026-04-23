@@ -1186,21 +1186,39 @@ pub(crate) async fn refresh_public_pair(
                             base_url: node.base_url,
                         })
                         .await;
-                }
+                    }
             }
         }
+    }
+
+    fn public_connectivity_reapply_interval() -> Duration {
+        if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+            Duration::from_secs(20)
+        } else {
+            Duration::from_secs(10)
+        }
+    }
+
+    async fn force_public_runtime_connectivity(runtime: &DesktopRuntime) {
         let _ = runtime.reapply_community_node_connectivity().await;
     }
 
     let refresh_interval = Duration::from_secs(5);
+    let reapply_interval = public_connectivity_reapply_interval();
     match timeout(step_timeout, async {
         let mut next_refresh_at = Instant::now();
+        let mut next_reapply_at = Instant::now() + reapply_interval;
         let mut stable_ready_polls = 0usize;
         loop {
             if Instant::now() >= next_refresh_at {
                 refresh_public_runtime(runtime_a, topic).await;
                 refresh_public_runtime(runtime_b, topic).await;
                 next_refresh_at = Instant::now() + refresh_interval;
+            }
+            if Instant::now() >= next_reapply_at {
+                force_public_runtime_connectivity(runtime_a).await;
+                force_public_runtime_connectivity(runtime_b).await;
+                next_reapply_at = Instant::now() + reapply_interval;
             }
 
             let status_a = runtime_a

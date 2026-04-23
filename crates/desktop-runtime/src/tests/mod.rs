@@ -678,6 +678,18 @@ async fn refresh_public_runtime_for_retry(runtime: &DesktopRuntime, topic: &str)
             scope: TimelineScope::Public,
         })
         .await;
+    Ok(())
+}
+
+fn public_connectivity_reapply_interval() -> Duration {
+    if cfg!(target_os = "windows") || std::env::var_os("GITHUB_ACTIONS").is_some() {
+        Duration::from_secs(20)
+    } else {
+        Duration::from_secs(10)
+    }
+}
+
+async fn force_public_runtime_connectivity_retry(runtime: &DesktopRuntime) -> Result<()> {
     runtime
         .reapply_community_node_connectivity()
         .await
@@ -692,13 +704,19 @@ async fn wait_for_public_runtime_delivery_with_refresh(
     step_timeout: Duration,
 ) -> Result<()> {
     let refresh_interval = Duration::from_secs(5);
+    let reapply_interval = public_connectivity_reapply_interval();
     match timeout(step_timeout, async {
         let mut next_refresh_at = tokio::time::Instant::now();
+        let mut next_reapply_at = tokio::time::Instant::now() + reapply_interval;
         let mut stable_ready_polls = 0usize;
         loop {
             if tokio::time::Instant::now() >= next_refresh_at {
                 refresh_public_runtime_for_retry(runtime, topic).await?;
                 next_refresh_at = tokio::time::Instant::now() + refresh_interval;
+            }
+            if tokio::time::Instant::now() >= next_reapply_at {
+                force_public_runtime_connectivity_retry(runtime).await?;
+                next_reapply_at = tokio::time::Instant::now() + reapply_interval;
             }
 
             let status = runtime
@@ -742,14 +760,21 @@ async fn wait_for_public_pair_delivery_with_refresh(
     step_timeout: Duration,
 ) -> Result<()> {
     let refresh_interval = Duration::from_secs(5);
+    let reapply_interval = public_connectivity_reapply_interval();
     match timeout(step_timeout, async {
         let mut next_refresh_at = tokio::time::Instant::now();
+        let mut next_reapply_at = tokio::time::Instant::now() + reapply_interval;
         let mut stable_ready_polls = 0usize;
         loop {
             if tokio::time::Instant::now() >= next_refresh_at {
                 refresh_public_runtime_for_retry(runtime_a, topic).await?;
                 refresh_public_runtime_for_retry(runtime_b, topic).await?;
                 next_refresh_at = tokio::time::Instant::now() + refresh_interval;
+            }
+            if tokio::time::Instant::now() >= next_reapply_at {
+                force_public_runtime_connectivity_retry(runtime_a).await?;
+                force_public_runtime_connectivity_retry(runtime_b).await?;
+                next_reapply_at = tokio::time::Instant::now() + reapply_interval;
             }
 
             let status_a = runtime_a
@@ -5893,7 +5918,7 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
         &runtime_b,
         topic,
         1,
-        Duration::from_secs(90),
+        runtime_replication_timeout(),
     )
     .await
     .expect("relay-backed stale addr hints pair delivery");
@@ -6062,6 +6087,16 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
+    wait_for_public_pair_delivery_with_refresh(
+        &runtime_a,
+        &runtime_b,
+        topic,
+        1,
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("relay-only pair delivery");
+
     let _ = replicate_public_post_with_retry(
         &runtime_a,
         &runtime_b,
@@ -6192,13 +6227,13 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         .expect("subscribe");
     }
 
-    wait_for_public_runtime_delivery_with_refresh(&runtime_a, topic, 1, Duration::from_secs(90))
+    wait_for_public_runtime_delivery_with_refresh(&runtime_a, topic, 1, runtime_replication_timeout())
         .await
         .expect("runtime a three-client delivery");
-    wait_for_public_runtime_delivery_with_refresh(&runtime_b, topic, 1, Duration::from_secs(90))
+    wait_for_public_runtime_delivery_with_refresh(&runtime_b, topic, 1, runtime_replication_timeout())
         .await
         .expect("runtime b three-client delivery");
-    wait_for_public_runtime_delivery_with_refresh(&runtime_c, topic, 1, Duration::from_secs(90))
+    wait_for_public_runtime_delivery_with_refresh(&runtime_c, topic, 1, runtime_replication_timeout())
         .await
         .expect("runtime c three-client delivery");
 
@@ -6545,7 +6580,7 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
         &runtime_b,
         topic,
         1,
-        Duration::from_secs(90),
+        runtime_replication_timeout(),
     )
     .await
     .expect("shared-identity relay-backed stale addr hints pair delivery");
