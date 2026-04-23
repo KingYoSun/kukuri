@@ -1078,6 +1078,14 @@ pub(crate) async fn replicate_public_post_with_retry(
             Ok(post_id) => return Ok(post_id),
             Err(error) if attempt < attempts => {
                 last_error = Some(format!("{error:#}"));
+                refresh_public_pair(publisher, subscriber, topic, attempt_timeout)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to refresh public pair after {} replication timeout",
+                            labels.failure
+                        )
+                    })?;
                 sleep(Duration::from_millis(250)).await;
             }
             Err(error) => {
@@ -1186,7 +1194,7 @@ pub(crate) async fn refresh_public_pair(
                             base_url: node.base_url,
                         })
                         .await;
-                    }
+                }
             }
         }
     }

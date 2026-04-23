@@ -6227,15 +6227,30 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         .expect("subscribe");
     }
 
-    wait_for_public_runtime_delivery_with_refresh(&runtime_a, topic, 1, runtime_replication_timeout())
-        .await
-        .expect("runtime a three-client delivery");
-    wait_for_public_runtime_delivery_with_refresh(&runtime_b, topic, 1, runtime_replication_timeout())
-        .await
-        .expect("runtime b three-client delivery");
-    wait_for_public_runtime_delivery_with_refresh(&runtime_c, topic, 1, runtime_replication_timeout())
-        .await
-        .expect("runtime c three-client delivery");
+    wait_for_public_runtime_delivery_with_refresh(
+        &runtime_a,
+        topic,
+        1,
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("runtime a three-client delivery");
+    wait_for_public_runtime_delivery_with_refresh(
+        &runtime_b,
+        topic,
+        1,
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("runtime b three-client delivery");
+    wait_for_public_runtime_delivery_with_refresh(
+        &runtime_c,
+        topic,
+        1,
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("runtime c three-client delivery");
 
     let object_id_a = runtime_a
         .create_post(CreatePostRequest {
