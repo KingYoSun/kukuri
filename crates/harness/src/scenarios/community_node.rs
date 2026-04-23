@@ -728,6 +728,9 @@ pub(crate) async fn run_community_node_connectivity(
                 .await
                 .with_context(|| format!("failed to end live session on {live_owner_label}"))?;
             wait_for_live_ended(live_owner, topic, session_id.as_str(), step_timeout).await?;
+            refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                .await
+                .context("failed to refresh public topic after live session ended")?;
             let mut live_ended_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_ended(
