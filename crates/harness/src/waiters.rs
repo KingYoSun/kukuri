@@ -1157,49 +1157,96 @@ pub(crate) async fn refresh_public_pair(
     topic: &str,
     step_timeout: Duration,
 ) -> Result<()> {
-    let _ = runtime_a
-        .list_timeline(ListTimelineRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-            cursor: None,
-            limit: Some(20),
-        })
-        .await;
-    let _ = runtime_b
-        .list_timeline(ListTimelineRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-            cursor: None,
-            limit: Some(20),
-        })
-        .await;
-    let _ = runtime_a
-        .list_live_sessions(ListLiveSessionsRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-        })
-        .await;
-    let _ = runtime_b
-        .list_live_sessions(ListLiveSessionsRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-        })
-        .await;
-    let _ = runtime_a
-        .list_game_rooms(ListGameRoomsRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-        })
-        .await;
-    let _ = runtime_b
-        .list_game_rooms(ListGameRoomsRequest {
-            topic: topic.to_string(),
-            scope: TimelineScope::Public,
-        })
-        .await;
-    wait_for_topic_delivery(runtime_a, topic, 1, step_timeout).await?;
-    wait_for_topic_delivery(runtime_b, topic, 1, step_timeout).await?;
-    Ok(())
+    async fn refresh_public_runtime(runtime: &DesktopRuntime, topic: &str) {
+        let _ = runtime
+            .list_timeline(ListTimelineRequest {
+                topic: topic.to_string(),
+                scope: TimelineScope::Public,
+                cursor: None,
+                limit: Some(20),
+            })
+            .await;
+        let _ = runtime
+            .list_live_sessions(ListLiveSessionsRequest {
+                topic: topic.to_string(),
+                scope: TimelineScope::Public,
+            })
+            .await;
+        let _ = runtime
+            .list_game_rooms(ListGameRoomsRequest {
+                topic: topic.to_string(),
+                scope: TimelineScope::Public,
+            })
+            .await;
+        if let Ok(statuses) = runtime.get_community_node_statuses().await {
+            for node in statuses {
+                if node.auth_state.authenticated {
+                    let _ = runtime
+                        .refresh_community_node_metadata(CommunityNodeTargetRequest {
+                            base_url: node.base_url,
+                        })
+                        .await;
+                }
+            }
+        }
+    }
+
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = Instant::now();
+        let mut stable_ready_polls = 0usize;
+        loop {
+            if Instant::now() >= next_refresh_at {
+                refresh_public_runtime(runtime_a, topic).await;
+                refresh_public_runtime(runtime_b, topic).await;
+                next_refresh_at = Instant::now() + refresh_interval;
+            }
+
+            let status_a = runtime_a
+                .get_sync_status()
+                .await
+                .context("desktop a public sync status")?;
+            let status_b = runtime_b
+                .get_sync_status()
+                .await
+                .context("desktop b public sync status")?;
+            let ready_a = topic_has_direct_peer(&status_a, topic, 1)
+                || topic_has_durable_delivery(&status_a, topic);
+            let ready_b = topic_has_direct_peer(&status_b, topic, 1)
+                || topic_has_durable_delivery(&status_b, topic);
+            if ready_a && ready_b {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let snapshot_a = runtime_a
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop a sync status".to_string());
+            let snapshot_b = runtime_b
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|status| format_sync_snapshot(&status, topic))
+                .unwrap_or_else(|| "failed to read desktop b sync status".to_string());
+            anyhow::bail!(
+                "public pair refresh timeout; desktop_a=({snapshot_a}); desktop_b=({snapshot_b})"
+            );
+        }
+    }
 }
 
 pub(crate) async fn refresh_direct_message_pair(

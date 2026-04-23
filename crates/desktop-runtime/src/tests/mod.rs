@@ -645,6 +645,162 @@ async fn wait_for_timeline_post_result(
     }
 }
 
+fn topic_has_durable_delivery(status: &SyncStatus, topic: &str) -> bool {
+    status.topic_diagnostics.iter().any(|topic_status| {
+        topic_status.topic == topic
+            && !topic_status.docs_assist_peer_ids.is_empty()
+            && matches!(
+                topic_status.delivery_state,
+                kukuri_app_api::DeliveryState::DurableRecovering
+                    | kukuri_app_api::DeliveryState::DurableReady
+            )
+    })
+}
+
+async fn refresh_public_runtime_for_retry(runtime: &DesktopRuntime, topic: &str) -> Result<()> {
+    let _ = runtime
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await;
+    let _ = runtime
+        .list_live_sessions(ListLiveSessionsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+        })
+        .await;
+    let _ = runtime
+        .list_game_rooms(ListGameRoomsRequest {
+            topic: topic.to_string(),
+            scope: TimelineScope::Public,
+        })
+        .await;
+    runtime
+        .apply_runtime_connectivity_assist()
+        .await
+        .context("apply runtime connectivity assist during public retry")?;
+    runtime
+        .apply_effective_seed_peers()
+        .await
+        .context("apply effective seed peers during public retry")?;
+    Ok(())
+}
+
+async fn wait_for_public_runtime_delivery_with_refresh(
+    runtime: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = tokio::time::Instant::now();
+        let mut stable_ready_polls = 0usize;
+        loop {
+            if tokio::time::Instant::now() >= next_refresh_at {
+                refresh_public_runtime_for_retry(runtime, topic).await?;
+                next_refresh_at = tokio::time::Instant::now() + refresh_interval;
+            }
+
+            let status = runtime
+                .get_sync_status()
+                .await
+                .context("runtime sync status")?;
+            let ready = topic_has_direct_peer(&status, topic, expected)
+                || topic_has_durable_delivery(&status, topic);
+            if ready {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let status = runtime
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|value| format_sync_snapshot(&value, topic))
+                .unwrap_or_else(|| "failed to read runtime sync status".to_string());
+            bail!("public runtime delivery timeout; {status}");
+        }
+    }
+}
+
+async fn wait_for_public_pair_delivery_with_refresh(
+    runtime_a: &DesktopRuntime,
+    runtime_b: &DesktopRuntime,
+    topic: &str,
+    expected: usize,
+    step_timeout: Duration,
+) -> Result<()> {
+    let refresh_interval = Duration::from_secs(5);
+    match timeout(step_timeout, async {
+        let mut next_refresh_at = tokio::time::Instant::now();
+        let mut stable_ready_polls = 0usize;
+        loop {
+            if tokio::time::Instant::now() >= next_refresh_at {
+                refresh_public_runtime_for_retry(runtime_a, topic).await?;
+                refresh_public_runtime_for_retry(runtime_b, topic).await?;
+                next_refresh_at = tokio::time::Instant::now() + refresh_interval;
+            }
+
+            let status_a = runtime_a
+                .get_sync_status()
+                .await
+                .context("runtime a sync status")?;
+            let status_b = runtime_b
+                .get_sync_status()
+                .await
+                .context("runtime b sync status")?;
+            let ready_a = topic_has_direct_peer(&status_a, topic, expected)
+                || topic_has_durable_delivery(&status_a, topic);
+            let ready_b = topic_has_direct_peer(&status_b, topic, expected)
+                || topic_has_durable_delivery(&status_b, topic);
+            if ready_a && ready_b {
+                stable_ready_polls += 1;
+                if stable_ready_polls >= 3 {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            } else {
+                stable_ready_polls = 0;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let status_a = runtime_a
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|value| format_sync_snapshot(&value, topic))
+                .unwrap_or_else(|| "failed to read runtime a sync status".to_string());
+            let status_b = runtime_b
+                .get_sync_status()
+                .await
+                .ok()
+                .map(|value| format_sync_snapshot(&value, topic))
+                .unwrap_or_else(|| "failed to read runtime b sync status".to_string());
+            bail!("public pair delivery timeout; runtime_a=({status_a}); runtime_b=({status_b})");
+        }
+    }
+}
+
 async fn apply_relay_backed_community_node_seed_peers(
     runtime: &DesktopRuntime,
     base_url: &str,
@@ -980,6 +1136,21 @@ async fn replicate_public_post_with_retry_inner(
             Ok(object_id) => return object_id,
             Err(error) if attempt < attempts => {
                 last_error = Some(format!("{error:#}"));
+                if let Err(refresh_error) = wait_for_public_pair_delivery_with_refresh(
+                    publisher,
+                    subscriber,
+                    topic,
+                    1,
+                    attempt_timeout,
+                )
+                .await
+                {
+                    last_error = Some(format!(
+                        "{:#}; public topic refresh failed after replication timeout: {refresh_error:#}",
+                        error
+                    ));
+                    break;
+                }
                 sleep(Duration::from_millis(250)).await;
             }
             Err(error) => {
@@ -5721,20 +5892,15 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_topic_delivery(
+    wait_for_public_pair_delivery_with_refresh(
         &runtime_a,
-        topic,
-        1,
-        "runtime a did not establish relay-backed topic delivery with stale addr hints",
-    )
-    .await;
-    wait_for_topic_delivery(
         &runtime_b,
         topic,
         1,
-        "runtime b did not establish relay-backed topic delivery with stale addr hints",
+        Duration::from_secs(90),
     )
-    .await;
+    .await
+    .expect("relay-backed stale addr hints pair delivery");
 
     let status_a = runtime_a
         .get_sync_status()
@@ -6030,27 +6196,15 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         .expect("subscribe");
     }
 
-    wait_for_topic_delivery(
-        &runtime_a,
-        topic,
-        1,
-        "runtime a did not establish three-client relay-backed delivery",
-    )
-    .await;
-    wait_for_topic_delivery(
-        &runtime_b,
-        topic,
-        1,
-        "runtime b did not establish three-client relay-backed delivery",
-    )
-    .await;
-    wait_for_topic_delivery(
-        &runtime_c,
-        topic,
-        1,
-        "runtime c did not establish three-client relay-backed delivery",
-    )
-    .await;
+    wait_for_public_runtime_delivery_with_refresh(&runtime_a, topic, 1, Duration::from_secs(90))
+        .await
+        .expect("runtime a three-client delivery");
+    wait_for_public_runtime_delivery_with_refresh(&runtime_b, topic, 1, Duration::from_secs(90))
+        .await
+        .expect("runtime b three-client delivery");
+    wait_for_public_runtime_delivery_with_refresh(&runtime_c, topic, 1, Duration::from_secs(90))
+        .await
+        .expect("runtime c three-client delivery");
 
     let object_id_a = runtime_a
         .create_post(CreatePostRequest {
@@ -6390,20 +6544,15 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
     .expect("subscribe b timeout")
     .expect("subscribe b");
 
-    wait_for_topic_delivery(
+    wait_for_public_pair_delivery_with_refresh(
         &runtime_a,
-        topic,
-        1,
-        "runtime a did not establish shared-identity relay-backed delivery with stale addr hints",
-    )
-    .await;
-    wait_for_topic_delivery(
         &runtime_b,
         topic,
         1,
-        "runtime b did not establish shared-identity relay-backed delivery with stale addr hints",
+        Duration::from_secs(90),
     )
-    .await;
+    .await
+    .expect("shared-identity relay-backed stale addr hints pair delivery");
 
     let _ = replicate_public_post_with_retry(
         &runtime_a,
