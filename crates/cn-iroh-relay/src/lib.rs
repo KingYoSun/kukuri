@@ -107,10 +107,12 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
                 cert: CertConfig::<(), ()>::Manual { certs },
                 server_config: server_config.clone(),
             });
-            let quic = tls_config.quic_bind_addr.map(|bind_addr| QuicConfig {
-                bind_addr,
-                server_config,
-            });
+            let quic = tls_config
+                .effective_quic_bind_addr()
+                .map(|bind_addr| QuicConfig {
+                    bind_addr,
+                    server_config,
+                });
             (relay_tls, quic)
         }
         None => (None, None),
@@ -260,7 +262,11 @@ fn load_secret_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
     use std::net::{IpAddr, Ipv4Addr};
+
+    use rcgen::{CertifiedKey, generate_simple_self_signed};
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -328,6 +334,43 @@ mod tests {
         );
         assert_eq!(tls.cert_path, PathBuf::from("/certs/iroh.crt"));
         assert_eq!(tls.key_path, PathBuf::from("/certs/iroh.key"));
+    }
+
+    #[tokio::test]
+    async fn spawn_server_defaults_quic_listener_from_https_bind_addr() {
+        if std::net::UdpSocket::bind("127.0.0.1:7842").is_err() {
+            return;
+        }
+
+        let temp = tempdir().expect("tempdir");
+        let cert_path = temp.path().join("relay.crt");
+        let key_path = temp.path().join("relay.key");
+        let CertifiedKey { cert, signing_key } =
+            generate_simple_self_signed(vec!["localhost".to_string(), "127.0.0.1".to_string()])
+                .expect("self-signed certificate");
+        fs::write(&cert_path, cert.pem()).expect("write cert");
+        fs::write(&key_path, signing_key.serialize_pem()).expect("write key");
+
+        let server = spawn_server(IrohRelayConfig {
+            http_bind_addr: "127.0.0.1:0".parse().expect("http bind addr"),
+            tls: Some(IrohRelayTlsConfig {
+                https_bind_addr: Some("127.0.0.1:0".parse().expect("https bind addr")),
+                quic_bind_addr: None,
+                cert_path,
+                key_path,
+            }),
+        })
+        .await
+        .expect("spawn relay server");
+
+        assert!(server.https_addr().is_some());
+        assert_eq!(
+            server.quic_addr(),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                DEFAULT_RELAY_QUIC_PORT,
+            ))
+        );
     }
 
     fn config_from_vars(vars: &[(&str, &str)]) -> Result<IrohRelayConfig> {
