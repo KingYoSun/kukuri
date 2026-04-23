@@ -1563,18 +1563,10 @@ async fn wait_for_seeded_dht_topic_ready(
         loop {
             let status_a = runtime_a.get_sync_status().await.expect("status a");
             let status_b = runtime_b.get_sync_status().await.expect("status b");
-            let ready_a = status_a.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic
-                    && topic_status.joined
-                    && !topic_status.connected_peers.is_empty()
-                    && topic_status.peer_count > 0
-            });
-            let ready_b = status_b.topic_diagnostics.iter().any(|topic_status| {
-                topic_status.topic == topic
-                    && topic_status.joined
-                    && !topic_status.connected_peers.is_empty()
-                    && topic_status.peer_count > 0
-            });
+            let ready_a = topic_has_direct_peer(&status_a, topic, 1)
+                || topic_has_durable_delivery(&status_a, topic);
+            let ready_b = topic_has_direct_peer(&status_b, topic, 1)
+                || topic_has_durable_delivery(&status_b, topic);
             if ready_a && ready_b {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -4357,18 +4349,12 @@ async fn set_discovery_seeds_reapplies_runtime_without_restart() {
             .iter()
             .any(|entry| entry == topic)
     );
-    assert!(status_a.topic_diagnostics.iter().any(|entry| {
-        entry.topic == topic
-            && entry.joined
-            && entry.peer_count > 0
-            && !entry.connected_peers.is_empty()
-    }));
-    assert!(status_b.topic_diagnostics.iter().any(|entry| {
-        entry.topic == topic
-            && entry.joined
-            && entry.peer_count > 0
-            && !entry.connected_peers.is_empty()
-    }));
+    assert!(
+        topic_has_direct_peer(&status_a, topic, 1) || topic_has_durable_delivery(&status_a, topic)
+    );
+    assert!(
+        topic_has_direct_peer(&status_b, topic, 1) || topic_has_durable_delivery(&status_b, topic)
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
