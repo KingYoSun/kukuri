@@ -154,9 +154,16 @@ impl IrohGossipTransport {
             &self.endpoint.bound_sockets(),
             &self.network_config,
         );
-        Ok(Some(encode_endpoint_ticket(
-            &endpoint_addr,
-            &ticket_config,
-        )?))
+        match encode_endpoint_ticket(&endpoint_addr, &ticket_config) {
+            Ok(ticket) => Ok(Some(ticket)),
+            Err(error)
+                if error
+                    .to_string()
+                    .contains("could not determine advertised host") =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 }

@@ -6,9 +6,17 @@ use std::collections::HashMap;
 struct CountingDocsSync {
     inner: kukuri_docs_sync::MemoryDocsSync,
     queries: Arc<TokioMutex<Vec<(String, DocQuery)>>>,
+    assist_peer_ids: Vec<String>,
 }
 
 impl CountingDocsSync {
+    fn with_assist_peer_ids(peer_ids: Vec<&str>) -> Self {
+        Self {
+            assist_peer_ids: peer_ids.into_iter().map(str::to_string).collect(),
+            ..Self::default()
+        }
+    }
+
     async fn clear_queries(&self) {
         self.queries.lock().await.clear();
     }
@@ -64,6 +72,10 @@ impl DocsSync for CountingDocsSync {
 
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         self.inner.import_peer_ticket(ticket).await
+    }
+
+    async fn assist_peer_ids(&self) -> Result<Vec<String>> {
+        Ok(self.assist_peer_ids.clone())
     }
 }
 
@@ -972,6 +984,98 @@ async fn topic_reaction_hints_rehydrate_only_target_reactions() {
 }
 
 #[tokio::test]
+async fn public_topic_recovery_keeps_docs_probe_when_live_peer_has_not_delivered_content() {
+    let store = Arc::new(MemoryStore::default());
+    let topic = TopicId::new("kukuri:topic:live-peer-docs-probe");
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot {
+        connected: true,
+        peer_count: 1,
+        connected_peers: vec!["peer-a".into()],
+        configured_peers: vec!["peer-a".into()],
+        subscribed_topics: vec![topic.as_str().to_string()],
+        pending_events: 0,
+        status_detail: "live peer connected".into(),
+        last_error: None,
+        topic_diagnostics: vec![TopicPeerSnapshot {
+            topic: topic.as_str().to_string(),
+            joined: true,
+            peer_count: 1,
+            connected_peers: vec!["peer-a".into()],
+            configured_peer_ids: vec!["peer-a".into()],
+            missing_peer_ids: Vec::new(),
+            last_received_at: None,
+            status_detail: "live peer connected".into(),
+            last_error: None,
+        }],
+    }));
+    let docs_sync = Arc::new(CountingDocsSync::with_assist_peer_ids(vec!["peer-a"]));
+    let app = AppService::new_with_services(
+        store.clone(),
+        store,
+        transport.clone(),
+        transport.clone(),
+        docs_sync.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+
+    let _ = app
+        .list_timeline(topic.as_str(), None, 20)
+        .await
+        .expect("initial timeline");
+    sleep(Duration::from_millis(100)).await;
+    docs_sync.clear_queries().await;
+
+    transport
+        .publish_hint(
+            &channel_hint_topic_for(topic.as_str(), None),
+            GossipHint::TopicObjectsChanged {
+                topic_id: topic.clone(),
+                objects: vec![HintObjectRef {
+                    object_id: "missing-post".into(),
+                    object_kind: "post".into(),
+                }],
+            },
+        )
+        .await
+        .expect("publish hint miss");
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let queries = docs_sync.queries().await;
+            if queries
+                .iter()
+                .any(|(_, query)| *query == DocQuery::Prefix("objects/".into()))
+            {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("initial recovery probe timeout");
+    docs_sync.clear_queries().await;
+
+    timeout(
+        Duration::from_millis(PUBLIC_TOPIC_RECOVERY_GRACE_MS as u64 + 2_000),
+        async {
+            loop {
+                let queries = docs_sync.queries().await;
+                if queries
+                    .iter()
+                    .any(|(_, query)| *query == DocQuery::Prefix("objects/".into()))
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        },
+    )
+    .await
+    .expect("periodic docs-assisted recovery probe timeout");
+}
+
+#[tokio::test]
 async fn topic_session_hints_retry_until_manifest_blob_is_available() {
     let docs_sync = Arc::new(kukuri_docs_sync::MemoryDocsSync::default());
     let blob_service = Arc::new(DelayedBlobService::default());
@@ -1766,6 +1870,120 @@ async fn relay_seeded_syncs_post_between_apps_without_ticket_import() {
     };
 
     assert_eq!(received.content, "relay seeded app sync");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn external_relay_endpoint_only_seeds_sync_post_between_apps() {
+    let Some(relay_url) = std::env::var("KUKURI_TEST_EXTERNAL_IROH_RELAY_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+
+    let _guard = iroh_integration_test_lock().lock_owned().await;
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url],
+    };
+    let dir = tempdir().expect("tempdir");
+    let stack_a = TestIrohStack::new_with_network_options(
+        &dir.path().join("external-relay-a"),
+        kukuri_transport::TransportNetworkConfig::default(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config.clone(),
+    )
+    .await;
+    let stack_b = TestIrohStack::new_with_network_options(
+        &dir.path().join("external-relay-b"),
+        kukuri_transport::TransportNetworkConfig::default(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config,
+    )
+    .await;
+    let app_a = app_with_iroh_services(Arc::new(MemoryStore::default()), &stack_a);
+    let app_b = app_with_iroh_services(Arc::new(MemoryStore::default()), &stack_b);
+    let endpoint_a = app_a
+        .get_sync_status()
+        .await
+        .expect("status a")
+        .discovery
+        .local_endpoint_id;
+    let endpoint_b = app_b
+        .get_sync_status()
+        .await
+        .expect("status b")
+        .discovery
+        .local_endpoint_id;
+
+    app_a
+        .set_discovery_seeds(
+            DiscoveryMode::StaticPeer,
+            false,
+            Vec::new(),
+            vec![SeedPeer {
+                endpoint_id: endpoint_b,
+                addr_hint: None,
+            }],
+        )
+        .await
+        .expect("set seed a");
+    app_b
+        .set_discovery_seeds(
+            DiscoveryMode::StaticPeer,
+            false,
+            Vec::new(),
+            vec![SeedPeer {
+                endpoint_id: endpoint_a,
+                addr_hint: None,
+            }],
+        )
+        .await
+        .expect("set seed b");
+
+    let topic = "kukuri:topic:external-relay-endpoint-only";
+    let _ = app_a
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe a");
+    let _ = app_b
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("subscribe b");
+    wait_for_topic_delivery(&app_a, topic, 1).await;
+    wait_for_topic_delivery(&app_b, topic, 1).await;
+
+    let object_id = app_a
+        .create_post(topic, "external relay endpoint-only app sync", None)
+        .await
+        .expect("create post");
+    let received = timeout(Duration::from_secs(120), async {
+        loop {
+            let timeline = app_b
+                .list_timeline(topic, None, 20)
+                .await
+                .expect("timeline");
+            if let Some(post) = timeline
+                .items
+                .iter()
+                .find(|post| post.object_id == object_id)
+            {
+                return post.clone();
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+    let received = match received {
+        Ok(post) => post,
+        Err(error) => {
+            let diagnostics =
+                iroh_sync_diagnostics(&app_a, &app_b, &stack_a, &stack_b, topic).await;
+            panic!("external relay endpoint-only sync timeout: {error:?}; {diagnostics}");
+        }
+    };
+
+    assert_eq!(received.content, "external relay endpoint-only app sync");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

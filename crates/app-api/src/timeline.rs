@@ -452,20 +452,29 @@ impl AppService {
             )
             .await?;
         }
-        if let Err(error) = self
-            .hint_transport
-            .publish_hint(
-                &channel_hint_topic_for(topic_id, effective_channel_id.as_ref()),
-                GossipHint::TopicObjectsChanged {
-                    topic_id: topic.clone(),
-                    objects: vec![HintObjectRef {
-                        object_id: envelope.id.0.clone(),
-                        object_kind: envelope.kind.clone(),
-                    }],
-                },
-            )
-            .await
-        {
+        let hint_topic = channel_hint_topic_for(topic_id, effective_channel_id.as_ref());
+        let hint = GossipHint::TopicObjectsChanged {
+            topic_id: topic.clone(),
+            objects: vec![HintObjectRef {
+                object_id: envelope.id.0.clone(),
+                object_kind: envelope.kind.clone(),
+            }],
+        };
+        let mut hint_error = None;
+        for attempt in 0..3 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(250 * attempt)).await;
+            }
+            match self
+                .hint_transport
+                .publish_hint(&hint_topic, hint.clone())
+                .await
+            {
+                Ok(()) => hint_error = None,
+                Err(error) => hint_error = Some(error),
+            }
+        }
+        if let Some(error) = hint_error {
             warn!(
                 topic = %topic_id,
                 object_id = %envelope.id.0,

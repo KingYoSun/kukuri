@@ -5342,6 +5342,43 @@ async fn local_community_node_seed_peer_includes_addr_hint() {
     runtime.shutdown().await;
 }
 
+#[tokio::test]
+async fn local_community_node_seed_peer_omits_auto_addr_hint_when_relay_assisted() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-seed-peer-relay-auto-hint.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::default(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: "https://api.example.com".to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    "https://api.example.com",
+                    vec!["https://relay.example.com".to_string()],
+                    Vec::new(),
+                )
+                .expect("resolved urls"),
+            ),
+        }],
+    };
+
+    let seed_peer = runtime
+        .local_community_node_seed_peer("test")
+        .await
+        .expect("seed peer");
+
+    assert!(seed_peer.addr_hint.is_none());
+
+    runtime.shutdown().await;
+}
+
 #[test]
 fn stored_community_node_config_restores_cached_connectivity_union() {
     let dir = tempdir().expect("tempdir");
@@ -6088,6 +6125,159 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
         .await
         .expect("runtime b shutdown timeout");
     drop(relay);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timeline() {
+    let Some(relay_url) = std::env::var("KUKURI_TEST_EXTERNAL_IROH_RELAY_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_a = dir.path().join("external-relay-only-a.db");
+    let db_b = dir.path().join("external-relay-only-b.db");
+    let runtime_a = DesktopRuntime::new_with_config_and_identity(
+        &db_a,
+        TransportNetworkConfig::default(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime a");
+    let runtime_b = DesktopRuntime::new_with_config_and_identity(
+        &db_b,
+        TransportNetworkConfig::default(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime b");
+
+    let endpoint_a = runtime_a
+        .get_sync_status()
+        .await
+        .expect("status a")
+        .discovery
+        .local_endpoint_id;
+    let endpoint_b = runtime_b
+        .get_sync_status()
+        .await
+        .expect("status b")
+        .discovery
+        .local_endpoint_id;
+    let base_url = "https://community.example.com";
+
+    *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url.clone()],
+                    vec![
+                        CommunityNodeSeedPeer::new(endpoint_b.as_str(), None).expect("seed peer b"),
+                    ],
+                )
+                .expect("resolved urls a"),
+            ),
+        }],
+    };
+    *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+        nodes: vec![CommunityNodeNodeConfig {
+            base_url: base_url.to_string(),
+            auto_approve: false,
+            resolved_urls: Some(
+                CommunityNodeResolvedUrls::new(
+                    base_url,
+                    vec![relay_url],
+                    vec![
+                        CommunityNodeSeedPeer::new(endpoint_a.as_str(), None).expect("seed peer a"),
+                    ],
+                )
+                .expect("resolved urls b"),
+            ),
+        }],
+    };
+
+    timeout(
+        Duration::from_secs(30),
+        runtime_a.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("apply assist a timeout")
+    .expect("apply assist a");
+    timeout(
+        Duration::from_secs(15),
+        runtime_a.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("apply seed peers a timeout")
+    .expect("apply seed peers a");
+    timeout(
+        Duration::from_secs(30),
+        runtime_b.apply_runtime_connectivity_assist(),
+    )
+    .await
+    .expect("apply assist b timeout")
+    .expect("apply assist b");
+    timeout(
+        Duration::from_secs(15),
+        runtime_b.apply_effective_seed_peers(),
+    )
+    .await
+    .expect("apply seed peers b timeout")
+    .expect("apply seed peers b");
+
+    let topic = "kukuri:topic:external-relay-desktop";
+    let scope = TimelineScope::Public;
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope: scope.clone(),
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe a");
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.to_string(),
+            scope,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe b");
+
+    wait_for_public_pair_delivery_with_refresh(
+        &runtime_a,
+        &runtime_b,
+        topic,
+        1,
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("external relay endpoint-only pair delivery");
+
+    let _ = replicate_public_post_with_retry(
+        &runtime_a,
+        &runtime_b,
+        topic,
+        "external relay desktop",
+        "external relay desktop should replicate",
+    )
+    .await;
+
+    timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
+        .await
+        .expect("runtime a shutdown timeout");
+    timeout(runtime_shutdown_timeout(), runtime_b.shutdown())
+        .await
+        .expect("runtime b shutdown timeout");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
