@@ -34,7 +34,7 @@ struct ReplicaHandle {
 
 const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
-const REMOTE_FETCH_RETRY_COOLDOWN: Duration = Duration::from_secs(15);
+const REMOTE_FETCH_RETRY_COOLDOWN: Duration = Duration::from_secs(3);
 
 #[derive(Debug, PartialEq, Eq)]
 enum RemoteFetchStart {

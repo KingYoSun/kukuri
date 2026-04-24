@@ -231,22 +231,7 @@ async fn wait_for_topic_delivery(
         let mut stable_ready_polls = 0usize;
         loop {
             let status = runtime.get_sync_status().await.expect("sync status");
-            let ready = status.topic_diagnostics.iter().any(|topic_status| {
-                let live_ready = topic_status.peer_count >= expected
-                    && topic_status.connected_peers.len() >= expected.min(1)
-                    && (topic_status.joined
-                        || matches!(
-                            topic_status.delivery_state,
-                            kukuri_app_api::DeliveryState::Live
-                        ));
-                let durable_ready = !topic_status.docs_assist_peer_ids.is_empty()
-                    && matches!(
-                        topic_status.delivery_state,
-                        kukuri_app_api::DeliveryState::DurableRecovering
-                            | kukuri_app_api::DeliveryState::DurableReady
-                    );
-                topic_status.topic == topic && (live_ready || durable_ready)
-            });
+            let ready = topic_has_delivery(&status, topic, expected);
             if ready {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -268,7 +253,7 @@ async fn wait_for_topic_delivery(
     }
 }
 
-async fn wait_for_connected_topic_peer_count_result(
+async fn wait_for_topic_delivery_result(
     runtime: &DesktopRuntime,
     topic: &str,
     expected: usize,
@@ -278,7 +263,7 @@ async fn wait_for_connected_topic_peer_count_result(
         let mut stable_ready_polls = 0usize;
         loop {
             let status = runtime.get_sync_status().await.context("sync status")?;
-            let ready = topic_has_direct_peer(&status, topic, expected);
+            let ready = topic_has_delivery(&status, topic, expected);
             if ready {
                 stable_ready_polls += 1;
                 if stable_ready_polls >= 3 {
@@ -300,7 +285,7 @@ async fn wait_for_connected_topic_peer_count_result(
                 .ok()
                 .map(|value| format_sync_snapshot(&value, topic))
                 .unwrap_or_else(|| "failed to read sync status".to_string());
-            bail!("topic readiness timeout; {status}");
+            bail!("topic delivery timeout; {status}");
         }
     }
 }
@@ -316,6 +301,10 @@ fn topic_has_direct_peer(status: &SyncStatus, topic: &str, expected: usize) -> b
                     kukuri_app_api::DeliveryState::Live
                 ))
     })
+}
+
+fn topic_has_delivery(status: &SyncStatus, topic: &str, expected: usize) -> bool {
+    topic_has_direct_peer(status, topic, expected) || topic_has_durable_delivery(status, topic)
 }
 
 fn should_swap_shared_identity_public_replication_direction(
@@ -1243,9 +1232,9 @@ async fn replicate_private_post_with_retry(
                 })
                 .await
                 .context("failed to refresh publisher joined private channels")?;
-            wait_for_connected_topic_peer_count_result(publisher, topic, 1, attempt_timeout)
+            wait_for_topic_delivery_result(publisher, topic, 1, attempt_timeout)
                 .await
-                .context("publisher did not observe private topic connectivity")?;
+                .context("publisher did not observe private topic delivery readiness")?;
             for subscriber in subscribers {
                 let _ = subscriber
                     .list_timeline(ListTimelineRequest {
@@ -1271,9 +1260,9 @@ async fn replicate_private_post_with_retry(
                     })
                     .await
                     .context("failed to refresh subscriber joined private channels")?;
-                wait_for_connected_topic_peer_count_result(subscriber, topic, 1, attempt_timeout)
+                wait_for_topic_delivery_result(subscriber, topic, 1, attempt_timeout)
                     .await
-                    .context("subscriber did not observe private topic connectivity")?;
+                    .context("subscriber did not observe private topic delivery readiness")?;
             }
             let pre_write_epoch =
                 joined_private_channel_epoch_result(publisher, topic, channel_id.as_str())
