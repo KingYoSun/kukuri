@@ -1340,7 +1340,7 @@ async fn import_peer_ticket_restarts_existing_topic_hint_subscription() {
 }
 
 #[tokio::test]
-async fn local_public_post_coalesces_replica_sync_restarts() {
+async fn local_public_post_restarts_replica_sync_after_each_write() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
     let docs_sync = Arc::new(TrackingDocsSync::default());
@@ -1364,9 +1364,17 @@ async fn local_public_post_coalesces_replica_sync_restarts() {
         .await
         .expect("second post");
 
-    assert_eq!(
-        docs_sync.restarted_replicas.lock().await.clone(),
-        vec![topic_replica_id(topic).as_str().to_string()]
+    let restarted = docs_sync.restarted_replicas.lock().await.clone();
+    let expected_replica = topic_replica_id(topic).as_str().to_string();
+    assert!(
+        restarted.len() >= 2,
+        "expected at least one sync restart per local post, got {restarted:?}"
+    );
+    assert!(
+        restarted
+            .iter()
+            .all(|replica| replica.as_str() == expected_replica),
+        "local post restarts should target only the topic replica, got {restarted:?}"
     );
 }
 
