@@ -14,6 +14,7 @@ use kukuri_core::ReplicaId;
 use kukuri_transport::{SeedPeer, parse_endpoint_ticket, prefer_relay_endpoint_addr};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
+use tokio::time::{Duration, Instant, timeout};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 
@@ -31,6 +32,44 @@ struct ReplicaHandle {
     live_task: JoinHandle<()>,
 }
 
+const REMOTE_FETCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const REMOTE_FETCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
+const REMOTE_FETCH_RETRY_COOLDOWN: Duration = Duration::from_secs(3);
+
+#[derive(Debug, PartialEq, Eq)]
+enum RemoteFetchStart {
+    Ready,
+    CoolingDown,
+}
+
+#[derive(Debug, Default)]
+struct RemoteFetchRetryState {
+    retry_after: BTreeMap<String, Instant>,
+}
+
+impl RemoteFetchRetryState {
+    fn try_begin(&mut self, key: &str, now: Instant) -> RemoteFetchStart {
+        if self
+            .retry_after
+            .get(key)
+            .is_some_and(|retry_after| *retry_after > now)
+        {
+            return RemoteFetchStart::CoolingDown;
+        }
+        self.retry_after.remove(key);
+        RemoteFetchStart::Ready
+    }
+
+    fn finish(&mut self, key: &str, success: bool, now: Instant) {
+        if success {
+            self.retry_after.remove(key);
+        } else {
+            self.retry_after
+                .insert(key.to_string(), now + REMOTE_FETCH_RETRY_COOLDOWN);
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct DocsPeerState {
     pub learned_peers: Vec<EndpointAddr>,
@@ -45,6 +84,7 @@ pub struct IrohDocsSync {
     seed_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     private_replica_secrets: Arc<Mutex<HashMap<String, NamespaceSecret>>>,
+    remote_fetch_retries: Arc<Mutex<RemoteFetchRetryState>>,
 }
 
 impl IrohDocsSync {
@@ -56,6 +96,7 @@ impl IrohDocsSync {
             seed_peers: Arc::new(Mutex::new(BTreeMap::new())),
             imported_peers: Arc::new(Mutex::new(BTreeMap::new())),
             private_replica_secrets: Arc::new(Mutex::new(HashMap::new())),
+            remote_fetch_retries: Arc::new(Mutex::new(RemoteFetchRetryState::default())),
         }
     }
 
@@ -324,69 +365,127 @@ impl IrohDocsSync {
             Err(error) => {
                 if policy == DocFetchPolicy::LocalOnly {
                     info!(
-                        hash = %content_hash,
-                        error = %error,
-                        "docs entry fetch local miss under local-only policy"
+                            hash = %content_hash,
+                            error = %error,
+                            "docs entry fetch local miss under local-only policy"
                     );
                     return Ok(None);
                 }
-                let peers = self.sync_peers().await;
-                info!(
-                    hash = %content_hash,
-                    error = %error,
-                    configured_peer_count = peers.len(),
-                    "docs entry fetch local miss, trying remote peers"
+                match self
+                    .remote_fetch_retries
+                    .lock()
+                    .await
+                    .try_begin(content_hash, Instant::now())
+                {
+                    RemoteFetchStart::Ready => {}
+                    RemoteFetchStart::CoolingDown => {
+                        info!(
+                            hash = %content_hash,
+                            error = %error,
+                            "docs entry remote fetch skipped during retry cooldown"
+                        );
+                        return Ok(None);
+                    }
+                }
+                let result = self
+                    .fetch_entry_bytes_from_remote(content_hash, hash, error)
+                    .await;
+                self.remote_fetch_retries.lock().await.finish(
+                    content_hash,
+                    matches!(&result, Ok(Some(_))),
+                    Instant::now(),
                 );
-                for imported_peer in peers {
-                    let candidates = self.connect_candidates(&imported_peer).await;
-                    for peer in candidates {
-                        match self
-                            .node
-                            .endpoint()
-                            .connect(peer.clone(), iroh_blobs::ALPN)
-                            .await
+                result
+            }
+        }
+    }
+
+    async fn fetch_entry_bytes_from_remote(
+        &self,
+        content_hash: &str,
+        hash: iroh_blobs::Hash,
+        local_error: impl std::fmt::Display,
+    ) -> Result<Option<Vec<u8>>> {
+        let peers = self.sync_peers().await;
+        info!(
+            hash = %content_hash,
+            error = %local_error,
+            configured_peer_count = peers.len(),
+            "docs entry fetch local miss, trying remote peers"
+        );
+        for imported_peer in peers {
+            let candidates = self.connect_candidates(&imported_peer).await;
+            for peer in candidates {
+                match timeout(
+                    REMOTE_FETCH_CONNECT_TIMEOUT,
+                    self.node.endpoint().connect(peer.clone(), iroh_blobs::ALPN),
+                )
+                .await
+                {
+                    Ok(Ok(conn)) => {
+                        match timeout(
+                            REMOTE_FETCH_TRANSFER_TIMEOUT,
+                            self.node.blobs().remote().fetch(conn, hash),
+                        )
+                        .await
                         {
-                            Ok(conn) => match self.node.blobs().remote().fetch(conn, hash).await {
-                                Ok(_) => match self.node.blobs().blobs().get_bytes(hash).await {
-                                    Ok(bytes) => return Ok(Some(bytes.to_vec())),
-                                    Err(error) => {
-                                        warn!(
-                                            hash = %content_hash,
-                                            peer_id = %peer.id,
-                                            error = %error,
-                                            "docs entry transfer completed but content is still missing locally"
-                                        );
-                                    }
-                                },
+                            Ok(Ok(_)) => match self.node.blobs().blobs().get_bytes(hash).await {
+                                Ok(bytes) => return Ok(Some(bytes.to_vec())),
                                 Err(error) => {
                                     warn!(
                                         hash = %content_hash,
                                         peer_id = %peer.id,
-                                        addrs = ?peer.addrs,
                                         error = %error,
-                                        "docs entry remote transfer failed"
+                                        "docs entry transfer completed but content is still missing locally"
                                     );
                                 }
                             },
-                            Err(error) => {
+                            Ok(Err(error)) => {
                                 warn!(
                                     hash = %content_hash,
                                     peer_id = %peer.id,
                                     addrs = ?peer.addrs,
                                     error = %error,
-                                    "docs entry fetch connect failed"
+                                    "docs entry remote transfer failed"
+                                );
+                            }
+                            Err(_) => {
+                                warn!(
+                                    hash = %content_hash,
+                                    peer_id = %peer.id,
+                                    addrs = ?peer.addrs,
+                                    timeout_ms = REMOTE_FETCH_TRANSFER_TIMEOUT.as_millis(),
+                                    "docs entry remote transfer timed out"
                                 );
                             }
                         }
                     }
+                    Ok(Err(error)) => {
+                        warn!(
+                            hash = %content_hash,
+                            peer_id = %peer.id,
+                            addrs = ?peer.addrs,
+                            error = %error,
+                            "docs entry fetch connect failed"
+                        );
+                    }
+                    Err(_) => {
+                        warn!(
+                            hash = %content_hash,
+                            peer_id = %peer.id,
+                            addrs = ?peer.addrs,
+                            timeout_ms = REMOTE_FETCH_CONNECT_TIMEOUT.as_millis(),
+                            "docs entry fetch connect timed out"
+                        );
+                    }
                 }
-                warn!(
-                    hash = %content_hash,
-                    "docs entry fetch exhausted remote peers without success"
-                );
-                Ok(None)
             }
         }
+        warn!(
+            hash = %content_hash,
+            "docs entry fetch exhausted remote peers without success"
+        );
+        Ok(None)
     }
 }
 
@@ -563,4 +662,34 @@ impl DocsSync for IrohDocsSync {
 
 async fn doc_start_sync(doc: &Doc, peers: Vec<EndpointAddr>) -> Result<()> {
     doc.start_sync(peers).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remote_fetch_retry_state_cools_down_failures_without_blocking_active_fetches() {
+        let now = Instant::now();
+        let mut state = RemoteFetchRetryState::default();
+
+        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
+        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
+
+        state.finish("hash-a", false, now);
+        assert_eq!(
+            state.try_begin("hash-a", now + Duration::from_secs(1)),
+            RemoteFetchStart::CoolingDown
+        );
+        assert_eq!(
+            state.try_begin("hash-a", now + REMOTE_FETCH_RETRY_COOLDOWN),
+            RemoteFetchStart::Ready
+        );
+
+        state.finish("hash-a", true, now + REMOTE_FETCH_RETRY_COOLDOWN);
+        assert_eq!(
+            state.try_begin("hash-a", now + REMOTE_FETCH_RETRY_COOLDOWN),
+            RemoteFetchStart::Ready
+        );
+    }
 }
