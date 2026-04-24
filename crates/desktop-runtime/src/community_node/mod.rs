@@ -8,7 +8,7 @@ use kukuri_cn_core::{
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
     build_auth_envelope_json, normalize_http_url,
 };
-use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig};
+use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};

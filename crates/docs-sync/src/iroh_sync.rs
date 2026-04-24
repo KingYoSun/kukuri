@@ -11,7 +11,7 @@ use iroh_docs::api::Doc;
 use iroh_docs::store::Query;
 use iroh_docs::{Capability, DocTicket, NamespaceSecret};
 use kukuri_core::ReplicaId;
-use kukuri_transport::{SeedPeer, parse_endpoint_ticket, prefer_relay_endpoint_addr};
+use kukuri_transport::{SeedPeer, parse_endpoint_ticket, relay_assisted_endpoint_addr};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant, timeout};
@@ -199,12 +199,12 @@ impl IrohDocsSync {
 
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
         let mut candidates = Vec::new();
-        let relay_preferred = prefer_relay_endpoint_addr(imported_peer);
+        let relay_preferred = relay_assisted_endpoint_addr(imported_peer);
         if relay_preferred.relay_urls().next().is_some() {
             candidates.push(relay_preferred);
         }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = prefer_relay_endpoint_addr(&EndpointAddr::from_parts(
+            let learned_peer = relay_assisted_endpoint_addr(&EndpointAddr::from_parts(
                 remote_info.id(),
                 remote_info.into_addrs().map(|addr| addr.into_addr()),
             ));

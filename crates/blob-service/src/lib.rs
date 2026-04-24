@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use iroh::EndpointId;
 use kukuri_core::BlobHash;
 use kukuri_docs_sync::IrohDocsNode;
-use kukuri_transport::{SeedPeer, parse_endpoint_ticket, prefer_relay_endpoint_addr};
+use kukuri_transport::{SeedPeer, parse_endpoint_ticket, relay_assisted_endpoint_addr};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{Duration, Instant, timeout};
@@ -122,13 +122,13 @@ impl IrohBlobService {
         imported_peer: &iroh::EndpointAddr,
     ) -> Vec<iroh::EndpointAddr> {
         let mut candidates = Vec::new();
-        let relay_preferred = prefer_relay_endpoint_addr(imported_peer);
+        let relay_preferred = relay_assisted_endpoint_addr(imported_peer);
         let imported_uses_relay = relay_preferred.relay_urls().next().is_some();
         if imported_uses_relay {
             candidates.push(relay_preferred);
         }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = prefer_relay_endpoint_addr(&iroh::EndpointAddr::from_parts(
+            let learned_peer = relay_assisted_endpoint_addr(&iroh::EndpointAddr::from_parts(
                 remote_info.id(),
                 remote_info.into_addrs().map(|addr| addr.into_addr()),
             ));

@@ -291,6 +291,15 @@ impl DesktopRuntime {
         &self,
         operation: &str,
     ) -> Result<CommunityNodeSeedPeer> {
+        if let Some(ticket) = self.local_peer_ticket().await? {
+            let seed_peer = parse_seed_peer(ticket.as_str()).with_context(|| {
+                format!(
+                    "failed to derive local seed peer from ticket for community node {operation}"
+                )
+            })?;
+            return CommunityNodeSeedPeer::new(seed_peer.endpoint_id, seed_peer.addr_hint);
+        }
+
         let endpoint_id = self
             .iroh_stack
             .transport
@@ -300,9 +309,6 @@ impl DesktopRuntime {
                 format!("failed to read local endpoint id for community node {operation}")
             })?
             .local_endpoint_id;
-        // Community-node bootstrap metadata should stay relay-first. Publishing local or
-        // private addr hints here causes other clients to spend time on unusable direct
-        // paths before the shared relay-only path has a chance to stabilize.
         CommunityNodeSeedPeer::new(endpoint_id, None)
     }
 
