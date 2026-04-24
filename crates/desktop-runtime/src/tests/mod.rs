@@ -6237,12 +6237,20 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         })
         .await
         .expect("create post a");
+    wait_for_topic_doc_index_entry_result(
+        &runtime_a,
+        topic,
+        object_id_a.as_str(),
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("runtime a should persist post a into docs index");
     wait_for_timeline_post_result(
         &runtime_b,
         topic,
         &scope,
         object_id_a.as_str(),
-        Duration::from_secs(30),
+        runtime_replication_timeout(),
     )
     .await
     .expect("runtime b should receive runtime a post");
@@ -6251,7 +6259,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         topic,
         &scope,
         object_id_a.as_str(),
-        Duration::from_secs(30),
+        runtime_replication_timeout(),
     )
     .await
     .expect("runtime c should receive runtime a post");
@@ -6266,12 +6274,20 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         })
         .await
         .expect("create post c");
+    wait_for_topic_doc_index_entry_result(
+        &runtime_c,
+        topic,
+        object_id_c.as_str(),
+        runtime_replication_timeout(),
+    )
+    .await
+    .expect("runtime c should persist post c into docs index");
     wait_for_timeline_post_result(
         &runtime_a,
         topic,
         &scope,
         object_id_c.as_str(),
-        Duration::from_secs(30),
+        runtime_replication_timeout(),
     )
     .await
     .expect("runtime a should receive runtime c post");
@@ -6280,7 +6296,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
         topic,
         &scope,
         object_id_c.as_str(),
-        Duration::from_secs(30),
+        runtime_replication_timeout(),
     )
     .await
     .expect("runtime b should receive runtime c post");
