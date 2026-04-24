@@ -112,6 +112,20 @@ pub(crate) fn merge_community_node_resolved_urls(
     }
 }
 
+pub(crate) fn refresh_community_node_resolved_urls(
+    current: Option<CommunityNodeResolvedUrls>,
+    incoming: CommunityNodeResolvedUrls,
+) -> Result<CommunityNodeResolvedUrls> {
+    let public_base_url = incoming.public_base_url;
+    let connectivity_urls = current
+        .map(|current| current.connectivity_urls)
+        .unwrap_or_default()
+        .into_iter()
+        .chain(incoming.connectivity_urls)
+        .collect();
+    CommunityNodeResolvedUrls::new(public_base_url, connectivity_urls, incoming.seed_peers)
+}
+
 pub(crate) fn community_node_seed_peers(
     config: &CommunityNodeConfig,
 ) -> impl Iterator<Item = SeedPeer> + '_ {
@@ -282,5 +296,36 @@ mod tests {
         assert_eq!(merged.seed_peers.len(), 1);
         assert_eq!(merged.seed_peers[0].endpoint_id, "peer-a");
         assert!(merged.seed_peers[0].addr_hint.is_none());
+    }
+
+    #[test]
+    fn refresh_resolved_urls_replaces_seed_peer_snapshot() {
+        let current = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay-a.example.com".to_string()],
+            vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")],
+        )
+        .expect("current urls");
+        let incoming = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay-b.example.com".to_string()],
+            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")],
+        )
+        .expect("incoming urls");
+
+        let refreshed =
+            refresh_community_node_resolved_urls(Some(current), incoming).expect("refreshed urls");
+
+        assert_eq!(
+            refreshed.connectivity_urls,
+            vec![
+                "https://relay-a.example.com".to_string(),
+                "https://relay-b.example.com".to_string()
+            ]
+        );
+        assert_eq!(
+            refreshed.seed_peers,
+            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")]
+        );
     }
 }

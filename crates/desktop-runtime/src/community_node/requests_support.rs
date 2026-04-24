@@ -199,11 +199,13 @@ impl DesktopRuntime {
             "community-node metadata sync resolved bootstrap metadata"
         );
         let mut next_config = config;
-        next_config.nodes[index].resolved_urls = merge_community_node_resolved_urls(
-            next_config.nodes[index].resolved_urls.clone(),
-            Some(resolved_urls),
-        )
-        .map_err(CommunityNodeRequestError::Other)?;
+        next_config.nodes[index].resolved_urls = Some(
+            refresh_community_node_resolved_urls(
+                next_config.nodes[index].resolved_urls.clone(),
+                resolved_urls,
+            )
+            .map_err(CommunityNodeRequestError::Other)?,
+        );
         let normalized = normalize_community_node_config(next_config)
             .map_err(CommunityNodeRequestError::Other)?;
         save_community_node_config(&self.db_path, &normalized)
