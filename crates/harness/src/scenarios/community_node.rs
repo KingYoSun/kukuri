@@ -492,8 +492,7 @@ pub(crate) async fn run_community_node_connectivity(
         );
         let mut direct_reply_path_error = None;
         for attempt in 1..=reply_thread_attempts {
-            match wait_for_direct_topic_peer_count(&runtime_b, topic, 1, reply_thread_timeout).await
-            {
+            match wait_for_topic_delivery(&runtime_b, topic, 1, reply_thread_timeout).await {
                 Ok(()) => {
                     direct_reply_path_error = None;
                     break;
@@ -528,7 +527,7 @@ pub(crate) async fn run_community_node_connectivity(
             }
         }
         if let Some(error) = direct_reply_path_error {
-            anyhow::bail!("desktop b did not observe direct public connectivity before community reply: {error}");
+            anyhow::bail!("desktop b did not observe public topic delivery before community reply: {error}");
         }
         let reply_id = runtime_b
             .create_post(CreatePostRequest {
@@ -729,6 +728,9 @@ pub(crate) async fn run_community_node_connectivity(
                 .await
                 .with_context(|| format!("failed to end live session on {live_owner_label}"))?;
             wait_for_live_ended(live_owner, topic, session_id.as_str(), step_timeout).await?;
+            refresh_public_pair(&runtime_a, &runtime_b, topic, public_feature_timeout)
+                .await
+                .context("failed to refresh public topic after live session ended")?;
             let mut live_ended_error = None;
             for attempt in 1..=public_feature_attempts {
                 match wait_for_live_ended(

@@ -314,6 +314,12 @@ impl DesktopRuntime {
         self.community_node_status(refreshed, None, None).await
     }
 
+    pub async fn reapply_community_node_connectivity(&self) -> Result<()> {
+        self.force_apply_runtime_connectivity_assist().await?;
+        self.force_apply_effective_seed_peers().await?;
+        Ok(())
+    }
+
     pub async fn shutdown(&self) {
         self.app_service.shutdown().await;
         let _ = tokio::time::timeout(

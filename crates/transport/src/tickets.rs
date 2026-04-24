@@ -175,6 +175,14 @@ pub(crate) fn endpoint_addr_with_relays(
     endpoint_addr
 }
 
+pub fn prefer_relay_endpoint_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
+    let relay_urls = endpoint_addr.relay_urls().cloned().collect::<Vec<_>>();
+    if relay_urls.is_empty() {
+        return endpoint_addr.clone();
+    }
+    endpoint_addr_with_relays(endpoint_addr.id, &relay_urls)
+}
+
 pub(crate) fn resolve_socket_addrs(value: &str) -> Result<Vec<SocketAddr>> {
     let trimmed = value.trim();
     if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {
@@ -331,5 +339,45 @@ mod tests {
             parsed.ip_addrs().next().copied(),
             Some("127.0.0.1:40123".parse().expect("socket addr"))
         );
+    }
+
+    #[test]
+    fn prefer_relay_endpoint_addr_strips_ip_addrs_when_relay_urls_exist() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let relay_url = "https://relay.example.com"
+            .parse::<RelayUrl>()
+            .expect("relay url");
+        let endpoint_addr = EndpointAddr::new(endpoint_id)
+            .with_ip_addr("10.0.0.5:40123".parse().expect("socket addr"))
+            .with_relay_url(relay_url.clone());
+
+        let preferred = prefer_relay_endpoint_addr(&endpoint_addr);
+
+        assert!(preferred.ip_addrs().next().is_none());
+        assert_eq!(
+            preferred.relay_urls().cloned().collect::<Vec<_>>(),
+            vec![relay_url]
+        );
+    }
+
+    #[test]
+    fn prefer_relay_endpoint_addr_keeps_direct_addrs_without_relays() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr = EndpointAddr::new(endpoint_id)
+            .with_ip_addr("10.0.0.5:40123".parse().expect("socket addr"));
+
+        let preferred = prefer_relay_endpoint_addr(&endpoint_addr);
+
+        assert_eq!(
+            preferred.ip_addrs().copied().collect::<Vec<_>>(),
+            vec!["10.0.0.5:40123".parse().expect("socket addr")]
+        );
+        assert!(preferred.relay_urls().next().is_none());
     }
 }

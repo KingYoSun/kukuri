@@ -54,11 +54,8 @@ pub(crate) struct SharedIrohStack {
 fn should_rebuild_runtime_connectivity(
     current_relay_urls: &[String],
     next_relay_urls: &[String],
-    discovery_mode: &DiscoveryMode,
-    is_windows: bool,
 ) -> bool {
     current_relay_urls != next_relay_urls
-        && (*discovery_mode != DiscoveryMode::StaticPeer || is_windows)
 }
 
 impl ReloadableTransport {
@@ -388,12 +385,7 @@ impl SharedIrohStack {
                 .map(|url| url.to_string())
                 .collect::<Vec<_>>()
         };
-        if should_rebuild_runtime_connectivity(
-            &current_relay_urls,
-            &next_relay_urls,
-            &discovery_config.mode,
-            cfg!(target_os = "windows"),
-        ) {
+        if should_rebuild_runtime_connectivity(&current_relay_urls, &next_relay_urls) {
             info!(
                 current_relay_url_count = current_relay_urls.len(),
                 next_relay_url_count = next_relay_urls.len(),
@@ -531,20 +523,16 @@ mod tests {
         assert!(!should_rebuild_runtime_connectivity(
             std::slice::from_ref(&relay_url),
             std::slice::from_ref(&relay_url),
-            &DiscoveryMode::StaticPeer,
-            true,
         ));
     }
 
     #[test]
-    fn runtime_connectivity_rebuild_helper_rebuilds_for_windows_static_peer_relay_change() {
+    fn runtime_connectivity_rebuild_helper_rebuilds_for_static_peer_relay_change() {
         let current = "https://relay-a.example.com".to_string();
         let next = "https://relay-b.example.com".to_string();
         assert!(should_rebuild_runtime_connectivity(
             std::slice::from_ref(&current),
             std::slice::from_ref(&next),
-            &DiscoveryMode::StaticPeer,
-            true,
         ));
     }
 
@@ -555,20 +543,6 @@ mod tests {
         assert!(should_rebuild_runtime_connectivity(
             std::slice::from_ref(&current),
             std::slice::from_ref(&next),
-            &DiscoveryMode::SeededDht,
-            false,
-        ));
-    }
-
-    #[test]
-    fn runtime_connectivity_rebuild_helper_keeps_non_windows_static_peer_in_place() {
-        let current = "https://relay-a.example.com".to_string();
-        let next = "https://relay-b.example.com".to_string();
-        assert!(!should_rebuild_runtime_connectivity(
-            std::slice::from_ref(&current),
-            std::slice::from_ref(&next),
-            &DiscoveryMode::StaticPeer,
-            false,
         ));
     }
 

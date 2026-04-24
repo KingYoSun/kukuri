@@ -2912,6 +2912,7 @@ dependencies = [
  "kukuri-app-api",
  "kukuri-blob-service",
  "kukuri-cn-core",
+ "kukuri-cn-iroh-relay",
  "kukuri-core",
  "kukuri-docs-sync",
  "kukuri-store",
