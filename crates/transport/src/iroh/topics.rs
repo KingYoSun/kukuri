@@ -19,19 +19,7 @@ fn topic_warmup_retry_delay(attempt: usize) -> Duration {
 }
 
 fn direct_warmup_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
-    if endpoint_addr.relay_urls().next().is_some() {
-        return crate::prefer_relay_endpoint_addr(endpoint_addr);
-    }
-    let direct_addrs = endpoint_addr
-        .ip_addrs()
-        .copied()
-        .map(TransportAddr::Ip)
-        .collect::<Vec<_>>();
-    if direct_addrs.is_empty() {
-        endpoint_addr.clone()
-    } else {
-        EndpointAddr::from_parts(endpoint_addr.id, direct_addrs)
-    }
+    endpoint_addr.clone()
 }
 pub(crate) fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     let hash = blake3::hash(topic.as_str().as_bytes());

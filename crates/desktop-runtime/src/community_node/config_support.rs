@@ -117,29 +117,21 @@ pub(crate) fn community_node_seed_peers(
         .iter()
         .filter_map(|node| node.resolved_urls.as_ref())
         .flat_map(|resolved| {
-            let relay_backed = !resolved.connectivity_urls.is_empty();
             resolved
                 .seed_peers
                 .iter()
-                .filter_map(move |seed_peer| seed_peer_from_community_node(seed_peer, relay_backed))
+                .filter_map(seed_peer_from_community_node)
         })
 }
 
-pub(crate) fn seed_peer_from_community_node(
-    seed_peer: &CommunityNodeSeedPeer,
-    relay_backed: bool,
-) -> Option<SeedPeer> {
+pub(crate) fn seed_peer_from_community_node(seed_peer: &CommunityNodeSeedPeer) -> Option<SeedPeer> {
     let endpoint_id = seed_peer.endpoint_id.trim();
     if endpoint_id.is_empty() {
         return None;
     }
     Some(SeedPeer {
         endpoint_id: endpoint_id.to_string(),
-        addr_hint: if relay_backed {
-            None
-        } else {
-            seed_peer.addr_hint.clone()
-        },
+        addr_hint: seed_peer.addr_hint.clone(),
     })
 }
 
@@ -195,7 +187,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn community_node_seed_peers_drop_addr_hints_when_relay_urls_exist() {
+    fn community_node_seed_peers_keep_addr_hints_when_relay_urls_exist() {
         let config = CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
                 base_url: "https://community.example.com".to_string(),
@@ -223,7 +215,7 @@ mod tests {
             peers,
             vec![SeedPeer {
                 endpoint_id: "peer-a".to_string(),
-                addr_hint: None,
+                addr_hint: Some("192.168.1.40:40123".to_string()),
             }]
         );
     }

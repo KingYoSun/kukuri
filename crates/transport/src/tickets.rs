@@ -175,12 +175,12 @@ pub(crate) fn endpoint_addr_with_relays(
     endpoint_addr
 }
 
+pub fn relay_assisted_endpoint_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
+    endpoint_addr.clone()
+}
+
 pub fn prefer_relay_endpoint_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
-    let relay_urls = endpoint_addr.relay_urls().cloned().collect::<Vec<_>>();
-    if relay_urls.is_empty() {
-        return endpoint_addr.clone();
-    }
-    endpoint_addr_with_relays(endpoint_addr.id, &relay_urls)
+    relay_assisted_endpoint_addr(endpoint_addr)
 }
 
 pub(crate) fn resolve_socket_addrs(value: &str) -> Result<Vec<SocketAddr>> {
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn prefer_relay_endpoint_addr_strips_ip_addrs_when_relay_urls_exist() {
+    fn relay_assisted_endpoint_addr_keeps_ip_addrs_with_relay_urls() {
         let endpoint_id = EndpointId::from_str(
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
         )
@@ -354,9 +354,12 @@ mod tests {
             .with_ip_addr("10.0.0.5:40123".parse().expect("socket addr"))
             .with_relay_url(relay_url.clone());
 
-        let preferred = prefer_relay_endpoint_addr(&endpoint_addr);
+        let preferred = relay_assisted_endpoint_addr(&endpoint_addr);
 
-        assert!(preferred.ip_addrs().next().is_none());
+        assert_eq!(
+            preferred.ip_addrs().copied().collect::<Vec<_>>(),
+            vec!["10.0.0.5:40123".parse().expect("socket addr")]
+        );
         assert_eq!(
             preferred.relay_urls().cloned().collect::<Vec<_>>(),
             vec![relay_url]
@@ -364,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn prefer_relay_endpoint_addr_keeps_direct_addrs_without_relays() {
+    fn relay_assisted_endpoint_addr_keeps_direct_addrs_without_relays() {
         let endpoint_id = EndpointId::from_str(
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
         )
@@ -372,7 +375,7 @@ mod tests {
         let endpoint_addr = EndpointAddr::new(endpoint_id)
             .with_ip_addr("10.0.0.5:40123".parse().expect("socket addr"));
 
-        let preferred = prefer_relay_endpoint_addr(&endpoint_addr);
+        let preferred = relay_assisted_endpoint_addr(&endpoint_addr);
 
         assert_eq!(
             preferred.ip_addrs().copied().collect::<Vec<_>>(),

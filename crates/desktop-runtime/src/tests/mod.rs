@@ -5320,10 +5320,10 @@ fn community_node_config_preserves_public_kukuri_urls() {
 }
 
 #[tokio::test]
-async fn local_community_node_seed_peer_omits_addr_hint() {
+async fn local_community_node_seed_peer_includes_addr_hint() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
-    let db_path = dir.path().join("community-seed-peer-no-addr-hint.db");
+    let db_path = dir.path().join("community-seed-peer-addr-hint.db");
     let runtime = DesktopRuntime::new_with_config_and_identity(
         &db_path,
         TransportNetworkConfig::loopback(),
@@ -5337,7 +5337,7 @@ async fn local_community_node_seed_peer_omits_addr_hint() {
         .await
         .expect("seed peer");
 
-    assert!(seed_peer.addr_hint.is_none());
+    assert!(seed_peer.addr_hint.is_some());
 
     runtime.shutdown().await;
 }

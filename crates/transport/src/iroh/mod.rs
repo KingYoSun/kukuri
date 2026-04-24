@@ -25,7 +25,7 @@ use iroh::endpoint::{
 use iroh::protocol::Router;
 #[cfg(test)]
 use iroh::tls::CaRootsConfig;
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey, TransportAddr};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
 use kukuri_core::{GossipHint, TopicId};
