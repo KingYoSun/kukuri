@@ -34,13 +34,11 @@ const REMOTE_FETCH_RETRY_COOLDOWN: Duration = Duration::from_secs(15);
 #[derive(Debug, PartialEq, Eq)]
 enum RemoteFetchStart {
     Ready,
-    InFlight,
     CoolingDown,
 }
 
 #[derive(Debug, Default)]
 struct RemoteFetchRetryState {
-    in_flight: std::collections::BTreeSet<String>,
     retry_after: BTreeMap<String, Instant>,
 }
 
@@ -54,14 +52,10 @@ impl RemoteFetchRetryState {
             return RemoteFetchStart::CoolingDown;
         }
         self.retry_after.remove(key);
-        if !self.in_flight.insert(key.to_string()) {
-            return RemoteFetchStart::InFlight;
-        }
         RemoteFetchStart::Ready
     }
 
     fn finish(&mut self, key: &str, success: bool, now: Instant) {
-        self.in_flight.remove(key);
         if success {
             self.retry_after.remove(key);
         } else {
@@ -428,14 +422,6 @@ impl BlobService for IrohBlobService {
                     .try_begin(hash_text.as_str(), Instant::now())
                 {
                     RemoteFetchStart::Ready => {}
-                    RemoteFetchStart::InFlight => {
-                        info!(
-                            hash = %hash_text,
-                            error = %error,
-                            "blob remote fetch skipped because another fetch is already running"
-                        );
-                        return Ok(None);
-                    }
                     RemoteFetchStart::CoolingDown => {
                         info!(
                             hash = %hash_text,
@@ -543,12 +529,12 @@ mod tests {
     }
 
     #[test]
-    fn remote_fetch_retry_state_blocks_duplicate_and_cools_down_failures() {
+    fn remote_fetch_retry_state_cools_down_failures_without_blocking_active_fetches() {
         let now = Instant::now();
         let mut state = RemoteFetchRetryState::default();
 
         assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
-        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::InFlight);
+        assert_eq!(state.try_begin("hash-a", now), RemoteFetchStart::Ready);
 
         state.finish("hash-a", false, now);
         assert_eq!(
