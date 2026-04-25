@@ -2,6 +2,7 @@
   "actions": {
     "createChannel": "Create Channel",
     "join": "Join",
+    "openSettings": "Open {{channel}} channel settings",
     "share": "Share"
   },
   "audienceOptions": {
@@ -9,10 +10,14 @@
     "friend_plus": "Friends+",
     "invite_only": "Invite only"
   },
+  "createDialogTitle": "Create Private Channel",
   "editor": {
     "audience": "Audience",
+    "channelName": "Channel name",
+    "createBlockTitle": "Create",
     "createChannel": "Create Channel",
     "join": "Join",
+    "joinBlockTitle": "Join",
     "placeholders": {
       "channelLabel": "core contributors",
       "inviteToken": "paste private channel invite, friend grant, or friends+ share"
@@ -31,7 +36,7 @@
   },
   "inspectHint": "Inspect policy and actions here.",
   "joined": "{{count}} joined",
-  "loading": "Loading private channels…",
+  "loading": "Loading private channels...",
   "latestInvite": "Latest invite",
   "latestShare": "Latest share",
   "policies": {
@@ -39,15 +44,11 @@
     "friend_plus": "Friends+: participants can share to their mutuals",
     "invite_only": "Invite only"
   },
-  "rotationRequired": "rotation required: current participants include non-mutual followers",
   "previewDialog": {
     "title": "Preview Access",
-    "description": "Inspect the channel access token before importing it.",
     "import": "Import / Join",
     "copyToken": "Copy token",
-    "showRaw": "Show raw token",
-    "hideRaw": "Hide raw token",
-    "channel": "channel",
+    "channel": "Channel",
     "channelId": "channel id",
     "inviter": "inviter",
     "sponsor": "sponsor",
@@ -58,7 +59,11 @@
       "share": "Share"
     }
   },
+  "rotationRequired": "rotation required: current participants include non-mutual followers",
   "selectChannel": "Select a channel",
   "selectChannelNotice": "Select a private channel to inspect policy and actions.",
+  "settings": {
+    "title": "Channel Settings"
+  },
   "title": "Private Channels"
 }

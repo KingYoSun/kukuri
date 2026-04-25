@@ -1,11 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function openChannelManager(page: Page) {
-  const dialog = page.getByRole('dialog', { name: 'Channels' });
+  const dialog = page.getByRole('dialog', { name: 'Create Private Channel' });
   if (await dialog.isVisible().catch(() => false)) {
     return dialog;
   }
   await page.getByRole('button', { name: 'Channels' }).click();
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openChannelSettings(page: Page, channelLabel: string) {
+  await page.getByRole('button', { name: `Open ${channelLabel} channel settings` }).click();
+  const dialog = page.getByRole('dialog', { name: 'Channel Settings' });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -27,17 +34,25 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await channelDialog.getByPlaceholder('core contributors').fill('Core Contributors');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-1/);
-  await expect(channelDialog.getByRole('heading', { name: 'Core Contributors' })).toBeVisible();
-  await channelDialog
+  await page.keyboard.press('Escape');
+
+  const channelSettingsDialog = await openChannelSettings(page, 'Core Contributors');
+  await channelSettingsDialog
     .getByRole('button', { name: /Core Contributors\s*\/\s*Invite only/i })
     .click();
-  await expect(channelDialog.getByRole('button', { name: 'Invite token' })).toBeVisible();
+  await expect(
+    channelSettingsDialog.getByRole('button', { name: /channel-1\s*\/\s*Invite only/i })
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
 
-  await channelDialog
+  const joinDialog = await openChannelManager(page);
+  await joinDialog
     .getByPlaceholder('paste private channel invite, friend grant, or friends+ share')
     .fill('invite-token');
-  await channelDialog.getByRole('button', { name: 'Join' }).click();
-  await expect(channelDialog.getByText(/Imported/i).first()).toBeVisible();
+  await joinDialog.getByRole('button', { name: 'Join' }).click();
+  await expect(page).toHaveURL(
+    /#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-imported/
+  );
   await page.keyboard.press('Escape');
 
   await page.goto('/#/live');

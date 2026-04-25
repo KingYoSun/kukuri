@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { GameRoomPanel } from './GameRoomPanel';
 import { LiveSessionPanel } from './LiveSessionPanel';
-import { PrivateChannelPanel } from './PrivateChannelPanel';
+import { PrivateChannelPanel, PrivateChannelSettingsPanel } from './PrivateChannelPanel';
 import { ProfileEditorPanel } from './ProfileEditorPanel';
 
 const meta = {
@@ -49,30 +49,17 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
             { value: 'friend_plus', label: 'Friends+' },
           ]}
           inviteTokenInput={inviteToken}
-          inviteOutput='share:kukuri:topic:demo:channel-1'
-          inviteOutputLabel='share'
-          channels={[
-            {
-              active: true,
-              channel: {
-                topic_id: 'kukuri:topic:demo',
-                channel_id: 'channel-1',
-                label: 'Core Contributors',
-                creator_pubkey: 'a'.repeat(64),
-                owner_pubkey: 'a'.repeat(64),
-                joined_via_pubkey: null,
-                audience_kind: 'friend_plus',
-                is_owner: true,
-                current_epoch_id: 'epoch-4',
-                archived_epoch_ids: ['epoch-3'],
-                sharing_state: 'open',
-                rotation_required: false,
-                participant_count: 3,
-                stale_participant_count: 0,
-              },
-            },
-          ]}
-          selectedChannel={{
+          onChannelLabelChange={setChannelLabel}
+          onChannelAudienceChange={() => undefined}
+          onInviteTokenChange={setInviteToken}
+          onCreateChannel={(event) => event.preventDefault()}
+          onJoin={(event) => event.preventDefault()}
+        />
+
+        <PrivateChannelSettingsPanel
+          error={null}
+          pendingAction={null}
+          channel={{
             topic_id: 'kukuri:topic:demo',
             channel_id: 'channel-1',
             label: 'Core Contributors',
@@ -88,12 +75,8 @@ function ExtendedProductFlowStory({ width }: { width: number }) {
             participant_count: 3,
             stale_participant_count: 0,
           }}
-          onChannelLabelChange={setChannelLabel}
-          onChannelAudienceChange={() => undefined}
-          onInviteTokenChange={setInviteToken}
-          onCreateChannel={(event) => event.preventDefault()}
-          onJoin={(event) => event.preventDefault()}
-          onSelectChannel={() => undefined}
+          inviteOutput='share:kukuri:topic:demo:channel-1'
+          inviteOutputLabel='share'
           onShare={() => undefined}
         />
 

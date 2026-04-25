@@ -23,6 +23,7 @@ const meta = {
           items={topicItems}
           onSelectTopic={() => undefined}
           onSelectChannel={() => undefined}
+          onOpenChannelSettings={() => undefined}
           onRemoveTopic={() => undefined}
         />
       </Card>

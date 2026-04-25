@@ -382,7 +382,7 @@ async function publishPost(user: ReturnType<typeof userEvent.setup>, content: st
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Private Channels' }));
-  return await screen.findByRole('dialog', { name: 'Private Channels' });
+  return await screen.findByRole('dialog', { name: 'Create Private Channel' });
 }
 
 function getChannelShareButton(
@@ -393,6 +393,13 @@ function getChannelShareButton(
   return within(dialog).getByRole('button', {
     name: `${channelLabel} / ${audienceLabel}`,
   });
+}
+
+async function openChannelSettings(user: ReturnType<typeof userEvent.setup>, channelLabel: string) {
+  await user.click(
+    screen.getByRole('button', { name: `Open ${channelLabel} channel settings` })
+  );
+  return await screen.findByRole('dialog', { name: 'Channel Settings' });
 }
 
 async function openLiveCreateDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -803,11 +810,15 @@ test('channel manager opens as a modal from the navigation summary', async () =>
 
   const dialog = await openChannelManager(user);
   expect(dialog).toBeInTheDocument();
+  expect(dialog).toHaveAccessibleName('Create Private Channel');
+  expect(within(dialog).getByText('Create')).toBeInTheDocument();
+  expect(within(dialog).getAllByText('Join').length).toBeGreaterThan(0);
+  expect(within(dialog).getByText('Channel name')).toBeInTheDocument();
   expect(within(dialog).getByPlaceholderText('core contributors')).toBeInTheDocument();
 
   await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Private Channels' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Private Channel' })).not.toBeInTheDocument();
   });
 });
 
@@ -1235,13 +1246,18 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
+    expect(window.location.hash).toMatch(
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+    );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
     expect(
-      screen.queryByRole('dialog', { name: 'Private Channels' })
+      screen.queryByRole('dialog', { name: 'Create Private Channel' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open core channel settings' })
+    ).toBeInTheDocument();
   });
 
   const topicItem = screen.getByRole('button', { name: 'kukuri:topic:demo' }).closest('li');
@@ -1281,7 +1297,9 @@ test('sidebar can reselect the same private channel after switching back to publ
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
+    expect(window.location.hash).toMatch(
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+    );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -1320,9 +1338,7 @@ test('sidebar can switch from one topic public scope to another topic private ch
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'second-core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(
-      getChannelShareButton(channelDialog, 'second-core', 'Invite only')
-    ).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond&channel=channel-1');
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
@@ -2095,11 +2111,13 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
-    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Private Channels' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Private Channel' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open core channel settings' })
+    ).toBeInTheDocument();
     expect(screen.getByText('channel post')).toBeInTheDocument();
   });
   expect(screen.queryByText('public post')).not.toBeInTheDocument();
@@ -2179,12 +2197,14 @@ test('profile overview aggregates public posts across topics and excludes privat
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
+    expect(window.location.hash).toMatch(
+      /^#\/timeline\?topic=kukuri%3Atopic%3Ademo&channel=channel-\d+$/
+    );
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
     expect(
-      screen.queryByRole('dialog', { name: 'Private Channels' })
+      screen.queryByRole('dialog', { name: 'Create Private Channel' })
     ).not.toBeInTheDocument();
   });
   await publishPost(user, 'demo private post');
@@ -2432,14 +2452,15 @@ test('desktop shell can create a private channel and export an invite', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'core', 'Invite only')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
   });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await user.click(getChannelShareButton(channelDialog, 'core', 'Invite only'));
+  const settingsDialog = await openChannelSettings(user, 'core');
+  await user.click(getChannelShareButton(settingsDialog, 'core', 'Invite only'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /invite token/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /channel-1 \/ Invite only/i })).toBeInTheDocument();
   });
 });
 
@@ -2483,15 +2504,16 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'friends', 'Friends')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await user.click(getChannelShareButton(channelDialog, 'friends', 'Friends'));
+  const settingsDialog = await openChannelSettings(user, 'friends');
+  await user.click(getChannelShareButton(settingsDialog, 'friends', 'Friends'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /grant token/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /channel-1 \/ Friends/i })).toBeInTheDocument();
   });
 });
 
@@ -2504,21 +2526,38 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
-    expect(getChannelShareButton(channelDialog, 'friends+', 'Friends+')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
     expect(screen.queryByRole('button', { name: 'Freeze' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
   });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
-  await user.click(getChannelShareButton(channelDialog, 'friends+', 'Friends+'));
+  const settingsDialog = await openChannelSettings(user, 'friends+');
+  await user.click(getChannelShareButton(settingsDialog, 'friends+', 'Friends+'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /share token/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /channel-1 \/ Friends\+/i })).toBeInTheDocument();
   });
 });
 
 test('share token smart link previews before import and joins only after confirmation', async () => {
   const user = userEvent.setup();
+  const ownerPubkey = 'f'.repeat(64);
+  const inviteToken = JSON.stringify({
+    envelope: {
+      kind: 'channel-invite',
+      pubkey: ownerPubkey,
+      content: JSON.stringify({
+        channel_id: 'channel-imported',
+        topic_id: 'kukuri:topic:private-imported',
+        channel_label: 'Imported',
+        owner_pubkey: ownerPubkey,
+        epoch_id: 'epoch-imported-1',
+        namespace_secret_hex: 'a'.repeat(64),
+        expires_at: null,
+      }),
+    },
+  });
   const api = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:demo': [
@@ -2533,7 +2572,7 @@ test('share token smart link previews before import and joins only after confirm
           mutual: false,
           friend_of_friend: false,
           object_kind: 'post',
-          content: 'invite:kukuri:topic:private-imported:channel-imported',
+          content: inviteToken,
           content_status: 'Available',
           attachments: [],
           created_at: 1,
@@ -2548,8 +2587,8 @@ test('share token smart link previews before import and joins only after confirm
       channel_id: 'channel-imported',
       topic_id: 'kukuri:topic:private-imported',
       channel_label: 'Imported',
-      inviter_pubkey: 'f'.repeat(64),
-      owner_pubkey: 'f'.repeat(64),
+      inviter_pubkey: ownerPubkey,
+      owner_pubkey: ownerPubkey,
       epoch_id: 'epoch-imported-1',
       expires_at: null,
       namespace_secret_hex: 'a'.repeat(64),
@@ -2560,7 +2599,9 @@ test('share token smart link previews before import and joins only after confirm
 
   render(<App api={api} />);
 
-  const tokenChip = await screen.findByText('Invite token', { selector: 'button.smart-reference-chip' });
+  const tokenChip = await screen.findByText('Imported / Invite only', {
+    selector: 'button.smart-reference-chip',
+  });
   await user.click(tokenChip);
 
   const dialog = await screen.findByRole('dialog', { name: 'Preview Access' });
@@ -2568,7 +2609,13 @@ test('share token smart link previews before import and joins only after confirm
     expect(previewSpy).toHaveBeenCalledTimes(1);
     expect(importSpy).not.toHaveBeenCalled();
   });
-  expect(within(dialog).getByText(/channel-imported/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Imported')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/channel-imported/)).not.toBeInTheDocument();
+  expect(within(dialog).queryByText(/epoch-imported-1/)).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Imported').closest('div')).toHaveAttribute(
+    'title',
+    'channel-imported'
+  );
 
   await user.click(within(dialog).getByRole('button', { name: 'Import / Join' }));
 
@@ -2712,7 +2759,16 @@ test('share button uses the selected channel label and audience with a trailing 
   await user.selectOptions(within(channelDialog).getByLabelText('Audience'), 'friend_plus');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
-  const shareButton = await within(channelDialog).findByRole('button', {
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+  });
+  expect(
+    within(channelDialog).queryByRole('button', { name: 'friends+ / Friends+' })
+  ).not.toBeInTheDocument();
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
+
+  const settingsDialog = await openChannelSettings(user, 'friends+');
+  const shareButton = await within(settingsDialog).findByRole('button', {
     name: 'friends+ / Friends+',
   });
   expect(shareButton).toHaveTextContent('friends+ / Friends+');

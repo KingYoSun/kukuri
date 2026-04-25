@@ -11,7 +11,6 @@ import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
-import { cn } from '@/lib/utils';
 
 import {
   type ChannelAudienceOption,
@@ -52,16 +51,19 @@ type PrivateChannelPanelProps = {
   channelAudience: ChannelAudienceOption['value'];
   channelAudienceOptions: ChannelAudienceOption[];
   inviteTokenInput: string;
-  inviteOutput: string | null;
-  inviteOutputLabel: InviteOutputLabel;
-  channels: PrivateChannelListItemView[];
-  selectedChannel: PrivateChannelListItemView['channel'] | null;
   onChannelLabelChange: (value: string) => void;
   onChannelAudienceChange: (value: ChannelAudienceOption['value']) => void;
   onInviteTokenChange: (value: string) => void;
   onCreateChannel: FormEventHandler<HTMLFormElement>;
   onJoin: FormEventHandler<HTMLFormElement>;
-  onSelectChannel: (channelId: string) => void;
+};
+
+type PrivateChannelSettingsPanelProps = {
+  error: string | null;
+  pendingAction: PrivateChannelPendingAction;
+  channel: PrivateChannelListItemView['channel'];
+  inviteOutput: string | null;
+  inviteOutputLabel: InviteOutputLabel;
   onShare: () => void;
   onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyInviteOutput?: (token: string) => void;
@@ -75,82 +77,139 @@ export function PrivateChannelPanel({
   channelAudience,
   channelAudienceOptions,
   inviteTokenInput,
-  inviteOutput,
-  inviteOutputLabel,
-  channels,
-  selectedChannel,
   onChannelLabelChange,
   onChannelAudienceChange,
   onInviteTokenChange,
   onCreateChannel,
   onJoin,
-  onSelectChannel,
-  onShare,
-  onActivateReference,
-  onCopyInviteOutput,
 }: PrivateChannelPanelProps) {
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
-  const selectedChannelId = selectedChannel?.channel_id ?? null;
-  const selectedChannelShareLabel = selectedChannel
-    ? `${selectedChannel.label} / ${t(`channels:audienceOptions.${selectedChannel.audience_kind}`)}`
-    : t('channels:actions.share');
 
   return (
-    <Card className='panel-subsection'>
-      <CardHeader>
-        <h3>{t('channels:title')}</h3>
-        <small>{t('channels:joined', { count: channels.length })}</small>
-      </CardHeader>
-
+    <div className='extended-module-stack'>
       {status === 'loading' ? <Notice>{t('channels:loading')}</Notice> : null}
       {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
-      <div className='extended-module-stack'>
-        <form className='composer composer-compact' onSubmit={onCreateChannel}>
-          <Label>
-            <span>{t('channels:editor.createChannel')}</span>
-            <Input
-              value={channelLabel}
-              onChange={(event) => onChannelLabelChange(event.target.value)}
-              placeholder={t('channels:editor.placeholders.channelLabel')}
-              disabled={channelActionDisabled}
-            />
-          </Label>
-          <Label>
-            <span>{t('channels:editor.audience')}</span>
-            <Select
-              aria-label={t('channels:editor.audience')}
-              value={channelAudience}
-              onChange={(event) => onChannelAudienceChange(event.target.value as ChannelAudienceOption['value'])}
-              disabled={channelActionDisabled}
-            >
-              {channelAudienceOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-            {t('channels:actions.createChannel')}
-          </Button>
-        </form>
+      <div className='private-channel-editor-grid'>
+        <Card className='panel-subsection private-channel-editor-block'>
+          <CardHeader>
+            <h3>{t('channels:editor.createBlockTitle')}</h3>
+          </CardHeader>
+          <form className='composer composer-compact' onSubmit={onCreateChannel}>
+            <Label>
+              <span>{t('channels:editor.channelName')}</span>
+              <Input
+                value={channelLabel}
+                onChange={(event) => onChannelLabelChange(event.target.value)}
+                placeholder={t('channels:editor.placeholders.channelLabel')}
+                disabled={channelActionDisabled}
+              />
+            </Label>
+            <Label>
+              <span>{t('channels:editor.audience')}</span>
+              <Select
+                aria-label={t('channels:editor.audience')}
+                value={channelAudience}
+                onChange={(event) =>
+                  onChannelAudienceChange(event.target.value as ChannelAudienceOption['value'])
+                }
+                disabled={channelActionDisabled}
+              >
+                {channelAudienceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+            <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
+              {t('channels:actions.createChannel')}
+            </Button>
+          </form>
+        </Card>
 
-        <form className='composer composer-compact' onSubmit={onJoin}>
-          <Label>
-            <span>{t('channels:editor.join')}</span>
-            <Textarea
-              value={inviteTokenInput}
-              onChange={(event) => onInviteTokenChange(event.target.value)}
-              placeholder={t('channels:editor.placeholders.inviteToken')}
-              disabled={channelActionDisabled}
-            />
-          </Label>
-          <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
-            {t('channels:actions.join')}
+        <Card className='panel-subsection private-channel-editor-block'>
+          <CardHeader>
+            <h3>{t('channels:editor.joinBlockTitle')}</h3>
+          </CardHeader>
+          <form className='composer composer-compact' onSubmit={onJoin}>
+            <Label>
+              <span>{t('channels:editor.join')}</span>
+              <Textarea
+                value={inviteTokenInput}
+                onChange={(event) => onInviteTokenChange(event.target.value)}
+                placeholder={t('channels:editor.placeholders.inviteToken')}
+                disabled={channelActionDisabled}
+              />
+            </Label>
+            <Button variant='secondary' type='submit' disabled={channelActionDisabled}>
+              {t('channels:actions.join')}
+            </Button>
+          </form>
+        </Card>
+      </div>
+
+      {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
+    </div>
+  );
+}
+
+export function PrivateChannelSettingsPanel({
+  error,
+  pendingAction,
+  channel,
+  inviteOutput,
+  inviteOutputLabel,
+  onShare,
+  onActivateReference,
+  onCopyInviteOutput,
+}: PrivateChannelSettingsPanelProps) {
+  const { t } = useTranslation(['channels', 'common']);
+  const channelActionDisabled = pendingAction !== null;
+  const selectedChannelShareLabel = `${channel.label} / ${t(`channels:audienceOptions.${channel.audience_kind}`)}`;
+
+  return (
+    <Card tone='accent' className='panel-subsection extended-channel-detail'>
+      <CardHeader>
+        <h3>{channel.label}</h3>
+        <small>{policyDescription(channel.audience_kind, t)}</small>
+      </CardHeader>
+
+      <div className='extended-module-stack'>
+        <div className='topic-diagnostic topic-diagnostic-secondary'>
+          <span>
+            {t('common:labels.policy')}: {policyDescription(channel.audience_kind, t)}
+          </span>
+        </div>
+        {(channel.audience_kind === 'friend_only' || channel.audience_kind === 'friend_plus') ? (
+          <div className='topic-diagnostic topic-diagnostic-secondary'>
+            <span>{t('common:labels.participants')}: {channel.participant_count}</span>
+            <span>{t('common:labels.stale')}: {channel.stale_participant_count}</span>
+            <span>
+              {t('common:labels.owner')}: {channel.is_owner ? t('common:states.yes') : t('common:states.no')}
+            </span>
+          </div>
+        ) : null}
+        {channel.audience_kind === 'friend_only' && channel.rotation_required ? (
+          <div className='topic-diagnostic topic-diagnostic-error'>
+            <span>{t('channels:rotationRequired')}</span>
+          </div>
+        ) : null}
+
+        <div className='discovery-actions'>
+          <Button
+            aria-label={selectedChannelShareLabel}
+            className='w-full justify-between gap-3 text-left'
+            variant='secondary'
+            type='button'
+            disabled={channelActionDisabled}
+            onClick={onShare}
+          >
+            <span>{selectedChannelShareLabel}</span>
+            <DoorOpen className='size-4 shrink-0' aria-hidden='true' />
           </Button>
-        </form>
+        </div>
 
         {inviteOutput ? (
           <Notice tone='accent'>
@@ -176,86 +235,7 @@ export function PrivateChannelPanel({
           </Notice>
         ) : null}
 
-        {channels.length === 0 && status === 'ready' ? (
-          <p className='empty-state'>{t('channels:empty')}</p>
-        ) : null}
-
-        {channels.length > 0 ? (
-          <div className='extended-channel-grid'>
-            <ul className='post-list'>
-              {channels.map(({ channel, active }) => (
-                <li key={channel.channel_id}>
-                  <button
-                    className={cn(
-                      'post-card post-link extended-channel-card',
-                      active && 'extended-channel-card-active'
-                    )}
-                    type='button'
-                    aria-pressed={active}
-                    onClick={() => onSelectChannel(channel.channel_id)}
-                  >
-                    <div className='post-meta'>
-                      <span>{channel.label}</span>
-                      <span>{t(`channels:audienceOptions.${channel.audience_kind}`)}</span>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <Card tone={selectedChannel ? 'accent' : 'default'} className='extended-channel-detail'>
-            <CardHeader>
-                <h4>{selectedChannel?.label ?? t('channels:selectChannel')}</h4>
-                <small>
-                  {selectedChannel
-                    ? policyDescription(selectedChannel.audience_kind, t)
-                    : t('channels:inspectHint')}
-                </small>
-              </CardHeader>
-
-              {selectedChannel ? (
-                <>
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      {t('common:labels.policy')}: {policyDescription(selectedChannel.audience_kind, t)}
-                    </span>
-                  </div>
-                  {(selectedChannel.audience_kind === 'friend_only' ||
-                    selectedChannel.audience_kind === 'friend_plus') ? (
-                    <div className='topic-diagnostic topic-diagnostic-secondary'>
-                      <span>{t('common:labels.participants')}: {selectedChannel.participant_count}</span>
-                      <span>{t('common:labels.stale')}: {selectedChannel.stale_participant_count}</span>
-                      <span>{t('common:labels.owner')}: {selectedChannel.is_owner ? t('common:states.yes') : t('common:states.no')}</span>
-                    </div>
-                  ) : null}
-                  {selectedChannel.audience_kind === 'friend_only' &&
-                  selectedChannel.rotation_required ? (
-                    <div className='topic-diagnostic topic-diagnostic-error'>
-                      <span>{t('channels:rotationRequired')}</span>
-                    </div>
-                  ) : null}
-                  <div className='discovery-actions'>
-                    <Button
-                      aria-label={selectedChannelShareLabel}
-                      className='w-full justify-between gap-3 text-left'
-                      variant='secondary'
-                      type='button'
-                      disabled={channelActionDisabled || selectedChannelId === null}
-                      onClick={onShare}
-                    >
-                      <span>{selectedChannelShareLabel}</span>
-                      <DoorOpen className='size-4 shrink-0' aria-hidden='true' />
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <Notice>{t('channels:selectChannelNotice')}</Notice>
-              )}
-            </Card>
-          </div>
-        ) : null}
-
-        {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
+        {error ? <p className='error error-inline'>{error}</p> : null}
       </div>
     </Card>
   );

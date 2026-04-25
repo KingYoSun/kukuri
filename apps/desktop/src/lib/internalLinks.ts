@@ -35,6 +35,18 @@ export type ShareTokenReference = {
   kind: 'share_token';
   token: string;
   tokenKind: ChannelAccessTokenKind;
+  metadata: ChannelAccessTokenMetadata;
+};
+
+export type ChannelAccessTokenMetadata = {
+  kind: ChannelAccessTokenKind;
+  topicId?: string | null;
+  channelId?: string | null;
+  channelLabel?: string | null;
+  ownerPubkey?: string | null;
+  inviterPubkey?: string | null;
+  sponsorPubkey?: string | null;
+  epochId?: string | null;
 };
 
 export type InternalSmartReference =
@@ -119,19 +131,59 @@ export function shortenReferenceId(value: string): string {
   return `${trimmed.slice(0, 10)}…`;
 }
 
-export function parseShareTokenKind(rawValue: string): ChannelAccessTokenKind | null {
+function tokenKindFromEnvelopeKind(kind: string | null | undefined): ChannelAccessTokenKind | null {
+  if (kind === 'channel-invite') {
+    return 'invite';
+  }
+  if (kind === 'channel-friend-grant') {
+    return 'grant';
+  }
+  if (kind === 'channel-share') {
+    return 'share';
+  }
+  return null;
+}
+
+function parseEnvelopeContent(value: unknown): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function stringField(content: Record<string, unknown> | null, key: string): string | null {
+  const value = content?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+export function parseChannelAccessTokenMetadata(rawValue: string): ChannelAccessTokenMetadata | null {
   const trimmed = rawValue.trim();
   if (!trimmed) {
     return null;
   }
-  if (trimmed.startsWith('invite:')) {
-    return 'invite';
-  }
-  if (trimmed.startsWith('grant:')) {
-    return 'grant';
-  }
-  if (trimmed.startsWith('share:')) {
-    return 'share';
+  const legacyKind = trimmed.startsWith('invite:')
+    ? 'invite'
+    : trimmed.startsWith('grant:')
+      ? 'grant'
+      : trimmed.startsWith('share:')
+        ? 'share'
+        : null;
+  if (legacyKind) {
+    const lastSeparator = trimmed.lastIndexOf(':');
+    const channelId = lastSeparator > -1 ? trimmed.slice(lastSeparator + 1).trim() : null;
+    return {
+      kind: legacyKind,
+      channelId: channelId || null,
+      channelLabel: channelId || null,
+    };
   }
   if (!trimmed.startsWith('{')) {
     return null;
@@ -140,21 +192,38 @@ export function parseShareTokenKind(rawValue: string): ChannelAccessTokenKind | 
     const parsed = JSON.parse(trimmed) as {
       envelope?: {
         kind?: string;
+        pubkey?: string;
+        content?: unknown;
+        id?: string;
       };
     };
-    if (parsed.envelope?.kind === 'channel-invite') {
-      return 'invite';
+    const kind = tokenKindFromEnvelopeKind(parsed.envelope?.kind);
+    if (!kind) {
+      return null;
     }
-    if (parsed.envelope?.kind === 'channel-friend-grant') {
-      return 'grant';
-    }
-    if (parsed.envelope?.kind === 'channel-share') {
-      return 'share';
-    }
+    const content = parseEnvelopeContent(parsed.envelope?.content);
+    return {
+      kind,
+      topicId: stringField(content, 'topic_id'),
+      channelId: stringField(content, 'channel_id'),
+      channelLabel: stringField(content, 'channel_label'),
+      ownerPubkey: stringField(content, 'owner_pubkey'),
+      inviterPubkey: kind === 'invite' ? parsed.envelope?.pubkey ?? null : null,
+      sponsorPubkey:
+        kind === 'share'
+          ? stringField(content, 'sponsor_pubkey') ?? parsed.envelope?.pubkey ?? null
+          : kind === 'grant'
+            ? stringField(content, 'owner_pubkey')
+            : null,
+      epochId: stringField(content, 'epoch_id'),
+    };
   } catch {
     return null;
   }
-  return null;
+}
+
+export function parseShareTokenKind(rawValue: string): ChannelAccessTokenKind | null {
+  return parseChannelAccessTokenMetadata(rawValue)?.kind ?? null;
 }
 
 export function parseInternalRouteLink(rawValue: string): InternalSmartReference | null {
@@ -280,6 +349,7 @@ export function parseSmartText(value: string): SmartTextSegment[][] {
             kind: 'share_token',
             token: trimmed,
             tokenKind: shareTokenKind,
+            metadata: parseChannelAccessTokenMetadata(trimmed) ?? { kind: shareTokenKind },
           },
         },
       ] satisfies SmartTextSegment[];

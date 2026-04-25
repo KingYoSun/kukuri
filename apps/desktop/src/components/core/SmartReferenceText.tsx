@@ -27,6 +27,19 @@ function tokenKindLabel(
   return t('channels:previewDialog.tokenKinds.share');
 }
 
+function tokenAudienceLabel(
+  tokenKind: 'invite' | 'grant' | 'share',
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  if (tokenKind === 'invite') {
+    return t('channels:audienceOptions.invite_only');
+  }
+  if (tokenKind === 'grant') {
+    return t('channels:audienceOptions.friend_only');
+  }
+  return t('channels:audienceOptions.friend_plus');
+}
+
 function referenceLabel(
   reference: InternalSmartReference,
   t: ReturnType<typeof useTranslation>['t']
@@ -44,6 +57,11 @@ function referenceLabel(
   }
   if (reference.kind === 'game') {
     return `${t('shell:primarySections.game')} ${shortenReferenceId(reference.roomId)}`;
+  }
+  const channelLabel =
+    reference.metadata.channelLabel?.trim() || reference.metadata.channelId?.trim();
+  if (channelLabel) {
+    return `${channelLabel} / ${tokenAudienceLabel(reference.tokenKind, t)}`;
   }
   return `${tokenKindLabel(reference.tokenKind, t)} ${t('channels:previewDialog.tokenLabelSuffix')}`;
 }
@@ -86,7 +104,7 @@ export function SmartReferenceText({
                 className='smart-reference-chip'
                 title={
                   segment.reference.kind === 'share_token'
-                    ? tokenKindLabel(segment.reference.tokenKind, t)
+                    ? segment.reference.token
                     : segment.reference.route
                 }
                 onClick={(event) =>

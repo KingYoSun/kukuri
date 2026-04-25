@@ -3,7 +3,10 @@ import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from 'react';
 import { Plus } from 'lucide-react';
 
 import { ComposerPanel } from '@/components/core/ComposerPanel';
-import { PrivateChannelPanel } from '@/components/extended/PrivateChannelPanel';
+import {
+  PrivateChannelPanel,
+  PrivateChannelSettingsPanel,
+} from '@/components/extended/PrivateChannelPanel';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -36,7 +39,6 @@ type DesktopShellOverlaysProps = {
     | 'activeComposeAudienceLabel'
     | 'activeChannelPanelState'
     | 'channelAudienceOptions'
-    | 'privateChannelListItems'
     | 'composerDraftViews'
     | 'composerSourcePreview'
     | 'floatingActionLabel'
@@ -50,6 +52,8 @@ type DesktopShellOverlaysProps = {
   handleProfileAvatarFile: (file: File) => Promise<void>;
   channelDialogOpen: boolean;
   setChannelDialogOpen: Dispatch<SetStateAction<boolean>>;
+  channelSettingsDialogOpen: boolean;
+  setChannelSettingsDialogOpen: Dispatch<SetStateAction<boolean>>;
   sharePreviewOpen: boolean;
   setSharePreviewOpen: Dispatch<SetStateAction<boolean>>;
   sharePreviewToken: string | null;
@@ -59,13 +63,10 @@ type DesktopShellOverlaysProps = {
   sharePreviewLoading: boolean;
   sharePreviewError: string | null;
   setSharePreviewError: Dispatch<SetStateAction<string | null>>;
-  sharePreviewShowRaw: boolean;
-  setSharePreviewShowRaw: Dispatch<SetStateAction<boolean>>;
   shareImportPending: boolean;
   handleConfirmShareImport: () => Promise<void>;
   handleCreatePrivateChannel: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleJoinChannelAccess: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  handleSelectPrivateChannel: (topicId: string, channelId: string) => void;
   handleShareChannelAccess: () => Promise<void>;
   handleActivateReference: (reference: InternalSmartReference) => Promise<void>;
   handleCopyInternalLink: (link: string) => void;
@@ -97,6 +98,8 @@ export function DesktopShellOverlays({
   handleProfileAvatarFile,
   channelDialogOpen,
   setChannelDialogOpen,
+  channelSettingsDialogOpen,
+  setChannelSettingsDialogOpen,
   sharePreviewOpen,
   setSharePreviewOpen,
   sharePreviewToken,
@@ -106,13 +109,10 @@ export function DesktopShellOverlays({
   sharePreviewLoading,
   sharePreviewError,
   setSharePreviewError,
-  sharePreviewShowRaw,
-  setSharePreviewShowRaw,
   shareImportPending,
   handleConfirmShareImport,
   handleCreatePrivateChannel,
   handleJoinChannelAccess,
-  handleSelectPrivateChannel,
   handleShareChannelAccess,
   handleActivateReference,
   handleCopyInternalLink,
@@ -136,7 +136,6 @@ export function DesktopShellOverlays({
     activeComposeAudienceLabel,
     activeChannelPanelState,
     channelAudienceOptions,
-    privateChannelListItems,
     composerDraftViews,
     composerSourcePreview,
     floatingActionLabel,
@@ -159,12 +158,15 @@ export function DesktopShellOverlays({
     inviteOutput,
     inviteOutputLabel,
     inviteTokenInput,
+    knownAuthorsByPubkey,
+    localProfile,
     liveCreatePending,
     liveDescription,
     liveError,
     liveTitle,
     replyTarget,
     repostTarget,
+    syncStatus,
   } = useDesktopShellStore();
   const setChannelLabelInput = useDesktopShellFieldSetter('channelLabelInput');
   const setChannelAudienceInput = useDesktopShellFieldSetter('channelAudienceInput');
@@ -175,6 +177,28 @@ export function DesktopShellOverlays({
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
   const setGameDescription = useDesktopShellFieldSetter('gameDescription');
   const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
+  const previewOwnerProfile =
+    sharePreviewData?.owner_pubkey === syncStatus.local_author_pubkey
+      ? localProfile
+      : sharePreviewData
+        ? knownAuthorsByPubkey[sharePreviewData.owner_pubkey] ?? null
+        : null;
+  const previewOwnerLabel = sharePreviewData
+    ? authorDisplayLabel(
+        sharePreviewData.owner_pubkey,
+        previewOwnerProfile?.display_name,
+        previewOwnerProfile?.name
+      )
+    : null;
+  const previewAudienceLabel = sharePreviewData
+    ? t(
+        sharePreviewData.kind === 'invite'
+          ? 'channels:audienceOptions.invite_only'
+          : sharePreviewData.kind === 'grant'
+            ? 'channels:audienceOptions.friend_only'
+            : 'channels:audienceOptions.friend_plus'
+      )
+    : null;
 
   return (
     <>
@@ -202,7 +226,7 @@ export function DesktopShellOverlays({
       <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('channels:title')}</DialogTitle>
+            <DialogTitle>{t('channels:createDialogTitle')}</DialogTitle>
             <DialogDescription>{activeTopic}</DialogDescription>
           </DialogHeader>
           <DialogBody>
@@ -214,20 +238,41 @@ export function DesktopShellOverlays({
               channelAudience={channelAudienceInput}
               channelAudienceOptions={channelAudienceOptions}
               inviteTokenInput={inviteTokenInput}
-              inviteOutput={inviteOutput}
-              inviteOutputLabel={inviteOutputLabel}
-              channels={privateChannelListItems}
-              selectedChannel={activePrivateChannel}
               onChannelLabelChange={setChannelLabelInput}
               onChannelAudienceChange={setChannelAudienceInput}
               onInviteTokenChange={setInviteTokenInput}
               onCreateChannel={(event) => void handleCreatePrivateChannel(event)}
               onJoin={(event) => void handleJoinChannelAccess(event)}
-              onSelectChannel={(channelId) => handleSelectPrivateChannel(activeTopic, channelId)}
-              onShare={() => void handleShareChannelAccess()}
-              onActivateReference={(reference) => void handleActivateReference(reference)}
-              onCopyInviteOutput={handleCopyInternalLink}
             />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={channelSettingsDialogOpen} onOpenChange={setChannelSettingsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('channels:settings.title')}</DialogTitle>
+            <DialogDescription>
+              {activePrivateChannel
+                ? `${activePrivateChannel.label} / ${t(`channels:audienceOptions.${activePrivateChannel.audience_kind}`)}`
+                : activeTopic}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            {activePrivateChannel ? (
+              <PrivateChannelSettingsPanel
+                error={channelError ?? activeChannelPanelState.error}
+                pendingAction={channelActionPending}
+                channel={activePrivateChannel}
+                inviteOutput={inviteOutput}
+                inviteOutputLabel={inviteOutputLabel}
+                onShare={() => void handleShareChannelAccess()}
+                onActivateReference={(reference) => void handleActivateReference(reference)}
+                onCopyInviteOutput={handleCopyInternalLink}
+              />
+            ) : (
+              <Notice>{t('channels:selectChannelNotice')}</Notice>
+            )}
           </DialogBody>
         </DialogContent>
       </Dialog>
@@ -237,7 +282,6 @@ export function DesktopShellOverlays({
         onOpenChange={(open) => {
           setSharePreviewOpen(open);
           if (!open) {
-            setSharePreviewShowRaw(false);
             setSharePreviewError(null);
             setSharePreviewData(null);
             setSharePreviewToken(null);
@@ -247,56 +291,29 @@ export function DesktopShellOverlays({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('channels:previewDialog.title')}</DialogTitle>
-            <DialogDescription>{t('channels:previewDialog.description')}</DialogDescription>
           </DialogHeader>
           <DialogBody>
             {sharePreviewLoading ? <Notice>{t('channels:loading')}</Notice> : null}
             {sharePreviewError ? <Notice tone='destructive'>{sharePreviewError}</Notice> : null}
             {sharePreviewData ? (
-              <>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>
-                    {t('common:labels.policy')}:{' '}
-                    {t(`channels:previewDialog.tokenKinds.${sharePreviewData.kind}`)}
-                  </span>
-                  <span>
-                    {t('common:labels.epoch')}: {sharePreviewData.epoch_id}
-                  </span>
+              <dl className='access-preview-list'>
+                <div title={sharePreviewData.owner_pubkey}>
+                  <dt>{t('common:labels.owner')}</dt>
+                  <dd>{previewOwnerLabel}</dd>
                 </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>
-                    {t('common:labels.owner')}: {sharePreviewData.owner_pubkey}
-                  </span>
-                  <span>
-                    {t('common:labels.sourceTopic')}: {sharePreviewData.topic_id}
-                  </span>
+                <div title={sharePreviewData.topic_id}>
+                  <dt>{t('common:labels.sourceTopic')}</dt>
+                  <dd>{sharePreviewData.topic_id}</dd>
                 </div>
-                <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>
-                    {t('channels:previewDialog.channel')}: {sharePreviewData.channel_label}
-                  </span>
-                  <span>
-                    {t('channels:previewDialog.channelId')}: {sharePreviewData.channel_id}
-                  </span>
+                <div title={sharePreviewData.channel_id}>
+                  <dt>{t('channels:previewDialog.channel')}</dt>
+                  <dd>{sharePreviewData.channel_label}</dd>
                 </div>
-                {sharePreviewData.inviter_pubkey ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      {t('channels:previewDialog.inviter')}: {sharePreviewData.inviter_pubkey}
-                    </span>
-                  </div>
-                ) : null}
-                {sharePreviewData.sponsor_pubkey ? (
-                  <div className='topic-diagnostic topic-diagnostic-secondary'>
-                    <span>
-                      {t('channels:previewDialog.sponsor')}: {sharePreviewData.sponsor_pubkey}
-                    </span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            {sharePreviewShowRaw && sharePreviewToken ? (
-              <code className='extended-inline-code'>{sharePreviewToken}</code>
+                <div title={`${sharePreviewData.kind} / ${sharePreviewData.epoch_id}`}>
+                  <dt>{t('common:labels.audience')}</dt>
+                  <dd>{previewAudienceLabel}</dd>
+                </div>
+              </dl>
             ) : null}
             <div className='ui-dialog-footer'>
               {sharePreviewToken ? (
@@ -306,17 +323,6 @@ export function DesktopShellOverlays({
                   onClick={() => handleCopyInternalLink(sharePreviewToken)}
                 >
                   {t('channels:previewDialog.copyToken')}
-                </Button>
-              ) : null}
-              {sharePreviewToken ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  onClick={() => setSharePreviewShowRaw((current) => !current)}
-                >
-                  {sharePreviewShowRaw
-                    ? t('channels:previewDialog.hideRaw')
-                    : t('channels:previewDialog.showRaw')}
                 </Button>
               ) : null}
               <Button
