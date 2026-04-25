@@ -10,6 +10,7 @@
     "activeCount": "{{count}} 个活跃",
     "addTopic": "添加主题",
     "channel": "频道",
+    "channelCreateJoin": "创建 / 加入频道",
     "channelsGroup": "频道",
     "close": "关闭导航",
     "notificationsButton": "通知",

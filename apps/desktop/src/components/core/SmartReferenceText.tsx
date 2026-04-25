@@ -1,5 +1,6 @@
 import { Fragment, type MouseEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DoorOpen } from 'lucide-react';
 
 import {
   parseSmartText,
@@ -7,6 +8,12 @@ import {
   type InternalSmartReference,
 } from '@/lib/internalLinks';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type SmartReferenceTextProps = {
   text: string;
@@ -97,16 +104,15 @@ export function SmartReferenceText({
               );
             }
             const label = referenceLabel(segment.reference, t);
-            return (
+            const button = (
               <button
                 key={`${lineIndex}-${segmentIndex}`}
                 type='button'
-                className='smart-reference-chip'
-                title={
-                  segment.reference.kind === 'share_token'
-                    ? segment.reference.token
-                    : segment.reference.route
-                }
+                className={cn(
+                  'smart-reference-chip',
+                  segment.reference.kind === 'share_token' && 'smart-reference-chip-access-preview'
+                )}
+                title={segment.reference.kind === 'share_token' ? undefined : segment.reference.route}
                 onClick={(event) =>
                   handleReferenceAction(event, segment.reference, onActivateReference)
                 }
@@ -116,8 +122,22 @@ export function SmartReferenceText({
                   }
                 }}
               >
-                {label}
+                <span>{label}</span>
+                {segment.reference.kind === 'share_token' ? (
+                  <DoorOpen className='size-3.5' aria-hidden='true' />
+                ) : null}
               </button>
+            );
+            if (segment.reference.kind !== 'share_token') {
+              return button;
+            }
+            return (
+              <TooltipProvider key={`${lineIndex}-${segmentIndex}`} delayDuration={180}>
+                <Tooltip>
+                  <TooltipTrigger asChild>{button}</TooltipTrigger>
+                  <TooltipContent>{segment.reference.token}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           })}
           {lineIndex < lines.length - 1 ? <br /> : null}

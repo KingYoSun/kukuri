@@ -459,7 +459,6 @@ function ReviewSurface() {
                 </div>
               </label>
             }
-            channelSummary='Core Contributors Coordination Room · Friends+'
             channelAction={
               <Button
                 className='shell-icon-button shell-nav-channel-action'

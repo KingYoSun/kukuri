@@ -4,6 +4,7 @@ mod tracing;
 
 use ::tracing::info;
 use tauri::Manager;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{state::build_desktop_state, tracing::init_tracing};
 
@@ -11,9 +12,21 @@ use crate::{state::build_desktop_state, tracing::init_tracing};
 pub fn run() {
     init_tracing();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, argv, _cwd| {
+            info!(?argv, "received kukuri desktop single-instance activation");
+        }));
+    }
+
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             let state = build_desktop_state(app.handle())?;
+            #[cfg(any(windows, target_os = "linux"))]
+            app.deep_link().register_all()?;
             info!("initialized kukuri desktop runtime");
             app.manage(state);
             Ok(())

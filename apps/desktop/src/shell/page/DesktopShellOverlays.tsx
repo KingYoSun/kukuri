@@ -21,9 +21,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import type { ChannelAccessTokenPreview } from '@/lib/api';
-import type { InternalSmartReference } from '@/lib/internalLinks';
 import { authorDisplayLabel } from '@/shell/selectors';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { Translate } from '@/shell/actions/shared';
@@ -68,7 +73,6 @@ type DesktopShellOverlaysProps = {
   handleCreatePrivateChannel: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleJoinChannelAccess: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleShareChannelAccess: () => Promise<void>;
-  handleActivateReference: (reference: InternalSmartReference) => Promise<void>;
   handleCopyInternalLink: (link: string) => void;
   composeDialogOpen: boolean;
   setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -86,6 +90,30 @@ type DesktopShellOverlaysProps = {
   openFloatingActionDialog: () => void;
   clipboardToastId: number;
 };
+
+function AccessPreviewItem({
+  label,
+  value,
+  tooltip,
+}: {
+  label: string;
+  value: string | null;
+  tooltip: string;
+}) {
+  return (
+    <TooltipProvider delayDuration={180}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>
+            <dt>{label}</dt>
+            <dd>{value ?? '-'}</dd>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export function DesktopShellOverlays({
   t,
@@ -114,7 +142,6 @@ export function DesktopShellOverlays({
   handleCreatePrivateChannel,
   handleJoinChannelAccess,
   handleShareChannelAccess,
-  handleActivateReference,
   handleCopyInternalLink,
   composeDialogOpen,
   setComposeDialogOpen,
@@ -252,11 +279,6 @@ export function DesktopShellOverlays({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('channels:settings.title')}</DialogTitle>
-            <DialogDescription>
-              {activePrivateChannel
-                ? `${activePrivateChannel.label} / ${t(`channels:audienceOptions.${activePrivateChannel.audience_kind}`)}`
-                : activeTopic}
-            </DialogDescription>
           </DialogHeader>
           <DialogBody>
             {activePrivateChannel ? (
@@ -267,7 +289,6 @@ export function DesktopShellOverlays({
                 inviteOutput={inviteOutput}
                 inviteOutputLabel={inviteOutputLabel}
                 onShare={() => void handleShareChannelAccess()}
-                onActivateReference={(reference) => void handleActivateReference(reference)}
                 onCopyInviteOutput={handleCopyInternalLink}
               />
             ) : (
@@ -297,22 +318,26 @@ export function DesktopShellOverlays({
             {sharePreviewError ? <Notice tone='destructive'>{sharePreviewError}</Notice> : null}
             {sharePreviewData ? (
               <dl className='access-preview-list'>
-                <div title={sharePreviewData.owner_pubkey}>
-                  <dt>{t('common:labels.owner')}</dt>
-                  <dd>{previewOwnerLabel}</dd>
-                </div>
-                <div title={sharePreviewData.topic_id}>
-                  <dt>{t('common:labels.sourceTopic')}</dt>
-                  <dd>{sharePreviewData.topic_id}</dd>
-                </div>
-                <div title={sharePreviewData.channel_id}>
-                  <dt>{t('channels:previewDialog.channel')}</dt>
-                  <dd>{sharePreviewData.channel_label}</dd>
-                </div>
-                <div title={`${sharePreviewData.kind} / ${sharePreviewData.epoch_id}`}>
-                  <dt>{t('common:labels.audience')}</dt>
-                  <dd>{previewAudienceLabel}</dd>
-                </div>
+                <AccessPreviewItem
+                  label={t('common:labels.owner')}
+                  value={previewOwnerLabel}
+                  tooltip={sharePreviewData.owner_pubkey}
+                />
+                <AccessPreviewItem
+                  label={t('common:labels.sourceTopic')}
+                  value={sharePreviewData.topic_id}
+                  tooltip={sharePreviewData.topic_id}
+                />
+                <AccessPreviewItem
+                  label={t('channels:previewDialog.channel')}
+                  value={sharePreviewData.channel_label}
+                  tooltip={sharePreviewData.channel_id}
+                />
+                <AccessPreviewItem
+                  label={t('common:labels.audience')}
+                  value={previewAudienceLabel}
+                  tooltip={`${sharePreviewData.kind} / ${sharePreviewData.epoch_id}`}
+                />
               </dl>
             ) : null}
             <div className='ui-dialog-footer'>

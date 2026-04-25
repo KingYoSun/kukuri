@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function openChannelManager(page: Page) {
-  const dialog = page.getByRole('dialog', { name: 'Create Private Channel' });
+  const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   if (await dialog.isVisible().catch(() => false)) {
     return dialog;
   }
@@ -37,12 +37,9 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.keyboard.press('Escape');
 
   const channelSettingsDialog = await openChannelSettings(page, 'Core Contributors');
-  await channelSettingsDialog
-    .getByRole('button', { name: /Core Contributors\s*\/\s*Invite only/i })
-    .click();
-  await expect(
-    channelSettingsDialog.getByRole('button', { name: /channel-1\s*\/\s*Invite only/i })
-  ).toBeVisible();
+  await channelSettingsDialog.getByRole('button', { name: 'Create share link' }).click();
+  await expect(channelSettingsDialog.getByText('Copy share link')).toBeVisible();
+  await expect(channelSettingsDialog.getByRole('button', { name: 'Copy link' })).toBeVisible();
   await page.keyboard.press('Escape');
 
   const joinDialog = await openChannelManager(page);

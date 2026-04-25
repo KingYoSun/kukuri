@@ -40,7 +40,7 @@ function getDetailPane(name: 'Thread' | 'Author') {
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Private Channels' }));
-  return await screen.findByRole('dialog', { name: 'Create Private Channel' });
+  return await screen.findByRole('dialog', { name: 'Create / Join Private Channel' });
 }
 
 test('invalid hash routes fall back to the active public timeline and normalize the URL', async () => {
