@@ -435,6 +435,78 @@ fn is_retryable_friend_plus_share_import_error(message: &str) -> bool {
         || message.contains("timed out waiting for friend-plus channel replica sync")
 }
 
+fn is_retryable_friend_only_grant_import_error(message: &str) -> bool {
+    message.contains("mutual relationship")
+        || message.contains("friend-only grant epoch does not match the current policy")
+        || message.contains("friend-only grant owner is not an active participant")
+        || message.contains("timed out waiting for friend-only channel replica sync")
+}
+
+async fn wait_for_friend_only_grant_import(
+    runtime: &DesktopRuntime,
+    token: &str,
+    step_timeout: Duration,
+    timeout_label: &str,
+) -> kukuri_core::FriendOnlyGrantPreview {
+    let preview = kukuri_core::parse_friend_only_grant_token(token).expect("parse grant token");
+    let last_retryable_error = Arc::new(Mutex::new(None::<String>));
+    let retry_error_slot = Arc::clone(&last_retryable_error);
+    match timeout(step_timeout, async {
+        loop {
+            match runtime
+                .import_friend_only_grant(ImportFriendOnlyGrantRequest {
+                    token: token.to_string(),
+                })
+                .await
+            {
+                Ok(preview) => return preview,
+                Err(error)
+                    if is_retryable_friend_only_grant_import_error(error.to_string().as_str()) =>
+                {
+                    *retry_error_slot.lock().await = Some(error.to_string());
+                    sleep(Duration::from_millis(100)).await;
+                }
+                Err(error) => panic!("{timeout_label}: {error:#}"),
+            }
+        }
+    })
+    .await
+    {
+        Ok(preview) => preview,
+        Err(_) => {
+            let last_error = last_retryable_error
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let social_view = runtime
+                .get_author_social_view(AuthorRequest {
+                    pubkey: preview.owner_pubkey.as_str().to_string(),
+                })
+                .await
+                .ok()
+                .map(|value| {
+                    format!(
+                        "following={}, followed_by={}, mutual={}, friend_of_friend={}, fof_via={:?}",
+                        value.following,
+                        value.followed_by,
+                        value.mutual,
+                        value.friend_of_friend,
+                        value.friend_of_friend_via_pubkeys
+                    )
+                })
+                .unwrap_or_else(|| "social_view=unavailable".to_string());
+            let status = runtime.get_sync_status().await.expect("sync status");
+            panic!(
+                "{timeout_label}: owner_pubkey={}, last_retryable_error={}, {social_view}, {}",
+                preview.owner_pubkey.as_str(),
+                last_error,
+                format_sync_snapshot(&status, preview.topic_id.as_str())
+            );
+        }
+    }
+}
+
 async fn wait_for_friend_plus_share_import(
     runtime: &DesktopRuntime,
     token: &str,
@@ -3444,10 +3516,13 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
         })
         .await
         .expect("export friend-only grant");
-    let preview = runtime_b
-        .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: grant })
-        .await
-        .expect("import friend-only grant");
+    let preview = wait_for_friend_only_grant_import(
+        &runtime_b,
+        grant.as_str(),
+        social_graph_propagation_timeout(),
+        "import friend-only grant",
+    )
+    .await;
     let original_epoch_id = preview.epoch_id.clone();
     assert_eq!(preview.topic_id.as_str(), topic);
     assert_eq!(preview.channel_id.as_str(), channel.channel_id);
@@ -3528,10 +3603,13 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
         })
         .await
         .expect("export fresh friend-only grant");
-    let fresh_preview = runtime_b
-        .import_friend_only_grant(ImportFriendOnlyGrantRequest { token: fresh_grant })
-        .await
-        .expect("import fresh friend-only grant");
+    let fresh_preview = wait_for_friend_only_grant_import(
+        &runtime_b,
+        fresh_grant.as_str(),
+        social_graph_propagation_timeout(),
+        "import fresh friend-only grant",
+    )
+    .await;
     assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
 
     let joined_before_restart = vec![
