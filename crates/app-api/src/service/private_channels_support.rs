@@ -838,9 +838,6 @@ impl AppService {
                                 (false, false)
                             }
                         };
-                        if has_live_topic_peer {
-                            continue;
-                        }
                         let docs_assist_peer_count = match docs_sync.assist_peer_ids().await {
                             Ok(peer_ids) => peer_ids.len(),
                             Err(error) => {
@@ -852,6 +849,9 @@ impl AppService {
                                 0
                             }
                         };
+                        if has_live_topic_peer && docs_assist_peer_count == 0 {
+                            continue;
+                        }
                         if docs_assist_peer_count == 0 && !has_configured_topic_peer {
                             continue;
                         }

@@ -199,7 +199,13 @@ impl DesktopRuntime {
             "community-node metadata sync resolved bootstrap metadata"
         );
         let mut next_config = config;
-        next_config.nodes[index].resolved_urls = Some(resolved_urls);
+        next_config.nodes[index].resolved_urls = Some(
+            refresh_community_node_resolved_urls(
+                next_config.nodes[index].resolved_urls.clone(),
+                resolved_urls,
+            )
+            .map_err(CommunityNodeRequestError::Other)?,
+        );
         let normalized = normalize_community_node_config(next_config)
             .map_err(CommunityNodeRequestError::Other)?;
         save_community_node_config(&self.db_path, &normalized)
@@ -291,13 +297,27 @@ impl DesktopRuntime {
         &self,
         operation: &str,
     ) -> Result<CommunityNodeSeedPeer> {
-        if let Some(ticket) = self.local_peer_ticket().await? {
-            let seed_peer = parse_seed_peer(ticket.as_str()).with_context(|| {
-                format!(
-                    "failed to derive local seed peer from ticket for community node {operation}"
-                )
-            })?;
-            return CommunityNodeSeedPeer::new(seed_peer.endpoint_id, seed_peer.addr_hint);
+        let publish_addr_hint = self.should_publish_community_node_addr_hint().await;
+        match self.local_peer_ticket().await {
+            Ok(Some(ticket)) => {
+                let mut seed_peer = parse_seed_peer(ticket.as_str()).with_context(|| {
+                    format!(
+                        "failed to derive local seed peer from ticket for community node {operation}"
+                    )
+                })?;
+                if !publish_addr_hint {
+                    seed_peer.addr_hint = None;
+                }
+                return CommunityNodeSeedPeer::new(seed_peer.endpoint_id, seed_peer.addr_hint);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                debug!(
+                    operation,
+                    error = %error,
+                    "local peer ticket unavailable; registering community-node endpoint without addr_hint"
+                );
+            }
         }
 
         let endpoint_id = self
@@ -310,6 +330,21 @@ impl DesktopRuntime {
             })?
             .local_endpoint_id;
         CommunityNodeSeedPeer::new(endpoint_id, None)
+    }
+
+    async fn should_publish_community_node_addr_hint(&self) -> bool {
+        let community_node_config = self.community_node_config.lock().await.clone();
+        let relay_config = relay_config_from_community_node_config(&community_node_config);
+        if relay_config.iroh_relay_urls.is_empty() {
+            return true;
+        }
+        self.iroh_stack.network_config.advertised_host.is_some()
+            || !self
+                .iroh_stack
+                .network_config
+                .bind_addr
+                .ip()
+                .is_unspecified()
     }
 
     pub(crate) async fn fetch_community_node_consent_status_with_retry(

@@ -19,6 +19,13 @@ fn relay_seeded_public_replication_timeout() -> Duration {
     }
 }
 
+fn external_relay_url() -> Option<String> {
+    std::env::var("KUKURI_TEST_EXTERNAL_IROH_RELAY_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+}
+
 async fn wait_for_relay_seeded_replica_row(
     docs: &IrohDocsSync,
     replica: &str,
@@ -44,6 +51,72 @@ async fn wait_for_relay_seeded_replica_row(
     if let Err(error) = sync_result {
         anyhow::bail!("relay-seeded public replica sync timeout: {error:?}");
     }
+    Ok(())
+}
+
+async fn assert_public_replica_syncs_over_relay(relay_url: &str, topic: &str) -> Result<()> {
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url.to_string()],
+    }
+    .normalized();
+    let dir = tempdir()?;
+    let node_a = IrohDocsNode::persistent_with_discovery_config(
+        dir.path().join("docs-a"),
+        TransportNetworkConfig::default(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config.clone(),
+    )
+    .await?;
+    let node_b = IrohDocsNode::persistent_with_discovery_config(
+        dir.path().join("docs-b"),
+        TransportNetworkConfig::default(),
+        DhtDiscoveryOptions::disabled(),
+        relay_config,
+    )
+    .await?;
+    let docs_a = IrohDocsSync::new(node_a.clone());
+    let docs_b = IrohDocsSync::new(node_b.clone());
+    let replica = topic_replica_id(topic);
+    let key = stable_key("timeline", "0001-external-relay-event");
+
+    docs_a
+        .set_seed_peers(vec![SeedPeer {
+            endpoint_id: node_b.endpoint().id().to_string(),
+            addr_hint: None,
+        }])
+        .await?;
+    docs_b
+        .set_seed_peers(vec![SeedPeer {
+            endpoint_id: node_a.endpoint().id().to_string(),
+            addr_hint: None,
+        }])
+        .await?;
+    docs_a.open_replica(&replica).await?;
+    docs_b.open_replica(&replica).await?;
+    docs_a
+        .apply_doc_op(
+            &replica,
+            DocOp::SetBytes {
+                key: key.clone(),
+                value: b"external-relay-doc-entry".repeat(64),
+            },
+        )
+        .await?;
+
+    if let Err(error) = wait_for_relay_seeded_replica_row(&docs_b, topic, key.as_str()).await {
+        let diagnostics =
+            relay_seeded_timeout_diagnostics(&docs_a, &docs_b, &node_a, &node_b, topic).await;
+        docs_a.shutdown().await;
+        docs_b.shutdown().await;
+        node_a.shutdown().await?;
+        node_b.shutdown().await?;
+        anyhow::bail!("{error:#}; {diagnostics}");
+    }
+
+    docs_a.shutdown().await;
+    docs_b.shutdown().await;
+    node_a.shutdown().await?;
+    node_b.shutdown().await?;
     Ok(())
 }
 
@@ -212,6 +285,16 @@ async fn public_replica_syncs_over_custom_relay_seed_peers() -> Result<()> {
     node_a.shutdown().await?;
     node_b.shutdown().await?;
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn public_replica_syncs_over_external_relay_when_configured() -> Result<()> {
+    let Some(relay_url) = external_relay_url() else {
+        return Ok(());
+    };
+
+    assert_public_replica_syncs_over_relay(relay_url.as_str(), "kukuri:topic:external-relay-docs")
+        .await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

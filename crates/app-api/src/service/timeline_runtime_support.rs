@@ -95,6 +95,13 @@ impl AppService {
             envelope.clone(),
         )
         .await?;
+        if let Err(error) = self.docs_sync.restart_replica_sync(replica).await {
+            warn!(
+                replica_id = %replica.as_str(),
+                error = %error,
+                "failed to restart replica sync after local timeline write"
+            );
+        }
         ProjectionStore::put_object_projection(
             self.projection_store.as_ref(),
             projection_row_from_header(&object, content, replica),

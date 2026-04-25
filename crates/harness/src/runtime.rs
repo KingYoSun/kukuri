@@ -1,6 +1,8 @@
 use crate::*;
 
 const DEFAULT_CN_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
+const EXTERNAL_CN_BASE_URL_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_BASE_URL";
+const EXTERNAL_CN_CONNECTIVITY_URLS_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_CONNECTIVITY_URLS";
 
 pub(crate) struct ScenarioRuntime {
     pub(crate) db_path: PathBuf,
@@ -48,15 +50,28 @@ impl ScenarioRuntime {
 }
 
 pub(crate) struct CommunityNodeStack {
-    pub(crate) database: TestDatabase,
-    pub(crate) user_api_task: tokio::task::JoinHandle<()>,
-    pub(crate) _iroh_relay: SpawnedIrohRelay,
+    pub(crate) external: bool,
+    pub(crate) database: Option<TestDatabase>,
+    pub(crate) user_api_task: Option<tokio::task::JoinHandle<()>>,
+    pub(crate) _iroh_relay: Option<SpawnedIrohRelay>,
     pub(crate) base_url: String,
-    pub(crate) iroh_relay_url: String,
+    pub(crate) expected_connectivity_urls: Option<Vec<String>>,
 }
 
 impl CommunityNodeStack {
     pub(crate) async fn spawn(prefix: &str) -> Result<Self> {
+        if let Some(base_url) = external_community_node_base_url() {
+            let expected_connectivity_urls = external_community_node_connectivity_urls();
+            return Ok(Self {
+                external: true,
+                database: None,
+                user_api_task: None,
+                _iroh_relay: None,
+                base_url,
+                expected_connectivity_urls,
+            });
+        }
+
         let admin_database_url = community_node_admin_database_url();
         let database = TestDatabase::create(admin_database_url.as_str(), prefix).await?;
         let iroh_relay = kukuri_cn_iroh_relay::spawn_server(IrohRelayConfig {
@@ -95,17 +110,23 @@ impl CommunityNodeStack {
         });
 
         Ok(Self {
-            database,
-            user_api_task,
-            _iroh_relay: iroh_relay,
+            external: false,
+            database: Some(database),
+            user_api_task: Some(user_api_task),
+            _iroh_relay: Some(iroh_relay),
             base_url,
-            iroh_relay_url,
+            expected_connectivity_urls: Some(vec![iroh_relay_url]),
         })
     }
 
     pub(crate) async fn shutdown(self) -> Result<()> {
-        self.user_api_task.abort();
-        self.database.cleanup().await
+        if let Some(user_api_task) = self.user_api_task {
+            user_api_task.abort();
+        }
+        if let Some(database) = self.database {
+            database.cleanup().await?;
+        }
+        Ok(())
     }
 }
 
@@ -121,6 +142,33 @@ pub(crate) fn community_node_admin_database_url() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_CN_ADMIN_DATABASE_URL.to_string())
+}
+
+fn external_community_node_base_url() -> Option<String> {
+    std::env::var(EXTERNAL_CN_BASE_URL_ENV)
+        .ok()
+        .map(|value| normalize_url(value.as_str()))
+        .filter(|value| !value.is_empty())
+}
+
+fn external_community_node_connectivity_urls() -> Option<Vec<String>> {
+    let urls = std::env::var(EXTERNAL_CN_CONNECTIVITY_URLS_ENV)
+        .ok()
+        .map(|value| parse_connectivity_urls(value.as_str()))
+        .unwrap_or_default();
+    (!urls.is_empty()).then_some(urls)
+}
+
+fn parse_connectivity_urls(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(normalize_url)
+        .filter(|url| !url.is_empty())
+        .collect()
+}
+
+fn normalize_url(value: &str) -> String {
+    value.trim().trim_end_matches('/').to_string()
 }
 
 pub(crate) fn persist_runtime_identity(db_path: &Path, keys: &KukuriKeys) -> Result<()> {
@@ -197,4 +245,28 @@ pub(crate) fn remove_sqlite_runtime_db(db_path: &Path) -> Result<()> {
             .with_context(|| format!("failed to remove sqlite artifact {}", path.display()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_connectivity_urls_normalizes_comma_separated_values() {
+        assert_eq!(
+            parse_connectivity_urls(" https://iroh-relay.kukuri.app/ , http://127.0.0.1:3340 "),
+            vec![
+                "https://iroh-relay.kukuri.app".to_string(),
+                "http://127.0.0.1:3340".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_connectivity_urls_ignores_empty_values() {
+        assert_eq!(
+            parse_connectivity_urls(" , https://iroh-relay.kukuri.app///, "),
+            vec!["https://iroh-relay.kukuri.app".to_string()]
+        );
+    }
 }

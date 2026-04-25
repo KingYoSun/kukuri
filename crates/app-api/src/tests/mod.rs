@@ -670,10 +670,25 @@ impl TestIrohStack {
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
     ) -> Self {
+        Self::new_with_network_options(
+            root,
+            kukuri_transport::TransportNetworkConfig::loopback(),
+            dht_options,
+            relay_config,
+        )
+        .await
+    }
+
+    async fn new_with_network_options(
+        root: &std::path::Path,
+        network_config: kukuri_transport::TransportNetworkConfig,
+        dht_options: DhtDiscoveryOptions,
+        relay_config: TransportRelayConfig,
+    ) -> Self {
         let relay_config = relay_config.normalized();
         let node = IrohDocsNode::persistent_with_discovery_config(
             root,
-            kukuri_transport::TransportNetworkConfig::loopback(),
+            network_config.clone(),
             dht_options,
             relay_config.clone(),
         )
@@ -684,7 +699,7 @@ impl TestIrohStack {
                 node.endpoint().clone(),
                 node.gossip().clone(),
                 node.discovery(),
-                kukuri_transport::TransportNetworkConfig::loopback(),
+                network_config,
                 relay_config.clone(),
             )
             .expect("transport"),

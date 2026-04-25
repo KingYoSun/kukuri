@@ -6,6 +6,25 @@ pub(crate) enum CommunityNodeIdentityMode {
     SharedIdentity,
 }
 
+fn expect_connectivity_urls(
+    actual: &[String],
+    expected: Option<&[String]>,
+    label: &str,
+) -> Result<()> {
+    if let Some(expected) = expected {
+        anyhow::ensure!(
+            actual == expected,
+            "{label} connectivity urls mismatch: expected {expected:?}, got {actual:?}"
+        );
+    } else {
+        anyhow::ensure!(
+            !actual.is_empty(),
+            "{label} did not resolve any community-node connectivity urls"
+        );
+    }
+    Ok(())
+}
+
 struct PublicReactionSummaryWait<'a> {
     runtime_a: &'a DesktopRuntime,
     runtime_b: &'a DesktopRuntime,
@@ -125,10 +144,15 @@ pub(crate) async fn run_community_node_connectivity(
         let mut steps = Vec::new();
 
         let started_at = Instant::now();
-        let runtime_a = DesktopRuntime::new_with_config(&db_a, TransportNetworkConfig::loopback())
+        let network_config = if stack.external {
+            TransportNetworkConfig::default()
+        } else {
+            TransportNetworkConfig::loopback()
+        };
+        let runtime_a = DesktopRuntime::new_with_config(&db_a, network_config.clone())
             .await
             .context("failed to launch community-node desktop a")?;
-        let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+        let runtime_b = DesktopRuntime::new_with_config(&db_b, network_config.clone())
             .await
             .context("failed to launch community-node desktop b")?;
         push_named_step(&mut steps, "launch_desktops", started_at);
@@ -216,22 +240,24 @@ pub(crate) async fn run_community_node_connectivity(
                 .expect("accepted consent state b")
                 .all_required_accepted
         );
-        assert_eq!(
-            accepted_a
+        expect_connectivity_urls(
+            &accepted_a
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls a")
                 .connectivity_urls,
-            vec![stack.iroh_relay_url.clone()]
-        );
-        assert_eq!(
-            accepted_b
+            stack.expected_connectivity_urls.as_deref(),
+            "desktop a accepted",
+        )?;
+        expect_connectivity_urls(
+            &accepted_b
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls b")
                 .connectivity_urls,
-            vec![stack.iroh_relay_url.clone()]
-        );
+            stack.expected_connectivity_urls.as_deref(),
+            "desktop b accepted",
+        )?;
         assert!(!accepted_a.restart_required);
         assert!(!accepted_b.restart_required);
         push_named_step(&mut steps, "accept_consents", started_at);
@@ -277,22 +303,24 @@ pub(crate) async fn run_community_node_connectivity(
         assert!(refreshed_b.auth_state.authenticated);
         assert!(!refreshed_a.restart_required);
         assert!(!refreshed_b.restart_required);
-        assert_eq!(
-            refreshed_a
+        expect_connectivity_urls(
+            &refreshed_a
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls a after consent")
                 .connectivity_urls,
-            vec![stack.iroh_relay_url.clone()]
-        );
-        assert_eq!(
-            refreshed_b
+            stack.expected_connectivity_urls.as_deref(),
+            "desktop a refreshed",
+        )?;
+        expect_connectivity_urls(
+            &refreshed_b
                 .resolved_urls
                 .as_ref()
                 .expect("resolved urls b after consent")
                 .connectivity_urls,
-            vec![stack.iroh_relay_url.clone()]
-        );
+            stack.expected_connectivity_urls.as_deref(),
+            "desktop b refreshed",
+        )?;
         match identity_mode {
             CommunityNodeIdentityMode::DistinctUsers => {
                 assert_ne!(sync_a.local_author_pubkey, sync_b.local_author_pubkey);
@@ -909,7 +937,7 @@ pub(crate) async fn run_community_node_connectivity(
         shutdown_runtime(runtime_b, "desktop b reconnect pre-shutdown")
             .await
             .context("community-node reconnect shutdown timed out")?;
-        let runtime_b = DesktopRuntime::new_with_config(&db_b, TransportNetworkConfig::loopback())
+        let runtime_b = DesktopRuntime::new_with_config(&db_b, network_config)
             .await
             .context("failed to restart community-node desktop b for reconnect")?;
         let _ = runtime_b

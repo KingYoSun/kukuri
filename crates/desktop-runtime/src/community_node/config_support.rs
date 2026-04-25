@@ -95,11 +95,14 @@ pub(crate) fn merge_community_node_resolved_urls(
                 .into_iter()
                 .chain(incoming.connectivity_urls)
                 .collect();
-            let seed_peers = current
-                .seed_peers
-                .into_iter()
-                .chain(incoming.seed_peers)
-                .collect();
+            let mut seed_peers_by_endpoint = std::collections::BTreeMap::new();
+            for seed_peer in current.seed_peers {
+                seed_peers_by_endpoint.insert(seed_peer.endpoint_id.clone(), seed_peer);
+            }
+            for seed_peer in incoming.seed_peers {
+                seed_peers_by_endpoint.insert(seed_peer.endpoint_id.clone(), seed_peer);
+            }
+            let seed_peers = seed_peers_by_endpoint.into_values().collect();
             Ok(Some(CommunityNodeResolvedUrls::new(
                 public_base_url,
                 connectivity_urls,
@@ -107,6 +110,20 @@ pub(crate) fn merge_community_node_resolved_urls(
             )?))
         }
     }
+}
+
+pub(crate) fn refresh_community_node_resolved_urls(
+    current: Option<CommunityNodeResolvedUrls>,
+    incoming: CommunityNodeResolvedUrls,
+) -> Result<CommunityNodeResolvedUrls> {
+    let public_base_url = incoming.public_base_url;
+    let connectivity_urls = current
+        .map(|current| current.connectivity_urls)
+        .unwrap_or_default()
+        .into_iter()
+        .chain(incoming.connectivity_urls)
+        .collect();
+    CommunityNodeResolvedUrls::new(public_base_url, connectivity_urls, incoming.seed_peers)
 }
 
 pub(crate) fn community_node_seed_peers(
@@ -251,6 +268,64 @@ mod tests {
                 endpoint_id: "peer-a".to_string(),
                 addr_hint: Some("192.168.1.40:40123".to_string()),
             }]
+        );
+    }
+
+    #[test]
+    fn merge_resolved_urls_replaces_cached_addr_hint_with_incoming_endpoint() {
+        let current = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay.example.com".to_string()],
+            vec![
+                CommunityNodeSeedPeer::new("peer-a", Some("172.20.80.1:40123".to_string()))
+                    .expect("seed peer"),
+            ],
+        )
+        .expect("current urls");
+        let incoming = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay.example.com".to_string()],
+            vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")],
+        )
+        .expect("incoming urls");
+
+        let merged = merge_community_node_resolved_urls(Some(current), Some(incoming))
+            .expect("merged urls")
+            .expect("resolved urls");
+
+        assert_eq!(merged.seed_peers.len(), 1);
+        assert_eq!(merged.seed_peers[0].endpoint_id, "peer-a");
+        assert!(merged.seed_peers[0].addr_hint.is_none());
+    }
+
+    #[test]
+    fn refresh_resolved_urls_replaces_seed_peer_snapshot() {
+        let current = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay-a.example.com".to_string()],
+            vec![CommunityNodeSeedPeer::new("peer-a", None).expect("seed peer")],
+        )
+        .expect("current urls");
+        let incoming = CommunityNodeResolvedUrls::new(
+            "https://api.example.com",
+            vec!["https://relay-b.example.com".to_string()],
+            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")],
+        )
+        .expect("incoming urls");
+
+        let refreshed =
+            refresh_community_node_resolved_urls(Some(current), incoming).expect("refreshed urls");
+
+        assert_eq!(
+            refreshed.connectivity_urls,
+            vec![
+                "https://relay-a.example.com".to_string(),
+                "https://relay-b.example.com".to_string()
+            ]
+        );
+        assert_eq!(
+            refreshed.seed_peers,
+            vec![CommunityNodeSeedPeer::new("peer-b", None).expect("seed peer")]
         );
     }
 }

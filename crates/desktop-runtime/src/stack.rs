@@ -194,6 +194,10 @@ impl DocsSync for ReloadableDocsSync {
         self.current().await.learn_peer(endpoint_id).await
     }
 
+    async fn restart_replica_sync(&self, replica_id: &ReplicaId) -> Result<()> {
+        self.current().await.restart_replica_sync(replica_id).await
+    }
+
     async fn set_seed_peers(&self, peers: Vec<SeedPeer>) -> Result<()> {
         self.current().await.set_seed_peers(peers).await
     }

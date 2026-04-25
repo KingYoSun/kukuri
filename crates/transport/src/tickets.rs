@@ -58,18 +58,21 @@ pub fn encode_endpoint_ticket(
     let advertised_host = config
         .advertised_host
         .clone()
-        .or_else(|| {
-            endpoint_addr
-                .ip_addrs()
-                .filter(|addr| is_reachable_ip(addr.ip()))
-                .map(|addr| addr.ip().to_string())
-                .next()
-        })
         .or_else(|| match config.bind_addr.ip() {
             ip if is_reachable_ip(ip) => Some(ip.to_string()),
             IpAddr::V4(ip) if ip.is_loopback() => Some(ip.to_string()),
             IpAddr::V6(ip) if ip.is_loopback() => Some(ip.to_string()),
             _ => None,
+        })
+        .or_else(|| {
+            if config.bind_addr.ip().is_unspecified() {
+                return None;
+            }
+            endpoint_addr
+                .ip_addrs()
+                .filter(|addr| is_reachable_ip(addr.ip()))
+                .map(|addr| addr.ip().to_string())
+                .next()
         })
         .ok_or_else(|| anyhow!("could not determine advertised host"))?;
 
@@ -116,6 +119,9 @@ pub(crate) fn ticket_network_config(
     config: &TransportNetworkConfig,
 ) -> TransportNetworkConfig {
     let advertised_host = config.advertised_host.clone().or_else(|| {
+        if config.bind_addr.ip().is_unspecified() {
+            return None;
+        }
         bound_sockets
             .iter()
             .find(|addr| is_reachable_ip(addr.ip()) || addr.ip().is_loopback())
@@ -310,6 +316,25 @@ mod tests {
     }
 
     #[test]
+    fn encode_ticket_does_not_use_observed_addr_for_unspecified_bind() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr = EndpointAddr::new(endpoint_id)
+            .with_ip_addr("10.73.0.1:40123".parse().expect("observed socket addr"));
+        let config = TransportNetworkConfig {
+            bind_addr: "0.0.0.0:40123".parse().expect("bind addr"),
+            advertised_host: None,
+            advertised_port: None,
+        };
+
+        let error = encode_endpoint_ticket(&endpoint_addr, &config).expect_err("ticket error");
+
+        assert!(error.to_string().contains("advertised host"));
+    }
+
+    #[test]
     fn ticket_network_config_uses_bound_loopback_socket_for_port_zero_bind() {
         let endpoint_id = EndpointId::from_str(
             "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
@@ -326,6 +351,26 @@ mod tests {
         );
 
         assert_eq!(resolved.advertised_host.as_deref(), Some("127.0.0.1"));
+        assert_eq!(resolved.advertised_port, Some(40123));
+    }
+
+    #[test]
+    fn ticket_network_config_ignores_bound_socket_host_for_unspecified_bind() {
+        let endpoint_id = EndpointId::from_str(
+            "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+        )
+        .expect("endpoint id");
+        let endpoint_addr =
+            EndpointAddr::new(endpoint_id).with_ip_addr("0.0.0.0:0".parse().expect("socket addr"));
+        let config = TransportNetworkConfig::default();
+
+        let resolved = ticket_network_config(
+            &endpoint_addr,
+            &["10.73.0.1:40123".parse().expect("observed socket")],
+            &config,
+        );
+
+        assert_eq!(resolved.advertised_host, None);
         assert_eq!(resolved.advertised_port, Some(40123));
     }
 
