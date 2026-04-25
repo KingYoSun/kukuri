@@ -441,6 +441,67 @@ async fn transport_seed_update_updates_existing_topic_subscription() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_resubscribe_recreates_timed_out_topic_state() {
+    let transport_a = IrohGossipTransport::bind_local()
+        .await
+        .expect("transport a");
+    let transport_b = IrohGossipTransport::bind_local()
+        .await
+        .expect("transport b");
+    let ticket_b = transport_b
+        .export_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
+    transport_b.shutdown().await;
+
+    transport_a
+        .configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![seed_peer_from_ticket(&ticket_b)],
+            Vec::new(),
+        )
+        .await
+        .expect("configure a");
+
+    let topic = TopicId::new("kukuri:topic:timed-out-resubscribe");
+    let _stream = transport_a
+        .subscribe_hints(&topic)
+        .await
+        .expect("initial subscribe");
+    let topic_key = "hint/kukuri:topic:timed-out-resubscribe";
+    let initial_last_error = {
+        let topics = transport_a.topic_states.lock().await;
+        topics
+            .get(topic_key)
+            .expect("initial topic state")
+            .last_error
+            .clone()
+    };
+    *initial_last_error.lock().await = Some("timed out waiting for initial topic join".to_string());
+
+    let _stream = transport_a
+        .subscribe_hints(&topic)
+        .await
+        .expect("resubscribe after join timeout");
+    let recreated_last_error = {
+        let topics = transport_a.topic_states.lock().await;
+        topics
+            .get(topic_key)
+            .expect("recreated topic state")
+            .last_error
+            .clone()
+    };
+
+    assert_eq!(
+        *recreated_last_error.lock().await,
+        None,
+        "resubscribe should recreate timed-out topic state so future joins can retry cleanly"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_seeded_dht_can_connect_by_endpoint_id_without_ticket() {
     let testnet = Testnet::new(5).expect("testnet");
     let config = TransportNetworkConfig::loopback();

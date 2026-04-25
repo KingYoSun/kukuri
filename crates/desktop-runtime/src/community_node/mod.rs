@@ -11,7 +11,7 @@ use kukuri_cn_core::{
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::discovery::{DiscoveryConfig, normalize_seed_peers};
 use crate::identity::{IdentityStorageMode, load_optional_secret, persist_optional_secret};
@@ -20,6 +20,7 @@ use crate::runtime::DesktopRuntime;
 
 mod config_support;
 mod http_client_support;
+mod reconnect_support;
 mod requests_support;
 mod session_runtime_support;
 mod session_state_support;
@@ -36,6 +37,8 @@ pub(crate) const COMMUNITY_NODE_BOOTSTRAP_HEARTBEAT_RETRY_SECONDS: i64 = 10;
 pub(crate) const COMMUNITY_NODE_BOOTSTRAP_METADATA_RETRY_SECONDS: i64 = 5;
 pub(crate) const COMMUNITY_NODE_SESSION_RETRY_SECONDS: i64 = 30;
 pub(crate) const COMMUNITY_NODE_AUTH_REFRESH_SKEW_SECONDS: i64 = 300;
+pub(crate) const COMMUNITY_NODE_RECONNECT_UNHEALTHY_SECONDS: i64 = 30;
+pub(crate) const COMMUNITY_NODE_RECONNECT_BACKOFF_SECONDS: [i64; 3] = [30, 60, 120];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommunityNodeNodeConfig {
@@ -102,6 +105,13 @@ pub(crate) struct EffectiveSeedPeerApplyState {
     pub(crate) discovery_env_locked: bool,
     pub(crate) configured_seed_peers: Vec<SeedPeer>,
     pub(crate) bootstrap_seed_peers: Vec<SeedPeer>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CommunityNodeReconnectState {
+    pub(crate) unhealthy_since: Option<i64>,
+    pub(crate) next_retry_at: i64,
+    pub(crate) backoff_step: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

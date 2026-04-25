@@ -31,12 +31,13 @@ use crate::attachments::{
 };
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
-    CommunityNodeTargetRequest, SetCommunityNodeConfigRequest, community_node_seed_peers,
-    default_preview_community_node_config, effective_seed_peer_apply_state,
-    load_community_node_config_from_file, load_community_node_token,
-    normalize_community_node_config, relay_config_from_community_node_config,
-    runtime_connectivity_assist_state, save_community_node_config,
+    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeReconnectState,
+    CommunityNodeSessionPhase, CommunityNodeTargetRequest, SetCommunityNodeConfigRequest,
+    community_node_seed_peers, default_preview_community_node_config,
+    effective_seed_peer_apply_state, load_community_node_config_from_file,
+    load_community_node_token, normalize_community_node_config,
+    relay_config_from_community_node_config, runtime_connectivity_assist_state,
+    save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,
@@ -77,6 +78,8 @@ pub struct DesktopRuntime {
     pub(crate) community_node_cached_consents:
         Arc<Mutex<HashMap<String, CommunityNodeConsentStatus>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
+    pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
+    pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
     pub(crate) active_connectivity_urls: Arc<Mutex<Vec<String>>>,
     pub(crate) last_runtime_connectivity_assist_state:
         Arc<Mutex<Option<crate::community_node::RuntimeConnectivityAssistState>>>,
@@ -235,6 +238,10 @@ impl DesktopRuntime {
             community_node_last_errors: Arc::new(Mutex::new(HashMap::new())),
             community_node_cached_consents: Arc::new(Mutex::new(HashMap::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
+            community_node_reconnect_state: Arc::new(Mutex::new(
+                CommunityNodeReconnectState::default(),
+            )),
+            community_node_reconnect_guard: Arc::new(Mutex::new(())),
             active_connectivity_urls: Arc::new(Mutex::new(relay_config.iroh_relay_urls.clone())),
             last_runtime_connectivity_assist_state: Arc::new(Mutex::new(Some(
                 initial_runtime_connectivity_state,

@@ -277,8 +277,31 @@ impl DesktopRuntime {
             .await
     }
 
-    pub(crate) async fn force_apply_runtime_connectivity_assist(&self) -> Result<()> {
-        self.apply_runtime_connectivity_assist_with_mode(true).await
+    pub(crate) async fn force_rebuild_runtime_connectivity_assist(&self) -> Result<()> {
+        let discovery_config = self.discovery_config.lock().await.clone();
+        let community_node_config = self.community_node_config.lock().await.clone();
+        let next_state =
+            runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+        let relay_config = TransportRelayConfig {
+            iroh_relay_urls: next_state.relay_urls.clone(),
+        };
+        self.iroh_stack
+            .force_rebuild_runtime_connectivity(
+                &discovery_config,
+                &next_state.bootstrap_seed_peers,
+                relay_config.clone(),
+            )
+            .await?;
+        debug!(
+            relay_url_count = relay_config.iroh_relay_urls.len(),
+            bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
+            "force rebuilt runtime connectivity assist from community-node metadata"
+        );
+        *self.active_connectivity_urls.lock().await = relay_config.iroh_relay_urls;
+        *self.last_runtime_connectivity_assist_state.lock().await = Some(next_state);
+        self.runtime_connectivity_apply_version
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
     }
 
     async fn apply_effective_seed_peers_with_mode(&self, force: bool) -> Result<()> {

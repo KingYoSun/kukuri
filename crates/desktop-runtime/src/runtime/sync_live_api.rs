@@ -15,7 +15,14 @@ impl DesktopRuntime {
                 );
             }
         }
-        self.app_service.get_sync_status().await
+        let status = self.app_service.get_sync_status().await?;
+        if self
+            .maybe_self_heal_community_node_connectivity(&status)
+            .await
+        {
+            return self.app_service.get_sync_status().await;
+        }
+        Ok(status)
     }
 
     pub async fn has_topic_timeline_doc_index_entry(
