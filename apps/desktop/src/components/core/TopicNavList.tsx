@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link2 } from 'lucide-react';
+import { Link2, Settings } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ type TopicNavListProps = {
   items: TopicDiagnosticSummary[];
   onSelectTopic: (topic: string) => void;
   onSelectChannel: (topic: string, channelId: string) => void;
+  onOpenChannelSettings?: (topic: string, channelId: string) => void;
   onRemoveTopic: (topic: string) => void;
   onCopyTopicLink?: (topic: string) => void;
 };
@@ -16,10 +17,11 @@ export function TopicNavList({
   items,
   onSelectTopic,
   onSelectChannel,
+  onOpenChannelSettings,
   onRemoveTopic,
   onCopyTopicLink,
 }: TopicNavListProps) {
-  const { t } = useTranslation(['common', 'shell']);
+  const { t } = useTranslation(['channels', 'common', 'shell']);
 
   return (
     <ul>
@@ -92,7 +94,7 @@ export function TopicNavList({
                     <div className='topic-subsection-label'>{t('shell:navigation.channelsGroup')}</div>
                     <ul className='topic-sublist'>
                       {item.channels?.map((channel) => (
-                        <li key={channel.channelId}>
+                        <li key={channel.channelId} className='topic-subitem-row'>
                           <button
                             className={cn(
                               'topic-subitem',
@@ -105,6 +107,18 @@ export function TopicNavList({
                             <span className='shell-topic-link-label'>{channel.label}</span>
                             <small>{t(`channels:audienceOptions.${channel.audienceKind}`)}</small>
                           </button>
+                          {onOpenChannelSettings ? (
+                            <button
+                              className='topic-channel-settings'
+                              type='button'
+                              aria-label={t('channels:actions.openSettings', {
+                                channel: channel.label,
+                              })}
+                              onClick={() => onOpenChannelSettings(item.topic, channel.channelId)}
+                            >
+                              <Settings className='size-4' aria-hidden='true' />
+                            </button>
+                          ) : null}
                         </li>
                       ))}
                     </ul>

@@ -24,6 +24,20 @@ const basePost = {
   audience_label: 'Public',
 };
 
+const inviteTokenPostContent = JSON.stringify({
+  envelope: {
+    kind: 'channel-invite',
+    pubkey: 'b'.repeat(64),
+    content: JSON.stringify({
+      channel_id: 'channel-core',
+      topic_id: 'kukuri:topic:demo',
+      channel_label: 'Core Contributors',
+      owner_pubkey: 'b'.repeat(64),
+      epoch_id: 'epoch-1',
+    }),
+  },
+});
+
 function createView(overrides?: Partial<PostCardView>): PostCardView {
   return {
     post: basePost,
@@ -181,6 +195,20 @@ export const UnsupportedVideo: Story = {
         videoPlaybackSrc: null,
         videoUnsupportedOnClient: true,
       },
+    }),
+  },
+};
+
+export const ChannelAccessToken: Story = {
+  args: {
+    view: createView({
+      post: {
+        ...basePost,
+        object_id: 'token-post',
+        envelope_id: 'envelope-token-post',
+        content: inviteTokenPostContent,
+      },
+      threadTargetId: 'token-post',
     }),
   },
 };

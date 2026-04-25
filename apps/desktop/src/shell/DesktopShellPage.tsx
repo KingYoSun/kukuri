@@ -96,6 +96,7 @@ export function DesktopShellPage({
   } = useDesktopShellStore();
   const [composeDialogOpen, setComposeDialogOpen] = useState(false);
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
+  const [channelSettingsDialogOpen, setChannelSettingsDialogOpen] = useState(false);
   const [liveCreateDialogOpen, setLiveCreateDialogOpen] = useState(false);
   const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
@@ -107,7 +108,6 @@ export function DesktopShellPage({
   const [sharePreviewData, setSharePreviewData] = useState<ChannelAccessTokenPreview | null>(null);
   const [sharePreviewLoading, setSharePreviewLoading] = useState(false);
   const [sharePreviewError, setSharePreviewError] = useState<string | null>(null);
-  const [sharePreviewShowRaw, setSharePreviewShowRaw] = useState(false);
   const [shareImportPending, setShareImportPending] = useState(false);
   const [clipboardToastId, setClipboardToastId] = useState(0);
   const previousPrimarySectionRef = useRef(shellChromeState.activePrimarySection);
@@ -202,6 +202,8 @@ export function DesktopShellPage({
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setSelectedLiveSessionId = useDesktopShellFieldSetter('selectedLiveSessionId');
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
+  const setInviteOutput = useDesktopShellFieldSetter('inviteOutput');
+  const setChannelError = useDesktopShellFieldSetter('channelError');
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
@@ -460,7 +462,6 @@ export function DesktopShellPage({
       setSharePreviewToken(token);
       setSharePreviewData(null);
       setSharePreviewError(null);
-      setSharePreviewShowRaw(false);
       setSharePreviewLoading(true);
       try {
         const preview = await api.previewChannelAccessToken(token);
@@ -722,6 +723,12 @@ export function DesktopShellPage({
       onSelectChannel={(topic, channelId) => {
         handleSelectPrivateChannel(topic, channelId);
       }}
+      onOpenChannelSettings={(topic, channelId) => {
+        setInviteOutput(null);
+        setChannelError(null);
+        handleSelectPrivateChannel(topic, channelId);
+        setChannelSettingsDialogOpen(true);
+      }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
       onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
     />
@@ -928,6 +935,8 @@ export function DesktopShellPage({
         handleProfileAvatarFile={handleProfileAvatarFile}
         channelDialogOpen={channelDialogOpen}
         setChannelDialogOpen={setChannelDialogOpen}
+        channelSettingsDialogOpen={channelSettingsDialogOpen}
+        setChannelSettingsDialogOpen={setChannelSettingsDialogOpen}
         sharePreviewOpen={sharePreviewOpen}
         setSharePreviewOpen={setSharePreviewOpen}
         sharePreviewToken={sharePreviewToken}
@@ -937,13 +946,10 @@ export function DesktopShellPage({
         sharePreviewLoading={sharePreviewLoading}
         sharePreviewError={sharePreviewError}
         setSharePreviewError={setSharePreviewError}
-        sharePreviewShowRaw={sharePreviewShowRaw}
-        setSharePreviewShowRaw={setSharePreviewShowRaw}
         shareImportPending={shareImportPending}
         handleConfirmShareImport={handleConfirmShareImport}
         handleCreatePrivateChannel={handleCreatePrivateChannel}
         handleJoinChannelAccess={handleJoinChannelAccess}
-        handleSelectPrivateChannel={handleSelectPrivateChannel}
         handleShareChannelAccess={handleShareChannelAccess}
         handleActivateReference={handleActivateReference}
         handleCopyInternalLink={handleCopyInternalLink}

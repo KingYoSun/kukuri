@@ -2,8 +2,8 @@ import { useState, type FormEvent } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { PrivateChannelPanel } from './PrivateChannelPanel';
-import type { InviteOutputLabel, PrivateChannelListItemView } from './types';
+import { PrivateChannelPanel, PrivateChannelSettingsPanel } from './PrivateChannelPanel';
+import type { PrivateChannelListItemView } from './types';
 
 const meta = {
   title: 'Extended/PrivateChannelPanel',
@@ -67,29 +67,19 @@ const STORY_ARGS = {
     { value: 'friend_plus', label: 'Friends+' },
   ],
   inviteTokenInput: '',
-  inviteOutput: null,
-  inviteOutputLabel: 'invite',
-  channels: BASE_CHANNELS,
-  selectedChannel: BASE_CHANNELS[0].channel,
   onChannelLabelChange: () => undefined,
   onChannelAudienceChange: () => undefined,
   onInviteTokenChange: () => undefined,
   onCreateChannel: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
   onJoin: (event: FormEvent<HTMLFormElement>) => event.preventDefault(),
-  onSelectChannel: () => undefined,
-  onShare: () => undefined,
 } satisfies React.ComponentProps<typeof PrivateChannelPanel>;
 
 function ChannelStory({
   status = 'ready',
   error = null,
-  inviteOutput = null,
-  inviteOutputLabel = 'invite',
 }: {
   status?: 'loading' | 'ready' | 'error';
   error?: string | null;
-  inviteOutput?: string | null;
-  inviteOutputLabel?: InviteOutputLabel;
 }) {
   const [label, setLabel] = useState('Core Contributors');
   const [audience, setAudience] = useState<'invite_only' | 'friend_only' | 'friend_plus'>(
@@ -110,17 +100,11 @@ function ChannelStory({
         { value: 'friend_plus', label: 'Friends+' },
       ]}
       inviteTokenInput={token}
-      inviteOutput={inviteOutput}
-      inviteOutputLabel={inviteOutputLabel}
-      channels={BASE_CHANNELS}
-      selectedChannel={BASE_CHANNELS[0].channel}
       onChannelLabelChange={setLabel}
       onChannelAudienceChange={setAudience}
       onInviteTokenChange={setToken}
       onCreateChannel={(event) => event.preventDefault()}
       onJoin={(event) => event.preventDefault()}
-      onSelectChannel={() => undefined}
-      onShare={() => undefined}
     />
   );
 }
@@ -131,8 +115,6 @@ export const Ready: Story = {
     <ChannelStory
       status={args.status}
       error={args.error}
-      inviteOutput={args.inviteOutput}
-      inviteOutputLabel={args.inviteOutputLabel}
     />
   ),
 };
@@ -147,8 +129,6 @@ export const ErrorState: Story = {
     <ChannelStory
       status={args.status}
       error={args.error}
-      inviteOutput={args.inviteOutput}
-      inviteOutputLabel={args.inviteOutputLabel}
     />
   ),
 };
@@ -156,15 +136,15 @@ export const ErrorState: Story = {
 export const InviteOutputState: Story = {
   args: {
     ...STORY_ARGS,
-    inviteOutput: 'share:kukuri:topic:demo:channel-1',
-    inviteOutputLabel: 'share',
   },
-  render: (args) => (
-    <ChannelStory
-      status={args.status}
-      error={args.error}
-      inviteOutput={args.inviteOutput}
-      inviteOutputLabel={args.inviteOutputLabel}
+  render: () => (
+    <PrivateChannelSettingsPanel
+      error={null}
+      pendingAction={null}
+      channel={BASE_CHANNELS[0].channel}
+      inviteOutput='share:kukuri:topic:demo:channel-1'
+      inviteOutputLabel='share'
+      onShare={() => undefined}
     />
   ),
 };

@@ -1,6 +1,11 @@
 [test-groups]
 harness-serial = { max-threads = 1 }
+iroh-integration-serial = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = "package(kukuri-harness)"
 test-group = "harness-serial"
+
+[[profile.default.overrides]]
+filter = "package(kukuri-app-api) | package(kukuri-desktop-runtime)"
+test-group = "iroh-integration-serial"

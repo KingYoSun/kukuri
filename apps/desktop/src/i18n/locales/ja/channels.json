@@ -2,6 +2,7 @@
   "actions": {
     "createChannel": "チャンネルを作成",
     "join": "参加",
+    "openSettings": "{{channel}} のチャンネル設定を開く",
     "share": "共有"
   },
   "audienceOptions": {
@@ -9,10 +10,14 @@
     "friend_plus": "友だち+",
     "invite_only": "招待限定"
   },
+  "createDialogTitle": "プライベートチャンネル作成",
   "editor": {
     "audience": "公開範囲",
+    "channelName": "チャンネル名",
+    "createBlockTitle": "作成",
     "createChannel": "チャンネルを作成",
     "join": "参加",
+    "joinBlockTitle": "参加",
     "placeholders": {
       "channelLabel": "コアメンバー",
       "inviteToken": "プライベートチャンネル招待、権限付与、共有トークンを貼り付け"
@@ -31,22 +36,18 @@
   },
   "inspectHint": "ここでポリシーと操作を確認できます。",
   "joined": "{{count}} 件参加中",
-  "loading": "プライベートチャンネルを読み込み中…",
+  "loading": "プライベートチャンネルを読み込み中...",
   "latestInvite": "最新の招待",
   "latestShare": "最新の共有",
   "policies": {
     "friend_only": "友だち限定: 相互フォローの相手だけが参加できます",
     "friend_plus": "友だち+: 参加者が相互フォロー相手へ共有できます",
-    "invite_only": "招待限定: 招待トークンを持つ相手だけが参加できます"
+    "invite_only": "招待限定"
   },
-  "rotationRequired": "ローテーションが必要です: 現在の参加者に相互フォローでない相手が含まれています",
   "previewDialog": {
     "title": "アクセスプレビュー",
-    "description": "インポート前にチャンネルアクセストークンを確認します。",
     "import": "インポート / 参加",
     "copyToken": "トークンをコピー",
-    "showRaw": "生トークンを表示",
-    "hideRaw": "生トークンを隠す",
     "channel": "チャンネル",
     "channelId": "チャンネル ID",
     "inviter": "招待者",
@@ -58,7 +59,11 @@
       "share": "共有"
     }
   },
+  "rotationRequired": "ローテーションが必要です。現在の参加者に相互フォローではない相手が含まれています",
   "selectChannel": "チャンネルを選択",
   "selectChannelNotice": "プライベートチャンネルを選択するとポリシーと操作を確認できます。",
+  "settings": {
+    "title": "チャンネル設定"
+  },
   "title": "プライベートチャンネル"
 }
