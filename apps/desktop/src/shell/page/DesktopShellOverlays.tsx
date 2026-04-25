@@ -29,7 +29,6 @@ import {
 } from '@/components/ui/tooltip';
 
 import type { ChannelAccessTokenPreview } from '@/lib/api';
-import type { InternalSmartReference } from '@/lib/internalLinks';
 import { authorDisplayLabel } from '@/shell/selectors';
 import { useDesktopShellFieldSetter, useDesktopShellStore } from '@/shell/store';
 import type { Translate } from '@/shell/actions/shared';
@@ -74,7 +73,6 @@ type DesktopShellOverlaysProps = {
   handleCreatePrivateChannel: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleJoinChannelAccess: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleShareChannelAccess: () => Promise<void>;
-  handleActivateReference: (reference: InternalSmartReference) => Promise<void>;
   handleCopyInternalLink: (link: string) => void;
   composeDialogOpen: boolean;
   setComposeDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -144,7 +142,6 @@ export function DesktopShellOverlays({
   handleCreatePrivateChannel,
   handleJoinChannelAccess,
   handleShareChannelAccess,
-  handleActivateReference,
   handleCopyInternalLink,
   composeDialogOpen,
   setComposeDialogOpen,

@@ -389,9 +389,11 @@ async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
 
 function getChannelShareButton(
   dialog: HTMLElement,
-  _channelLabel?: string,
-  _audienceLabel?: string
+  channelLabel?: string,
+  audienceLabel?: string
 ) {
+  void channelLabel;
+  void audienceLabel;
   return within(dialog).getByRole('button', {
     name: 'Create share link',
   });

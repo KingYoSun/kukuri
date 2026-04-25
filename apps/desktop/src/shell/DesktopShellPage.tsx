@@ -997,7 +997,6 @@ export function DesktopShellPage({
         handleCreatePrivateChannel={handleCreatePrivateChannel}
         handleJoinChannelAccess={handleJoinChannelAccess}
         handleShareChannelAccess={handleShareChannelAccess}
-        handleActivateReference={handleActivateReference}
         handleCopyInternalLink={handleCopyInternalLink}
         composeDialogOpen={composeDialogOpen}
         setComposeDialogOpen={setComposeDialogOpen}

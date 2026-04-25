@@ -2740,20 +2740,8 @@ async fn private_channel_import_without_local_posts_restores_after_restart() {
         })
         .await
         .expect("subscribe b");
-    wait_for_topic_delivery(
-        &runtime_a,
-        topic,
-        1,
-        "import owner topic delivery timeout",
-    )
-    .await;
-    wait_for_topic_delivery(
-        &runtime_b,
-        topic,
-        1,
-        "import joiner topic delivery timeout",
-    )
-    .await;
+    wait_for_topic_delivery(&runtime_a, topic, 1, "import owner topic delivery timeout").await;
+    wait_for_topic_delivery(&runtime_b, topic, 1, "import joiner topic delivery timeout").await;
 
     let channel = runtime_a
         .create_private_channel(CreatePrivateChannelRequest {
