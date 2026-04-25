@@ -68,6 +68,7 @@ export type SmartTextSegment =
 
 const TOPIC_PATTERN = /kukuri:topic:[A-Za-z0-9:_-]+/;
 const ROUTE_PATTERN = /#\/(?:timeline|live|game)\?[^\s]+/;
+const CHANNEL_ACCESS_PREVIEW_PATTERN = /kukuri:\/\/access-preview\?[^\s]+/;
 
 function buildRoute(pathname: string, params: URLSearchParams): string {
   const search = params.toString();
@@ -121,6 +122,12 @@ export function buildGameLink(
   }
   params.set('roomId', roomId);
   return buildRoute('/game', params);
+}
+
+export function buildChannelAccessPreviewDeepLink(token: string): string {
+  const params = new URLSearchParams();
+  params.set('token', token);
+  return `kukuri://access-preview?${params.toString()}`;
 }
 
 export function shortenReferenceId(value: string): string {
@@ -226,6 +233,31 @@ export function parseShareTokenKind(rawValue: string): ChannelAccessTokenKind | 
   return parseChannelAccessTokenMetadata(rawValue)?.kind ?? null;
 }
 
+export function parseChannelAccessPreviewDeepLink(rawValue: string): ShareTokenReference | null {
+  try {
+    const url = new URL(rawValue.trim());
+    if (url.protocol !== 'kukuri:' || url.hostname !== 'access-preview') {
+      return null;
+    }
+    const token = url.searchParams.get('token')?.trim() ?? '';
+    if (!token) {
+      return null;
+    }
+    const tokenKind = parseShareTokenKind(token);
+    if (!tokenKind) {
+      return null;
+    }
+    return {
+      kind: 'share_token',
+      token,
+      tokenKind,
+      metadata: parseChannelAccessTokenMetadata(token) ?? { kind: tokenKind },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function parseInternalRouteLink(rawValue: string): InternalSmartReference | null {
   const { pathname, search } = parseHashRouteLocation(rawValue);
   const params = new URLSearchParams(search);
@@ -295,8 +327,16 @@ function findNextReference(
 ): { index: number; length: number; reference: InternalSmartReference } | null {
   const remaining = value.slice(offset);
   const routeMatch = ROUTE_PATTERN.exec(remaining);
+  const accessPreviewMatch = CHANNEL_ACCESS_PREVIEW_PATTERN.exec(remaining);
   const topicMatch = TOPIC_PATTERN.exec(remaining);
   const candidates = [
+    accessPreviewMatch
+      ? {
+          index: offset + accessPreviewMatch.index,
+          text: accessPreviewMatch[0],
+          reference: parseChannelAccessPreviewDeepLink(accessPreviewMatch[0]),
+        }
+      : null,
     routeMatch
       ? {
           index: offset + routeMatch.index,
@@ -340,6 +380,16 @@ function findNextReference(
 export function parseSmartText(value: string): SmartTextSegment[][] {
   return value.split('\n').map((line) => {
     const trimmed = line.trim();
+    const accessPreviewReference = parseChannelAccessPreviewDeepLink(trimmed);
+    if (accessPreviewReference) {
+      return [
+        {
+          kind: 'reference',
+          reference: accessPreviewReference,
+        },
+      ] satisfies SmartTextSegment[];
+    }
+
     const shareTokenKind = parseShareTokenKind(trimmed);
     if (shareTokenKind) {
       return [

@@ -13,7 +13,6 @@ type ShellNavRailProps = {
   notificationAction?: React.ReactNode;
   headerContent: React.ReactNode;
   addTopicControl: React.ReactNode;
-  channelSummary?: React.ReactNode;
   channelAction?: React.ReactNode;
   topicList: React.ReactNode;
   topicCount: number;
@@ -26,7 +25,6 @@ export function ShellNavRail({
   notificationAction,
   headerContent,
   addTopicControl,
-  channelSummary,
   channelAction,
   topicList,
   topicCount,
@@ -75,10 +73,7 @@ export function ShellNavRail({
         {hasChannelAction ? (
           <section className='shell-nav-topic-entry shell-nav-channel-summary'>
             <div className='shell-nav-channel-copy'>
-              <span className='shell-nav-accordion-title'>{t('navigation.channel')}</span>
-              {channelSummary ? (
-                <span className='shell-nav-accordion-summary'>{channelSummary}</span>
-              ) : null}
+              <span className='shell-nav-accordion-title'>{t('navigation.channelCreateJoin')}</span>
             </div>
             {channelAction}
           </section>

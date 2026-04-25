@@ -3,14 +3,15 @@
     "createChannel": "Create Channel",
     "join": "Join",
     "openSettings": "Open {{channel}} channel settings",
-    "share": "Share"
+    "share": "Share",
+    "createShareLink": "Create share link"
   },
   "audienceOptions": {
     "friend_only": "Friends",
     "friend_plus": "Friends+",
     "invite_only": "Invite only"
   },
-  "createDialogTitle": "Create Private Channel",
+  "createDialogTitle": "Create / Join Private Channel",
   "editor": {
     "audience": "Audience",
     "channelName": "Channel name",
@@ -39,6 +40,7 @@
   "loading": "Loading private channels...",
   "latestInvite": "Latest invite",
   "latestShare": "Latest share",
+  "copyShareLink": "Copy share link",
   "policies": {
     "friend_only": "Friends: only mutual followers can join",
     "friend_plus": "Friends+: participants can share to their mutuals",
@@ -63,6 +65,8 @@
   "selectChannel": "Select a channel",
   "selectChannelNotice": "Select a private channel to inspect policy and actions.",
   "settings": {
+    "channelName": "Channel name: {{channel}}",
+    "policy": "Policy: {{policy}}",
     "title": "Channel Settings"
   },
   "title": "Private Channels"

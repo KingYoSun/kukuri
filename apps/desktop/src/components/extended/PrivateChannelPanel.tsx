@@ -1,8 +1,8 @@
 import type { FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DoorOpen, Link2 } from 'lucide-react';
+import { Copy } from 'lucide-react';
 
-import type { InternalSmartReference } from '@/lib/internalLinks';
+import { buildChannelAccessPreviewDeepLink } from '@/lib/internalLinks';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 
 import {
   type ChannelAudienceOption,
@@ -65,7 +64,6 @@ type PrivateChannelSettingsPanelProps = {
   inviteOutput: string | null;
   inviteOutputLabel: InviteOutputLabel;
   onShare: () => void;
-  onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyInviteOutput?: (token: string) => void;
 };
 
@@ -162,26 +160,23 @@ export function PrivateChannelSettingsPanel({
   inviteOutput,
   inviteOutputLabel,
   onShare,
-  onActivateReference,
   onCopyInviteOutput,
 }: PrivateChannelSettingsPanelProps) {
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
-  const selectedChannelShareLabel = `${channel.label} / ${t(`channels:audienceOptions.${channel.audience_kind}`)}`;
+  const policyLabel = policyDescription(channel.audience_kind, t);
+  const channelAccessDeepLink = inviteOutput
+    ? buildChannelAccessPreviewDeepLink(inviteOutput)
+    : null;
 
   return (
     <Card tone='accent' className='panel-subsection extended-channel-detail'>
       <CardHeader>
-        <h3>{channel.label}</h3>
-        <small>{policyDescription(channel.audience_kind, t)}</small>
+        <h3>{t('channels:settings.channelName', { channel: channel.label })}</h3>
+        <small>{t('channels:settings.policy', { policy: policyLabel })}</small>
       </CardHeader>
 
       <div className='extended-module-stack'>
-        <div className='topic-diagnostic topic-diagnostic-secondary'>
-          <span>
-            {t('common:labels.policy')}: {policyDescription(channel.audience_kind, t)}
-          </span>
-        </div>
         {(channel.audience_kind === 'friend_only' || channel.audience_kind === 'friend_plus') ? (
           <div className='topic-diagnostic topic-diagnostic-secondary'>
             <span>{t('common:labels.participants')}: {channel.participant_count}</span>
@@ -199,22 +194,21 @@ export function PrivateChannelSettingsPanel({
 
         <div className='discovery-actions'>
           <Button
-            aria-label={selectedChannelShareLabel}
-            className='w-full justify-between gap-3 text-left'
+            aria-label={t('channels:actions.createShareLink')}
+            className='w-full'
             variant='secondary'
             type='button'
             disabled={channelActionDisabled}
             onClick={onShare}
           >
-            <span>{selectedChannelShareLabel}</span>
-            <DoorOpen className='size-4 shrink-0' aria-hidden='true' />
+            {t('channels:actions.createShareLink')}
           </Button>
         </div>
 
-        {inviteOutput ? (
+        {inviteOutput && channelAccessDeepLink ? (
           <Notice tone='accent'>
             <div className='shell-inline-actions'>
-              <strong>{audienceSummaryLabel(inviteOutputLabel, t)}</strong>
+              <strong>{t('channels:copyShareLink')}</strong>
               {onCopyInviteOutput ? (
                 <Button
                   variant='secondary'
@@ -222,16 +216,13 @@ export function PrivateChannelSettingsPanel({
                   className='post-action-button'
                   type='button'
                   aria-label={t('common:actions.copyLink')}
-                  onClick={() => onCopyInviteOutput(inviteOutput)}
+                  onClick={() => onCopyInviteOutput(channelAccessDeepLink)}
                 >
-                  <Link2 className='size-4' aria-hidden='true' />
+                  <Copy className='size-4' aria-hidden='true' />
                 </Button>
               ) : null}
             </div>
-            <SmartReferenceText
-              text={inviteOutput}
-              onActivateReference={onActivateReference}
-            />
+            <span className='sr-only'>{audienceSummaryLabel(inviteOutputLabel, t)}</span>
           </Notice>
         ) : null}
 

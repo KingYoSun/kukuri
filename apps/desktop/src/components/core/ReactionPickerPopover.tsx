@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
 
 import { Search, SmilePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,12 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type {
   CustomReactionAssetView,
   ReactionKeyInput,
@@ -91,6 +97,23 @@ function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput |
     return { kind: 'custom_asset', asset: reaction.custom_asset };
   }
   return null;
+}
+
+function ReactionTooltipButton({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement;
+}) {
+  return (
+    <TooltipProvider delayDuration={180}>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function assetSearchLabel(asset: CustomReactionAssetView): string {
@@ -247,25 +270,26 @@ export function ReactionPickerPopover({
                   ? assetSearchLabel(asset)
                   : emojiSearchLabel(reaction.emoji ?? reaction.normalized_reaction_key);
                 return (
-                  <button
-                    key={reaction.normalized_reaction_key}
-                    className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
-                    type='button'
-                    onClick={() => {
-                      if (reactionKey) {
-                        handleSelect(reactionKey);
-                      }
-                    }}
-                    disabled={!reactionKey}
-                    aria-label={label}
-                    data-tooltip={label}
-                  >
-                    {previewUrl ? (
-                      <img className='post-reaction-chip-image' src={previewUrl} alt='' />
-                    ) : (
-                      <span className='post-reaction-picker-label'>{reaction.emoji ?? label}</span>
-                    )}
-                  </button>
+                  <ReactionTooltipButton key={reaction.normalized_reaction_key} label={label}>
+                    <button
+                      className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
+                      type='button'
+                      onClick={() => {
+                        if (reactionKey) {
+                          handleSelect(reactionKey);
+                        }
+                      }}
+                      disabled={!reactionKey}
+                      aria-label={label}
+                      data-tooltip={label}
+                    >
+                      {previewUrl ? (
+                        <img className='post-reaction-chip-image' src={previewUrl} alt='' />
+                      ) : (
+                        <span className='post-reaction-picker-label'>{reaction.emoji ?? label}</span>
+                      )}
+                    </button>
+                  </ReactionTooltipButton>
                 );
               })}
             </div>
@@ -276,18 +300,19 @@ export function ReactionPickerPopover({
           <p className='post-reaction-section-title'>{t('reactions.emoji')}</p>
           <div className='post-reaction-picker-grid post-reaction-picker-grid-compact post-reaction-picker-grid-8'>
             {filteredEmojiReactions.map((option) => (
-              <button
-                key={option.emoji}
-                className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
-                type='button'
-                aria-label={option.key}
-                data-tooltip={option.key}
-                onClick={() => handleSelect({ kind: 'emoji', emoji: option.emoji })}
-              >
-                <span className='post-reaction-picker-label' aria-hidden='true'>
-                  {option.emoji}
-                </span>
-              </button>
+              <ReactionTooltipButton key={option.emoji} label={option.key}>
+                <button
+                  className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
+                  type='button'
+                  aria-label={option.key}
+                  data-tooltip={option.key}
+                  onClick={() => handleSelect({ kind: 'emoji', emoji: option.emoji })}
+                >
+                  <span className='post-reaction-picker-label' aria-hidden='true'>
+                    {option.emoji}
+                  </span>
+                </button>
+              </ReactionTooltipButton>
             ))}
           </div>
         </section>
@@ -302,20 +327,21 @@ export function ReactionPickerPopover({
                   : null;
               const label = assetSearchLabel(asset);
               return (
-                <button
-                  key={asset.asset_id}
-                  className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
-                  type='button'
-                  onClick={() => handleSelect({ kind: 'custom_asset', asset })}
-                  aria-label={label}
-                  data-tooltip={label}
-                >
-                  {previewUrl ? (
-                    <img className='post-reaction-chip-image' src={previewUrl} alt='' />
-                  ) : (
-                    <span className='post-reaction-picker-fallback'>{label.slice(0, 2)}</span>
-                  )}
-                </button>
+                <ReactionTooltipButton key={asset.asset_id} label={label}>
+                  <button
+                    className='post-reaction-picker-button post-reaction-picker-button-compact post-reaction-tooltip-anchor'
+                    type='button'
+                    onClick={() => handleSelect({ kind: 'custom_asset', asset })}
+                    aria-label={label}
+                    data-tooltip={label}
+                  >
+                    {previewUrl ? (
+                      <img className='post-reaction-chip-image' src={previewUrl} alt='' />
+                    ) : (
+                      <span className='post-reaction-picker-fallback'>{label.slice(0, 2)}</span>
+                    )}
+                  </button>
+                </ReactionTooltipButton>
               );
             })}
           </div>

@@ -219,7 +219,6 @@ function ShellSurface({
               </Label>
             }
             channelAction={<ChannelRailControl />}
-            channelSummary='Core Contributors · Friends+'
             topicList={
               <TopicNavList
                 items={TOPIC_ITEMS}

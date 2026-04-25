@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
+import { buildChannelAccessPreviewDeepLink } from '@/lib/internalLinks';
 import { App } from '@/App';
 import type {
   AttachmentView,
@@ -11,6 +12,7 @@ import type {
   CreateAttachmentInput,
   DesktopApi,
   DirectMessageMessageView,
+  JoinedPrivateChannelView,
   NotificationView,
   PostView,
   TimelineCursor,
@@ -382,16 +384,16 @@ async function publishPost(user: ReturnType<typeof userEvent.setup>, content: st
 
 async function openChannelManager(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Private Channels' }));
-  return await screen.findByRole('dialog', { name: 'Create Private Channel' });
+  return await screen.findByRole('dialog', { name: 'Create / Join Private Channel' });
 }
 
 function getChannelShareButton(
   dialog: HTMLElement,
-  channelLabel: string,
-  audienceLabel: string
+  _channelLabel?: string,
+  _audienceLabel?: string
 ) {
   return within(dialog).getByRole('button', {
-    name: `${channelLabel} / ${audienceLabel}`,
+    name: 'Create share link',
   });
 }
 
@@ -810,7 +812,7 @@ test('channel manager opens as a modal from the navigation summary', async () =>
 
   const dialog = await openChannelManager(user);
   expect(dialog).toBeInTheDocument();
-  expect(dialog).toHaveAccessibleName('Create Private Channel');
+  expect(dialog).toHaveAccessibleName('Create / Join Private Channel');
   expect(within(dialog).getByText('Create')).toBeInTheDocument();
   expect(within(dialog).getAllByText('Join').length).toBeGreaterThan(0);
   expect(within(dialog).getByText('Channel name')).toBeInTheDocument();
@@ -818,7 +820,9 @@ test('channel manager opens as a modal from the navigation summary', async () =>
 
   await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Create Private Channel' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -1253,7 +1257,7 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
     expect(
-      screen.queryByRole('dialog', { name: 'Create Private Channel' })
+      screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Open core channel settings' })
@@ -1863,6 +1867,84 @@ test('timeline buffers remote posts until the pending banner is applied', async 
   });
 });
 
+test('pending timeline snapshots apply all unseen posts from the latest first page', async () => {
+  const user = userEvent.setup();
+  const olderPost: PostView = {
+    object_id: 'post-old',
+    envelope_id: 'envelope-old',
+    author_pubkey: 'a'.repeat(64),
+    author_name: 'alice',
+    author_display_name: null,
+    following: false,
+    followed_by: false,
+    mutual: false,
+    friend_of_friend: false,
+    object_kind: 'post',
+    content: 'older post',
+    content_status: 'Available',
+    attachments: [],
+    created_at: 1,
+    reply_to: null,
+    root_id: 'post-old',
+    channel_id: null,
+    audience_label: 'Public',
+  };
+  const firstNewPost: PostView = {
+    ...olderPost,
+    object_id: 'post-new-a',
+    envelope_id: 'envelope-new-a',
+    content: 'first unseen post',
+    created_at: 2,
+    root_id: 'post-new-a',
+  };
+  const secondNewPost: PostView = {
+    ...olderPost,
+    object_id: 'post-new-b',
+    envelope_id: 'envelope-new-b',
+    content: 'second unseen post',
+    created_at: 3,
+    root_id: 'post-new-b',
+  };
+  let timelineItems = [olderPost];
+  const baseApi = createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:demo': timelineItems,
+    },
+  });
+  const api: DesktopApi = {
+    ...baseApi,
+    async listTimeline(topic, cursor, limit, scope) {
+      if (topic !== 'kukuri:topic:demo') {
+        return baseApi.listTimeline(topic, cursor, limit, scope);
+      }
+      return {
+        items: timelineItems.map((item) => ({ ...item, attachments: [...item.attachments] })),
+        next_cursor: null,
+      };
+    },
+  };
+
+  render(<App api={api} />);
+
+  expect(await screen.findByText('older post')).toBeInTheDocument();
+
+  timelineItems = [secondNewPost, firstNewPost, olderPost];
+  window.dispatchEvent(new Event('focus'));
+  expect(await screen.findByRole('button', { name: 'Show 2 new post' })).toBeInTheDocument();
+  expect(screen.queryByText('first unseen post')).not.toBeInTheDocument();
+  expect(screen.queryByText('second unseen post')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Show 2 new post' }));
+
+  await waitFor(() => {
+    expect(screen.getByText('first unseen post')).toBeInTheDocument();
+    expect(screen.getByText('second unseen post')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Show \d+ new post/ })
+    ).not.toBeInTheDocument();
+  });
+});
+
 test('applying a pending timeline does not re-count the same post when a stale refresh completes later', async () => {
   const user = userEvent.setup();
   const olderPost: PostView = {
@@ -2114,7 +2196,9 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   });
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
-    expect(screen.queryByRole('dialog', { name: 'Create Private Channel' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Open core channel settings' })
     ).toBeInTheDocument();
@@ -2204,7 +2288,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
     expect(
-      screen.queryByRole('dialog', { name: 'Create Private Channel' })
+      screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
     ).not.toBeInTheDocument();
   });
   await publishPost(user, 'demo private post');
@@ -2460,7 +2544,8 @@ test('desktop shell can create a private channel and export an invite', async ()
   await user.click(getChannelShareButton(settingsDialog, 'core', 'Invite only'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /channel-1 \/ Invite only/i })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/invite:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
   });
 });
 
@@ -2495,6 +2580,56 @@ test('desktop shell joins an imported private channel and selects its topic scop
   });
 });
 
+test('channel route restore waits for joined channel list before normalizing', async () => {
+  const joinedChannels = createDeferred<JoinedPrivateChannelView[]>();
+  const api = createDesktopMockApi();
+  const listJoinedPrivateChannels = vi
+    .spyOn(api, 'listJoinedPrivateChannels')
+    .mockImplementation(async (topic) => {
+      if (topic !== 'kukuri:topic:demo') {
+        return [];
+      }
+      return joinedChannels.promise;
+    });
+
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored', api);
+
+  await waitFor(() => {
+    expect(listJoinedPrivateChannels).toHaveBeenCalledWith('kukuri:topic:demo');
+  });
+  expect(window.location.hash).toBe(
+    '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored'
+  );
+
+  joinedChannels.resolve([
+    {
+      topic_id: 'kukuri:topic:demo',
+      channel_id: 'channel-restored',
+      label: 'restored',
+      creator_pubkey: 'f'.repeat(64),
+      owner_pubkey: 'f'.repeat(64),
+      joined_via_pubkey: null,
+      audience_kind: 'friend_plus',
+      is_owner: false,
+      current_epoch_id: 'epoch-restored',
+      archived_epoch_ids: [],
+      sharing_state: 'open',
+      rotation_required: false,
+      participant_count: 1,
+      stale_participant_count: 0,
+    },
+  ]);
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe(
+      '#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-restored'
+    );
+    expect(screen.getByRole('button', { name: /restored.*Friends\+/ })).toHaveClass(
+      'topic-subitem-active'
+    );
+  });
+});
+
 test('desktop shell shows friend-only controls and can create a grant', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
@@ -2513,12 +2648,20 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   await user.click(getChannelShareButton(settingsDialog, 'friends', 'Friends'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /channel-1 \/ Friends/i })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/grant:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
   });
 });
 
 test('desktop shell shows friend-plus controls and can create a share', async () => {
   const user = userEvent.setup();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText,
+    },
+  });
   render(<App api={createDesktopMockApi()} />);
   const channelDialog = await openChannelManager(user);
   await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'friends+');
@@ -2536,8 +2679,14 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   await user.click(getChannelShareButton(settingsDialog, 'friends+', 'Friends+'));
 
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /channel-1 \/ Friends\+/i })).toBeInTheDocument();
+    expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
+    expect(within(settingsDialog).queryByText(/share:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
   });
+
+  await user.click(within(settingsDialog).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith(
+    buildChannelAccessPreviewDeepLink('share:kukuri:topic:demo:channel-1')
+  );
 });
 
 test('share token smart link previews before import and joins only after confirmation', async () => {
@@ -2572,7 +2721,7 @@ test('share token smart link previews before import and joins only after confirm
           mutual: false,
           friend_of_friend: false,
           object_kind: 'post',
-          content: inviteToken,
+          content: buildChannelAccessPreviewDeepLink(inviteToken),
           content_status: 'Available',
           attachments: [],
           created_at: 1,
@@ -2599,23 +2748,34 @@ test('share token smart link previews before import and joins only after confirm
 
   render(<App api={api} />);
 
-  const tokenChip = await screen.findByText('Imported / Invite only', {
-    selector: 'button.smart-reference-chip',
-  });
+  const tokenChip = (await screen.findAllByRole('button', { name: /Imported.*Invite only/ }))
+    .find((button) => button.classList.contains('smart-reference-chip'));
+  if (!(tokenChip instanceof HTMLButtonElement)) {
+    throw new Error('expected access preview chip');
+  }
+  expect(tokenChip).not.toHaveAttribute('title');
+  await user.hover(tokenChip);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(inviteToken);
+  await user.unhover(tokenChip);
+
   await user.click(tokenChip);
 
   const dialog = await screen.findByRole('dialog', { name: 'Preview Access' });
   await waitFor(() => {
     expect(previewSpy).toHaveBeenCalledTimes(1);
+    expect(previewSpy).toHaveBeenCalledWith(inviteToken);
     expect(importSpy).not.toHaveBeenCalled();
   });
   expect(within(dialog).getByText('Imported')).toBeInTheDocument();
   expect(within(dialog).queryByText(/channel-imported/)).not.toBeInTheDocument();
   expect(within(dialog).queryByText(/epoch-imported-1/)).not.toBeInTheDocument();
-  expect(within(dialog).getByText('Imported').closest('div')).toHaveAttribute(
-    'title',
-    'channel-imported'
-  );
+  const channelPreviewItem = within(dialog).getByText('Imported').closest('div');
+  if (!(channelPreviewItem instanceof HTMLElement)) {
+    throw new Error('expected channel preview item');
+  }
+  expect(channelPreviewItem).not.toHaveAttribute('title');
+  await user.hover(channelPreviewItem);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('channel-imported');
 
   await user.click(within(dialog).getByRole('button', { name: 'Import / Join' }));
 
@@ -2750,7 +2910,7 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   });
 });
 
-test('share button uses the selected channel label and audience with a trailing icon', async () => {
+test('channel settings copy removes duplicate summary and share button icon', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
@@ -2763,16 +2923,21 @@ test('share button uses the selected channel label and audience with a trailing 
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
   });
   expect(
-    within(channelDialog).queryByRole('button', { name: 'friends+ / Friends+' })
+    within(channelDialog).queryByRole('button', { name: 'Create share link' })
   ).not.toBeInTheDocument();
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
   const settingsDialog = await openChannelSettings(user, 'friends+');
   const shareButton = await within(settingsDialog).findByRole('button', {
-    name: 'friends+ / Friends+',
+    name: 'Create share link',
   });
-  expect(shareButton).toHaveTextContent('friends+ / Friends+');
-  expect(shareButton.lastElementChild?.tagName.toLowerCase()).toBe('svg');
+  expect(within(settingsDialog).getByText('Channel name: friends+')).toBeInTheDocument();
+  expect(
+    within(settingsDialog).getByText('Policy: Friends+: participants can share to their mutuals')
+  ).toBeInTheDocument();
+  expect(within(settingsDialog).queryByText('friends+ / Friends+')).not.toBeInTheDocument();
+  expect(shareButton).toHaveTextContent('Create share link');
+  expect(shareButton.querySelector('svg')).not.toBeInTheDocument();
 });
 
 test('background refresh preserves loaded timeline pages and does not restore a stale load-more cursor', async () => {

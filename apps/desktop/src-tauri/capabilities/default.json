@@ -2,5 +2,5 @@
   "identifier": "default",
   "description": "Capability for the main desktop window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "deep-link:default"]
 }

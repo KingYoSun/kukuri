@@ -670,50 +670,6 @@
   position: relative;
 }
 
-.shell-phase1 .post-reaction-tooltip-anchor::before,
-.shell-phase1 .post-reaction-tooltip-anchor::after {
-  position: absolute;
-  left: 50%;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease, transform 140ms ease;
-  z-index: 2;
-}
-
-.shell-phase1 .post-reaction-tooltip-anchor::before {
-  content: '';
-  bottom: calc(100% + 0.2rem);
-  transform: translate(-50%, 0.2rem);
-  border-width: 0.3rem 0.3rem 0;
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--surface-panel) 96%, white 4%) transparent transparent;
-}
-
-.shell-phase1 .post-reaction-tooltip-anchor::after {
-  content: attr(data-tooltip);
-  bottom: calc(100% + 0.45rem);
-  transform: translate(-50%, 0.2rem);
-  padding: 0.26rem 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, var(--surface-panel) 96%, white 4%);
-  color: var(--foreground-strong);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-}
-
-.shell-phase1 .post-reaction-tooltip-anchor:hover::before,
-.shell-phase1 .post-reaction-tooltip-anchor:hover::after,
-.shell-phase1 .post-reaction-tooltip-anchor:focus-visible::before,
-.shell-phase1 .post-reaction-tooltip-anchor:focus-visible::after {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
 .shell-phase1 .post-reaction-picker-fallback {
   display: inline-flex;
   align-items: center;

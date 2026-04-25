@@ -73,6 +73,7 @@ export function useRouteSynchronization({
     gamePanelStateByTopic,
     gameRoomsByTopic,
     joinedChannelsByTopic,
+    channelPanelStateByTopic,
     livePanelStateByTopic,
     liveSessionsByTopic,
     selectedAuthor,
@@ -186,8 +187,10 @@ export function useRouteSynchronization({
     let normalizedSelectedLiveSessionId: string | null = selectedLiveSessionId;
     let normalizedSelectedGameRoomId: string | null = selectedGameRoomId;
 
+    let requestedTopicIsTracked = false;
     if (requestedTopic) {
       if (trackedTopics.includes(requestedTopic)) {
+        requestedTopicIsTracked = true;
         if (requestedTopic !== activeTopic) {
           nextTopic = requestedTopic;
           setActiveTopic(requestedTopic);
@@ -203,6 +206,7 @@ export function useRouteSynchronization({
     const nextTimelineView =
       routeSection === 'timeline' && requestedTimelineView === 'bookmarks' ? 'bookmarks' : 'feed';
     const joinedChannelsForTopic = joinedChannelsByTopic[nextTopic] ?? [];
+    const channelPanelState = channelPanelStateByTopic[nextTopic];
     const liveSessionsForTopic = liveSessionsByTopic[nextTopic] ?? [];
     const gameRoomsForTopic = gameRoomsByTopic[nextTopic] ?? [];
     const livePanelState = livePanelStateByTopic[nextTopic];
@@ -212,8 +216,9 @@ export function useRouteSynchronization({
       routeSection !== 'messages' && routeSection !== 'notifications';
     let nextSelectedChannelId = currentSelectedChannelIdForTopic;
     if (allowChannelRouteParam && nextTimelineView !== 'bookmarks') {
-      nextSelectedChannelId = requestedChannelParam;
-      if (!nextSelectedChannelId) {
+      nextSelectedChannelId =
+        requestedTopic && !requestedTopicIsTracked ? null : requestedChannelParam;
+      if (!nextSelectedChannelId && (!requestedTopic || requestedTopicIsTracked)) {
         nextSelectedChannelId = parseLegacyRequestedChannel(
           requestedTimelineScopeValue,
           requestedComposeTargetValue
@@ -228,13 +233,23 @@ export function useRouteSynchronization({
     if (
       nextTimelineView !== 'bookmarks' &&
       nextSelectedChannelId &&
+      channelPanelState?.status === 'ready' &&
       !joinedChannelsForTopic.some((channel) => channel.channel_id === nextSelectedChannelId)
     ) {
       shouldNormalize = true;
       nextSelectedChannelId = null;
     }
+    const channelRoutePendingValidation = Boolean(
+      nextTimelineView !== 'bookmarks' &&
+        nextSelectedChannelId &&
+        channelPanelState?.status !== 'ready' &&
+        !joinedChannelsForTopic.some((channel) => channel.channel_id === nextSelectedChannelId)
+    );
 
-    if (currentSelectedChannelIdForTopic !== nextSelectedChannelId) {
+    if (
+      currentSelectedChannelIdForTopic !== nextSelectedChannelId &&
+      !channelRoutePendingValidation
+    ) {
       setSelectedChannelIdByTopic((current) => ({
         ...current,
         [nextTopic]: nextSelectedChannelId,
@@ -840,6 +855,7 @@ export function useRouteSynchronization({
     }
   }, [
     activeTopic,
+    channelPanelStateByTopic,
     directMessagePaneOpen,
     focusedObjectId,
     gamePanelStateByTopic,

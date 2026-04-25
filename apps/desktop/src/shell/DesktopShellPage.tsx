@@ -21,7 +21,11 @@ import { Label } from '@/components/ui/label';
 import { type ChannelAccessTokenPreview, runtimeApi } from '@/lib/api';
 import i18n from '@/i18n';
 import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
-import { buildTopicLink, type InternalSmartReference } from '@/lib/internalLinks';
+import {
+  buildTopicLink,
+  parseChannelAccessPreviewDeepLink,
+  type InternalSmartReference,
+} from '@/lib/internalLinks';
 import { CLIPBOARD_COPY_EVENT, copyTextToClipboard } from '@/lib/utils';
 import {
   SHELL_NAV_ID,
@@ -42,7 +46,6 @@ import {
   resolveProfilePictureSrc,
   syncStatusBadgeLabel,
   syncStatusBadgeTone,
-  translateAudienceKindLabel,
 } from '@/shell/selectors';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
@@ -370,7 +373,6 @@ export function DesktopShellPage({
     threadPostViews,
     topicNavItems,
     activeGameRooms,
-    activePrivateChannel,
   } = viewModels;
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
@@ -476,6 +478,55 @@ export function DesktopShellPage({
     },
     [api, translate]
   );
+  const handleAccessPreviewDeepLink = useCallback(
+    async (url: string) => {
+      const reference = parseChannelAccessPreviewDeepLink(url);
+      if (!reference) {
+        return;
+      }
+      await handleOpenSharePreview(reference.token);
+    },
+    [handleOpenSharePreview]
+  );
+  useEffect(() => {
+    const handleBrowserEvent = (event: Event) => {
+      const url =
+        event instanceof CustomEvent && typeof event.detail?.url === 'string'
+          ? event.detail.url
+          : null;
+      if (url) {
+        void handleAccessPreviewDeepLink(url);
+      }
+    };
+    window.addEventListener('kukuri:open-url', handleBrowserEvent);
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import('@tauri-apps/plugin-deep-link')
+      .then(async ({ getCurrent, onOpenUrl }) => {
+        if (disposed) {
+          return;
+        }
+        const currentUrls = await getCurrent();
+        if (!disposed) {
+          for (const url of currentUrls ?? []) {
+            await handleAccessPreviewDeepLink(url);
+          }
+        }
+        unlisten = await onOpenUrl((urls) => {
+          for (const url of urls) {
+            void handleAccessPreviewDeepLink(url);
+          }
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('kukuri:open-url', handleBrowserEvent);
+      unlisten?.();
+    };
+  }, [handleAccessPreviewDeepLink]);
   const handleConfirmShareImport = useCallback(async () => {
     if (!sharePreviewToken) {
       return;
@@ -843,11 +894,6 @@ export function DesktopShellPage({
               </Label>
             }
             channelAction={channelAction}
-            channelSummary={
-              activePrivateChannel
-                ? `${activePrivateChannel.label} · ${translateAudienceKindLabel(activePrivateChannel.audience_kind)}`
-                : t('common:audience.public')
-            }
             topicList={topicList}
             topicCount={syncStatus.subscribed_topics.length}
           />

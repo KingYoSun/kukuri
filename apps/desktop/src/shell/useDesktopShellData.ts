@@ -121,6 +121,7 @@ export function useDesktopShellData({
   const setLiveSessionsByTopic = useDesktopShellFieldSetter('liveSessionsByTopic');
   const setGameRoomsByTopic = useDesktopShellFieldSetter('gameRoomsByTopic');
   const setJoinedChannelsByTopic = useDesktopShellFieldSetter('joinedChannelsByTopic');
+  const setChannelPanelStateByTopic = useDesktopShellFieldSetter('channelPanelStateByTopic');
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
@@ -333,7 +334,7 @@ export function useDesktopShellData({
           if (shouldBuffer) {
             setPendingTimelineSnapshotsByKey((current) => ({
               ...current,
-              [timelineKey]: pendingTimelineItems,
+              [timelineKey]: normalizedTimelineItems,
             }));
             setPendingTimelineCountsByKey((current) => ({
               ...current,
@@ -388,6 +389,24 @@ export function useDesktopShellData({
             ...current,
             [topic]: joinedChannelsResult.value,
           }));
+          setChannelPanelStateByTopic((current) => ({
+            ...current,
+            [topic]: {
+              status: 'ready',
+              error: null,
+            },
+          }));
+        } else {
+          setChannelPanelStateByTopic((current) => ({
+            ...current,
+            [topic]: {
+              status: 'error',
+              error: messageFromError(
+                joinedChannelsResult.reason,
+                translate('common:errors.failedToLoadPrivateChannels')
+              ),
+            },
+          }));
         }
 
         if (currentThread) {
@@ -436,6 +455,7 @@ export function useDesktopShellData({
       loadTopicsRequestRef,
       setCommunityNodeStatuses,
       setError,
+      setChannelPanelStateByTopic,
       setJoinedChannelsByTopic,
       setPendingTimelineCountsByKey,
       setPendingTimelineNextCursorByKey,

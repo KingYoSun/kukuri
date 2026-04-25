@@ -56,7 +56,6 @@ function ShellNavRailStory() {
             {i18n.t('channels:title')}
           </Button>
         }
-        channelSummary='Core Contributors · Friends+'
         topicList={
           <TopicNavList
             items={topicItems}
@@ -86,7 +85,6 @@ const meta = {
     headerContent: null,
     addTopicControl: null,
     channelAction: null,
-    channelSummary: null,
     topicList: null,
     topicCount: topicItems.length,
   },

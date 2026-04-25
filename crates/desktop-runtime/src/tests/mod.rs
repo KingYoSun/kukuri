@@ -2682,6 +2682,144 @@ async fn preview_channel_access_token_is_non_mutating() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn private_channel_import_without_local_posts_restores_after_restart() {
+    let _serial = acquire_async_test_lock().await;
+    let dir = tempdir().expect("tempdir");
+    let db_a = dir.path().join("private-import-owner.db");
+    let db_b = dir.path().join("private-import-joiner.db");
+    let runtime_a = DesktopRuntime::new_with_config_and_identity(
+        &db_a,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime a");
+    let runtime_b = DesktopRuntime::new_with_config_and_identity(
+        &db_b,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime b");
+    let ticket_a = runtime_a
+        .local_peer_ticket()
+        .await
+        .expect("ticket a")
+        .expect("ticket a value");
+    let ticket_b = runtime_b
+        .local_peer_ticket()
+        .await
+        .expect("ticket b")
+        .expect("ticket b value");
+
+    runtime_a
+        .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_b })
+        .await
+        .expect("import b");
+    runtime_b
+        .import_peer_ticket(ImportPeerTicketRequest { ticket: ticket_a })
+        .await
+        .expect("import a");
+
+    let topic = "kukuri:topic:desktop-private-import-no-posts";
+    let _ = runtime_a
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe a");
+    let _ = runtime_b
+        .list_timeline(ListTimelineRequest {
+            topic: topic.into(),
+            scope: TimelineScope::Public,
+            cursor: None,
+            limit: Some(20),
+        })
+        .await
+        .expect("subscribe b");
+    wait_for_topic_delivery(
+        &runtime_a,
+        topic,
+        1,
+        "import owner topic delivery timeout",
+    )
+    .await;
+    wait_for_topic_delivery(
+        &runtime_b,
+        topic,
+        1,
+        "import joiner topic delivery timeout",
+    )
+    .await;
+
+    let channel = runtime_a
+        .create_private_channel(CreatePrivateChannelRequest {
+            topic: topic.into(),
+            label: "no-post-import".into(),
+            audience_kind: ChannelAudienceKind::InviteOnly,
+        })
+        .await
+        .expect("create private channel");
+    let invite = runtime_a
+        .export_private_channel_invite(ExportPrivateChannelInviteRequest {
+            topic: topic.into(),
+            channel_id: channel.channel_id.clone(),
+            expires_at: None,
+        })
+        .await
+        .expect("export invite");
+
+    let imported = runtime_b
+        .import_private_channel_invite(ImportPrivateChannelInviteRequest { token: invite })
+        .await
+        .expect("import invite");
+    assert_eq!(imported.topic_id.as_str(), topic);
+    assert_eq!(imported.channel_id.as_str(), channel.channel_id);
+
+    let joined_before_restart = runtime_b
+        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+            topic: topic.into(),
+        })
+        .await
+        .expect("list joined before restart");
+    assert_eq!(joined_before_restart.len(), 1);
+    assert_eq!(joined_before_restart[0].channel_id, channel.channel_id);
+
+    timeout(runtime_shutdown_timeout(), runtime_a.shutdown())
+        .await
+        .expect("runtime a shutdown timeout");
+    timeout(runtime_shutdown_timeout(), runtime_b.shutdown())
+        .await
+        .expect("runtime b shutdown timeout");
+    drop(runtime_a);
+    drop(runtime_b);
+
+    let restarted_b = DesktopRuntime::new_with_config_and_identity(
+        &db_b,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("restart runtime b");
+    let joined_after_restart = restarted_b
+        .list_joined_private_channels(ListJoinedPrivateChannelsRequest {
+            topic: topic.into(),
+        })
+        .await
+        .expect("list joined after restart");
+    assert_eq!(joined_after_restart.len(), 1);
+    assert_eq!(joined_after_restart[0].channel_id, channel.channel_id);
+    assert_eq!(joined_after_restart[0].label, "no-post-import");
+
+    timeout(runtime_shutdown_timeout(), restarted_b.shutdown())
+        .await
+        .expect("restarted runtime shutdown timeout");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn private_channel_invite_restores_after_restart_without_reimport() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
