@@ -438,6 +438,16 @@ impl SharedIrohStack {
         Ok(())
     }
 
+    pub(crate) async fn force_rebuild_runtime_connectivity(
+        &self,
+        discovery_config: &DiscoveryConfig,
+        bootstrap_seed_peers: &[SeedPeer],
+        relay_config: TransportRelayConfig,
+    ) -> Result<()> {
+        self.rebuild(discovery_config, bootstrap_seed_peers, relay_config)
+            .await
+    }
+
     pub(crate) async fn shutdown(&self) {
         if let Some(current) = self.current.lock().await.take() {
             let _ =

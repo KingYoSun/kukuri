@@ -7660,6 +7660,14 @@ async fn reapply_community_node_connectivity_forces_unchanged_runtime_inputs() {
     let effective_seed_peer_apply_version = runtime
         .effective_seed_peer_apply_version
         .load(Ordering::SeqCst);
+    let stack_node_before = {
+        let current = runtime.iroh_stack.current.lock().await;
+        current
+            .as_ref()
+            .expect("current stack before force reapply")
+            .node
+            .clone()
+    };
 
     timeout(
         Duration::from_secs(30),
@@ -7674,6 +7682,18 @@ async fn reapply_community_node_connectivity_forces_unchanged_runtime_inputs() {
             .runtime_connectivity_apply_version
             .load(Ordering::SeqCst),
         runtime_connectivity_apply_version + 1
+    );
+    let stack_node_after = {
+        let current = runtime.iroh_stack.current.lock().await;
+        current
+            .as_ref()
+            .expect("current stack after force reapply")
+            .node
+            .clone()
+    };
+    assert!(
+        !Arc::ptr_eq(&stack_node_before, &stack_node_after),
+        "force reapply should rebuild the iroh stack even when relay and seed inputs are unchanged"
     );
     assert_eq!(
         runtime

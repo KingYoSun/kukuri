@@ -68,6 +68,7 @@ impl DesktopRuntime {
             .clear();
         self.community_node_last_errors.lock().await.clear();
         self.community_node_cached_consents.lock().await.clear();
+        *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(next_config)
@@ -99,6 +100,7 @@ impl DesktopRuntime {
             .clear();
         self.community_node_last_errors.lock().await.clear();
         self.community_node_cached_consents.lock().await.clear();
+        *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
         Ok(())
@@ -204,6 +206,7 @@ impl DesktopRuntime {
             .lock()
             .await
             .remove(base_url.as_str());
+        *self.community_node_reconnect_state.lock().await = Default::default();
         let node = self
             .community_node_config
             .lock()
@@ -315,7 +318,7 @@ impl DesktopRuntime {
     }
 
     pub async fn reapply_community_node_connectivity(&self) -> Result<()> {
-        self.force_apply_runtime_connectivity_assist().await?;
+        self.force_rebuild_runtime_connectivity_assist().await?;
         self.force_apply_effective_seed_peers().await?;
         Ok(())
     }
