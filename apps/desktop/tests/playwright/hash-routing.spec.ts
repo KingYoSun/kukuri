@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function openChannelManager(page: Page) {
-  const dialog = page.getByRole('dialog', { name: 'Create Private Channel' });
+  const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   if (await dialog.isVisible().catch(() => false)) {
     return dialog;
   }
