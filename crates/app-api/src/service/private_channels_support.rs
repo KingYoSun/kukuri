@@ -16,15 +16,24 @@ impl AppService {
             };
             let local_author = self.current_author_pubkey();
             let replica = current_private_channel_replica_id(&state);
-            let grant_doc = fetch_private_channel_rotation_grant_from_replica(
+            let grant_doc = fetch_private_channel_rotation_grant_from_replica_with_policy(
                 self.docs_sync.as_ref(),
                 &replica,
                 local_author.as_str(),
+                DocFetchPolicy::LocalOnly,
             )
             .await?;
             let grant_doc = if let Some(grant_doc) = grant_doc {
                 Some(grant_doc)
             } else {
+                let has_peers = self
+                    .transport
+                    .peers()
+                    .await
+                    .is_ok_and(|peers| peers.peer_count > 0);
+                if !has_peers {
+                    return Ok(redeemed_any);
+                }
                 if let Err(error) = self.docs_sync.restart_replica_sync(&replica).await {
                     warn!(
                         topic = %topic_id,
