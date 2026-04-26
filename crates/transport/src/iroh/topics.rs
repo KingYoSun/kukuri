@@ -8,7 +8,14 @@ pub(crate) fn initial_topic_join_timeout() -> Duration {
     }
 }
 
-fn topic_warmup_retry_delay(attempt: usize) -> Duration {
+fn topic_warmup_retry_delay(attempt: usize, relay_backed: bool) -> Duration {
+    if relay_backed {
+        return relay_topic_warmup_retry_delay(attempt);
+    }
+    direct_topic_warmup_retry_delay(attempt)
+}
+
+fn direct_topic_warmup_retry_delay(attempt: usize) -> Duration {
     match attempt {
         0 => Duration::from_millis(250),
         1 => Duration::from_millis(500),
@@ -18,12 +25,117 @@ fn topic_warmup_retry_delay(attempt: usize) -> Duration {
     }
 }
 
+fn relay_topic_warmup_retry_delay(attempt: usize) -> Duration {
+    match attempt {
+        0 => Duration::from_secs(1),
+        1 => Duration::from_secs(2),
+        2 => Duration::from_secs(4),
+        3 => Duration::from_secs(8),
+        _ => Duration::from_secs(10),
+    }
+}
+
+fn peers_use_relay(peers: &[EndpointAddr]) -> bool {
+    peers.iter().any(|peer| peer.relay_urls().next().is_some())
+}
+
 fn direct_warmup_addr(endpoint_addr: &EndpointAddr) -> EndpointAddr {
     endpoint_addr.clone()
 }
 pub(crate) fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     let hash = blake3::hash(topic.as_str().as_bytes());
     GossipTopicId::from_bytes(*hash.as_bytes())
+}
+
+async fn endpoint_has_active_remote_addr(endpoint: &Endpoint, endpoint_id: EndpointId) -> bool {
+    endpoint.remote_info(endpoint_id).await.is_some_and(|info| {
+        info.addrs()
+            .any(|addr| matches!(addr.usage(), TransportAddrUsage::Active))
+    })
+}
+
+impl TopicWarmupCoordinator {
+    async fn warmup_peers_once(
+        &self,
+        endpoint: &Endpoint,
+        gossip: &Gossip,
+        peers: &[EndpointAddr],
+    ) {
+        let mut tasks = Vec::new();
+        for peer in peers.iter().cloned() {
+            let coordinator = self.clone();
+            let endpoint = endpoint.clone();
+            let gossip = gossip.clone();
+            tasks.push(tokio::spawn(async move {
+                coordinator.warmup_peer(endpoint, gossip, peer).await;
+            }));
+        }
+        for task in tasks {
+            let _ = task.await;
+        }
+    }
+
+    async fn warmup_peer(&self, endpoint: Endpoint, gossip: Gossip, peer: EndpointAddr) {
+        let peer_key = peer.id.to_string();
+        let Some(_in_flight_guard) = self.try_mark_peer_in_flight(peer_key) else {
+            return;
+        };
+
+        let Ok(_permit) = self.permits.acquire().await else {
+            return;
+        };
+        if endpoint_has_active_remote_addr(&endpoint, peer.id).await {
+            return;
+        }
+
+        let warmup_addr = direct_warmup_addr(&peer);
+        if let Ok(connection) = endpoint.connect(warmup_addr, GOSSIP_ALPN).await {
+            let _ = gossip.handle_connection(connection).await;
+        }
+    }
+
+    fn try_mark_peer_in_flight(&self, peer_key: String) -> Option<TopicWarmupInFlightGuard> {
+        let mut in_flight_peers = self
+            .in_flight_peers
+            .write()
+            .expect("topic warmup in-flight lock poisoned");
+        if !in_flight_peers.insert(peer_key.clone()) {
+            return None;
+        }
+        Some(TopicWarmupInFlightGuard {
+            peer_key,
+            in_flight_peers: Arc::clone(&self.in_flight_peers),
+        })
+    }
+
+    #[cfg(test)]
+    fn try_mark_peer_in_flight_for_test(&self, peer_key: &str) -> bool {
+        self.in_flight_peers
+            .write()
+            .expect("topic warmup in-flight lock poisoned")
+            .insert(peer_key.to_string())
+    }
+
+    #[cfg(test)]
+    fn clear_in_flight_for_test(&self, peer_key: &str) {
+        self.in_flight_peers
+            .write()
+            .expect("topic warmup in-flight lock poisoned")
+            .remove(peer_key);
+    }
+}
+
+struct TopicWarmupInFlightGuard {
+    peer_key: String,
+    in_flight_peers: Arc<StdRwLock<BTreeSet<String>>>,
+}
+
+impl Drop for TopicWarmupInFlightGuard {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight_peers) = self.in_flight_peers.write() {
+            in_flight_peers.remove(&self.peer_key);
+        }
+    }
 }
 
 impl IrohGossipTransport {
@@ -92,8 +204,10 @@ impl IrohGossipTransport {
 
             let endpoint = self.endpoint.clone();
             let gossip = self.gossip.clone();
+            let warmups = Arc::clone(&self.topic_warmups);
             tokio::spawn(async move {
                 let join_deadline = tokio::time::Instant::now() + initial_topic_join_timeout();
+                let relay_backed = peers_use_relay(&join_endpoint_addrs);
                 let mut attempt = 0usize;
                 loop {
                     let already_connected = {
@@ -105,13 +219,13 @@ impl IrohGossipTransport {
                     if already_connected || tokio::time::Instant::now() >= join_deadline {
                         return;
                     }
-                    for peer in &join_endpoint_addrs {
-                        let warmup_addr = direct_warmup_addr(peer);
-                        if let Ok(connection) = endpoint.connect(warmup_addr, GOSSIP_ALPN).await {
-                            let _ = gossip.handle_connection(connection).await;
-                        }
+                    warmups
+                        .warmup_peers_once(&endpoint, &gossip, &join_endpoint_addrs)
+                        .await;
+                    if tokio::time::Instant::now() >= join_deadline {
+                        return;
                     }
-                    let retry_delay = topic_warmup_retry_delay(attempt);
+                    let retry_delay = topic_warmup_retry_delay(attempt, relay_backed);
                     attempt = attempt.saturating_add(1);
                     sleep(retry_delay).await;
                 }
@@ -194,26 +308,23 @@ impl IrohGossipTransport {
         let warm_endpoint = self.endpoint.clone();
         let warm_bootstrap_peers = bootstrap_peers.clone();
         let warm_gossip = self.gossip.clone();
+        let warmups = Arc::clone(&self.topic_warmups);
 
         let task = tokio::spawn(async move {
             if imported_count > 0 {
                 let join_timeout = initial_topic_join_timeout();
                 let warmup_task = tokio::spawn(async move {
                     let join_deadline = tokio::time::Instant::now() + join_timeout;
+                    let relay_backed = peers_use_relay(&warm_bootstrap_peers);
                     let mut attempt = 0usize;
                     loop {
-                        for peer in &warm_bootstrap_peers {
-                            let warmup_addr = direct_warmup_addr(peer);
-                            if let Ok(connection) =
-                                warm_endpoint.connect(warmup_addr, GOSSIP_ALPN).await
-                            {
-                                let _ = warm_gossip.handle_connection(connection).await;
-                            }
-                        }
+                        warmups
+                            .warmup_peers_once(&warm_endpoint, &warm_gossip, &warm_bootstrap_peers)
+                            .await;
                         if tokio::time::Instant::now() >= join_deadline {
                             return;
                         }
-                        let retry_delay = topic_warmup_retry_delay(attempt);
+                        let retry_delay = topic_warmup_retry_delay(attempt, relay_backed);
                         attempt = attempt.saturating_add(1);
                         sleep(retry_delay).await;
                     }
@@ -373,11 +484,50 @@ mod tests {
 
     #[test]
     fn topic_warmup_retry_delay_backs_off_and_caps() {
-        assert_eq!(topic_warmup_retry_delay(0), Duration::from_millis(250));
-        assert_eq!(topic_warmup_retry_delay(1), Duration::from_millis(500));
-        assert_eq!(topic_warmup_retry_delay(2), Duration::from_secs(1));
-        assert_eq!(topic_warmup_retry_delay(3), Duration::from_secs(2));
-        assert_eq!(topic_warmup_retry_delay(4), Duration::from_secs(5));
-        assert_eq!(topic_warmup_retry_delay(12), Duration::from_secs(5));
+        assert_eq!(
+            topic_warmup_retry_delay(0, false),
+            Duration::from_millis(250)
+        );
+        assert_eq!(
+            topic_warmup_retry_delay(1, false),
+            Duration::from_millis(500)
+        );
+        assert_eq!(topic_warmup_retry_delay(2, false), Duration::from_secs(1));
+        assert_eq!(topic_warmup_retry_delay(3, false), Duration::from_secs(2));
+        assert_eq!(topic_warmup_retry_delay(4, false), Duration::from_secs(5));
+        assert_eq!(topic_warmup_retry_delay(12, false), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn relay_topic_warmup_retry_delay_backs_off_more_slowly() {
+        assert_eq!(topic_warmup_retry_delay(0, true), Duration::from_secs(1));
+        assert_eq!(topic_warmup_retry_delay(1, true), Duration::from_secs(2));
+        assert_eq!(topic_warmup_retry_delay(2, true), Duration::from_secs(4));
+        assert_eq!(topic_warmup_retry_delay(3, true), Duration::from_secs(8));
+        assert_eq!(topic_warmup_retry_delay(4, true), Duration::from_secs(10));
+        assert_eq!(topic_warmup_retry_delay(12, true), Duration::from_secs(10));
+    }
+
+    #[test]
+    fn warmup_coordinator_coalesces_same_peer_dials() {
+        let coordinator = TopicWarmupCoordinator::default();
+
+        assert!(coordinator.try_mark_peer_in_flight_for_test("peer"));
+        assert!(!coordinator.try_mark_peer_in_flight_for_test("peer"));
+
+        coordinator.clear_in_flight_for_test("peer");
+        assert!(coordinator.try_mark_peer_in_flight_for_test("peer"));
+    }
+
+    #[test]
+    fn warmup_in_flight_guard_clears_on_drop() {
+        let coordinator = TopicWarmupCoordinator::default();
+        let guard = coordinator
+            .try_mark_peer_in_flight("peer".to_string())
+            .expect("first warmup marks peer");
+
+        assert!(!coordinator.try_mark_peer_in_flight_for_test("peer"));
+        drop(guard);
+        assert!(coordinator.try_mark_peer_in_flight_for_test("peer"));
     }
 }

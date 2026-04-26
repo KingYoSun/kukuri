@@ -1,12 +1,13 @@
 use std::net::SocketAddr;
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use iroh_relay::defaults::DEFAULT_RELAY_QUIC_PORT;
 use iroh_relay::server::{
-    AccessConfig, CertConfig, QuicConfig, RelayConfig as HttpRelayConfig, Server, ServerConfig,
-    TlsConfig,
+    AccessConfig, CertConfig, ClientRateLimit, Limits, QuicConfig, RelayConfig as HttpRelayConfig,
+    Server, ServerConfig, TlsConfig,
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -37,6 +38,13 @@ impl IrohRelayTlsConfig {
 pub struct IrohRelayConfig {
     pub http_bind_addr: SocketAddr,
     pub tls: Option<IrohRelayTlsConfig>,
+    pub client_rx_limit: Option<IrohRelayClientRxLimit>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IrohRelayClientRxLimit {
+    pub bytes_per_second: NonZeroU32,
+    pub max_burst_bytes: Option<NonZeroU32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +70,7 @@ impl IrohRelayConfig {
                 DEFAULT_HTTP_BIND_ADDR,
             )?,
             tls: parse_tls_config_from_lookup(lookup)?,
+            client_rx_limit: parse_client_rx_limit_from_lookup(lookup)?,
         })
     }
 
@@ -118,11 +127,19 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
         None => (None, None),
     };
 
+    let limits = Limits {
+        client_rx: config.client_rx_limit.map(|limit| ClientRateLimit {
+            bytes_per_second: limit.bytes_per_second,
+            max_burst_bytes: limit.max_burst_bytes,
+        }),
+        ..Default::default()
+    };
+
     let server_config = ServerConfig::<(), ()> {
         relay: Some(HttpRelayConfig {
             http_bind_addr: config.http_bind_addr,
             tls: relay_tls,
-            limits: Default::default(),
+            limits,
             key_cache_capacity: Some(1024),
             access: AccessConfig::Everyone,
         }),
@@ -186,6 +203,31 @@ where
     }))
 }
 
+fn parse_client_rx_limit_from_lookup<F>(lookup: &F) -> Result<Option<IrohRelayClientRxLimit>>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let bytes_per_second = optional_nonzero_u32_lookup(
+        lookup,
+        "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND",
+    )?;
+    let max_burst_bytes = optional_nonzero_u32_lookup(
+        lookup,
+        "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES",
+    )?;
+
+    match (bytes_per_second, max_burst_bytes) {
+        (None, None) => Ok(None),
+        (Some(bytes_per_second), max_burst_bytes) => Ok(Some(IrohRelayClientRxLimit {
+            bytes_per_second,
+            max_burst_bytes,
+        })),
+        (None, Some(_)) => bail!(
+            "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND is required when setting COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES"
+        ),
+    }
+}
+
 fn parse_socket_addr_lookup<F>(lookup: &F, var_name: &str, default: &str) -> Result<SocketAddr>
 where
     F: Fn(&str) -> Option<String>,
@@ -205,6 +247,21 @@ where
             value
                 .parse()
                 .with_context(|| format!("failed to parse {var_name}"))
+        })
+        .transpose()
+}
+
+fn optional_nonzero_u32_lookup<F>(lookup: &F, var_name: &str) -> Result<Option<NonZeroU32>>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    lookup_value(lookup, var_name)
+        .map(|value| {
+            let parsed = value
+                .parse::<u32>()
+                .with_context(|| format!("failed to parse {var_name}"))?;
+            NonZeroU32::new(parsed)
+                .ok_or_else(|| anyhow::anyhow!("{var_name} must be greater than zero"))
         })
         .transpose()
 }
@@ -279,6 +336,58 @@ mod tests {
             SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3340)
         );
         assert!(config.tls.is_none());
+        assert!(config.client_rx_limit.is_none());
+    }
+
+    #[test]
+    fn from_env_parses_client_rx_limit() {
+        let config = config_from_vars(&[
+            (
+                "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND",
+                "1048576",
+            ),
+            (
+                "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES",
+                "2097152",
+            ),
+        ])
+        .expect("config");
+
+        assert_eq!(
+            config.client_rx_limit,
+            Some(IrohRelayClientRxLimit {
+                bytes_per_second: NonZeroU32::new(1_048_576).expect("nonzero"),
+                max_burst_bytes: Some(NonZeroU32::new(2_097_152).expect("nonzero")),
+            })
+        );
+    }
+
+    #[test]
+    fn from_env_rejects_client_rx_burst_without_rate() {
+        let error = config_from_vars(&[(
+            "COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES",
+            "2097152",
+        )])
+        .expect_err("config should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("CLIENT_RX_BYTES_PER_SECOND is required")
+        );
+    }
+
+    #[test]
+    fn from_env_rejects_zero_client_rx_rate() {
+        let error =
+            config_from_vars(&[("COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND", "0")])
+                .expect_err("config should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("CLIENT_RX_BYTES_PER_SECOND must be greater than zero")
+        );
     }
 
     #[test]
@@ -359,6 +468,7 @@ mod tests {
                 cert_path,
                 key_path,
             }),
+            client_rx_limit: None,
         })
         .await
         .expect("spawn relay server");
