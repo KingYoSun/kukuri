@@ -394,12 +394,24 @@ export function createProfileTopicChannelActions({
       return;
     }
     setChannelActionPending('create');
+    setInviteOutput(null);
     try {
       const channel = await api.createPrivateChannel(
         activeTopic,
         channelLabelInput.trim(),
         channelAudienceInput
       );
+      let nextChannelError: string | null = null;
+      try {
+        const access = await api.exportChannelAccessToken(activeTopic, channel.channel_id, null);
+        setInviteOutput(access.token);
+        setInviteOutputLabel(access.kind);
+      } catch (shareError) {
+        nextChannelError = messageFromError(
+          shareError,
+          translate('channels:errors.failedShareChannel')
+        );
+      }
       setJoinedChannelsByTopic((current) => ({
         ...current,
         [activeTopic]: upsertJoinedChannel(current[activeTopic] ?? [], channel),
@@ -413,7 +425,7 @@ export function createProfileTopicChannelActions({
       }));
       setChannelLabelInput('');
       setChannelAudienceInput('invite_only');
-      setChannelError(null);
+      setChannelError(nextChannelError);
       setTimelineScopeByTopic((current) => ({
         ...current,
         [activeTopic]: {
@@ -454,6 +466,55 @@ export function createProfileTopicChannelActions({
       setChannelError(
         messageFromError(channelCreateError, translate('channels:errors.failedCreateChannel'))
       );
+    } finally {
+      setChannelActionPending(null);
+    }
+  }
+
+  async function handleLeavePrivateChannel(topicId: string, channelId: string) {
+    setChannelActionPending('leave');
+    try {
+      await api.leavePrivateChannel(topicId, channelId);
+      setJoinedChannelsByTopic((current) => ({
+        ...current,
+        [topicId]: (current[topicId] ?? []).filter(
+          (channel) => channel.channel_id !== channelId
+        ),
+      }));
+      setChannelPanelStateByTopic((current) => ({
+        ...current,
+        [topicId]: {
+          status: 'ready',
+          error: null,
+        },
+      }));
+      setInviteOutput(null);
+      setChannelError(null);
+      const leavingSelectedChannel = selectedChannelIdByTopic[topicId] === channelId;
+      if (leavingSelectedChannel) {
+        setSelectedChannelIdByTopic((current) => ({
+          ...current,
+          [topicId]: null,
+        }));
+        setTimelineScopeByTopic((current) => ({
+          ...current,
+          [topicId]: PUBLIC_TIMELINE_SCOPE,
+        }));
+        setComposeChannelByTopic((current) => ({
+          ...current,
+          [topicId]: PUBLIC_CHANNEL_REF,
+        }));
+        if (topicId === activeTopic) {
+          syncRoute('replace', {
+            activeTopic: topicId,
+            composeTarget: PUBLIC_CHANNEL_REF,
+            timelineScope: PUBLIC_TIMELINE_SCOPE,
+          });
+        }
+      }
+      await loadTopics(trackedTopics, activeTopic, selectedThread);
+    } catch (leaveError) {
+      setChannelError(messageFromError(leaveError, translate('channels:errors.failedLeaveChannel')));
     } finally {
       setChannelActionPending(null);
     }
@@ -720,6 +781,7 @@ export function createProfileTopicChannelActions({
     handleOpenOriginalTopic,
     handleRemoveTopic,
     handleCreatePrivateChannel,
+    handleLeavePrivateChannel,
     handleShareChannelAccess,
     handleJoinChannelAccess,
     handleImportChannelAccessToken,

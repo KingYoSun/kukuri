@@ -398,6 +398,7 @@ pub(crate) async fn wait_for_private_channel_epoch_snapshot(
                     participant.participant_pubkey == policy.owner_pubkey
                         && participant.epoch_id == policy.epoch_id
                         && participant.is_owner
+                        && participant.left_at.is_none()
                 })
             });
             if let (Some(metadata), Some(policy)) = (metadata, policy)

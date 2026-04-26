@@ -90,6 +90,7 @@ fn channel_policy_and_participant_roundtrip() {
         join_mode: Some(PrivateChannelJoinMode::FriendOnlyGrant),
         sponsor_pubkey: Some(owner.public_key()),
         share_token_id: None,
+        left_at: None,
     };
     let participant_envelope =
         build_private_channel_participant_envelope(&participant, &participant_doc)

@@ -4,9 +4,10 @@ use kukuri_desktop_runtime::{
     ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
     ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
-    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, ListJoinedPrivateChannelsRequest,
-    PreviewChannelAccessTokenRequest, RotatePrivateChannelRequest, SetCommunityNodeConfigRequest,
-    SetDiscoverySeedsRequest, UnsubscribeTopicRequest,
+    ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
+    ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
+    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
+    UnsubscribeTopicRequest,
 };
 
 use crate::state::{DesktopState, map_error};
@@ -151,6 +152,18 @@ pub async fn rotate_private_channel(
     state
         .runtime
         .rotate_private_channel(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn leave_private_channel(
+    state: tauri::State<'_, DesktopState>,
+    request: LeavePrivateChannelRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .leave_private_channel(request)
         .await
         .map_err(map_error)
 }

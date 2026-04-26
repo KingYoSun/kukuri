@@ -100,6 +100,11 @@ export function DesktopShellPage({
   const [composeDialogOpen, setComposeDialogOpen] = useState(false);
   const [channelDialogOpen, setChannelDialogOpen] = useState(false);
   const [channelSettingsDialogOpen, setChannelSettingsDialogOpen] = useState(false);
+  const [leaveChannelDialogOpen, setLeaveChannelDialogOpen] = useState(false);
+  const [pendingLeaveChannel, setPendingLeaveChannel] = useState<{
+    topicId: string;
+    channelId: string;
+  } | null>(null);
   const [liveCreateDialogOpen, setLiveCreateDialogOpen] = useState(false);
   const [gameCreateDialogOpen, setGameCreateDialogOpen] = useState(false);
   const [profileAvatarPreviewUrl, setProfileAvatarPreviewUrl] = useState<string | null>(null);
@@ -293,6 +298,7 @@ export function DesktopShellPage({
     handleRemoveTopic,
     handleSelectPrivateChannel,
     handleCreatePrivateChannel,
+    handleLeavePrivateChannel,
     handleShareChannelAccess,
     handleJoinChannelAccess,
     handleImportChannelAccessToken,
@@ -780,6 +786,10 @@ export function DesktopShellPage({
         handleSelectPrivateChannel(topic, channelId);
         setChannelSettingsDialogOpen(true);
       }}
+      onLeaveChannel={(topic, channelId) => {
+        setPendingLeaveChannel({ topicId: topic, channelId });
+        setLeaveChannelDialogOpen(true);
+      }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
       onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
     />
@@ -983,6 +993,24 @@ export function DesktopShellPage({
         setChannelDialogOpen={setChannelDialogOpen}
         channelSettingsDialogOpen={channelSettingsDialogOpen}
         setChannelSettingsDialogOpen={setChannelSettingsDialogOpen}
+        leaveChannelDialogOpen={leaveChannelDialogOpen}
+        setLeaveChannelDialogOpen={(open) => {
+          setLeaveChannelDialogOpen(open);
+          if (!open) {
+            setPendingLeaveChannel(null);
+          }
+        }}
+        handleConfirmLeaveChannel={async () => {
+          if (!pendingLeaveChannel) {
+            return;
+          }
+          await handleLeavePrivateChannel(
+            pendingLeaveChannel.topicId,
+            pendingLeaveChannel.channelId
+          );
+          setLeaveChannelDialogOpen(false);
+          setPendingLeaveChannel(null);
+        }}
         sharePreviewOpen={sharePreviewOpen}
         setSharePreviewOpen={setSharePreviewOpen}
         sharePreviewToken={sharePreviewToken}

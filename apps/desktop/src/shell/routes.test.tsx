@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+﻿import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test } from 'vitest';
 
@@ -467,7 +467,7 @@ test('topic and private channel selection sync into the hash route', async () =>
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {

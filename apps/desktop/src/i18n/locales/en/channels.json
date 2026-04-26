@@ -2,6 +2,7 @@
   "actions": {
     "createChannel": "Create Channel",
     "join": "Join",
+    "leaveChannel": "Leave {{channel}} channel",
     "openSettings": "Open {{channel}} channel settings",
     "share": "Share",
     "createShareLink": "Create share link"
@@ -20,7 +21,7 @@
     "join": "Join",
     "joinBlockTitle": "Join",
     "placeholders": {
-      "channelLabel": "core contributors",
+      "channelLabel": "Channel name",
       "inviteToken": "paste private channel invite, friend grant, or friends+ share"
     }
   },
@@ -33,6 +34,7 @@
     "failedPreviewToken": "failed to preview private channel token",
     "failedCreateShare": "failed to create friends+ share",
     "failedJoinChannel": "failed to join private channel",
+    "failedLeaveChannel": "failed to leave private channel",
     "failedShareChannel": "failed to share private channel"
   },
   "inspectHint": "Inspect policy and actions here.",
@@ -40,6 +42,12 @@
   "loading": "Loading private channels...",
   "latestInvite": "Latest invite",
   "latestShare": "Latest share",
+  "leaveDialog": {
+    "title": "Leave channel",
+    "description": "Leave this channel?",
+    "no": "No",
+    "yes": "Yes"
+  },
   "copyShareLink": "Copy share link",
   "policies": {
     "friend_only": "Friends: only mutual followers can join",

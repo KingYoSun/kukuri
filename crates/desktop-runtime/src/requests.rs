@@ -318,6 +318,12 @@ pub struct RotatePrivateChannelRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeavePrivateChannelRequest {
+    pub topic: String,
+    pub channel_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListJoinedPrivateChannelsRequest {
     pub topic: String,
 }

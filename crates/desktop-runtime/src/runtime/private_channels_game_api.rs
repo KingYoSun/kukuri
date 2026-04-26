@@ -150,6 +150,13 @@ impl DesktopRuntime {
         Ok(view)
     }
 
+    pub async fn leave_private_channel(&self, request: LeavePrivateChannelRequest) -> Result<()> {
+        self.app_service
+            .leave_private_channel(request.topic.as_str(), request.channel_id.as_str())
+            .await?;
+        self.persist_private_channel_capabilities_from_app().await
+    }
+
     pub async fn list_joined_private_channels(
         &self,
         request: ListJoinedPrivateChannelsRequest,
