@@ -50,11 +50,14 @@ type PrivateChannelPanelProps = {
   channelAudience: ChannelAudienceOption['value'];
   channelAudienceOptions: ChannelAudienceOption[];
   inviteTokenInput: string;
+  inviteOutput?: string | null;
+  inviteOutputLabel?: InviteOutputLabel;
   onChannelLabelChange: (value: string) => void;
   onChannelAudienceChange: (value: ChannelAudienceOption['value']) => void;
   onInviteTokenChange: (value: string) => void;
   onCreateChannel: FormEventHandler<HTMLFormElement>;
   onJoin: FormEventHandler<HTMLFormElement>;
+  onCopyInviteOutput?: (token: string) => void;
 };
 
 type PrivateChannelSettingsPanelProps = {
@@ -75,14 +78,20 @@ export function PrivateChannelPanel({
   channelAudience,
   channelAudienceOptions,
   inviteTokenInput,
+  inviteOutput = null,
+  inviteOutputLabel = 'invite',
   onChannelLabelChange,
   onChannelAudienceChange,
   onInviteTokenChange,
   onCreateChannel,
   onJoin,
+  onCopyInviteOutput,
 }: PrivateChannelPanelProps) {
   const { t } = useTranslation(['channels', 'common']);
   const channelActionDisabled = pendingAction !== null;
+  const channelAccessDeepLink = inviteOutput
+    ? buildChannelAccessPreviewDeepLink(inviteOutput)
+    : null;
 
   return (
     <div className='extended-module-stack'>
@@ -147,6 +156,27 @@ export function PrivateChannelPanel({
           </form>
         </Card>
       </div>
+
+      {inviteOutput && channelAccessDeepLink ? (
+        <Notice tone='accent'>
+          <div className='shell-inline-actions'>
+            <strong>{t('channels:copyShareLink')}</strong>
+            {onCopyInviteOutput ? (
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('common:actions.copyLink')}
+                onClick={() => onCopyInviteOutput(channelAccessDeepLink)}
+              >
+                <Copy className='size-4' aria-hidden='true' />
+              </Button>
+            ) : null}
+          </div>
+          <span className='sr-only'>{audienceSummaryLabel(inviteOutputLabel, t)}</span>
+        </Notice>
+      ) : null}
 
       {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
     </div>

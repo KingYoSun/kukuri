@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+﻿import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -818,7 +818,7 @@ test('channel manager opens as a modal from the navigation summary', async () =>
   expect(within(dialog).getByText('Create')).toBeInTheDocument();
   expect(within(dialog).getAllByText('Join').length).toBeGreaterThan(0);
   expect(within(dialog).getByText('Channel name')).toBeInTheDocument();
-  expect(within(dialog).getByPlaceholderText('core contributors')).toBeInTheDocument();
+  expect(within(dialog).getByPlaceholderText('Channel name')).toBeInTheDocument();
 
   await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
   await waitFor(() => {
@@ -1234,7 +1234,7 @@ test('topic and private channel selection sync into the hash route', async () =>
 
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:demo' }));
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
@@ -1249,7 +1249,7 @@ test('tracked topics show public and channel scope separately in the sidebar', a
   render(<App api={createDesktopMockApi()} />);
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
@@ -1300,7 +1300,7 @@ test('sidebar can reselect the same private channel after switching back to publ
   render(<App api={createDesktopMockApi()} />);
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
@@ -1341,7 +1341,7 @@ test('sidebar can switch from one topic public scope to another topic private ch
   await user.click(screen.getByRole('button', { name: 'kukuri:topic:second' }));
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'second-core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'second-core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Asecond&channel=channel-1');
@@ -2190,7 +2190,7 @@ test('private channel timeline keeps scope-separated posts and pending counts fr
   expect(screen.queryByText('channel post')).not.toBeInTheDocument();
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
@@ -2280,7 +2280,7 @@ test('profile overview aggregates public posts across topics and excludes privat
   });
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
   await waitFor(() => {
     expect(window.location.hash).toMatch(
@@ -2532,14 +2532,26 @@ test('desktop shell can create, join, leave, and end a live session', async () =
 
 test('desktop shell can create a private channel and export an invite', async () => {
   const user = userEvent.setup();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText,
+    },
+  });
   render(<App api={createDesktopMockApi()} />);
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'core');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
   await waitFor(() => {
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+    expect(within(channelDialog).getByText('Copy share link')).toBeInTheDocument();
   });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Copy link' }));
+  expect(writeText).toHaveBeenLastCalledWith(
+    buildChannelAccessPreviewDeepLink('invite:kukuri:topic:demo:channel-1')
+  );
   await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
 
   const settingsDialog = await openChannelSettings(user, 'core');
@@ -2548,6 +2560,43 @@ test('desktop shell can create a private channel and export an invite', async ()
   await waitFor(() => {
     expect(within(settingsDialog).getByText('Copy share link')).toBeInTheDocument();
     expect(within(settingsDialog).queryByText(/invite:kukuri:topic:demo:channel-1/)).not.toBeInTheDocument();
+  });
+});
+
+test('desktop shell confirms and leaves a private channel', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const leavePrivateChannel = vi.spyOn(api, 'leavePrivateChannel');
+  render(<App api={api} />);
+
+  const channelDialog = await openChannelManager(user);
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'core');
+  await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
+
+  await waitFor(() => {
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo&channel=channel-1');
+  });
+  await user.click(within(channelDialog).getByRole('button', { name: 'Close dialog' }));
+
+  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  let leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
+  expect(within(leaveDialog).getByText('Leave this channel?')).toBeInTheDocument();
+  await user.click(within(leaveDialog).getByRole('button', { name: 'Close dialog' }));
+  expect(leavePrivateChannel).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
+  await user.click(within(leaveDialog).getByRole('button', { name: 'No' }));
+  expect(leavePrivateChannel).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('button', { name: 'Leave core channel' }));
+  leaveDialog = await screen.findByRole('dialog', { name: 'Leave channel' });
+  await user.click(within(leaveDialog).getByRole('button', { name: 'Yes' }));
+
+  await waitFor(() => {
+    expect(leavePrivateChannel).toHaveBeenCalledWith('kukuri:topic:demo', 'channel-1');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ademo');
+    expect(screen.queryByRole('button', { name: /core.*Invite only/ })).not.toBeInTheDocument();
   });
 });
 
@@ -2636,7 +2685,7 @@ test('desktop shell shows friend-only controls and can create a grant', async ()
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'friends');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'friends');
   await user.selectOptions(within(channelDialog).getByLabelText('Audience'), 'friend_only');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
@@ -2666,7 +2715,7 @@ test('desktop shell shows friend-plus controls and can create a share', async ()
   });
   render(<App api={createDesktopMockApi()} />);
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'friends+');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'friends+');
   await user.selectOptions(within(channelDialog).getByLabelText('Audience'), 'friend_plus');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 
@@ -2917,7 +2966,7 @@ test('channel settings copy removes duplicate summary and share button icon', as
   render(<App api={createDesktopMockApi()} />);
 
   const channelDialog = await openChannelManager(user);
-  await user.type(within(channelDialog).getByPlaceholderText('core contributors'), 'friends+');
+  await user.type(within(channelDialog).getByPlaceholderText('Channel name'), 'friends+');
   await user.selectOptions(within(channelDialog).getByLabelText('Audience'), 'friend_plus');
   await user.click(within(channelDialog).getByRole('button', { name: 'Create Channel' }));
 

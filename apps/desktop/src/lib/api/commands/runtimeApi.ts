@@ -593,6 +593,17 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
+  leavePrivateChannel: async (topic, channelId) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.leavePrivateChannel(topic, channelId);
+    }
+    return invokeDesktop<void>('leave_private_channel', {
+      request: {
+        topic,
+        channel_id: channelId,
+      },
+    });
+  },
   listJoinedPrivateChannels: async (topic) => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.listJoinedPrivateChannels(topic);

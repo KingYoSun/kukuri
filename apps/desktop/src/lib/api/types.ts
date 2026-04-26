@@ -660,6 +660,7 @@ export interface DesktopApi {
   importFriendPlusShare(token: string): Promise<FriendPlusSharePreview>;
   freezePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
   rotatePrivateChannel(topic: string, channelId: string): Promise<JoinedPrivateChannelView>;
+  leavePrivateChannel(topic: string, channelId: string): Promise<void>;
   listJoinedPrivateChannels(topic: string): Promise<JoinedPrivateChannelView[]>;
   updateGameRoom(
     topic: string,

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link2, Settings } from 'lucide-react';
+import { Link2, Settings, SquareArrowRightExit } from 'lucide-react';
 
 import { type TopicDiagnosticSummary } from './types';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ type TopicNavListProps = {
   onSelectTopic: (topic: string) => void;
   onSelectChannel: (topic: string, channelId: string) => void;
   onOpenChannelSettings?: (topic: string, channelId: string) => void;
+  onLeaveChannel?: (topic: string, channelId: string) => void;
   onRemoveTopic: (topic: string) => void;
   onCopyTopicLink?: (topic: string) => void;
 };
@@ -18,6 +19,7 @@ export function TopicNavList({
   onSelectTopic,
   onSelectChannel,
   onOpenChannelSettings,
+  onLeaveChannel,
   onRemoveTopic,
   onCopyTopicLink,
 }: TopicNavListProps) {
@@ -117,6 +119,18 @@ export function TopicNavList({
                               onClick={() => onOpenChannelSettings(item.topic, channel.channelId)}
                             >
                               <Settings className='size-4' aria-hidden='true' />
+                            </button>
+                          ) : null}
+                          {onLeaveChannel ? (
+                            <button
+                              className='topic-channel-settings'
+                              type='button'
+                              aria-label={t('channels:actions.leaveChannel', {
+                                channel: channel.label,
+                              })}
+                              onClick={() => onLeaveChannel(item.topic, channel.channelId)}
+                            >
+                              <SquareArrowRightExit className='size-4' aria-hidden='true' />
                             </button>
                           ) : null}
                         </li>

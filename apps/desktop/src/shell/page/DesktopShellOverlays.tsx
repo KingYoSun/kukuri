@@ -59,6 +59,9 @@ type DesktopShellOverlaysProps = {
   setChannelDialogOpen: Dispatch<SetStateAction<boolean>>;
   channelSettingsDialogOpen: boolean;
   setChannelSettingsDialogOpen: Dispatch<SetStateAction<boolean>>;
+  leaveChannelDialogOpen: boolean;
+  setLeaveChannelDialogOpen: (open: boolean) => void;
+  handleConfirmLeaveChannel: () => Promise<void>;
   sharePreviewOpen: boolean;
   setSharePreviewOpen: Dispatch<SetStateAction<boolean>>;
   sharePreviewToken: string | null;
@@ -128,6 +131,9 @@ export function DesktopShellOverlays({
   setChannelDialogOpen,
   channelSettingsDialogOpen,
   setChannelSettingsDialogOpen,
+  leaveChannelDialogOpen,
+  setLeaveChannelDialogOpen,
+  handleConfirmLeaveChannel,
   sharePreviewOpen,
   setSharePreviewOpen,
   sharePreviewToken,
@@ -265,11 +271,14 @@ export function DesktopShellOverlays({
               channelAudience={channelAudienceInput}
               channelAudienceOptions={channelAudienceOptions}
               inviteTokenInput={inviteTokenInput}
+              inviteOutput={inviteOutput}
+              inviteOutputLabel={inviteOutputLabel}
               onChannelLabelChange={setChannelLabelInput}
               onChannelAudienceChange={setChannelAudienceInput}
               onInviteTokenChange={setInviteTokenInput}
               onCreateChannel={(event) => void handleCreatePrivateChannel(event)}
               onJoin={(event) => void handleJoinChannelAccess(event)}
+              onCopyInviteOutput={handleCopyInternalLink}
             />
           </DialogBody>
         </DialogContent>
@@ -294,6 +303,33 @@ export function DesktopShellOverlays({
             ) : (
               <Notice>{t('channels:selectChannelNotice')}</Notice>
             )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={leaveChannelDialogOpen} onOpenChange={setLeaveChannelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('channels:leaveDialog.title')}</DialogTitle>
+            <DialogDescription>{t('channels:leaveDialog.description')}</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <div className='ui-dialog-footer'>
+              <Button
+                variant='secondary'
+                type='button'
+                onClick={() => setLeaveChannelDialogOpen(false)}
+              >
+                {t('channels:leaveDialog.no')}
+              </Button>
+              <Button
+                type='button'
+                disabled={channelActionPending === 'leave'}
+                onClick={() => void handleConfirmLeaveChannel()}
+              >
+                {t('channels:leaveDialog.yes')}
+              </Button>
+            </div>
           </DialogBody>
         </DialogContent>
       </Dialog>

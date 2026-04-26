@@ -118,6 +118,7 @@ impl AppService {
             if !participants.iter().any(|participant| {
                 participant.participant_pubkey == local_pubkey
                     && participant.epoch_id == policy.epoch_id
+                    && participant.left_at.is_none()
             }) {
                 persist_private_channel_participant(
                     self.docs_sync.as_ref(),
@@ -132,6 +133,7 @@ impl AppService {
                         join_mode: Some(PrivateChannelJoinMode::RotationRedeem),
                         sponsor_pubkey: Some(policy.owner_pubkey.clone()),
                         share_token_id: None,
+                        left_at: None,
                     },
                     &next_replica,
                 )
@@ -173,6 +175,8 @@ impl AppService {
             DocFetchPolicy::LocalOnly,
         )
         .await?;
+        let participants =
+            active_private_channel_participants(&participants, state.current_epoch_id.as_str());
         let participant_count = participants.len();
         let mut stale_participant_count = 0usize;
         if state.audience_kind == ChannelAudienceKind::FriendOnly
@@ -408,6 +412,69 @@ impl AppService {
         )
         .await?;
         Ok(())
+    }
+
+    pub(crate) async fn remove_joined_private_channel(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+    ) -> Result<Option<JoinedPrivateChannelState>> {
+        let removed = self
+            .joined_private_channels
+            .lock()
+            .await
+            .remove(joined_private_channel_key(topic_id, channel_id).as_str());
+        let prefix = joined_private_channel_subscription_prefix(topic_id, channel_id);
+        let keys = self
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .keys()
+            .filter(|key| key.starts_with(prefix.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in keys {
+            if let Some(handle) = self
+                .private_channel_subscriptions
+                .lock()
+                .await
+                .remove(key.as_str())
+            {
+                handle.abort();
+            }
+        }
+        let has_peers = self
+            .transport
+            .peers()
+            .await
+            .is_ok_and(|peers| peers.peer_count > 0);
+        if has_peers {
+            let hint_topic = private_channel_hint_topic(channel_id);
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                self.hint_transport.unsubscribe_hints(&hint_topic),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %channel_id,
+                        error = %error,
+                        "failed to unsubscribe private channel hints after leave"
+                    );
+                }
+                Err(_) => {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %channel_id,
+                        "timed out unsubscribing private channel hints after leave"
+                    );
+                }
+            }
+        }
+        Ok(removed)
     }
 
     pub(crate) async fn ensure_private_channel_subscription(

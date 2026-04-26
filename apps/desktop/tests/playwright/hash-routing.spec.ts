@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+﻿import { expect, test, type Page } from '@playwright/test';
 
 async function openChannelManager(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
@@ -98,7 +98,7 @@ test('browser mock hash history keeps route state stable without narrow-width ov
   await page.goBack();
   await page.getByTestId('shell-nav-trigger').click();
   const channelDialog = await openChannelManager(page);
-  await channelDialog.getByPlaceholder('core contributors').fill('Route Room');
+  await channelDialog.getByPlaceholder('Channel name').fill('Route Room');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-/);
 

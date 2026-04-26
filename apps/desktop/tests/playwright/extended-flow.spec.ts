@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+﻿import { expect, test, type Page } from '@playwright/test';
 
 async function openChannelManager(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
@@ -31,7 +31,7 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   await page.goto('/');
 
   const channelDialog = await openChannelManager(page);
-  await channelDialog.getByPlaceholder('core contributors').fill('Core Contributors');
+  await channelDialog.getByPlaceholder('Channel name').fill('Core Contributors');
   await channelDialog.getByRole('button', { name: 'Create Channel' }).click();
   await expect(page).toHaveURL(/#\/timeline\?topic=.*&channel=channel-1/);
   await page.keyboard.press('Escape');

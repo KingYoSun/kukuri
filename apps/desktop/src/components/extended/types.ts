@@ -16,6 +16,7 @@ export type ProfileEditorFields = {
 export type PrivateChannelPendingAction =
   | 'create'
   | 'join'
+  | 'leave'
   | 'share'
   | null;
 

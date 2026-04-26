@@ -78,6 +78,7 @@ impl AppService {
                 join_mode: Some(PrivateChannelJoinMode::OwnerSeed),
                 sponsor_pubkey: None,
                 share_token_id: None,
+                left_at: None,
             },
             &current_private_channel_replica_id(&state),
         )
@@ -156,6 +157,7 @@ impl AppService {
                 participant.participant_pubkey == policy.owner_pubkey
                     && participant.epoch_id == policy.epoch_id
                     && participant.is_owner
+                    && participant.left_at.is_none()
             }) {
                 anyhow::bail!("invite-only channel owner is not an active participant");
             }
@@ -163,6 +165,7 @@ impl AppService {
             if !participants.iter().any(|participant| {
                 participant.participant_pubkey == local_pubkey
                     && participant.epoch_id == policy.epoch_id
+                    && participant.left_at.is_none()
             }) {
                 persist_private_channel_participant(
                     self.docs_sync.as_ref(),
@@ -177,6 +180,7 @@ impl AppService {
                         join_mode: Some(PrivateChannelJoinMode::InviteToken),
                         sponsor_pubkey: Some(preview.inviter_pubkey.clone()),
                         share_token_id: None,
+                        left_at: None,
                     },
                     &replica,
                 )
@@ -423,6 +427,7 @@ impl AppService {
                 participant.participant_pubkey == policy.owner_pubkey
                     && participant.epoch_id == policy.epoch_id
                     && participant.is_owner
+                    && participant.left_at.is_none()
             }) {
                 anyhow::bail!("friend-only grant owner is not an active participant");
             }
@@ -440,6 +445,7 @@ impl AppService {
                     join_mode: Some(PrivateChannelJoinMode::FriendOnlyGrant),
                     sponsor_pubkey: Some(policy.owner_pubkey.clone()),
                     share_token_id: None,
+                    left_at: None,
                 },
                 &replica,
             )
@@ -503,6 +509,7 @@ impl AppService {
         if !participants.iter().any(|participant| {
             participant.epoch_id == state.current_epoch_id
                 && participant.participant_pubkey.as_str() == local_author
+                && participant.left_at.is_none()
         }) {
             anyhow::bail!("only active participants can create friend-plus shares");
         }
@@ -570,6 +577,7 @@ impl AppService {
             if !participants.iter().any(|participant| {
                 participant.participant_pubkey.as_str() == local_author
                     && participant.epoch_id == policy.epoch_id
+                    && participant.left_at.is_none()
             }) {
                 persist_private_channel_participant(
                     self.docs_sync.as_ref(),
@@ -584,6 +592,7 @@ impl AppService {
                         join_mode: Some(PrivateChannelJoinMode::FriendPlusShare),
                         sponsor_pubkey: Some(preview.sponsor_pubkey.clone()),
                         share_token_id: Some(preview.share_token_id.clone()),
+                        left_at: None,
                     },
                     &replica,
                 )
@@ -778,6 +787,7 @@ impl AppService {
                 join_mode: Some(PrivateChannelJoinMode::OwnerSeed),
                 sponsor_pubkey: None,
                 share_token_id: None,
+                left_at: None,
             },
             &next_replica,
         )
@@ -860,6 +870,101 @@ impl AppService {
         self.register_joined_private_channel(state).await
     }
 
+    pub async fn leave_private_channel(&self, topic_id: &str, channel_id: &str) -> Result<()> {
+        let Some(state) = self
+            .joined_private_channel_state(topic_id, channel_id)
+            .await
+        else {
+            anyhow::bail!("private channel is not joined");
+        };
+        let replica = current_private_channel_replica_id(&state);
+        let local_author = self.current_author_pubkey();
+        let local_pubkey = Pubkey::from(local_author.clone());
+        let now = Utc::now().timestamp_millis();
+        let existing_participant = fetch_private_channel_participants_from_replica_with_policy(
+            self.docs_sync.as_ref(),
+            &replica,
+            DocFetchPolicy::LocalOnly,
+        )
+        .await?
+        .into_iter()
+        .find(|participant| {
+            participant.epoch_id == state.current_epoch_id
+                && participant.participant_pubkey == local_pubkey
+        });
+        persist_private_channel_participant(
+            self.docs_sync.as_ref(),
+            self.keys.as_ref(),
+            &PrivateChannelParticipantDocV1 {
+                channel_id: state.channel_id.clone(),
+                topic_id: TopicId::new(topic_id),
+                epoch_id: state.current_epoch_id.clone(),
+                participant_pubkey: local_pubkey,
+                joined_at: existing_participant
+                    .as_ref()
+                    .map(|participant| participant.joined_at)
+                    .unwrap_or(now),
+                is_owner: existing_participant
+                    .as_ref()
+                    .map(|participant| participant.is_owner)
+                    .unwrap_or(state.owner_pubkey == local_author),
+                join_mode: existing_participant
+                    .as_ref()
+                    .and_then(|participant| participant.join_mode.clone()),
+                sponsor_pubkey: existing_participant
+                    .as_ref()
+                    .and_then(|participant| participant.sponsor_pubkey.clone()),
+                share_token_id: existing_participant
+                    .as_ref()
+                    .and_then(|participant| participant.share_token_id.clone()),
+                left_at: Some(now),
+            },
+            &replica,
+        )
+        .await?;
+        let has_peers = self
+            .transport
+            .peers()
+            .await
+            .is_ok_and(|peers| peers.peer_count > 0);
+        if has_peers {
+            let publish_result = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                self.hint_transport.publish_hint(
+                    &channel_hint_topic_for(topic_id, Some(&state.channel_id)),
+                    GossipHint::TopicObjectsChanged {
+                        topic_id: TopicId::new(topic_id),
+                        objects: Vec::new(),
+                    },
+                ),
+            )
+            .await;
+            match publish_result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %state.channel_id.as_str(),
+                        epoch_id = %state.current_epoch_id,
+                        error = %error,
+                        "failed to publish private channel leave hint"
+                    );
+                }
+                Err(_) => {
+                    warn!(
+                        topic = %topic_id,
+                        channel_id = %state.channel_id.as_str(),
+                        epoch_id = %state.current_epoch_id,
+                        "timed out publishing private channel leave hint"
+                    );
+                }
+            }
+        }
+        self.remove_joined_private_channel(topic_id, channel_id)
+            .await?;
+        Ok(())
+    }
+
     pub async fn list_joined_private_channels(
         &self,
         topic_id: &str,
@@ -869,6 +974,10 @@ impl AppService {
             .await?;
         self.maybe_restart_scope_replica_sync(topic_id, &TimelineScope::AllJoined)
             .await;
+        for state in self.joined_private_channel_states_for_topic(topic_id).await {
+            self.maybe_redeem_rotation_grants_for_channel(topic_id, state.channel_id.as_str())
+                .await?;
+        }
         let mut items = Vec::new();
         for state in self.joined_private_channel_states_for_topic(topic_id).await {
             items.push(self.joined_private_channel_view_for_state(&state).await?);

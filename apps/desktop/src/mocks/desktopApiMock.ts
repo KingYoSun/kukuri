@@ -1495,6 +1495,11 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       joinedChannelsByTopic[topic] = next;
       return next.find((channel) => channel.channel_id === channelId)!;
     },
+    async leavePrivateChannel(topic, channelId) {
+      joinedChannelsByTopic[topic] = (joinedChannelsByTopic[topic] ?? []).filter(
+        (channel) => channel.channel_id !== channelId
+      );
+    },
     async listJoinedPrivateChannels(topic) {
       return joinedChannelsByTopic[topic] ?? [];
     },

@@ -307,7 +307,7 @@ pub(crate) fn active_private_channel_participants(
 ) -> Vec<PrivateChannelParticipantDocV1> {
     participants
         .iter()
-        .filter(|participant| participant.epoch_id == epoch_id)
+        .filter(|participant| participant.epoch_id == epoch_id && participant.left_at.is_none())
         .cloned()
         .collect()
 }

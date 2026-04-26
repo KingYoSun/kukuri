@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+﻿import { type ReactNode, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookPlus, Settings } from 'lucide-react';
@@ -130,7 +130,7 @@ function ChannelRailControl() {
           <Input
             value={channelLabel}
             onChange={(event) => setChannelLabel(event.target.value)}
-            placeholder='core contributors'
+            placeholder='Channel name'
           />
         </Label>
         <Label>

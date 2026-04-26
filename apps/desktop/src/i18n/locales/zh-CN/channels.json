@@ -2,6 +2,7 @@
   "actions": {
     "createChannel": "创建频道",
     "join": "加入",
+    "leaveChannel": "退出 {{channel}} 频道",
     "openSettings": "打开 {{channel}} 频道设置",
     "share": "分享",
     "createShareLink": "创建分享链接"
@@ -20,7 +21,7 @@
     "join": "加入",
     "joinBlockTitle": "加入",
     "placeholders": {
-      "channelLabel": "核心成员",
+      "channelLabel": "频道名称",
       "inviteToken": "粘贴私密频道邀请、授权或分享令牌"
     }
   },
@@ -33,6 +34,7 @@
     "failedPreviewToken": "预览私密频道令牌失败",
     "failedCreateShare": "创建分享失败",
     "failedJoinChannel": "加入私密频道失败",
+    "failedLeaveChannel": "退出私密频道失败",
     "failedShareChannel": "分享私密频道失败"
   },
   "inspectHint": "在这里查看策略和操作。",
@@ -40,6 +42,12 @@
   "loading": "正在加载私密频道...",
   "latestInvite": "最新邀请",
   "latestShare": "最新分享",
+  "leaveDialog": {
+    "title": "退出频道",
+    "description": "要退出此频道吗？",
+    "no": "否",
+    "yes": "是"
+  },
   "copyShareLink": "复制分享链接",
   "policies": {
     "friend_only": "仅好友: 只有互相关注的用户可以加入",

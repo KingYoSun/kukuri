@@ -2,6 +2,7 @@
   "actions": {
     "createChannel": "チャンネルを作成",
     "join": "参加",
+    "leaveChannel": "{{channel}} から退出する",
     "openSettings": "{{channel}} のチャンネル設定を開く",
     "share": "共有",
     "createShareLink": "共有リンク作成"
@@ -20,7 +21,7 @@
     "join": "参加",
     "joinBlockTitle": "参加",
     "placeholders": {
-      "channelLabel": "コアメンバー",
+      "channelLabel": "チャンネル名",
       "inviteToken": "プライベートチャンネル招待、権限付与、共有トークンを貼り付け"
     }
   },
@@ -33,6 +34,7 @@
     "failedPreviewToken": "プライベートチャンネルトークンの確認に失敗しました",
     "failedCreateShare": "共有の作成に失敗しました",
     "failedJoinChannel": "プライベートチャンネルへの参加に失敗しました",
+    "failedLeaveChannel": "プライベートチャンネルからの退出に失敗しました",
     "failedShareChannel": "プライベートチャンネルの共有に失敗しました"
   },
   "inspectHint": "ここでポリシーと操作を確認できます。",
@@ -40,6 +42,12 @@
   "loading": "プライベートチャンネルを読み込み中...",
   "latestInvite": "最新の招待",
   "latestShare": "最新の共有",
+  "leaveDialog": {
+    "title": "チャンネルから退出する",
+    "description": "チャンネルから退出しますか？",
+    "no": "いいえ",
+    "yes": "はい"
+  },
   "copyShareLink": "共有リンクをコピーする",
   "policies": {
     "friend_only": "友だち限定: 相互フォローの相手だけが参加できます",
