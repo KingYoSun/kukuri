@@ -157,6 +157,156 @@ async fn transport_custom_relay_static_peer_seed_peers_ignore_stale_addr_hints()
     .await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_custom_relay_three_clients_multiple_topics_with_stale_addr_hints() {
+    let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()
+        .await
+        .expect("relay server");
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec![relay_url.to_string()],
+    }
+    .normalized();
+    let config = TransportNetworkConfig::loopback();
+    let (transport_a, transport_b, transport_c) = tokio::try_join!(
+        IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        ),
+        IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        ),
+        IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+    )
+    .expect("transports");
+
+    let topic_one = TopicId::new("kukuri:topic:relay-three-client-stale-one");
+    let topic_two = TopicId::new("kukuri:topic:relay-three-client-stale-two");
+    let peer_id_a = transport_a.endpoint.id().to_string();
+    let peer_id_b = transport_b.endpoint.id().to_string();
+    let peer_id_c = transport_c.endpoint.id().to_string();
+    let (
+        mut stream_a_one,
+        mut stream_b_one,
+        mut stream_c_one,
+        _stream_a_two,
+        mut stream_b_two,
+        mut stream_c_two,
+    ) = tokio::try_join!(
+        transport_a.subscribe_hints(&topic_one),
+        transport_b.subscribe_hints(&topic_one),
+        transport_c.subscribe_hints(&topic_one),
+        transport_a.subscribe_hints(&topic_two),
+        transport_b.subscribe_hints(&topic_two),
+        transport_c.subscribe_hints(&topic_two),
+    )
+    .expect("subscribe hints");
+
+    tokio::try_join!(
+        transport_a.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![
+                SeedPeer {
+                    endpoint_id: peer_id_b.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+                SeedPeer {
+                    endpoint_id: peer_id_c.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+            ],
+            Vec::new(),
+        ),
+        transport_b.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![
+                SeedPeer {
+                    endpoint_id: peer_id_a.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+                SeedPeer {
+                    endpoint_id: peer_id_c.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+            ],
+            Vec::new(),
+        ),
+        transport_c.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![
+                SeedPeer {
+                    endpoint_id: peer_id_a.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+                SeedPeer {
+                    endpoint_id: peer_id_b.clone(),
+                    addr_hint: Some("127.0.0.1:9".into()),
+                },
+            ],
+            Vec::new(),
+        ),
+    )
+    .expect("configure stale seed peers");
+
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_a,
+            stream: &mut stream_a_one,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_b,
+            stream: &mut stream_b_one,
+            expected_source_peer: None,
+        },
+        &topic_one,
+        Duration::from_secs(30),
+        "custom relay three clients stale topic one a-b",
+    )
+    .await;
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_b,
+            stream: &mut stream_b_two,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_c,
+            stream: &mut stream_c_two,
+            expected_source_peer: None,
+        },
+        &topic_two,
+        Duration::from_secs(30),
+        "custom relay three clients stale topic two b-c",
+    )
+    .await;
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_a,
+            stream: &mut stream_a_one,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_c,
+            stream: &mut stream_c_one,
+            expected_source_peer: None,
+        },
+        &topic_one,
+        Duration::from_secs(30),
+        "custom relay three clients stale topic one a-c",
+    )
+    .await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_custom_relay_lookup_connects_unknown_peer_without_dht_publish() {
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()

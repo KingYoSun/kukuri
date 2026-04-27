@@ -127,6 +127,11 @@ curl -fsS https://iroh-relay.kukuri.app/ping
 - Linux 実機の公開 manual smoke では `Save Nodes -> Authenticate -> Accept -> post -> reply/thread -> blob sync` まで restart なしで成功を確認済み
 - relay-only public path でも `Sync Status` / `Tracked Topics` diagnostics は relay-assisted docs/blob peer を含めて `connected` と `peer_count` を出す
 
+### cn-iroh-relay backpressure guardrail
+- `iroh-relay 0.98.0` の per-client send queue depth は upstream で `512` 固定。`cn-iroh-relay` から queue depth は変更できない。
+- `iroh_relay::server::client: failed to handle send packet frame: failed to forward packet: Full` が 3 client 同時起動などで増える場合、まず client 側の topic warmup throttling / coalescing が入った current build で確認する。
+- noisy client の ingress を運用上絞る必要がある場合だけ、`.env.community-node` に `COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_BYTES_PER_SECOND` と任意の `COMMUNITY_NODE_IROH_RELAY_CLIENT_RX_MAX_BURST_BYTES` を設定する。未指定時は従来どおり unlimited。
+
 ## community-node deploy 順序
 ```bash
 cargo run -p kukuri-cn-cli -- --database-url "$COMMUNITY_NODE_DATABASE_URL" prepare

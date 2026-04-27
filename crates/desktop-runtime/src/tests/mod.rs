@@ -6044,6 +6044,7 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
+        client_rx_limit: None,
     })
     .await
     .expect("relay server");
@@ -6178,6 +6179,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
+        client_rx_limit: None,
     })
     .await
     .expect("relay server");
@@ -6491,6 +6493,7 @@ async fn community_node_connectivity_assist_backfills_three_client_public_timeli
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
+        client_rx_limit: None,
     })
     .await
     .expect("relay server");
@@ -6882,6 +6885,7 @@ async fn community_node_connectivity_assist_relay_backed_seed_peers_ignore_stale
     let relay = kukuri_cn_iroh_relay::spawn_server(kukuri_cn_iroh_relay::IrohRelayConfig {
         http_bind_addr: "127.0.0.1:0".parse().expect("relay bind addr"),
         tls: None,
+        client_rx_limit: None,
     })
     .await
     .expect("relay server");

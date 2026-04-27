@@ -20,7 +20,8 @@ use iroh::address_lookup::{
     MemoryLookup,
 };
 use iroh::endpoint::{
-    Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig, presets,
+    Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig, TransportAddrUsage,
+    presets,
 };
 use iroh::protocol::Router;
 #[cfg(test)]
@@ -35,7 +36,7 @@ use kukuri_core::{HintObjectRef, KukuriEnvelope, build_post_envelope, generate_k
 use pkarr::Client as PkarrClient;
 #[cfg(test)]
 use pkarr::Timestamp;
-use tokio::sync::{Mutex, Notify, RwLock, broadcast};
+use tokio::sync::{Mutex, Notify, RwLock, Semaphore, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::BroadcastStream;
@@ -66,6 +67,21 @@ struct HintTopicState {
     _receiver_task: JoinHandle<()>,
 }
 
+#[derive(Clone, Debug)]
+struct TopicWarmupCoordinator {
+    permits: Arc<Semaphore>,
+    in_flight_peers: Arc<StdRwLock<BTreeSet<String>>>,
+}
+
+impl Default for TopicWarmupCoordinator {
+    fn default() -> Self {
+        Self {
+            permits: Arc::new(Semaphore::new(2)),
+            in_flight_peers: Arc::new(StdRwLock::new(BTreeSet::new())),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct TransportPeerState {
     pub imported_peers: Vec<EndpointAddr>,
@@ -83,6 +99,7 @@ pub struct IrohGossipTransport {
     imported_peers: Arc<Mutex<BTreeMap<String, EndpointAddr>>>,
     subscribed_topics: Arc<Mutex<BTreeSet<String>>>,
     topic_states: Arc<Mutex<HashMap<String, HintTopicState>>>,
+    topic_warmups: Arc<TopicWarmupCoordinator>,
     last_error: Arc<Mutex<Option<String>>>,
     discovery_mode: Arc<Mutex<DiscoveryMode>>,
     connect_mode: Arc<Mutex<ConnectMode>>,

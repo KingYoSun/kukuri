@@ -79,6 +79,7 @@ impl CommunityNodeStack {
                 .parse()
                 .expect("valid loopback relay bind addr"),
             tls: None,
+            client_rx_limit: None,
         })
         .await?;
         let iroh_relay_url = format!("http://{}", iroh_relay.http_addr());
