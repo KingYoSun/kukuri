@@ -1,10 +1,11 @@
-FROM rust:1.89-bookworm AS builder
+ARG RUST_VERSION=1.91.0
+FROM rust:${RUST_VERSION}-bookworm AS builder
 
 WORKDIR /workspace
 
 ARG TARGET_PACKAGE
 
-COPY Cargo.toml Cargo.lock ./
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 COPY xtask ./xtask
 COPY crates ./crates
 
