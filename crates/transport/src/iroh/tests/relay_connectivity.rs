@@ -353,14 +353,14 @@ async fn transport_custom_relay_lookup_connects_unknown_peer_without_dht_publish
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_peer_snapshot_reports_seeded_dht_mode() {
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let transport = IrohGossipTransport::bind_with_discovery(
         TransportNetworkConfig::loopback(),
         DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
     )
     .await
     .expect("transport");
-    publish_endpoint_to_testnet(&transport.endpoint, &testnet).await;
+    wait_for_endpoint_in_testnet(&transport.endpoint, &testnet).await;
     let local_endpoint_id = transport
         .discovery()
         .await
@@ -394,14 +394,14 @@ async fn transport_peer_snapshot_reports_seeded_dht_mode() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_empty_seed_list_stays_idle_without_error() {
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let transport = IrohGossipTransport::bind_with_discovery(
         TransportNetworkConfig::loopback(),
         DhtDiscoveryOptions::with_bootstrap(&testnet.bootstrap),
     )
     .await
     .expect("transport");
-    publish_endpoint_to_testnet(&transport.endpoint, &testnet).await;
+    wait_for_endpoint_in_testnet(&transport.endpoint, &testnet).await;
 
     transport
         .configure_discovery(DiscoveryMode::SeededDht, false, Vec::new(), Vec::new())

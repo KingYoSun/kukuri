@@ -15,27 +15,22 @@ use chrono::Utc;
 use futures_util::StreamExt;
 #[cfg(test)]
 use iroh::RelayMode;
-use iroh::address_lookup::{
-    AddrFilter, AddressLookup, DhtAddressLookup, EndpointInfo, Item as AddressLookupItem,
-    MemoryLookup,
-};
+use iroh::address_lookup::{AddrFilter, AddressLookup, Item as AddressLookupItem, MemoryLookup};
 use iroh::endpoint::{
     Builder as EndpointBuilder, MtuDiscoveryConfig, QuicTransportConfig, TransportAddrUsage,
     presets,
 };
+use iroh::endpoint_info::EndpointInfo;
 use iroh::protocol::Router;
 #[cfg(test)]
 use iroh::tls::CaRootsConfig;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};
+use iroh_mainline_address_lookup::DhtAddressLookup;
 use kukuri_core::{GossipHint, TopicId};
 #[cfg(test)]
 use kukuri_core::{HintObjectRef, KukuriEnvelope, build_post_envelope, generate_keys};
-#[cfg(test)]
-use pkarr::Client as PkarrClient;
-#[cfg(test)]
-use pkarr::Timestamp;
 use tokio::sync::{Mutex, Notify, RwLock, Semaphore, broadcast};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
@@ -47,8 +42,6 @@ use crate::config::{
     TransportNetworkConfig, TransportRelayConfig,
 };
 use crate::diagnostics::{peer_status_detail, topic_status_detail};
-#[cfg(test)]
-use crate::discovery::build_signed_packet_with_timestamp;
 use crate::discovery::prepare_endpoint_for_discovery;
 use crate::tickets::{
     encode_endpoint_ticket, endpoint_addr_with_relays, parse_endpoint_ticket, ticket_network_config,

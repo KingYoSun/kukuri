@@ -107,45 +107,43 @@ impl SpawnedIrohRelay {
 pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
     let (relay_tls, quic) = match config.tls.as_ref() {
         Some(tls_config) => {
-            let (certs, server_config) = load_tls_materials(tls_config)?;
-            let relay_tls = tls_config.https_bind_addr.map(|https_bind_addr| TlsConfig {
-                https_bind_addr,
-                quic_bind_addr: tls_config.effective_quic_bind_addr().unwrap_or_else(|| {
-                    SocketAddr::new(https_bind_addr.ip(), DEFAULT_RELAY_QUIC_PORT)
-                }),
-                cert: CertConfig::<(), ()>::Manual { certs },
-                server_config: server_config.clone(),
+            let server_config = load_tls_materials(tls_config)?;
+            let relay_tls = tls_config.https_bind_addr.map(|https_bind_addr| {
+                TlsConfig::new(
+                    https_bind_addr,
+                    CertConfig::Manual {
+                        server_config: server_config.clone(),
+                    },
+                )
             });
-            let quic = tls_config
-                .effective_quic_bind_addr()
-                .map(|bind_addr| QuicConfig {
-                    bind_addr,
-                    server_config,
-                });
+            let quic = tls_config.effective_quic_bind_addr().map(|bind_addr| {
+                let mut quic = QuicConfig::new(bind_addr);
+                if relay_tls.is_none() {
+                    quic.server_config = Some(server_config.clone());
+                }
+                quic
+            });
             (relay_tls, quic)
         }
         None => (None, None),
     };
 
-    let limits = Limits {
-        client_rx: config.client_rx_limit.map(|limit| ClientRateLimit {
-            bytes_per_second: limit.bytes_per_second,
-            max_burst_bytes: limit.max_burst_bytes,
-        }),
-        ..Default::default()
-    };
+    let mut limits = Limits::default();
+    limits.client_rx = config.client_rx_limit.map(|limit| {
+        let mut client_rx = ClientRateLimit::new(limit.bytes_per_second);
+        client_rx.max_burst_bytes = limit.max_burst_bytes;
+        client_rx
+    });
 
-    let server_config = ServerConfig::<(), ()> {
-        relay: Some(HttpRelayConfig {
-            http_bind_addr: config.http_bind_addr,
-            tls: relay_tls,
-            limits,
-            key_cache_capacity: Some(1024),
-            access: AccessConfig::Everyone,
-        }),
-        quic,
-        metrics_addr: None,
-    };
+    let mut relay_config = HttpRelayConfig::new(config.http_bind_addr);
+    relay_config.tls = relay_tls;
+    relay_config.limits = limits;
+    relay_config.key_cache_capacity = Some(1024);
+    relay_config.access = AccessConfig::Everyone;
+
+    let mut server_config = ServerConfig::default();
+    server_config.relay = Some(relay_config);
+    server_config.quic = quic;
     let server = Server::spawn(server_config)
         .await
         .context("failed to spawn iroh relay")?;
@@ -282,9 +280,7 @@ where
         .filter(|value| !value.is_empty())
 }
 
-fn load_tls_materials(
-    config: &IrohRelayTlsConfig,
-) -> Result<(Vec<CertificateDer<'static>>, rustls::ServerConfig)> {
+fn load_tls_materials(config: &IrohRelayTlsConfig) -> Result<rustls::ServerConfig> {
     let certs = load_certs(config.cert_path.as_path())?;
     if certs.is_empty() {
         bail!(
@@ -301,7 +297,7 @@ fn load_tls_materials(
     .with_no_client_auth()
     .with_single_cert(certs.clone(), private_key)
     .context("failed to build iroh relay tls server config")?;
-    Ok((certs, server_config))
+    Ok(server_config)
 }
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {

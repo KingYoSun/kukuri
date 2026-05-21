@@ -9,31 +9,21 @@ use crate::crypto::{
 };
 use crate::{ChannelId, KukuriEnvelope, KukuriKeys, Pubkey, TopicId};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelAudienceKind {
+    #[default]
     InviteOnly,
     FriendOnly,
     FriendPlus,
 }
 
-impl Default for ChannelAudienceKind {
-    fn default() -> Self {
-        Self::InviteOnly
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChannelSharingState {
+    #[default]
     Open,
     Frozen,
-}
-
-impl Default for ChannelSharingState {
-    fn default() -> Self {
-        Self::Open
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

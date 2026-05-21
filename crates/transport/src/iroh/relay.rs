@@ -75,9 +75,7 @@ pub fn build_endpoint_builder(
     }
     builder = builder.address_lookup(RelayFallbackLookup::new(relay_urls));
     if let Some(dht_options) = dht_options.filter(|options| options.enabled) {
-        let mut dht_builder = DhtAddressLookup::builder()
-            .addr_filter(AddrFilter::unfiltered())
-            .no_publish();
+        let mut dht_builder = DhtAddressLookup::builder().addr_filter(AddrFilter::unfiltered());
         if let Some(builder_override) = dht_options.resolved_dht_builder() {
             dht_builder = dht_builder.dht_builder(builder_override);
         }
