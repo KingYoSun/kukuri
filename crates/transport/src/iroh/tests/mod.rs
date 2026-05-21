@@ -1,63 +1,21 @@
 use super::*;
 
-use pkarr::errors::{ConcurrencyError, PublishError};
-use pkarr::mainline::Testnet;
+use n0_mainline::{DhtBuilder, Testnet};
 
-fn dht_test_client(testnet: &Testnet) -> PkarrClient {
-    let mut builder = PkarrClient::builder();
-    builder.no_default_network().bootstrap(&testnet.bootstrap);
-    builder.build().expect("pkarr client")
-}
-
-fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
-    let name = format!("_iroh.{}.", packet.public_key().to_z32());
-    let txt_records = packet.resource_records("_iroh").filter_map(|record| {
-        let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
-            return None;
-        };
-        String::try_from(txt.clone()).ok()
-    });
-    EndpointInfo::from_txt_lookup(name, txt_records).ok()
-}
-
-async fn publish_endpoint_to_testnet(endpoint: &Endpoint, testnet: &Testnet) {
-    let client = dht_test_client(testnet);
-    let public_key =
-        pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
-    let expected_info = EndpointInfo::from(endpoint.addr());
-    for _ in 0..20 {
-        let previous_timestamp = client
-            .resolve_most_recent(&public_key)
-            .await
-            .map(|packet| packet.timestamp());
-        let now = Timestamp::now();
-        let timestamp = match previous_timestamp {
-            Some(previous) if previous >= now => previous + 1,
-            _ => now,
-        };
-        let signed_packet =
-            build_signed_packet_with_timestamp(&expected_info, endpoint.secret_key(), 1, timestamp)
-                .expect("signed packet");
-        match client.publish(&signed_packet, previous_timestamp).await {
-            Ok(()) => break,
-            Err(PublishError::Concurrency(
-                ConcurrencyError::ConflictRisk
-                | ConcurrencyError::NotMostRecent
-                | ConcurrencyError::CasFailed,
-            )) => tokio::time::sleep(Duration::from_millis(50)).await,
-            Err(error) => panic!("publish endpoint info: {error}"),
-        }
-    }
-    timeout(Duration::from_secs(5), async {
+async fn wait_for_endpoint_in_testnet(endpoint: &Endpoint, testnet: &Testnet) {
+    let mut dht_builder = DhtBuilder::default();
+    dht_builder.bootstrap(&testnet.bootstrap);
+    let lookup = DhtAddressLookup::builder()
+        .dht_builder(dht_builder)
+        .no_publish()
+        .addr_filter(AddrFilter::unfiltered())
+        .build()
+        .expect("dht lookup");
+    timeout(Duration::from_secs(30), async {
         loop {
-            if client
-                .resolve_most_recent(&public_key)
-                .await
-                .as_ref()
-                .and_then(endpoint_info_from_resolved_packet)
-                .is_some_and(|packet_info| {
-                    packet_info.to_txt_strings() == expected_info.to_txt_strings()
-                })
+            if let Some(mut resolved) = lookup.resolve(endpoint.id())
+                && let Some(Ok(item)) = resolved.next().await
+                && item.endpoint_info().endpoint_id == endpoint.id()
             {
                 return;
             }
@@ -65,7 +23,7 @@ async fn publish_endpoint_to_testnet(endpoint: &Endpoint, testnet: &Testnet) {
         }
     })
     .await
-    .expect("resolve published endpoint info");
+    .expect("resolve endpoint info from DHT");
 }
 
 struct HintRoundtripParticipant<'a, T> {
@@ -503,7 +461,7 @@ async fn transport_resubscribe_recreates_timed_out_topic_state() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_seeded_dht_can_connect_by_endpoint_id_without_ticket() {
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let config = TransportNetworkConfig::loopback();
     let transport_a = IrohGossipTransport::bind_with_discovery(
         config.clone(),
@@ -519,8 +477,8 @@ async fn transport_seeded_dht_can_connect_by_endpoint_id_without_ticket() {
     .expect("transport b");
     let discovery_a = transport_a.discovery().await.expect("discovery a");
     let discovery_b = transport_b.discovery().await.expect("discovery b");
-    publish_endpoint_to_testnet(&transport_a.endpoint, &testnet).await;
-    publish_endpoint_to_testnet(&transport_b.endpoint, &testnet).await;
+    wait_for_endpoint_in_testnet(&transport_a.endpoint, &testnet).await;
+    wait_for_endpoint_in_testnet(&transport_b.endpoint, &testnet).await;
 
     transport_a
         .configure_discovery(

@@ -17,47 +17,34 @@ pub enum PayloadRef {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ObjectVisibility {
+    #[default]
     Public,
     Community,
     Room,
     Private,
 }
 
-impl Default for ObjectVisibility {
-    fn default() -> Self {
-        Self::Public
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ObjectStatus {
+    #[default]
     Active,
     Edited,
     Deleted,
     Tombstoned,
 }
 
-impl Default for ObjectStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChannelRef {
+    #[default]
     Public,
-    PrivateChannel { channel_id: ChannelId },
-}
-
-impl Default for ChannelRef {
-    fn default() -> Self {
-        Self::Public
-    }
+    PrivateChannel {
+        channel_id: ChannelId,
+    },
 }
 
 impl ChannelRef {
@@ -76,18 +63,15 @@ impl ChannelRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TimelineScope {
+    #[default]
     Public,
     AllJoined,
-    Channel { channel_id: ChannelId },
-}
-
-impl Default for TimelineScope {
-    fn default() -> Self {
-        Self::Public
-    }
+    Channel {
+        channel_id: ChannelId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

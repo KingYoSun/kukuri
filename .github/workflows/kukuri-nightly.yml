@@ -19,10 +19,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
           components: clippy,rustfmt
 
       - name: Install Linux system dependencies
@@ -80,10 +80,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -129,10 +129,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -195,10 +195,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -265,10 +265,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -314,10 +314,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -368,10 +368,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >
@@ -422,10 +422,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.89
+      - name: Install Rust 1.91
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.89.0
+          toolchain: 1.91.0
 
       - name: Install Linux system dependencies
         run: >

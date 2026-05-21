@@ -1,11 +1,10 @@
 use std::collections::BTreeSet;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use iroh::{RelayMap, RelayMode, RelayUrl};
-use mainline::DhtBuilder;
-use pkarr::Client as PkarrClient;
+use n0_mainline::DhtBuilder;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -115,7 +114,7 @@ impl DhtDiscoveryOptions {
         }
     }
 
-    pub fn with_bootstrap<T: ToSocketAddrs>(bootstrap: &[T]) -> Self {
+    pub fn with_bootstrap<T: ToString>(bootstrap: &[T]) -> Self {
         let mut dht_builder = DhtBuilder::default();
         dht_builder.bootstrap(bootstrap);
         Self {
@@ -136,22 +135,6 @@ impl DhtDiscoveryOptions {
             return None;
         }
         Some(self.dht_builder.clone().unwrap_or_default())
-    }
-
-    pub(crate) fn publish_client(&self) -> Result<Option<PkarrClient>> {
-        let Some(dht_builder) = self.resolved_dht_builder() else {
-            return Ok(None);
-        };
-        let mut builder = PkarrClient::builder();
-        builder.no_default_network();
-        builder.cache_size(0);
-        builder.dht(|dht| {
-            *dht = dht_builder;
-            dht
-        });
-        Ok(Some(builder.build().context(
-            "failed to build pkarr client for endpoint publication",
-        )?))
     }
 }
 
@@ -250,12 +233,14 @@ mod tests {
     }
 
     #[test]
-    fn dht_publish_client_disables_pkarr_cache() {
-        let client = DhtDiscoveryOptions::seeded_dht()
-            .publish_client()
-            .expect("publish client")
-            .expect("pkarr client");
+    fn seeded_dht_resolves_upstream_dht_builder() {
+        let options = DhtDiscoveryOptions::seeded_dht();
 
-        assert!(client.cache().is_none());
+        assert!(options.resolved_dht_builder().is_some());
+        assert!(
+            DhtDiscoveryOptions::disabled()
+                .resolved_dht_builder()
+                .is_none()
+        );
     }
 }

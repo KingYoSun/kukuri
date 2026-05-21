@@ -3612,17 +3612,15 @@ async fn friend_only_channel_restore_keeps_archived_epoch_history() {
     .await;
     assert_eq!(fresh_preview.epoch_id, rotated.current_epoch_id);
 
-    let joined_before_restart = vec![
-        wait_for_joined_private_channel_epoch(
-            &runtime_b,
-            topic,
-            channel.channel_id.as_str(),
-            rotated.current_epoch_id.as_str(),
-            2,
-            "joined channel update timeout",
-        )
-        .await,
-    ];
+    let joined_before_restart = [wait_for_joined_private_channel_epoch(
+        &runtime_b,
+        topic,
+        channel.channel_id.as_str(),
+        rotated.current_epoch_id.as_str(),
+        2,
+        "joined channel update timeout",
+    )
+    .await];
     assert_eq!(joined_before_restart.len(), 1);
     assert_eq!(
         joined_before_restart[0].archived_epoch_ids,
