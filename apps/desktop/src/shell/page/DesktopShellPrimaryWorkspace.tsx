@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react';
 
 import { TimelineWorkspaceHeader } from '@/components/core/TimelineWorkspaceHeader';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
+import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
 import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
@@ -44,6 +45,7 @@ type ViewModels = ReturnType<typeof useDesktopShellViewModels>;
 
 type DesktopShellPrimaryWorkspaceProps = {
   t: Translate;
+  api: DesktopApi;
   locale: SupportedLocale;
   routeSection: PrimarySection;
   profileAuthorLabel: string;
@@ -53,6 +55,7 @@ type DesktopShellPrimaryWorkspaceProps = {
   viewModels: Pick<
     ViewModels,
     | 'activeComposeAudienceLabel'
+    | 'activeComposeChannel'
     | 'activeGamePanelState'
     | 'activeGameRooms'
     | 'activeLivePanelState'
@@ -76,6 +79,7 @@ type DesktopShellPrimaryWorkspaceProps = {
   focusTimelineView: (view: 'feed' | 'bookmarks') => void;
   loadReactionCatalogData: () => Promise<void>;
   refreshTimelineFeed: (topic: string, currentThread: string | null) => Promise<void>;
+  refreshCurrentTopic: () => Promise<void>;
   loadMoreTimeline: (topic: string) => Promise<void>;
   openAuthorDetail: OpenAuthorDetail;
   openThread: OpenThread;
@@ -111,6 +115,7 @@ type DesktopShellPrimaryWorkspaceProps = {
 
 export function DesktopShellPrimaryWorkspace({
   t,
+  api,
   locale,
   routeSection,
   profileAuthorLabel,
@@ -123,6 +128,7 @@ export function DesktopShellPrimaryWorkspace({
   focusTimelineView,
   loadReactionCatalogData,
   refreshTimelineFeed,
+  refreshCurrentTopic,
   loadMoreTimeline,
   openAuthorDetail,
   openThread,
@@ -190,6 +196,14 @@ export function DesktopShellPrimaryWorkspace({
   const activeTimelinePendingCount = pendingTimelineCountsByKey[activeTimelineKey] ?? 0;
   const activeTimelineHasMore = Boolean(timelineNextCursorByKey[activeTimelineKey]);
   const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
+  const metaverseRooms = useMemo(
+    () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'metaverse_room'),
+    [viewModels.activeGameRooms]
+  );
+  const scoreGameRooms = useMemo(
+    () => viewModels.activeGameRooms.filter((room) => room.room_kind !== 'metaverse_room'),
+    [viewModels.activeGameRooms]
+  );
   const profileMode = shellChromeState.profileMode;
   const profileConnectionsView = shellChromeState.profileConnectionsView;
   const unavailableCommunityNodeCount = communityNodeStatuses.filter(
@@ -467,7 +481,7 @@ export function DesktopShellPrimaryWorkspace({
               <div className='panel-header'>
                 <div>
                   <h3>{t('game:title')}</h3>
-                  <small>{t('game:summary', { count: viewModels.activeGameRooms.length })}</small>
+                  <small>{t('game:summary', { count: scoreGameRooms.length })}</small>
                 </div>
               </div>
               {viewModels.activeGamePanelState.status === 'loading' ? (
@@ -479,12 +493,12 @@ export function DesktopShellPrimaryWorkspace({
               ) : null}
             </Card>
             <Card className='shell-workspace-card'>
-              {viewModels.activeGameRooms.length === 0 &&
+              {scoreGameRooms.length === 0 &&
               viewModels.activeGamePanelState.status === 'ready' ? (
                 <p className='empty-state'>{t('game:empty')}</p>
               ) : null}
               <ul className='post-list'>
-                {viewModels.activeGameRooms.map((room) => {
+                {scoreGameRooms.map((room) => {
                   const draft = viewModels.gameDraftViews[room.room_id];
                   const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
                   const pending = Boolean(gameSavingByRoomId[room.room_id]);
@@ -618,6 +632,15 @@ export function DesktopShellPrimaryWorkspace({
                 })}
               </ul>
             </Card>
+            <MetaverseRoomPanel
+              api={api}
+              activeTopic={activeTopic}
+              activeComposeChannel={viewModels.activeComposeChannel}
+              rooms={metaverseRooms}
+              syncStatus={syncStatus}
+              locale={locale}
+              onRefresh={refreshCurrentTopic}
+            />
           </>
         ) : null}
 

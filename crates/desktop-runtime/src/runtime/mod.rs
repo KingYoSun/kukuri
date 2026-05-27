@@ -10,11 +10,12 @@ use kukuri_app_api::{
     AppService, AuthorSocialView, BlobMediaPayload, BookmarkedCustomReactionView,
     BookmarkedPostView, ChannelAccessTokenExport, ChannelAccessTokenPreview,
     CreateCustomReactionAssetInput, CreateGameRoomInput, CreateLiveSessionInput,
-    CustomReactionAssetView, DirectMessageConversationView, DirectMessageStatusView,
-    DirectMessageTimelineView, DirectMessageTopicStatusView, GameRoomView,
-    JoinedPrivateChannelView, LiveSessionView, NotificationStatusView, NotificationView,
-    PrivateChannelCapability, ProfileInput, ReactionStateView, RecentReactionView, SyncStatus,
-    TimelineView, UpdateGameRoomInput,
+    CreateMetaverseRoomInput, CustomReactionAssetView, DirectMessageConversationView,
+    DirectMessageStatusView, DirectMessageTimelineView, DirectMessageTopicStatusView, GameRoomView,
+    ImportMetaverseRoomAssetInput, JoinedPrivateChannelView, LiveSessionView,
+    MetaverseAssetRefView, MetaverseRoomEventView, NotificationStatusView, NotificationView,
+    PrivateChannelCapability, ProfileInput, PublishMetaverseRoomEventInput, ReactionStateView,
+    RecentReactionView, SyncStatus, TimelineView, UpdateGameRoomInput, UpdateMetaverseRoomInput,
 };
 use kukuri_cn_core::{CommunityNodeConsentStatus, normalize_http_url};
 use kukuri_core::{

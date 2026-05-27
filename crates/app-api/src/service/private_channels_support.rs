@@ -598,6 +598,7 @@ impl AppService {
         let blob_service = Arc::clone(&self.blob_service);
         let hint_transport = Arc::clone(&self.hint_transport);
         let transport = Arc::clone(&self.transport);
+        let metaverse_room_events = Arc::clone(&self.metaverse_room_events);
         let last_sync = Arc::clone(&self.last_sync_ts);
         let public_topic_delivery = Arc::clone(&self.public_topic_delivery);
         let topic = topic_id.to_string();
@@ -797,6 +798,31 @@ impl AppService {
                                 }
                             }
                             match &event.hint {
+                                GossipHint::MetaverseRoomEvent { event: envelope, .. } => {
+                                    let now = Utc::now().timestamp_millis();
+                                    match parse_metaverse_room_event_envelope(
+                                        envelope.as_ref().clone(),
+                                        event.received_at,
+                                        event.source_peer.clone(),
+                                    ) {
+                                        Ok(Some(view)) => {
+                                            push_metaverse_room_event_buffer(
+                                                &metaverse_room_events,
+                                                view,
+                                            )
+                                            .await;
+                                            *last_sync.lock().await = Some(now);
+                                        }
+                                        Ok(None) => {}
+                                        Err(error) => {
+                                            warn!(
+                                                topic = %topic,
+                                                error = %error,
+                                                "failed to parse metaverse room event hint"
+                                            );
+                                        }
+                                    }
+                                }
                                 GossipHint::LivePresence { session_id, author, ttl_ms, .. } => {
                                     let now = Utc::now().timestamp_millis();
                                     let _ = projection_store

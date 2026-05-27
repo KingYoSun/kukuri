@@ -1,5 +1,7 @@
 use kukuri_core::{
-    AssetRole, ChannelAudienceKind, ChannelSharingState, GameRoomStatus, LiveSessionStatus,
+    AssetRole, ChannelAudienceKind, ChannelSharingState, GameRoomKind, GameRoomStatus,
+    KukuriEnvelope, LiveSessionStatus, MetaverseAssetKind, MetaverseAssetRef,
+    MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
 use kukuri_transport::{ConnectMode, DiscoveryMode};
@@ -311,6 +313,9 @@ pub struct GameRoomView {
     pub status: GameRoomStatus,
     pub phase_label: Option<String>,
     pub scores: Vec<GameScoreView>,
+    pub room_kind: GameRoomKind,
+    pub metaverse: Option<MetaverseRoomStateV1>,
+    pub manifest_blob_hash: String,
     pub updated_at: i64,
     pub channel_id: Option<String>,
     pub audience_label: String,
@@ -337,11 +342,54 @@ pub struct CreateGameRoomInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateMetaverseRoomInput {
+    pub title: String,
+    pub description: String,
+    pub max_peers: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateGameRoomInput {
     pub status: GameRoomStatus,
     pub phase_label: Option<String>,
     pub scores: Vec<GameScoreView>,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateMetaverseRoomInput {
+    pub status: GameRoomStatus,
+    pub shared_object_position: [i64; 3],
+    pub shared_object_rotation: [i64; 3],
+    pub shared_object_scale: [i64; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishMetaverseRoomEventInput {
+    pub room_id: String,
+    pub peer_id: String,
+    pub seq: u64,
+    pub event: MetaverseRoomEventV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MetaverseRoomEventView {
+    pub envelope_id: String,
+    pub content: MetaverseRoomEventEnvelopeContentV1,
+    pub envelope: KukuriEnvelope,
+    pub received_at: i64,
+    pub source_peer: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportMetaverseRoomAssetInput {
+    pub room_id: String,
+    pub kind: MetaverseAssetKind,
+    pub mime_type: String,
+    pub name: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+pub type MetaverseAssetRefView = MetaverseAssetRef;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelineView {

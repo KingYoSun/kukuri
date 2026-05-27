@@ -1,7 +1,8 @@
 use kukuri_core::{
     AssetRef, BlobHash, CustomReactionAssetSnapshotV1, DirectMessageAttachmentManifestV1,
-    EnvelopeId, GameRoomStatus, GameScoreEntry, LiveSessionStatus, ObjectStatus, PayloadRef,
-    ReactionKeyKind, ReplicaId, RepostSourceSnapshotV1,
+    EnvelopeId, GameRoomKind, GameRoomStatus, GameScoreEntry, LiveSessionStatus,
+    MetaverseRoomStateV1, ObjectStatus, PayloadRef, ReactionKeyKind, ReplicaId,
+    RepostSourceSnapshotV1,
 };
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +130,8 @@ pub struct GameRoomProjectionRow {
     pub status: GameRoomStatus,
     pub phase_label: Option<String>,
     pub scores: Vec<GameScoreEntry>,
+    pub room_kind: GameRoomKind,
+    pub metaverse: Option<MetaverseRoomStateV1>,
     pub updated_at: i64,
     pub source_replica_id: ReplicaId,
     pub source_key: String,

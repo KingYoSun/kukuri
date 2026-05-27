@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_game_room_cache_topic_kind_updated;

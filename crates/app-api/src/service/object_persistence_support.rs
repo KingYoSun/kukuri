@@ -619,6 +619,8 @@ pub(crate) fn game_projection_row_from_state(
         status: state.status.clone(),
         phase_label: manifest.phase_label.clone(),
         scores: manifest.scores.clone(),
+        room_kind: manifest.room_kind.clone(),
+        metaverse: manifest.metaverse.clone(),
         updated_at: state.updated_at,
         source_replica_id: source_replica_id.clone(),
         source_key: stable_key("sessions/game", &format!("{}/state", state.room_id)),
