@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use iroh_relay::defaults::DEFAULT_RELAY_QUIC_PORT;
 use iroh_relay::server::{
-    AccessConfig, CertConfig, ClientRateLimit, Limits, QuicConfig, RelayConfig as HttpRelayConfig,
+    AllowAll, CertConfig, ClientRateLimit, Limits, QuicConfig, RelayConfig as HttpRelayConfig,
     Server, ServerConfig, TlsConfig,
 };
 use rustls::pki_types::pem::PemObject;
@@ -139,7 +139,7 @@ pub async fn spawn_server(config: IrohRelayConfig) -> Result<SpawnedIrohRelay> {
     relay_config.tls = relay_tls;
     relay_config.limits = limits;
     relay_config.key_cache_capacity = Some(1024);
-    relay_config.access = AccessConfig::Everyone;
+    relay_config.access = Arc::new(AllowAll);
 
     let mut server_config = ServerConfig::default();
     server_config.relay = Some(relay_config);

@@ -38,12 +38,12 @@ hex = "0.4.3"
 hkdf = "0.12.4"
 httpdate = "1.0.3"
 image = { version = "0.25.10", default-features = false, features = ["png", "gif", "jpeg", "webp"] }
-iroh = "1.0.0-rc.0"
-iroh-docs = "0.99.0"
-iroh-blobs = "0.101.0"
-iroh-gossip = "0.99.0"
-iroh-mainline-address-lookup = "0.2.0"
-iroh-relay = { version = "1.0.0-rc.0", features = ["server"] }
+iroh = "1.0.0-rc.1"
+iroh-docs = "0.100.0"
+iroh-blobs = "0.102.0"
+iroh-gossip = "0.100.0"
+iroh-mainline-address-lookup = "0.3.0"
+iroh-relay = { version = "1.0.0-rc.1", features = ["server"] }
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 keyring = { version = "3.6.3", default-features = false }
 chacha20poly1305 = "0.10.1"
