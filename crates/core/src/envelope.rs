@@ -50,6 +50,11 @@ pub enum GossipHint {
         author: Pubkey,
         ttl_ms: u32,
     },
+    MetaverseRoomEvent {
+        topic_id: TopicId,
+        room_id: String,
+        event: Box<KukuriEnvelope>,
+    },
     DirectMessageFrame {
         topic_id: TopicId,
         dm_id: String,

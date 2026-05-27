@@ -652,6 +652,7 @@ pub(crate) async fn hydrate_subscription_hint_with_services(
         | GossipHint::Presence { .. }
         | GossipHint::Typing { .. }
         | GossipHint::LivePresence { .. }
+        | GossipHint::MetaverseRoomEvent { .. }
         | GossipHint::DirectMessageFrame { .. }
         | GossipHint::DirectMessageAck { .. } => Ok(0),
     }
@@ -664,6 +665,7 @@ pub(crate) fn hint_targets_topic(hint: &GossipHint, topic: &str) -> bool {
         | GossipHint::Typing { topic_id, .. }
         | GossipHint::SessionChanged { topic_id, .. }
         | GossipHint::LivePresence { topic_id, .. }
+        | GossipHint::MetaverseRoomEvent { topic_id, .. }
         | GossipHint::DirectMessageFrame { topic_id, .. }
         | GossipHint::DirectMessageAck { topic_id, .. } => topic_id.as_str() == topic,
         GossipHint::ThreadUpdated { .. } | GossipHint::ProfileUpdated { .. } => true,

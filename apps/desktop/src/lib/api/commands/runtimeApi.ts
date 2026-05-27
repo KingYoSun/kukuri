@@ -18,6 +18,8 @@ import type {
   GameRoomView,
   JoinedPrivateChannelView,
   LiveSessionView,
+  MetaverseAssetRef,
+  MetaverseRoomEventView,
   NotificationStatusView,
   NotificationView,
   PrivateChannelInvitePreview,
@@ -473,6 +475,32 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
+  createMetaverseRoom: async (
+    topic,
+    title,
+    description,
+    maxPeers = null,
+    channelRef = { kind: 'public' }
+  ) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.createMetaverseRoom(
+        topic,
+        title,
+        description,
+        maxPeers,
+        channelRef
+      );
+    }
+    return invokeDesktop<string>('create_metaverse_room', {
+      request: {
+        topic,
+        channel_ref: channelRef,
+        title,
+        description,
+        max_peers: maxPeers,
+      },
+    });
+  },
   createPrivateChannel: async (topic, label, audienceKind = 'invite_only') => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.createPrivateChannel(topic, label, audienceKind);
@@ -623,6 +651,84 @@ export const runtimeApi: DesktopApi = {
         status,
         phase_label: phaseLabel,
         scores,
+      },
+    });
+  },
+  updateMetaverseRoom: async (
+    topic,
+    roomId,
+    status,
+    sharedObjectPosition,
+    sharedObjectRotation,
+    sharedObjectScale
+  ) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.updateMetaverseRoom(
+        topic,
+        roomId,
+        status,
+        sharedObjectPosition,
+        sharedObjectRotation,
+        sharedObjectScale
+      );
+    }
+    return invokeDesktop<void>('update_metaverse_room', {
+      request: {
+        topic,
+        room_id: roomId,
+        status,
+        shared_object_position: sharedObjectPosition,
+        shared_object_rotation: sharedObjectRotation,
+        shared_object_scale: sharedObjectScale,
+      },
+    });
+  },
+  publishMetaverseRoomEvent: async (topic, roomId, peerId, seq, event) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.publishMetaverseRoomEvent(topic, roomId, peerId, seq, event);
+    }
+    return invokeDesktop<MetaverseRoomEventView>('publish_metaverse_room_event', {
+      request: {
+        topic,
+        room_id: roomId,
+        peer_id: peerId,
+        seq,
+        event,
+      },
+    });
+  },
+  listMetaverseRoomEvents: async (topic, roomId, afterEnvelopeId = null, limit = null) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.listMetaverseRoomEvents(topic, roomId, afterEnvelopeId, limit);
+    }
+    return invokeDesktop<MetaverseRoomEventView[]>('list_metaverse_room_events', {
+      request: {
+        topic,
+        room_id: roomId,
+        after_envelope_id: afterEnvelopeId,
+        limit,
+      },
+    });
+  },
+  importMetaverseRoomAsset: async (topic, roomId, kind, mimeType, name, dataBase64) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.importMetaverseRoomAsset(
+        topic,
+        roomId,
+        kind,
+        mimeType,
+        name,
+        dataBase64
+      );
+    }
+    return invokeDesktop<MetaverseAssetRef>('import_metaverse_room_asset', {
+      request: {
+        topic,
+        room_id: roomId,
+        kind,
+        mime_type: mimeType,
+        name,
+        data_base64: dataBase64,
       },
     });
   },

@@ -1,4 +1,4 @@
-pub(crate) use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+pub(crate) use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 pub(crate) use std::sync::Arc;
 
 pub(crate) use anyhow::{Context, Result};
@@ -15,20 +15,23 @@ pub(crate) use kukuri_core::{
     DirectMessageEncryptedAttachmentV1, DirectMessageEncryptedBlobRefV1, DirectMessageFrameV1,
     DirectMessagePayloadV1, EnvelopeId, FollowEdge, FollowEdgeDocV1, FollowEdgeStatus,
     FriendOnlyGrantPreview, FriendPlusSharePreview, GAME_MANIFEST_MIME, GameParticipant,
-    GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry, GossipHint,
-    HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
+    GameRoomKind, GameRoomManifestBlobV1, GameRoomStateDocV1, GameRoomStatus, GameScoreEntry,
+    GossipHint, HintObjectRef, KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1,
     KukuriProfileEnvelopeContentV1, KukuriProfilePostEnvelopeContentV1,
     KukuriProfileRepostEnvelopeContentV1, LIVE_MANIFEST_MIME, LiveSessionManifestBlobV1,
-    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem, ObjectStatus,
+    LiveSessionStateDocV1, LiveSessionStatus, ManifestBlobRef, MediaManifestItem,
+    MetaverseAssetRef, MetaversePrimitive, MetaverseRoomEventEnvelopeContentV1,
+    MetaverseRoomSceneV1, MetaverseRoomSpawnV1, MetaverseRoomStateV1, ObjectStatus,
     ObjectVisibility, PayloadRef, PrivateChannelEpochHandoffGrantDocV1,
     PrivateChannelEpochHandoffGrantPayloadV1, PrivateChannelInvitePreview,
     PrivateChannelInviteTokenParams, PrivateChannelJoinMode, PrivateChannelMetadataDocV1,
     PrivateChannelParticipantDocV1, PrivateChannelPolicyDocV1, Profile, ProfilePost, ProfileRepost,
     Pubkey, ReactionDocV1, ReactionKeyKind, ReactionKeyV1, ReplicaId, RepostSourceSnapshotV1,
-    TimelineScope, TopicId, author_profile_topic_id, build_custom_reaction_asset_envelope,
-    build_direct_message_ack, build_follow_edge_envelope, build_friend_only_grant_token,
-    build_friend_plus_share_token, build_game_session_envelope, build_live_session_envelope,
-    build_media_manifest_envelope, build_post_envelope_with_payload_in_channel,
+    SharedRoomObjectV1, TimelineScope, TopicId, author_profile_topic_id,
+    build_custom_reaction_asset_envelope, build_direct_message_ack, build_follow_edge_envelope,
+    build_friend_only_grant_token, build_friend_plus_share_token, build_game_session_envelope,
+    build_live_session_envelope, build_media_manifest_envelope,
+    build_metaverse_room_event_envelope, build_post_envelope_with_payload_in_channel,
     build_private_channel_epoch_handoff_grant_envelope, build_private_channel_invite_token,
     build_private_channel_participant_envelope, build_private_channel_policy_envelope,
     build_profile_envelope, build_profile_post_envelope, build_profile_repost_envelope,
@@ -82,6 +85,7 @@ mod direct_messages_delivery_support;
 mod direct_messages_subscription_support;
 mod hydration_support;
 mod live_game_support;
+mod metaverse_room_event_support;
 mod notifications_support;
 mod object_persistence_support;
 mod private_channels_support;
@@ -93,6 +97,7 @@ mod timeline_runtime_support;
 
 pub(crate) use attachment_support::*;
 pub(crate) use hydration_support::*;
+pub(crate) use metaverse_room_event_support::*;
 pub(crate) use notifications_support::*;
 pub(crate) use object_persistence_support::*;
 pub(crate) use profile_docs_support::*;
@@ -221,6 +226,7 @@ pub struct AppService {
     pub(crate) author_subscriptions: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     pub(crate) joined_private_channels: Arc<Mutex<HashMap<String, JoinedPrivateChannelState>>>,
     pub(crate) live_presence_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    pub(crate) metaverse_room_events: Arc<Mutex<HashMap<String, VecDeque<MetaverseRoomEventView>>>>,
     pub(crate) last_sync_ts: Arc<Mutex<Option<i64>>>,
     pub(crate) subscription_generations: Arc<Mutex<HashMap<String, u64>>>,
     pub(crate) public_topic_delivery: Arc<Mutex<HashMap<String, PublicTopicDeliveryStatus>>>,
@@ -371,6 +377,7 @@ impl AppService {
             author_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             joined_private_channels: Arc::new(Mutex::new(HashMap::new())),
             live_presence_tasks: Arc::new(Mutex::new(HashMap::new())),
+            metaverse_room_events: Arc::new(Mutex::new(HashMap::new())),
             last_sync_ts: Arc::new(Mutex::new(None)),
             subscription_generations: Arc::new(Mutex::new(HashMap::new())),
             public_topic_delivery: Arc::new(Mutex::new(HashMap::new())),

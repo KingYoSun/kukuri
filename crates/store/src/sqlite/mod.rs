@@ -22,13 +22,13 @@ use crate::pagination::{
     direct_message_page_from_rows, envelope_page_from_rows, object_projection_page_from_rows,
 };
 use crate::row_mapping::{
-    follow_edge_status_name, game_status_name, live_status_name, notification_kind_name,
-    object_status_name, reaction_key_kind_name, row_to_author_relationship_projection,
-    row_to_bookmarked_custom_reaction, row_to_bookmarked_post, row_to_direct_message_conversation,
-    row_to_direct_message_message, row_to_direct_message_outbox, row_to_direct_message_tombstone,
-    row_to_envelope, row_to_follow_edge, row_to_game_room_projection,
-    row_to_live_session_projection, row_to_muted_author, row_to_notification,
-    row_to_object_projection, row_to_reaction_projection,
+    follow_edge_status_name, game_room_kind_name, game_status_name, live_status_name,
+    notification_kind_name, object_status_name, reaction_key_kind_name,
+    row_to_author_relationship_projection, row_to_bookmarked_custom_reaction,
+    row_to_bookmarked_post, row_to_direct_message_conversation, row_to_direct_message_message,
+    row_to_direct_message_outbox, row_to_direct_message_tombstone, row_to_envelope,
+    row_to_follow_edge, row_to_game_room_projection, row_to_live_session_projection,
+    row_to_muted_author, row_to_notification, row_to_object_projection, row_to_reaction_projection,
 };
 use crate::traits::{ProjectionStore, Store};
 

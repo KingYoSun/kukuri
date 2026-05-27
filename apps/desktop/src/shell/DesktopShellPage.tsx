@@ -911,6 +911,7 @@ export function DesktopShellPage({
         workspace={
           <DesktopShellPrimaryWorkspace
             t={t}
+            api={api}
             locale={locale}
             routeSection={routeSection}
             profileAuthorLabel={profileAuthorLabel}
@@ -923,6 +924,7 @@ export function DesktopShellPage({
             focusTimelineView={focusTimelineView}
             loadReactionCatalogData={loadReactionCatalogData}
             refreshTimelineFeed={refreshTimelineFeed}
+            refreshCurrentTopic={() => loadTopics(trackedTopics, activeTopic, selectedThread)}
             loadMoreTimeline={loadMoreTimeline}
             openAuthorDetail={openAuthorDetail}
             openThread={openThread}

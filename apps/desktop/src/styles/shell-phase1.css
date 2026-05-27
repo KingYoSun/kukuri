@@ -165,6 +165,134 @@
   background: var(--surface-input);
 }
 
+.metaverse-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.metaverse-discovery-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.metaverse-create-form {
+  grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1.4fr) minmax(6rem, 0.5fr) auto;
+  align-items: end;
+}
+
+.metaverse-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.metaverse-room-card {
+  display: grid;
+  gap: 0.65rem;
+  min-height: 13rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--surface-panel-muted);
+}
+
+.metaverse-room-card-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.metaverse-room-view {
+  overflow: hidden;
+}
+
+.metaverse-room-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 0.8fr);
+  gap: 1rem;
+  min-height: 34rem;
+}
+
+.metaverse-viewport {
+  min-height: 34rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #101318;
+}
+
+.metaverse-room-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.metaverse-object-controls {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.metaverse-object-controls > strong,
+.metaverse-chat-form span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.metaverse-nudge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.metaverse-chat-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.metaverse-chat-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 12rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.metaverse-chat-list li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+}
+
+.metaverse-chat-list strong {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.metaverse-chat-list small {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .metaverse-create-form,
+  .metaverse-room-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .metaverse-viewport {
+    min-height: 24rem;
+  }
+}
+
 .reply-banner {
   display: flex;
   justify-content: space-between;

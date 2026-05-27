@@ -23,6 +23,9 @@ import {
   type GameScoreView,
   type JoinedPrivateChannelView,
   type LiveSessionView,
+  type MetaverseAssetRef,
+  type MetaverseRoomEventV1,
+  type MetaverseRoomEventView,
   type NotificationStatusView,
   type NotificationView,
   type PostView,
@@ -227,6 +230,9 @@ function withGameRoomDefaults(room: GameRoomView): GameRoomView {
     channel_id: room.channel_id ?? null,
     audience_label: room.audience_label ?? (room.channel_id ? 'Private channel' : 'Public'),
     scores: room.scores.map((score) => ({ ...score })),
+    room_kind: room.room_kind ?? 'score_game',
+    metaverse: room.metaverse ?? null,
+    manifest_blob_hash: room.manifest_blob_hash ?? `mock-${room.room_id}`,
   };
 }
 
@@ -482,6 +488,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       rooms.map((room) => withGameRoomDefaults(room)),
     ])
   );
+  const metaverseRoomEventsByRoom: Record<string, MetaverseRoomEventView[]> = {};
+  const metaverseAssetPayloads: Record<string, BlobMediaPayload> = {};
   const joinedChannelsByTopic: Record<string, JoinedPrivateChannelView[]> = {};
   let sequence = 0;
   let discoveryConfig: DiscoveryConfig = {
@@ -1280,6 +1288,58 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       ];
       return roomId;
     },
+    async createMetaverseRoom(
+      topic,
+      title,
+      description,
+      maxPeers = null,
+      channelRef = { kind: 'public' }
+    ) {
+      sequence += 1;
+      const roomId = `meta-${sequence}`;
+      const channelId = channelRef.kind === 'private_channel' ? channelRef.channel_id : null;
+      const now = Date.now();
+      gameRoomsByTopic[topic] = [
+        withGameRoomDefaults({
+          room_id: roomId,
+          host_pubkey: syncStatus.local_author_pubkey,
+          title,
+          description,
+          status: 'Waiting',
+          phase_label: 'metaverse-mvp',
+          scores: [],
+          room_kind: 'metaverse_room',
+          metaverse: {
+            world_version: 1,
+            max_peers: maxPeers,
+            scene: {
+              ground: 'default',
+              shared_object: {
+                object_id: 'mvp-object-1',
+                asset_ref: null,
+                primitive_fallback: 'cube',
+                position: [0, 50, -240],
+                rotation: [0, 0, 0],
+                scale: [100, 100, 100],
+                updated_by: syncStatus.local_author_pubkey,
+                updated_at: now,
+              },
+            },
+            default_spawn: {
+              position: [0, 0, 260],
+              rotation: [0, 180, 0],
+            },
+            asset_refs: [],
+          },
+          manifest_blob_hash: `mock-${roomId}`,
+          updated_at: now,
+          channel_id: channelId,
+          audience_label: channelId ? 'Private channel' : 'Public',
+        }),
+        ...(gameRoomsByTopic[topic] ?? []),
+      ];
+      return roomId;
+    },
     async createPrivateChannel(
       topic,
       label,
@@ -1516,6 +1576,90 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
           : room
       );
     },
+    async updateMetaverseRoom(
+      topic,
+      roomId,
+      status,
+      sharedObjectPosition,
+      sharedObjectRotation,
+      sharedObjectScale
+    ) {
+      const now = Date.now();
+      gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) =>
+        room.room_id === roomId && room.metaverse
+          ? withGameRoomDefaults({
+              ...room,
+              status,
+              metaverse: {
+                ...room.metaverse,
+                scene: {
+                  ...room.metaverse.scene,
+                  shared_object: {
+                    ...room.metaverse.scene.shared_object,
+                    position: sharedObjectPosition,
+                    rotation: sharedObjectRotation,
+                    scale: sharedObjectScale,
+                    updated_by: syncStatus.local_author_pubkey,
+                    updated_at: now,
+                  },
+                },
+              },
+              updated_at: now,
+              manifest_blob_hash: `mock-${roomId}-${now}`,
+            })
+          : room
+      );
+    },
+    async publishMetaverseRoomEvent(topic, roomId, peerId, seq, event) {
+      const now = Date.now();
+      const envelopeId = `mock-metaverse-event-${now}-${seq}`;
+      const view: MetaverseRoomEventView = {
+        envelope_id: envelopeId,
+        content: {
+          event_id: envelopeId,
+          topic_id: topic,
+          channel_id: null,
+          room_id: roomId,
+          peer_id: peerId,
+          seq,
+          sent_at: now,
+          event: event as MetaverseRoomEventV1,
+        },
+        envelope: {
+          id: envelopeId,
+          kind: 'metaverse-room-event',
+          pubkey: syncStatus.local_author_pubkey,
+        },
+        received_at: now,
+        source_peer: 'mock-local',
+      };
+      const key = `${topic}::${roomId}`;
+      metaverseRoomEventsByRoom[key] = [...(metaverseRoomEventsByRoom[key] ?? []), view].slice(-512);
+      return view;
+    },
+    async listMetaverseRoomEvents(topic, roomId, afterEnvelopeId = null, limit = null) {
+      const key = `${topic}::${roomId}`;
+      const events = metaverseRoomEventsByRoom[key] ?? [];
+      const start = afterEnvelopeId
+        ? events.findIndex((event) => event.envelope_id === afterEnvelopeId) + 1
+        : 0;
+      const page = events.slice(Math.max(0, start));
+      return typeof limit === 'number' && page.length > limit ? page.slice(page.length - limit) : page;
+    },
+    async importMetaverseRoomAsset(_topic, roomId, kind, mimeType, name, dataBase64) {
+      const hash = `mock-metaverse-asset-${roomId}-${Object.keys(metaverseAssetPayloads).length + 1}`;
+      metaverseAssetPayloads[hash] = {
+        bytes_base64: dataBase64,
+        mime: mimeType,
+      };
+      return {
+        kind,
+        blob_hash: hash,
+        mime_type: mimeType,
+        size_bytes: Math.ceil((dataBase64.length * 3) / 4),
+        name,
+      } satisfies MetaverseAssetRef;
+    },
     async getSyncStatus() {
       return cloneSyncStatus(syncStatus);
     },
@@ -1655,7 +1799,10 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     async getLocalPeerTicket() {
       return 'peer1@127.0.0.1:7777';
     },
-    async getBlobMediaPayload(_hash, mime): Promise<BlobMediaPayload | null> {
+    async getBlobMediaPayload(hash, mime): Promise<BlobMediaPayload | null> {
+      if (metaverseAssetPayloads[hash]) {
+        return metaverseAssetPayloads[hash];
+      }
       return {
         bytes_base64: mime.startsWith('video/') ? 'ZmFrZS12aWRlbw==' : 'ZmFrZS1pbWFnZQ==',
         mime,

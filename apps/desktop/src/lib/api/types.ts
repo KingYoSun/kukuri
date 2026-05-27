@@ -444,6 +444,96 @@ export type LiveSessionView = {
 };
 
 export type GameRoomStatus = 'Waiting' | 'Running' | 'Paused' | 'Ended';
+export type GameRoomKind = 'score_game' | 'metaverse_room';
+
+export type MetaverseAssetKind = 'vrm' | 'glb' | 'texture' | 'other';
+
+export type MetaverseAssetRef = {
+  kind: MetaverseAssetKind;
+  blob_hash: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  name?: string | null;
+};
+
+export type MetaversePrimitive = 'cube' | 'sphere';
+
+export type SharedRoomObjectV1 = {
+  object_id: string;
+  asset_ref?: MetaverseAssetRef | null;
+  primitive_fallback: MetaversePrimitive;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+  updated_by: string;
+  updated_at: number;
+};
+
+export type MetaverseRoomStateV1 = {
+  world_version: number;
+  max_peers?: number | null;
+  scene: {
+    ground: string;
+    shared_object: SharedRoomObjectV1;
+  };
+  default_spawn: {
+    position: [number, number, number];
+    rotation: [number, number, number];
+  };
+  asset_refs: MetaverseAssetRef[];
+};
+
+export type MetaverseRoomPresenceV1 = {
+  room_id: string;
+  peer_id: string;
+  display_name?: string | null;
+  avatar_asset_ref?: MetaverseAssetRef | null;
+  joined_at: number;
+  last_seen_at: number;
+};
+
+export type MetaverseAvatarTransformV1 = {
+  room_id: string;
+  peer_id: string;
+  seq: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  animation?: string | null;
+  sent_at: number;
+};
+
+export type MetaverseRoomChatMessageV1 = {
+  room_id: string;
+  message_id: string;
+  author_peer_id: string;
+  display_name?: string | null;
+  body: string;
+  created_at: number;
+};
+
+export type MetaverseRoomEventV1 =
+  | { type: 'presence_join'; presence: MetaverseRoomPresenceV1 }
+  | { type: 'presence_leave'; room_id: string; peer_id: string; left_at: number }
+  | { type: 'avatar_transform'; transform: MetaverseAvatarTransformV1 }
+  | { type: 'chat_message'; message: MetaverseRoomChatMessageV1 }
+  | { type: 'object_update'; object: SharedRoomObjectV1 };
+
+export type MetaverseRoomEventView = {
+  envelope_id: string;
+  content: {
+    event_id: string;
+    topic_id: string;
+    channel_id?: string | null;
+    room_id: string;
+    peer_id: string;
+    seq: number;
+    sent_at: number;
+    event: MetaverseRoomEventV1;
+  };
+  envelope: Record<string, unknown>;
+  received_at: number;
+  source_peer: string;
+};
 
 export type GameScoreView = {
   participant_id: string;
@@ -459,6 +549,9 @@ export type GameRoomView = {
   status: GameRoomStatus;
   phase_label?: string | null;
   scores: GameScoreView[];
+  room_kind?: GameRoomKind;
+  metaverse?: MetaverseRoomStateV1 | null;
+  manifest_blob_hash?: string | null;
   updated_at: number;
   channel_id?: string | null;
   audience_label: string;
@@ -628,6 +721,13 @@ export interface DesktopApi {
     participants: string[],
     channelRef?: ChannelRef
   ): Promise<string>;
+  createMetaverseRoom(
+    topic: string,
+    title: string,
+    description: string,
+    maxPeers?: number | null,
+    channelRef?: ChannelRef
+  ): Promise<string>;
   createPrivateChannel(
     topic: string,
     label: string,
@@ -669,6 +769,35 @@ export interface DesktopApi {
     phaseLabel: string | null,
     scores: GameScoreView[]
   ): Promise<void>;
+  updateMetaverseRoom(
+    topic: string,
+    roomId: string,
+    status: GameRoomStatus,
+    sharedObjectPosition: [number, number, number],
+    sharedObjectRotation: [number, number, number],
+    sharedObjectScale: [number, number, number]
+  ): Promise<void>;
+  publishMetaverseRoomEvent(
+    topic: string,
+    roomId: string,
+    peerId: string,
+    seq: number,
+    event: MetaverseRoomEventV1
+  ): Promise<MetaverseRoomEventView>;
+  listMetaverseRoomEvents(
+    topic: string,
+    roomId: string,
+    afterEnvelopeId?: string | null,
+    limit?: number | null
+  ): Promise<MetaverseRoomEventView[]>;
+  importMetaverseRoomAsset(
+    topic: string,
+    roomId: string,
+    kind: MetaverseAssetKind,
+    mimeType: string,
+    name: string | null,
+    dataBase64: string
+  ): Promise<MetaverseAssetRef>;
   getSyncStatus(): Promise<SyncStatus>;
   getDiscoveryConfig(): Promise<DiscoveryConfig>;
   getCommunityNodeConfig(): Promise<CommunityNodeConfig>;

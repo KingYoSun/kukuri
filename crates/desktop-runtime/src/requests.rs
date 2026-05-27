@@ -1,6 +1,9 @@
 use kukuri_app_api::{GameScoreView, SocialConnectionKind};
 
-use kukuri_core::{ChannelAudienceKind, ChannelRef, GameRoomStatus, TimelineScope};
+use kukuri_core::{
+    ChannelAudienceKind, ChannelRef, GameRoomStatus, MetaverseAssetKind, MetaverseRoomEventV1,
+    TimelineScope,
+};
 use kukuri_store::TimelineCursor;
 use serde::{Deserialize, Serialize};
 
@@ -245,6 +248,43 @@ pub struct CreateGameRoomRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateMetaverseRoomRequest {
+    pub topic: String,
+    #[serde(default)]
+    pub channel_ref: ChannelRef,
+    pub title: String,
+    pub description: String,
+    pub max_peers: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishMetaverseRoomEventRequest {
+    pub topic: String,
+    pub room_id: String,
+    pub peer_id: String,
+    pub seq: u64,
+    pub event: MetaverseRoomEventV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListMetaverseRoomEventsRequest {
+    pub topic: String,
+    pub room_id: String,
+    pub after_envelope_id: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportMetaverseRoomAssetRequest {
+    pub topic: String,
+    pub room_id: String,
+    pub kind: MetaverseAssetKind,
+    pub mime_type: String,
+    pub name: Option<String>,
+    pub data_base64: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreatePrivateChannelRequest {
     pub topic: String,
     pub label: String,
@@ -335,4 +375,14 @@ pub struct UpdateGameRoomRequest {
     pub status: GameRoomStatus,
     pub phase_label: Option<String>,
     pub scores: Vec<GameScoreView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateMetaverseRoomRequest {
+    pub topic: String,
+    pub room_id: String,
+    pub status: GameRoomStatus,
+    pub shared_object_position: [i64; 3],
+    pub shared_object_rotation: [i64; 3],
+    pub shared_object_scale: [i64; 3],
 }

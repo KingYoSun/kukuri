@@ -89,14 +89,19 @@ impl SqliteStore {
         row: GameRoomProjectionRow,
     ) -> Result<()> {
         let scores_json = serde_json::to_string(&row.scores)?;
+        let metaverse_json = row
+            .metaverse
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
         sqlx::query(
             r#"
             INSERT INTO game_room_cache (
               room_id, topic_id, channel_id, host_pubkey, title, description, status, phase_label,
-              scores_json, updated_at, source_replica_id, source_key, manifest_blob_hash,
-              derived_at, projection_version
+              scores_json, room_kind, metaverse_json, updated_at, source_replica_id, source_key,
+              manifest_blob_hash, derived_at, projection_version
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
             ON CONFLICT(room_id) DO UPDATE SET
               topic_id = excluded.topic_id,
               channel_id = excluded.channel_id,
@@ -106,6 +111,8 @@ impl SqliteStore {
               status = excluded.status,
               phase_label = excluded.phase_label,
               scores_json = excluded.scores_json,
+              room_kind = excluded.room_kind,
+              metaverse_json = excluded.metaverse_json,
               updated_at = excluded.updated_at,
               source_replica_id = excluded.source_replica_id,
               source_key = excluded.source_key,
@@ -123,6 +130,8 @@ impl SqliteStore {
         .bind(game_status_name(&row.status))
         .bind(row.phase_label.as_deref())
         .bind(scores_json)
+        .bind(game_room_kind_name(&row.room_kind))
+        .bind(metaverse_json.as_deref())
         .bind(row.updated_at)
         .bind(row.source_replica_id.as_str())
         .bind(row.source_key.as_str())
@@ -141,8 +150,8 @@ impl SqliteStore {
         let rows = sqlx::query(
             r#"
             SELECT room_id, topic_id, host_pubkey, title, description, status, phase_label,
-                   channel_id, scores_json, updated_at, source_replica_id, source_key,
-                   manifest_blob_hash, derived_at, projection_version
+                   channel_id, scores_json, room_kind, metaverse_json, updated_at,
+                   source_replica_id, source_key, manifest_blob_hash, derived_at, projection_version
             FROM game_room_cache
             WHERE topic_id = ?1
             ORDER BY updated_at DESC, room_id DESC

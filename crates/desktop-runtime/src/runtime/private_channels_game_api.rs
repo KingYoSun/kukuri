@@ -183,6 +183,90 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn create_metaverse_room(
+        &self,
+        request: CreateMetaverseRoomRequest,
+    ) -> Result<String> {
+        self.app_service
+            .create_metaverse_room_in_channel(
+                request.topic.as_str(),
+                request.channel_ref,
+                CreateMetaverseRoomInput {
+                    title: request.title,
+                    description: request.description,
+                    max_peers: request.max_peers,
+                },
+            )
+            .await
+    }
+
+    pub async fn update_metaverse_room(&self, request: UpdateMetaverseRoomRequest) -> Result<()> {
+        self.app_service
+            .update_metaverse_room(
+                request.topic.as_str(),
+                request.room_id.as_str(),
+                UpdateMetaverseRoomInput {
+                    status: request.status,
+                    shared_object_position: request.shared_object_position,
+                    shared_object_rotation: request.shared_object_rotation,
+                    shared_object_scale: request.shared_object_scale,
+                },
+            )
+            .await
+    }
+
+    pub async fn publish_metaverse_room_event(
+        &self,
+        request: PublishMetaverseRoomEventRequest,
+    ) -> Result<MetaverseRoomEventView> {
+        self.app_service
+            .publish_metaverse_room_event(
+                request.topic.as_str(),
+                PublishMetaverseRoomEventInput {
+                    room_id: request.room_id,
+                    peer_id: request.peer_id,
+                    seq: request.seq,
+                    event: request.event,
+                },
+            )
+            .await
+    }
+
+    pub async fn list_metaverse_room_events(
+        &self,
+        request: ListMetaverseRoomEventsRequest,
+    ) -> Result<Vec<MetaverseRoomEventView>> {
+        self.app_service
+            .list_metaverse_room_events(
+                request.topic.as_str(),
+                request.room_id.as_str(),
+                request.after_envelope_id.as_deref(),
+                request.limit,
+            )
+            .await
+    }
+
+    pub async fn import_metaverse_room_asset(
+        &self,
+        request: ImportMetaverseRoomAssetRequest,
+    ) -> Result<MetaverseAssetRefView> {
+        let bytes = BASE64_STANDARD
+            .decode(request.data_base64.as_bytes())
+            .context("failed to decode metaverse asset data")?;
+        self.app_service
+            .import_metaverse_room_asset(
+                request.topic.as_str(),
+                ImportMetaverseRoomAssetInput {
+                    room_id: request.room_id,
+                    kind: request.kind,
+                    mime_type: request.mime_type,
+                    name: request.name,
+                    bytes,
+                },
+            )
+            .await
+    }
+
     pub async fn import_peer_ticket(&self, request: ImportPeerTicketRequest) -> Result<()> {
         self.app_service
             .import_peer_ticket(request.ticket.as_str())
