@@ -241,6 +241,12 @@ test('video upload generates poster attachment with metadata seek fallback', asy
     within(publishDialog).getByLabelText(/attachment/i),
     new File([Uint8Array.from([7, 8, 9])], 'clip.mp4', { type: 'video/mp4' })
   );
+
+  await waitFor(() => {
+    expect(screen.getByText(/video_manifest/)).toBeInTheDocument();
+  });
+  expect(screen.getByText(/video_poster/)).toBeInTheDocument();
+
   await user.click(within(publishDialog).getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => {
