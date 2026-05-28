@@ -21,7 +21,7 @@
 - Desktop の game section で通常の score room と metaverse room を分離表示。
 - Metaverse discovery panel で、トピック単位の metaverse room 一覧と作成を提供。
 - Room view で three.js scene、camera、lights、ground、local avatar、remote avatar、共有オブジェクトを描画。
-- `apps/desktop/public/avatar_sample_a.vrm` を local avatar としてロードし、失敗時は primitive fallback を使用。
+- `apps/desktop/public/blumochichi.vrm` を local avatar としてロードし、失敗時は primitive fallback を使用。
 - 任意の VRM file または sample VRM を blob storage に import し、`MetaverseAssetRef` として扱う。
 - avatar presence は `avatar_asset_ref` を signed room event に載せ、raw bytes を room event に埋め込まない。
 - avatar transform、chat、object update は署名済み `metaverse-room-event` envelope として hint transport で送受信する。
@@ -59,7 +59,7 @@ desktop app を開き、`Game` に切り替えて `Metaverse Rooms` panel を使
 1. `Game` を開く。
 2. metaverse room を作成する。
 3. room card を開く。
-4. 3D viewport が表示され、local avatar に `avatar_sample_a.vrm` が読み込まれることを確認する。
+4. 3D viewport が表示され、local avatar に `blumochichi.vrm` が読み込まれることを確認する。
 5. `Sample VRM` または `VRM file` で avatar asset を blob に import し、`Avatar asset` が `blob VRM loaded` になることを確認する。
 6. WASD または arrow key で local avatar を移動する。
 7. room chat message を送信する。

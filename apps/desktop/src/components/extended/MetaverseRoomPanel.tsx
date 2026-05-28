@@ -22,6 +22,7 @@ import type { SupportedLocale } from '@/i18n';
 import { blobToBase64 } from '@/lib/attachments';
 import { MetaverseScene } from './MetaverseScene';
 import {
+  DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
   DEFAULT_SHARED_OBJECT,
   type AvatarAssetStatus,
@@ -179,7 +180,7 @@ export function MetaverseRoomPanel({
     if (!response.ok) {
       throw new Error(`sample VRM fetch failed: ${response.status}`);
     }
-    await importAvatarBlob(await response.blob(), 'avatar_sample_a.vrm');
+    await importAvatarBlob(await response.blob(), DEFAULT_AVATAR_ASSET_NAME);
   }
 
   useEffect(() => {

@@ -39,4 +39,5 @@ export const DEFAULT_SHARED_OBJECT: SharedRoomObjectV1 = {
   updated_at: 0,
 };
 
-export const DEFAULT_AVATAR_ASSET_URL = '/avatar_sample_a.vrm';
+export const DEFAULT_AVATAR_ASSET_NAME = 'blumochichi.vrm';
+export const DEFAULT_AVATAR_ASSET_URL = `/${DEFAULT_AVATAR_ASSET_NAME}`;
