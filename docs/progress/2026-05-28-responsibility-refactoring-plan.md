@@ -588,14 +588,68 @@ cargo xtask desktop-ui-check
 
 | wave | status | notes |
 | --- | --- | --- |
-| 0 | planned | 初期計画 document のみ。 |
-| 1 | not started | Test responsibility split。 |
-| 2 | not started | Harness waiters and scenario helpers。 |
-| 3 | not started | Desktop shell orchestration boundaries。 |
-| 4 | not started | App API support helper boundaries。 |
-| 5 | not started | Desktop runtime community-node and stack boundaries。 |
-| 6 | not started | Community-node server boundary review。 |
-| 7 | not started | Metaverse UI/component responsibility check。 |
+| 0 | completed | baseline document を現行 code と照合。 |
+| 1 | landed | desktop-runtime / app-api の大型 test を behavior domain module に分割。desktop shell test は既存 regression surface を維持し、frontend full gate で保護。 |
+| 2 | landed | harness waiters を timeline / social / direct-message / private-channel / replication / live-game / scenario-step に分割。 |
+| 3 | completed | shell data/action/view-model は既存 feature module 境界を維持。追加の mock split は今回の refactor intent から外した。 |
+| 4 | completed | app-api support helper は public behavior を変えず、今回の変更は対応 test boundary split に限定。 |
+| 5 | completed | desktop-runtime community-node / stack は既存 module 境界を維持し、runtime test を config / session / connectivity / metadata 等へ分割。 |
+| 6 | completed | cn-core / cn-user-api / cn-iroh-relay / cn-cli は既存 boundary を維持。contract 変更なし。 |
+| 7 | landed | `MetaverseRoomPanel` から Three.js scene と scene model を分離。UI redesign なし。 |
+
+## 2026-05-28 Closeout
+
+- Change type: `refactor:extract`
+- Goal: responsibility-first refactoring plan の wave 1 / 2 / 7 を実装し、wave 3 / 4 / 5 / 6 は既存境界を audit して contract-preserving な状態で closeout。
+- Changed paths:
+  - `crates/desktop-runtime/src/tests/*`
+  - `crates/app-api/src/tests/*`
+  - `crates/harness/src/waiters.rs`
+  - `crates/harness/src/waiters/*`
+  - `apps/desktop/src/components/extended/MetaverseRoomPanel.tsx`
+  - `apps/desktop/src/components/extended/MetaverseScene.tsx`
+  - `apps/desktop/src/components/extended/MetaverseSceneModel.ts`
+- Behavior changes: none intended.
+- Public API / protocol / storage changes: none.
+- Tests/contracts/scenarios added or updated: existing test functions were moved into behavior-domain modules; no assertions were weakened or removed.
+- Validation run:
+  - `cargo fmt`
+  - `cargo test -p kukuri-app-api --no-run`
+  - `cargo test -p kukuri-desktop-runtime --no-run`
+  - `cargo test -p kukuri-harness --no-run`
+  - `cd apps/desktop && npx pnpm@10.16.1 exec tsc --noEmit`
+  - `cargo test -p kukuri-app-api sync::diagnostics -- --test-threads=1`
+  - `cargo test -p kukuri-app-api sync::hint_rehydration -- --test-threads=1`
+  - `cargo test -p kukuri-app-api sync::subscription_restarts -- --test-threads=1`
+  - `cargo test -p kukuri-app-api direct_messages:: -- --test-threads=1`
+  - `cargo test -p kukuri-app-api private_channels:: -- --test-threads=1`
+  - `cargo test -p kukuri-app-api timeline:: -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime attachments -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime replication_heuristics -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime identity_restart -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime media_blob_restore -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime private_channels::invite -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime private_channels::friend_only -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime private_channels::friend_plus -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime community_node::config -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime community_node::session -- --test-threads=1`
+  - `cargo test -p kukuri-desktop-runtime community_node::metadata -- --test-threads=1`
+  - `cargo test -p kukuri-harness`
+  - `cd apps/desktop && npx pnpm@10.16.1 test`
+  - `cargo xtask desktop-ui-check`
+  - `cargo xtask check`
+  - `cargo xtask e2e-smoke`
+- Validation not run / not green:
+  - `cargo test -p kukuri-app-api` timed out twice (10 min, then 20 min). Targeted app-api test domains above passed; `sync::transport_replication` also timed out at 20 min.
+  - `cargo test -p kukuri-desktop-runtime seeded_dht -- --test-threads=1` failed in all 3 tests while publishing `SignedPacket` to Mainline. This is an external DHT publish failure at `publish_runtime_endpoint_to_testnet`, not a compile or assertion change from the split.
+  - `cargo xtask test` was not rerun because app-api full test did not complete under the local timeout.
+- Risks:
+  - The large desktop shell integration test and desktop mock remain on the oversized watchlist; frontend behavior is protected by `cargo xtask desktop-ui-check`.
+  - `crates/desktop-runtime/src/tests/mod.rs` remains a large helper parent after moving test bodies; further splitting helper groups would be a follow-up refactor intent.
+- Suggested follow-ups:
+  - Isolate or mark the long-running `sync::transport_replication` group so full `cargo test -p kukuri-app-api` can complete deterministically.
+  - Split desktop shell test fixtures and `desktopApiMock` in a dedicated frontend-only refactor PR.
+  - Re-run seeded DHT tests in an environment where Mainline publish is healthy.
 
 ## Completion Report Template
 
