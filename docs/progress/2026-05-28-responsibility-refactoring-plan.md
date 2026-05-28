@@ -589,13 +589,13 @@ cargo xtask desktop-ui-check
 | wave | status | notes |
 | --- | --- | --- |
 | 0 | completed | baseline document を現行 code と照合。 |
-| 1 | landed | desktop-runtime / app-api の大型 test を behavior domain module に分割。desktop shell test は既存 regression surface を維持し、frontend full gate で保護。 |
-| 2 | landed | harness waiters を timeline / social / direct-message / private-channel / replication / live-game / scenario-step に分割。 |
+| 1 | completed | desktop-runtime / app-api の大型 test を behavior domain module に分割。desktop shell test helper は frontend follow-up で分離し、frontend full gate で保護。 |
+| 2 | completed | harness waiters を timeline / social / direct-message / private-channel / replication / live-game / scenario-step に分割。 |
 | 3 | completed | shell data/action/view-model は既存 feature module 境界を維持。追加の mock split は今回の refactor intent から外した。 |
 | 4 | completed | app-api support helper は public behavior を変えず、今回の変更は対応 test boundary split に限定。 |
 | 5 | completed | desktop-runtime community-node / stack は既存 module 境界を維持し、runtime test を config / session / connectivity / metadata 等へ分割。 |
 | 6 | completed | cn-core / cn-user-api / cn-iroh-relay / cn-cli は既存 boundary を維持。contract 変更なし。 |
-| 7 | landed | `MetaverseRoomPanel` から Three.js scene と scene model を分離。UI redesign なし。 |
+| 7 | completed | `MetaverseRoomPanel` から Three.js scene と scene model を分離。UI redesign なし。 |
 
 ## 2026-05-28 Closeout
 
@@ -650,6 +650,34 @@ cargo xtask desktop-ui-check
   - Isolate or mark the long-running `sync::transport_replication` group so full `cargo test -p kukuri-app-api` can complete deterministically.
   - Split desktop shell test fixtures and `desktopApiMock` in a dedicated frontend-only refactor PR.
   - Re-run seeded DHT tests in an environment where Mainline publish is healthy.
+
+## 2026-05-28 Frontend Follow-up Closeout
+
+- Change type: `refactor:extract`
+- Goal: split the remaining frontend fixture/helper pressure called out in the closeout follow-ups without changing shell behavior, DTO shape, API command names, or UI flow.
+- Changed paths:
+  - `apps/desktop/src/mocks/desktopApiMock.ts`
+  - `apps/desktop/src/mocks/desktopMockModel.ts`
+  - `apps/desktop/src/shell/DesktopShellPage.test.tsx`
+  - `apps/desktop/src/shell/DesktopShellPage.testHelpers.tsx`
+- Behavior changes: none intended.
+- Public API / protocol / storage changes: none.
+- Tests/contracts/scenarios added or updated: no assertions were added, weakened, or removed; existing shell test helpers and mock normalization helpers were moved behind explicit helper modules.
+- Validation run:
+  - `cd apps/desktop && npx pnpm@10.16.1 exec eslint src/mocks/desktopApiMock.ts src/mocks/desktopMockModel.ts src/shell/DesktopShellPage.test.tsx src/shell/DesktopShellPage.testHelpers.tsx --max-warnings 0`
+  - `cd apps/desktop && npx pnpm@10.16.1 exec tsc --noEmit`
+  - `cd apps/desktop && npx pnpm@10.16.1 test`
+  - `cargo xtask desktop-ui-check`
+  - `cargo xtask oversized-files`
+  - `git diff --check`
+- Validation not run:
+  - Rust crate tests were not rerun for this frontend-only extraction.
+- Risks:
+  - `apps/desktop/src/shell/DesktopShellPage.test.tsx` remains oversized because behavior-case splitting is a separate frontend test responsibility slice.
+  - `apps/desktop/src/mocks/desktopApiMock.ts` remains above the oversized threshold as the command factory facade; domain defaults and clone/normalization helpers now live in `desktopMockModel.ts`.
+- Suggested follow-ups:
+  - Split `DesktopShellPage.test.tsx` into behavior-domain test files while keeping `DesktopShellPage.testHelpers.tsx` as the shared fixture boundary.
+  - Split `desktopApiMock.ts` command groups by feature domain after the test file is smaller enough to review mock call-site changes safely.
 
 ## Completion Report Template
 
