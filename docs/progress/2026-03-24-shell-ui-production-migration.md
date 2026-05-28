@@ -44,7 +44,6 @@
 ### Non-goals
 - この文書自体で新しい visual spec、token 値、layout pixel、component API を確定しない。これらは各 phase の Figma design artifact と implementation review で決める。
 - backend、runtime、Tauri invoke surface、data contract、domain model の変更計画を持ち込まない。
-- `legacy/` からの wholesale 移植や、全面 rewrite を 1 PR で完了する前提を置かない。
 
 ## Current Snapshot
 - この section は planning 開始時点 (`2026-03-24`) の snapshot であり、最新状態は上の `2026-03-25 Status Update` を優先する。

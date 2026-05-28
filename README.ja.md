@@ -74,7 +74,6 @@ kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署
 ## コントリビューター向け
 
 - 新規実装・修正は root workspace を対象にします。
-- `legacy/` は、明示的な移植タスクがない限り参照専用です。
 - 現在の truth は主に次です。
   - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
   - [docs/README.md](./docs/README.md)

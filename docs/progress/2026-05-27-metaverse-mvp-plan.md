@@ -39,7 +39,6 @@ kukuri は topic-first P2P social app / protocol です。
 - connectivity は static peer、seeded DHT discovery、community node assist によって補助される
 - community node は bootstrap / auth / control-plane / connectivity assist の役割を持つが、ユーザーコンテンツの canonical store ではない
 - topic / channel / live session / game room の既存概念と整合するように設計する
-- `legacy/` は参照専用。明示的に必要でない限り移行元として扱わない
 
 P2P Room Metaverse は、kukuri における「3D化された topic/channel/game-room 的な surface」として扱ってください。
 

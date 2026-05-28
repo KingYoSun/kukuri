@@ -11,5 +11,4 @@ Accepted
 
 ## Consequences
 - fast lane は deterministic な harness と fake transport を優先する。
-- `legacy/` の資産は移植元として読むが、仕様の真実にはしない。
 - `docs` は短い pointer / ADR / runbook だけに保つ。

@@ -74,7 +74,6 @@ Current scope is defined by [foundation progress](./docs/progress/2026-03-10-fou
 ## For Contributors
 
 - New work targets the root workspace.
-- `legacy/` is reference-only unless a task explicitly requires migration from it.
 - Current sources of truth:
   - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
   - [docs/README.md](./docs/README.md)

@@ -406,9 +406,8 @@ cd apps/desktop && npx pnpm@10.16.1 test
 6. `sqlite_deletion_does_not_lose_shared_state` と `restart_restores_from_docs_blobs_without_sqlite_seed` が green であることを確認する。
 7. `missing_gossip_but_docs_sync_recovers_post` と `gossip_loss_does_not_lose_durable_post` が green であることを確認する。
 8. `compat_event_gossip` が current code から除去されていることを確認する。
-9. `legacy/` を参照せず root workspace だけで Linux の開発・テスト・起動が完結することを確認する。
 
-現在の HEAD では上記 1-9 を local で確認済みで、Phase5 cutover は完了。
+現在の HEAD では上記 1-8 を local で確認済みで、Phase5 cutover は完了。
 
 補足:
 - desktop shell は約 2 秒ごとに timeline / sync status / local ticket を再取得する。
