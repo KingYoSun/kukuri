@@ -31,7 +31,7 @@
 - desktop runtime で local 鍵を OS keyring へ保存し、利用できない環境では fallback file へ保存するようにした
 - v3 foundation として `kukuri-docs-sync` / `kukuri-blob-service` を追加し、shared durable state の正本を docs/blobs に寄せる最小 data plane を導入した
 - desktop-runtime で gossip/docs/blobs を shared iroh stack 上に統合し、`import_peer_ticket` が docs/blobs にも伝播するようにした
-- root 直下の pre-cutover app/service tree を `legacy/` へ移し、root 入口を current kukuri 実装中心へ縮退した
+- root 入口を current kukuri 実装中心へ縮退し、pre-cutover app/service tree は削除済みにした
 - `ADR 0003` で image post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
 - `image_post_visible_before_full_blob_download` を attachment metadata と blob status 遷移まで広げた
 - `ADR 0004` で video post の canonical source を `docs header + blobs payload + gossip hint + SQLite projection` に固定した
@@ -160,5 +160,5 @@
 - `gossip` を取り逃しても late join/backfill が docs/blobs だけで成立することを確認済み
 - `compat_event_gossip` は current code から除去済み
 - root workspace と root README は kukuri 中心へ縮退済み
-- pre-cutover の app/service tree は `legacy/` へ移動済み
-- `legacy/` を参照せず Linux の開発・テスト・起動が完結することを local required lane で確認済み
+- pre-cutover の app/service tree は削除済み
+- root workspace だけで Linux の開発・テスト・起動が完結することを local required lane で確認済み

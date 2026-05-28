@@ -3,7 +3,6 @@
 ## 目的
 - 現行 kukuri 実装に必要な情報だけを置く。
 - 仕様は ADR、実行手順は runbook、状態は progress に分ける。
-- `legacy/docs` は参照専用の履歴として扱う。
 
 ## 優先参照順
 1. `docs/progress/2026-04-16-mvp-builder-preview-plan.md`

@@ -2,7 +2,7 @@
 
 ## Summary
 - この文書は、current kukuri workspace にある長大な entry file を段階的に facade 化する multi-PR modularization campaign の正本である。
-- 対象は root workspace の現行実装のみとし、`legacy/` は参照専用で campaign scope から除外する。
+- 対象は root workspace の現行実装のみとする。
 - execution order は `edge -> core` に固定し、PR は subsystem wave 単位で切る。repo 全体を横断する mechanical split-only PR は前提にしない。
 - この文書は TODO メモではなく、`対象 inventory + 目標モジュール境界 + wave 順序 + validation gate + status update rule` を先に固定する設計書兼 progress tracker とする。
 - broad cleanup は許容するが、new feature 追加は scope 外とする。

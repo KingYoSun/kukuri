@@ -20,7 +20,6 @@ const OVERSIZED_FILE_EXTENSIONS: &[&str] = &[
     "tsx", "txt", "yaml", "yml",
 ];
 const OVERSIZED_FILE_EXCLUDED_PATH_PREFIXES: &[&str] = &[
-    "legacy/",
     "apps/desktop/src-tauri/gen/",
     "apps/desktop/src-tauri/icons/",
 ];
