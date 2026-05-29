@@ -166,6 +166,7 @@ export function DesktopShellPrimaryWorkspace({
     composerError,
     gameError,
     gameSavingByRoomId,
+    knownAuthorsByPubkey,
     liveError,
     localProfile,
     mediaObjectUrls,
@@ -639,6 +640,9 @@ export function DesktopShellPrimaryWorkspace({
               rooms={metaverseRooms}
               syncStatus={syncStatus}
               locale={locale}
+              localProfile={localProfile}
+              knownAuthorsByPubkey={knownAuthorsByPubkey}
+              mediaObjectUrls={mediaObjectUrls}
               onRefresh={refreshCurrentTopic}
             />
           </>

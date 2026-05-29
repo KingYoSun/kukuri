@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
@@ -10,20 +11,28 @@ import {
 
 import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import {
+  AVATAR_GROUND_Y,
   DEFAULT_AVATAR_ASSET_URL,
   avatarAnimationForInput,
+  initialAvatarTransform,
+  isNewerRemoteTransform,
+  stepAvatarJump,
   type AvatarAnimationState,
   type AvatarAssetStatus,
+  type AvatarPhysicsState,
   type AvatarTransform,
   type MetaverseVec3,
+  type PeerPresence,
 } from './MetaverseSceneModel';
 
 type SceneProps = {
   room: GameRoomView;
   localPeerId: string;
   remoteTransforms: Record<string, AvatarTransform>;
+  peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
   avatarAssetUrl: string | null;
+  hud: ReactNode;
   onLocalTransform: (transform: AvatarTransform) => void;
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
 };
@@ -61,20 +70,19 @@ function scenePosition(values: MetaverseVec3) {
   return new THREE.Vector3(toSceneUnit(values[0]), toSceneUnit(values[1]), toSceneUnit(values[2]));
 }
 
-function makeAvatarMesh(color: number) {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.28, 0.72, 6, 12),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+function makePrimitiveAvatar(color: number) {
+  return (
+    <>
+      <mesh position={[0, 0.72, 0]}>
+        <capsuleGeometry args={[0.28, 0.72, 6, 12]} />
+        <meshStandardMaterial color={color} roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 1.34, 0]}>
+        <sphereGeometry args={[0.22, 16, 16]} />
+        <meshStandardMaterial color={0xf5d0c5} roughness={0.65} />
+      </mesh>
+    </>
   );
-  body.position.y = 0.72;
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 16, 16),
-    new THREE.MeshStandardMaterial({ color: 0xf5d0c5, roughness: 0.65 })
-  );
-  head.position.y = 1.34;
-  group.add(body, head);
-  return group;
 }
 
 function disposeObjectTree(object: THREE.Object3D) {
@@ -87,23 +95,6 @@ function disposeObjectTree(object: THREE.Object3D) {
       }
     }
   });
-}
-
-function initialAvatarTransform(
-  roomId: string,
-  localPeerId: string,
-  spawnPosition?: MetaverseVec3,
-  spawnRotation?: MetaverseVec3
-): AvatarTransform {
-  return {
-    roomId,
-    peerId: localPeerId,
-    seq: 0,
-    position: spawnPosition ?? [0, 0, 260],
-    rotation: spawnRotation ?? [0, 180, 0],
-    animation: 'idle',
-    sentAt: 0,
-  };
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -214,131 +205,41 @@ function playSittingExit(runtime: AvatarAnimationRuntime, nextAnimation: AvatarA
   }, 300);
 }
 
-export function MetaverseScene({
-  room,
-  localPeerId,
-  remoteTransforms,
-  sharedObject,
-  avatarAssetUrl,
-  onLocalTransform,
-  onAvatarAssetStatus,
-}: SceneProps) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const spawnPosition = room.metaverse?.default_spawn.position;
-  const spawnRotation = room.metaverse?.default_spawn.rotation;
-  const localTransformRef = useRef<AvatarTransform>(
-    initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation)
-  );
-  const seqRef = useRef(0);
-  const lastSentAtRef = useRef(0);
-  const lastPublishedTransformRef = useRef<AvatarTransform | null>(null);
-  const keysRef = useRef(new Set<string>());
-  const remoteGroupsRef = useRef(new Map<string, THREE.Group>());
-  const localAvatarRef = useRef<THREE.Group | null>(null);
-  const sharedObjectRef = useRef<THREE.Mesh | null>(null);
-  const onLocalTransformRef = useRef(onLocalTransform);
-  const onAvatarAssetStatusRef = useRef(onAvatarAssetStatus);
-  const remoteTransformsRef = useRef(remoteTransforms);
-  const sharedObjectStateRef = useRef(sharedObject);
+function AvatarModel({
+  assetUrl,
+  color,
+  animationRef,
+  statusTarget,
+}: {
+  assetUrl: string;
+  color: number;
+  animationRef?: RefObject<AvatarAnimationState>;
+  statusTarget?: (status: AvatarAssetStatus) => void;
+}) {
+  const groupRef = useRef<THREE.Group | null>(null);
+  const vrmRuntimeRef = useRef<{ vrm: VRM | null; loadedRoot: THREE.Object3D | null }>({
+    vrm: null,
+    loadedRoot: null,
+  });
+  const animationRuntimeRef = useRef<AvatarAnimationRuntime | null>(null);
+  const [visiblePrimitive, setVisiblePrimitive] = useState(true);
 
   useEffect(() => {
-    onLocalTransformRef.current = onLocalTransform;
-  }, [onLocalTransform]);
-
-  useEffect(() => {
-    onAvatarAssetStatusRef.current = onAvatarAssetStatus;
-  }, [onAvatarAssetStatus]);
-
-  useEffect(() => {
-    remoteTransformsRef.current = remoteTransforms;
-  }, [remoteTransforms]);
-
-  useEffect(() => {
-    const nextTransform = initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation);
-    localTransformRef.current = nextTransform;
-    seqRef.current = 0;
-    lastSentAtRef.current = 0;
-    lastPublishedTransformRef.current = null;
-    keysRef.current.clear();
-    if (localAvatarRef.current) {
-      localAvatarRef.current.position.copy(scenePosition(nextTransform.position));
-      localAvatarRef.current.rotation.y = THREE.MathUtils.degToRad(nextTransform.rotation[1]);
-    }
-  }, [localPeerId, room.room_id, spawnPosition, spawnRotation]);
-
-  useEffect(() => {
-    sharedObjectStateRef.current = sharedObject;
-    if (sharedObjectRef.current) {
-      sharedObjectRef.current.position.copy(scenePosition(sharedObject.position));
-      sharedObjectRef.current.rotation.set(
-        THREE.MathUtils.degToRad(sharedObject.rotation[0]),
-        THREE.MathUtils.degToRad(sharedObject.rotation[1]),
-        THREE.MathUtils.degToRad(sharedObject.rotation[2])
-      );
-      sharedObjectRef.current.scale.set(
-        Math.max(0.1, toSceneUnit(sharedObject.scale[0])),
-        Math.max(0.1, toSceneUnit(sharedObject.scale[1])),
-        Math.max(0.1, toSceneUnit(sharedObject.scale[2]))
-      );
-    }
-  }, [sharedObject]);
-
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) {
+    const group = groupRef.current;
+    if (!group) {
       return;
     }
-    const avatarAssetRuntime: { vrm: VRM | null; loadedRoot: THREE.Object3D | null } = {
-      vrm: null,
-      loadedRoot: null,
-    };
-    const animationRuntimeRef: { current: AvatarAnimationRuntime | null } = {
-      current: null,
-    };
     let disposed = false;
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101318);
-    const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
-    camera.position.set(0, 4.2, 6.5);
-    camera.lookAt(0, 0.8, 0);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
-    mount.appendChild(renderer.domElement);
-
-    const hemi = new THREE.HemisphereLight(0xb7d7ff, 0x29351f, 2.2);
-    const key = new THREE.DirectionalLight(0xffffff, 2.4);
-    key.position.set(4, 8, 3);
-    scene.add(hemi, key);
-
-    const grid = new THREE.GridHelper(12, 12, 0x4f9f78, 0x30423a);
-    scene.add(grid);
-
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(12, 12),
-      new THREE.MeshStandardMaterial({ color: 0x1c2a25, roughness: 0.9 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.01;
-    scene.add(ground);
-
-    const localAvatar = makeAvatarMesh(0x4f9fef);
-    localAvatar.position.copy(scenePosition(localTransformRef.current.position));
-    localAvatarRef.current = localAvatar;
-    scene.add(localAvatar);
-    onAvatarAssetStatusRef.current('loading');
-
+    setVisiblePrimitive(true);
+    statusTarget?.('loading');
     const avatarLoader = new GLTFLoader();
     avatarLoader.register((parser) => new VRMLoaderPlugin(parser));
-    const avatarUrl = avatarAssetUrl ?? DEFAULT_AVATAR_ASSET_URL;
     avatarLoader.load(
-      avatarUrl,
+      assetUrl,
       (gltf) => {
         const vrm = gltf.userData.vrm as VRM | undefined;
         if (disposed || !vrm) {
-          onAvatarAssetStatusRef.current('fallback-primitive');
+          statusTarget?.('fallback-primitive');
           return;
         }
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
@@ -347,15 +248,11 @@ export function MetaverseScene({
         vrmRoot.scale.setScalar(0.9);
         vrmRoot.rotation.y = Math.PI;
         vrmRoot.position.y = 0;
-        while (localAvatar.children.length > 0) {
-          const child = localAvatar.children[0];
-          localAvatar.remove(child);
-          disposeObjectTree(child);
-        }
-        localAvatar.add(vrmRoot);
-        avatarAssetRuntime.vrm = vrm;
-        avatarAssetRuntime.loadedRoot = vrmRoot;
-        onAvatarAssetStatusRef.current(avatarAssetUrl ? 'blob-vrm' : 'sample-vrm');
+        group.add(vrmRoot);
+        setVisiblePrimitive(false);
+        vrmRuntimeRef.current = { vrm, loadedRoot: vrmRoot };
+        statusTarget?.(assetUrl === DEFAULT_AVATAR_ASSET_URL ? 'sample-vrm' : 'blob-vrm');
+
         const animationLoader = new GLTFLoader();
         animationLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
         const mixer = new THREE.AnimationMixer(vrm.scene);
@@ -383,7 +280,7 @@ export function MetaverseScene({
           }
           if (event.action === runtime.actions.jumpLand) {
             runtime.jumpActive = false;
-            playLoopAnimation(runtime, localTransformRef.current.animation);
+            playLoopAnimation(runtime, 'idle');
             return;
           }
           if (event.action === runtime.actions.sittingEnter) {
@@ -391,7 +288,7 @@ export function MetaverseScene({
             return;
           }
           if (event.action === runtime.actions.sittingExit) {
-            playLoopAnimation(runtime, localTransformRef.current.animation);
+            playLoopAnimation(runtime, 'idle');
           }
         });
         animationRuntimeRef.current = runtime;
@@ -412,31 +309,105 @@ export function MetaverseScene({
           })
         ).then(() => {
           if (!disposed) {
-            playLoopAnimation(runtime, localTransformRef.current.animation);
+            playLoopAnimation(runtime, 'idle');
           }
         });
       },
       undefined,
       () => {
         if (!disposed) {
-          onAvatarAssetStatusRef.current('fallback-primitive');
+          statusTarget?.('fallback-primitive');
         }
       }
     );
 
-    const objectMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0xf3b35d, roughness: 0.55 })
-    );
-    objectMesh.position.copy(scenePosition(sharedObjectStateRef.current.position));
-    objectMesh.scale.set(1, 1, 1);
-    sharedObjectRef.current = objectMesh;
-    scene.add(objectMesh);
+    return () => {
+      disposed = true;
+      const runtime = animationRuntimeRef.current;
+      if (runtime?.jumpLoopTimeoutId) {
+        window.clearTimeout(runtime.jumpLoopTimeoutId);
+      }
+      if (runtime?.sittingExitTimeoutId) {
+        window.clearTimeout(runtime.sittingExitTimeoutId);
+      }
+      runtime?.mixer.stopAllAction();
+      if (vrmRuntimeRef.current.vrm) {
+        runtime?.mixer.uncacheRoot(vrmRuntimeRef.current.vrm.scene);
+      }
+      if (vrmRuntimeRef.current.loadedRoot) {
+        group.remove(vrmRuntimeRef.current.loadedRoot);
+        disposeObjectTree(vrmRuntimeRef.current.loadedRoot);
+      }
+      animationRuntimeRef.current = null;
+      vrmRuntimeRef.current = { vrm: null, loadedRoot: null };
+    };
+  }, [assetUrl, statusTarget]);
 
-    let sittingRequested = false;
-    let jumpRequested = false;
-    let primitiveJumpUntil = 0;
+  useFrame((_, delta) => {
+    const runtime = animationRuntimeRef.current;
+    const animation = animationRef?.current ?? 'idle';
+    if (runtime) {
+      if (animation === 'jump') {
+        playJumpAnimation(runtime);
+      } else if (animation === 'sitting' && !runtime.sittingActive) {
+        playSittingEnter(runtime);
+      } else if (animation !== 'sitting' && runtime.sittingActive) {
+        playSittingExit(runtime, animation);
+      } else if (!runtime.jumpActive && !runtime.sittingActive && runtime.activeKey !== 'sittingExit') {
+        playLoopAnimation(runtime, animation);
+      }
+    }
+    runtime?.mixer.update(delta);
+    vrmRuntimeRef.current.vrm?.update(delta);
+  });
 
+  return (
+    <group ref={groupRef}>
+      {visiblePrimitive ? makePrimitiveAvatar(color) : null}
+    </group>
+  );
+}
+
+function LocalAvatar({
+  room,
+  localPeerId,
+  avatarAssetUrl,
+  onLocalTransform,
+  onAvatarAssetStatus,
+}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus'>) {
+  const groupRef = useRef<THREE.Group | null>(null);
+  const spawnPosition = room.metaverse?.default_spawn.position;
+  const spawnRotation = room.metaverse?.default_spawn.rotation;
+  const transformRef = useRef(initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation));
+  const physicsRef = useRef<AvatarPhysicsState>({ verticalVelocity: 0, grounded: true });
+  const seqRef = useRef(0);
+  const lastSentAtRef = useRef(0);
+  const lastPublishedTransformRef = useRef<AvatarTransform | null>(null);
+  const keysRef = useRef(new Set<string>());
+  const animationRef = useRef<AvatarAnimationState>('idle');
+  const jumpRequestedRef = useRef(false);
+  const sittingRequestedRef = useRef(false);
+  const onLocalTransformRef = useRef(onLocalTransform);
+
+  useEffect(() => {
+    onLocalTransformRef.current = onLocalTransform;
+  }, [onLocalTransform]);
+
+  useEffect(() => {
+    const nextTransform = initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation);
+    transformRef.current = nextTransform;
+    physicsRef.current = { verticalVelocity: 0, grounded: nextTransform.position[1] <= AVATAR_GROUND_Y };
+    seqRef.current = 0;
+    lastSentAtRef.current = 0;
+    lastPublishedTransformRef.current = null;
+    keysRef.current.clear();
+    if (groupRef.current) {
+      groupRef.current.position.copy(scenePosition(nextTransform.position));
+      groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextTransform.rotation[1]);
+    }
+  }, [localPeerId, room.room_id, spawnPosition, spawnRotation]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) {
         return;
@@ -448,24 +419,18 @@ export function MetaverseScene({
       }
       if (event.code === 'Space') {
         event.preventDefault();
-        if (!event.repeat && !sittingRequested) {
-          jumpRequested = true;
+        if (!event.repeat && !sittingRequestedRef.current) {
+          jumpRequestedRef.current = true;
         }
         return;
       }
       if (key === 'c') {
         if (!event.repeat) {
-          sittingRequested = !sittingRequested;
+          sittingRequestedRef.current = !sittingRequestedRef.current;
         }
         return;
       }
-      if (
-        key === 'w' ||
-        key === 'a' ||
-        key === 's' ||
-        key === 'd' ||
-        event.key.startsWith('Arrow')
-      ) {
+      if (key === 'w' || key === 'a' || key === 's' || key === 'd' || event.key.startsWith('Arrow')) {
         keysRef.current.add(key);
       }
     };
@@ -477,140 +442,227 @@ export function MetaverseScene({
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-
-    const resizeObserver = new ResizeObserver(([entry]) => {
-      const width = Math.max(1, entry.contentRect.width);
-      const height = Math.max(1, entry.contentRect.height);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    });
-    resizeObserver.observe(mount);
-
-    let frameId = 0;
-    let lastFrameAt = performance.now();
-    const tick = (frameAt: number) => {
-      const deltaSeconds = Math.min(0.05, (frameAt - lastFrameAt) / 1000);
-      lastFrameAt = frameAt;
-      const keys = keysRef.current;
-      const { x, z, moving } = movementVectorFromKeys(keys);
-      const runtime = animationRuntimeRef.current;
-      if (jumpRequested) {
-        if (runtime) {
-          playJumpAnimation(runtime);
-        }
-        primitiveJumpUntil = frameAt + 650;
-        jumpRequested = false;
-      }
-      const baseAnimation = avatarAnimationForInput(keys, sittingRequested);
-      const currentRuntimeState = runtime?.jumpActive || frameAt < primitiveJumpUntil ? 'jump' : baseAnimation;
-      if (runtime && baseAnimation === 'sitting' && !runtime.sittingActive) {
-        playSittingEnter(runtime);
-      } else if (runtime && baseAnimation !== 'sitting' && runtime.sittingActive) {
-        playSittingExit(runtime, baseAnimation);
-      } else if (runtime && !runtime.jumpActive && !runtime.sittingActive && runtime.activeKey !== 'sittingExit') {
-        playLoopAnimation(runtime, baseAnimation);
-      }
-
-      if (moving && baseAnimation !== 'sitting') {
-        const length = Math.hypot(x, z) || 1;
-        const speed = baseAnimation === 'sprint' ? 380 : 220;
-        const current = localTransformRef.current;
-        const nextPosition: MetaverseVec3 = [
-          current.position[0] + Math.round((x / length) * speed * deltaSeconds),
-          current.position[1],
-          current.position[2] + Math.round((z / length) * speed * deltaSeconds),
-        ];
-        const yaw = Math.round(THREE.MathUtils.radToDeg(Math.atan2(x, z)));
-        localTransformRef.current = {
-          ...current,
-          seq: seqRef.current,
-          position: nextPosition,
-          rotation: [0, yaw, 0],
-          animation: currentRuntimeState,
-          sentAt: Date.now(),
-        };
-        localAvatar.position.copy(scenePosition(nextPosition));
-        localAvatar.rotation.y = THREE.MathUtils.degToRad(yaw);
-      } else if (localTransformRef.current.animation !== currentRuntimeState) {
-        localTransformRef.current = {
-          ...localTransformRef.current,
-          seq: seqRef.current,
-          animation: currentRuntimeState,
-          sentAt: Date.now(),
-        };
-      }
-      runtime?.mixer.update(deltaSeconds);
-      avatarAssetRuntime.vrm?.update(deltaSeconds);
-
-      if (frameAt - lastSentAtRef.current >= 100) {
-        lastSentAtRef.current = frameAt;
-        const nextTransform = {
-          ...localTransformRef.current,
-          seq: seqRef.current + 1,
-          sentAt: Date.now(),
-        };
-        if (!avatarTransformsEqual(lastPublishedTransformRef.current, nextTransform)) {
-          seqRef.current += 1;
-          lastPublishedTransformRef.current = nextTransform;
-          onLocalTransformRef.current(nextTransform);
-        }
-      }
-
-      const seenPeers = new Set(Object.keys(remoteTransformsRef.current));
-      for (const [peerId, transform] of Object.entries(remoteTransformsRef.current)) {
-        let group = remoteGroupsRef.current.get(peerId);
-        if (!group) {
-          group = makeAvatarMesh(0xe37070);
-          remoteGroupsRef.current.set(peerId, group);
-          scene.add(group);
-        }
-        group.position.copy(scenePosition(transform.position));
-        group.rotation.y = THREE.MathUtils.degToRad(transform.rotation[1]);
-        group.visible = Date.now() - transform.sentAt < 15_000;
-      }
-      for (const [peerId, group] of remoteGroupsRef.current) {
-        if (!seenPeers.has(peerId)) {
-          scene.remove(group);
-          remoteGroupsRef.current.delete(peerId);
-        }
-      }
-
-      objectMesh.rotation.y += 0.25 * deltaSeconds;
-      renderer.render(scene, camera);
-      frameId = window.requestAnimationFrame(tick);
-    };
-    frameId = window.requestAnimationFrame(tick);
-
     return () => {
-      window.cancelAnimationFrame(frameId);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      resizeObserver.disconnect();
-      renderer.dispose();
-      mount.removeChild(renderer.domElement);
-      localAvatarRef.current = null;
-      sharedObjectRef.current = null;
-      if (animationRuntimeRef.current?.jumpLoopTimeoutId) {
-        window.clearTimeout(animationRuntimeRef.current.jumpLoopTimeoutId);
-      }
-      if (animationRuntimeRef.current?.sittingExitTimeoutId) {
-        window.clearTimeout(animationRuntimeRef.current.sittingExitTimeoutId);
-      }
-      animationRuntimeRef.current?.mixer.stopAllAction();
-      if (avatarAssetRuntime.vrm) {
-        animationRuntimeRef.current?.mixer.uncacheRoot(avatarAssetRuntime.vrm.scene);
-      }
-      animationRuntimeRef.current = null;
-      if (avatarAssetRuntime.loadedRoot) {
-        disposeObjectTree(avatarAssetRuntime.loadedRoot);
-      }
-      avatarAssetRuntime.vrm = null;
-      avatarAssetRuntime.loadedRoot = null;
-      disposed = true;
     };
-  }, [avatarAssetUrl, localPeerId, room.room_id, room.metaverse?.default_spawn.position, room.metaverse?.default_spawn.rotation]);
+  }, []);
 
-  return <div className='metaverse-viewport' ref={mountRef} aria-label='Metaverse room viewport' />;
+  useFrame((_, deltaSeconds) => {
+    const delta = Math.min(0.05, deltaSeconds);
+    const keys = keysRef.current;
+    const { x, z, moving } = movementVectorFromKeys(keys);
+    const baseAnimation = avatarAnimationForInput(keys, sittingRequestedRef.current);
+    const current = transformRef.current;
+    const jumpStep = stepAvatarJump(current.position, physicsRef.current, delta, jumpRequestedRef.current);
+    jumpRequestedRef.current = false;
+    physicsRef.current = jumpStep.physics;
+
+    let nextPosition = jumpStep.position;
+    let nextRotation = current.rotation;
+    if (moving && baseAnimation !== 'sitting') {
+      const length = Math.hypot(x, z) || 1;
+      const speed = baseAnimation === 'sprint' ? 380 : 220;
+      nextPosition = [
+        nextPosition[0] + Math.round((x / length) * speed * delta),
+        nextPosition[1],
+        nextPosition[2] + Math.round((z / length) * speed * delta),
+      ];
+      nextRotation = [0, Math.round(THREE.MathUtils.radToDeg(Math.atan2(x, z))), 0];
+    }
+
+    const animation = !physicsRef.current.grounded ? 'jump' : baseAnimation;
+    animationRef.current = animation;
+    transformRef.current = {
+      ...current,
+      position: nextPosition,
+      rotation: nextRotation,
+      animation,
+      sentAt: Date.now(),
+    };
+
+    if (groupRef.current) {
+      groupRef.current.position.copy(scenePosition(nextPosition));
+      groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextRotation[1]);
+    }
+
+    const sendInterval = moving || animation === 'jump' ? 50 : 220;
+    const frameAt = performance.now();
+    if (frameAt - lastSentAtRef.current >= sendInterval) {
+      lastSentAtRef.current = frameAt;
+      const nextTransform = {
+        ...transformRef.current,
+        seq: seqRef.current + 1,
+        sentAt: Date.now(),
+      };
+      if (!avatarTransformsEqual(lastPublishedTransformRef.current, nextTransform)) {
+        seqRef.current += 1;
+        lastPublishedTransformRef.current = nextTransform;
+        transformRef.current = nextTransform;
+        onLocalTransformRef.current(nextTransform);
+      }
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <AvatarModel
+        assetUrl={avatarAssetUrl ?? DEFAULT_AVATAR_ASSET_URL}
+        color={0x4f9fef}
+        animationRef={animationRef}
+        statusTarget={onAvatarAssetStatus}
+      />
+    </group>
+  );
 }
 
+function RemoteAvatar({
+  transform,
+  presence,
+}: {
+  transform: AvatarTransform;
+  presence: PeerPresence | null;
+}) {
+  const groupRef = useRef<THREE.Group | null>(null);
+  const targetRef = useRef(transform);
+  const animationRef = useRef<AvatarAnimationState>(transform.animation);
+
+  useEffect(() => {
+    if (isNewerRemoteTransform(targetRef.current, transform)) {
+      targetRef.current = transform;
+      animationRef.current = transform.animation;
+    }
+  }, [transform]);
+
+  useFrame((_, deltaSeconds) => {
+    const group = groupRef.current;
+    if (!group) {
+      return;
+    }
+    const target = targetRef.current;
+    const targetPosition = scenePosition(target.position);
+    const alpha = Math.min(1, deltaSeconds * 12);
+    group.position.lerp(targetPosition, alpha);
+    const targetYaw = THREE.MathUtils.degToRad(target.rotation[1]);
+    group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, alpha);
+    group.visible = Date.now() - target.sentAt < 15_000;
+  });
+
+  return (
+    <group
+      ref={groupRef}
+      position={scenePosition(transform.position)}
+      rotation={[0, THREE.MathUtils.degToRad(transform.rotation[1]), 0]}
+      userData={{ displayName: presence?.displayName ?? transform.peerId }}
+    >
+      <AvatarModel
+        assetUrl={presence?.avatarAssetUrl || DEFAULT_AVATAR_ASSET_URL}
+        color={0xe37070}
+        animationRef={animationRef}
+      />
+    </group>
+  );
+}
+
+function SharedObject({ object }: { object: SharedRoomObjectV1 }) {
+  const position = scenePosition(object.position);
+  const rotation: [number, number, number] = [
+    THREE.MathUtils.degToRad(object.rotation[0]),
+    THREE.MathUtils.degToRad(object.rotation[1]),
+    THREE.MathUtils.degToRad(object.rotation[2]),
+  ];
+  const scale: [number, number, number] = [
+    Math.max(0.1, toSceneUnit(object.scale[0])),
+    Math.max(0.1, toSceneUnit(object.scale[1])),
+    Math.max(0.1, toSceneUnit(object.scale[2])),
+  ];
+
+  return (
+    <mesh position={position} rotation={rotation} scale={scale}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={0xf3b35d} roughness={0.55} />
+    </mesh>
+  );
+}
+
+function SceneContents({
+  room,
+  localPeerId,
+  remoteTransforms,
+  peerPresence,
+  sharedObject,
+  avatarAssetUrl,
+  onLocalTransform,
+  onAvatarAssetStatus,
+}: Omit<SceneProps, 'hud'>) {
+  const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
+  const { camera } = useThree();
+
+  useEffect(() => {
+    camera.lookAt(0, 0.8, 0);
+  }, [camera]);
+
+  return (
+    <>
+      <color attach='background' args={[0x101318]} />
+      <ambientLight intensity={0.4} />
+      <hemisphereLight args={[0xb7d7ff, 0x29351f, 2.2]} />
+      <directionalLight position={[4, 8, 3]} intensity={2.4} />
+      <gridHelper args={[12, 12, 0x4f9f78, 0x30423a]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+        <planeGeometry args={[12, 12]} />
+        <meshStandardMaterial color={0x1c2a25} roughness={0.9} />
+      </mesh>
+      <LocalAvatar
+        room={room}
+        localPeerId={localPeerId}
+        avatarAssetUrl={avatarAssetUrl}
+        onLocalTransform={onLocalTransform}
+        onAvatarAssetStatus={onAvatarAssetStatus}
+      />
+      {remoteEntries.map(([peerId, transform]) => (
+        <RemoteAvatar
+          key={peerId}
+          transform={transform}
+          presence={peerPresence[peerId] ?? null}
+        />
+      ))}
+      <SharedObject object={sharedObject} />
+    </>
+  );
+}
+
+export function MetaverseScene({
+  room,
+  localPeerId,
+  remoteTransforms,
+  peerPresence,
+  sharedObject,
+  avatarAssetUrl,
+  hud,
+  onLocalTransform,
+  onAvatarAssetStatus,
+}: SceneProps) {
+  return (
+    <div className='metaverse-viewport-shell' aria-label='Metaverse room viewport'>
+      <Canvas
+        className='metaverse-viewport-canvas'
+        camera={{ position: [0, 4.2, 6.5], fov: 58 }}
+        gl={{ antialias: true }}
+        dpr={[1, 2]}
+      >
+        <SceneContents
+          room={room}
+          localPeerId={localPeerId}
+          remoteTransforms={remoteTransforms}
+          peerPresence={peerPresence}
+          sharedObject={sharedObject}
+          avatarAssetUrl={avatarAssetUrl}
+          onLocalTransform={onLocalTransform}
+          onAvatarAssetStatus={onAvatarAssetStatus}
+        />
+      </Canvas>
+      {hud}
+    </div>
+  );
+}

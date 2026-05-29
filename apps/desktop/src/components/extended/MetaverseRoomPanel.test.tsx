@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
+import { useState, type ReactNode } from 'react';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import type {
@@ -27,6 +28,7 @@ vi.mock('./MetaverseScene', () => ({
       sentAt: number;
     }) => void;
     onAvatarAssetStatus: (status: 'loading' | 'sample-vrm' | 'blob-vrm' | 'fallback-primitive') => void;
+    hud: ReactNode;
   }) => (
     <div aria-label='Metaverse room viewport'>
       <button
@@ -49,6 +51,7 @@ vi.mock('./MetaverseScene', () => ({
         Mark animation fallback
       </button>
       <span>{props.sharedObject.object_id}</span>
+      {props.hud}
     </div>
   ),
 }));
@@ -120,44 +123,195 @@ function avatarEvent(peerId: string, animation: string | null, seq: number): Met
   };
 }
 
-function renderPanel(api: DesktopApi, syncStatus?: SyncStatus) {
-  return render(
+type RenderPanelOptions = {
+  rooms?: GameRoomView[];
+  syncStatus?: SyncStatus;
+  onRefresh?: () => Promise<void>;
+};
+
+function createSyncStatus(): SyncStatus {
+  return {
+    connected: true,
+    delivery_state: 'Live',
+    peer_count: 1,
+    pending_events: 0,
+    status_detail: 'connected',
+    configured_peers: [],
+    subscribed_topics: ['kukuri:topic:demo'],
+    topic_diagnostics: [],
+    local_author_pubkey: 'f'.repeat(64),
+    discovery: {
+      mode: 'seeded_dht' as const,
+      connect_mode: 'direct_only' as const,
+      env_locked: false,
+      configured_seed_peer_ids: [],
+      bootstrap_seed_peer_ids: [],
+      manual_ticket_peer_ids: [],
+      connected_peer_ids: [],
+      docs_assist_peer_ids: [],
+      blob_assist_peer_ids: [],
+      local_endpoint_id: 'local-endpoint-a',
+    },
+  };
+}
+
+function panelElement(api: DesktopApi, options: RenderPanelOptions = {}) {
+  const effectiveSyncStatus = options.syncStatus ?? createSyncStatus();
+  return (
     <MetaverseRoomPanel
       api={api}
       activeTopic='kukuri:topic:demo'
       activeComposeChannel={{ kind: 'public' }}
-      rooms={[room]}
-      syncStatus={syncStatus ?? {
-        connected: true,
-        delivery_state: 'Live',
-        peer_count: 1,
-        pending_events: 0,
-        status_detail: 'connected',
-        configured_peers: [],
-        subscribed_topics: ['kukuri:topic:demo'],
-        topic_diagnostics: [],
-        local_author_pubkey: 'f'.repeat(64),
-        discovery: {
-          mode: 'seeded_dht',
-          connect_mode: 'direct_only',
-          env_locked: false,
-          configured_seed_peer_ids: [],
-          bootstrap_seed_peer_ids: [],
-          manual_ticket_peer_ids: [],
-          connected_peer_ids: [],
-          docs_assist_peer_ids: [],
-          blob_assist_peer_ids: [],
-          local_endpoint_id: 'local-endpoint-a',
-        },
-      }}
+      rooms={options.rooms ?? [room]}
+      syncStatus={effectiveSyncStatus}
       locale='en'
-      onRefresh={vi.fn()}
+      localProfile={{
+        pubkey: effectiveSyncStatus.local_author_pubkey,
+        name: 'host',
+        display_name: 'Host Author',
+        about: null,
+        picture: 'https://example.com/host.png',
+        picture_asset: null,
+        updated_at: 1,
+      }}
+      onRefresh={options.onRefresh ?? vi.fn()}
     />
   );
 }
 
+function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
+  return render(panelElement(api, options));
+}
+
 describe('MetaverseRoomPanel animation sharing', () => {
+  test('does not join an existing room until Join Room is clicked', async () => {
+    const baseApi = createDesktopMockApi();
+    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const api: DesktopApi = {
+      ...baseApi,
+      publishMetaverseRoomEvent,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+    expect(publishMetaverseRoomEvent).not.toHaveBeenCalled();
+  });
+
+  test('joins a room from the explicit Join Room action', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const api: DesktopApi = {
+      ...baseApi,
+      publishMetaverseRoomEvent,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        publishMetaverseRoomEvent.mock.calls.some(([, , , , event]) => event.type === 'presence_join')
+      ).toBe(true);
+    });
+  });
+
+  test('room HUD can be resized and collapsed', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const api: DesktopApi = {
+      ...baseApi,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    expect(screen.queryByText(/Topic: kukuri:topic:demo/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Debug details' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    expect(screen.getByText(/Topic: kukuri:topic:demo/)).toBeInTheDocument();
+
+    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'compact');
+    await user.click(screen.getByRole('button', { name: 'Expand room HUD' }));
+    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'wide');
+    expect(screen.getByRole('button', { name: 'Shrink room HUD' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));
+    expect(document.querySelector('.metaverse-room-hud')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open room HUD' }));
+    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'wide');
+  });
+
+  test('keeps create room controls collapsed until opened', async () => {
+    const user = userEvent.setup();
+    const api = createDesktopMockApi();
+
+    renderPanel(api);
+
+    expect(screen.queryByPlaceholderText('Atrium')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
+    expect(screen.getByPlaceholderText('Atrium')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Small social space')).toBeInTheDocument();
+  });
+
+  test('opens the created room after refreshed rooms include it', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const createdRoom = {
+      ...room,
+      room_id: 'created-metaverse-room',
+      title: 'Created room',
+      manifest_blob_hash: 'mock-created-metaverse-room',
+    };
+    const api: DesktopApi = {
+      ...baseApi,
+      createMetaverseRoom: vi.fn().mockResolvedValue(createdRoom.room_id),
+      publishMetaverseRoomEvent: vi.fn(baseApi.publishMetaverseRoomEvent),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+    function CreatedRoomHarness() {
+      const [rooms, setRooms] = useState<GameRoomView[]>([]);
+      return panelElement(api, {
+        rooms,
+        onRefresh: async () => {
+          setRooms([createdRoom]);
+        },
+      });
+    }
+
+    render(<CreatedRoomHarness />);
+    await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
+    await user.type(screen.getByPlaceholderText('Atrium'), 'Created room');
+    await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
+
+    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.publishMetaverseRoomEvent).toHaveBeenCalled();
+    });
+  });
+
+  test('renders host identity from profile data', () => {
+    const api = createDesktopMockApi();
+
+    renderPanel(api);
+
+    expect(screen.getByText('Host: Host Author')).toBeInTheDocument();
+    expect(screen.getByText('Host: Host Author').previousElementSibling).toHaveAttribute(
+      'data-avatar-src',
+      'https://example.com/host.png'
+    );
+  });
+
   test('normalizes backend avatar animation states', async () => {
+    const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
     const api: DesktopApi = {
       ...baseApi,
@@ -172,6 +326,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
     };
 
     renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: 'Debug details' }));
 
     await waitFor(() => {
       expect(screen.getByText(/idle-rem:idle/)).toBeInTheDocument();
@@ -194,6 +350,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     };
 
     renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
     await user.click(screen.getByRole('button', { name: 'Emit sprint transform' }));
 
     await waitFor(() => {
@@ -214,7 +371,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const api = createDesktopMockApi();
 
     renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
     await user.click(screen.getByRole('button', { name: 'Mark animation fallback' }));
+    await user.click(screen.getByRole('button', { name: 'Debug details' }));
 
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     expect(screen.getByText(/fallback-primitive/)).toBeInTheDocument();
