@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock as StdRwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use futures_util::StreamExt;
 use iroh::address_lookup::MemoryLookup;
 use iroh::endpoint::{Builder as EndpointBuilder, presets};
@@ -27,6 +27,8 @@ use tracing::warn;
 use iroh::tls::CaRootsConfig;
 
 const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
+const DOCS_STORE_FILE_NAME: &str = "docs.redb";
+const DEFAULT_AUTHOR_FILE_NAME: &str = "default-author";
 
 fn relay_activation_timeout() -> Duration {
     Duration::from_secs(10)
@@ -38,6 +40,102 @@ fn router_shutdown_timeout() -> Duration {
     } else {
         Duration::from_secs(5)
     }
+}
+
+async fn spawn_docs(
+    root: Option<&Path>,
+    endpoint: Endpoint,
+    blobs: BlobStore,
+    gossip: Gossip,
+) -> Result<iroh_docs::protocol::Docs> {
+    let docs_builder = match root {
+        Some(path) => iroh_docs::protocol::Docs::persistent(path.to_path_buf()),
+        None => iroh_docs::protocol::Docs::memory(),
+    };
+    docs_builder.spawn(endpoint, blobs, gossip).await
+}
+
+async fn recover_persistent_docs(
+    root: &Path,
+    endpoint: Endpoint,
+    blobs: BlobStore,
+    gossip: Gossip,
+    original_error: anyhow::Error,
+) -> Result<iroh_docs::protocol::Docs> {
+    let recovery_dir = move_corrupt_docs_store(root)
+        .with_context(|| format!("failed to recover iroh docs store at {}", root.display()))?;
+    warn!(
+        root = %root.display(),
+        recovery_dir = %recovery_dir.display(),
+        error = %original_error,
+        "recovering corrupt iroh docs store before retrying startup"
+    );
+    spawn_docs(
+        Some(root),
+        endpoint,
+        blobs,
+        gossip,
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "failed to spawn iroh docs after recovering corrupt store to {}; original error: {original_error:#}",
+            recovery_dir.display()
+        )
+    })
+}
+
+fn move_corrupt_docs_store(root: &Path) -> Result<PathBuf> {
+    let recovery_dir = unique_recovery_dir(root)?;
+    std::fs::create_dir_all(&recovery_dir).with_context(|| {
+        format!(
+            "failed to create iroh docs recovery dir {}",
+            recovery_dir.display()
+        )
+    })?;
+    let mut moved_any = false;
+    for file_name in [DOCS_STORE_FILE_NAME, DEFAULT_AUTHOR_FILE_NAME] {
+        let source = root.join(file_name);
+        if !source.exists() {
+            continue;
+        }
+        let target = recovery_dir.join(file_name);
+        std::fs::rename(&source, &target).with_context(|| {
+            format!(
+                "failed to move corrupt iroh docs file {} to {}",
+                source.display(),
+                target.display()
+            )
+        })?;
+        moved_any = true;
+    }
+    if !moved_any {
+        return Err(anyhow!(
+            "no iroh docs store files found to recover in {}",
+            root.display()
+        ));
+    }
+    Ok(recovery_dir)
+}
+
+fn unique_recovery_dir(root: &Path) -> Result<PathBuf> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before UNIX_EPOCH")?;
+    for attempt in 0..100 {
+        let candidate = root.join(format!(
+            "iroh-docs-recovery-{}-{}-{attempt}",
+            now.as_secs(),
+            now.subsec_nanos()
+        ));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(anyhow!(
+        "failed to allocate unique iroh docs recovery dir under {}",
+        root.display()
+    ))
 }
 
 pub struct IrohDocsNode {
@@ -155,14 +253,41 @@ impl IrohDocsNode {
             prepare_endpoint_for_discovery(&endpoint, &discovery, &dht_options, &relay_config)
                 .await?;
         let gossip = Gossip::builder().spawn(endpoint.clone());
-        let docs_builder = match root {
-            Some(path) => iroh_docs::protocol::Docs::persistent(path),
-            None => iroh_docs::protocol::Docs::memory(),
+        let docs = match spawn_docs(
+            root.as_deref(),
+            endpoint.clone(),
+            blobs.clone(),
+            gossip.clone(),
+        )
+        .await
+        {
+            Ok(docs) => docs,
+            Err(error) => {
+                let error = if let Some(root) = root.as_deref() {
+                    recover_persistent_docs(
+                        root,
+                        endpoint.clone(),
+                        blobs.clone(),
+                        gossip.clone(),
+                        error,
+                    )
+                    .await
+                } else {
+                    Err(error).context("failed to spawn iroh docs")
+                };
+                match error {
+                    Ok(docs) => docs,
+                    Err(error) => {
+                        if let Some(task) = &endpoint_publish_task {
+                            task.abort();
+                        }
+                        endpoint.close().await;
+                        let _ = blobs.shutdown().await;
+                        return Err(error);
+                    }
+                }
+            }
         };
-        let docs = docs_builder
-            .spawn(endpoint.clone(), blobs.clone(), gossip.clone())
-            .await
-            .context("failed to spawn iroh docs")?;
         let router = Router::builder(endpoint.clone())
             .accept(
                 iroh_blobs::ALPN,
