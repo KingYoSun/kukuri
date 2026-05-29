@@ -16,19 +16,19 @@ const cardVariants = cva('panel', {
   },
 });
 
-type CardOwnProps<T extends React.ElementType> = {
-  as?: T;
-} & VariantProps<typeof cardVariants>;
+type CardElement = 'article' | 'aside' | 'div' | 'section';
 
-type CardProps<T extends React.ElementType> = CardOwnProps<T> &
-  Omit<React.ComponentPropsWithoutRef<T>, keyof CardOwnProps<T>>;
+type CardProps = {
+  as?: CardElement;
+} & VariantProps<typeof cardVariants> &
+  Omit<React.ComponentPropsWithoutRef<CardElement>, 'as'>;
 
-export function Card<T extends React.ElementType = 'section'>({
+export function Card({
   as,
   tone,
   className,
   ...props
-}: CardProps<T>) {
+}: CardProps) {
   const Component = as ?? 'section';
 
   return <Component className={cn(cardVariants({ tone }), className)} {...props} />;
