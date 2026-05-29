@@ -7,8 +7,8 @@ pub(crate) struct DesktopState {
     pub(crate) runtime: Arc<DesktopRuntime>,
 }
 
-pub(crate) fn map_error(error: impl std::fmt::Display) -> String {
-    error.to_string()
+pub(crate) fn map_error(error: anyhow::Error) -> String {
+    format!("{error:#}")
 }
 
 pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {

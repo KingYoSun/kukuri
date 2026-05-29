@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
+anyhow = "1.0.102"
 kukuri-app-api = { path = "../../../crates/app-api" }
 kukuri-core = { path = "../../../crates/core" }
 kukuri-desktop-runtime = { path = "../../../crates/desktop-runtime" }
