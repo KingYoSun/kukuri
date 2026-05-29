@@ -25,6 +25,7 @@ import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
   DEFAULT_SHARED_OBJECT,
+  normalizeAvatarAnimationState,
   type AvatarAssetStatus,
   type AvatarTransform,
   type MetaverseRoomEvent,
@@ -76,6 +77,13 @@ export function MetaverseRoomPanel({
     const values = Object.values(remoteTransforms).map((transform) => transform.sentAt);
     return values.length ? Math.max(...values) : null;
   }, [remoteTransforms]);
+  const remoteAnimationSummary = useMemo(
+    () =>
+      Object.values(remoteTransforms)
+        .map((transform) => `${transform.peerId.slice(0, 8)}:${transform.animation}`)
+        .join(', '),
+    [remoteTransforms]
+  );
 
   const selectedRoom =
     rooms.find((room) => room.room_id === selectedRoomId) ?? rooms[0] ?? null;
@@ -200,7 +208,7 @@ export function MetaverseRoomPanel({
             seq: event.transform.seq,
             position: event.transform.position,
             rotation: event.transform.rotation,
-            animation: event.transform.animation === 'walk' ? 'walk' : 'idle',
+            animation: normalizeAvatarAnimationState(event.transform.animation),
             sentAt: event.transform.sent_at,
           },
         }));
@@ -483,6 +491,7 @@ export function MetaverseRoomPanel({
                 <span>Known peers: {knownPeerCount}</span>
                 <span>Last sent seq: {lastSentSeq}</span>
                 <span>Last received: {lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : 'none'}</span>
+                <span>Remote animation: {remoteAnimationSummary || 'none'}</span>
                 <span>
                   Avatar asset:{' '}
                   {avatarAssetStatus === 'sample-vrm'
