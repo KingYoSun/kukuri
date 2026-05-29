@@ -11,6 +11,9 @@ importers:
       '@pixiv/three-vrm':
         specifier: ^3.5.3
         version: 3.5.3(three@0.184.0)
+      '@pixiv/three-vrm-animation':
+        specifier: ^3.5.3
+        version: 3.5.3(three@0.184.0)
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -563,6 +566,11 @@ packages:
   '@oxc-project/types@0.126.0':
     resolution: {integrity: sha512-oGfVtjAgwQVVpfBrbtk4e1XDyWHRFta6BS3GWVzrF8xYBT2VGQAk39yJS/wFSMrZqoiCU4oghT3Ch0HaHGIHcQ==}
 
+  '@pixiv/three-vrm-animation@3.5.3':
+    resolution: {integrity: sha512-3zcp8TfPZdVX2y0Tgff9HmLl7KlEQ7WfeTSdmmZzEJpauzqxCK609TOtpQQnFASZBtMsCLt5XIH3B+I1VRfuTw==}
+    peerDependencies:
+      three: '>=0.137'
+
   '@pixiv/three-vrm-core@3.5.3':
     resolution: {integrity: sha512-iZDOkOxOnvT8vGPE2SgNRee3fQw/u11y4MULE9VPXN/LKSf946aVi+YfVnnMBRdwMfQ2uBNHxUvkIQlRIkXnHQ==}
     peerDependencies:
@@ -618,6 +626,9 @@ packages:
 
   '@pixiv/types-vrmc-vrm-1.0@3.5.3':
     resolution: {integrity: sha512-3HsBZWKXU/CnY2J6uAVuYmM0NPt/e5jroQZH85WYK0EzYmebqTmWKF/fllguNliJQAovdhn8sIA8NbHZoQvbUA==}
+
+  '@pixiv/types-vrmc-vrm-animation-1.0@3.5.3':
+    resolution: {integrity: sha512-SwwHofRepbZVvseIXIC3THA3Z/EKULOH2JJR9NjHRGOUdDcrIkQuQaZ0ml99P47EaUx5vwSlG7C7FEM9+ByvTQ==}
 
   '@playwright/test@1.59.1':
     resolution: {integrity: sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==}
@@ -2964,6 +2975,13 @@ snapshots:
 
   '@oxc-project/types@0.126.0': {}
 
+  '@pixiv/three-vrm-animation@3.5.3(three@0.184.0)':
+    dependencies:
+      '@pixiv/three-vrm-core': 3.5.3(three@0.184.0)
+      '@pixiv/types-vrmc-vrm-1.0': 3.5.3
+      '@pixiv/types-vrmc-vrm-animation-1.0': 3.5.3
+      three: 0.184.0
+
   '@pixiv/three-vrm-core@3.5.3(three@0.184.0)':
     dependencies:
       '@pixiv/types-vrm-0.0': 3.5.3
@@ -3022,6 +3040,10 @@ snapshots:
   '@pixiv/types-vrmc-springbone-extended-collider-1.0@3.5.3': {}
 
   '@pixiv/types-vrmc-vrm-1.0@3.5.3': {}
+
+  '@pixiv/types-vrmc-vrm-animation-1.0@3.5.3':
+    dependencies:
+      '@pixiv/types-vrmc-vrm-1.0': 3.5.3
 
   '@playwright/test@1.59.1':
     dependencies:
