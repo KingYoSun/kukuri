@@ -395,6 +395,9 @@ jobs:
           shared-key: kukuri-nightly-${{ runner.os }}-${{ github.job }}
 
       - name: Community-node connectivity scenario
+        env:
+          CN_POSTGRES_PORT: "55433"
+          COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@127.0.0.1:55433/cn
         run: cargo xtask scenario community_node_public_connectivity
 
       - name: Upload community-node artifacts
@@ -449,6 +452,9 @@ jobs:
           shared-key: kukuri-nightly-${{ runner.os }}-${{ github.job }}
 
       - name: Community-node multi-device scenario
+        env:
+          CN_POSTGRES_PORT: "55434"
+          COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@127.0.0.1:55434/cn
         run: cargo xtask scenario community_node_multi_device_connectivity
 
       - name: Upload multi-device artifacts

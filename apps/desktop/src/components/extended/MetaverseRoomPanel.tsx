@@ -1,6 +1,19 @@
 ﻿import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Box, Cuboid, MessageSquare, Move3D, Play, Send } from 'lucide-react';
+import {
+  Box,
+  ChevronDown,
+  Cuboid,
+  Maximize2,
+  MessageSquare,
+  Minimize2,
+  Move3D,
+  PanelRightClose,
+  PanelRightOpen,
+  Play,
+  Send,
+} from 'lucide-react';
 
+import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +27,8 @@ import type {
   MetaverseAssetRef,
   MetaverseRoomEventView,
   MetaverseRoomEventV1,
+  AuthorSocialView,
+  Profile,
   SharedRoomObjectV1,
   SyncStatus,
 } from '@/lib/api';
@@ -30,6 +45,7 @@ import {
   type AvatarTransform,
   type MetaverseRoomEvent,
   type MetaverseVec3,
+  type PeerPresence,
   type RoomChatMessage,
 } from './MetaverseSceneModel';
 
@@ -40,6 +56,9 @@ type MetaverseRoomPanelProps = {
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
   locale: SupportedLocale;
+  localProfile?: Profile | null;
+  knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
+  mediaObjectUrls?: Record<string, string | null>;
   onRefresh: () => Promise<void>;
 };
 
@@ -50,26 +69,34 @@ export function MetaverseRoomPanel({
   rooms,
   syncStatus,
   locale,
+  localProfile = null,
+  knownAuthorsByPubkey = {},
+  mediaObjectUrls = {},
   onRefresh,
 }: MetaverseRoomPanelProps) {
+  const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [maxPeers, setMaxPeers] = useState('8');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(rooms[0]?.room_id ?? null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
+  const [hudOpen, setHudOpen] = useState(true);
+  const [hudSize, setHudSize] = useState<'compact' | 'wide'>('compact');
+  const [hudDebugOpen, setHudDebugOpen] = useState(false);
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
+  const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState('');
-  const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(
-    rooms[0]?.metaverse?.scene.shared_object ?? DEFAULT_SHARED_OBJECT
-  );
+  const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
   const [lastSentSeq, setLastSentSeq] = useState(0);
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
   const [localAvatarAssetRef, setLocalAvatarAssetRef] = useState<MetaverseAssetRef | null>(null);
   const [localAvatarAssetUrl, setLocalAvatarAssetUrl] = useState<string | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const lastBackendEventEnvelopeIdRef = useRef<string | null>(null);
+  const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
@@ -85,15 +112,26 @@ export function MetaverseRoomPanel({
     [remoteTransforms]
   );
 
-  const selectedRoom =
-    rooms.find((room) => room.room_id === selectedRoomId) ?? rooms[0] ?? null;
+  const selectedRoom = selectedRoomId
+    ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
+    : null;
   const knownPeerCount = Object.keys(remoteTransforms).length;
+  const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
 
   useEffect(() => {
-    if (!selectedRoom && rooms[0]) {
-      setSelectedRoomId(rooms[0].room_id);
+    if (!selectedRoomId) {
+      return;
     }
-  }, [rooms, selectedRoom]);
+    if (rooms.some((room) => room.room_id === selectedRoomId)) {
+      if (pendingCreatedRoomIdRef.current === selectedRoomId) {
+        pendingCreatedRoomIdRef.current = null;
+      }
+      return;
+    }
+    if (pendingCreatedRoomIdRef.current !== selectedRoomId) {
+      setSelectedRoomId(null);
+    }
+  }, [rooms, selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoom) {
@@ -101,6 +139,7 @@ export function MetaverseRoomPanel({
     }
     setSharedObject(selectedRoom.metaverse?.scene.shared_object ?? DEFAULT_SHARED_OBJECT);
     setRemoteTransforms({});
+    setPeerPresence({});
     setMessages([]);
     lastBackendEventEnvelopeIdRef.current = null;
     if (typeof BroadcastChannel === 'undefined') {
@@ -108,11 +147,16 @@ export function MetaverseRoomPanel({
     }
     const channel = new BroadcastChannel(`kukuri-metaverse-room:${selectedRoom.room_id}`);
     channelRef.current = channel;
-    const publish = (event: MetaverseRoomEvent) => channel.postMessage(event);
     channel.onmessage = (event: MessageEvent<MetaverseRoomEvent>) => {
       const data = event.data;
       if (!data || !('type' in data)) {
         return;
+      }
+      if (data.type === 'presence.join' && data.presence.peerId !== localPeerId) {
+        setPeerPresence((current) => ({
+          ...current,
+          [data.presence.peerId]: data.presence,
+        }));
       }
       if (data.type === 'avatar.transform' && data.transform.peerId !== localPeerId) {
         setRemoteTransforms((current) => ({
@@ -127,7 +171,6 @@ export function MetaverseRoomPanel({
         setSharedObject(data.object);
       }
     };
-    publish({ type: 'presence.join', roomId: selectedRoom.room_id, peerId: localPeerId, at: Date.now() });
     return () => {
       channel.close();
       channelRef.current = null;
@@ -139,12 +182,21 @@ export function MetaverseRoomPanel({
       return;
     }
     const now = Date.now();
+    const presence: PeerPresence = {
+      peerId: localPeerId,
+      displayName: localDisplayName,
+      avatarAssetRef: localAvatarAssetRef,
+      avatarAssetUrl: localAvatarAssetUrl,
+      joinedAt: now,
+      lastSeenAt: now,
+    };
+    emit({ type: 'presence.join', presence });
     void api.publishMetaverseRoomEvent(activeTopic, selectedRoom.room_id, localPeerId, now, {
       type: 'presence_join',
       presence: {
         room_id: selectedRoom.room_id,
         peer_id: localPeerId,
-        display_name: null,
+        display_name: localDisplayName,
         avatar_asset_ref: localAvatarAssetRef,
         joined_at: now,
         last_seen_at: now,
@@ -152,7 +204,7 @@ export function MetaverseRoomPanel({
     }).catch(() => {
       // Browser-only fallback is handled by the local scene.
     });
-  }, [activeTopic, api, localAvatarAssetRef, localPeerId, selectedRoom]);
+  }, [activeTopic, api, localAvatarAssetRef, localAvatarAssetUrl, localDisplayName, localPeerId, selectedRoom]);
 
   async function importAvatarBlob(blob: Blob, name: string) {
     if (!selectedRoom) {
@@ -199,6 +251,43 @@ export function MetaverseRoomPanel({
     let timeoutId = 0;
     const applyBackendEvent = (view: MetaverseRoomEventView) => {
       const event = view.content.event;
+      if (event.type === 'presence_join' && event.presence.peer_id !== localPeerId) {
+        const presence: PeerPresence = {
+          peerId: event.presence.peer_id,
+          displayName: event.presence.display_name ?? null,
+          avatarAssetRef: event.presence.avatar_asset_ref ?? null,
+          joinedAt: event.presence.joined_at,
+          lastSeenAt: event.presence.last_seen_at,
+        };
+        setPeerPresence((current) => ({
+          ...current,
+          [presence.peerId]: {
+            ...current[presence.peerId],
+            ...presence,
+          },
+        }));
+        if (presence.avatarAssetRef) {
+          void api
+            .getBlobPreviewUrl(
+              presence.avatarAssetRef.blob_hash,
+              presence.avatarAssetRef.mime_type ?? 'model/vrm'
+            )
+            .then((avatarAssetUrl) => {
+              if (!cancelled && avatarAssetUrl) {
+                setPeerPresence((current) => ({
+                  ...current,
+                  [presence.peerId]: {
+                    ...current[presence.peerId],
+                    avatarAssetUrl,
+                  },
+                }));
+              }
+            })
+            .catch(() => {
+              // Missing remote avatar blobs fall back to the bundled default VRM.
+            });
+        }
+      }
       if (event.type === 'avatar_transform' && event.transform.peer_id !== localPeerId) {
         setRemoteTransforms((current) => ({
           ...current,
@@ -247,7 +336,7 @@ export function MetaverseRoomPanel({
         // The browser-only dev shell has no Tauri backend. BroadcastChannel remains the local fallback.
       } finally {
         if (!cancelled) {
-          timeoutId = window.setTimeout(() => void poll(), 600);
+          timeoutId = window.setTimeout(() => void poll(), 180);
         }
       }
     };
@@ -278,6 +367,8 @@ export function MetaverseRoomPanel({
       setDescription('');
       setMaxPeers('8');
       setError(null);
+      pendingCreatedRoomIdRef.current = roomId;
+      setJoinedRoomIds((current) => new Set(current).add(roomId));
       setSelectedRoomId(roomId);
       await onRefresh();
     } catch (createError) {
@@ -289,6 +380,31 @@ export function MetaverseRoomPanel({
 
   function emit(event: MetaverseRoomEvent) {
     channelRef.current?.postMessage(event);
+  }
+
+  function handleJoinRoom(roomId: string) {
+    setJoinedRoomIds((current) => new Set(current).add(roomId));
+    setSelectedRoomId(roomId);
+  }
+
+  function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
+    return room.host_pubkey === syncStatus.local_author_pubkey
+      ? localProfile
+      : knownAuthorsByPubkey[room.host_pubkey] ?? null;
+  }
+
+  function hostLabel(room: GameRoomView) {
+    const host = hostAuthor(room);
+    return host?.display_name?.trim() || host?.name?.trim() || room.host_pubkey.slice(0, 10);
+  }
+
+  function hostPicture(room: GameRoomView) {
+    const host = hostAuthor(room);
+    const pictureAssetHash = host?.picture_asset?.hash;
+    if (pictureAssetHash && typeof mediaObjectUrls[pictureAssetHash] === 'string') {
+      return mediaObjectUrls[pictureAssetHash];
+    }
+    return host?.picture ?? null;
   }
 
   function handleLocalTransform(transform: AvatarTransform) {
@@ -401,38 +517,56 @@ export function MetaverseRoomPanel({
           </div>
         </div>
         {error ? <Notice tone='destructive'>{error}</Notice> : null}
-        <form className='composer composer-compact metaverse-create-form' onSubmit={handleCreateRoom}>
-          <Label>
-            <span>Room title</span>
-            <Input
-              value={title}
-              placeholder='Atrium'
-              disabled={pending}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </Label>
-          <Label>
-            <span>Description</span>
-            <Textarea
-              value={description}
-              placeholder='Small social space'
-              disabled={pending}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </Label>
-          <Label>
-            <span>Max peers</span>
-            <Input
-              value={maxPeers}
-              disabled={pending}
-              onChange={(event) => setMaxPeers(event.target.value)}
-            />
-          </Label>
-          <Button type='submit' disabled={pending}>
+        <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
+          <button
+            className='shell-nav-accordion-trigger'
+            type='button'
+            aria-expanded={createOpen}
+            onClick={() => setCreateOpen((current) => !current)}
+          >
             <Cuboid className='size-4' aria-hidden='true' />
-            Create metaverse room
-          </Button>
-        </form>
+            <span className='shell-nav-accordion-title'>Create metaverse room</span>
+            <ChevronDown className='shell-nav-accordion-icon size-4' aria-hidden='true' />
+          </button>
+          {createOpen ? (
+            <form className='composer composer-compact metaverse-create-form' onSubmit={handleCreateRoom}>
+              <div className='metaverse-create-form-primary'>
+                <Label>
+                  <span>Room title</span>
+                  <Input
+                    value={title}
+                    placeholder='Atrium'
+                    disabled={pending}
+                    onChange={(event) => setTitle(event.target.value)}
+                  />
+                </Label>
+                <Label>
+                  <span>Max peers</span>
+                  <Input
+                    value={maxPeers}
+                    disabled={pending}
+                    onChange={(event) => setMaxPeers(event.target.value)}
+                  />
+                </Label>
+              </div>
+              <Label className='metaverse-create-form-description'>
+                <span>Description</span>
+                <Textarea
+                  value={description}
+                  placeholder='Small social space'
+                  disabled={pending}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </Label>
+              <div className='metaverse-create-form-actions'>
+                <Button type='submit' disabled={pending}>
+                  <Cuboid className='size-4' aria-hidden='true' />
+                  Create metaverse room
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </section>
         {rooms.length === 0 ? <p className='empty-state'>No metaverse rooms in this topic.</p> : null}
         <ul className='metaverse-room-grid'>
           {rooms.map((room) => (
@@ -444,9 +578,13 @@ export function MetaverseRoomPanel({
                   <span className='reply-chip'>{room.audience_label}</span>
                 </div>
                 <p>{room.description || 'No description'}</p>
+                <div className='metaverse-room-host'>
+                  <AuthorAvatar label={hostLabel(room)} picture={hostPicture(room)} size='sm' />
+                  <span>Host: {hostLabel(room)}</span>
+                </div>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
-                  <span>Host: {room.host_pubkey.slice(0, 10)}</span>
                   <span>Updated: {formatLocalizedTime(room.updated_at, locale)}</span>
+                  <span>{joinedRoomIds.has(room.room_id) ? 'Joined' : 'Not joined'}</span>
                 </div>
                 <div className='topic-diagnostic topic-diagnostic-secondary'>
                   <span>Manifest: {room.manifest_blob_hash ?? 'pending'}</span>
@@ -455,10 +593,10 @@ export function MetaverseRoomPanel({
                 <Button
                   variant='secondary'
                   type='button'
-                  onClick={() => setSelectedRoomId(room.room_id)}
+                  onClick={() => handleJoinRoom(room.room_id)}
                 >
                   <Play className='size-4' aria-hidden='true' />
-                  Open room
+                  Join Room
                 </Button>
               </article>
             </li>
@@ -473,104 +611,159 @@ export function MetaverseRoomPanel({
               room={selectedRoom}
               localPeerId={localPeerId}
               remoteTransforms={remoteTransforms}
+              peerPresence={peerPresence}
               sharedObject={sharedObject}
               avatarAssetUrl={localAvatarAssetUrl}
               onLocalTransform={handleLocalTransform}
               onAvatarAssetStatus={setAvatarAssetStatus}
+              hud={(
+                <>
+                  <div className='metaverse-hud-toolbar' data-open={hudOpen}>
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className='metaverse-hud-icon-button'
+                      type='button'
+                      aria-label={hudOpen ? 'Hide room HUD' : 'Open room HUD'}
+                      onClick={() => setHudOpen((open) => !open)}
+                    >
+                      {hudOpen ? (
+                        <PanelRightClose className='size-4' aria-hidden='true' />
+                      ) : (
+                        <PanelRightOpen className='size-4' aria-hidden='true' />
+                      )}
+                    </Button>
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className='metaverse-hud-icon-button'
+                      type='button'
+                      aria-label={hudSize === 'compact' ? 'Expand room HUD' : 'Shrink room HUD'}
+                      onClick={() => setHudSize((size) => (size === 'compact' ? 'wide' : 'compact'))}
+                    >
+                      {hudSize === 'compact' ? (
+                        <Maximize2 className='size-4' aria-hidden='true' />
+                      ) : (
+                        <Minimize2 className='size-4' aria-hidden='true' />
+                      )}
+                    </Button>
+                  </div>
+                  {hudOpen ? (
+                    <>
+                    <aside className='metaverse-room-hud' data-size={hudSize}>
+                      <div className='panel-header metaverse-hud-header'>
+                        <div>
+                          <h3>{selectedRoom.title}</h3>
+                          <small>{selectedRoom.room_id}</small>
+                        </div>
+                      </div>
+                      <section className='metaverse-hud-accordion' data-open={hudDebugOpen}>
+                        <button
+                          type='button'
+                          className='metaverse-hud-accordion-trigger'
+                          aria-expanded={hudDebugOpen}
+                          onClick={() => setHudDebugOpen((open) => !open)}
+                        >
+                          <span>Debug details</span>
+                          <ChevronDown className='size-4' aria-hidden='true' />
+                        </button>
+                        {hudDebugOpen ? (
+                          <div className='metaverse-room-diagnostics'>
+                            <span>Topic: {activeTopic}</span>
+                            <span>Local peer: {localPeerId}</span>
+                            <span>Known peers: {knownPeerCount}</span>
+                            <span>Last sent seq: {lastSentSeq}</span>
+                            <span>Last received: {lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : 'none'}</span>
+                            <span>Remote animation: {remoteAnimationSummary || 'none'}</span>
+                            <span>
+                              Avatar asset:{' '}
+                              {avatarAssetStatus === 'sample-vrm'
+                                ? 'sample VRM loaded'
+                                : avatarAssetStatus === 'blob-vrm'
+                                  ? 'blob VRM loaded'
+                                  : avatarAssetStatus}
+                            </span>
+                            <span>Blob asset resolve: {localAvatarAssetRef?.blob_hash ?? 'public sample / fallback-ready'}</span>
+                            <span>Persistence: manifest blob {selectedRoom.manifest_blob_hash ?? 'pending'}</span>
+                            <span>Community assist: {syncStatus.discovery.bootstrap_seed_peer_ids.length > 0 ? 'available' : 'optional'}</span>
+                          </div>
+                        ) : null}
+                      </section>
+                      <div className='metaverse-object-controls'>
+                        <strong>Avatar asset</strong>
+                        <div className='metaverse-avatar-asset-controls'>
+                          <Label>
+                            <span className='sr-only'>VRM file</span>
+                            <Input
+                              type='file'
+                              accept='.vrm,model/vrm,application/octet-stream'
+                              disabled={pending}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  void importAvatarBlob(file, file.name);
+                                }
+                                event.currentTarget.value = '';
+                              }}
+                            />
+                          </Label>
+                          <Button size='sm' variant='secondary' type='button' disabled={pending} onClick={() => void handleSampleAvatarImport()}>
+                            Default
+                          </Button>
+                        </div>
+                      </div>
+                      <div className='metaverse-object-controls'>
+                        <strong>
+                          <Box className='size-4' aria-hidden='true' />
+                          Shared object
+                        </strong>
+                        <div className='metaverse-nudge-grid'>
+                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, -50])}>
+                            <Move3D className='size-4' aria-hidden='true' />
+                            Forward
+                          </Button>
+                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([-50, 0, 0])}>Left</Button>
+                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([50, 0, 0])}>Right</Button>
+                          <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, 50])}>Back</Button>
+                        </div>
+                      </div>
+                      <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
+                        <Label>
+                          <span>
+                            <MessageSquare className='size-4' aria-hidden='true' />
+                            Room chat
+                          </span>
+                          <Input
+                            value={messageDraft}
+                            placeholder='Say something in the room'
+                            onChange={(event) => setMessageDraft(event.target.value)}
+                          />
+                        </Label>
+                        <Button size='sm' type='submit'>
+                          <Send className='size-4' aria-hidden='true' />
+                          Send
+                        </Button>
+                      </form>
+                      <ul className='metaverse-chat-list'>
+                        {messages.map((message) => (
+                          <li key={message.messageId}>
+                            <strong>
+                              {message.authorPeerId === localPeerId ? 'You' : message.authorPeerId.slice(0, 12)}
+                              <small>{formatLocalizedTime(message.createdAt, locale)}</small>
+                            </strong>
+                            <span>{message.body}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </aside>
+                    <span className='metaverse-hud-scrollbar-indicator' aria-hidden='true'>
+                      <span />
+                    </span>
+                    </>
+                  ) : null}
+                </>
+              )}
             />
-            <aside className='metaverse-room-sidebar'>
-              <div className='panel-header'>
-                <div>
-                  <h3>{selectedRoom.title}</h3>
-                  <small>{selectedRoom.room_id}</small>
-                </div>
-              </div>
-              <div className='topic-diagnostic'>
-                <span>Topic: {activeTopic}</span>
-                <span>Local peer: {localPeerId}</span>
-                <span>Known peers: {knownPeerCount}</span>
-                <span>Last sent seq: {lastSentSeq}</span>
-                <span>Last received: {lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : 'none'}</span>
-                <span>Remote animation: {remoteAnimationSummary || 'none'}</span>
-                <span>
-                  Avatar asset:{' '}
-                  {avatarAssetStatus === 'sample-vrm'
-                    ? 'sample VRM loaded'
-                    : avatarAssetStatus === 'blob-vrm'
-                      ? 'blob VRM loaded'
-                      : avatarAssetStatus}
-                </span>
-                <span>Blob asset resolve: {localAvatarAssetRef?.blob_hash ?? 'public sample / fallback-ready'}</span>
-                <span>Persistence: manifest blob {selectedRoom.manifest_blob_hash ?? 'pending'}</span>
-                <span>Community assist: {syncStatus.discovery.bootstrap_seed_peer_ids.length > 0 ? 'available' : 'optional'}</span>
-              </div>
-              <div className='metaverse-object-controls'>
-                <strong>Avatar asset</strong>
-                <div className='metaverse-nudge-grid'>
-                  <Button variant='secondary' type='button' disabled={pending} onClick={() => void handleSampleAvatarImport()}>
-                    Sample VRM
-                  </Button>
-                  <Label>
-                    <span>VRM file</span>
-                    <Input
-                      type='file'
-                      accept='.vrm,model/vrm,application/octet-stream'
-                      disabled={pending}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void importAvatarBlob(file, file.name);
-                        }
-                        event.currentTarget.value = '';
-                      }}
-                    />
-                  </Label>
-                </div>
-              </div>
-              <div className='metaverse-object-controls'>
-                <strong>
-                  <Box className='size-4' aria-hidden='true' />
-                  Shared object
-                </strong>
-                <div className='metaverse-nudge-grid'>
-                  <Button variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, -50])}>
-                    <Move3D className='size-4' aria-hidden='true' />
-                    Forward
-                  </Button>
-                  <Button variant='secondary' type='button' onClick={() => void moveSharedObject([-50, 0, 0])}>Left</Button>
-                  <Button variant='secondary' type='button' onClick={() => void moveSharedObject([50, 0, 0])}>Right</Button>
-                  <Button variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, 50])}>Back</Button>
-                </div>
-              </div>
-              <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
-                <Label>
-                  <span>
-                    <MessageSquare className='size-4' aria-hidden='true' />
-                    Room chat
-                  </span>
-                  <Input
-                    value={messageDraft}
-                    placeholder='Say something in the room'
-                    onChange={(event) => setMessageDraft(event.target.value)}
-                  />
-                </Label>
-                <Button type='submit'>
-                  <Send className='size-4' aria-hidden='true' />
-                  Send
-                </Button>
-              </form>
-              <ul className='metaverse-chat-list'>
-                {messages.map((message) => (
-                  <li key={message.messageId}>
-                    <strong>
-                      {message.authorPeerId === localPeerId ? 'You' : message.authorPeerId.slice(0, 12)}
-                      <small>{formatLocalizedTime(message.createdAt, locale)}</small>
-                    </strong>
-                    <span>{message.body}</span>
-                  </li>
-                ))}
-              </ul>
-            </aside>
           </div>
         </Card>
       ) : null}

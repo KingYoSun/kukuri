@@ -1,6 +1,7 @@
 import {
   startTransition,
   useCallback,
+  useEffect,
   useRef,
   type MutableRefObject,
 } from 'react';
@@ -173,6 +174,51 @@ export function useDesktopShellData({
   const setGameDrafts = useDesktopShellFieldSetter('gameDrafts');
   const setReactionPanelState = useDesktopShellFieldSetter('reactionPanelState');
   const setError = useDesktopShellFieldSetter('error');
+
+  useEffect(() => {
+    if (shellChromeState.activePrimarySection !== 'game') {
+      return;
+    }
+    const missingHostPubkeys = Array.from(
+      new Set(
+        activeGameRooms
+          .map((room) => room.host_pubkey)
+          .filter(
+            (pubkey) =>
+              pubkey &&
+              pubkey !== localProfile?.pubkey &&
+              pubkey !== state.syncStatus.local_author_pubkey &&
+              !knownAuthorsByPubkey[pubkey]
+          )
+      )
+    );
+    if (missingHostPubkeys.length === 0) {
+      return;
+    }
+    let disposed = false;
+    void Promise.all(
+      missingHostPubkeys.map((pubkey) => api.getAuthorSocialView(pubkey).catch(() => null))
+    ).then((authors) => {
+      if (disposed) {
+        return;
+      }
+      const resolvedAuthors = authors.filter((author) => author !== null);
+      if (resolvedAuthors.length > 0) {
+        setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, resolvedAuthors));
+      }
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [
+    activeGameRooms,
+    api,
+    knownAuthorsByPubkey,
+    localProfile?.pubkey,
+    setKnownAuthorsByPubkey,
+    shellChromeState.activePrimarySection,
+    state.syncStatus.local_author_pubkey,
+  ]);
 
   const previewableMediaAttachments = usePreviewableMediaAttachments({
     activeTimeline,

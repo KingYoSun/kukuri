@@ -424,6 +424,9 @@ jobs:
           shared-key: kukuri-fast-${{ runner.os }}-${{ github.job }}
 
       - name: Community-node connectivity scenario
+        env:
+          CN_POSTGRES_PORT: "55433"
+          COMMUNITY_NODE_DATABASE_URL: postgres://cn:cn_password@127.0.0.1:55433/cn
         run: cargo xtask scenario community_node_public_connectivity
 
       - name: Upload community-node artifacts

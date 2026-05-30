@@ -258,7 +258,7 @@ fn cn_check() -> Result<()> {
 
 fn cn_test() -> Result<()> {
     with_cn_postgres(|| {
-        run_with_env(
+        run_with_owned_env(
             "cargo",
             cargo_package_args("test", &CN_PACKAGES),
             &root_dir(),
@@ -422,6 +422,19 @@ fn run_with_env(
     run_spec_with_env(&CommandSpec::direct(binary, args), cwd, envs)
 }
 
+fn run_with_owned_env(
+    binary: &str,
+    args: impl IntoIterator<Item = impl Into<String>>,
+    cwd: &Path,
+    envs: &[(String, String)],
+) -> Result<()> {
+    let env_refs = envs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect::<Vec<_>>();
+    run_with_env(binary, args, cwd, &env_refs)
+}
+
 fn run_spec_with_env(spec: &CommandSpec, cwd: &Path, envs: &[(&str, &str)]) -> Result<()> {
     let label = format_command(spec);
     run_timed_step(label, || {
@@ -553,14 +566,26 @@ fn cn_compose_envs() -> [(&'static str, &'static str); 2] {
     ]
 }
 
-fn cn_test_envs() -> [(&'static str, &'static str); 2] {
-    [
-        ("KUKURI_CN_RUN_INTEGRATION_TESTS", "1"),
+fn cn_test_envs() -> Vec<(String, String)> {
+    vec![
         (
-            "COMMUNITY_NODE_DATABASE_URL",
-            "postgres://cn:cn_password@127.0.0.1:55432/cn",
+            "KUKURI_CN_RUN_INTEGRATION_TESTS".to_string(),
+            "1".to_string(),
+        ),
+        (
+            "COMMUNITY_NODE_DATABASE_URL".to_string(),
+            cn_test_database_url(),
         ),
     ]
+}
+
+fn cn_test_database_url() -> String {
+    let port = std::env::var("CN_POSTGRES_PORT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "55432".to_string());
+    format!("postgres://cn:cn_password@127.0.0.1:{port}/cn")
 }
 
 fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {

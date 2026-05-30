@@ -1,4 +1,4 @@
-import type { SharedRoomObjectV1 } from '@/lib/api';
+import type { MetaverseAssetRef, SharedRoomObjectV1 } from '@/lib/api';
 
 export type MetaverseVec3 = [number, number, number];
 
@@ -43,6 +43,25 @@ export type AvatarTransform = {
   sentAt: number;
 };
 
+export type AvatarPhysicsState = {
+  verticalVelocity: number;
+  grounded: boolean;
+};
+
+export type AvatarMovementStep = {
+  position: MetaverseVec3;
+  physics: AvatarPhysicsState;
+};
+
+export type PeerPresence = {
+  peerId: string;
+  displayName: string | null;
+  avatarAssetRef: MetaverseAssetRef | null;
+  avatarAssetUrl?: string | null;
+  joinedAt: number;
+  lastSeenAt: number;
+};
+
 export type RoomChatMessage = {
   roomId: string;
   messageId: string;
@@ -52,7 +71,7 @@ export type RoomChatMessage = {
 };
 
 export type MetaverseRoomEvent =
-  | { type: 'presence.join'; roomId: string; peerId: string; at: number }
+  | { type: 'presence.join'; presence: PeerPresence }
   | { type: 'avatar.transform'; transform: AvatarTransform }
   | { type: 'chat.message'; message: RoomChatMessage }
   | { type: 'object.update'; roomId: string; object: SharedRoomObjectV1 };
@@ -72,3 +91,62 @@ export const DEFAULT_SHARED_OBJECT: SharedRoomObjectV1 = {
 
 export const DEFAULT_AVATAR_ASSET_NAME = 'blumochichi.vrm';
 export const DEFAULT_AVATAR_ASSET_URL = `/${DEFAULT_AVATAR_ASSET_NAME}`;
+
+export const AVATAR_GROUND_Y = 0;
+export const AVATAR_JUMP_VELOCITY = 520;
+export const AVATAR_GRAVITY = 1600;
+
+export function initialAvatarTransform(
+  roomId: string,
+  localPeerId: string,
+  spawnPosition?: MetaverseVec3,
+  spawnRotation?: MetaverseVec3
+): AvatarTransform {
+  return {
+    roomId,
+    peerId: localPeerId,
+    seq: 0,
+    position: spawnPosition ?? [0, AVATAR_GROUND_Y, 260],
+    rotation: spawnRotation ?? [0, 180, 0],
+    animation: 'idle',
+    sentAt: 0,
+  };
+}
+
+export function stepAvatarJump(
+  position: MetaverseVec3,
+  physics: AvatarPhysicsState,
+  deltaSeconds: number,
+  jumpRequested: boolean
+): AvatarMovementStep {
+  let verticalVelocity =
+    jumpRequested && physics.grounded ? AVATAR_JUMP_VELOCITY : physics.verticalVelocity;
+  let nextY = position[1] + verticalVelocity * deltaSeconds;
+  verticalVelocity -= AVATAR_GRAVITY * deltaSeconds;
+
+  if (nextY <= AVATAR_GROUND_Y) {
+    nextY = AVATAR_GROUND_Y;
+    verticalVelocity = 0;
+  }
+
+  return {
+    position: [position[0], Math.round(nextY), position[2]],
+    physics: {
+      verticalVelocity,
+      grounded: nextY === AVATAR_GROUND_Y,
+    },
+  };
+}
+
+export function isNewerRemoteTransform(
+  current: AvatarTransform | null | undefined,
+  incoming: AvatarTransform
+): boolean {
+  if (!current) {
+    return true;
+  }
+  if (incoming.seq !== current.seq) {
+    return incoming.seq > current.seq;
+  }
+  return incoming.sentAt > current.sentAt;
+}

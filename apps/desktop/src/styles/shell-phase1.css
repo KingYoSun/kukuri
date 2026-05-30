@@ -176,8 +176,40 @@
 }
 
 .metaverse-create-form {
-  grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1.4fr) minmax(6rem, 0.5fr) auto;
+  gap: 0.75rem;
+}
+
+.metaverse-create-accordion {
+  display: grid;
+}
+
+.metaverse-create-form-primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.32fr);
+  gap: 0.75rem;
   align-items: end;
+}
+
+.metaverse-create-form-description textarea {
+  min-height: 5.5rem;
+}
+
+.metaverse-create-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.metaverse-room-host {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.metaverse-room-host span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .metaverse-room-grid {
@@ -209,10 +241,21 @@
 }
 
 .metaverse-room-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 0.8fr);
-  gap: 1rem;
   min-height: 34rem;
+}
+
+.metaverse-viewport-shell {
+  position: relative;
+  min-height: 34rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #101318;
+}
+
+.metaverse-viewport-canvas {
+  position: absolute !important;
+  inset: 0;
 }
 
 .metaverse-viewport {
@@ -223,16 +266,159 @@
   background: #101318;
 }
 
-.metaverse-room-sidebar {
+.metaverse-hud-toolbar {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+}
+
+.metaverse-hud-toolbar[data-open='false'] {
+  background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
+}
+
+.metaverse-hud-icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  border-radius: 0.4rem;
+}
+
+.metaverse-room-hud {
+  position: absolute;
+  top: 4rem;
+  right: 0.75rem;
+  bottom: 1rem;
+  z-index: 1;
   display: grid;
   align-content: start;
-  gap: 1rem;
+  gap: 0.8rem;
+  width: min(18rem, calc(100% - 1.5rem));
+  max-height: calc(100% - 5rem);
+  padding: 0.8rem;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+  scrollbar-color: color-mix(in srgb, var(--accent) 72%, white 8%) color-mix(in srgb, var(--surface-raised) 76%, black 12%);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.metaverse-room-hud[data-size='wide'] {
+  width: min(25rem, calc(100% - 1.5rem));
+}
+
+.metaverse-hud-scrollbar-indicator {
+  position: absolute;
+  top: 4.85rem;
+  right: 1rem;
+  bottom: 1.85rem;
+  z-index: 3;
+  width: 0.28rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, black 10%);
+  pointer-events: none;
+}
+
+.metaverse-hud-scrollbar-indicator span {
+  position: absolute;
+  top: 0.35rem;
+  right: 0;
+  left: 0;
+  height: 31%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 78%, white 12%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface-panel) 70%, transparent);
+}
+
+.metaverse-room-hud::-webkit-scrollbar,
+.metaverse-chat-list::-webkit-scrollbar {
+  width: 0.85rem;
+}
+
+.metaverse-room-hud::-webkit-scrollbar-track,
+.metaverse-chat-list::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--surface-raised) 76%, black 12%);
+  border-radius: 999px;
+}
+
+.metaverse-room-hud::-webkit-scrollbar-thumb,
+.metaverse-chat-list::-webkit-scrollbar-thumb {
+  border: 2px solid color-mix(in srgb, var(--surface-panel) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 72%, white 8%);
+}
+
+.metaverse-hud-header {
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.metaverse-hud-header h3 {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.metaverse-hud-accordion {
+  display: grid;
+  gap: 0.5rem;
   min-width: 0;
+}
+
+.metaverse-hud-accordion-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-button-secondary) 76%, transparent);
+  color: var(--foreground);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.metaverse-hud-accordion-trigger svg {
+  transition: transform 160ms ease;
+}
+
+.metaverse-hud-accordion[data-open='true'] .metaverse-hud-accordion-trigger svg {
+  transform: rotate(180deg);
+}
+
+.metaverse-room-diagnostics {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.74rem;
+}
+
+.metaverse-room-diagnostics span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .metaverse-object-controls {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .metaverse-object-controls > strong,
@@ -245,7 +431,42 @@
 .metaverse-nudge-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.45rem;
+}
+
+.metaverse-avatar-asset-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.metaverse-avatar-asset-controls label {
+  min-width: 0;
+}
+
+.metaverse-avatar-asset-controls input[type='file'] {
+  min-height: 2.25rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.metaverse-avatar-asset-controls .button {
+  min-width: 5.5rem;
+}
+
+.metaverse-room-hud .button {
+  align-self: start;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  font-size: 0.86rem;
+}
+
+.metaverse-room-hud .button svg {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .metaverse-chat-form {
@@ -283,13 +504,34 @@
 }
 
 @media (max-width: 900px) {
-  .metaverse-create-form,
-  .metaverse-room-stage {
+  .metaverse-create-form-primary {
     grid-template-columns: 1fr;
   }
 
+  .metaverse-viewport-shell,
   .metaverse-viewport {
     min-height: 24rem;
+  }
+
+  .metaverse-room-hud {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    top: auto;
+    width: auto;
+    max-height: 46%;
+  }
+
+  .metaverse-room-hud[data-size='wide'] {
+    width: auto;
+    max-height: 62%;
+  }
+
+  .metaverse-hud-scrollbar-indicator {
+    top: auto;
+    right: 1rem;
+    bottom: 1.6rem;
+    height: calc(46% - 1.7rem);
   }
 }
 
