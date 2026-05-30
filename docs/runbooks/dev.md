@@ -422,3 +422,9 @@ cd apps/desktop && npx pnpm@10.16.1 test
 
 補足:
 - GitHub branch protection の required check 名は repo 外設定なので、`Next Fast/Nightly` から `Kukuri Fast/Nightly` への手動更新が必要。
+## community-node topic rendezvous
+- community-node の local/dev/CI runtime は Postgres に加えて `cn-valkey` (Valkey/Redis-compatible KV) を必須とする。
+- `cn-user-api` は `COMMUNITY_NODE_RENDEZVOUS_REDIS_URL` で KV に接続し、`/v1/rendezvous/topics/heartbeat` の TTL 付き ephemeral topic presence を管理する。
+- `cn-iroh-relay` は topic state を持たず、純粋な iroh relay として維持する。
+- 通信優先度は `Direct P2P -> Relay Supported P2P -> Relay Fallback`。relay URL があるだけでは fallback ではなく、topic rendezvous による接続補助は `Relay Supported P2P` として扱う。
+- `Relay Fallback` は Direct P2P と Relay Supported P2P が成立せず、gossip/docs/blob など実データが relay 経由になる場合だけを指す。

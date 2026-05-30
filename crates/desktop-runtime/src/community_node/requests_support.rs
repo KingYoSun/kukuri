@@ -333,18 +333,89 @@ impl DesktopRuntime {
     }
 
     async fn should_publish_community_node_addr_hint(&self) -> bool {
-        let community_node_config = self.community_node_config.lock().await.clone();
-        let relay_config = relay_config_from_community_node_config(&community_node_config);
-        if relay_config.iroh_relay_urls.is_empty() {
-            return true;
+        true
+    }
+
+    async fn refresh_topic_rendezvous_with_token(
+        &self,
+        base_url: &str,
+        access_token: &str,
+    ) -> std::result::Result<(), CommunityNodeRequestError> {
+        let snapshot = self
+            .iroh_stack
+            .transport
+            .peers()
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
+        let topic_keys = snapshot
+            .subscribed_topics
+            .iter()
+            .map(|topic| public_topic_rendezvous_key(&TopicId::new(topic.clone())))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        if topic_keys.is_empty() {
+            return Ok(());
         }
-        self.iroh_stack.network_config.advertised_host.is_some()
-            || !self
-                .iroh_stack
-                .network_config
-                .bind_addr
-                .ip()
-                .is_unspecified()
+        let seed_peer = self
+            .local_community_node_seed_peer("topic-rendezvous")
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
+        let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
+        let response = client
+            .post(format!("{}/v1/rendezvous/topics/heartbeat", base_url))
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({
+                "endpoint_id": seed_peer.endpoint_id,
+                "addr_hint": seed_peer.addr_hint,
+                "joins": [],
+                "refreshes": topic_keys,
+                "leaves": []
+            }))
+            .send()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to refresh community node topic rendezvous",
+                    error,
+                )
+            })?;
+        let response = response.error_for_status().map_err(|error| {
+            Self::map_community_node_status_error(
+                "community node topic rendezvous request failed",
+                error,
+            )
+        })?;
+        let response = response
+            .json::<TopicRendezvousHeartbeatResponse>()
+            .await
+            .map_err(|error| {
+                Self::map_community_node_send_error(
+                    "failed to decode community node topic rendezvous response",
+                    error,
+                )
+            })?;
+        let mut peers_by_endpoint = std::collections::BTreeMap::new();
+        for topic in response.topics {
+            for peer in topic.peers {
+                peers_by_endpoint.insert(
+                    peer.endpoint_id.clone(),
+                    SeedPeer {
+                        endpoint_id: peer.endpoint_id,
+                        addr_hint: peer.addr_hint,
+                    },
+                );
+            }
+        }
+        let rendezvous_peers = peers_by_endpoint.into_values().collect::<Vec<_>>();
+        *self.community_node_rendezvous_seed_peers.lock().await = rendezvous_peers;
+        self.apply_runtime_connectivity_assist()
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
+        self.apply_effective_seed_peers()
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
+        Ok(())
     }
 
     pub(crate) async fn fetch_community_node_consent_status_with_retry(
@@ -458,6 +529,8 @@ impl DesktopRuntime {
                 .await
             {
                 Ok(node) => {
+                    self.refresh_topic_rendezvous_with_token(base_url.as_str(), access_token)
+                        .await?;
                     self.record_community_node_bootstrap_metadata_refresh(
                         base_url.as_str(),
                         node.resolved_urls
@@ -541,6 +614,8 @@ impl DesktopRuntime {
                     .await
                 {
                     Ok(node) => {
+                        self.refresh_topic_rendezvous_with_token(base_url.as_str(), access_token)
+                            .await?;
                         self.record_community_node_bootstrap_metadata_refresh(
                             base_url.as_str(),
                             node.resolved_urls

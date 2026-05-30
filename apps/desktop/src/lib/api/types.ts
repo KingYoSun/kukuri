@@ -309,6 +309,11 @@ export type DiscoveryMode = 'static_peer' | 'seeded_dht';
 
 export type ConnectMode = 'direct_only' | 'direct_or_relay';
 
+export type ConnectionPath =
+  | 'direct_p2p'
+  | 'relay_supported_p2p'
+  | 'relay_fallback';
+
 export type SeedPeer = {
   endpoint_id: string;
   addr_hint?: string | null;
@@ -324,6 +329,8 @@ export type DiscoveryConfig = {
 export type DiscoveryStatus = {
   mode: DiscoveryMode;
   connect_mode: ConnectMode;
+  active_path: ConnectionPath;
+  fallback_peer_ids: string[];
   env_locked: boolean;
   configured_seed_peer_ids: string[];
   bootstrap_seed_peer_ids: string[];
@@ -347,6 +354,8 @@ export type SyncStatus = {
   last_error?: string | null;
   configured_peers: string[];
   subscribed_topics: string[];
+  active_path: ConnectionPath;
+  fallback_peer_ids: string[];
   topic_diagnostics: TopicSyncStatus[];
   local_author_pubkey: string;
   discovery: DiscoveryStatus;
@@ -421,6 +430,9 @@ export type TopicSyncStatus = {
   docs_assist_peer_ids: string[];
   configured_peer_ids: string[];
   missing_peer_ids: string[];
+  active_path: ConnectionPath;
+  rendezvous_peer_ids: string[];
+  fallback_peer_ids: string[];
   last_received_at?: number | null;
   last_docs_activity_at?: number | null;
   status_detail: string;

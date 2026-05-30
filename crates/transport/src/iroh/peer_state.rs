@@ -90,6 +90,7 @@ impl IrohGossipTransport {
             .collect::<Vec<_>>();
         let mut connected = BTreeSet::new();
         let configured_peers = self.configured_peer_ids().await;
+        let bootstrap_seed_peer_ids = self.bootstrap_seed_peer_ids().await;
         let mut topic_diagnostics = Vec::with_capacity(topic_states.len());
         for (topic, configured_peer_ids, neighbors, last_received_at, last_error) in topic_states {
             let peers = neighbors.read().await.iter().cloned().collect::<Vec<_>>();
@@ -105,6 +106,16 @@ impl IrohGossipTransport {
                 .filter(|peer| !peers.iter().any(|connected_peer| connected_peer == *peer))
                 .cloned()
                 .collect::<Vec<_>>();
+            let rendezvous_peer_ids = peers
+                .iter()
+                .filter(|peer| bootstrap_seed_peer_ids.contains(peer))
+                .cloned()
+                .collect::<Vec<_>>();
+            let active_path = if !rendezvous_peer_ids.is_empty() {
+                ConnectionPath::RelaySupportedP2p
+            } else {
+                ConnectionPath::DirectP2p
+            };
             topic_diagnostics.push(TopicPeerSnapshot {
                 topic,
                 joined: !peers.is_empty(),
@@ -112,6 +123,9 @@ impl IrohGossipTransport {
                 connected_peers: peers,
                 configured_peer_ids,
                 missing_peer_ids,
+                active_path,
+                rendezvous_peer_ids,
+                fallback_peer_ids: Vec::new(),
                 last_received_at,
                 status_detail: topic_status_detail(configured_peer_count, connected_peer_count),
                 last_error,
@@ -129,6 +143,14 @@ impl IrohGossipTransport {
         let configured_peer_count = configured_peers.len();
         let connected_peer_count = connected_peers.len();
         let subscribed_topic_count = topic_diagnostics.len();
+        let active_path = if topic_diagnostics
+            .iter()
+            .any(|topic| topic.active_path == ConnectionPath::RelaySupportedP2p)
+        {
+            ConnectionPath::RelaySupportedP2p
+        } else {
+            ConnectionPath::DirectP2p
+        };
 
         Ok(PeerSnapshot {
             connected: !connected_peers.is_empty(),
@@ -136,6 +158,8 @@ impl IrohGossipTransport {
             connected_peers,
             configured_peers,
             subscribed_topics,
+            active_path,
+            fallback_peer_ids: Vec::new(),
             pending_events: 0,
             status_detail: peer_status_detail(
                 configured_peer_count,

@@ -5,20 +5,29 @@ use kukuri_cn_core::{
     JwtConfig, TestDatabase, USER_API_BEARER_CHALLENGE, build_auth_envelope_json,
 };
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
-use kukuri_core::{KukuriKeys, generate_keys};
+use kukuri_core::{
+    KukuriKeys, TopicId, generate_keys, private_topic_rendezvous_key_hex_secret,
+    public_topic_rendezvous_key,
+};
+use redis::AsyncCommands;
 use reqwest::{Client, StatusCode};
 use sqlx::postgres::PgPool;
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
+const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:56379/";
 
 struct TestServer {
     task: tokio::task::JoinHandle<()>,
     database: TestDatabase,
     base_url: String,
+    rendezvous_redis_url: String,
+    rendezvous_key_prefix: String,
 }
 
 impl TestServer {
     async fn spawn(admin_database_url: &str, prefix: &str) -> Result<Self> {
+        let rendezvous_redis_url = integration_test_rendezvous_redis_url();
+        let rendezvous_key_prefix = format!("cn:test:{prefix}");
         let database = TestDatabase::create(admin_database_url, prefix).await?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -28,6 +37,8 @@ impl TestServer {
         let state = build_state(&UserApiConfig {
             bind_addr: addr,
             database_url: database.database_url.clone(),
+            rendezvous_redis_url: rendezvous_redis_url.clone(),
+            rendezvous_key_prefix: rendezvous_key_prefix.clone(),
             base_url: base_url.clone(),
             public_base_url: base_url.clone(),
             connectivity_urls: vec!["http://127.0.0.1:13340".to_string()],
@@ -47,6 +58,8 @@ impl TestServer {
             task,
             database,
             base_url,
+            rendezvous_redis_url,
+            rendezvous_key_prefix,
         })
     }
 
@@ -54,6 +67,32 @@ impl TestServer {
         self.task.abort();
         self.database.cleanup().await
     }
+}
+
+async fn accept_required_consents(
+    client: &Client,
+    base_url: &str,
+    access_token: &str,
+) -> Result<()> {
+    let accepted = client
+        .post(format!("{base_url}/v1/consents"))
+        .bearer_auth(access_token)
+        .json(&serde_json::json!({ "policy_slugs": [] }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_core::CommunityNodeConsentStatus>()
+        .await?;
+    assert!(accepted.all_required_accepted);
+    Ok(())
+}
+
+async fn redis_keys(redis_url: &str, pattern: &str) -> Result<Vec<String>> {
+    let client = redis::Client::open(redis_url)?;
+    let mut connection = client.get_multiplexed_async_connection().await?;
+    let mut keys: Vec<String> = connection.keys(pattern).await?;
+    keys.sort();
+    Ok(keys)
 }
 
 fn integration_test_admin_database_url() -> Option<String> {
@@ -70,6 +109,13 @@ fn integration_test_admin_database_url() -> Option<String> {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| DEFAULT_ADMIN_DATABASE_URL.to_string()),
     )
+}
+
+fn integration_test_rendezvous_redis_url() -> String {
+    std::env::var("COMMUNITY_NODE_RENDEZVOUS_REDIS_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_RENDEZVOUS_REDIS_URL.to_string())
 }
 
 async fn authenticate(
@@ -451,6 +497,211 @@ async fn bootstrap_filters_expired_peer_registrations_and_heartbeat_restores_the
         .find(|peer| peer["endpoint_id"] == "peer-a-1")
         .context("peer-a-1 restored seed peer missing")?;
     assert_eq!(peer_a1["addr_hint"], "127.0.0.1:45011");
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn topic_rendezvous_batch_heartbeat_returns_fresh_peer_candidates() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(admin_database_url.as_str(), "cn_user_api_rendezvous").await?;
+    let client = Client::new();
+
+    let keys_a = generate_keys();
+    let keys_b = generate_keys();
+    let (token_a, _) = authenticate(&client, &server.base_url, &keys_a, "peer-a", None).await?;
+    let (token_b, _) = authenticate(
+        &client,
+        &server.base_url,
+        &keys_b,
+        "peer-b",
+        Some("127.0.0.1:46002"),
+    )
+    .await?;
+    accept_required_consents(&client, &server.base_url, token_a.as_str()).await?;
+    accept_required_consents(&client, &server.base_url, token_b.as_str()).await?;
+
+    let raw_topic = TopicId::new("kukuri:topic:rendezvous-public");
+    let topic_key = public_topic_rendezvous_key(&raw_topic);
+
+    let first = client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-a",
+            "addr_hint": null,
+            "joins": [topic_key],
+            "refreshes": [],
+            "leaves": []
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        first["topics"][0]["peers"].as_array().map(Vec::len),
+        Some(0)
+    );
+
+    let second = client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token_b.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-b",
+            "addr_hint": "127.0.0.1:46002",
+            "joins": [topic_key],
+            "refreshes": [],
+            "leaves": []
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(second["expires_in_seconds"], 45);
+    assert_eq!(second["topics"][0]["topic_key"], topic_key);
+    assert_eq!(second["topics"][0]["peers"][0]["endpoint_id"], "peer-a");
+    assert_eq!(
+        second["topics"][0]["peers"][0]["addr_hint"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        second["topics"][0]["peers"][0]["relay_urls"][0],
+        "http://127.0.0.1:13340"
+    );
+
+    let refreshed = client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-a",
+            "addr_hint": null,
+            "joins": [],
+            "refreshes": [topic_key],
+            "leaves": []
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(refreshed["topics"][0]["peers"][0]["endpoint_id"], "peer-b");
+    assert_eq!(
+        refreshed["topics"][0]["peers"][0]["addr_hint"],
+        "127.0.0.1:46002"
+    );
+
+    client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token_b.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-b",
+            "addr_hint": "127.0.0.1:46002",
+            "joins": [],
+            "refreshes": [],
+            "leaves": [topic_key]
+        }))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let after_leave = client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-a",
+            "addr_hint": null,
+            "joins": [],
+            "refreshes": [topic_key],
+            "leaves": []
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(
+        after_leave["topics"][0]["peers"].as_array().map(Vec::len),
+        Some(0)
+    );
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn topic_rendezvous_keys_do_not_expose_raw_topic_ids() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_user_api_rendezvous_privacy",
+    )
+    .await?;
+    let client = Client::new();
+
+    let keys = generate_keys();
+    let (token, _) = authenticate(&client, &server.base_url, &keys, "peer-a", None).await?;
+    accept_required_consents(&client, &server.base_url, token.as_str()).await?;
+
+    let raw_public_topic = TopicId::new("kukuri:topic:dictionary-visible");
+    let raw_private_topic = TopicId::new("kukuri:private:super-secret-channel");
+    let public_key = public_topic_rendezvous_key(&raw_public_topic);
+    let private_key = private_topic_rendezvous_key_hex_secret(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        &raw_private_topic,
+    )?;
+
+    assert!(!public_key.contains(raw_public_topic.as_str()));
+    assert!(!private_key.contains(raw_private_topic.as_str()));
+    assert_ne!(public_key, private_key);
+
+    client
+        .post(format!(
+            "{}/v1/rendezvous/topics/heartbeat",
+            server.base_url
+        ))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({
+            "endpoint_id": "peer-a",
+            "addr_hint": null,
+            "joins": [public_key, private_key],
+            "refreshes": [],
+            "leaves": []
+        }))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let keys = redis_keys(
+        server.rendezvous_redis_url.as_str(),
+        format!("{}*", server.rendezvous_key_prefix).as_str(),
+    )
+    .await?;
+    assert!(!keys.is_empty());
+    let serialized_keys = keys.join("\n");
+    assert!(!serialized_keys.contains(raw_public_topic.as_str()));
+    assert!(!serialized_keys.contains(raw_private_topic.as_str()));
 
     server.shutdown().await
 }

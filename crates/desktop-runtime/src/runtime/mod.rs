@@ -78,6 +78,7 @@ pub struct DesktopRuntime {
     pub(crate) community_node_last_errors: Arc<Mutex<HashMap<String, String>>>,
     pub(crate) community_node_cached_consents:
         Arc<Mutex<HashMap<String, CommunityNodeConsentStatus>>>,
+    pub(crate) community_node_rendezvous_seed_peers: Arc<Mutex<Vec<kukuri_transport::SeedPeer>>>,
     pub(crate) community_node_session_guard: Arc<Mutex<()>>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
     pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
@@ -238,6 +239,7 @@ impl DesktopRuntime {
             community_node_ready_refresh_pending: Arc::new(Mutex::new(HashMap::new())),
             community_node_last_errors: Arc::new(Mutex::new(HashMap::new())),
             community_node_cached_consents: Arc::new(Mutex::new(HashMap::new())),
+            community_node_rendezvous_seed_peers: Arc::new(Mutex::new(Vec::new())),
             community_node_session_guard: Arc::new(Mutex::new(())),
             community_node_reconnect_state: Arc::new(Mutex::new(
                 CommunityNodeReconnectState::default(),

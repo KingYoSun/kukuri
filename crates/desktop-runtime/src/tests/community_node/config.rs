@@ -114,7 +114,7 @@ async fn local_community_node_seed_peer_includes_addr_hint() {
 }
 
 #[tokio::test]
-async fn local_community_node_seed_peer_omits_auto_addr_hint_when_relay_assisted() {
+async fn local_community_node_seed_peer_keeps_addr_hint_when_relay_urls_exist() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("community-seed-peer-relay-auto-hint.db");
@@ -145,7 +145,7 @@ async fn local_community_node_seed_peer_omits_auto_addr_hint_when_relay_assisted
         .await
         .expect("seed peer");
 
-    assert!(seed_peer.addr_hint.is_none());
+    assert!(seed_peer.addr_hint.is_some());
 
     runtime.shutdown().await;
 }

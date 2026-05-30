@@ -1495,6 +1495,8 @@ fn sync_status_with_topic(
         last_error: None,
         configured_peers: Vec::new(),
         subscribed_topics: vec![topic.to_string()],
+        active_path: Default::default(),
+        fallback_peer_ids: Vec::new(),
         topic_diagnostics: vec![kukuri_app_api::TopicSyncStatus {
             topic: topic.to_string(),
             joined: connected,
@@ -1510,6 +1512,9 @@ fn sync_status_with_topic(
                 .collect(),
             configured_peer_ids: Vec::new(),
             missing_peer_ids: Vec::new(),
+            active_path: Default::default(),
+            rendezvous_peer_ids: Vec::new(),
+            fallback_peer_ids: Vec::new(),
             last_received_at: None,
             last_docs_activity_at: None,
             status_detail: "test".to_string(),

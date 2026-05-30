@@ -576,6 +576,10 @@ fn cn_test_envs() -> Vec<(String, String)> {
             "COMMUNITY_NODE_DATABASE_URL".to_string(),
             cn_test_database_url(),
         ),
+        (
+            "COMMUNITY_NODE_RENDEZVOUS_REDIS_URL".to_string(),
+            cn_test_rendezvous_redis_url(),
+        ),
     ]
 }
 
@@ -586,6 +590,15 @@ fn cn_test_database_url() -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "55432".to_string());
     format!("postgres://cn:cn_password@127.0.0.1:{port}/cn")
+}
+
+fn cn_test_rendezvous_redis_url() -> String {
+    let port = std::env::var("CN_VALKEY_PORT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "56379".to_string());
+    format!("redis://127.0.0.1:{port}/")
 }
 
 fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
@@ -600,6 +613,7 @@ fn with_cn_postgres<T>(operation: impl FnOnce() -> Result<T>) -> Result<T> {
             "-d",
             "--wait",
             "cn-postgres",
+            "cn-valkey",
         ],
         &root,
         &cn_compose_envs(),

@@ -31,6 +31,15 @@ pub enum ConnectMode {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionPath {
+    #[default]
+    DirectP2p,
+    RelaySupportedP2p,
+    RelayFallback,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransportRelayConfig {
     #[serde(default)]
     pub iroh_relay_urls: Vec<String>,
@@ -87,6 +96,9 @@ pub struct SeedPeer {
 pub struct DiscoverySnapshot {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,
+    pub active_path: ConnectionPath,
+    #[serde(default)]
+    pub fallback_peer_ids: Vec<String>,
     pub env_locked: bool,
     pub configured_seed_peer_ids: Vec<String>,
     pub bootstrap_seed_peer_ids: Vec<String>,

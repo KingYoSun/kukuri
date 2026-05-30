@@ -25,4 +25,5 @@ kukuri-cn-core = { path = "../cn-core" }
 [dev-dependencies]
 kukuri-core = { path = "../core" }
 reqwest.workspace = true
+redis.workspace = true
 tempfile.workspace = true

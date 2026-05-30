@@ -9,6 +9,7 @@ mod posts;
 mod private_channels;
 mod profile;
 mod reactions;
+mod rendezvous;
 
 #[cfg(test)]
 mod tests;
@@ -24,3 +25,4 @@ pub use posts::*;
 pub use private_channels::*;
 pub use profile::*;
 pub use reactions::*;
+pub use rendezvous::*;
