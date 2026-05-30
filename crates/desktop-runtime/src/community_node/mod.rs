@@ -8,6 +8,7 @@ use kukuri_cn_core::{
     CommunityNodeConsentStatus, CommunityNodeResolvedUrls, CommunityNodeSeedPeer,
     build_auth_envelope_json, normalize_http_url,
 };
+use kukuri_core::{TopicId, public_topic_rendezvous_key};
 use kukuri_transport::{SeedPeer, Transport, TransportRelayConfig, parse_seed_peer};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,27 @@ pub struct CommunityNodeConfig {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BootstrapNodesResponse {
     pub(crate) nodes: Vec<kukuri_cn_core::CommunityNodeBootstrapNode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct TopicRendezvousHeartbeatResponse {
+    pub(crate) expires_in_seconds: u64,
+    pub(crate) topics: Vec<TopicRendezvousTopicResponse>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct TopicRendezvousTopicResponse {
+    pub(crate) topic_key: String,
+    pub(crate) peers: Vec<TopicRendezvousPeerCandidate>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct TopicRendezvousPeerCandidate {
+    pub(crate) endpoint_id: String,
+    #[serde(default)]
+    pub(crate) addr_hint: Option<String>,
+    #[serde(default)]
+    pub(crate) relay_urls: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

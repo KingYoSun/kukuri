@@ -7,8 +7,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_core::{
     ApiError, ApiResult, AuthChallengeResponse, AuthVerifyResponse, BootstrapHeartbeatResponse,
+    COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV, COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV,
     CommunityNodeBootstrapNode, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
-    DatabaseInitMode, JwtConfig, accept_consents, auth_required_error, connect_postgres,
+    DatabaseInitMode, JwtConfig, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
+    TopicRendezvousStore, accept_consents, auth_required_error, connect_postgres,
     create_auth_challenge, get_consent_status, initialize_database,
     initialize_database_for_runtime, load_bootstrap_nodes, load_bootstrap_seed_peers,
     normalize_http_url, normalize_http_url_list, refresh_bootstrap_peer_registration,
@@ -24,6 +26,7 @@ use tracing_subscriber::EnvFilter;
 #[derive(Clone)]
 pub struct UserApiState {
     pool: PgPool,
+    rendezvous_store: TopicRendezvousStore,
     jwt_config: JwtConfig,
     self_node: CommunityNodeBootstrapNode,
 }
@@ -32,6 +35,8 @@ pub struct UserApiState {
 pub struct UserApiConfig {
     pub bind_addr: SocketAddr,
     pub database_url: String,
+    pub rendezvous_redis_url: String,
+    pub rendezvous_key_prefix: String,
     pub base_url: String,
     pub public_base_url: String,
     pub connectivity_urls: Vec<String>,
@@ -78,6 +83,12 @@ impl UserApiConfig {
             .context("failed to parse COMMUNITY_NODE_BIND_ADDR")?;
         let database_url = std::env::var("COMMUNITY_NODE_DATABASE_URL")
             .context("COMMUNITY_NODE_DATABASE_URL is required")?;
+        let rendezvous_redis_url = std::env::var(COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV)
+            .with_context(|| format!("{COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV} is required"))?;
+        let rendezvous_key_prefix = std::env::var(COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "cn:rendezvous:v1".to_string());
         let base_url = normalize_http_url(
             std::env::var("COMMUNITY_NODE_BASE_URL")
                 .context("COMMUNITY_NODE_BASE_URL is required")?
@@ -94,6 +105,8 @@ impl UserApiConfig {
         Ok(Self {
             bind_addr,
             database_url,
+            rendezvous_redis_url,
+            rendezvous_key_prefix,
             base_url,
             public_base_url,
             connectivity_urls,
@@ -115,8 +128,13 @@ async fn build_runtime_state(config: &UserApiConfig) -> Result<UserApiState> {
 }
 
 async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<UserApiState> {
+    let rendezvous_store = TopicRendezvousStore::new(
+        config.rendezvous_redis_url.as_str(),
+        config.rendezvous_key_prefix.as_str(),
+    )?;
     Ok(UserApiState {
         pool,
+        rendezvous_store,
         jwt_config: config.jwt_config.clone(),
         self_node: CommunityNodeBootstrapNode {
             base_url: config.base_url.clone(),
@@ -138,6 +156,10 @@ pub fn app_router(state: UserApiState) -> Router {
         .route("/v1/consents", post(accept_consents_handler))
         .route("/v1/bootstrap/nodes", get(bootstrap_nodes))
         .route("/v1/bootstrap/heartbeat", post(bootstrap_heartbeat))
+        .route(
+            "/v1/rendezvous/topics/heartbeat",
+            post(topic_rendezvous_heartbeat),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -273,6 +295,29 @@ async fn bootstrap_heartbeat(
     )
     .await
     .map_err(internal_error)?;
+    Ok(Json(response))
+}
+
+async fn topic_rendezvous_heartbeat(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<TopicRendezvousHeartbeat>,
+) -> ApiResult<Json<TopicRendezvousHeartbeatResponse>> {
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    if let Some(bound_endpoint_id) = identity.endpoint_id.as_deref()
+        && bound_endpoint_id != request.endpoint_id
+    {
+        return Err(auth_required_error("bearer token endpoint mismatch"));
+    }
+    let response = state
+        .rendezvous_store
+        .heartbeat(
+            request,
+            state.self_node.resolved_urls.connectivity_urls.as_slice(),
+        )
+        .await
+        .map_err(internal_error)?;
     Ok(Json(response))
 }
 

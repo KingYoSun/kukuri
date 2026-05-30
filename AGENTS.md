@@ -41,3 +41,11 @@
 - root に新しい長文ドキュメントを増やさない。必要なら `docs/` に置く。
 - `console.error` は使わない。
 - コミットはユーザーが求めたときだけ行う。
+
+## 通信経路
+- 本プロジェクトの基本優先度は `Direct P2P -> Relay Supported P2P -> Relay Fallback`。
+- `Direct P2P` は manual ticket / `addr_hint` / DHT などの直接到達情報で接続し、relay URL を候補に含めない経路。
+- `Relay Supported P2P` は topic rendezvous / discovery / hole punching / endpoint assist に community-node や relay を使い、同じ topic を subscribe している client 同士の P2P 接続を成立させる経路。これは fallback ではない。
+- `Relay Fallback` は Direct P2P と Relay Supported P2P が成立しない場合だけ、gossip/docs/blob など実データを含む通信が relay 経由になる経路。
+- `cn-user-api` は topic rendezvous state の owner。topic presence は Valkey/Redis-compatible KV に TTL 付き ephemeral state として置き、`cn-iroh-relay` は純粋な iroh relay のままにする。
+- relay-only の実装やテストは通常成功経路として扱わず、`Relay Fallback` として明示する。

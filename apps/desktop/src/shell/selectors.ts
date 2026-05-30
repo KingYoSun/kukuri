@@ -318,6 +318,12 @@ export function topicConnectionLabel(diagnostic?: TopicSyncStatus): string {
   if (!diagnostic) {
     return 'idle';
   }
+  if (diagnostic.active_path === 'relay_fallback') {
+    return 'relay fallback';
+  }
+  if (diagnostic.active_path === 'relay_supported_p2p') {
+    return 'relay-supported P2P';
+  }
   switch (diagnostic.delivery_state) {
     case 'Live':
       return 'joined';

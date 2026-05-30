@@ -83,6 +83,12 @@ impl IrohGossipTransport {
         Ok(DiscoverySnapshot {
             mode: self.discovery_mode.lock().await.clone(),
             connect_mode: self.connect_mode.lock().await.clone(),
+            active_path: if bootstrap_seed_peer_ids.is_empty() {
+                ConnectionPath::DirectP2p
+            } else {
+                ConnectionPath::RelaySupportedP2p
+            },
+            fallback_peer_ids: Vec::new(),
             env_locked: *self.env_locked.lock().await,
             configured_seed_peer_ids,
             bootstrap_seed_peer_ids,

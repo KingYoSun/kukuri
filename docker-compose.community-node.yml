@@ -5,6 +5,8 @@ x-cn-postgres-env: &cn-postgres-env
 
 x-cn-service-env: &cn-service-env
   COMMUNITY_NODE_DATABASE_URL: postgres://${CN_POSTGRES_USER:-cn}:${CN_POSTGRES_PASSWORD:?set CN_POSTGRES_PASSWORD}@cn-postgres:5432/${CN_POSTGRES_DB:-cn}
+  COMMUNITY_NODE_RENDEZVOUS_REDIS_URL: redis://cn-valkey:6379/
+  COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX: ${COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX:-cn:rendezvous:v1}
   COMMUNITY_NODE_BASE_URL: ${CN_BASE_URL:-http://127.0.0.1:18080}
   COMMUNITY_NODE_PUBLIC_BASE_URL: ${CN_PUBLIC_BASE_URL:-http://127.0.0.1:18080}
   COMMUNITY_NODE_CONNECTIVITY_URLS: ${COMMUNITY_NODE_CONNECTIVITY_URLS:-http://127.0.0.1:13340}
@@ -26,6 +28,16 @@ services:
       retries: 20
     volumes:
       - cn-postgres-data:/var/lib/postgresql/data
+
+  cn-valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "${CN_VALKEY_HOST_BIND_IP:-127.0.0.1}:${CN_VALKEY_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   cn-migrate:
     build:
@@ -56,6 +68,8 @@ services:
     depends_on:
       cn-migrate:
         condition: service_completed_successfully
+      cn-valkey:
+        condition: service_healthy
     environment:
       <<: *cn-service-env
       COMMUNITY_NODE_BIND_ADDR: 0.0.0.0:8080

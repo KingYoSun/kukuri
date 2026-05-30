@@ -6,6 +6,7 @@ mod database;
 mod errors;
 mod models;
 mod normalize;
+mod rendezvous;
 mod rollout;
 #[cfg(test)]
 mod tests;
@@ -21,8 +22,9 @@ pub use bootstrap::{
 pub use config::{
     AUTH_CHALLENGE_TTL_SECONDS, AUTH_ENVELOPE_KIND, AUTH_EVENT_MAX_SKEW_SECONDS, AuthMode,
     AuthRolloutConfig, BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS, COMMUNITY_NODE_AUTH_SERVICE_NAME,
-    COMMUNITY_NODE_DATABASE_INIT_MODE_ENV, DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode, JwtConfig,
-    USER_API_BEARER_CHALLENGE,
+    COMMUNITY_NODE_DATABASE_INIT_MODE_ENV, COMMUNITY_NODE_RENDEZVOUS_KEY_PREFIX_ENV,
+    COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV, DEFAULT_TOKEN_TTL_SECONDS, DatabaseInitMode,
+    JwtConfig, TOPIC_RENDEZVOUS_TTL_SECONDS, USER_API_BEARER_CHALLENGE,
 };
 pub use consents::{accept_consents, get_consent_status, require_consents};
 pub use database::{
@@ -38,5 +40,9 @@ pub use models::{
 pub use normalize::{
     first_tag_value, normalize_http_url, normalize_http_url_list, normalize_pubkey,
     normalize_ws_url, parse_auth_envelope, parse_socket_addr_env, verify_auth_envelope,
+};
+pub use rendezvous::{
+    TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
+    TopicRendezvousStore, TopicRendezvousTopicResponse,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};

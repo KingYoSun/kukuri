@@ -199,24 +199,30 @@ impl IrohDocsSync {
 
     async fn connect_candidates(&self, imported_peer: &EndpointAddr) -> Vec<EndpointAddr> {
         let mut candidates = Vec::new();
-        let relay_preferred = relay_assisted_endpoint_addr(imported_peer);
-        if relay_preferred.relay_urls().next().is_some() {
-            candidates.push(relay_preferred);
+        if let Some(candidate) = direct_endpoint_addr(imported_peer) {
+            candidates.push(candidate);
         }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = relay_assisted_endpoint_addr(&EndpointAddr::from_parts(
+            let learned_peer = EndpointAddr::from_parts(
                 remote_info.id(),
                 remote_info.into_addrs().map(|addr| addr.into_addr()),
-            ));
+            );
             if !learned_peer.is_empty() {
                 candidates.push(learned_peer);
             }
         }
+        let relay_supported = relay_assisted_endpoint_addr(imported_peer);
+        if relay_supported.relay_urls().next().is_some()
+            && !candidates
+                .iter()
+                .any(|candidate| candidate == &relay_supported)
+        {
+            candidates.push(relay_supported);
+        }
         if candidates.is_empty()
-            || (imported_peer.relay_urls().next().is_none()
-                && !candidates
-                    .iter()
-                    .any(|candidate| candidate == imported_peer))
+            || !candidates
+                .iter()
+                .any(|candidate| candidate == imported_peer)
         {
             candidates.push(imported_peer.clone());
         }
@@ -487,6 +493,14 @@ impl IrohDocsSync {
         );
         Ok(None)
     }
+}
+
+fn direct_endpoint_addr(endpoint_addr: &EndpointAddr) -> Option<EndpointAddr> {
+    let mut direct = EndpointAddr::new(endpoint_addr.id);
+    for addr in endpoint_addr.ip_addrs() {
+        direct = direct.with_ip_addr(*addr);
+    }
+    (!direct.is_empty()).then_some(direct)
 }
 
 #[async_trait]

@@ -122,25 +122,31 @@ impl IrohBlobService {
         imported_peer: &iroh::EndpointAddr,
     ) -> Vec<iroh::EndpointAddr> {
         let mut candidates = Vec::new();
-        let relay_preferred = relay_assisted_endpoint_addr(imported_peer);
-        let imported_uses_relay = relay_preferred.relay_urls().next().is_some();
-        if imported_uses_relay {
-            candidates.push(relay_preferred);
+        let direct_imported = direct_endpoint_addr(imported_peer);
+        if let Some(candidate) = direct_imported {
+            candidates.push(candidate);
         }
         if let Some(remote_info) = self.node.endpoint().remote_info(imported_peer.id).await {
-            let learned_peer = relay_assisted_endpoint_addr(&iroh::EndpointAddr::from_parts(
+            let learned_peer = iroh::EndpointAddr::from_parts(
                 remote_info.id(),
                 remote_info.into_addrs().map(|addr| addr.into_addr()),
-            ));
+            );
             if !learned_peer.is_empty() {
                 candidates.push(learned_peer);
             }
         }
+        let relay_supported = relay_assisted_endpoint_addr(imported_peer);
+        if relay_supported.relay_urls().next().is_some()
+            && !candidates
+                .iter()
+                .any(|candidate| candidate == &relay_supported)
+        {
+            candidates.push(relay_supported);
+        }
         if candidates.is_empty()
-            || (!imported_uses_relay
-                && !candidates
-                    .iter()
-                    .any(|candidate| candidate == imported_peer))
+            || !candidates
+                .iter()
+                .any(|candidate| candidate == imported_peer)
         {
             candidates.push(imported_peer.clone());
         }
@@ -356,6 +362,14 @@ impl IrohBlobService {
         warn!(hash = %hash_text, "blob fetch exhausted remote peers without success");
         Ok(None)
     }
+}
+
+fn direct_endpoint_addr(endpoint_addr: &iroh::EndpointAddr) -> Option<iroh::EndpointAddr> {
+    let mut direct = iroh::EndpointAddr::new(endpoint_addr.id);
+    for addr in endpoint_addr.ip_addrs() {
+        direct = direct.with_ip_addr(*addr);
+    }
+    (!direct.is_empty()).then_some(direct)
 }
 
 #[async_trait]
@@ -671,7 +685,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn connect_candidates_prefers_relay_hint_before_learned_remote_info() {
+    async fn connect_candidates_prefers_direct_remote_info_before_relay_hint() {
         let sender_dir = tempdir().expect("sender tempdir");
         let receiver_dir = tempdir().expect("receiver tempdir");
         let config = TransportNetworkConfig::loopback();
@@ -713,7 +727,9 @@ mod tests {
 
         let candidates = receiver.connect_candidates(&sender_addr).await;
         assert!(!candidates.is_empty());
-        assert_eq!(candidates[0], sender_addr);
+        assert_ne!(candidates[0], sender_addr);
+        assert!(candidates[0].relay_urls().next().is_none());
+        assert_eq!(candidates.last(), Some(&sender_addr));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -1,6 +1,7 @@
 use crate::*;
 
 const DEFAULT_CN_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:55432/cn";
+const DEFAULT_CN_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:56379/";
 const EXTERNAL_CN_BASE_URL_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_BASE_URL";
 const EXTERNAL_CN_CONNECTIVITY_URLS_ENV: &str = "KUKURI_HARNESS_COMMUNITY_NODE_CONNECTIVITY_URLS";
 
@@ -93,6 +94,8 @@ impl CommunityNodeStack {
         let user_api_state = build_user_api_state(&UserApiConfig {
             bind_addr: user_api_addr,
             database_url: database.database_url.clone(),
+            rendezvous_redis_url: community_node_rendezvous_redis_url(),
+            rendezvous_key_prefix: format!("cn:harness:{prefix}"),
             base_url: base_url.clone(),
             public_base_url: base_url.clone(),
             connectivity_urls: vec![iroh_relay_url.clone()],
@@ -143,6 +146,13 @@ pub(crate) fn community_node_admin_database_url() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_CN_ADMIN_DATABASE_URL.to_string())
+}
+
+pub(crate) fn community_node_rendezvous_redis_url() -> String {
+    std::env::var("COMMUNITY_NODE_RENDEZVOUS_REDIS_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_CN_RENDEZVOUS_REDIS_URL.to_string())
 }
 
 fn external_community_node_base_url() -> Option<String> {

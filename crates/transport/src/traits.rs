@@ -6,7 +6,7 @@ use futures_util::Stream;
 use kukuri_core::{GossipHint, TopicId};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{DiscoveryMode, DiscoverySnapshot, SeedPeer};
+use crate::config::{ConnectionPath, DiscoveryMode, DiscoverySnapshot, SeedPeer};
 
 pub type HintStream = Pin<Box<dyn Stream<Item = HintEnvelope> + Send>>;
 
@@ -24,6 +24,8 @@ pub struct PeerSnapshot {
     pub connected_peers: Vec<String>,
     pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
+    pub active_path: ConnectionPath,
+    pub fallback_peer_ids: Vec<String>,
     pub pending_events: usize,
     pub status_detail: String,
     pub last_error: Option<String>,
@@ -38,6 +40,9 @@ pub struct TopicPeerSnapshot {
     pub connected_peers: Vec<String>,
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
+    pub active_path: ConnectionPath,
+    pub rendezvous_peer_ids: Vec<String>,
+    pub fallback_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
     pub status_detail: String,
     pub last_error: Option<String>,

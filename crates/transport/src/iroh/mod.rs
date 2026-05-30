@@ -38,7 +38,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 
 use crate::config::{
-    ConnectMode, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, SeedPeer,
+    ConnectMode, ConnectionPath, DhtDiscoveryOptions, DiscoveryMode, DiscoverySnapshot, SeedPeer,
     TransportNetworkConfig, TransportRelayConfig,
 };
 use crate::diagnostics::{peer_status_detail, topic_status_detail};

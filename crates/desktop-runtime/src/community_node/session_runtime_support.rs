@@ -237,8 +237,20 @@ impl DesktopRuntime {
     async fn apply_runtime_connectivity_assist_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
-        let next_state =
+        let mut next_state =
             runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+        let rendezvous_seed_peers = self
+            .community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .clone();
+        next_state.bootstrap_seed_peers = normalize_seed_peers(
+            next_state
+                .bootstrap_seed_peers
+                .into_iter()
+                .chain(rendezvous_seed_peers)
+                .collect(),
+        );
         if !force {
             let current_state = self.last_runtime_connectivity_assist_state.lock().await;
             if current_state.as_ref() == Some(&next_state) {
@@ -280,8 +292,20 @@ impl DesktopRuntime {
     pub(crate) async fn force_rebuild_runtime_connectivity_assist(&self) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
-        let next_state =
+        let mut next_state =
             runtime_connectivity_assist_state(&discovery_config, &community_node_config);
+        let rendezvous_seed_peers = self
+            .community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .clone();
+        next_state.bootstrap_seed_peers = normalize_seed_peers(
+            next_state
+                .bootstrap_seed_peers
+                .into_iter()
+                .chain(rendezvous_seed_peers)
+                .collect(),
+        );
         let relay_config = TransportRelayConfig {
             iroh_relay_urls: next_state.relay_urls.clone(),
         };
@@ -307,7 +331,20 @@ impl DesktopRuntime {
     async fn apply_effective_seed_peers_with_mode(&self, force: bool) -> Result<()> {
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.community_node_config.lock().await.clone();
-        let next_state = effective_seed_peer_apply_state(&discovery_config, &community_node_config);
+        let mut next_state =
+            effective_seed_peer_apply_state(&discovery_config, &community_node_config);
+        let rendezvous_seed_peers = self
+            .community_node_rendezvous_seed_peers
+            .lock()
+            .await
+            .clone();
+        next_state.bootstrap_seed_peers = normalize_seed_peers(
+            next_state
+                .bootstrap_seed_peers
+                .into_iter()
+                .chain(rendezvous_seed_peers)
+                .collect(),
+        );
         if !force {
             let current_state = self.last_effective_seed_peer_apply_state.lock().await;
             if current_state.as_ref() == Some(&next_state) {

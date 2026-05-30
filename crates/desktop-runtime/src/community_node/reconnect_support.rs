@@ -172,6 +172,8 @@ mod tests {
             last_error: None,
             configured_peers: configured_peer_ids.clone(),
             subscribed_topics: vec!["hint/kukuri:topic:test".to_string()],
+            active_path: Default::default(),
+            fallback_peer_ids: Vec::new(),
             topic_diagnostics: vec![TopicSyncStatus {
                 topic: "hint/kukuri:topic:test".to_string(),
                 joined: connected,
@@ -185,6 +187,9 @@ mod tests {
                 docs_assist_peer_ids: Vec::new(),
                 configured_peer_ids,
                 missing_peer_ids: Vec::new(),
+                active_path: Default::default(),
+                rendezvous_peer_ids: Vec::new(),
+                fallback_peer_ids: Vec::new(),
                 last_received_at: None,
                 last_docs_activity_at: None,
                 status_detail: String::new(),
@@ -194,6 +199,8 @@ mod tests {
             discovery: DiscoveryStatus {
                 mode: DiscoveryMode::StaticPeer,
                 connect_mode: ConnectMode::DirectOrRelay,
+                active_path: Default::default(),
+                fallback_peer_ids: Vec::new(),
                 env_locked: false,
                 configured_seed_peer_ids: Vec::new(),
                 bootstrap_seed_peer_ids: Vec::new(),

@@ -58,8 +58,8 @@ pub(crate) use kukuri_store::{
     ObjectProjectionRow, Page, ProjectionStore, ReactionProjectionRow, Store, TimelineCursor,
 };
 pub(crate) use kukuri_transport::{
-    DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer, TopicPeerSnapshot,
-    Transport,
+    ConnectionPath, DiscoveryMode, DiscoverySnapshot, HintTransport, PeerSnapshot, SeedPeer,
+    TopicPeerSnapshot, Transport,
 };
 pub(crate) use serde::{Serialize, de::DeserializeOwned};
 pub(crate) use tokio::sync::Mutex;

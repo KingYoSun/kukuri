@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, broadcast};
 use tokio::time::timeout;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::config::{ConnectMode, DiscoveryMode, DiscoverySnapshot, SeedPeer};
+use crate::config::{ConnectMode, ConnectionPath, DiscoveryMode, DiscoverySnapshot, SeedPeer};
 use crate::diagnostics::{peer_status_detail, topic_status_detail};
 use crate::traits::{
     HintEnvelope, HintStream, HintTransport, PeerSnapshot, TopicPeerSnapshot, Transport,
@@ -113,6 +113,13 @@ impl Transport for FakeTransport {
                     connected_peers: connected_peers.clone(),
                     configured_peer_ids: imported.clone(),
                     missing_peer_ids,
+                    active_path: if connected_peers.is_empty() {
+                        ConnectionPath::DirectP2p
+                    } else {
+                        ConnectionPath::RelaySupportedP2p
+                    },
+                    rendezvous_peer_ids: connected_peers.clone(),
+                    fallback_peer_ids: Vec::new(),
                     last_received_at: None,
                     status_detail: topic_status_detail(imported.len(), connected_peers.len()),
                     last_error: None,
@@ -125,6 +132,8 @@ impl Transport for FakeTransport {
             connected_peers: imported.clone(),
             configured_peers: imported,
             subscribed_topics: topics,
+            active_path: ConnectionPath::DirectP2p,
+            fallback_peer_ids: Vec::new(),
             pending_events: 0,
             status_detail: peer_status_detail(
                 topic_diagnostics
@@ -219,6 +228,8 @@ impl Transport for FakeTransport {
         Ok(DiscoverySnapshot {
             mode: self.discovery_mode.lock().await.clone(),
             connect_mode: ConnectMode::DirectOnly,
+            active_path: ConnectionPath::DirectP2p,
+            fallback_peer_ids: Vec::new(),
             env_locked: *self.env_locked.lock().await,
             configured_seed_peer_ids,
             bootstrap_seed_peer_ids,

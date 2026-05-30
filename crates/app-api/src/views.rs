@@ -4,7 +4,7 @@ use kukuri_core::{
     MetaverseRoomEventEnvelopeContentV1, MetaverseRoomEventV1, MetaverseRoomStateV1,
 };
 use kukuri_store::{NotificationKind, TimelineCursor};
-use kukuri_transport::{ConnectMode, DiscoveryMode};
+use kukuri_transport::{ConnectMode, ConnectionPath, DiscoveryMode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -492,6 +492,8 @@ pub struct SyncStatus {
     pub last_error: Option<String>,
     pub configured_peers: Vec<String>,
     pub subscribed_topics: Vec<String>,
+    pub active_path: ConnectionPath,
+    pub fallback_peer_ids: Vec<String>,
     pub topic_diagnostics: Vec<TopicSyncStatus>,
     pub local_author_pubkey: String,
     pub discovery: DiscoveryStatus,
@@ -510,6 +512,8 @@ pub enum DeliveryState {
 pub struct DiscoveryStatus {
     pub mode: DiscoveryMode,
     pub connect_mode: ConnectMode,
+    pub active_path: ConnectionPath,
+    pub fallback_peer_ids: Vec<String>,
     pub env_locked: bool,
     pub configured_seed_peer_ids: Vec<String>,
     pub bootstrap_seed_peer_ids: Vec<String>,
@@ -531,6 +535,9 @@ pub struct TopicSyncStatus {
     pub docs_assist_peer_ids: Vec<String>,
     pub configured_peer_ids: Vec<String>,
     pub missing_peer_ids: Vec<String>,
+    pub active_path: ConnectionPath,
+    pub rendezvous_peer_ids: Vec<String>,
+    pub fallback_peer_ids: Vec<String>,
     pub last_received_at: Option<i64>,
     pub last_docs_activity_at: Option<i64>,
     pub status_detail: String,
