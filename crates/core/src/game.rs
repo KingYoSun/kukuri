@@ -153,6 +153,8 @@ pub struct MetaverseRoomStateV1 {
     pub scene: MetaverseRoomSceneV1,
     pub default_spawn: MetaverseRoomSpawnV1,
     pub asset_refs: Vec<MetaverseAssetRef>,
+    #[serde(default)]
+    pub chat_history: Vec<MetaverseRoomChatMessageV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

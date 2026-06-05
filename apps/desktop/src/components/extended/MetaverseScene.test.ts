@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   isNewerRemoteTransform,
   avatarAnimationForInput,
+  mergeRoomChatMessages,
   normalizeAvatarAnimationState,
   stepAvatarJump,
   type AvatarTransform,
@@ -52,5 +53,45 @@ describe('metaverse avatar animation state', () => {
     expect(isNewerRemoteTransform(current, { ...current, seq: 2, sentAt: 400 })).toBe(false);
     expect(isNewerRemoteTransform(current, { ...current, seq: 4, sentAt: 250 })).toBe(true);
     expect(isNewerRemoteTransform(current, { ...current, sentAt: 301 })).toBe(true);
+  });
+
+  test('deduplicates and caps room chat messages', () => {
+    const current = Array.from({ length: 99 }, (_, index) => ({
+      roomId: 'room',
+      messageId: `chat-${index}`,
+      authorPeerId: 'peer',
+      body: `message ${index}`,
+      createdAt: index,
+    }));
+    const merged = mergeRoomChatMessages(current, [
+      {
+        roomId: 'room',
+        messageId: 'chat-98',
+        authorPeerId: 'peer',
+        body: 'message 98 edited by arrival order',
+        createdAt: 98,
+      },
+      {
+        roomId: 'room',
+        messageId: 'chat-100',
+        authorPeerId: 'peer',
+        body: 'message 100',
+        createdAt: 100,
+      },
+      {
+        roomId: 'room',
+        messageId: 'chat-101',
+        authorPeerId: 'peer',
+        body: 'message 101',
+        createdAt: 101,
+      },
+    ]);
+
+    expect(merged).toHaveLength(100);
+    expect(merged[0].messageId).toBe('chat-1');
+    expect(merged.find((message) => message.messageId === 'chat-98')?.body).toBe(
+      'message 98 edited by arrival order'
+    );
+    expect(merged.at(-1)?.messageId).toBe('chat-101');
   });
 });

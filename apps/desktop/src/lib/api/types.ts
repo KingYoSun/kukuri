@@ -493,6 +493,7 @@ export type MetaverseRoomStateV1 = {
     rotation: [number, number, number];
   };
   asset_refs: MetaverseAssetRef[];
+  chat_history?: MetaverseRoomChatMessageV1[];
 };
 
 export type MetaverseRoomPresenceV1 = {

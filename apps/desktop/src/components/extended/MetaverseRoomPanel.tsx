@@ -1,5 +1,6 @@
 ﻿import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
+  AlertTriangle,
   Box,
   ChevronDown,
   Cuboid,
@@ -10,7 +11,10 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Play,
+  RefreshCw,
   Send,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
@@ -40,9 +44,16 @@ import {
   DEFAULT_AVATAR_ASSET_NAME,
   DEFAULT_AVATAR_ASSET_URL,
   DEFAULT_SHARED_OBJECT,
+  METAVERSE_CHAT_BUBBLE_TTL_MS,
+  METAVERSE_ROOM_HEARTBEAT_MS,
+  METAVERSE_ROOM_RECOVERY_MS,
+  METAVERSE_ROOM_STALE_MS,
+  mergeRoomChatMessages,
   normalizeAvatarAnimationState,
   type AvatarAssetStatus,
   type AvatarTransform,
+  type LatestChatBubble,
+  type MetaverseRoomConnectionState,
   type MetaverseRoomEvent,
   type MetaverseVec3,
   type PeerPresence,
@@ -61,6 +72,83 @@ type MetaverseRoomPanelProps = {
   mediaObjectUrls?: Record<string, string | null>;
   onRefresh: () => Promise<void>;
 };
+
+const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
+  NonNullable<GameRoomView['metaverse']>['chat_history']
+> = [];
+
+function chatMessageFromApi(message: {
+  room_id: string;
+  message_id: string;
+  author_peer_id: string;
+  display_name?: string | null;
+  body: string;
+  created_at: number;
+}): RoomChatMessage {
+  return {
+    roomId: message.room_id,
+    messageId: message.message_id,
+    authorPeerId: message.author_peer_id,
+    displayName: message.display_name ?? null,
+    body: message.body,
+    createdAt: message.created_at,
+  };
+}
+
+function topicDiagnosticFor(syncStatus: SyncStatus, topic: string) {
+  return syncStatus.topic_diagnostics.find(
+    (diagnostic) => diagnostic.topic === topic || diagnostic.topic === `hint/${topic}`
+  );
+}
+
+function connectionStateLabel(state: MetaverseRoomConnectionState) {
+  if (state === 'live') {
+    return 'Live';
+  }
+  if (state === 'recovering') {
+    return 'Recovering';
+  }
+  if (state === 'stale') {
+    return 'Stale';
+  }
+  return 'Offline';
+}
+
+function connectionStateDetail(state: MetaverseRoomConnectionState) {
+  if (state === 'live') {
+    return 'Room events are flowing';
+  }
+  if (state === 'recovering') {
+    return 'Refreshing room connectivity';
+  }
+  if (state === 'stale') {
+    return 'No room activity recently';
+  }
+  return 'Peer connectivity is unavailable';
+}
+
+function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now()): LatestChatBubble {
+  return {
+    peerId: message.authorPeerId,
+    displayName: message.displayName ?? null,
+    body: message.body,
+    createdAt: message.createdAt,
+    expiresAt: now + METAVERSE_CHAT_BUBBLE_TTL_MS,
+  };
+}
+
+function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState }) {
+  if (state === 'live') {
+    return <Wifi className='size-4' aria-hidden='true' />;
+  }
+  if (state === 'recovering') {
+    return <RefreshCw className='size-4' aria-hidden='true' />;
+  }
+  if (state === 'stale') {
+    return <AlertTriangle className='size-4' aria-hidden='true' />;
+  }
+  return <WifiOff className='size-4' aria-hidden='true' />;
+}
 
 export function MetaverseRoomPanel({
   api,
@@ -88,14 +176,20 @@ export function MetaverseRoomPanel({
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
   const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
+  const [latestChatByPeer, setLatestChatByPeer] = useState<Record<string, LatestChatBubble>>({});
   const [messageDraft, setMessageDraft] = useState('');
   const [sharedObject, setSharedObject] = useState<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
   const [lastSentSeq, setLastSentSeq] = useState(0);
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
   const [localAvatarAssetRef, setLocalAvatarAssetRef] = useState<MetaverseAssetRef | null>(null);
   const [localAvatarAssetUrl, setLocalAvatarAssetUrl] = useState<string | null>(null);
+  const [pollErrorCount, setPollErrorCount] = useState(0);
+  const [lastRoomActivityAt, setLastRoomActivityAt] = useState(() => Date.now());
+  const [recoveringUntil, setRecoveringUntil] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const channelRef = useRef<BroadcastChannel | null>(null);
   const lastBackendEventEnvelopeIdRef = useRef<string | null>(null);
+  const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
@@ -115,6 +209,44 @@ export function MetaverseRoomPanel({
   const selectedRoom = selectedRoomId
     ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
     : null;
+  const selectedRoomRoomId = selectedRoom?.room_id ?? null;
+  const selectedRoomSharedObject = selectedRoom?.metaverse?.scene.shared_object ?? null;
+  const selectedRoomChatHistory = selectedRoom?.metaverse?.chat_history ?? EMPTY_ROOM_CHAT_HISTORY;
+  const activeTopicDiagnostic = useMemo(
+    () => topicDiagnosticFor(syncStatus, activeTopic),
+    [activeTopic, syncStatus]
+  );
+  const roomConnectionState: MetaverseRoomConnectionState = useMemo(() => {
+    if (!selectedRoom) {
+      return 'offline';
+    }
+    if (recoveringUntil > clockNow) {
+      return 'recovering';
+    }
+    const topicPeerCount = activeTopicDiagnostic?.peer_count ?? syncStatus.peer_count;
+    const topicError = activeTopicDiagnostic?.last_error ?? syncStatus.last_error ?? null;
+    if (
+      !syncStatus.connected ||
+      syncStatus.delivery_state === 'Offline' ||
+      topicPeerCount === 0 ||
+      pollErrorCount >= 3 ||
+      topicError
+    ) {
+      return 'offline';
+    }
+    if (clockNow - lastRoomActivityAt > METAVERSE_ROOM_STALE_MS) {
+      return 'stale';
+    }
+    return 'live';
+  }, [
+    activeTopicDiagnostic,
+    clockNow,
+    lastRoomActivityAt,
+    pollErrorCount,
+    recoveringUntil,
+    selectedRoom,
+    syncStatus,
+  ]);
   const knownPeerCount = Object.keys(remoteTransforms).length;
   const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
 
@@ -134,24 +266,44 @@ export function MetaverseRoomPanel({
   }, [rooms, selectedRoomId]);
 
   useEffect(() => {
-    if (!selectedRoom) {
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      setClockNow(now);
+      setLatestChatByPeer((current) => {
+        const next = Object.fromEntries(
+          Object.entries(current).filter(([, bubble]) => bubble.expiresAt > now)
+        );
+        return Object.keys(next).length === Object.keys(current).length ? current : next;
+      });
+    }, 1000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRoomRoomId) {
       return;
     }
-    setSharedObject(selectedRoom.metaverse?.scene.shared_object ?? DEFAULT_SHARED_OBJECT);
+    setSharedObject(DEFAULT_SHARED_OBJECT);
     setRemoteTransforms({});
     setPeerPresence({});
     setMessages([]);
+    setLatestChatByPeer({});
+    setPollErrorCount(0);
+    setLastRoomActivityAt(Date.now());
     lastBackendEventEnvelopeIdRef.current = null;
     if (typeof BroadcastChannel === 'undefined') {
       return;
     }
-    const channel = new BroadcastChannel(`kukuri-metaverse-room:${selectedRoom.room_id}`);
+    const channel = new BroadcastChannel(`kukuri-metaverse-room:${selectedRoomRoomId}`);
     channelRef.current = channel;
     channel.onmessage = (event: MessageEvent<MetaverseRoomEvent>) => {
       const data = event.data;
       if (!data || !('type' in data)) {
         return;
       }
+      setLastRoomActivityAt(Date.now());
       if (data.type === 'presence.join' && data.presence.peerId !== localPeerId) {
         setPeerPresence((current) => ({
           ...current,
@@ -164,8 +316,12 @@ export function MetaverseRoomPanel({
           [data.transform.peerId]: data.transform,
         }));
       }
-      if (data.type === 'chat.message' && data.message.authorPeerId !== localPeerId) {
-        setMessages((current) => [...current, data.message].slice(-64));
+      if (data.type === 'chat.message') {
+        setMessages((current) => mergeRoomChatMessages(current, [data.message]));
+        setLatestChatByPeer((current) => ({
+          ...current,
+          [data.message.authorPeerId]: latestChatBubbleFromMessage(data.message),
+        }));
       }
       if (data.type === 'object.update' && data.object.updated_by !== localPeerId) {
         setSharedObject(data.object);
@@ -175,36 +331,61 @@ export function MetaverseRoomPanel({
       channel.close();
       channelRef.current = null;
     };
-  }, [localPeerId, selectedRoom]);
+  }, [localPeerId, selectedRoomRoomId]);
+
+  useEffect(() => {
+    setSharedObject(selectedRoomSharedObject ?? DEFAULT_SHARED_OBJECT);
+  }, [selectedRoomSharedObject]);
+
+  useEffect(() => {
+    const durableMessages = selectedRoomChatHistory.map(chatMessageFromApi);
+    setMessages((current) => mergeRoomChatMessages(current, durableMessages));
+  }, [selectedRoomChatHistory, selectedRoomRoomId]);
 
   useEffect(() => {
     if (!selectedRoom) {
       return;
     }
-    const now = Date.now();
-    const presence: PeerPresence = {
-      peerId: localPeerId,
-      displayName: localDisplayName,
-      avatarAssetRef: localAvatarAssetRef,
-      avatarAssetUrl: localAvatarAssetUrl,
-      joinedAt: now,
-      lastSeenAt: now,
+    const joinedAt = Date.now();
+    const publishPresence = () => {
+      const now = Date.now();
+      const presence: PeerPresence = {
+        peerId: localPeerId,
+        displayName: localDisplayName,
+        avatarAssetRef: localAvatarAssetRef,
+        avatarAssetUrl: localAvatarAssetUrl,
+        joinedAt,
+        lastSeenAt: now,
+      };
+      emit({ type: 'presence.join', presence });
+      void api.publishMetaverseRoomEvent(activeTopic, selectedRoom.room_id, localPeerId, now, {
+        type: 'presence_join',
+        presence: {
+          room_id: selectedRoom.room_id,
+          peer_id: localPeerId,
+          display_name: localDisplayName,
+          avatar_asset_ref: localAvatarAssetRef,
+          joined_at: joinedAt,
+          last_seen_at: now,
+        },
+      }).catch(() => {
+        // Browser-only fallback is handled by the local scene.
+      });
     };
-    emit({ type: 'presence.join', presence });
-    void api.publishMetaverseRoomEvent(activeTopic, selectedRoom.room_id, localPeerId, now, {
-      type: 'presence_join',
-      presence: {
-        room_id: selectedRoom.room_id,
-        peer_id: localPeerId,
-        display_name: localDisplayName,
-        avatar_asset_ref: localAvatarAssetRef,
-        joined_at: now,
-        last_seen_at: now,
-      },
-    }).catch(() => {
-      // Browser-only fallback is handled by the local scene.
-    });
-  }, [activeTopic, api, localAvatarAssetRef, localAvatarAssetUrl, localDisplayName, localPeerId, selectedRoom]);
+    publishPresence();
+    const intervalId = window.setInterval(publishPresence, METAVERSE_ROOM_HEARTBEAT_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    activeTopic,
+    api,
+    localAvatarAssetRef,
+    localAvatarAssetUrl,
+    localDisplayName,
+    localPeerId,
+    selectedRoom,
+  ]);
 
   async function importAvatarBlob(blob: Blob, name: string) {
     if (!selectedRoom) {
@@ -251,6 +432,7 @@ export function MetaverseRoomPanel({
     let timeoutId = 0;
     const applyBackendEvent = (view: MetaverseRoomEventView) => {
       const event = view.content.event;
+      setLastRoomActivityAt(Date.now());
       if (event.type === 'presence_join' && event.presence.peer_id !== localPeerId) {
         const presence: PeerPresence = {
           peerId: event.presence.peer_id,
@@ -302,17 +484,13 @@ export function MetaverseRoomPanel({
           },
         }));
       }
-      if (event.type === 'chat_message' && event.message.author_peer_id !== localPeerId) {
-        setMessages((current) => [
+      if (event.type === 'chat_message') {
+        const message = chatMessageFromApi(event.message);
+        setMessages((current) => mergeRoomChatMessages(current, [message]));
+        setLatestChatByPeer((current) => ({
           ...current,
-          {
-            roomId: event.message.room_id,
-            messageId: event.message.message_id,
-            authorPeerId: event.message.author_peer_id,
-            body: event.message.body,
-            createdAt: event.message.created_at,
-          },
-        ].slice(-64));
+          [message.authorPeerId]: latestChatBubbleFromMessage(message),
+        }));
       }
       if (event.type === 'object_update' && event.object.updated_by !== localPeerId) {
         setSharedObject(event.object);
@@ -332,7 +510,13 @@ export function MetaverseRoomPanel({
           }
           lastBackendEventEnvelopeIdRef.current = events[events.length - 1].envelope_id;
         }
+        if (!cancelled) {
+          setPollErrorCount(0);
+        }
       } catch {
+        if (!cancelled) {
+          setPollErrorCount((current) => current + 1);
+        }
         // The browser-only dev shell has no Tauri backend. BroadcastChannel remains the local fallback.
       } finally {
         if (!cancelled) {
@@ -346,6 +530,24 @@ export function MetaverseRoomPanel({
       window.clearTimeout(timeoutId);
     };
   }, [activeTopic, api, localPeerId, selectedRoom]);
+
+  useEffect(() => {
+    if (!selectedRoom || (roomConnectionState !== 'stale' && roomConnectionState !== 'offline')) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastRecoveryAtRef.current < METAVERSE_ROOM_RECOVERY_MS) {
+      return;
+    }
+    lastRecoveryAtRef.current = now;
+    lastBackendEventEnvelopeIdRef.current = null;
+    if (roomConnectionState === 'stale') {
+      setRecoveringUntil(now + 3_000);
+    }
+    void Promise.resolve(onRefresh()).catch(() => {
+      setPollErrorCount((current) => current + 1);
+    });
+  }, [onRefresh, roomConnectionState, selectedRoom]);
 
   async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -437,10 +639,15 @@ export function MetaverseRoomPanel({
       roomId: selectedRoom.room_id,
       messageId: `${localPeerId}-${Date.now()}`,
       authorPeerId: localPeerId,
+      displayName: localDisplayName,
       body: messageDraft.trim(),
       createdAt: Date.now(),
     };
-    setMessages((current) => [...current, message].slice(-64));
+    setMessages((current) => mergeRoomChatMessages(current, [message]));
+    setLatestChatByPeer((current) => ({
+      ...current,
+      [message.authorPeerId]: latestChatBubbleFromMessage(message),
+    }));
     setMessageDraft('');
     emit({ type: 'chat.message', message });
     void api.publishMetaverseRoomEvent(
@@ -454,7 +661,7 @@ export function MetaverseRoomPanel({
           room_id: message.roomId,
           message_id: message.messageId,
           author_peer_id: message.authorPeerId,
-          display_name: null,
+          display_name: message.displayName,
           body: message.body,
           created_at: message.createdAt,
         },
@@ -614,10 +821,21 @@ export function MetaverseRoomPanel({
               peerPresence={peerPresence}
               sharedObject={sharedObject}
               avatarAssetUrl={localAvatarAssetUrl}
+              latestChatByPeer={latestChatByPeer}
+              connectionState={roomConnectionState}
+              now={clockNow}
               onLocalTransform={handleLocalTransform}
               onAvatarAssetStatus={setAvatarAssetStatus}
               hud={(
                 <>
+                  <div
+                    className='metaverse-connection-badge'
+                    data-state={roomConnectionState}
+                    title={connectionStateDetail(roomConnectionState)}
+                  >
+                    <ConnectionStateIcon state={roomConnectionState} />
+                    <span>{connectionStateLabel(roomConnectionState)}</span>
+                  </div>
                   <div className='metaverse-hud-toolbar' data-open={hudOpen}>
                     <Button
                       variant='ghost'
@@ -727,40 +945,45 @@ export function MetaverseRoomPanel({
                           <Button size='sm' variant='secondary' type='button' onClick={() => void moveSharedObject([0, 0, 50])}>Back</Button>
                         </div>
                       </div>
-                      <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
-                        <Label>
-                          <span>
-                            <MessageSquare className='size-4' aria-hidden='true' />
-                            Room chat
-                          </span>
-                          <Input
-                            value={messageDraft}
-                            placeholder='Say something in the room'
-                            onChange={(event) => setMessageDraft(event.target.value)}
-                          />
-                        </Label>
-                        <Button size='sm' type='submit'>
-                          <Send className='size-4' aria-hidden='true' />
-                          Send
-                        </Button>
-                      </form>
-                      <ul className='metaverse-chat-list'>
-                        {messages.map((message) => (
-                          <li key={message.messageId}>
-                            <strong>
-                              {message.authorPeerId === localPeerId ? 'You' : message.authorPeerId.slice(0, 12)}
-                              <small>{formatLocalizedTime(message.createdAt, locale)}</small>
-                            </strong>
-                            <span>{message.body}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </aside>
                     <span className='metaverse-hud-scrollbar-indicator' aria-hidden='true'>
                       <span />
                     </span>
                     </>
                   ) : null}
+                  <section className='metaverse-room-chat-log' aria-label='ROOM Chat'>
+                    <div className='metaverse-room-chat-log-header'>
+                      <MessageSquare className='size-4' aria-hidden='true' />
+                      <span>ROOM Chat</span>
+                    </div>
+                    <ul className='metaverse-chat-list'>
+                      {messages.map((message) => (
+                        <li key={message.messageId}>
+                          <strong>
+                            {message.authorPeerId === localPeerId
+                              ? 'You'
+                              : message.displayName || message.authorPeerId.slice(0, 12)}
+                            <small>{formatLocalizedTime(message.createdAt, locale)}</small>
+                          </strong>
+                          <span>{message.body}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
+                      <Label>
+                        <span className='sr-only'>Room chat message</span>
+                        <Input
+                          value={messageDraft}
+                          placeholder='Say something in the room'
+                          onChange={(event) => setMessageDraft(event.target.value)}
+                        />
+                      </Label>
+                      <Button size='sm' type='submit'>
+                        <Send className='size-4' aria-hidden='true' />
+                        Send
+                      </Button>
+                    </form>
+                  </section>
                 </>
               )}
             />

@@ -208,7 +208,12 @@ export function withGameRoomDefaults(room: GameRoomView): GameRoomView {
     audience_label: room.audience_label ?? (room.channel_id ? 'Private channel' : 'Public'),
     scores: room.scores.map((score) => ({ ...score })),
     room_kind: room.room_kind ?? 'score_game',
-    metaverse: room.metaverse ?? null,
+    metaverse: room.metaverse
+      ? {
+          ...room.metaverse,
+          chat_history: [...(room.metaverse.chat_history ?? [])],
+        }
+      : null,
     manifest_blob_hash: room.manifest_blob_hash ?? `mock-${room.room_id}`,
   };
 }
