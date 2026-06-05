@@ -66,27 +66,23 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 - `COMMUNITY_NODE_DATABASE_URL` は compose 内では `cn-postgres` 向けに組み立てる。外部 Postgres を使う場合だけ個別に差し替える
 
 ## community-node 公開 manual smoke
-公開 URL を current community-node 構成で出す場合は、`.env.community-node` に最低限この 3 つを入れる。
+公開 URL を current community-node 構成で出す場合は、`WireGuard + Caddy` の VPS edge を用いる。詳細な self-host 手順は `docs/runbooks/community-node-self-host-vps.md` を参照する。
+
+VPS 側:
+
+- `api.kukuri.app` と `iroh-relay.kukuri.app` は VPS の public IP へ向ける
+- Caddy は `api.kukuri.app -> http://10.73.0.2:18080`, `iroh-relay.kukuri.app -> http://10.73.0.2:13340` を reverse proxy する
+- nftables は `7842/udp` を Home 側 `10.73.0.2:7842` へ WireGuard 経由で forward する
+
+Home 側の `.env.community-node` には最低限この値を入れる。
 
 ```dotenv
 CN_BASE_URL=https://api.kukuri.app
 CN_PUBLIC_BASE_URL=https://api.kukuri.app
 COMMUNITY_NODE_CONNECTIVITY_URLS=https://iroh-relay.kukuri.app
-```
 
-- `api.kukuri.app` は `cn-user-api` を向ける
-- `iroh-relay.kukuri.app` は `cn-iroh-relay` を向ける
-- desktop は `connectivity_urls` を server から受け取るので、websocket relay 前提は使わない
-
-TCP 公開を Cloudflare Tunnel で行う場合:
-
-- `CN_USER_API_HOST_BIND_IP=127.0.0.1`
-- `CN_IROH_RELAY_HTTP_HOST_BIND_IP=127.0.0.1`
-- tunnel 側で `api.kukuri.app -> 127.0.0.1:${CN_USER_API_PORT}`, `iroh-relay.kukuri.app -> 127.0.0.1:${CN_IROH_RELAY_PORT}` を割り当てる
-
-`iroh-relay` の `7842/udp` を WireGuard/VPS edge 経由で公開する場合:
-
-```dotenv
+CN_USER_API_HOST_BIND_IP=10.73.0.2
+CN_IROH_RELAY_HTTP_HOST_BIND_IP=10.73.0.2
 CN_IROH_RELAY_QUIC_BIND_ADDR=0.0.0.0:7842
 CN_IROH_RELAY_QUIC_HOST_BIND_IP=10.73.0.2
 CN_IROH_RELAY_QUIC_PORT=7842
@@ -95,12 +91,11 @@ CN_IROH_RELAY_TLS_KEY_PATH=/certs/default.key
 CN_IROH_RELAY_CERTS_HOST_PATH=./docker/cn/certs
 ```
 
-- Cloudflare Tunnel は UDP を運べないので、`7842/udp` は WireGuard/VPS edge で home 側へ直接 forward する
-- QUIC は tunnel を迂回するので、`docker/cn/certs/` には `iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を置く
-- `CN_IROH_RELAY_QUIC_HOST_BIND_IP` は WireGuard で到達可能な home 側 IP に合わせる
-- Cloudflare Tunnel で `iroh-relay.kukuri.app` の TCP を公開しつつ QUIC を直公開したい場合は、`CN_IROH_RELAY_HTTPS_BIND_ADDR` を空のままにして `iroh-relay.kukuri.app -> http://127.0.0.1:${CN_IROH_RELAY_PORT}` を向ける
-- `CN_IROH_RELAY_HTTPS_BIND_ADDR` を設定した場合、local HTTP listener は captive portal 用の `/generate_204` しか返さない。`/`, `/ping`, `/relay`, `/healthz` を Cloudflare Tunnel で通したいなら `iroh-relay.kukuri.app -> https://127.0.0.1:${CN_IROH_RELAY_HTTPS_PORT}` を向ける
-- `https://iroh-relay.kukuri.app/ping` が `404 Not Found` を返す場合は、Cloudflare Tunnel が HTTP origin (`${CN_IROH_RELAY_PORT}`) に向いているのに `CN_IROH_RELAY_HTTPS_BIND_ADDR` が有効な構成になっている
+- `api.kukuri.app` は `cn-user-api` を向ける
+- `iroh-relay.kukuri.app` は `cn-iroh-relay` の HTTP/TCP と QUIC/UDP を向ける
+- desktop は `connectivity_urls` を server から受け取るので、websocket relay 前提は使わない
+- `docker/cn/certs/` には `iroh-relay.kukuri.app` 用の公開証明書と秘密鍵を `default.crt` / `default.key` として置く
+- Postgres と Valkey は Home 側 private bind のままにし、VPS や public internet へ公開しない
 
 起動:
 
