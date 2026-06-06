@@ -130,6 +130,30 @@ function avatarEvent(peerId: string, animation: string | null, seq: number): Met
   };
 }
 
+function presenceLeaveEvent(peerId: string, seq: number): MetaverseRoomEventView {
+  return {
+    envelope_id: `event-${seq}`,
+    content: {
+      event_id: `event-${seq}`,
+      topic_id: 'kukuri:topic:demo',
+      channel_id: null,
+      room_id: room.room_id,
+      peer_id: peerId,
+      seq,
+      sent_at: seq,
+      event: {
+        type: 'presence_leave',
+        room_id: room.room_id,
+        peer_id: peerId,
+        left_at: seq,
+      },
+    },
+    envelope: {},
+    received_at: seq,
+    source_peer: peerId,
+  };
+}
+
 type RenderPanelOptions = {
   rooms?: GameRoomView[];
   syncStatus?: SyncStatus;
@@ -231,6 +255,32 @@ describe('MetaverseRoomPanel animation sharing', () => {
     });
   });
 
+  test('leaves a joined room and publishes presence leave', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const api: DesktopApi = {
+      ...baseApi,
+      publishMetaverseRoomEvent,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Leave room' }));
+
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        publishMetaverseRoomEvent.mock.calls.some(
+          ([, roomId, , , event]) => roomId === room.room_id && event.type === 'presence_leave'
+        )
+      ).toBe(true);
+    });
+  });
+
   test('room HUD can be collapsed without a resize mode', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
@@ -275,6 +325,43 @@ describe('MetaverseRoomPanel animation sharing', () => {
     expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
+  });
+
+  test('enter opens room chat and focuses the message input while playing', async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
+    expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
+
+    await user.keyboard('{Enter}');
+
+    const input = await screen.findByPlaceholderText('Say something in the room');
+    await waitFor(() => {
+      expect(input).toHaveFocus();
+    });
+  });
+
+  test('enter inside an editable control does not open room chat', async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
+    await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
+    await user.click(screen.getByPlaceholderText('Atrium'));
+    await user.keyboard('{Enter}');
+
+    expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
   });
 
   test('keeps create room controls collapsed until opened', async () => {
@@ -363,6 +450,26 @@ describe('MetaverseRoomPanel animation sharing', () => {
       expect(screen.getByText(/jump-rem:jump/)).toBeInTheDocument();
       expect(screen.getByText(/sitting-:sitting/)).toBeInTheDocument();
       expect(screen.getByText(/unknown-:idle/)).toBeInTheDocument();
+    });
+  });
+
+  test('removes a remote avatar when a presence leave event arrives', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const api: DesktopApi = {
+      ...baseApi,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([
+        avatarEvent('leaving-remote', 'walk', 1),
+        presenceLeaveEvent('leaving-remote', 2),
+      ]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Remote animation: none')).toBeInTheDocument();
     });
   });
 

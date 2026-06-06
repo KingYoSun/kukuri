@@ -509,10 +509,12 @@
   bottom: 0.75rem;
   z-index: 2;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.55rem;
   width: min(27rem, calc(100% - 1.5rem));
-  max-height: 42%;
+  max-height: min(24rem, calc(100% - 5.5rem));
   padding: 0.7rem;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--surface-panel) 80%, transparent);
@@ -557,12 +559,22 @@
 }
 
 .metaverse-room-chat-log .metaverse-chat-form {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
+}
+
+.metaverse-room-chat-log .metaverse-chat-form label,
+.metaverse-room-chat-log .metaverse-chat-form input {
+  min-width: 0;
+}
+
+.metaverse-room-chat-log .metaverse-chat-form .button {
+  white-space: nowrap;
 }
 
 .metaverse-room-chat-log .metaverse-chat-list {
   max-height: 9rem;
+  min-height: 0;
 }
 
 .metaverse-room-chat-log .metaverse-chat-list li {
@@ -658,7 +670,7 @@
   .metaverse-room-chat-log {
     right: 0.75rem;
     width: auto;
-    max-height: 34%;
+    max-height: min(18rem, calc(100% - 5.5rem));
   }
 }
 

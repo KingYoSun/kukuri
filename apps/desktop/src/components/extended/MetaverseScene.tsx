@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { AlertTriangle } from 'lucide-react';
+import { MonitorPause } from 'lucide-react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
@@ -116,7 +116,7 @@ function AvatarStaleIndicator({ stale }: { stale: boolean }) {
   return (
     <Html position={[0.32, 1.9, 0]} center distanceFactor={8} occlude={false}>
       <div className='metaverse-avatar-stale-icon' aria-label='Remote avatar stale'>
-        <AlertTriangle className='size-3' aria-hidden='true' />
+        <MonitorPause className='size-3' aria-hidden='true' />
       </div>
     </Html>
   );
