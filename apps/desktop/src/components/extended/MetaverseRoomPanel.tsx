@@ -1,10 +1,11 @@
 ﻿import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
-  AlertTriangle,
   Box,
   ChevronDown,
   Cuboid,
+  LogOut,
   MessageSquare,
+  MonitorPause,
   Move3D,
   PanelRightClose,
   PanelRightOpen,
@@ -137,6 +138,14 @@ function latestChatBubbleFromMessage(message: RoomChatMessage, now = Date.now())
   };
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tagName = target.tagName.toLowerCase();
+  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+}
+
 function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState }) {
   if (state === 'live') {
     return <Wifi className='size-4' aria-hidden='true' />;
@@ -145,7 +154,7 @@ function ConnectionStateIcon({ state }: { state: MetaverseRoomConnectionState })
     return <RefreshCw className='size-4' aria-hidden='true' />;
   }
   if (state === 'stale') {
-    return <AlertTriangle className='size-4' aria-hidden='true' />;
+    return <MonitorPause className='size-4' aria-hidden='true' />;
   }
   return <WifiOff className='size-4' aria-hidden='true' />;
 }
@@ -192,6 +201,7 @@ export function MetaverseRoomPanel({
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const sharedObjectRef = useRef<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
+  const messageInputRef = useRef<HTMLInputElement | null>(null);
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
@@ -315,6 +325,23 @@ export function MetaverseRoomPanel({
           ...current,
           [data.presence.peerId]: data.presence,
         }));
+      }
+      if (data.type === 'presence.leave' && data.peerId !== localPeerId) {
+        setPeerPresence((current) => {
+          const next = { ...current };
+          delete next[data.peerId];
+          return next;
+        });
+        setRemoteTransforms((current) => {
+          const next = { ...current };
+          delete next[data.peerId];
+          return next;
+        });
+        setLatestChatByPeer((current) => {
+          const next = { ...current };
+          delete next[data.peerId];
+          return next;
+        });
       }
       if (data.type === 'avatar.transform' && data.transform.peerId !== localPeerId) {
         setRemoteTransforms((current) => ({
@@ -489,6 +516,23 @@ export function MetaverseRoomPanel({
             });
         }
       }
+      if (event.type === 'presence_leave' && event.peer_id !== localPeerId) {
+        setPeerPresence((current) => {
+          const next = { ...current };
+          delete next[event.peer_id];
+          return next;
+        });
+        setRemoteTransforms((current) => {
+          const next = { ...current };
+          delete next[event.peer_id];
+          return next;
+        });
+        setLatestChatByPeer((current) => {
+          const next = { ...current };
+          delete next[event.peer_id];
+          return next;
+        });
+      }
       if (event.type === 'avatar_transform' && event.transform.peer_id !== localPeerId) {
         setRemoteTransforms((current) => ({
           ...current,
@@ -609,9 +653,45 @@ export function MetaverseRoomPanel({
     channelRef.current?.postMessage(event);
   }
 
+  function resetRoomRuntimeState() {
+    setRemoteTransforms({});
+    setPeerPresence({});
+    setLatestChatByPeer({});
+    setPollErrorCount(0);
+    setLastRoomActivityAt(Date.now());
+    setRecoveringUntil(0);
+    setLastSentSeq(0);
+    lastSentTransformRef.current = null;
+    lastBackendEventEnvelopeIdRef.current = null;
+  }
+
   function handleJoinRoom(roomId: string) {
     setJoinedRoomIds((current) => new Set(current).add(roomId));
     setSelectedRoomId(roomId);
+  }
+
+  function handleLeaveRoom() {
+    if (!selectedRoom) {
+      return;
+    }
+    const roomId = selectedRoom.room_id;
+    const leftAt = Date.now();
+    emit({ type: 'presence.leave', roomId, peerId: localPeerId, leftAt });
+    void api.publishMetaverseRoomEvent(activeTopic, roomId, localPeerId, leftAt, {
+      type: 'presence_leave',
+      room_id: roomId,
+      peer_id: localPeerId,
+      left_at: leftAt,
+    }).catch((leaveError) => {
+      setError(leaveError instanceof Error ? leaveError.message : 'Failed to publish room leave');
+    });
+    setJoinedRoomIds((current) => {
+      const next = new Set(current);
+      next.delete(roomId);
+      return next;
+    });
+    setSelectedRoomId(null);
+    resetRoomRuntimeState();
   }
 
   function hostAuthor(room: GameRoomView): Profile | AuthorSocialView | null {
@@ -745,6 +825,33 @@ export function MetaverseRoomPanel({
     persistSharedObject(nextObject, room);
   }
 
+  useEffect(() => {
+    if (!selectedRoom) {
+      return;
+    }
+    let focusFrameId = 0;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      setChatOpen(true);
+      if (focusFrameId) {
+        window.cancelAnimationFrame(focusFrameId);
+      }
+      focusFrameId = window.requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (focusFrameId) {
+        window.cancelAnimationFrame(focusFrameId);
+      }
+    };
+  }, [selectedRoom]);
+
   return (
     <div className='metaverse-panel'>
       <Card className='shell-workspace-card metaverse-discovery-card'>
@@ -868,6 +975,16 @@ export function MetaverseRoomPanel({
                     <span>{connectionStateLabel(roomConnectionState)}</span>
                   </div>
                   <div className='metaverse-hud-toolbar' data-open={hudOpen}>
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className='metaverse-hud-icon-button'
+                      type='button'
+                      aria-label='Leave room'
+                      onClick={handleLeaveRoom}
+                    >
+                      <LogOut className='size-4' aria-hidden='true' />
+                    </Button>
                     <Button
                       variant='ghost'
                       size='icon'
@@ -1003,6 +1120,7 @@ export function MetaverseRoomPanel({
                         <Label>
                           <span className='sr-only'>Room chat message</span>
                           <Input
+                            ref={messageInputRef}
                             value={messageDraft}
                             placeholder='Say something in the room'
                             onChange={(event) => setMessageDraft(event.target.value)}

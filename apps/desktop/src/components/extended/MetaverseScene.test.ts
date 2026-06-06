@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
   METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS,
+  METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS,
   METAVERSE_ROOM_STALE_MS,
   isNewerRemoteTransform,
   isNewerSharedObject,
@@ -17,6 +18,7 @@ describe('metaverse avatar animation state', () => {
   test('uses low-latency transform intervals and a longer stale threshold', () => {
     expect(METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS).toBe(30);
     expect(METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS).toBe(150);
+    expect(METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS).toBe(0.14);
     expect(METAVERSE_ROOM_STALE_MS).toBe(45_000);
   });
 
