@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
+  METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS,
+  METAVERSE_ROOM_STALE_MS,
   isNewerRemoteTransform,
+  isNewerSharedObject,
   avatarAnimationForInput,
   mergeRoomChatMessages,
   normalizeAvatarAnimationState,
@@ -10,6 +14,12 @@ import {
 } from './MetaverseSceneModel';
 
 describe('metaverse avatar animation state', () => {
+  test('uses low-latency transform intervals and a longer stale threshold', () => {
+    expect(METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS).toBe(30);
+    expect(METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS).toBe(150);
+    expect(METAVERSE_ROOM_STALE_MS).toBe(45_000);
+  });
+
   test('derives keyboard animation state', () => {
     expect(avatarAnimationForInput([], false)).toBe('idle');
     expect(avatarAnimationForInput(['w'], false)).toBe('walk');
@@ -53,6 +63,22 @@ describe('metaverse avatar animation state', () => {
     expect(isNewerRemoteTransform(current, { ...current, seq: 2, sentAt: 400 })).toBe(false);
     expect(isNewerRemoteTransform(current, { ...current, seq: 4, sentAt: 250 })).toBe(true);
     expect(isNewerRemoteTransform(current, { ...current, sentAt: 301 })).toBe(true);
+  });
+
+  test('accepts only newer shared object updates', () => {
+    const current = {
+      object_id: 'mvp-object-1',
+      asset_ref: null,
+      primitive_fallback: 'cube' as const,
+      position: [0, 50, -240] as [number, number, number],
+      rotation: [0, 0, 0] as [number, number, number],
+      scale: [100, 100, 100] as [number, number, number],
+      updated_by: 'peer-a',
+      updated_at: 20,
+    };
+
+    expect(isNewerSharedObject(current, { ...current, position: [0, 50, -290], updated_at: 19 })).toBe(false);
+    expect(isNewerSharedObject(current, { ...current, position: [0, 50, -290], updated_at: 21 })).toBe(true);
   });
 
   test('deduplicates and caps room chat messages', () => {

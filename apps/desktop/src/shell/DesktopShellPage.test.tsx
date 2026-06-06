@@ -2105,7 +2105,7 @@ test('desktop shell primary nav jumps focus and settings drawer restores trigger
   const gameNav = within(getWorkspaceTabs()).getByRole('tab', { name: 'Game' });
   await user.click(gameNav);
 
-  const gameSection = screen.getByText('Game Rooms').closest('.shell-section');
+  const gameSection = screen.getByText('Metaverse Rooms').closest('.shell-section');
   if (!(gameSection instanceof HTMLElement)) {
     throw new Error('game section not found');
   }
@@ -2473,7 +2473,7 @@ test('share token smart link previews before import and joins only after confirm
   });
 });
 
-test('copy link actions write canonical hash routes for topic, post, live, and game', async () => {
+test('copy link actions write canonical hash routes for topic, post, and live', async () => {
   const user = userEvent.setup();
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(window.navigator, 'clipboard', {
@@ -2583,17 +2583,8 @@ test('copy link actions write canonical hash routes for topic, post, live, and g
   });
 
   await selectWorkspace(user, 'Game');
-  const gameArticle = screen.getByText('Room Demo').closest('article');
-  if (!(gameArticle instanceof HTMLElement)) {
-    throw new Error('expected game article');
-  }
-  await user.click(within(gameArticle).getByRole('button', { name: 'Copy link' }));
-  expect(writeText).toHaveBeenLastCalledWith(
-    '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo'
-  );
-  await waitFor(() => {
-    expect(screen.getAllByRole('status')).toHaveLength(1);
-  });
+  expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
+  expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
 });
 
 test('channel settings copy removes duplicate summary and share button icon', async () => {
@@ -2714,7 +2705,7 @@ test('thread focus auto-scroll runs only once even when the thread loads additio
   expect(scrollIntoView).toHaveBeenCalledTimes(1);
 });
 
-test('desktop shell can create and update a game room', async () => {
+test('desktop shell game workspace hides score game room list and keeps metaverse rooms', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
@@ -2725,24 +2716,13 @@ test('desktop shell can create and update a game room', async () => {
   await user.click(within(gameDialog).getByRole('button', { name: 'Create Room' }));
 
   await waitFor(() => {
-    expect(screen.getByText('Grand Finals')).toBeInTheDocument();
-    expect(screen.getByLabelText(/game-.*-status/)).toBeInTheDocument();
+    expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
   });
-  expect(screen.getByText('set one')).toBeInTheDocument();
-  expect(screen.getByLabelText(/game-.*-Alice-score/)).toBeInTheDocument();
-
-  await user.selectOptions(screen.getByLabelText(/game-.*-status/), 'Running');
-  await user.clear(screen.getByLabelText(/game-.*-phase/));
-  await user.type(screen.getByLabelText(/game-.*-phase/), 'Round 3');
-  await user.clear(screen.getByLabelText(/game-.*-Alice-score/));
-  await user.type(screen.getByLabelText(/game-.*-Alice-score/), '2');
-  await user.click(screen.getByRole('button', { name: 'Save Room' }));
-
-  await waitFor(() => {
-    expect(screen.getByLabelText(/game-.*-status/)).toHaveValue('Running');
-  });
-  expect(screen.getByText('phase: Round 3')).toBeInTheDocument();
-  expect(screen.getByDisplayValue('2')).toBeInTheDocument();
+  expect(screen.queryByText('Game Rooms')).not.toBeInTheDocument();
+  expect(screen.queryByText('No game rooms')).not.toBeInTheDocument();
+  expect(screen.queryByText('Grand Finals')).not.toBeInTheDocument();
+  expect(screen.queryByText('set one')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/game-.*-status/)).not.toBeInTheDocument();
 });
 
 test('single attach button classifies mixed image and video files', async () => {
@@ -3715,7 +3695,8 @@ test('profile social management updates follow and mute lists and muted authors 
   await waitFor(() => {
     expect(screen.queryByText('Muted Room')).not.toBeInTheDocument();
   });
-  expect(screen.getByText('Visible Room')).toBeInTheDocument();
+  expect(screen.queryByText('Visible Room')).not.toBeInTheDocument();
+  expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
 });
 
 test('author detail shows via authors and follow action updates relationship', async () => {

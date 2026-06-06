@@ -104,9 +104,12 @@ export const DEFAULT_AVATAR_ASSET_NAME = 'blumochichi.vrm';
 export const DEFAULT_AVATAR_ASSET_URL = `/${DEFAULT_AVATAR_ASSET_NAME}`;
 export const METAVERSE_CHAT_HISTORY_LIMIT = 100;
 export const METAVERSE_CHAT_BUBBLE_TTL_MS = 8_000;
-export const METAVERSE_ROOM_STALE_MS = 15_000;
+export const METAVERSE_ROOM_STALE_MS = 45_000;
 export const METAVERSE_ROOM_HEARTBEAT_MS = 5_000;
 export const METAVERSE_ROOM_RECOVERY_MS = 10_000;
+export const METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS = 30;
+export const METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS = 150;
+export const METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS = 0.06;
 
 export const AVATAR_GROUND_Y = 0;
 export const AVATAR_JUMP_VELOCITY = 520;
@@ -165,6 +168,16 @@ export function isNewerRemoteTransform(
     return incoming.seq > current.seq;
   }
   return incoming.sentAt > current.sentAt;
+}
+
+export function isNewerSharedObject(
+  current: SharedRoomObjectV1 | null | undefined,
+  incoming: SharedRoomObjectV1
+): boolean {
+  if (!current) {
+    return true;
+  }
+  return incoming.updated_at > current.updated_at;
 }
 
 export function mergeRoomChatMessages(
