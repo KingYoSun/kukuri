@@ -66,9 +66,20 @@ export type RoomChatMessage = {
   roomId: string;
   messageId: string;
   authorPeerId: string;
+  displayName?: string | null;
   body: string;
   createdAt: number;
 };
+
+export type LatestChatBubble = {
+  peerId: string;
+  displayName: string | null;
+  body: string;
+  createdAt: number;
+  expiresAt: number;
+};
+
+export type MetaverseRoomConnectionState = 'live' | 'stale' | 'recovering' | 'offline';
 
 export type MetaverseRoomEvent =
   | { type: 'presence.join'; presence: PeerPresence }
@@ -91,6 +102,11 @@ export const DEFAULT_SHARED_OBJECT: SharedRoomObjectV1 = {
 
 export const DEFAULT_AVATAR_ASSET_NAME = 'blumochichi.vrm';
 export const DEFAULT_AVATAR_ASSET_URL = `/${DEFAULT_AVATAR_ASSET_NAME}`;
+export const METAVERSE_CHAT_HISTORY_LIMIT = 100;
+export const METAVERSE_CHAT_BUBBLE_TTL_MS = 8_000;
+export const METAVERSE_ROOM_STALE_MS = 15_000;
+export const METAVERSE_ROOM_HEARTBEAT_MS = 5_000;
+export const METAVERSE_ROOM_RECOVERY_MS = 10_000;
 
 export const AVATAR_GROUND_Y = 0;
 export const AVATAR_JUMP_VELOCITY = 520;
@@ -149,4 +165,17 @@ export function isNewerRemoteTransform(
     return incoming.seq > current.seq;
   }
   return incoming.sentAt > current.sentAt;
+}
+
+export function mergeRoomChatMessages(
+  current: RoomChatMessage[],
+  incoming: RoomChatMessage[]
+): RoomChatMessage[] {
+  const byId = new Map<string, RoomChatMessage>();
+  for (const message of [...current, ...incoming]) {
+    byId.set(message.messageId, message);
+  }
+  return Array.from(byId.values())
+    .sort((left, right) => left.createdAt - right.createdAt || left.messageId.localeCompare(right.messageId))
+    .slice(-METAVERSE_CHAT_HISTORY_LIMIT);
 }

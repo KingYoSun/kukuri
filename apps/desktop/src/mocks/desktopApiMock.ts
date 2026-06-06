@@ -967,6 +967,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
               rotation: [0, 180, 0],
             },
             asset_refs: [],
+            chat_history: [],
           },
           manifest_blob_hash: `mock-${roomId}`,
           updated_at: now,
@@ -1272,6 +1273,28 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       };
       const key = `${topic}::${roomId}`;
       metaverseRoomEventsByRoom[key] = [...(metaverseRoomEventsByRoom[key] ?? []), view].slice(-512);
+      if (event.type === 'chat_message') {
+        gameRoomsByTopic[topic] = (gameRoomsByTopic[topic] ?? []).map((room) => {
+          if (room.room_id !== roomId || !room.metaverse) {
+            return room;
+          }
+          const chatHistory = [
+            ...(room.metaverse.chat_history ?? []).filter(
+              (message) => message.message_id !== event.message.message_id
+            ),
+            event.message,
+          ].slice(-100);
+          return withGameRoomDefaults({
+            ...room,
+            metaverse: {
+              ...room.metaverse,
+              chat_history: chatHistory,
+            },
+            updated_at: now,
+            manifest_blob_hash: `mock-${roomId}-${now}`,
+          });
+        });
+      }
       return view;
     },
     async listMetaverseRoomEvents(topic, roomId, afterEnvelopeId = null, limit = null) {

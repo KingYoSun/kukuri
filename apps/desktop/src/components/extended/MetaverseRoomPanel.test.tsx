@@ -18,6 +18,8 @@ vi.mock('./MetaverseScene', () => ({
     room: GameRoomView;
     localPeerId: string;
     sharedObject: SharedRoomObjectV1;
+    latestChatByPeer: Record<string, { body: string }>;
+    connectionState: 'live' | 'stale' | 'recovering' | 'offline';
     onLocalTransform: (transform: {
       roomId: string;
       peerId: string;
@@ -51,6 +53,10 @@ vi.mock('./MetaverseScene', () => ({
         Mark animation fallback
       </button>
       <span>{props.sharedObject.object_id}</span>
+      <span>Scene connection: {props.connectionState}</span>
+      {Object.entries(props.latestChatByPeer).map(([peerId, bubble]) => (
+        <span key={peerId}>{`Bubble ${peerId}: ${bubble.body}`}</span>
+      ))}
       {props.hud}
     </div>
   ),
@@ -381,5 +387,102 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     expect(screen.getByText(/fallback-primitive/)).toBeInTheDocument();
+  });
+
+  test('renders durable room chat history when joining a room', async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+    const roomWithHistory: GameRoomView = {
+      ...room,
+      metaverse: {
+        ...room.metaverse!,
+        chat_history: [
+          {
+            room_id: room.room_id,
+            message_id: 'durable-chat-1',
+            author_peer_id: 'peer-history',
+            display_name: 'History Peer',
+            body: 'durable hello',
+            created_at: 12,
+          },
+        ],
+      },
+    };
+
+    renderPanel(api, { rooms: [roomWithHistory] });
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
+    expect(screen.getByText('History Peer')).toBeInTheDocument();
+    expect(screen.getByText('durable hello')).toBeInTheDocument();
+  });
+
+  test('shows offline room status when sync connectivity is unhealthy', async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockRejectedValue(new Error('poll failed')),
+    };
+    const offlineStatus = {
+      ...createSyncStatus(),
+      connected: false,
+      delivery_state: 'Offline' as const,
+      peer_count: 0,
+    };
+
+    renderPanel(api, { syncStatus: offlineStatus });
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    expect(screen.getByText('Offline')).toBeInTheDocument();
+    expect(screen.getByText('Scene connection: offline')).toBeInTheDocument();
+  });
+
+  test('sends room chat to the log, backend event, and avatar bubble', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
+    const api: DesktopApi = {
+      ...baseApi,
+      publishMetaverseRoomEvent,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.type(screen.getByPlaceholderText('Say something in the room'), 'hello room');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(screen.getByText('hello room')).toBeInTheDocument();
+    expect(screen.getByText(/Bubble .*hello room/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        publishMetaverseRoomEvent.mock.calls.some(
+          ([, , , , event]) => event.type === 'chat_message' && event.message.body === 'hello room'
+        )
+      ).toBe(true);
+    });
+  });
+
+  test('shared object movement persists without closing the room viewport', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const updateMetaverseRoom = vi.fn(baseApi.updateMetaverseRoom);
+    const api: DesktopApi = {
+      ...baseApi,
+      updateMetaverseRoom,
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: /Forward/ }));
+
+    await waitFor(() => {
+      expect(updateMetaverseRoom).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
   });
 });

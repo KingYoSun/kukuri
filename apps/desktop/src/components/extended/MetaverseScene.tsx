@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
@@ -21,6 +22,8 @@ import {
   type AvatarAssetStatus,
   type AvatarPhysicsState,
   type AvatarTransform,
+  type LatestChatBubble,
+  type MetaverseRoomConnectionState,
   type MetaverseVec3,
   type PeerPresence,
 } from './MetaverseSceneModel';
@@ -32,6 +35,9 @@ type SceneProps = {
   peerPresence: Record<string, PeerPresence>;
   sharedObject: SharedRoomObjectV1;
   avatarAssetUrl: string | null;
+  latestChatByPeer: Record<string, LatestChatBubble>;
+  connectionState: MetaverseRoomConnectionState;
+  now: number;
   hud: ReactNode;
   onLocalTransform: (transform: AvatarTransform) => void;
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
@@ -82,6 +88,19 @@ function makePrimitiveAvatar(color: number) {
         <meshStandardMaterial color={0xf5d0c5} roughness={0.65} />
       </mesh>
     </>
+  );
+}
+
+function AvatarChatBubble({ bubble, stale }: { bubble?: LatestChatBubble; stale?: boolean }) {
+  if (!bubble && !stale) {
+    return null;
+  }
+  return (
+    <Html position={[0, 1.9, 0]} center distanceFactor={8} occlude={false}>
+      <div className='metaverse-avatar-bubble' data-stale={stale ? 'true' : 'false'}>
+        {bubble ? <span>{bubble.body}</span> : <span>stale</span>}
+      </div>
+    </Html>
   );
 }
 
@@ -372,12 +391,17 @@ function LocalAvatar({
   room,
   localPeerId,
   avatarAssetUrl,
+  chatBubble,
   onLocalTransform,
   onAvatarAssetStatus,
-}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus'>) {
+}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus'> & {
+  chatBubble?: LatestChatBubble;
+}) {
   const groupRef = useRef<THREE.Group | null>(null);
   const spawnPosition = room.metaverse?.default_spawn.position;
   const spawnRotation = room.metaverse?.default_spawn.rotation;
+  const spawnPositionKey = spawnPosition?.join(',');
+  const spawnRotationKey = spawnRotation?.join(',');
   const transformRef = useRef(initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation));
   const physicsRef = useRef<AvatarPhysicsState>({ verticalVelocity: 0, grounded: true });
   const seqRef = useRef(0);
@@ -394,7 +418,13 @@ function LocalAvatar({
   }, [onLocalTransform]);
 
   useEffect(() => {
-    const nextTransform = initialAvatarTransform(room.room_id, localPeerId, spawnPosition, spawnRotation);
+    const nextSpawnPosition = spawnPositionKey
+      ? (spawnPositionKey.split(',').map(Number) as MetaverseVec3)
+      : undefined;
+    const nextSpawnRotation = spawnRotationKey
+      ? (spawnRotationKey.split(',').map(Number) as MetaverseVec3)
+      : undefined;
+    const nextTransform = initialAvatarTransform(room.room_id, localPeerId, nextSpawnPosition, nextSpawnRotation);
     transformRef.current = nextTransform;
     physicsRef.current = { verticalVelocity: 0, grounded: nextTransform.position[1] <= AVATAR_GROUND_Y };
     seqRef.current = 0;
@@ -405,7 +435,7 @@ function LocalAvatar({
       groupRef.current.position.copy(scenePosition(nextTransform.position));
       groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextTransform.rotation[1]);
     }
-  }, [localPeerId, room.room_id, spawnPosition, spawnRotation]);
+  }, [localPeerId, room.room_id, spawnPositionKey, spawnRotationKey]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -512,6 +542,7 @@ function LocalAvatar({
         animationRef={animationRef}
         statusTarget={onAvatarAssetStatus}
       />
+      <AvatarChatBubble bubble={chatBubble} />
     </group>
   );
 }
@@ -519,13 +550,20 @@ function LocalAvatar({
 function RemoteAvatar({
   transform,
   presence,
+  chatBubble,
+  connectionState,
+  now,
 }: {
   transform: AvatarTransform;
   presence: PeerPresence | null;
+  chatBubble?: LatestChatBubble;
+  connectionState: MetaverseRoomConnectionState;
+  now: number;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const targetRef = useRef(transform);
   const animationRef = useRef<AvatarAnimationState>(transform.animation);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (isNewerRemoteTransform(targetRef.current, transform)) {
@@ -541,18 +579,23 @@ function RemoteAvatar({
     }
     const target = targetRef.current;
     const targetPosition = scenePosition(target.position);
-    const alpha = Math.min(1, deltaSeconds * 12);
-    group.position.lerp(targetPosition, alpha);
+    if (!initializedRef.current) {
+      group.position.copy(targetPosition);
+      group.rotation.y = THREE.MathUtils.degToRad(target.rotation[1]);
+      initializedRef.current = true;
+      return;
+    }
+    const alpha = 1 - Math.exp(-deltaSeconds / 0.12);
+    group.position.lerp(targetPosition, Math.min(1, alpha));
     const targetYaw = THREE.MathUtils.degToRad(target.rotation[1]);
-    group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, alpha);
-    group.visible = Date.now() - target.sentAt < 15_000;
+    group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, Math.min(1, alpha));
   });
+
+  const stale = connectionState !== 'live' || now - transform.sentAt > 15_000;
 
   return (
     <group
       ref={groupRef}
-      position={scenePosition(transform.position)}
-      rotation={[0, THREE.MathUtils.degToRad(transform.rotation[1]), 0]}
       userData={{ displayName: presence?.displayName ?? transform.peerId }}
     >
       <AvatarModel
@@ -560,6 +603,7 @@ function RemoteAvatar({
         color={0xe37070}
         animationRef={animationRef}
       />
+      <AvatarChatBubble bubble={chatBubble} stale={stale && !chatBubble} />
     </group>
   );
 }
@@ -592,6 +636,9 @@ function SceneContents({
   peerPresence,
   sharedObject,
   avatarAssetUrl,
+  latestChatByPeer,
+  connectionState,
+  now,
   onLocalTransform,
   onAvatarAssetStatus,
 }: Omit<SceneProps, 'hud'>) {
@@ -617,6 +664,7 @@ function SceneContents({
         room={room}
         localPeerId={localPeerId}
         avatarAssetUrl={avatarAssetUrl}
+        chatBubble={latestChatByPeer[localPeerId]}
         onLocalTransform={onLocalTransform}
         onAvatarAssetStatus={onAvatarAssetStatus}
       />
@@ -625,6 +673,9 @@ function SceneContents({
           key={peerId}
           transform={transform}
           presence={peerPresence[peerId] ?? null}
+          chatBubble={latestChatByPeer[peerId]}
+          connectionState={connectionState}
+          now={now}
         />
       ))}
       <SharedObject object={sharedObject} />
@@ -639,6 +690,9 @@ export function MetaverseScene({
   peerPresence,
   sharedObject,
   avatarAssetUrl,
+  latestChatByPeer,
+  connectionState,
+  now,
   hud,
   onLocalTransform,
   onAvatarAssetStatus,
@@ -658,6 +712,9 @@ export function MetaverseScene({
           peerPresence={peerPresence}
           sharedObject={sharedObject}
           avatarAssetUrl={avatarAssetUrl}
+          latestChatByPeer={latestChatByPeer}
+          connectionState={connectionState}
+          now={now}
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
         />

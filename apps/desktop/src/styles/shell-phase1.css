@@ -293,6 +293,39 @@
   border-radius: 0.4rem;
 }
 
+.metaverse-connection-badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+}
+
+.metaverse-connection-badge[data-state='live'] {
+  color: var(--accent);
+}
+
+.metaverse-connection-badge[data-state='stale'],
+.metaverse-connection-badge[data-state='recovering'] {
+  color: var(--warning);
+}
+
+.metaverse-connection-badge[data-state='offline'] {
+  color: var(--danger);
+}
+
 .metaverse-room-hud {
   position: absolute;
   top: 4rem;
@@ -474,6 +507,46 @@
   gap: 0.6rem;
 }
 
+.metaverse-room-chat-log {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.55rem;
+  width: min(27rem, calc(100% - 1.5rem));
+  max-height: 42%;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-panel) 80%, transparent);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+}
+
+.metaverse-room-chat-log-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metaverse-room-chat-log .metaverse-chat-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.metaverse-room-chat-log .metaverse-chat-list {
+  max-height: 9rem;
+}
+
+.metaverse-room-chat-log .metaverse-chat-list li {
+  background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
+}
+
 .metaverse-chat-list {
   display: grid;
   gap: 0.5rem;
@@ -501,6 +574,26 @@
 .metaverse-chat-list small {
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.metaverse-avatar-bubble {
+  max-width: 14rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-panel) 90%, transparent);
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  text-align: center;
+  box-shadow: var(--shadow-panel);
+  white-space: normal;
+}
+
+.metaverse-avatar-bubble[data-stale='true'] {
+  color: var(--warning);
 }
 
 @media (max-width: 900px) {
@@ -532,6 +625,12 @@
     right: 1rem;
     bottom: 1.6rem;
     height: calc(46% - 1.7rem);
+  }
+
+  .metaverse-room-chat-log {
+    right: 0.75rem;
+    width: auto;
+    max-height: 34%;
   }
 }
 

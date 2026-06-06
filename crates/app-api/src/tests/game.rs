@@ -392,6 +392,183 @@ async fn metaverse_room_events_are_signed_and_delivered_over_hint_transport() {
 }
 
 #[tokio::test]
+async fn metaverse_chat_messages_persist_to_recent_room_history() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:metaverse-chat-history";
+    let room_id = app
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "chat history".into(),
+                description: "recent messages".into(),
+                max_peers: Some(4),
+            },
+        )
+        .await
+        .expect("create metaverse room");
+
+    app.publish_metaverse_room_event(
+        topic,
+        PublishMetaverseRoomEventInput {
+            room_id: room_id.clone(),
+            peer_id: "peer-a".into(),
+            seq: 1,
+            event: MetaverseRoomEventV1::ChatMessage {
+                message: MetaverseRoomChatMessageV1 {
+                    room_id: room_id.clone(),
+                    message_id: "chat-1".into(),
+                    author_peer_id: "peer-a".into(),
+                    display_name: Some("Peer A".into()),
+                    body: "persistent hello".into(),
+                    created_at: Utc::now().timestamp_millis(),
+                },
+            },
+        },
+    )
+    .await
+    .expect("publish chat message");
+
+    let room = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list rooms")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("metaverse room");
+    let history = &room.metaverse.as_ref().expect("metaverse").chat_history;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].message_id, "chat-1");
+    assert_eq!(history[0].body, "persistent hello");
+}
+
+#[tokio::test]
+async fn metaverse_avatar_transforms_do_not_mutate_room_history() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:metaverse-transform-ephemeral";
+    let room_id = app
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "ephemeral transforms".into(),
+                description: "no durable writes".into(),
+                max_peers: Some(4),
+            },
+        )
+        .await
+        .expect("create metaverse room");
+    let before = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list rooms before")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("room before");
+
+    app.publish_metaverse_room_event(
+        topic,
+        PublishMetaverseRoomEventInput {
+            room_id: room_id.clone(),
+            peer_id: "peer-a".into(),
+            seq: 1,
+            event: MetaverseRoomEventV1::AvatarTransform {
+                transform: MetaverseAvatarTransformV1 {
+                    room_id: room_id.clone(),
+                    peer_id: "peer-a".into(),
+                    seq: 1,
+                    position: [100, 0, -50],
+                    rotation: [0, 90, 0],
+                    animation: Some("walk".into()),
+                    sent_at: Utc::now().timestamp_millis(),
+                },
+            },
+        },
+    )
+    .await
+    .expect("publish transform");
+
+    let after = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list rooms after")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("room after");
+    assert_eq!(after.manifest_blob_hash, before.manifest_blob_hash);
+    assert!(
+        after
+            .metaverse
+            .as_ref()
+            .expect("metaverse")
+            .chat_history
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn metaverse_chat_history_keeps_latest_one_hundred_messages() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:metaverse-chat-cap";
+    let room_id = app
+        .create_metaverse_room(
+            topic,
+            CreateMetaverseRoomInput {
+                title: "chat cap".into(),
+                description: "recent only".into(),
+                max_peers: Some(4),
+            },
+        )
+        .await
+        .expect("create metaverse room");
+
+    for seq in 0..105_u64 {
+        app.publish_metaverse_room_event(
+            topic,
+            PublishMetaverseRoomEventInput {
+                room_id: room_id.clone(),
+                peer_id: "peer-a".into(),
+                seq,
+                event: MetaverseRoomEventV1::ChatMessage {
+                    message: MetaverseRoomChatMessageV1 {
+                        room_id: room_id.clone(),
+                        message_id: format!("chat-{seq}"),
+                        author_peer_id: "peer-a".into(),
+                        display_name: None,
+                        body: format!("message {seq}"),
+                        created_at: Utc::now().timestamp_millis(),
+                    },
+                },
+            },
+        )
+        .await
+        .expect("publish chat message");
+    }
+
+    let room = app
+        .list_game_rooms(topic)
+        .await
+        .expect("list rooms")
+        .into_iter()
+        .find(|room| room.room_id == room_id)
+        .expect("metaverse room");
+    let history = &room.metaverse.as_ref().expect("metaverse").chat_history;
+    assert_eq!(history.len(), 100);
+    assert_eq!(
+        history.first().map(|message| message.message_id.as_str()),
+        Some("chat-5")
+    );
+    assert_eq!(
+        history.last().map(|message| message.message_id.as_str()),
+        Some("chat-104")
+    );
+}
+
+#[tokio::test]
 async fn metaverse_room_event_rejects_mismatched_payload_identity() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(FakeTransport::new("self", FakeNetwork::default()));
@@ -610,6 +787,26 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
     )
     .await
     .expect("update shared object");
+    app.publish_metaverse_room_event(
+        topic,
+        PublishMetaverseRoomEventInput {
+            room_id: room_id.clone(),
+            peer_id: "peer-a".into(),
+            seq: 1,
+            event: MetaverseRoomEventV1::ChatMessage {
+                message: MetaverseRoomChatMessageV1 {
+                    room_id: room_id.clone(),
+                    message_id: "restart-chat-1".into(),
+                    author_peer_id: "peer-a".into(),
+                    display_name: Some("Peer A".into()),
+                    body: "restored room chat".into(),
+                    created_at: Utc::now().timestamp_millis(),
+                },
+            },
+        },
+    )
+    .await
+    .expect("publish restart chat");
 
     let restarted_store = Arc::new(MemoryStore::default());
     let restarted = AppService::new_with_services(
@@ -637,6 +834,14 @@ async fn metaverse_room_manifest_restores_after_restart_from_docs_and_blobs() {
             .as_ref()
             .map(|state| state.scene.shared_object.position),
         Some([150, 50, -90])
+    );
+    assert_eq!(
+        restored
+            .metaverse
+            .as_ref()
+            .and_then(|state| state.chat_history.first())
+            .map(|message| message.body.as_str()),
+        Some("restored room chat")
     );
     assert!(!restored.manifest_blob_hash.trim().is_empty());
 }

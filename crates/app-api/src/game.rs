@@ -1,6 +1,8 @@
 use crate::service::*;
 use kukuri_core::MetaverseRoomEventV1;
 
+const METAVERSE_CHAT_HISTORY_LIMIT: usize = 100;
+
 impl AppService {
     pub async fn list_game_rooms(&self, topic_id: &str) -> Result<Vec<GameRoomView>> {
         self.list_game_rooms_scoped(topic_id, TimelineScope::Public)
@@ -236,6 +238,7 @@ impl AppService {
                 rotation: [0, 180, 0],
             },
             asset_refs: Vec::new(),
+            chat_history: Vec::new(),
         };
         let manifest = GameRoomManifestBlobV1 {
             room_id: room_id.clone(),
@@ -451,7 +454,7 @@ impl AppService {
         input: PublishMetaverseRoomEventInput,
     ) -> Result<MetaverseRoomEventView> {
         self.ensure_topic_subscription(topic_id).await?;
-        let (_, state, manifest) = self
+        let (source_replica_id, state, mut manifest) = self
             .fetch_game_room_state_and_manifest(topic_id, input.room_id.as_str())
             .await?
             .ok_or_else(|| anyhow::anyhow!("metaverse room not found"))?;
@@ -492,6 +495,43 @@ impl AppService {
         let view = parse_metaverse_room_event_envelope(envelope.clone(), now, "local".to_string())?
             .ok_or_else(|| anyhow::anyhow!("failed to build metaverse room event"))?;
         push_metaverse_room_event_buffer(&self.metaverse_room_events, view.clone()).await;
+        if let MetaverseRoomEventV1::ChatMessage { message } = &content.event {
+            let Some(metaverse) = manifest.metaverse.as_mut() else {
+                anyhow::bail!("metaverse room state is missing");
+            };
+            if !metaverse
+                .chat_history
+                .iter()
+                .any(|existing| existing.message_id == message.message_id)
+            {
+                metaverse.chat_history.push(message.clone());
+                if metaverse.chat_history.len() > METAVERSE_CHAT_HISTORY_LIMIT {
+                    let overflow = metaverse
+                        .chat_history
+                        .len()
+                        .saturating_sub(METAVERSE_CHAT_HISTORY_LIMIT);
+                    metaverse.chat_history.drain(0..overflow);
+                }
+                manifest.updated_at = now;
+                let persisted = self
+                    .persist_game_room_manifest(
+                        &source_replica_id,
+                        topic_id,
+                        manifest.clone(),
+                        state.created_at,
+                        envelope.id.clone(),
+                    )
+                    .await?;
+                self.projection_store
+                    .upsert_game_room_cache(game_projection_row_from_state(
+                        &persisted,
+                        &manifest,
+                        topic_id,
+                        &source_replica_id,
+                    ))
+                    .await?;
+            }
+        }
         self.hint_transport
             .publish_hint(
                 &channel_hint_topic_for(topic_id, state.channel_id.as_ref()),
