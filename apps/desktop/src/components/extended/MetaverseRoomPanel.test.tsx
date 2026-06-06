@@ -53,6 +53,7 @@ vi.mock('./MetaverseScene', () => ({
         Mark animation fallback
       </button>
       <span>{props.sharedObject.object_id}</span>
+      <span>Shared object position: {props.sharedObject.position.join(',')}</span>
       <span>Scene connection: {props.connectionState}</span>
       {Object.entries(props.latestChatByPeer).map(([peerId, bubble]) => (
         <span key={peerId}>{`Bubble ${peerId}: ${bubble.body}`}</span>
@@ -230,7 +231,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     });
   });
 
-  test('room HUD can be resized and collapsed', async () => {
+  test('room HUD can be collapsed without a resize mode', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
     const api: DesktopApi = {
@@ -249,15 +250,31 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.click(screen.getByRole('button', { name: 'Debug details' }));
     expect(screen.getByText(/Topic: kukuri:topic:demo/)).toBeInTheDocument();
 
-    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'compact');
-    await user.click(screen.getByRole('button', { name: 'Expand room HUD' }));
-    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'wide');
-    expect(screen.getByRole('button', { name: 'Shrink room HUD' })).toBeInTheDocument();
+    expect(document.querySelector('.metaverse-room-hud')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Expand room HUD' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Shrink room HUD' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));
     expect(document.querySelector('.metaverse-room-hud')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Open room HUD' }));
-    expect(document.querySelector('.metaverse-room-hud')).toHaveAttribute('data-size', 'wide');
+    expect(document.querySelector('.metaverse-room-hud')).toBeInTheDocument();
+  });
+
+  test('room chat can be closed and reopened', async () => {
+    const user = userEvent.setup();
+    const api = {
+      ...createDesktopMockApi(),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    renderPanel(api);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+
+    expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
+    expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open room chat' }));
+    expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
   });
 
   test('keeps create room controls collapsed until opened', async () => {
@@ -484,5 +501,35 @@ describe('MetaverseRoomPanel animation sharing', () => {
       expect(updateMetaverseRoom).toHaveBeenCalled();
     });
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
+  });
+
+  test('shared object optimistic movement is not rolled back by a stale refreshed room', async () => {
+    const user = userEvent.setup();
+    const baseApi = createDesktopMockApi();
+    const api: DesktopApi = {
+      ...baseApi,
+      updateMetaverseRoom: vi.fn().mockResolvedValue(undefined),
+      listMetaverseRoomEvents: vi.fn().mockResolvedValue([]),
+    };
+
+    function StaleRefreshHarness() {
+      const [rooms, setRooms] = useState<GameRoomView[]>([room]);
+      return panelElement(api, {
+        rooms,
+        onRefresh: async () => {
+          setRooms([{ ...room }]);
+        },
+      });
+    }
+
+    render(<StaleRefreshHarness />);
+    await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    expect(screen.getByText('Shared object position: 0,50,-240')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Forward/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Shared object position: 0,50,-290')).toBeInTheDocument();
+    });
   });
 });

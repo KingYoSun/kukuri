@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
+import { AlertTriangle } from 'lucide-react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
@@ -14,6 +15,10 @@ import type { GameRoomView, SharedRoomObjectV1 } from '@/lib/api';
 import {
   AVATAR_GROUND_Y,
   DEFAULT_AVATAR_ASSET_URL,
+  METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
+  METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS,
+  METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS,
+  METAVERSE_ROOM_STALE_MS,
   avatarAnimationForInput,
   initialAvatarTransform,
   isNewerRemoteTransform,
@@ -91,14 +96,27 @@ function makePrimitiveAvatar(color: number) {
   );
 }
 
-function AvatarChatBubble({ bubble, stale }: { bubble?: LatestChatBubble; stale?: boolean }) {
-  if (!bubble && !stale) {
+function AvatarChatBubble({ bubble }: { bubble?: LatestChatBubble }) {
+  if (!bubble) {
     return null;
   }
   return (
     <Html position={[0, 1.9, 0]} center distanceFactor={8} occlude={false}>
-      <div className='metaverse-avatar-bubble' data-stale={stale ? 'true' : 'false'}>
-        {bubble ? <span>{bubble.body}</span> : <span>stale</span>}
+      <div className='metaverse-avatar-bubble'>
+        <span>{bubble.body}</span>
+      </div>
+    </Html>
+  );
+}
+
+function AvatarStaleIndicator({ stale }: { stale: boolean }) {
+  if (!stale) {
+    return null;
+  }
+  return (
+    <Html position={[0.32, 1.9, 0]} center distanceFactor={8} occlude={false}>
+      <div className='metaverse-avatar-stale-icon' aria-label='Remote avatar stale'>
+        <AlertTriangle className='size-3' aria-hidden='true' />
       </div>
     </Html>
   );
@@ -516,7 +534,10 @@ function LocalAvatar({
       groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextRotation[1]);
     }
 
-    const sendInterval = moving || animation === 'jump' ? 50 : 220;
+    const sendInterval =
+      moving || animation === 'jump'
+        ? METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS
+        : METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS;
     const frameAt = performance.now();
     if (frameAt - lastSentAtRef.current >= sendInterval) {
       lastSentAtRef.current = frameAt;
@@ -585,13 +606,13 @@ function RemoteAvatar({
       initializedRef.current = true;
       return;
     }
-    const alpha = 1 - Math.exp(-deltaSeconds / 0.12);
+    const alpha = 1 - Math.exp(-deltaSeconds / METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS);
     group.position.lerp(targetPosition, Math.min(1, alpha));
     const targetYaw = THREE.MathUtils.degToRad(target.rotation[1]);
     group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, Math.min(1, alpha));
   });
 
-  const stale = connectionState !== 'live' || now - transform.sentAt > 15_000;
+  const stale = connectionState !== 'live' || now - transform.sentAt > METAVERSE_ROOM_STALE_MS;
 
   return (
     <group
@@ -603,7 +624,8 @@ function RemoteAvatar({
         color={0xe37070}
         animationRef={animationRef}
       />
-      <AvatarChatBubble bubble={chatBubble} stale={stale && !chatBubble} />
+      <AvatarChatBubble bubble={chatBubble} />
+      <AvatarStaleIndicator stale={stale} />
     </group>
   );
 }

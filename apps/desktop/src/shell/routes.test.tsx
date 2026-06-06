@@ -349,7 +349,7 @@ test('live session route restores and normalizes invalid session targets without
   expect(screen.getByRole('heading', { name: 'Live Sessions' })).toBeInTheDocument();
 });
 
-test('game room route restores and normalizes invalid room targets without leaving game', async () => {
+test('game route restores and normalizes invalid score room targets without showing score rooms', async () => {
   const firstRender = renderAtHash(
     '#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo',
     createDesktopMockApi({
@@ -375,7 +375,8 @@ test('game room route restores and normalizes invalid room targets without leavi
   await waitFor(() => {
     expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo&roomId=room-demo');
   });
-  expect(screen.getByText('Room Demo').closest('article')).toHaveClass('post-card-targeted');
+  expect(screen.getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
+  expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
 
   firstRender.unmount();
 
@@ -404,7 +405,8 @@ test('game room route restores and normalizes invalid room targets without leavi
   await waitFor(() => {
     expect(window.location.hash).toBe('#/game?topic=kukuri%3Atopic%3Ademo');
   });
-  expect(screen.getByRole('heading', { name: 'Game Rooms' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Metaverse Rooms' })).toBeInTheDocument();
+  expect(screen.queryByText('Room Demo')).not.toBeInTheDocument();
 });
 
 test('profile connections route restores the requested view', async () => {

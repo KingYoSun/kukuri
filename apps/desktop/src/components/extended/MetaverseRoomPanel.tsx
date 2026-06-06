@@ -4,9 +4,7 @@ import {
   Box,
   ChevronDown,
   Cuboid,
-  Maximize2,
   MessageSquare,
-  Minimize2,
   Move3D,
   PanelRightClose,
   PanelRightOpen,
@@ -15,6 +13,7 @@ import {
   Send,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
@@ -48,6 +47,7 @@ import {
   METAVERSE_ROOM_HEARTBEAT_MS,
   METAVERSE_ROOM_RECOVERY_MS,
   METAVERSE_ROOM_STALE_MS,
+  isNewerSharedObject,
   mergeRoomChatMessages,
   normalizeAvatarAnimationState,
   type AvatarAssetStatus,
@@ -171,7 +171,7 @@ export function MetaverseRoomPanel({
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [hudOpen, setHudOpen] = useState(true);
-  const [hudSize, setHudSize] = useState<'compact' | 'wide'>('compact');
+  const [chatOpen, setChatOpen] = useState(true);
   const [hudDebugOpen, setHudDebugOpen] = useState(false);
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
   const [peerPresence, setPeerPresence] = useState<Record<string, PeerPresence>>({});
@@ -191,6 +191,7 @@ export function MetaverseRoomPanel({
   const lastBackendEventEnvelopeIdRef = useRef<string | null>(null);
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
+  const sharedObjectRef = useRef<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
   const localPeerSeed = useId().replaceAll(':', '');
   const localPeerId = `${syncStatus.discovery.local_endpoint_id || syncStatus.local_author_pubkey || 'local'}:${localPeerSeed}`;
   const lastSentTransformRef = useRef<AvatarTransform | null>(null);
@@ -251,6 +252,10 @@ export function MetaverseRoomPanel({
   const localDisplayName = localProfile?.display_name?.trim() || localProfile?.name?.trim() || null;
 
   useEffect(() => {
+    sharedObjectRef.current = sharedObject;
+  }, [sharedObject]);
+
+  useEffect(() => {
     if (!selectedRoomId) {
       return;
     }
@@ -285,6 +290,7 @@ export function MetaverseRoomPanel({
     if (!selectedRoomRoomId) {
       return;
     }
+    sharedObjectRef.current = DEFAULT_SHARED_OBJECT;
     setSharedObject(DEFAULT_SHARED_OBJECT);
     setRemoteTransforms({});
     setPeerPresence({});
@@ -324,7 +330,13 @@ export function MetaverseRoomPanel({
         }));
       }
       if (data.type === 'object.update' && data.object.updated_by !== localPeerId) {
-        setSharedObject(data.object);
+        setSharedObject((current) => {
+          if (!isNewerSharedObject(current, data.object)) {
+            return current;
+          }
+          sharedObjectRef.current = data.object;
+          return data.object;
+        });
       }
     };
     return () => {
@@ -334,7 +346,14 @@ export function MetaverseRoomPanel({
   }, [localPeerId, selectedRoomRoomId]);
 
   useEffect(() => {
-    setSharedObject(selectedRoomSharedObject ?? DEFAULT_SHARED_OBJECT);
+    const nextObject = selectedRoomSharedObject ?? DEFAULT_SHARED_OBJECT;
+    setSharedObject((current) => {
+      if (!isNewerSharedObject(current, nextObject)) {
+        return current;
+      }
+      sharedObjectRef.current = nextObject;
+      return nextObject;
+    });
   }, [selectedRoomSharedObject]);
 
   useEffect(() => {
@@ -493,7 +512,13 @@ export function MetaverseRoomPanel({
         }));
       }
       if (event.type === 'object_update' && event.object.updated_by !== localPeerId) {
-        setSharedObject(event.object);
+        setSharedObject((current) => {
+          if (!isNewerSharedObject(current, event.object)) {
+            return current;
+          }
+          sharedObjectRef.current = event.object;
+          return event.object;
+        });
       }
     };
     const poll = async () => {
@@ -671,25 +696,11 @@ export function MetaverseRoomPanel({
     });
   }
 
-  async function moveSharedObject(delta: MetaverseVec3) {
-    if (!selectedRoom) {
-      return;
-    }
-    const nextObject: SharedRoomObjectV1 = {
-      ...sharedObject,
-      position: [
-        sharedObject.position[0] + delta[0],
-        sharedObject.position[1] + delta[1],
-        sharedObject.position[2] + delta[2],
-      ],
-      updated_by: localPeerId,
-      updated_at: Date.now(),
-    };
-    setSharedObject(nextObject);
-    emit({ type: 'object.update', roomId: selectedRoom.room_id, object: nextObject });
+  function persistSharedObject(nextObject: SharedRoomObjectV1, room: GameRoomView) {
+    emit({ type: 'object.update', roomId: room.room_id, object: nextObject });
     void api.publishMetaverseRoomEvent(
       activeTopic,
-      selectedRoom.room_id,
+      room.room_id,
       localPeerId,
       Date.now(),
       {
@@ -699,19 +710,39 @@ export function MetaverseRoomPanel({
     ).catch(() => {
       // Browser-only fallback is handled by BroadcastChannel.
     });
-    try {
-      await api.updateMetaverseRoom(
-        activeTopic,
-        selectedRoom.room_id,
-        selectedRoom.status,
-        nextObject.position,
-        nextObject.rotation,
-        nextObject.scale
-      );
-      await onRefresh();
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'Failed to persist shared object');
+    void api.updateMetaverseRoom(
+      activeTopic,
+      room.room_id,
+      room.status,
+      nextObject.position,
+      nextObject.rotation,
+      nextObject.scale
+    )
+      .then(() => onRefresh())
+      .catch((updateError) => {
+        setError(updateError instanceof Error ? updateError.message : 'Failed to persist shared object');
+      });
+  }
+
+  function moveSharedObject(delta: MetaverseVec3) {
+    if (!selectedRoom) {
+      return;
     }
+    const room = selectedRoom;
+    const current = sharedObjectRef.current;
+    const nextObject: SharedRoomObjectV1 = {
+      ...current,
+      position: [
+        current.position[0] + delta[0],
+        current.position[1] + delta[1],
+        current.position[2] + delta[2],
+      ],
+      updated_by: localPeerId,
+      updated_at: Date.now(),
+    };
+    sharedObjectRef.current = nextObject;
+    setSharedObject(nextObject);
+    persistSharedObject(nextObject, room);
   }
 
   return (
@@ -851,24 +882,10 @@ export function MetaverseRoomPanel({
                         <PanelRightOpen className='size-4' aria-hidden='true' />
                       )}
                     </Button>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='metaverse-hud-icon-button'
-                      type='button'
-                      aria-label={hudSize === 'compact' ? 'Expand room HUD' : 'Shrink room HUD'}
-                      onClick={() => setHudSize((size) => (size === 'compact' ? 'wide' : 'compact'))}
-                    >
-                      {hudSize === 'compact' ? (
-                        <Maximize2 className='size-4' aria-hidden='true' />
-                      ) : (
-                        <Minimize2 className='size-4' aria-hidden='true' />
-                      )}
-                    </Button>
                   </div>
                   {hudOpen ? (
                     <>
-                    <aside className='metaverse-room-hud' data-size={hudSize}>
+                    <aside className='metaverse-room-hud'>
                       <div className='panel-header metaverse-hud-header'>
                         <div>
                           <h3>{selectedRoom.title}</h3>
@@ -951,39 +968,64 @@ export function MetaverseRoomPanel({
                     </span>
                     </>
                   ) : null}
-                  <section className='metaverse-room-chat-log' aria-label='ROOM Chat'>
-                    <div className='metaverse-room-chat-log-header'>
+                  {chatOpen ? (
+                    <section className='metaverse-room-chat-log' aria-label='ROOM Chat'>
+                      <div className='metaverse-room-chat-log-header'>
+                        <span>
+                          <MessageSquare className='size-4' aria-hidden='true' />
+                          ROOM Chat
+                        </span>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='metaverse-chat-close-button'
+                          type='button'
+                          aria-label='Hide room chat'
+                          onClick={() => setChatOpen(false)}
+                        >
+                          <X className='size-4' aria-hidden='true' />
+                        </Button>
+                      </div>
+                      <ul className='metaverse-chat-list'>
+                        {messages.map((message) => (
+                          <li key={message.messageId}>
+                            <strong>
+                              {message.authorPeerId === localPeerId
+                                ? 'You'
+                                : message.displayName || message.authorPeerId.slice(0, 12)}
+                              <small>{formatLocalizedTime(message.createdAt, locale)}</small>
+                            </strong>
+                            <span>{message.body}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
+                        <Label>
+                          <span className='sr-only'>Room chat message</span>
+                          <Input
+                            value={messageDraft}
+                            placeholder='Say something in the room'
+                            onChange={(event) => setMessageDraft(event.target.value)}
+                          />
+                        </Label>
+                        <Button size='sm' type='submit'>
+                          <Send className='size-4' aria-hidden='true' />
+                          Send
+                        </Button>
+                      </form>
+                    </section>
+                  ) : (
+                    <Button
+                      variant='secondary'
+                      size='icon'
+                      className='metaverse-chat-toggle'
+                      type='button'
+                      aria-label='Open room chat'
+                      onClick={() => setChatOpen(true)}
+                    >
                       <MessageSquare className='size-4' aria-hidden='true' />
-                      <span>ROOM Chat</span>
-                    </div>
-                    <ul className='metaverse-chat-list'>
-                      {messages.map((message) => (
-                        <li key={message.messageId}>
-                          <strong>
-                            {message.authorPeerId === localPeerId
-                              ? 'You'
-                              : message.displayName || message.authorPeerId.slice(0, 12)}
-                            <small>{formatLocalizedTime(message.createdAt, locale)}</small>
-                          </strong>
-                          <span>{message.body}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <form className='metaverse-chat-form' onSubmit={handleSendMessage}>
-                      <Label>
-                        <span className='sr-only'>Room chat message</span>
-                        <Input
-                          value={messageDraft}
-                          placeholder='Say something in the room'
-                          onChange={(event) => setMessageDraft(event.target.value)}
-                        />
-                      </Label>
-                      <Button size='sm' type='submit'>
-                        <Send className='size-4' aria-hidden='true' />
-                        Send
-                      </Button>
-                    </form>
-                  </section>
+                    </Button>
+                  )}
                 </>
               )}
             />

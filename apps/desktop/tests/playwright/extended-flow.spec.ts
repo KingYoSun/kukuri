@@ -82,17 +82,18 @@ test('browser mock shell can run profile, private channel, live, and game flows'
   ).toBeVisible();
 
   await page.goto('/#/game');
+  await expect(page.getByRole('heading', { name: 'Metaverse Rooms' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Game Rooms' })).toHaveCount(0);
+  await expect(page.getByText('No game rooms', { exact: true })).toHaveCount(0);
   const gameDialog = await openFloatingActionDialog(page);
   await gameDialog.getByPlaceholder('Top 8 Finals').fill('Grand Finals');
   await gameDialog.getByPlaceholder('match summary').fill('set one');
   await gameDialog.getByPlaceholder('Alice, Bob').fill('Alice, Bob');
   await gameDialog.getByRole('button', { name: 'Create Room' }).click();
-  await expect(page.getByText('Grand Finals')).toBeVisible();
-  await page.getByLabel(/game-.*-status/).selectOption('Running');
-  await page.getByLabel(/game-.*-phase/).fill('Round 3');
-  await page.getByLabel(/game-.*-Alice-score/).fill('2');
-  await page.getByRole('button', { name: 'Save Room' }).click();
-  await expect(page.getByText('phase: Round 3')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Metaverse Rooms' })).toBeVisible();
+  await expect(page.getByText('Grand Finals')).toHaveCount(0);
+  await expect(page.getByText('set one')).toHaveCount(0);
+  await expect(page.getByLabel(/game-.*-status/)).toHaveCount(0);
 
   await page.goto('/#/profile?profileMode=edit');
   await page.getByPlaceholder('Visible label').fill('Browser Author');

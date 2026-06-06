@@ -9,22 +9,18 @@ import { ProfileEditorPanel } from '@/components/extended/ProfileEditorPanel';
 import { ProfileOverviewPanel } from '@/components/extended/ProfileOverviewPanel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
-import { Select } from '@/components/ui/select';
 import { SmartReferenceText } from '@/components/core/SmartReferenceText';
 import type { PrimarySection, ProfileConnectionsView } from '@/components/shell/types';
 
 import type {
   DesktopApi,
-  GameRoomStatus,
   PostView,
   ReactionKeyInput,
 } from '@/lib/api';
 import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
-import { buildGameLink, buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
+import { buildLiveLink, type InternalSmartReference } from '@/lib/internalLinks';
 import {
   timelineScopeStorageKey,
   type GameEditorDraft,
@@ -35,7 +31,6 @@ import {
   formatCount,
   localizeAudienceLabel,
   resolveProfilePictureSrc,
-  translateGameStatus,
   translateLiveStatus,
 } from '@/shell/selectors';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
@@ -145,8 +140,6 @@ export function DesktopShellPrimaryWorkspace({
   handleJoinLiveSession,
   handleLeaveLiveSession,
   handleEndLiveSession,
-  updateGameDraft,
-  handleUpdateGameRoom,
   openProfileOverview,
   openProfileEditor,
   openProfileConnections,
@@ -164,8 +157,6 @@ export function DesktopShellPrimaryWorkspace({
     bookmarkedPosts,
     bookmarkedReactionAssets,
     composerError,
-    gameError,
-    gameSavingByRoomId,
     knownAuthorsByPubkey,
     liveError,
     localProfile,
@@ -178,7 +169,6 @@ export function DesktopShellPrimaryWorkspace({
     profilePanelState,
     profileSaving,
     recentReactions,
-    selectedGameRoomId,
     selectedLiveSessionId,
     selectedThread,
     shellChromeState,
@@ -199,10 +189,6 @@ export function DesktopShellPrimaryWorkspace({
   const activeTimelineLoadingMore = timelineLoadingMoreByKey[activeTimelineKey] ?? false;
   const metaverseRooms = useMemo(
     () => viewModels.activeGameRooms.filter((room) => room.room_kind === 'metaverse_room'),
-    [viewModels.activeGameRooms]
-  );
-  const scoreGameRooms = useMemo(
-    () => viewModels.activeGameRooms.filter((room) => room.room_kind !== 'metaverse_room'),
     [viewModels.activeGameRooms]
   );
   const profileMode = shellChromeState.profileMode;
@@ -477,175 +463,18 @@ export function DesktopShellPrimaryWorkspace({
         ) : null}
 
         {shellChromeState.activePrimarySection === 'game' ? (
-          <>
-            <Card className='shell-workspace-card'>
-              <div className='panel-header'>
-                <div>
-                  <h3>{t('game:title')}</h3>
-                  <small>{t('game:summary', { count: scoreGameRooms.length })}</small>
-                </div>
-              </div>
-              {viewModels.activeGamePanelState.status === 'loading' ? (
-                <Notice>{t('game:loading')}</Notice>
-              ) : null}
-              {viewModels.activeGamePanelState.status === 'error' &&
-              (gameError ?? viewModels.activeGamePanelState.error) ? (
-                <Notice tone='destructive'>{gameError ?? viewModels.activeGamePanelState.error}</Notice>
-              ) : null}
-            </Card>
-            <Card className='shell-workspace-card'>
-              {scoreGameRooms.length === 0 &&
-              viewModels.activeGamePanelState.status === 'ready' ? (
-                <p className='empty-state'>{t('game:empty')}</p>
-              ) : null}
-              <ul className='post-list'>
-                {scoreGameRooms.map((room) => {
-                  const draft = viewModels.gameDraftViews[room.room_id];
-                  const isOwner = room.host_pubkey === syncStatus.local_author_pubkey;
-                  const pending = Boolean(gameSavingByRoomId[room.room_id]);
-
-                  return (
-                    <li key={room.room_id}>
-                      <article
-                        className={`post-card${
-                          selectedGameRoomId === room.room_id ? ' post-card-targeted' : ''
-                        }`}
-                        aria-busy={pending}
-                        data-game-room-id={room.room_id}
-                        tabIndex={selectedGameRoomId === room.room_id ? -1 : undefined}
-                      >
-                        <div className='post-meta'>
-                          <span>{room.title}</span>
-                          <span>{translateGameStatus(room.status)}</span>
-                          <span className='reply-chip'>
-                            {localizeAudienceLabel(room.audience_label)}
-                          </span>
-                        </div>
-                        <div className='post-body'>
-                          <strong className='post-title post-copy-wrap'>
-                            <SmartReferenceText
-                              text={room.description || t('common:fallbacks.noDescription')}
-                              className='post-copy-wrap'
-                              onActivateReference={(reference) => void handleActivateReference(reference)}
-                            />
-                          </strong>
-                        </div>
-                        <small>{room.room_id}</small>
-                        <div className='topic-diagnostic topic-diagnostic-secondary'>
-                          <span>
-                            {t('common:labels.phase')}: {room.phase_label ?? t('common:fallbacks.none')}
-                          </span>
-                          <span>
-                            {t('common:labels.updated')}: {formatLocalizedTime(room.updated_at, locale)}
-                          </span>
-                        </div>
-                        <ul className='draft-attachment-list'>
-                          {room.scores.map((score) => (
-                            <li key={score.participant_id} className='draft-attachment-item score-row'>
-                              <div className='draft-attachment-content'>
-                                <strong>{score.label}</strong>
-                              </div>
-                              {isOwner ? (
-                                <Input
-                                  aria-label={`${room.room_id}-${score.label}-score`}
-                                  value={draft?.scores[score.participant_id] ?? String(score.score)}
-                                  disabled={pending}
-                                  onChange={(event) =>
-                                    updateGameDraft(room.room_id, (current) => ({
-                                      ...current,
-                                      scores: {
-                                        ...current.scores,
-                                        [score.participant_id]: event.target.value,
-                                      },
-                                    }))
-                                  }
-                                />
-                              ) : (
-                                <span>{score.score}</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                        {isOwner && draft ? (
-                          <div className='composer composer-compact'>
-                            <Label>
-                              <span>{t('game:fields.status')}</span>
-                              <Select
-                                aria-label={`${room.room_id}-status`}
-                                value={draft.status}
-                                disabled={pending}
-                                onChange={(event) =>
-                                  updateGameDraft(room.room_id, (current) => ({
-                                    ...current,
-                                    status: event.target.value as GameRoomStatus,
-                                  }))
-                                }
-                              >
-                                <option value='Waiting'>{t('game:statuses.Waiting')}</option>
-                                <option value='Running'>{t('game:statuses.Running')}</option>
-                                <option value='Paused'>{t('game:statuses.Paused')}</option>
-                                <option value='Ended'>{t('game:statuses.Ended')}</option>
-                              </Select>
-                            </Label>
-                            <Label>
-                              <span>{t('game:fields.phase')}</span>
-                              <Input
-                                aria-label={`${room.room_id}-phase`}
-                                value={draft.phaseLabel}
-                                disabled={pending}
-                                onChange={(event) =>
-                                  updateGameDraft(room.room_id, (current) => ({
-                                    ...current,
-                                    phase_label: event.target.value,
-                                  }))
-                                }
-                              />
-                            </Label>
-                            <Button
-                              variant='secondary'
-                              type='button'
-                              disabled={pending}
-                              onClick={() => void handleUpdateGameRoom(room.room_id)}
-                            >
-                              {t('game:actions.saveRoom')}
-                            </Button>
-                          </div>
-                        ) : null}
-                        <div className='post-actions'>
-                          <Button
-                            variant='secondary'
-                            size='icon'
-                            className='post-action-button'
-                            type='button'
-                            aria-label={t('common:actions.copyLink')}
-                            onClick={() =>
-                              handleCopyInternalLink(
-                                buildGameLink(activeTopic, room.room_id, room.channel_id ?? null)
-                              )
-                            }
-                          >
-                            <Link2 className='size-4' aria-hidden='true' />
-                          </Button>
-                        </div>
-                      </article>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-            <MetaverseRoomPanel
-              api={api}
-              activeTopic={activeTopic}
-              activeComposeChannel={viewModels.activeComposeChannel}
-              rooms={metaverseRooms}
-              syncStatus={syncStatus}
-              locale={locale}
-              localProfile={localProfile}
-              knownAuthorsByPubkey={knownAuthorsByPubkey}
-              mediaObjectUrls={mediaObjectUrls}
-              onRefresh={refreshCurrentTopic}
-            />
-          </>
+          <MetaverseRoomPanel
+            api={api}
+            activeTopic={activeTopic}
+            activeComposeChannel={viewModels.activeComposeChannel}
+            rooms={metaverseRooms}
+            syncStatus={syncStatus}
+            locale={locale}
+            localProfile={localProfile}
+            knownAuthorsByPubkey={knownAuthorsByPubkey}
+            mediaObjectUrls={mediaObjectUrls}
+            onRefresh={refreshCurrentTopic}
+          />
         ) : null}
 
         {shellChromeState.activePrimarySection === 'notifications' ? notificationsWorkspace : null}
