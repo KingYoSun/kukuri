@@ -110,7 +110,7 @@ export const METAVERSE_ROOM_HEARTBEAT_MS = 5_000;
 export const METAVERSE_ROOM_RECOVERY_MS = 10_000;
 export const METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS = 30;
 export const METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS = 150;
-export const METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS = 0.14;
+export const METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS = 0.14;
 
 export const AVATAR_GROUND_Y = 0;
 export const AVATAR_JUMP_VELOCITY = 520;
@@ -169,6 +169,10 @@ export function isNewerRemoteTransform(
     return incoming.seq > current.seq;
   }
   return incoming.sentAt > current.sentAt;
+}
+
+export function remoteAvatarYawDegrees(rotation: MetaverseVec3): number {
+  return rotation[1];
 }
 
 export function isNewerSharedObject(
