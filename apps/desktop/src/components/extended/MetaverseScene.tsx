@@ -17,11 +17,12 @@ import {
   DEFAULT_AVATAR_ASSET_URL,
   METAVERSE_AVATAR_IDLE_SEND_INTERVAL_MS,
   METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS,
-  METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS,
+  METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS,
   METAVERSE_ROOM_STALE_MS,
   avatarAnimationForInput,
   initialAvatarTransform,
   isNewerRemoteTransform,
+  remoteAvatarYawDegrees,
   stepAvatarJump,
   type AvatarAnimationState,
   type AvatarAssetStatus,
@@ -282,8 +283,8 @@ function AvatarModel({
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
         VRMUtils.removeUnnecessaryJoints(gltf.scene);
         const vrmRoot = vrm.scene;
-        vrmRoot.scale.setScalar(0.9);
-        vrmRoot.rotation.y = Math.PI;
+        vrmRoot.scale.setScalar(1);
+        VRMUtils.rotateVRM0(vrm);
         vrmRoot.position.y = 0;
         group.add(vrmRoot);
         setVisiblePrimitive(false);
@@ -606,10 +607,9 @@ function RemoteAvatar({
       initializedRef.current = true;
       return;
     }
-    const alpha = 1 - Math.exp(-deltaSeconds / METAVERSE_REMOTE_AVATAR_SMOOTHING_SECONDS);
+    const alpha = 1 - Math.exp(-deltaSeconds / METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS);
     group.position.lerp(targetPosition, Math.min(1, alpha));
-    const targetYaw = THREE.MathUtils.degToRad(target.rotation[1]);
-    group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, Math.min(1, alpha));
+    group.rotation.y = THREE.MathUtils.degToRad(remoteAvatarYawDegrees(target.rotation));
   });
 
   const stale = connectionState !== 'live' || now - transform.sentAt > METAVERSE_ROOM_STALE_MS;
@@ -668,7 +668,7 @@ function SceneContents({
   const { camera } = useThree();
 
   useEffect(() => {
-    camera.lookAt(0, 0.8, 0);
+    camera.lookAt(0, 0.9, 0);
   }, [camera]);
 
   return (
@@ -723,7 +723,7 @@ export function MetaverseScene({
     <div className='metaverse-viewport-shell' aria-label='Metaverse room viewport'>
       <Canvas
         className='metaverse-viewport-canvas'
-        camera={{ position: [0, 4.2, 6.5], fov: 58 }}
+        camera={{ position: [0, 3.2, 5.2], fov: 54 }}
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
