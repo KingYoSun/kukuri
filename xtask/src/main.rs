@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 
 const CN_PACKAGES: [&str; 4] = [
     "kukuri-cn-core",
@@ -54,6 +55,10 @@ fn main() -> Result<()> {
         "cn-check" => cn_check(),
         "cn-test" => cn_test(),
         "desktop-package" => desktop_package(),
+        "release-check" => {
+            let tag = args.next();
+            release_check(tag.as_deref())
+        }
         "oversized-files" => oversized_files(),
         "e2e-smoke" => e2e_smoke("desktop_smoke_post_persist"),
         "scenario" => {
@@ -184,7 +189,12 @@ fn rust_test_with_cargo_test() -> Result<()> {
     regular_test_args.extend(cargo_exclude_args(
         &[&CN_PACKAGES[..], &[SERIAL_RUST_PACKAGE]].concat(),
     ));
-    run("cargo", regular_test_args, &root_dir())?;
+    run_with_env(
+        "cargo",
+        regular_test_args,
+        &root_dir(),
+        &[("RUST_TEST_THREADS", "1")],
+    )?;
 
     run_with_env(
         "cargo",
@@ -309,10 +319,69 @@ fn desktop_package() -> Result<()> {
         bail!("desktop-package is only supported on Windows hosts");
     }
 
-    run_pnpm(
-        ["tauri", "build", "--target", "x86_64-pc-windows-msvc"],
-        &desktop_dir(),
-    )
+    let mut args = vec![
+        "tauri".to_string(),
+        "build".to_string(),
+        "--target".to_string(),
+        "x86_64-pc-windows-msvc".to_string(),
+    ];
+    if std::env::var_os("TAURI_SIGNING_PRIVATE_KEY").is_none() {
+        println!(
+            "[xtask] TAURI_SIGNING_PRIVATE_KEY is not set; building installer without updater artifacts"
+        );
+        args.extend([
+            "--config".to_string(),
+            r#"{"bundle":{"createUpdaterArtifacts":false}}"#.to_string(),
+        ]);
+    }
+
+    run_pnpm(args, &desktop_dir())
+}
+
+fn release_check(tag: Option<&str>) -> Result<()> {
+    let root = root_dir();
+    let workspace_version = read_workspace_version(&root.join("Cargo.toml"))?;
+    let tauri_version = read_package_version(&desktop_dir().join("src-tauri").join("Cargo.toml"))?;
+    let desktop_package_version = read_json_version(&desktop_dir().join("package.json"))
+        .context("desktop package version")?;
+    let tauri_config_version =
+        read_json_version(&desktop_dir().join("src-tauri").join("tauri.conf.json"))
+            .context("tauri config version")?;
+
+    for (label, version) in [
+        ("apps/desktop/src-tauri/Cargo.toml", tauri_version.as_str()),
+        (
+            "apps/desktop/package.json",
+            desktop_package_version.as_str(),
+        ),
+        (
+            "apps/desktop/src-tauri/tauri.conf.json",
+            tauri_config_version.as_str(),
+        ),
+    ] {
+        if version != workspace_version {
+            bail!(
+                "release version mismatch: workspace version is {workspace_version}, {label} has {version}"
+            );
+        }
+    }
+
+    if let Some(tag) = tag {
+        let expected = format!("v{workspace_version}-preview.");
+        if !tag.starts_with(&expected) {
+            bail!("release tag must start with {expected} and include a preview number, got {tag}");
+        }
+        let suffix = &tag[expected.len()..];
+        if suffix.is_empty() || !suffix.chars().all(|value| value.is_ascii_digit()) {
+            bail!("release tag preview suffix must be numeric, got {tag}");
+        }
+    }
+
+    println!(
+        "[xtask] release version ok: workspace={workspace_version} channel=preview tag={}",
+        tag.unwrap_or("<not checked>")
+    );
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -482,6 +551,51 @@ fn run_pnpm(args: impl IntoIterator<Item = impl Into<String>>, cwd: &Path) -> Re
     run_spec_with_env(&pnpm_command_spec(platform, available, args), cwd, &[])
 }
 
+fn read_package_version(path: &Path) -> Result<String> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let mut in_package = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]" || trimmed == "[workspace.package]";
+            continue;
+        }
+        if in_package && trimmed.starts_with("version") {
+            return parse_toml_string_value(trimmed)
+                .with_context(|| format!("failed to parse version in {}", path.display()));
+        }
+    }
+    bail!("version was not found in {}", path.display())
+}
+
+fn read_workspace_version(path: &Path) -> Result<String> {
+    read_package_version(path)
+}
+
+fn parse_toml_string_value(line: &str) -> Result<String> {
+    let (_, value) = line
+        .split_once('=')
+        .context("expected key = \"value\" TOML line")?;
+    let value = value.trim();
+    if !(value.starts_with('"') && value.ends_with('"') && value.len() >= 2) {
+        bail!("expected quoted TOML string value");
+    }
+    Ok(value[1..value.len() - 1].to_string())
+}
+
+fn read_json_version(path: &Path) -> Result<String> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let value: Value = serde_json::from_str(&content)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    value
+        .get("version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .with_context(|| format!("version was not found in {}", path.display()))
+}
+
 fn run_timed_step<T>(label: impl Into<String>, operation: impl FnOnce() -> Result<T>) -> Result<T> {
     let label = label.into();
     println!("[xtask] start {label}");
@@ -506,7 +620,7 @@ fn run_timed_step<T>(label: impl Into<String>, operation: impl FnOnce() -> Resul
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-ui-check|cn-check|cn-test|desktop-package|oversized-files|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-ui-check|cn-check|cn-test|desktop-package|release-check [tag]|oversized-files|e2e-smoke|scenario <name>>"
     );
 }
 

@@ -6,7 +6,7 @@ async fn set_discovery_seeds_reapplies_runtime_without_restart() {
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("seeded-a.db");
     let db_b = dir.path().join("seeded-b.db");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let runtime_a = new_seeded_dht_runtime(&db_a, &testnet).await;
     let runtime_b = new_seeded_dht_runtime(&db_b, &testnet).await;
     let endpoint_a = runtime_a
@@ -99,7 +99,7 @@ async fn restart_restores_seeded_dht_config_and_endpoint_identity() {
     let dir = tempdir().expect("tempdir");
     let db_a = dir.path().join("restart-seeded-a.db");
     let db_b = dir.path().join("restart-seeded-b.db");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let runtime_a = new_seeded_dht_runtime(&db_a, &testnet).await;
     let runtime_b = new_seeded_dht_runtime(&db_b, &testnet).await;
     let endpoint_a = runtime_a
@@ -202,7 +202,7 @@ async fn invalid_seed_entry_rejected_without_mutating_runtime() {
     let _serial = acquire_async_test_lock().await;
     let dir = tempdir().expect("tempdir");
     let db_path = dir.path().join("invalid-seed.db");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let runtime = new_seeded_dht_runtime(&db_path, &testnet).await;
 
     let error = runtime

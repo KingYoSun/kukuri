@@ -9,11 +9,13 @@ use axum::{
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
+use futures_util::StreamExt;
 use image::{
     AnimationDecoder, Delay, DynamicImage, Frame, GenericImageView, ImageDecoder, ImageFormat,
     Rgba, RgbaImage,
 };
-use iroh::address_lookup::EndpointInfo;
+use iroh::address_lookup::{AddrFilter, AddressLookup};
+use iroh_mainline_address_lookup::DhtAddressLookup;
 use kukuri_app_api::{GameScoreView, JoinedPrivateChannelView, SyncStatus, TimelineView};
 use kukuri_cn_core::{
     BootstrapHeartbeatResponse, CommunityNodeConsentStatus, CommunityNodeResolvedUrls,
@@ -26,8 +28,7 @@ use kukuri_docs_sync::{DocQuery, DocsSync};
 use kukuri_transport::{
     ConnectMode, DhtDiscoveryOptions, DiscoveryMode, SeedPeer, TransportNetworkConfig,
 };
-use pkarr::errors::{ConcurrencyError, PublishError};
-use pkarr::{Client as PkarrClient, SignedPacket, Timestamp, mainline::Testnet};
+use n0_mainline::{DhtBuilder, Testnet};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -1625,43 +1626,6 @@ fn video_attachment_request(
     }
 }
 
-fn dht_test_client(testnet: &Testnet) -> PkarrClient {
-    let mut builder = PkarrClient::builder();
-    builder.no_default_network().bootstrap(&testnet.bootstrap);
-    builder.build().expect("pkarr client")
-}
-
-fn endpoint_info_from_resolved_packet(packet: &pkarr::SignedPacket) -> Option<EndpointInfo> {
-    let name = format!("_iroh.{}.", packet.public_key().to_z32());
-    let txt_records = packet.resource_records("_iroh").filter_map(|record| {
-        let pkarr::dns::rdata::RData::TXT(txt) = &record.rdata else {
-            return None;
-        };
-        String::try_from(txt.clone()).ok()
-    });
-    EndpointInfo::from_txt_lookup(name, txt_records).ok()
-}
-
-fn build_endpoint_signed_packet_with_timestamp(
-    endpoint_info: &EndpointInfo,
-    secret_key: &iroh::SecretKey,
-    ttl: u32,
-    timestamp: Timestamp,
-) -> SignedPacket {
-    use pkarr::dns::{self, rdata};
-
-    let keypair = pkarr::Keypair::from_secret_key(&secret_key.to_bytes());
-    let mut builder = SignedPacket::builder().timestamp(timestamp);
-    let name = dns::Name::new("_iroh").expect("iroh txt name");
-    for entry in endpoint_info.to_txt_strings() {
-        let mut txt = rdata::TXT::new();
-        txt.add_string(&entry)
-            .expect("valid endpoint info txt entry");
-        builder = builder.txt(name.clone(), txt.into_owned(), ttl);
-    }
-    builder.sign(&keypair).expect("sign endpoint info packet")
-}
-
 fn delete_sqlite_artifacts(db_path: &Path) {
     for path in [
         db_path.to_path_buf(),
@@ -1676,48 +1640,21 @@ fn delete_sqlite_artifacts(db_path: &Path) {
     }
 }
 
-async fn publish_runtime_endpoint_to_testnet(runtime: &DesktopRuntime, testnet: &Testnet) {
+async fn wait_for_runtime_endpoint_in_testnet(runtime: &DesktopRuntime, testnet: &Testnet) {
     let endpoint = runtime.iroh_stack.endpoint().await;
-    let client = dht_test_client(testnet);
-    let public_key =
-        pkarr::PublicKey::try_from(endpoint.id().as_bytes()).expect("pkarr public key");
-    let expected_info = EndpointInfo::from(endpoint.addr());
-    for _ in 0..20 {
-        let previous_timestamp = client
-            .resolve_most_recent(&public_key)
-            .await
-            .map(|packet| packet.timestamp());
-        let now = Timestamp::now();
-        let timestamp = match previous_timestamp {
-            Some(previous) if previous >= now => previous + 1,
-            _ => now,
-        };
-        let signed_packet = build_endpoint_signed_packet_with_timestamp(
-            &expected_info,
-            endpoint.secret_key(),
-            1,
-            timestamp,
-        );
-        match client.publish(&signed_packet, previous_timestamp).await {
-            Ok(()) => break,
-            Err(PublishError::Concurrency(
-                ConcurrencyError::ConflictRisk
-                | ConcurrencyError::NotMostRecent
-                | ConcurrencyError::CasFailed,
-            )) => sleep(Duration::from_millis(50)).await,
-            Err(error) => panic!("publish endpoint info: {error}"),
-        }
-    }
-    timeout(Duration::from_secs(5), async {
+    let mut builder = DhtBuilder::default();
+    builder.bootstrap(&testnet.bootstrap);
+    let lookup = DhtAddressLookup::builder()
+        .dht_builder(builder)
+        .no_publish()
+        .addr_filter(AddrFilter::unfiltered())
+        .build()
+        .expect("dht lookup");
+    timeout(Duration::from_secs(30), async {
         loop {
-            if client
-                .resolve_most_recent(&public_key)
-                .await
-                .as_ref()
-                .and_then(endpoint_info_from_resolved_packet)
-                .is_some_and(|packet_info| {
-                    packet_info.to_txt_strings() == expected_info.to_txt_strings()
-                })
+            if let Some(mut resolved) = lookup.resolve(endpoint.id())
+                && let Some(Ok(item)) = resolved.next().await
+                && item.endpoint_info().endpoint_id == endpoint.id()
             {
                 return;
             }
@@ -1977,7 +1914,7 @@ async fn new_seeded_dht_runtime_with_config(
     )
     .await
     .expect("seeded dht runtime");
-    publish_runtime_endpoint_to_testnet(&runtime, testnet).await;
+    wait_for_runtime_endpoint_in_testnet(&runtime, testnet).await;
     runtime
 }
 

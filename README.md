@@ -8,6 +8,9 @@ kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived iden
 
 - Current preview target: Windows installer via GitHub Releases.
 - Linux remains source-run for now.
+- Preview updates use the in-app `Settings -> Release` updater against `latest-preview.json`.
+- Data safety, release runbook, and third-party notices are linked from `Settings -> Release`.
+- If a preview build is unsigned, the GitHub Release notes call out the expected SmartScreen warning.
 - Preview flow: launch the desktop app, let the preloaded community node reach `ready`, open a starter topic, post or reply, then send feedback.
 - Preview quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
 - Troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
@@ -19,6 +22,10 @@ kukuri is a topic-first P2P social app and protocol. It keeps Nostr-derived iden
 3. Publish a public post or reply in-thread.
 4. Create or join a private channel under the same topic.
 5. Export diagnostics and send feedback through GitHub before you close the app.
+
+Diagnostics are available in `Settings -> Release`. The default report omits secret keys, auth tokens, private channel secrets, invite/share tokens, DM bodies, and local DB paths.
+
+Preview updates are expected to preserve identity, local DB state, Iroh data, Community Node settings, private channel capability, and notification inbox state. Third-party notice review is tracked in [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md).
 
 ## What Community Nodes Do
 
@@ -94,6 +101,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
+cargo xtask release-check v0.1.0-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install

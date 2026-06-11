@@ -427,7 +427,7 @@ async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
         .await
         .expect("b follows c");
 
-    timeout(Duration::from_secs(10), async {
+    timeout(social_graph_propagation_timeout(), async {
         loop {
             let social_view = app_a
                 .get_author_social_view(c_pubkey.as_str())

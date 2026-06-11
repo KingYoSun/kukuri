@@ -11,6 +11,7 @@ import { Bell, BookPlus, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-r
 import { TopicNavList } from '@/components/core/TopicNavList';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
+import { ReleasePreviewBanner } from '@/components/shell/ReleasePreviewBanner';
 import { type PrimarySection } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +51,7 @@ import {
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
+import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
   DesktopShellDetailPaneStack,
@@ -382,6 +384,7 @@ export function DesktopShellPage({
   } = viewModels;
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
+  useOsNotificationBridge(notifications, syncStatus.local_author_pubkey);
   const notificationItems = useMemo(
     () =>
       notifications.map((notification) => {
@@ -875,6 +878,21 @@ export function DesktopShellPage({
     <>
       <ShellFrame
         skipTargetId={SHELL_WORKSPACE_ID}
+        topBar={
+          <ReleasePreviewBanner
+            onOpenReleaseSettings={() => {
+              setSettingsOpen(true, false);
+              setShellChromeState((current) => ({
+                ...current,
+                activeSettingsSection: 'release',
+              }));
+              syncRoute('replace', {
+                settingsOpen: true,
+                settingsSection: 'release',
+              });
+            }}
+          />
+        }
         navRail={
           <ShellNavRail
             railId={SHELL_NAV_ID}

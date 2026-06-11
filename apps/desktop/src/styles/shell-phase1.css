@@ -1532,6 +1532,36 @@
   justify-content: flex-end;
 }
 
+.release-preview-banner {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+  box-shadow: 0 12px 32px rgba(2, 7, 15, 0.12);
+}
+
+.release-preview-banner strong,
+.release-preview-banner span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.release-preview-banner strong {
+  font-size: 0.86rem;
+  color: var(--foreground-strong);
+}
+
+.release-preview-banner span {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
 .shell-nav-meta {
   display: grid;
   gap: 1rem;

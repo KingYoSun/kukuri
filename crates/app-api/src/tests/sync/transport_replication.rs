@@ -144,7 +144,7 @@ async fn import_peer_ticket_restarts_existing_topic_subscription_and_resumes_del
 async fn seeded_dht_syncs_post_between_apps_without_ticket_import() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-dht-a"), &testnet).await;
     let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-dht-b"), &testnet).await;
     let store_a = Arc::new(MemoryStore::default());
@@ -443,7 +443,7 @@ async fn external_relay_endpoint_only_seeds_sync_post_between_apps() {
 async fn seeded_dht_updates_existing_topic_subscription_after_seed_update() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-rebind-a"), &testnet).await;
     let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-rebind-b"), &testnet).await;
     let store_a = Arc::new(MemoryStore::default());
@@ -534,7 +534,7 @@ async fn seeded_dht_updates_existing_topic_subscription_after_seed_update() {
 async fn seeded_dht_backfills_docs_and_blobs_with_id_only_seed() {
     let _guard = iroh_integration_test_lock().lock_owned().await;
     let dir = tempdir().expect("tempdir");
-    let testnet = Testnet::new(5).expect("testnet");
+    let testnet = Testnet::new(5).await.expect("testnet");
     let stack_a = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-a"), &testnet).await;
     let stack_b = TestIrohStack::new_with_dht(&dir.path().join("seeded-image-b"), &testnet).await;
     let store_a = Arc::new(MemoryStore::default());

@@ -8,6 +8,42 @@
 - アップデーターとアップデート通知は、リリース基盤の一部として最優先で実装します。OS 通知とは別に、アプリ内の更新状態、更新バナー、設定画面上の更新表示を持ちます。
 - 初回プレビューの配布対象は Windows インストーラーとし、Linux はソース起動の代替導線のままにします。
 
+## 2026-06-11 実行結果
+
+実装済み:
+
+- desktop に Tauri updater plugin と OS notification plugin を追加し、updater endpoint、CI で差し替える updater 公開鍵、Windows updater artifact 生成、明示的な CSP を設定しました。
+- `Settings -> Release` を追加し、更新確認、更新インストール、秘匿情報除去済み診断レポートのコピー/書き出し、GitHub フィードバック、OS 通知設定、リリースセキュリティ、データ安全性、サードパーティ通知への導線を追加しました。
+- 通常の shell から `Settings -> Release` を開ける preview release banner を追加しました。更新状態は既存のアクティビティ通知 inbox には保存しません。
+- OS 通知は localStorage backed の独立設定として実装し、既存の `NotificationView` を best-effort で橋渡しします。重複抑止を行い、inbox の既読/削除状態は変更しません。
+- `cargo xtask release-check [tag]` を追加し、workspace / desktop package / Tauri config のバージョン同期と `vX.Y.Z-preview.N` 形式のタグを検証できるようにしました。
+- `.github/workflows/kukuri-release.yml` を `validate-release-inputs -> linux-verify -> windows-package -> release-assets -> publish-draft` に分割し、draft release asset、updater bundle、`.sig`、`latest-preview.json`、`SHA256SUMS.txt`、リリースノート、手動 smoke checklist、artifact attestation を生成するようにしました。
+- `scripts/release/create-preview-assets.ps1` と smoke test を追加し、`.sig` 内容の埋め込み、checksum 生成、asset list 生成、release notes、manual smoke checklist の出力を検証しました。
+- `docs/runbooks/release.md`、`docs/THIRD_PARTY_NOTICES.md`、preview feedback issue template、README / quickstart / troubleshooting の更新を追加し、更新フロー、診断、データ安全性、OSS notice review を説明しました。
+- release readiness と internal link parser の unit test を追加し、診断レポートの秘匿、OS 通知設定の独立性、DM preview suppression、Release settings navigation、不正または未対応 deep link の拒否を検証しました。
+- seeded DHT test の古い pkarr manual publish helper を、transport test と同じ `DhtAddressLookup::no_publish()` の publish-readiness wait に置き換え、app-api / desktop-runtime の seeded DHT validation hang を解消しました。
+- nextest がないローカル環境では `cargo test` fallback を `RUST_TEST_THREADS=1` で実行するようにし、Windows ローカル検証時の重い P2P test flake を避けるようにしました。CI では引き続き nextest を必須にしています。
+
+検証済み:
+
+- `cargo xtask doctor`
+- `cargo xtask release-check v0.1.0-preview.1`
+- `cargo xtask tauri-check`
+- `cargo xtask check`
+- `cargo xtask test`
+- `cargo xtask e2e-smoke`
+- `.\scripts\release\test-create-preview-assets.ps1`
+- `cd apps/desktop && npx pnpm@10.16.1 lint`
+- `cd apps/desktop && npx pnpm@10.16.1 typecheck`
+- `cd apps/desktop && npx pnpm@10.16.1 test` (`20` files / `215` tests)
+
+このローカル環境では実行できない外部ゲート:
+
+- GitHub Actions の tag trigger による draft release 実行。
+- GitHub draft release の asset を差し替えずに使う Windows 10 / Windows 11 install smoke。
+- 旧 preview から新 preview への実 installer updater smoke。
+- 証明書を使った Windows code signing。利用できない場合は、release notes に unsigned preview であることと想定される SmartScreen warning を明記する必要があります。
+
 ## 現状
 
 - Windows リリースワークフローは存在しており、タグまたは手動実行により、検証後に Windows パッケージを作成して GitHub Releases の配布物として公開します。
@@ -54,17 +90,17 @@
 
 - [ ] Windows インストーラーを GitHub Releases から取得し、新規 Windows ユーザープロファイルへインストールできる。
 - [ ] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
-- [ ] 更新ファイルは署名され、インストール前にアプリ側で検証される。
-- [ ] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
-- [ ] リリースワークフローが、インストーラー、更新用ファイル、署名、`latest-preview.json`、チェックサム、リリースノートを一貫して draft release に公開する。
+- [x] 更新ファイルは署名され、インストール前にアプリ側で検証される。
+- [x] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
+- [x] リリースワークフローが、インストーラー、更新用ファイル、署名、`latest-preview.json`、チェックサム、リリースノートを一貫して draft release に公開する。
 - [ ] draft release の asset を差し替えずに、Windows 10 / Windows 11 smoke 後にそのまま公開へ昇格できる。
-- [ ] 可能な場合、Windows 配布物には GitHub Actions artifact attestation または同等の provenance が付与されている。
-- [ ] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
+- [x] 可能な場合、Windows 配布物には GitHub Actions artifact attestation または同等の provenance が付与されている。
+- [x] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
 - [ ] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
 - [ ] 既存のローカル通知 inbox がアップデート後も動作する。
-- [ ] OS 通知を初回プレビューに含める場合、ユーザー許可制であり、ローカル通知 inbox の保存状態から独立している。
-- [ ] プライバシー、データ保存、フィードバック時に含まれる情報の説明が README またはアプリ内の About/Settings から読める。
-- [ ] CSP とリリース用セキュリティ設定が本番相当の安全側設定になっている。
+- [x] OS 通知を初回プレビューに含める場合、ユーザー許可制であり、ローカル通知 inbox の保存状態から独立している。
+- [x] プライバシー、データ保存、フィードバック時に含まれる情報の説明が README またはアプリ内の About/Settings から読める。
+- [x] CSP とリリース用セキュリティ設定が本番相当の安全側設定になっている。
 
 ## 作業領域
 
@@ -100,17 +136,17 @@
 
 作業:
 
-- [ ] 初回プレビュータグ形式を決める。例: `v0.1.0-preview.1`。
+- [x] 初回プレビュータグ形式を決める。例: `v0.1.0-preview.1`。
 - [ ] リリースチェックリスト issue または追跡ボードを作る。
-- [ ] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
+- [x] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
 - [ ] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
-- [ ] release workflow は既存の `cargo xtask desktop-package` / `.github/workflows/kukuri-release.yml` を拡張する方針で固定し、初回プレビューでは `tauri-action` への全面移行を行わない。
-- [ ] GitHub Actions の実行トリガーを整理する。
+- [x] release workflow は既存の `cargo xtask desktop-package` / `.github/workflows/kukuri-release.yml` を拡張する方針で固定し、初回プレビューでは `tauri-action` への全面移行を行わない。
+- [x] GitHub Actions の実行トリガーを整理する。
   - `push tags: v*` もまず draft release を作る。
   - `workflow_dispatch` は tag input を必須にし、既定で draft release を作る。
   - どちらの経路でも release tag の checkout と version consistency gate を通す。
-- [ ] `cargo xtask doctor` または専用のリリース確認コマンドに、バージョン同期チェックを追加する。
-- [ ] ワークフロー確定後に `docs/runbooks/release.md` を追加する。
+- [x] `cargo xtask doctor` または専用のリリース確認コマンドに、バージョン同期チェックを追加する。
+- [x] ワークフロー確定後に `docs/runbooks/release.md` を追加する。
 
 完了条件:
 
@@ -124,21 +160,21 @@
 
 作業:
 
-- [ ] `tauri-plugin-updater` を `apps/desktop/src-tauri/Cargo.toml` に追加する。
-- [ ] `@tauri-apps/plugin-updater` を `apps/desktop/package.json` に追加する。
-- [ ] Tauri 起動時に updater plugin を登録する。
-- [ ] updater の公開鍵と endpoint を `tauri.conf.json` またはリリース用 override 設定に追加する。
-- [ ] Windows bundle で更新用成果物を作成する設定を有効にする。
-- [ ] Windows の更新用成果物は `bundle.createUpdaterArtifacts: true` を使い、NSIS installer と updater bundle / signature の両方を release asset に含める。
-- [ ] 更新マニフェスト名を決める。
+- [x] `tauri-plugin-updater` を `apps/desktop/src-tauri/Cargo.toml` に追加する。
+- [x] `@tauri-apps/plugin-updater` を `apps/desktop/package.json` に追加する。
+- [x] Tauri 起動時に updater plugin を登録する。
+- [x] updater の公開鍵と endpoint を `tauri.conf.json` またはリリース用 override 設定に追加する。
+- [x] Windows bundle で更新用成果物を作成する設定を有効にする。
+- [x] Windows の更新用成果物は `bundle.createUpdaterArtifacts: true` を使い、NSIS installer と updater bundle / signature の両方を release asset に含める。
+- [x] 更新マニフェスト名を決める。
   - プレビューチャンネルは `latest-preview.json`。
   - 安定版チャンネル用に `latest.json` を予約する。
-- [ ] static updater manifest の必須項目を検証する。
+- [x] static updater manifest の必須項目を検証する。
   - `version`
   - `platforms.windows-x86_64.url`
   - `platforms.windows-x86_64.signature`
   - `signature` は `.sig` への URL ではなく、生成された `.sig` ファイルの内容を埋め込む。
-- [ ] フロントエンド API 層に更新状態型を追加する。
+- [x] フロントエンド API 層に更新状態型を追加する。
   - `idle`
   - `checking`
   - `up_to_date`
@@ -146,8 +182,8 @@
   - `downloading`
   - `ready_to_restart`
   - `failed`
-- [ ] Settings / About に「更新を確認」操作を追加する。
-- [ ] 更新がある場合の非ブロッキングな更新バナーを追加する。
+- [x] Settings / About に「更新を確認」操作を追加する。
+- [x] 更新がある場合の非ブロッキングな更新バナーを追加する。
 - [ ] インストール準備完了後の再起動プロンプトを追加する。
 - [ ] ネットワーク失敗、マニフェスト取得失敗、署名検証失敗、インストール失敗を区別したエラー文を追加する。
 
@@ -164,39 +200,39 @@
 
 作業:
 
-- [ ] `.github/workflows/kukuri-release.yml` を次の job 境界に分ける。
+- [x] `.github/workflows/kukuri-release.yml` を次の job 境界に分ける。
   - `validate-release-inputs`: tag/ref/channel/version consistency を検証する。
   - `linux-verify`: fast/nightly と同等以上の Linux gate を通す。
   - `windows-package`: clean な GitHub-hosted Windows runner で `cargo xtask desktop-package` を実行する。
   - `release-assets`: updater manifest、checksum、release note 下書き、可能なら provenance を生成する。
   - `publish-draft`: 既定では draft GitHub Release を作成する。
-- [ ] `validate-release-inputs` で次を fail-fast する。
+- [x] `validate-release-inputs` で次を fail-fast する。
   - tag が存在しない。
   - tag が `vX.Y.Z-preview.N` に一致しない。
   - tag の version と `Cargo.toml` / `apps/desktop/package.json` / `apps/desktop/src-tauri/tauri.conf.json` の version が一致しない。
   - `workflow_dispatch` の tag input と checkout 対象 ref が一致しない。
-- [ ] `windows-package` は次を公開する。
+- [x] `windows-package` は次を公開する。
   - NSIS インストーラー。
   - 更新用バンドル。
   - `.sig` ファイル。
   - 必要に応じて通常 installer と updater bundle を区別できる artifact 名。
 - [ ] updater 秘密鍵を GitHub Actions secrets に保存する。
-- [ ] updater build では `TAURI_SIGNING_PRIVATE_KEY` と、必要であれば `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を GitHub Actions secrets から渡す。
+- [x] updater build では `TAURI_SIGNING_PRIVATE_KEY` と、必要であれば `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を GitHub Actions secrets から渡す。
 - [ ] updater 公開鍵はリポジトリ設定に保持する。
-- [ ] `release-assets` で次を生成する。
+- [x] `release-assets` で次を生成する。
   - `latest-preview.json`
   - `SHA256SUMS.txt`
   - release asset 一覧
   - manual smoke checklist
-- [ ] `latest-preview.json` は同じ GitHub Release 内の変更されない asset URL を参照する。
-- [ ] `latest-preview.json` の `signature` は `.sig` ファイルの内容を埋め込み、`.sig` の URL だけを入れない。
-- [ ] マニフェストが存在しない配布物を参照している場合、または `.sig` の読み込み/埋め込みに失敗した場合、リリースワークフローを失敗させる検証を追加する。
-- [ ] `SHA256SUMS.txt` は通常 installer、updater bundle、manifest を含める。
-- [ ] GitHub Actions artifact attestation が利用できる場合、Windows 配布物と updater bundle に attestation を付ける。
+- [x] `latest-preview.json` は同じ GitHub Release 内の変更されない asset URL を参照する。
+- [x] `latest-preview.json` の `signature` は `.sig` ファイルの内容を埋め込み、`.sig` の URL だけを入れない。
+- [x] マニフェストが存在しない配布物を参照している場合、または `.sig` の読み込み/埋め込みに失敗した場合、リリースワークフローを失敗させる検証を追加する。
+- [x] `SHA256SUMS.txt` は通常 installer、updater bundle、manifest を含める。
+- [x] GitHub Actions artifact attestation が利用できる場合、Windows 配布物と updater bundle に attestation を付ける。
 - [ ] 証明書が利用可能になったら Windows コード署名 step を追加する。
-- [ ] コード署名が初回プレビューに間に合わない場合、リリースノートに明示的な注意書きを追加し、SmartScreen の手動確認を行う。
-- [ ] 成果物保持期間と成果物名で、preview / stable を区別できるようにする。
-- [ ] draft release 作成後の手動 smoke が終わるまで、公開 release へ昇格しない。
+- [x] コード署名が初回プレビューに間に合わない場合、リリースノートに明示的な注意書きを追加し、SmartScreen の手動確認を行う。
+- [x] 成果物保持期間と成果物名で、preview / stable を区別できるようにする。
+- [x] draft release 作成後の手動 smoke が終わるまで、公開 release へ昇格しない。
 
 完了条件:
 
@@ -224,8 +260,8 @@
   - 新ビルドへ更新する。
   - すべての状態が残っていることを確認する。
 - [ ] 少なくとも 1 つの旧版 DB fixture を追加する。
-- [ ] 再インストール時にデータを保持するか削除するかを文書化する。
-- [ ] keyring fallback と file fallback のリスクを文書化する。
+- [x] 再インストール時にデータを保持するか削除するかを文書化する。
+- [x] keyring fallback と file fallback のリスクを文書化する。
 - [ ] マイグレーション失敗または DB open 失敗時のユーザー向け起動エラーを追加する。
 
 完了条件:
@@ -240,8 +276,8 @@
 
 作業:
 
-- [ ] Settings に診断レポートのコピー/書き出し操作を追加する。
-- [ ] 診断レポートに次を含める。
+- [x] Settings に診断レポートのコピー/書き出し操作を追加する。
+- [x] 診断レポートに次を含める。
   - アプリバージョン。
   - リリースチャンネル。
   - OS とアーキテクチャ。
@@ -253,16 +289,16 @@
   - 通知未読数。
   - 直近の秘密情報を含まないエラーメッセージ。
   - 更新状態と直近の更新エラー。
-- [ ] 次を除外または秘匿する。
+- [x] 次を除外または秘匿する。
   - secret key。
   - 認証 token。
   - private channel capability secret。
   - invite/share token。
   - DM の本文。
   - ユーザー名などを含むローカル DB path。ただし、ユーザーが詳細レポートを明示選択した場合は別扱いにできる。
-- [ ] GitHub フィードバック URL またはテンプレート付きコピーを追加する。
-- [ ] `docs/runbooks/mvp-user-quickstart.md` に、診断レポートを添える手順を追加する。
-- [ ] `docs/runbooks/mvp-troubleshooting.md` に、更新と診断レポートの節を追加する。
+- [x] GitHub フィードバック URL またはテンプレート付きコピーを追加する。
+- [x] `docs/runbooks/mvp-user-quickstart.md` に、診断レポートを添える手順を追加する。
+- [x] `docs/runbooks/mvp-troubleshooting.md` に、更新と診断レポートの節を追加する。
 
 完了条件:
 
@@ -275,13 +311,13 @@
 
 作業:
 
-- [ ] リリース設定の `csp: null` を本番用 CSP に置き換える。
-- [ ] Tauri capability を確認し、必要な権限だけが有効になっていることを確認する。
-- [ ] deep link parsing を監査し、未対応 scheme や壊れた token を拒否する。
-- [ ] 更新 endpoint が HTTPS であることを確認する。
-- [ ] すべての更新インストールで updater 署名検証を必須にする。
+- [x] リリース設定の `csp: null` を本番用 CSP に置き換える。
+- [x] Tauri capability を確認し、必要な権限だけが有効になっていることを確認する。
+- [x] deep link parsing を監査し、未対応 scheme や壊れた token を拒否する。
+- [x] 更新 endpoint が HTTPS であることを確認する。
+- [x] すべての更新インストールで updater 署名検証を必須にする。
 - [ ] サードパーティライセンス通知の生成を追加する。
-- [ ] README またはアプリ内 settings に、プライバシーとデータ保存の説明を追加する。
+- [x] README またはアプリ内 settings に、プライバシーとデータ保存の説明を追加する。
 
 完了条件:
 
@@ -301,15 +337,15 @@
 
 作業:
 
-- [ ] desktop 向け OS 通知 plugin/dependency を追加する。
-- [ ] 通知設定を追加する。
+- [x] desktop 向け OS 通知 plugin/dependency を追加する。
+- [x] 通知設定を追加する。
   - 全体の有効/無効。
   - ダイレクトメッセージ。
   - メンション/返信。
   - 必要であれば、フォロー/リポスト。
   - 簡単に入れられる範囲で静音モード。
   - プレビュー本文の表示/非表示。
-- [ ] 権限要求フローを追加する。
+- [x] 権限要求フローを追加する。
 - [ ] 配信方針を追加する。
   - 自分が作成したイベントでは通知しない。
   - 関連する pane がフォーカス中なら、設定で許可されていない限り通知しない。
@@ -319,7 +355,7 @@
   - ダイレクトメッセージは DM pane を開く。
   - 返信/メンション/リポストは thread または topic を開く。
   - フォロー通知は author pane を開く。
-- [ ] 設定と重複排除方針のテストを追加する。
+- [x] 設定と重複排除方針のテストを追加する。
 - [ ] 権限許可/拒否、フォアグラウンド/バックグラウンド、可能な範囲でアプリ終了時の手動 QA を追加する。
 
 完了条件:
@@ -347,7 +383,7 @@
   - 通知 inbox を確認する。
   - 診断レポートを書き出す。
 - [ ] 前回 RC からのアップデート経路を完了する。
-- [ ] リリースノートに次が含まれることを確認する。
+- [x] リリースノートに次が含まれることを確認する。
   - プレビュー範囲。
   - 既知の制限。
   - 更新挙動。
@@ -386,27 +422,27 @@
 
 ## リリースチェックリスト
 
-- [ ] `README.ja.md` と `README.md` が、プレビュー範囲と Windows インストーラー導線を説明している。
-- [ ] `docs/runbooks/mvp-user-quickstart.md` に、更新確認と診断付きフィードバック手順がある。
-- [ ] `docs/runbooks/mvp-troubleshooting.md` に、アップデーター、インストール失敗、更新失敗の状態説明がある。
-- [ ] `docs/runbooks/release.md` が存在し、ワークフローと一致している。
+- [x] `README.ja.md` と `README.md` が、プレビュー範囲と Windows インストーラー導線を説明している。
+- [x] `docs/runbooks/mvp-user-quickstart.md` に、更新確認と診断付きフィードバック手順がある。
+- [x] `docs/runbooks/mvp-troubleshooting.md` に、アップデーター、インストール失敗、更新失敗の状態説明がある。
+- [x] `docs/runbooks/release.md` が存在し、ワークフローと一致している。
 - [ ] リリースワークフローが、tag/ref/channel/version consistency gate を通したうえで draft release を作成できる。
 - [ ] draft release に、インストーラー、更新用ファイル、署名、チェックサム、マニフェスト、リリースノートが含まれている。
 - [ ] draft release の成果物は GitHub-hosted runner で生成されたもので、手元ビルドとの差し替えを行っていない。
-- [ ] `latest-preview.json` の `signature` は `.sig` URL ではなく `.sig` 内容である。
-- [ ] `SHA256SUMS.txt` が release asset と一致している。
-- [ ] artifact attestation を使う場合、検証手順が release note または runbook にある。
-- [ ] インストーラーが署名済みである。未署名の場合は、未署名プレビューであるリスクが明記されている。
-- [ ] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
+- [x] `latest-preview.json` の `signature` は `.sig` URL ではなく `.sig` 内容である。
+- [x] `SHA256SUMS.txt` が release asset と一致している。
+- [x] artifact attestation を使う場合、検証手順が release note または runbook にある。
+- [x] インストーラーが署名済みである。未署名の場合は、未署名プレビューであるリスクが明記されている。
+- [x] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
 - [ ] 正しい署名と不正な署名の両方で、更新署名検証を確認している。
 - [ ] 新規インストールの happy path を手動確認している。
 - [ ] アップデートの happy path を手動確認している。
 - [ ] 再インストール時の挙動を手動確認している。
 - [ ] 診断レポートの書き出しと秘匿処理を手動確認している。
-- [ ] 既存のローカル通知 inbox が、アクティビティ通知シナリオで引き続き通る。
-- [ ] OS 通知設定が、ローカル通知 inbox の挙動を変更しない。
-- [ ] プライバシー/データ保存説明が、初回利用前または初回利用中に読める。
-- [ ] 既知の制限がリリースノートに列挙されている。
+- [x] 既存のローカル通知 inbox が、アクティビティ通知シナリオで引き続き通る。
+- [x] OS 通知設定が、ローカル通知 inbox の挙動を変更しない。
+- [x] プライバシー/データ保存説明が、初回利用前または初回利用中に読める。
+- [x] 既知の制限がリリースノートに列挙されている。
 
 ## 未決事項
 
