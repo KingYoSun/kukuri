@@ -66,6 +66,9 @@ jobs:
         with:
           toolchain: 1.91.0
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Release version gate
         run: cargo xtask release-check ${{ steps.release.outputs.release_tag }}
 

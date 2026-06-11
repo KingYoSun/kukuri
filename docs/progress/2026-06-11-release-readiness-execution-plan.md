@@ -139,7 +139,7 @@
 - [x] 初回プレビュータグ形式を決める。例: `v0.1.0-preview.1`。
 - [ ] リリースチェックリスト issue または追跡ボードを作る。
 - [x] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
-- [ ] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
+- [x] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
 - [x] release workflow は既存の `cargo xtask desktop-package` / `.github/workflows/kukuri-release.yml` を拡張する方針で固定し、初回プレビューでは `tauri-action` への全面移行を行わない。
 - [x] GitHub Actions の実行トリガーを整理する。
   - `push tags: v*` もまず draft release を作る。
@@ -216,9 +216,9 @@
   - 更新用バンドル。
   - `.sig` ファイル。
   - 必要に応じて通常 installer と updater bundle を区別できる artifact 名。
-- [ ] updater 秘密鍵を GitHub Actions secrets に保存する。
+- [x] updater 秘密鍵を GitHub Actions secrets に保存する。
 - [x] updater build では `TAURI_SIGNING_PRIVATE_KEY` と、必要であれば `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を GitHub Actions secrets から渡す。
-- [ ] updater 公開鍵はリポジトリ設定に保持する。
+- [x] updater 公開鍵はリポジトリ設定に保持する。
 - [x] `release-assets` で次を生成する。
   - `latest-preview.json`
   - `SHA256SUMS.txt`
