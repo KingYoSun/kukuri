@@ -11,6 +11,8 @@
 ## 現状
 
 - Windows リリースワークフローは存在しており、タグまたは手動実行により、検証後に Windows パッケージを作成して GitHub Releases の配布物として公開します。
+- 既存の `.github/workflows/kukuri-release.yml` は、Linux 検証後に Windows NSIS を生成して GitHub Release へ添付するところまでは到達しています。一方で、updater 用 `.sig`、`latest-preview.json`、チェックサム、artifact provenance、draft smoke 後の公開昇格はまだ明示的な成果物になっていません。
+- `workflow_dispatch` で tag input を受け取れますが、リリース対象 ref の checkout、タグ形式、タグとアプリ内バージョンの一致確認は release gate として固定する必要があります。
 - Windows のバンドル対象は NSIS インストーラーです。
 - `tauri-plugin-updater`、更新マニフェスト、更新署名ファイル、更新 UI はまだリリース面に含まれていません。
 - ローカル通知 inbox v1 は、メンション、返信、リポスト、引用リポスト、ダイレクトメッセージ、フォロー通知のアクティビティ inbox として存在します。
@@ -41,6 +43,11 @@
    - 開発時の利便性をそのままリリースに持ち込みません。
    - CSP、deep link の検証、署名済み更新ファイル、署名済み Windows インストーラーをリリース条件に含めます。
 
+6. **GitHub Actions をリリース成果物の正本にする**
+   - 初回プレビューでは、手元ビルドや差し替え済みファイルではなく、GitHub-hosted runner が生成した draft release asset を検証対象にします。
+   - 既存の `cargo xtask desktop-package` と `kukuri-release.yml` を拡張し、初回から `tauri-action` への全面移行は行いません。
+   - リリースは `validate -> package -> manifest/checksum/provenance -> draft release -> manual smoke -> publish` の段階に分けます。
+
 ## マイルストーン完了条件
 
 ビルドは次をすべて満たした時点で、リリース準備完了とします。
@@ -49,7 +56,9 @@
 - [ ] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
 - [ ] 更新ファイルは署名され、インストール前にアプリ側で検証される。
 - [ ] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
-- [ ] リリースワークフローが、インストーラー、更新用ファイル、署名、チェックサム、リリースノートを一貫して公開する。
+- [ ] リリースワークフローが、インストーラー、更新用ファイル、署名、`latest-preview.json`、チェックサム、リリースノートを一貫して draft release に公開する。
+- [ ] draft release の asset を差し替えずに、Windows 10 / Windows 11 smoke 後にそのまま公開へ昇格できる。
+- [ ] 可能な場合、Windows 配布物には GitHub Actions artifact attestation または同等の provenance が付与されている。
 - [ ] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
 - [ ] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
 - [ ] 既存のローカル通知 inbox がアップデート後も動作する。
@@ -64,11 +73,14 @@
 | P0 | バージョン/チャンネル運用 | 計画中 | 単一のリリースバージョン基準、プレビューチャンネル規約 | `vX.Y.Z-preview.N` を使い、`tauri.conf.json`、Tauri crate、desktop package のバージョンを同期する。 |
 | P0 | アップデーター基盤 | 計画中 | Tauri updater plugin、アップデーター設定、署名鍵運用 | Rust/JS 依存を追加し、確認、ダウンロード、インストール、再起動の実行面を作る。 |
 | P0 | アップデート通知 UI | 計画中 | アプリ内更新バナー、設定/About の更新状態表示 | 更新通知は既存のアクティビティ通知 inbox へ既定では保存しない。 |
-| P0 | リリースワークフローの更新用成果物 | 計画中 | 更新用バンドル、`.sig`、マニフェスト、チェックサム | `.github/workflows/kukuri-release.yml` を拡張する。 |
+| P0 | リリースワークフローの gate | 計画中 | tag checkout、version consistency、channel validation | `workflow_dispatch` の tag input と push tag の両方で、対象 ref と version を fail-fast で検証する。 |
+| P0 | リリースワークフローの更新用成果物 | 計画中 | 更新用バンドル、`.sig`、`latest-preview.json`、チェックサム | `.github/workflows/kukuri-release.yml` を拡張し、draft release の asset を正本にする。 |
 | P0 | Windows コード署名 | 計画中 | 署名済み EXE/MSI、CI secret 運用 | 証明書が初回プレビューに間に合わない場合は、リスク説明と手動検証条件を追加する。 |
+| P0 | draft release smoke | 計画中 | draft asset からの Windows install/update smoke 記録 | release asset を差し替えず、smoke 後に公開へ昇格できることを条件にする。 |
 | P0 | インストール/アップデート E2E | 計画中 | 旧版から新版への更新シナリオ | identity、DB、Community Node 設定、通知 inbox、private channel 状態を検証する。 |
 | P0 | 診断レポート出力 | 計画中 | 秘匿情報除去済みレポートのコピー/書き出し操作 | アプリ版、OS、同期状態、Community Node 状態、直近エラー、設定形状を含め、秘密情報は含めない。 |
 | P0 | 本番用セキュリティ設定 | 計画中 | CSP、リリース用 capability review、deep link 検証監査 | リリース設定では `csp: null` に依存しない。 |
+| P1 | artifact provenance | 計画中 | GitHub Actions artifact attestation または同等の出所確認 | `id-token: write` / `attestations: write` を使える場合は Windows 配布物に attestation を付ける。 |
 | P1 | OS 通知機能 | 計画中 | ユーザー許可制の OS 通知配信 | `notifications` テーブルとは別扱いにし、イベントや状態を参照するが、権限/設定状態は独立して持つ。 |
 | P1 | データ安全性/リセット/バックアップ導線 | 計画中 | バックアップ、書き出し、リセットの文書または設定操作 | identity の喪失、keyring fallback、ローカル DB 場所、再インストール挙動を説明する。 |
 | P1 | プライバシーとデータ保存説明 | 計画中 | README、runbook、アプリ設定上の説明 | 何がローカル保存か、Community Node へ何を送るか、診断に何を含めるかを書く。 |
@@ -92,6 +104,11 @@
 - [ ] リリースチェックリスト issue または追跡ボードを作る。
 - [ ] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
 - [ ] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
+- [ ] release workflow は既存の `cargo xtask desktop-package` / `.github/workflows/kukuri-release.yml` を拡張する方針で固定し、初回プレビューでは `tauri-action` への全面移行を行わない。
+- [ ] GitHub Actions の実行トリガーを整理する。
+  - `push tags: v*` もまず draft release を作る。
+  - `workflow_dispatch` は tag input を必須にし、既定で draft release を作る。
+  - どちらの経路でも release tag の checkout と version consistency gate を通す。
 - [ ] `cargo xtask doctor` または専用のリリース確認コマンドに、バージョン同期チェックを追加する。
 - [ ] ワークフロー確定後に `docs/runbooks/release.md` を追加する。
 
@@ -112,9 +129,15 @@
 - [ ] Tauri 起動時に updater plugin を登録する。
 - [ ] updater の公開鍵と endpoint を `tauri.conf.json` またはリリース用 override 設定に追加する。
 - [ ] Windows bundle で更新用成果物を作成する設定を有効にする。
+- [ ] Windows の更新用成果物は `bundle.createUpdaterArtifacts: true` を使い、NSIS installer と updater bundle / signature の両方を release asset に含める。
 - [ ] 更新マニフェスト名を決める。
   - プレビューチャンネルは `latest-preview.json`。
   - 安定版チャンネル用に `latest.json` を予約する。
+- [ ] static updater manifest の必須項目を検証する。
+  - `version`
+  - `platforms.windows-x86_64.url`
+  - `platforms.windows-x86_64.signature`
+  - `signature` は `.sig` への URL ではなく、生成された `.sig` ファイルの内容を埋め込む。
 - [ ] フロントエンド API 層に更新状態型を追加する。
   - `idle`
   - `checking`
@@ -141,24 +164,47 @@
 
 作業:
 
-- [ ] `.github/workflows/kukuri-release.yml` を拡張し、次を公開する。
+- [ ] `.github/workflows/kukuri-release.yml` を次の job 境界に分ける。
+  - `validate-release-inputs`: tag/ref/channel/version consistency を検証する。
+  - `linux-verify`: fast/nightly と同等以上の Linux gate を通す。
+  - `windows-package`: clean な GitHub-hosted Windows runner で `cargo xtask desktop-package` を実行する。
+  - `release-assets`: updater manifest、checksum、release note 下書き、可能なら provenance を生成する。
+  - `publish-draft`: 既定では draft GitHub Release を作成する。
+- [ ] `validate-release-inputs` で次を fail-fast する。
+  - tag が存在しない。
+  - tag が `vX.Y.Z-preview.N` に一致しない。
+  - tag の version と `Cargo.toml` / `apps/desktop/package.json` / `apps/desktop/src-tauri/tauri.conf.json` の version が一致しない。
+  - `workflow_dispatch` の tag input と checkout 対象 ref が一致しない。
+- [ ] `windows-package` は次を公開する。
   - NSIS インストーラー。
   - 更新用バンドル。
   - `.sig` ファイル。
-  - `latest-preview.json`。
-  - チェックサム。
+  - 必要に応じて通常 installer と updater bundle を区別できる artifact 名。
 - [ ] updater 秘密鍵を GitHub Actions secrets に保存する。
+- [ ] updater build では `TAURI_SIGNING_PRIVATE_KEY` と、必要であれば `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` を GitHub Actions secrets から渡す。
 - [ ] updater 公開鍵はリポジトリ設定に保持する。
-- [ ] マニフェストが存在しない配布物を参照している場合、リリースワークフローを失敗させる検証を追加する。
+- [ ] `release-assets` で次を生成する。
+  - `latest-preview.json`
+  - `SHA256SUMS.txt`
+  - release asset 一覧
+  - manual smoke checklist
+- [ ] `latest-preview.json` は同じ GitHub Release 内の変更されない asset URL を参照する。
+- [ ] `latest-preview.json` の `signature` は `.sig` ファイルの内容を埋め込み、`.sig` の URL だけを入れない。
+- [ ] マニフェストが存在しない配布物を参照している場合、または `.sig` の読み込み/埋め込みに失敗した場合、リリースワークフローを失敗させる検証を追加する。
+- [ ] `SHA256SUMS.txt` は通常 installer、updater bundle、manifest を含める。
+- [ ] GitHub Actions artifact attestation が利用できる場合、Windows 配布物と updater bundle に attestation を付ける。
 - [ ] 証明書が利用可能になったら Windows コード署名 step を追加する。
 - [ ] コード署名が初回プレビューに間に合わない場合、リリースノートに明示的な注意書きを追加し、SmartScreen の手動確認を行う。
 - [ ] 成果物保持期間と成果物名で、preview / stable を区別できるようにする。
+- [ ] draft release 作成後の手動 smoke が終わるまで、公開 release へ昇格しない。
 
 完了条件:
 
 - リリースワークフローの出力だけで、新規インストールと更新インストールの両方が成立する。
 - 生成されたマニフェストが、同じリリース内の変更されない配布物 URL を参照している。
 - 手動実行で、即時公開ではなく draft release を作成できる。
+- draft release asset を差し替えずに、manual smoke 後にそのまま公開へ昇格できる。
+- 証明書がない場合でも、未署名プレビューであること、SmartScreen warning が想定内であること、回避手順が release note に明記されている。
 
 ### フェーズ 3: アップデート E2E とデータ安全性
 
@@ -327,6 +373,11 @@
 | browser UI tests | `cargo xtask desktop-browser-test` |
 | Tauri compile check | `cargo xtask tauri-check` |
 | Windows package | Windows 上で `cargo xtask desktop-package` |
+| release input gate | tag/ref/channel/version consistency を release workflow で検証する |
+| release asset manifest | `latest-preview.json` が同一 release asset URL と `.sig` 内容を参照していることを検証する |
+| release checksum | `SHA256SUMS.txt` が installer / updater bundle / manifest を含むことを確認する |
+| draft release smoke | draft release asset を差し替えずに Windows 10 / Windows 11 で install/update を確認する |
+| artifact provenance | attestation を使う場合、`gh attestation verify` または同等手段で配布物の出所を確認する |
 | smoke scenario | `cargo xtask e2e-smoke` |
 | Community Node connectivity | `cargo xtask scenario community_node_public_connectivity` |
 | updater test | 旧ビルドをインストールし、新ビルドへ更新し、データ保持を確認する |
@@ -339,8 +390,12 @@
 - [ ] `docs/runbooks/mvp-user-quickstart.md` に、更新確認と診断付きフィードバック手順がある。
 - [ ] `docs/runbooks/mvp-troubleshooting.md` に、アップデーター、インストール失敗、更新失敗の状態説明がある。
 - [ ] `docs/runbooks/release.md` が存在し、ワークフローと一致している。
-- [ ] リリースワークフローがタグから draft release を作成できる。
+- [ ] リリースワークフローが、tag/ref/channel/version consistency gate を通したうえで draft release を作成できる。
 - [ ] draft release に、インストーラー、更新用ファイル、署名、チェックサム、マニフェスト、リリースノートが含まれている。
+- [ ] draft release の成果物は GitHub-hosted runner で生成されたもので、手元ビルドとの差し替えを行っていない。
+- [ ] `latest-preview.json` の `signature` は `.sig` URL ではなく `.sig` 内容である。
+- [ ] `SHA256SUMS.txt` が release asset と一致している。
+- [ ] artifact attestation を使う場合、検証手順が release note または runbook にある。
 - [ ] インストーラーが署名済みである。未署名の場合は、未署名プレビューであるリスクが明記されている。
 - [ ] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
 - [ ] 正しい署名と不正な署名の両方で、更新署名検証を確認している。
@@ -357,10 +412,18 @@
 
 - 初回プレビューに Windows コード署名を必須とするか、内部/ビルダー向けプレビューとして未署名のまま明示的な警告付きで配るか。
 - updater マニフェストを GitHub Release asset のみで配るか、プロジェクト所有の安定 URL にもミラーするか。
-- `latest-preview.json` を CI で生成するか、リリースメタデータ用ブランチに commit するか。
 - 診断レポートは初回プレビューではクリップボードのみでよいか、ZIP または text file 書き出しも行うか。
 - OS 通知を初回公開プレビューに含めるか、アップデーターと診断レポートの直後に入れるか。
 - 更新確認を起動時に自動実行するか、一定間隔で実行するか、初回プレビューでは手動確認のみにするか。
+- artifact attestation を初回プレビューの必須条件にするか、P1 の provenance 強化として扱うか。
+- 公開昇格を release workflow 内の environment approval にするか、GitHub Release UI で draft を手動 publish する運用にするか。
+
+## 決定済み方針
+
+- 初回プレビューでは、既存の `cargo xtask desktop-package` と `.github/workflows/kukuri-release.yml` を拡張する。`tauri-action` への全面移行は行わない。
+- `latest-preview.json` は CI で生成し、GitHub Release asset として添付する。リリースメタデータ用ブランチへの commit は初回プレビューでは行わない。
+- 初回プレビューの updater channel は preview のみとし、stable 用 `latest.json` は予約に留める。
+- 手動実行の release workflow は draft release を作り、draft asset の manual smoke 後に公開する。
 
 ## このマイルストーンで扱わないこと
 
