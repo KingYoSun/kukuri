@@ -1,121 +1,121 @@
-# 2026-06-11 Release Readiness Execution Plan
+# 2026-06-11 リリース準備 実行計画
 
-## Summary
+## 概要
 
-- この計画は `builder preview` を「配布できる」「更新できる」「問題報告を回収できる」状態にするための release readiness plan です。
-- 既存の local notification inbox は product activity の durable local inbox として維持します。
-- OS 通知は既存 notification inbox とは別の feature slice として実装します。既存 `NotificationRow` / `NotificationView` は canonical activity inbox、OS 通知は opt-in delivery surface として扱います。
-- updater / update notification は release infrastructure の一部として最優先で実装します。OS 通知とは別に、アプリ内 update status / banner / settings surface を持ちます。
-- 初回 preview の配布対象は Windows installer、Linux は source-run fallback のままにします。
+- この計画は、ビルダープレビューを「配布できる」「更新できる」「問題報告を回収できる」状態にするためのリリース準備計画です。
+- 既存のローカル通知 inbox は、プロダクト内アクティビティの永続ローカル inbox として維持します。
+- OS 通知は既存の通知 inbox とは別の機能単位として実装します。既存の `NotificationRow` / `NotificationView` はアクティビティ履歴の正本、OS 通知はユーザーの許可に基づく注意喚起面として扱います。
+- アップデーターとアップデート通知は、リリース基盤の一部として最優先で実装します。OS 通知とは別に、アプリ内の更新状態、更新バナー、設定画面上の更新表示を持ちます。
+- 初回プレビューの配布対象は Windows インストーラーとし、Linux はソース起動の代替導線のままにします。
 
-## Current Snapshot
+## 現状
 
-- Windows release workflow は存在し、tag / manual dispatch で verify 後に Windows package を作り GitHub Release asset として publish します。
-- Windows bundle target は NSIS installer です。
-- `tauri-plugin-updater`、update manifest、update signature artifact、update UI はまだ release surface に含まれていません。
-- local notification inbox v1 は mention / reply / repost / quote_repost / direct_message / followed の activity inbox として存在します。
-- OS toast / push / dismiss / archive は local notification inbox v1 の scope 外です。
-- Community Node diagnostics と troubleshooting docs はありますが、ユーザーが GitHub feedback に貼れる redacted diagnostics export はまだ明示的な release gate ではありません。
-- production CSP、Windows code signing、updater signing、installer trust story は release gate として固定する必要があります。
+- Windows リリースワークフローは存在しており、タグまたは手動実行により、検証後に Windows パッケージを作成して GitHub Releases の配布物として公開します。
+- Windows のバンドル対象は NSIS インストーラーです。
+- `tauri-plugin-updater`、更新マニフェスト、更新署名ファイル、更新 UI はまだリリース面に含まれていません。
+- ローカル通知 inbox v1 は、メンション、返信、リポスト、引用リポスト、ダイレクトメッセージ、フォロー通知のアクティビティ inbox として存在します。
+- OS トースト通知、プッシュ通知、通知の破棄、通知のアーカイブは、ローカル通知 inbox v1 の範囲外です。
+- Community Node の診断表示とトラブルシューティング文書はありますが、ユーザーが GitHub へのフィードバックに貼れる秘匿情報除去済み診断レポートは、まだ明示的なリリース条件になっていません。
+- 本番用 CSP、Windows コード署名、アップデーター署名、インストーラーの信頼性説明は、リリース条件として固定する必要があります。
 
-## Release Readiness Principles
+## リリース準備の原則
 
 1. **更新可能性を先に固める**
-   - preview 配布後の hotfix を成立させるため、installer 公開より先に updater path を完成させる。
-   - manual download だけに依存しない。
+   - プレビュー配布後の修正配布を成立させるため、インストーラー公開より先にアップデート経路を完成させます。
+   - 手動ダウンロードだけに依存しません。
 
-2. **通知 surface を分離する**
-   - product activity は existing local notification inbox に残す。
-   - OS 通知は user opt-in、foreground/background policy、quiet mode、permission failure fallback を持つ別 layer にする。
-   - update notification は release/update status として扱い、activity inbox の自動既読とは独立させる。
+2. **通知の役割を分離する**
+   - プロダクト内アクティビティは、既存のローカル通知 inbox に残します。
+   - OS 通知は、ユーザー許可、フォアグラウンド/バックグラウンド方針、静音設定、権限拒否時の代替表示を持つ別レイヤーにします。
+   - アップデート通知は、リリース/更新状態として扱い、アクティビティ inbox の自動既読挙動から独立させます。
 
-3. **ユーザーが問題を報告できる状態を exit criteria に含める**
-   - connectivity が安定しても、preview では user environment 起因の failure が残る。
-   - redacted diagnostics export を first preview の必須要件にする。
+3. **問題報告できる状態を完了条件に含める**
+   - 通信が安定しても、プレビューではユーザー環境に由来する失敗が残ります。
+   - 秘匿情報除去済み診断レポートの出力を、初回プレビューの必須要件にします。
 
-4. **identity / local data を壊さない**
-   - updater / reinstall / migration / keyring fallback は preview の信頼性に直結する。
-   - release validation は fresh install だけでなく old version update を必ず含める。
+4. **identity とローカルデータを壊さない**
+   - アップデート、再インストール、マイグレーション、keyring fallback はプレビューの信頼性に直結します。
+   - リリース検証は新規インストールだけでなく、旧版からのアップデートも必ず含めます。
 
-5. **security posture を release config として固定する**
-   - dev convenience を release に持ち込まない。
-   - CSP、deep-link validation、signed updater artifact、signed Windows installer を release gate に含める。
+5. **セキュリティ姿勢をリリース設定として固定する**
+   - 開発時の利便性をそのままリリースに持ち込みません。
+   - CSP、deep link の検証、署名済み更新ファイル、署名済み Windows インストーラーをリリース条件に含めます。
 
-## Milestone Exit Criteria
+## マイルストーン完了条件
 
-A build is release-ready when all of the following are true:
+ビルドは次をすべて満たした時点で、リリース準備完了とします。
 
-- [ ] Windows installer can be downloaded from GitHub Releases and installed on a fresh Windows user profile.
-- [ ] The installed app can check for updates, show update availability, install the update, relaunch, and preserve local data.
-- [ ] Update artifacts are signed and verified by the app before install.
-- [ ] Windows installer / executable are code-signed or the release explicitly documents unsigned-preview risk and mitigation.
-- [ ] Release workflow publishes installer artifacts, updater artifacts, signatures, checksums, and release notes consistently.
-- [ ] A user can export or copy redacted diagnostics for feedback.
-- [ ] Community Node failure states remain readable and recoverable from settings.
-- [ ] Existing local notification inbox still works after update.
-- [ ] OS notification implementation, if shipped in the preview, is opt-in and independent from local notification inbox storage.
-- [ ] Privacy / data storage / feedback data copy is visible from README or in-app About / Settings.
-- [ ] CSP and release security settings are production-safe.
+- [ ] Windows インストーラーを GitHub Releases から取得し、新規 Windows ユーザープロファイルへインストールできる。
+- [ ] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
+- [ ] 更新ファイルは署名され、インストール前にアプリ側で検証される。
+- [ ] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
+- [ ] リリースワークフローが、インストーラー、更新用ファイル、署名、チェックサム、リリースノートを一貫して公開する。
+- [ ] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
+- [ ] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
+- [ ] 既存のローカル通知 inbox がアップデート後も動作する。
+- [ ] OS 通知を初回プレビューに含める場合、ユーザー許可制であり、ローカル通知 inbox の保存状態から独立している。
+- [ ] プライバシー、データ保存、フィードバック時に含まれる情報の説明が README またはアプリ内の About/Settings から読める。
+- [ ] CSP とリリース用セキュリティ設定が本番相当の安全側設定になっている。
 
-## Workstreams
+## 作業領域
 
-| Priority | Workstream | Status | Output | Notes |
+| 優先度 | 作業領域 | 状態 | 成果物 | 補足 |
 | --- | --- | --- | --- | --- |
-| P0 | Version / channel discipline | planned | single release version source, preview channel convention | Use `vX.Y.Z-preview.N`; keep `tauri.conf.json`, Tauri crate, desktop package version synchronized. |
-| P0 | Updater foundation | planned | Tauri updater plugin, updater config, signing key process | Add Rust/JS plugin deps, `check -> download -> install -> relaunch` runtime surface. |
-| P0 | Update notification UI | planned | app-internal update banner + settings/about status | Do not store update notices in existing activity notification inbox by default. |
-| P0 | Release workflow updater artifacts | planned | updater bundle, `.sig`, manifest, checksums | Extend `.github/workflows/kukuri-release.yml`. |
-| P0 | Windows code signing | planned | signed EXE/MSI, CI secret handling | If certificate is unavailable for first preview, document risk and add manual validation gate. |
-| P0 | Install / update E2E | planned | old -> new update scenario | Validate identity, DB, community-node config, notification inbox, private channel state. |
-| P0 | Diagnostics export | planned | redacted report copy/export action | Include app version, OS, sync status, Community Node state, last errors, config shape, no secrets. |
-| P0 | Production security config | planned | CSP, release-only capability review, deep-link validation audit | Current release config must not rely on `csp: null`. |
-| P1 | OS notification slice | planned | opt-in OS notification delivery | Separate from `notifications` table; consume events/status but own permission/settings state. |
-| P1 | Data safety / reset / backup UX | planned | backup/export/reset docs and maybe settings actions | Clarify identity loss, keyring fallback, local DB location, reinstall behavior. |
-| P1 | Privacy and data storage copy | planned | README / runbook / app settings copy | State what is local, what is sent to Community Node, what diagnostics includes. |
-| P1 | First-run release onboarding | planned | in-app checklist / happy path hints | Guide user through ready -> starter topic -> post/reply -> private channel -> feedback. |
-| P1 | DB migration safety | planned | migration smoke, update backup policy | Add old-version DB fixture and migration failure UX. |
-| P1 | Third-party notices | planned | generated OSS notices | Bundle or link from About / release notes. |
-| P1 | Feedback home | planned | GitHub issue/discussion template and deep link | Pre-fill diagnostics checklist and expected feedback categories. |
-| P2 | Staged rollout / rollback | deferred | dynamic update server or channel split | Static `latest-preview.json` is enough for first preview. |
-| P2 | Crash reporting / telemetry | deferred | opt-in crash report | Do not add network telemetry before privacy copy and consent model are ready. |
-| P2 | Accessibility release pass | planned | keyboard/screen-reader checklist | Include nav rail, dialogs, notification list, settings drawer, update prompt. |
+| P0 | バージョン/チャンネル運用 | 計画中 | 単一のリリースバージョン基準、プレビューチャンネル規約 | `vX.Y.Z-preview.N` を使い、`tauri.conf.json`、Tauri crate、desktop package のバージョンを同期する。 |
+| P0 | アップデーター基盤 | 計画中 | Tauri updater plugin、アップデーター設定、署名鍵運用 | Rust/JS 依存を追加し、確認、ダウンロード、インストール、再起動の実行面を作る。 |
+| P0 | アップデート通知 UI | 計画中 | アプリ内更新バナー、設定/About の更新状態表示 | 更新通知は既存のアクティビティ通知 inbox へ既定では保存しない。 |
+| P0 | リリースワークフローの更新用成果物 | 計画中 | 更新用バンドル、`.sig`、マニフェスト、チェックサム | `.github/workflows/kukuri-release.yml` を拡張する。 |
+| P0 | Windows コード署名 | 計画中 | 署名済み EXE/MSI、CI secret 運用 | 証明書が初回プレビューに間に合わない場合は、リスク説明と手動検証条件を追加する。 |
+| P0 | インストール/アップデート E2E | 計画中 | 旧版から新版への更新シナリオ | identity、DB、Community Node 設定、通知 inbox、private channel 状態を検証する。 |
+| P0 | 診断レポート出力 | 計画中 | 秘匿情報除去済みレポートのコピー/書き出し操作 | アプリ版、OS、同期状態、Community Node 状態、直近エラー、設定形状を含め、秘密情報は含めない。 |
+| P0 | 本番用セキュリティ設定 | 計画中 | CSP、リリース用 capability review、deep link 検証監査 | リリース設定では `csp: null` に依存しない。 |
+| P1 | OS 通知機能 | 計画中 | ユーザー許可制の OS 通知配信 | `notifications` テーブルとは別扱いにし、イベントや状態を参照するが、権限/設定状態は独立して持つ。 |
+| P1 | データ安全性/リセット/バックアップ導線 | 計画中 | バックアップ、書き出し、リセットの文書または設定操作 | identity の喪失、keyring fallback、ローカル DB 場所、再インストール挙動を説明する。 |
+| P1 | プライバシーとデータ保存説明 | 計画中 | README、runbook、アプリ設定上の説明 | 何がローカル保存か、Community Node へ何を送るか、診断に何を含めるかを書く。 |
+| P1 | 初回起動オンボーディング | 計画中 | アプリ内チェックリストまたは案内表示 | ready、starter topic、post/reply、private channel、feedback まで案内する。 |
+| P1 | DB マイグレーション安全策 | 計画中 | マイグレーション smoke、更新前バックアップ方針 | 旧版 DB fixture と、失敗時のユーザー向け表示を追加する。 |
+| P1 | サードパーティ通知 | 計画中 | OSS ライセンス通知 | About 画面またはリリースノートから参照できるようにする。 |
+| P1 | フィードバック窓口 | 計画中 | GitHub issue/discussion template と導線 | 診断添付、期待するフィードバック分類を事前入力する。 |
+| P2 | 段階的配布/ロールバック | 後回し | 動的更新サーバーまたはチャンネル分離 | 初回プレビューでは静的 `latest-preview.json` で十分とする。 |
+| P2 | クラッシュ報告/計測 | 後回し | 任意参加のクラッシュ報告 | プライバシー説明と同意設計が整うまで、ネットワーク計測は追加しない。 |
+| P2 | アクセシビリティ確認 | 計画中 | キーボード/スクリーンリーダー確認表 | nav rail、dialog、通知一覧、settings drawer、更新プロンプトを含める。 |
 
-## Execution Plan
+## 実行計画
 
-### Phase 0: Release Baseline Audit
+### フェーズ 0: リリース基準の棚卸し
 
-Goal: freeze the baseline and make release work visible.
+目的: 現在の基準を固定し、リリース作業を追跡可能にします。
 
-Tasks:
+作業:
 
-- [ ] Decide first preview tag format, e.g. `v0.1.0-preview.1`.
-- [ ] Add a release checklist issue or tracking board.
-- [ ] Confirm target OS matrix: Windows 10 / Windows 11 for packaged preview, Linux source-run only.
-- [ ] Confirm release branch policy: direct tag from `main` or release branch.
-- [ ] Add a version sync check to `cargo xtask doctor` or a dedicated release check.
-- [ ] Add `docs/runbooks/release.md` after the workflow is finalized.
+- [ ] 初回プレビュータグ形式を決める。例: `v0.1.0-preview.1`。
+- [ ] リリースチェックリスト issue または追跡ボードを作る。
+- [ ] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
+- [ ] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
+- [ ] `cargo xtask doctor` または専用のリリース確認コマンドに、バージョン同期チェックを追加する。
+- [ ] ワークフロー確定後に `docs/runbooks/release.md` を追加する。
 
-Acceptance:
+完了条件:
 
-- One canonical release checklist exists.
-- Version/channel convention is documented.
-- Release candidate build can be produced from a reproducible command.
+- 正となるリリースチェックリストが 1 つ存在する。
+- バージョン/チャンネル規約が文書化されている。
+- リリース候補ビルドを再現可能なコマンドで作成できる。
 
-### Phase 1: Updater Foundation
+### フェーズ 1: アップデーター基盤
 
-Goal: installed preview builds can update without manual reinstall.
+目的: インストール済みプレビュービルドが、手動再インストールなしで更新できるようにします。
 
-Tasks:
+作業:
 
-- [ ] Add `tauri-plugin-updater` to `apps/desktop/src-tauri/Cargo.toml`.
-- [ ] Add `@tauri-apps/plugin-updater` to `apps/desktop/package.json`.
-- [ ] Register the updater plugin in Tauri startup.
-- [ ] Configure updater public key and endpoints in `tauri.conf.json` / release override config.
-- [ ] Enable updater artifact creation for Windows bundles.
-- [ ] Define update manifest naming:
-  - `latest-preview.json` for preview channel.
-  - `latest.json` reserved for stable channel.
-- [ ] Add update status types to frontend API layer:
+- [ ] `tauri-plugin-updater` を `apps/desktop/src-tauri/Cargo.toml` に追加する。
+- [ ] `@tauri-apps/plugin-updater` を `apps/desktop/package.json` に追加する。
+- [ ] Tauri 起動時に updater plugin を登録する。
+- [ ] updater の公開鍵と endpoint を `tauri.conf.json` またはリリース用 override 設定に追加する。
+- [ ] Windows bundle で更新用成果物を作成する設定を有効にする。
+- [ ] 更新マニフェスト名を決める。
+  - プレビューチャンネルは `latest-preview.json`。
+  - 安定版チャンネル用に `latest.json` を予約する。
+- [ ] フロントエンド API 層に更新状態型を追加する。
   - `idle`
   - `checking`
   - `up_to_date`
@@ -123,201 +123,201 @@ Tasks:
   - `downloading`
   - `ready_to_restart`
   - `failed`
-- [ ] Add manual "Check for updates" action in Settings / About.
-- [ ] Add non-blocking update banner when update is available.
-- [ ] Add restart prompt after install is ready.
-- [ ] Add error copy that distinguishes network failure, manifest unavailable, signature failure, and install failure.
+- [ ] Settings / About に「更新を確認」操作を追加する。
+- [ ] 更新がある場合の非ブロッキングな更新バナーを追加する。
+- [ ] インストール準備完了後の再起動プロンプトを追加する。
+- [ ] ネットワーク失敗、マニフェスト取得失敗、署名検証失敗、インストール失敗を区別したエラー文を追加する。
 
-Acceptance:
+完了条件:
 
-- A locally installed old build can discover a newer build from a test manifest.
-- Signature mismatch refuses installation.
-- Offline check fails gracefully.
-- Update status is independent from local activity notification inbox.
+- ローカルにインストールした旧ビルドが、テスト用マニフェストから新しいビルドを発見できる。
+- 署名不一致の更新はインストールを拒否する。
+- オフライン時の更新確認が安全に失敗表示される。
+- 更新状態はローカルアクティビティ通知 inbox から独立している。
 
-### Phase 2: Release Workflow and Signing
+### フェーズ 2: リリースワークフローと署名
 
-Goal: GitHub Releases produce all artifacts required by installer users and updater users.
+目的: GitHub Releases が、新規インストール用とアップデート用の両方に必要な成果物を生成します。
 
-Tasks:
+作業:
 
-- [ ] Extend `.github/workflows/kukuri-release.yml` to publish:
-  - NSIS installer.
-  - updater bundle artifacts.
-  - `.sig` files.
-  - `latest-preview.json`.
-  - checksums.
-- [ ] Store updater private key in GitHub Actions secrets.
-- [ ] Keep updater public key in repository config.
-- [ ] Add release workflow validation that fails if manifest points to missing assets.
-- [ ] Add Windows code-signing step when certificate is available.
-- [ ] If code signing is not ready for first preview, add explicit release note copy and manual SmartScreen validation.
-- [ ] Add artifact retention and artifact names that distinguish preview / stable.
+- [ ] `.github/workflows/kukuri-release.yml` を拡張し、次を公開する。
+  - NSIS インストーラー。
+  - 更新用バンドル。
+  - `.sig` ファイル。
+  - `latest-preview.json`。
+  - チェックサム。
+- [ ] updater 秘密鍵を GitHub Actions secrets に保存する。
+- [ ] updater 公開鍵はリポジトリ設定に保持する。
+- [ ] マニフェストが存在しない配布物を参照している場合、リリースワークフローを失敗させる検証を追加する。
+- [ ] 証明書が利用可能になったら Windows コード署名 step を追加する。
+- [ ] コード署名が初回プレビューに間に合わない場合、リリースノートに明示的な注意書きを追加し、SmartScreen の手動確認を行う。
+- [ ] 成果物保持期間と成果物名で、preview / stable を区別できるようにする。
 
-Acceptance:
+完了条件:
 
-- Release workflow output is enough for both fresh install and update install.
-- Generated manifest references immutable release asset URLs.
-- Manual workflow dispatch can create a draft release without publishing it immediately.
+- リリースワークフローの出力だけで、新規インストールと更新インストールの両方が成立する。
+- 生成されたマニフェストが、同じリリース内の変更されない配布物 URL を参照している。
+- 手動実行で、即時公開ではなく draft release を作成できる。
 
-### Phase 3: Update E2E and Data Safety
+### フェーズ 3: アップデート E2E とデータ安全性
 
-Goal: updates preserve user data and failures do not strand users.
+目的: アップデート後もユーザーデータが維持され、失敗時にもユーザーが詰まらないようにします。
 
-Tasks:
+作業:
 
-- [ ] Build `v0.1.0-preview.1` and `v0.1.0-preview.2` test artifacts.
-- [ ] Create a manual or automated update scenario:
-  - install old build,
-  - create identity,
-  - wait for Community Node ready,
-  - add starter topic,
-  - post/reply,
-  - create or join private channel,
-  - receive or create local notification,
-  - update to new build,
-  - verify all state is present.
-- [ ] Add migration fixture for at least one old DB.
-- [ ] Document reinstall behavior: data preserved vs removed.
-- [ ] Document keyring fallback behavior and file fallback risk.
-- [ ] Add user-visible startup error for migration/open DB failure.
+- [ ] `v0.1.0-preview.1` と `v0.1.0-preview.2` のテスト成果物を作る。
+- [ ] 手動または自動のアップデートシナリオを作る。
+  - 旧ビルドをインストールする。
+  - identity を作成する。
+  - Community Node が ready になるまで待つ。
+  - starter topic を追加する。
+  - 投稿/返信する。
+  - private channel を作成または参加する。
+  - ローカル通知を受信または作成する。
+  - 新ビルドへ更新する。
+  - すべての状態が残っていることを確認する。
+- [ ] 少なくとも 1 つの旧版 DB fixture を追加する。
+- [ ] 再インストール時にデータを保持するか削除するかを文書化する。
+- [ ] keyring fallback と file fallback のリスクを文書化する。
+- [ ] マイグレーション失敗または DB open 失敗時のユーザー向け起動エラーを追加する。
 
-Acceptance:
+完了条件:
 
-- Update preserves identity, DB, Iroh data, community-node config, private-channel capabilities, and notification inbox.
-- Failed update can be retried.
-- Migration failure produces actionable diagnostics rather than a blank app.
+- アップデート後も identity、DB、Iroh data、Community Node 設定、private channel capability、通知 inbox が保持される。
+- 失敗したアップデートを再試行できる。
+- マイグレーション失敗時に、空白画面ではなく実行可能な診断情報が表示される。
 
-### Phase 4: Diagnostics and Feedback Loop
+### フェーズ 4: 診断レポートとフィードバック導線
 
-Goal: preview users can provide actionable feedback without leaking secrets.
+目的: プレビュー利用者が、秘密情報を漏らさずに有用なフィードバックを送れるようにします。
 
-Tasks:
+作業:
 
-- [ ] Add diagnostics export/copy action in Settings.
-- [ ] Include:
-  - app version,
-  - release channel,
-  - OS and architecture,
-  - sync status,
-  - discovery mode,
-  - Community Node session phase / last error / retry-after,
-  - active path and peer counts,
-  - subscribed topic count,
-  - notification unread count,
-  - recent non-secret error messages,
-  - update status and last update error.
-- [ ] Exclude or redact:
-  - secret keys,
-  - auth tokens,
-  - private-channel capability secrets,
-  - invite/share tokens,
-  - raw DM content,
-  - raw local DB paths if they include sensitive usernames unless user chooses full report.
-- [ ] Add GitHub feedback URL or template copy.
-- [ ] Update `docs/runbooks/mvp-user-quickstart.md` to ask users to attach diagnostics.
-- [ ] Update `docs/runbooks/mvp-troubleshooting.md` with update and diagnostics sections.
+- [ ] Settings に診断レポートのコピー/書き出し操作を追加する。
+- [ ] 診断レポートに次を含める。
+  - アプリバージョン。
+  - リリースチャンネル。
+  - OS とアーキテクチャ。
+  - 同期状態。
+  - discovery mode。
+  - Community Node の session phase / last error / retry-after。
+  - active path と peer 数。
+  - subscribed topic 数。
+  - 通知未読数。
+  - 直近の秘密情報を含まないエラーメッセージ。
+  - 更新状態と直近の更新エラー。
+- [ ] 次を除外または秘匿する。
+  - secret key。
+  - 認証 token。
+  - private channel capability secret。
+  - invite/share token。
+  - DM の本文。
+  - ユーザー名などを含むローカル DB path。ただし、ユーザーが詳細レポートを明示選択した場合は別扱いにできる。
+- [ ] GitHub フィードバック URL またはテンプレート付きコピーを追加する。
+- [ ] `docs/runbooks/mvp-user-quickstart.md` に、診断レポートを添える手順を追加する。
+- [ ] `docs/runbooks/mvp-troubleshooting.md` に、更新と診断レポートの節を追加する。
 
-Acceptance:
+完了条件:
 
-- A non-technical user can produce a useful bug report in one minute.
-- Diagnostics output is safe to paste publicly by default.
+- 技術に詳しくないユーザーでも、1 分以内に有用な不具合報告を作れる。
+- 既定の診断レポートは、公開 issue に貼っても安全な内容になっている。
 
-### Phase 5: Production Security Hardening
+### フェーズ 5: 本番用セキュリティ強化
 
-Goal: preview builds have a clear, bounded security posture.
+目的: プレビュービルドのセキュリティ姿勢を明確にし、範囲を絞ります。
 
-Tasks:
+作業:
 
-- [ ] Replace release `csp: null` with a production CSP.
-- [ ] Review Tauri capabilities and ensure only required permissions are enabled.
-- [ ] Audit deep-link parsing and reject unsupported schemes / malformed tokens.
-- [ ] Ensure update endpoints are HTTPS.
-- [ ] Ensure updater signature verification is required for all update installs.
-- [ ] Add third-party notice generation.
-- [ ] Add privacy/data storage copy to README and/or app settings.
+- [ ] リリース設定の `csp: null` を本番用 CSP に置き換える。
+- [ ] Tauri capability を確認し、必要な権限だけが有効になっていることを確認する。
+- [ ] deep link parsing を監査し、未対応 scheme や壊れた token を拒否する。
+- [ ] 更新 endpoint が HTTPS であることを確認する。
+- [ ] すべての更新インストールで updater 署名検証を必須にする。
+- [ ] サードパーティライセンス通知の生成を追加する。
+- [ ] README またはアプリ内 settings に、プライバシーとデータ保存の説明を追加する。
 
-Acceptance:
+完了条件:
 
-- Release config is intentionally stricter than dev config.
-- Deep-link handling cannot silently import malformed or unintended data.
-- Users can understand where data is stored and what leaves the device.
+- リリース設定は開発設定より明示的に厳しくなっている。
+- deep link 処理が、壊れたデータや想定外のデータを黙って取り込まない。
+- ユーザーが、何が端末に保存され、何が端末外へ出るのかを理解できる。
 
-### Phase 6: OS Notification Slice
+### フェーズ 6: OS 通知機能
 
-Goal: OS notifications are available without changing the semantics of local notification inbox.
+目的: ローカル通知 inbox の意味を変えずに、OS 通知を利用できるようにします。
 
-Scope:
+範囲:
 
-- This slice is separate from `NotificationRow` persistence.
-- Existing local notification inbox remains the durable source for product activity history.
-- OS notification delivery is a best-effort surface for user attention.
+- この機能は `NotificationRow` の永続化とは別です。
+- 既存のローカル通知 inbox は、プロダクト内アクティビティ履歴の永続的な正本として維持します。
+- OS 通知は、ユーザーの注意を促すための best effort な表示面です。
 
-Tasks:
+作業:
 
-- [ ] Add OS notification plugin/dependency for desktop.
-- [ ] Add notification settings:
-  - master enable/disable,
-  - direct messages,
-  - mentions/replies,
-  - follows/reposts if desired,
-  - quiet mode / do not disturb if simple enough,
-  - preview text on/off.
-- [ ] Add permission request flow.
-- [ ] Add delivery policy:
-  - do not notify for self-authored events,
-  - do not notify when the relevant pane is focused unless setting allows,
-  - do not include private DM text if preview text is disabled,
-  - dedupe by notification id or source event id.
-- [ ] Decide whether OS notification click opens:
-  - DM pane for direct message,
-  - thread/topic for reply/mention/repost,
-  - author pane for followed.
-- [ ] Add tests for settings and dedupe policy.
-- [ ] Add manual QA for permission denied / foreground / background / app closed where supported.
+- [ ] desktop 向け OS 通知 plugin/dependency を追加する。
+- [ ] 通知設定を追加する。
+  - 全体の有効/無効。
+  - ダイレクトメッセージ。
+  - メンション/返信。
+  - 必要であれば、フォロー/リポスト。
+  - 簡単に入れられる範囲で静音モード。
+  - プレビュー本文の表示/非表示。
+- [ ] 権限要求フローを追加する。
+- [ ] 配信方針を追加する。
+  - 自分が作成したイベントでは通知しない。
+  - 関連する pane がフォーカス中なら、設定で許可されていない限り通知しない。
+  - プレビュー本文が無効なら、private DM の本文を OS 通知に含めない。
+  - notification id または source event id で重複排除する。
+- [ ] OS 通知クリック時の遷移先を決める。
+  - ダイレクトメッセージは DM pane を開く。
+  - 返信/メンション/リポストは thread または topic を開く。
+  - フォロー通知は author pane を開く。
+- [ ] 設定と重複排除方針のテストを追加する。
+- [ ] 権限許可/拒否、フォアグラウンド/バックグラウンド、可能な範囲でアプリ終了時の手動 QA を追加する。
 
-Acceptance:
+完了条件:
 
-- Turning OS notifications off does not affect local notification inbox.
-- Clearing or reading local inbox does not implicitly change OS notification permission settings.
-- OS notification click navigation matches existing notification click navigation where possible.
+- OS 通知を無効にしても、ローカル通知 inbox には影響しない。
+- ローカル通知 inbox の既読化やクリア操作が、OS 通知の権限設定を暗黙に変更しない。
+- OS 通知クリック時の遷移は、可能な限り既存の通知クリック時遷移と一致する。
 
-### Phase 7: Final Release Candidate Pass
+### フェーズ 7: 最終リリース候補確認
 
-Goal: one tagged candidate can be declared preview-ready.
+目的: 1 つのタグ付き候補をプレビュー公開可能と判断できる状態にします。
 
-Tasks:
+作業:
 
-- [ ] Run release workflow in draft mode.
-- [ ] Install draft artifact on clean Windows 10 and Windows 11 machines.
-- [ ] Complete happy path:
-  - launch,
-  - Community Node ready,
-  - starter topic,
-  - public post,
-  - reply/thread,
-  - private channel,
-  - DM if test peer is available,
-  - notification inbox,
-  - diagnostics export.
-- [ ] Complete update path from previous RC.
-- [ ] Verify release notes include:
-  - preview scope,
-  - known limitations,
-  - update behavior,
-  - data storage/privacy note,
-  - feedback instructions,
-  - troubleshooting link.
-- [ ] Publish release after final smoke.
+- [ ] リリースワークフローを draft mode で実行する。
+- [ ] clean な Windows 10 / Windows 11 環境に draft 配布物をインストールする。
+- [ ] happy path を完了する。
+  - 起動する。
+  - Community Node が ready になる。
+  - starter topic を開く。
+  - public post を行う。
+  - reply/thread を確認する。
+  - private channel を確認する。
+  - テスト peer が使える場合は DM を確認する。
+  - 通知 inbox を確認する。
+  - 診断レポートを書き出す。
+- [ ] 前回 RC からのアップデート経路を完了する。
+- [ ] リリースノートに次が含まれることを確認する。
+  - プレビュー範囲。
+  - 既知の制限。
+  - 更新挙動。
+  - データ保存/プライバシーに関する注意。
+  - フィードバック手順。
+  - トラブルシューティングへのリンク。
+- [ ] 最終 smoke 後にリリースを公開する。
 
-Acceptance:
+完了条件:
 
-- Draft release can be promoted without changing artifacts.
-- Known limitations are documented before users download the installer.
+- draft release の成果物を差し替えずに、そのまま公開へ昇格できる。
+- 既知の制限が、ユーザーがインストーラーを入手する前に読める。
 
-## Validation Matrix
+## 検証マトリクス
 
-| Path | Gate |
+| 経路 | 確認コマンドまたは確認内容 |
 | --- | --- |
 | workspace static check | `cargo xtask check` |
 | Rust tests | `cargo xtask rust-test` |
@@ -326,49 +326,49 @@ Acceptance:
 | Storybook build | `cargo xtask desktop-storybook` |
 | browser UI tests | `cargo xtask desktop-browser-test` |
 | Tauri compile check | `cargo xtask tauri-check` |
-| Windows package | `cargo xtask desktop-package` on Windows |
+| Windows package | Windows 上で `cargo xtask desktop-package` |
 | smoke scenario | `cargo xtask e2e-smoke` |
 | Community Node connectivity | `cargo xtask scenario community_node_public_connectivity` |
-| updater test | install old build -> update to new build -> verify data |
-| diagnostics test | export redacted report and inspect for secrets |
-| OS notification test | permission allow/deny, foreground/background, click routing |
+| updater test | 旧ビルドをインストールし、新ビルドへ更新し、データ保持を確認する |
+| diagnostics test | 秘匿情報除去済みレポートを書き出し、秘密情報が含まれないことを確認する |
+| OS notification test | 権限許可/拒否、フォアグラウンド/バックグラウンド、クリック時遷移を確認する |
 
-## Release Checklist
+## リリースチェックリスト
 
-- [ ] `README.ja.md` and `README.md` describe preview scope and Windows installer path.
-- [ ] `docs/runbooks/mvp-user-quickstart.md` includes update check and diagnostics feedback steps.
-- [ ] `docs/runbooks/mvp-troubleshooting.md` includes updater and install/update failure states.
-- [ ] `docs/runbooks/release.md` exists and matches the workflow.
-- [ ] Release workflow can create draft release from tag.
-- [ ] Draft release contains installer, updater artifacts, signatures, checksums, manifest, and release notes.
-- [ ] Installer is signed or unsigned-preview risk is explicitly documented.
-- [ ] Updater manifest points to release assets for the same version/channel.
-- [ ] Update signature verification is tested with valid and invalid signatures.
-- [ ] Fresh install happy path is manually confirmed.
-- [ ] Update happy path is manually confirmed.
-- [ ] Reinstall behavior is manually confirmed.
-- [ ] Diagnostics export is manually confirmed and redaction reviewed.
-- [ ] Existing local notification inbox still passes activity notification scenarios.
-- [ ] OS notification settings do not mutate local notification inbox behavior.
-- [ ] Privacy/data storage copy is visible before or during first use.
-- [ ] Known limitations are listed in release notes.
+- [ ] `README.ja.md` と `README.md` が、プレビュー範囲と Windows インストーラー導線を説明している。
+- [ ] `docs/runbooks/mvp-user-quickstart.md` に、更新確認と診断付きフィードバック手順がある。
+- [ ] `docs/runbooks/mvp-troubleshooting.md` に、アップデーター、インストール失敗、更新失敗の状態説明がある。
+- [ ] `docs/runbooks/release.md` が存在し、ワークフローと一致している。
+- [ ] リリースワークフローがタグから draft release を作成できる。
+- [ ] draft release に、インストーラー、更新用ファイル、署名、チェックサム、マニフェスト、リリースノートが含まれている。
+- [ ] インストーラーが署名済みである。未署名の場合は、未署名プレビューであるリスクが明記されている。
+- [ ] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
+- [ ] 正しい署名と不正な署名の両方で、更新署名検証を確認している。
+- [ ] 新規インストールの happy path を手動確認している。
+- [ ] アップデートの happy path を手動確認している。
+- [ ] 再インストール時の挙動を手動確認している。
+- [ ] 診断レポートの書き出しと秘匿処理を手動確認している。
+- [ ] 既存のローカル通知 inbox が、アクティビティ通知シナリオで引き続き通る。
+- [ ] OS 通知設定が、ローカル通知 inbox の挙動を変更しない。
+- [ ] プライバシー/データ保存説明が、初回利用前または初回利用中に読める。
+- [ ] 既知の制限がリリースノートに列挙されている。
 
-## Open Questions
+## 未決事項
 
-- Should first preview require Windows code signing, or can the first internal/builder preview ship unsigned with explicit warning?
-- Should updater manifests be hosted as GitHub Release assets only, or also mirrored to a stable project-owned URL?
-- Should `latest-preview.json` be generated by CI or checked into a release metadata branch?
-- Should diagnostics export be clipboard-only for first preview, or also write a ZIP/text file?
-- Should OS notifications ship in the first public preview, or land immediately after updater and diagnostics?
-- Should update checks run automatically on startup, on interval, or only manually for first preview?
+- 初回プレビューに Windows コード署名を必須とするか、内部/ビルダー向けプレビューとして未署名のまま明示的な警告付きで配るか。
+- updater マニフェストを GitHub Release asset のみで配るか、プロジェクト所有の安定 URL にもミラーするか。
+- `latest-preview.json` を CI で生成するか、リリースメタデータ用ブランチに commit するか。
+- 診断レポートは初回プレビューではクリップボードのみでよいか、ZIP または text file 書き出しも行うか。
+- OS 通知を初回公開プレビューに含めるか、アップデーターと診断レポートの直後に入れるか。
+- 更新確認を起動時に自動実行するか、一定間隔で実行するか、初回プレビューでは手動確認のみにするか。
 
-## Non-goals For This Milestone
+## このマイルストーンで扱わないこと
 
-- General-public launch.
-- macOS packaging/notarization.
-- Linux binary packaging.
-- Dynamic staged rollout server, unless static GitHub manifest proves insufficient.
-- Cross-device notification sync.
-- Push notification service.
-- Mandatory telemetry.
-- Full moderation tooling.
+- 一般公開リリース。
+- macOS パッケージングと notarization。
+- Linux バイナリ配布。
+- 静的 GitHub マニフェストで不足が出ない限り、動的な段階的配布サーバー。
+- 通知のクロスデバイス同期。
+- プッシュ通知サービス。
+- 必須 telemetry。
+- 完全な moderation tooling。
