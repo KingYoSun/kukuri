@@ -319,10 +319,23 @@ fn desktop_package() -> Result<()> {
         bail!("desktop-package is only supported on Windows hosts");
     }
 
-    run_pnpm(
-        ["tauri", "build", "--target", "x86_64-pc-windows-msvc"],
-        &desktop_dir(),
-    )
+    let mut args = vec![
+        "tauri".to_string(),
+        "build".to_string(),
+        "--target".to_string(),
+        "x86_64-pc-windows-msvc".to_string(),
+    ];
+    if std::env::var_os("TAURI_SIGNING_PRIVATE_KEY").is_none() {
+        println!(
+            "[xtask] TAURI_SIGNING_PRIVATE_KEY is not set; building installer without updater artifacts"
+        );
+        args.extend([
+            "--config".to_string(),
+            r#"{"bundle":{"createUpdaterArtifacts":false}}"#.to_string(),
+        ]);
+    }
+
+    run_pnpm(args, &desktop_dir())
 }
 
 fn release_check(tag: Option<&str>) -> Result<()> {
