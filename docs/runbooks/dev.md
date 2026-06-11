@@ -16,6 +16,7 @@ cargo xtask desktop-ui-check
 cargo xtask cn-check
 cargo xtask cn-test
 cargo xtask e2e-smoke
+cargo xtask release-check v0.1.0-preview.1
 cargo xtask scenario community_node_public_connectivity
 cargo xtask scenario community_node_multi_device_connectivity
 cargo xtask rust-check
@@ -204,6 +205,7 @@ cargo xtask desktop-package
 - 実行可能なのは Windows host のみ
 - 生成物は `apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` に出る
 - `cargo xtask desktop-package` は `src-tauri/tauri.windows.conf.json` を使った Windows bundle config を前提にする
+- release workflow / updater manifest / draft release の手順は `docs/runbooks/release.md` を参照する
 
 ## remote-sync 用の環境変数
 ```bash

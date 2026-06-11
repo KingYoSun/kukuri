@@ -2,6 +2,7 @@ import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
 import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
+import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 
@@ -201,6 +202,10 @@ export function DesktopShellSettingsDrawer({
           onRemoveBookmark={handleRemoveBookmarkedCustomReaction}
         />
       ),
+    },
+    {
+      ...settingsSectionCopy[5],
+      content: <ReleasePanel />,
     },
   ];
 

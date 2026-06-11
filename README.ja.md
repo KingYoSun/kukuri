@@ -8,6 +8,9 @@ kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署
 
 - 現在の preview 配布対象は Windows installer です。GitHub Releases から取得します。
 - Linux は現時点では source-run を前提にします。
+- preview 更新は `Settings -> Release` の updater から `latest-preview.json` を参照します。
+- data safety、release runbook、third-party notices は `Settings -> Release` から参照できます。
+- preview build が未署名の場合は、GitHub Release notes に SmartScreen warning が想定内であることを明記します。
 - preview の主線は `起動 -> preloaded community node が ready になる -> starter topic -> post/reply -> private channel -> feedback` です。
 - quickstart: [docs/runbooks/mvp-user-quickstart.md](./docs/runbooks/mvp-user-quickstart.md)
 - troubleshooting: [docs/runbooks/mvp-troubleshooting.md](./docs/runbooks/mvp-troubleshooting.md)
@@ -19,6 +22,10 @@ kukuri は topic-first な P2P social app / protocol です。Nostr 由来の署
 3. public post または thread reply を 1 本試します。
 4. 同じ topic 配下で private channel を作るか参加します。
 5. diagnostics を確認し、GitHub に feedback を送ります。
+
+diagnostics は `Settings -> Release` からコピーまたは書き出しできます。既定のレポートには secret key、認証 token、private channel secret、invite/share token、DM 本文、ローカル DB path を含めません。
+
+preview 更新では identity、local DB、Iroh data、Community Node 設定、private channel capability、通知 inbox を保持する前提です。third-party notice review は [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md) で追跡します。
 
 ## Community Node の役割
 
@@ -94,6 +101,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
+cargo xtask release-check v0.1.0-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install

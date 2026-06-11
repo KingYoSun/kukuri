@@ -84,6 +84,11 @@ export const SETTINGS_SECTION_COPY: Array<{
     label: 'Reactions',
     description: 'Custom reaction creation and saved reaction management.',
   },
+  {
+    id: 'release',
+    label: 'Release',
+    description: 'Preview updates, diagnostics, OS notifications, and privacy.',
+  },
 ];
 
 export const PRIMARY_SECTION_PATHS: Record<PrimarySection, string> = {
@@ -101,7 +106,8 @@ export function isSettingsSection(value: string | null): value is SettingsSectio
     value === 'connectivity' ||
     value === 'discovery' ||
     value === 'community-node' ||
-    value === 'reactions'
+    value === 'reactions' ||
+    value === 'release'
   );
 }
 

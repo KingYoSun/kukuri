@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test } from 'vitest';
 
 import { App } from '@/App';
@@ -40,4 +41,14 @@ test('desktop app restores a persisted light theme on boot', async () => {
   await waitFor(() => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
   });
+});
+
+test('preview release banner opens release settings', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Updates' }));
+
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
 });

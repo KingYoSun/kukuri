@@ -299,9 +299,10 @@ function parseInitialSettingsSection(): {
   if (
     requestedSection !== 'appearance' &&
     requestedSection !== 'connectivity' &&
-    requestedSection !== 'discovery' &&
-    requestedSection !== 'community-node' &&
-    requestedSection !== 'reactions'
+      requestedSection !== 'discovery' &&
+      requestedSection !== 'community-node' &&
+      requestedSection !== 'reactions' &&
+      requestedSection !== 'release'
   ) {
     return {
       activeSettingsSection: DEFAULT_SETTINGS_SECTION,

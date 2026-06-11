@@ -13,7 +13,8 @@ export type SettingsSection =
   | 'connectivity'
   | 'discovery'
   | 'community-node'
-  | 'reactions';
+  | 'reactions'
+  | 'release';
 
 export type ProfileWorkspaceMode = 'overview' | 'edit' | 'connections';
 

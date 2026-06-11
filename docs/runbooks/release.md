@@ -1,0 +1,108 @@
+# Release Runbook
+
+## Scope
+
+- Initial preview channel: `preview`.
+- Tag format: `vX.Y.Z-preview.N`, for example `v0.1.0-preview.1`.
+- Windows is the only packaged preview target.
+- Linux remains source-run only.
+- The release workflow extends `cargo xtask desktop-package`; it does not use `tauri-action` as the primary build path.
+
+## Required Secrets
+
+- `TAURI_SIGNING_PRIVATE_KEY`: updater signing private key.
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: optional updater signing key password.
+- `TAURI_UPDATER_PUBLIC_KEY`: updater public key that matches `TAURI_SIGNING_PRIVATE_KEY`; the workflow patches this into `tauri.conf.json` before the Windows package build.
+
+Generate a keypair outside the repository:
+
+```bash
+cd apps/desktop
+npx pnpm@10.16.1 tauri signer generate --write-keys <secure-private-key-path>
+```
+
+Store the private key contents in `TAURI_SIGNING_PRIVATE_KEY` and the `.pub` contents in `TAURI_UPDATER_PUBLIC_KEY`.
+
+Windows code signing certificates are optional for the first preview. If code signing is not configured, the release notes must state that the preview is unsigned and that SmartScreen warnings are expected.
+
+## Local Gates
+
+```bash
+cargo xtask release-check v0.1.0-preview.1
+cargo xtask check
+cargo xtask test
+cargo xtask e2e-smoke
+```
+
+On a Windows host:
+
+```powershell
+cargo xtask desktop-package
+.\scripts\release\test-create-preview-assets.ps1
+```
+
+## Workflow
+
+1. Create a tag matching `vX.Y.Z-preview.N`.
+2. Run `Kukuri Release` with `workflow_dispatch` and the tag, or push the tag.
+3. The workflow runs:
+   - `validate-release-inputs`
+   - `linux-verify`
+   - `windows-package`
+   - `release-assets`
+   - `publish-draft`
+4. `publish-draft` creates a GitHub draft release by default.
+5. Smoke the draft release assets without replacing them.
+6. Publish the draft from GitHub Releases after Windows 10 / Windows 11 smoke passes.
+
+## Release Assets
+
+The draft release must include:
+
+- Windows NSIS installer.
+- Tauri updater bundle.
+- `.sig` file.
+- `latest-preview.json`.
+- `SHA256SUMS.txt`.
+- `release-assets.txt`.
+- `manual-smoke-checklist.md`.
+- `RELEASE_NOTES_DRAFT.md`.
+
+`latest-preview.json` must embed the `.sig` file contents in `platforms.windows-x86_64.signature`. It must not point `signature` at a `.sig` URL.
+
+## Third-party Notices
+
+Before publishing a preview release, generate and review the Rust and desktop npm dependency
+license inventories from the release tag. Keep the generated inventories with the draft release
+notes or attach them to the draft release audit trail.
+
+The distribution notice lives at `docs/THIRD_PARTY_NOTICES.md`. Update it when a dependency requires
+specific attribution text to ship with the preview build.
+
+```powershell
+cargo metadata --locked --format-version 1
+cd apps/desktop
+npx pnpm@10.16.1 licenses list --prod
+```
+
+## Manual Smoke
+
+Use the exact draft release assets:
+
+1. Install on a clean Windows 10 user profile.
+2. Install on a clean Windows 11 user profile.
+3. Confirm launch, Community Node `ready`, starter topic, public post, reply/thread, private channel, DM when a test peer is available, local notification inbox, and diagnostic report export.
+4. Install a previous preview and update to the draft version.
+5. Confirm identity, local DB, Iroh data, Community Node config, private channel capability, and notification inbox state remain.
+6. If unsigned, confirm the release notes explain SmartScreen warnings.
+
+## Diagnostics And Feedback
+
+Users should open `Settings -> Release`, copy or export the diagnostic report, and attach it to the preview feedback issue template. The default report omits secret keys, auth tokens, private channel secrets, invite/share tokens, DM bodies, and local DB paths.
+
+## Data Safety
+
+Updates must preserve identity, local DB state, Iroh data, Community Node settings, private channel
+capability, and the local notification inbox. Uninstall, reset, and migration-failure guidance must
+tell users to keep the app data directory when they need to retain state, and failures should show
+actionable diagnostics instead of silently clearing data.

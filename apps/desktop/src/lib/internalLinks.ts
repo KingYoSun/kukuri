@@ -69,6 +69,7 @@ export type SmartTextSegment =
 const TOPIC_PATTERN = /kukuri:topic:[A-Za-z0-9:_-]+/;
 const ROUTE_PATTERN = /#\/(?:timeline|live|game)\?[^\s]+/;
 const CHANNEL_ACCESS_PREVIEW_PATTERN = /kukuri:\/\/access-preview\?[^\s]+/;
+const MAX_CHANNEL_ACCESS_PREVIEW_TOKEN_LENGTH = 16 * 1024;
 
 function buildRoute(pathname: string, params: URLSearchParams): string {
   const search = params.toString();
@@ -236,11 +237,27 @@ export function parseShareTokenKind(rawValue: string): ChannelAccessTokenKind | 
 export function parseChannelAccessPreviewDeepLink(rawValue: string): ShareTokenReference | null {
   try {
     const url = new URL(rawValue.trim());
-    if (url.protocol !== 'kukuri:' || url.hostname !== 'access-preview') {
+    if (
+      url.protocol !== 'kukuri:' ||
+      url.hostname !== 'access-preview' ||
+      (url.pathname !== '' && url.pathname !== '/') ||
+      url.hash ||
+      url.username ||
+      url.password ||
+      url.port
+    ) {
       return null;
     }
-    const token = url.searchParams.get('token')?.trim() ?? '';
-    if (!token) {
+    const queryKeys = Array.from(url.searchParams.keys());
+    if (queryKeys.length !== 1 || queryKeys[0] !== 'token') {
+      return null;
+    }
+    const tokenValues = url.searchParams.getAll('token');
+    if (tokenValues.length !== 1) {
+      return null;
+    }
+    const token = tokenValues[0].trim();
+    if (!token || token.length > MAX_CHANNEL_ACCESS_PREVIEW_TOKEN_LENGTH) {
       return null;
     }
     const tokenKind = parseShareTokenKind(token);

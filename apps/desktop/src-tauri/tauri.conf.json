@@ -19,7 +19,18 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' https://github.com https://api.github.com https://*.githubusercontent.com https://api.kukuri.app https://iroh-relay.kukuri.app",
+        "img-src": "'self' asset: http://asset.localhost blob: data: https:",
+        "media-src": "'self' asset: http://asset.localhost blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self'",
+        "font-src": "'self' data:",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      }
     }
   },
   "plugins": {
@@ -27,6 +38,13 @@
       "desktop": {
         "schemes": ["kukuri"]
       }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/KingYoSun/kukuri/releases/latest/download/latest-preview.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ1NDREMDEwNjM3NUY5QTkKUldTcCtYVmpFTkJFMWFldExjWDRodFM5VlNRV3ZJNUVpUXFKM0hIeVl5MWxpUlg3Z3BJVUJYcFoK"
     }
   },
   "bundle": {

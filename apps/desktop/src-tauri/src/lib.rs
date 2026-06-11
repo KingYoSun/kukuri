@@ -23,6 +23,8 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let state = build_desktop_state(app.handle())?;
             #[cfg(any(windows, target_os = "linux"))]

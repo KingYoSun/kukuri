@@ -51,3 +51,27 @@
 - `Clear Token`: 該当 node の token を破棄し、次回 auth をやり直す
 
 preview の primary UX は自動処理ですが、上の操作は troubleshooting 用に残しています。
+
+## Updates
+
+- `Settings -> Release -> Check` が失敗する場合は、ネットワーク到達性と GitHub Releases の `latest-preview.json` を確認する。
+- `Install` が失敗する場合は、同じ release の updater bundle と `.sig` が揃っているか確認する。
+- 署名検証に失敗した更新はインストールしない。release asset の差し替えや誤った signing key を疑う。
+- 更新後にデータが消えたように見える場合は、別の Windows user profile、別の app data dir、または keyring fallback の使用有無を確認する。
+
+## Diagnostics
+
+- `Settings -> Release -> Copy Report` で GitHub issue に貼れる診断レポートを作る。
+- 既定のレポートには secret key、auth token、private channel secret、invite/share token、DM 本文、ローカル DB path を含めない。
+- `Export` は `kukuri-diagnostics.txt` を作成する。
+
+## Data Safety
+
+- `Settings -> Release` includes the release runbook and third-party notices.
+- Reinstall or migration failures should be reported with diagnostics and must not silently clear local data.
+- If state appears missing after update, confirm the Windows user profile, app data directory, and keyring fallback path before resetting anything.
+
+## Installer Notes
+
+- 初回 preview で Windows code signing が未設定の場合、SmartScreen warning は想定内として release note に明記する。
+- 未署名 preview の場合も、updater bundle の Tauri signature は必須とする。
