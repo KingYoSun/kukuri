@@ -20,6 +20,7 @@ import {
   METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS,
   METAVERSE_ROOM_STALE_MS,
   avatarAnimationForInput,
+  avatarVrmVisualRootYawDegrees,
   initialAvatarTransform,
   isNewerRemoteTransform,
   remoteAvatarYawDegrees,
@@ -285,6 +286,10 @@ function AvatarModel({
         const vrmRoot = vrm.scene;
         vrmRoot.scale.setScalar(1);
         VRMUtils.rotateVRM0(vrm);
+        // Keep the shared transform yaw unchanged; flip only the normalized VRM visual forward.
+        vrmRoot.rotation.y = THREE.MathUtils.degToRad(
+          avatarVrmVisualRootYawDegrees(THREE.MathUtils.radToDeg(vrmRoot.rotation.y))
+        );
         vrmRoot.position.y = 0;
         group.add(vrmRoot);
         setVisiblePrimitive(false);

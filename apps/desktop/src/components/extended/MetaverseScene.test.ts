@@ -5,9 +5,11 @@ import {
   METAVERSE_AVATAR_MOVING_SEND_INTERVAL_MS,
   METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS,
   METAVERSE_ROOM_STALE_MS,
+  AVATAR_VRM_FORWARD_YAW_OFFSET_DEGREES,
   isNewerRemoteTransform,
   isNewerSharedObject,
   avatarAnimationForInput,
+  avatarVrmVisualRootYawDegrees,
   mergeRoomChatMessages,
   normalizeAvatarAnimationState,
   remoteAvatarYawDegrees,
@@ -25,6 +27,12 @@ describe('metaverse avatar animation state', () => {
 
   test('uses the received remote yaw without smoothing', () => {
     expect(remoteAvatarYawDegrees([0, 135, 0])).toBe(135);
+  });
+
+  test('flips the normalized VRM visual forward without changing shared yaw', () => {
+    expect(AVATAR_VRM_FORWARD_YAW_OFFSET_DEGREES).toBe(180);
+    expect(avatarVrmVisualRootYawDegrees(0)).toBe(180);
+    expect(avatarVrmVisualRootYawDegrees(180)).toBe(360);
   });
 
   test('derives keyboard animation state', () => {

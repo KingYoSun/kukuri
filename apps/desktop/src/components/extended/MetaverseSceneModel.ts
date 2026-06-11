@@ -115,6 +115,11 @@ export const METAVERSE_REMOTE_AVATAR_POSITION_SMOOTHING_SECONDS = 0.14;
 export const AVATAR_GROUND_Y = 0;
 export const AVATAR_JUMP_VELOCITY = 520;
 export const AVATAR_GRAVITY = 1600;
+export const AVATAR_VRM_FORWARD_YAW_OFFSET_DEGREES = 180;
+
+export function avatarVrmVisualRootYawDegrees(baseYawDegrees: number): number {
+  return baseYawDegrees + AVATAR_VRM_FORWARD_YAW_OFFSET_DEGREES;
+}
 
 export function initialAvatarTransform(
   roomId: string,
