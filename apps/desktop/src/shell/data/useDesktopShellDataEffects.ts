@@ -196,6 +196,17 @@ export function useDesktopShellDataEffects({
         if (!disposed) {
           setNotificationStatus(status);
         }
+        if (
+          status.unread_count > 0 &&
+          shellChromeState.activePrimarySection !== 'notifications'
+        ) {
+          const notificationItems = await api.listNotifications();
+          if (!disposed) {
+            startTransition(() => {
+              setNotifications(notificationItems);
+            });
+          }
+        }
       } catch {
         // best effort badge refresh
       }
@@ -209,7 +220,7 @@ export function useDesktopShellDataEffects({
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [api, setNotificationStatus]);
+  }, [api, setNotificationStatus, setNotifications, shellChromeState.activePrimarySection]);
 
   useEffect(() => {
     let disposed = false;

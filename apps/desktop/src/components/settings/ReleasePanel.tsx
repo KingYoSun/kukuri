@@ -230,6 +230,12 @@ export function ReleasePanel() {
     ]
   );
 
+  useEffect(() => {
+    if (diagnosticReport) {
+      setDiagnosticReport(diagnosticReportText);
+    }
+  }, [diagnosticReport, diagnosticReportText]);
+
   const copyDiagnosticReport = useCallback(async () => {
     const copied = await copyTextToClipboard(diagnosticReportText);
     setDiagnosticReport(diagnosticReportText);
