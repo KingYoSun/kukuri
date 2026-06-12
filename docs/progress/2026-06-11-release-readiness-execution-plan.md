@@ -23,6 +23,7 @@
 - `scripts/release/create-preview-assets.ps1` と smoke test を追加し、`.sig` 内容の埋め込み、checksum 生成、asset list 生成、release notes、manual smoke checklist の出力を検証しました。
 - `docs/runbooks/release.md`、`docs/THIRD_PARTY_NOTICES.md`、preview feedback issue template、README / quickstart / troubleshooting の更新を追加し、更新フロー、診断、データ安全性、OSS notice review を説明しました。
 - release readiness と internal link parser の unit test を追加し、診断レポートの秘匿、OS 通知設定の独立性、DM preview suppression、Release settings navigation、不正または未対応 deep link の拒否を検証しました。
+- Community Node の失敗状態は Settings で `failed to request auth challenge` / session retrying / next step を確認でき、URL 修正で ready に復旧できることを実機確認しました。ホームの `Community Node 設定を開く` ボタンが設定画面を開かない不具合は、Community Node 設定セクションをルート同期付きで開くよう修正し、回帰テストを追加しました。
 - seeded DHT test の古い pkarr manual publish helper を、transport test と同じ `DhtAddressLookup::no_publish()` の publish-readiness wait に置き換え、app-api / desktop-runtime の seeded DHT validation hang を解消しました。
 - nextest がないローカル環境では `cargo test` fallback を `RUST_TEST_THREADS=1` で実行するようにし、Windows ローカル検証時の重い P2P test flake を避けるようにしました。CI では引き続き nextest を必須にしています。
 
@@ -91,15 +92,15 @@
 ビルドは次をすべて満たした時点で、リリース準備完了とします。
 
 - [x] Windows インストーラーを GitHub Releases から取得し、新規 Windows ユーザープロファイルへインストールできる。
-- [ ] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
+- [x] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
 - [x] 更新ファイルは署名され、インストール前にアプリ側で検証される。
 - [x] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
 - [x] リリースワークフローが、インストーラー、更新用ファイル、署名、`latest-preview.json`、チェックサム、リリースノートを一貫して draft release に公開する。
 - [ ] draft release の asset を差し替えずに、Windows 10 / Windows 11 smoke 後にそのまま公開へ昇格できる。
 - [x] 可能な場合、Windows 配布物には GitHub Actions artifact attestation または同等の provenance が付与されている。
 - [x] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
-- [ ] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
-- [ ] 既存のローカル通知 inbox がアップデート後も動作する。
+- [x] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
+- [x] 既存のローカル通知 inbox がアップデート後も動作する。
 - [x] OS 通知を初回プレビューに含める場合、ユーザー許可制であり、ローカル通知 inbox の保存状態から独立している。
 - [x] プライバシー、データ保存、フィードバック時に含まれる情報の説明が README またはアプリ内の About/Settings から読める。
 - [x] CSP とリリース用セキュリティ設定が本番相当の安全側設定になっている。
@@ -252,7 +253,7 @@
 作業:
 
 - [ ] `v0.1.0-preview.1` と `v0.1.0-preview.2` のテスト成果物を作る。
-- [ ] 手動または自動のアップデートシナリオを作る。
+- [x] 手動または自動のアップデートシナリオを作る。
   - 旧ビルドをインストールする。
   - identity を作成する。
   - Community Node が ready になるまで待つ。
@@ -394,9 +395,15 @@
   - テスト peer が使える場合は DM を確認する。
   - 通知 inbox を確認する。
   - 診断レポートを書き出す。
-- [ ] 前回 RC からのアップデート経路を完了する。
+- [x] 前回 RC からのアップデート経路を完了する。
   - `v0.1.0-preview.3` 公開後、インストール済み `0.1.0` から「更新を確認」で `up to date` 表示になることを確認。公開済み `latest-preview.json` の取得は完了。
   - 更新あり表示、更新インストール、再起動、ローカルデータ保持は、次の preview 候補で継続確認する。
+  - `v0.1.0-preview.4` から `v0.1.1-preview.1` への更新確認で `0.1.1` が更新ありとして表示されることを確認。
+  - `インストール` 実行後、client が閉じ、インストールが開始・完了し、client が再起動することを確認。
+  - 再起動後に更新確認を実行し、現行バージョンが `0.1.1` かつ `up to date` であることを確認。
+  - 更新後の `0.1.1` client で、既存 identity / topic / private channel / 通知 inbox が保持されていることを確認。
+  - Community Node `session_phase: ready`、public post / reply / private channel の表示を確認。
+  - 診断レポートでは `app_version: 0.1.1`、`update_current_version: 0.1.1`、`update_available_version: none`、`update_last_error: none`、Community Node `last_error: none` を確認。1 client のみ起動のため `sync_connected: no` / `delivery_state: Offline` / `peer_count: 0` は想定内。
 - [x] 再インストール時のローカルデータ保持を確認する。
   - Windows 11 で `v0.1.0-preview.3` installer を再実行し、既存ローカルデータを保持したまま通常起動できることを確認。
   - 診断レポートでは `sync_connected: yes`、`delivery_state: Live`、`active_path: relay_supported_p2p`、Community Node `session_phase: ready`、`update_last_error: none`、`last_sync_error: none`、`last_discovery_error: none` を確認。
@@ -455,7 +462,9 @@
 - [x] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
 - [ ] 正しい署名と不正な署名の両方で、更新署名検証を確認している。
 - [x] 新規インストールの happy path を手動確認している。
-- [ ] アップデートの happy path を手動確認している。
+- [x] アップデートの happy path を手動確認している。
+  - `v0.1.0-preview.4` から `v0.1.1-preview.1` への更新あり表示、インストール、再起動、`0.1.1` up to date 表示は確認済み。
+  - 更新後に identity / topic / private channel / 通知 inbox が保持され、Community Node ready、public post / reply / private channel 表示も確認済み。
 - [x] 再インストール時の挙動を手動確認している。
 - [x] 診断レポートの書き出しと秘匿処理を手動確認している。
 - [x] 既存のローカル通知 inbox が、アクティビティ通知シナリオで引き続き通る。

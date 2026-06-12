@@ -72,6 +72,7 @@ type DesktopShellPrimaryWorkspaceProps = {
   setPrimarySectionRef: (section: PrimarySection) => (node: HTMLElement | null) => void;
   focusPrimarySection: (section: PrimarySection) => void;
   focusTimelineView: (view: 'feed' | 'bookmarks') => void;
+  openCommunityNodeSettings: () => void;
   loadReactionCatalogData: () => Promise<void>;
   refreshTimelineFeed: (topic: string, currentThread: string | null) => Promise<void>;
   refreshCurrentTopic: () => Promise<void>;
@@ -121,6 +122,7 @@ export function DesktopShellPrimaryWorkspace({
   setPrimarySectionRef,
   focusPrimarySection,
   focusTimelineView,
+  openCommunityNodeSettings,
   loadReactionCatalogData,
   refreshTimelineFeed,
   refreshCurrentTopic,
@@ -214,13 +216,7 @@ export function DesktopShellPrimaryWorkspace({
           <Button
             variant='secondary'
             type='button'
-            onClick={() =>
-              setShellChromeState((current) => ({
-                ...current,
-                settingsOpen: true,
-                activeSettingsSection: 'community-node',
-              }))
-            }
+            onClick={openCommunityNodeSettings}
           >
             {t('shell:workspace.communityNodeUnavailableAction')}
           </Button>
