@@ -22,6 +22,8 @@ export type UpdateStatus =
   | 'ready_to_restart'
   | 'failed';
 
+export type UpdateErrorKind = 'network' | 'manifest' | 'signature' | 'install' | 'unknown';
+
 export type UpdateState = {
   status: UpdateStatus;
   currentVersion: string;
@@ -164,6 +166,55 @@ export function writeSeenOsNotificationIds(values: Set<string>): void {
 
 export function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+export function classifyUpdateError(errorMessage?: string | null): UpdateErrorKind {
+  if (!errorMessage) {
+    return 'unknown';
+  }
+  const normalized = errorMessage.toLowerCase();
+
+  if (
+    normalized.includes('release json') ||
+    normalized.includes('manifest') ||
+    normalized.includes('latest-preview.json') ||
+    normalized.includes('invalid release') ||
+    normalized.includes('valid release')
+  ) {
+    return 'manifest';
+  }
+  if (
+    normalized.includes('signature') ||
+    normalized.includes(' sig') ||
+    normalized.includes('.sig') ||
+    normalized.includes('verify') ||
+    normalized.includes('verification') ||
+    normalized.includes('ed25519')
+  ) {
+    return 'signature';
+  }
+  if (
+    normalized.includes('install') ||
+    normalized.includes('installer') ||
+    normalized.includes('restart') ||
+    normalized.includes('apply update')
+  ) {
+    return 'install';
+  }
+  if (
+    normalized.includes('network') ||
+    normalized.includes('fetch') ||
+    normalized.includes('request') ||
+    normalized.includes('connection') ||
+    normalized.includes('connect') ||
+    normalized.includes('timeout') ||
+    normalized.includes('dns') ||
+    normalized.includes('offline')
+  ) {
+    return 'network';
+  }
+
+  return 'unknown';
 }
 
 export function buildSafeDiagnosticReport(input: {
