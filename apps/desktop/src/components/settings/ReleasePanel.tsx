@@ -10,6 +10,7 @@ import { Notice } from '@/components/ui/notice';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildSafeDiagnosticReport,
+  classifyUpdateError,
   DEFAULT_OS_NOTIFICATION_SETTINGS,
   isTauriRuntime,
   loadOsNotificationSettings,
@@ -38,6 +39,10 @@ const INITIAL_UPDATE_STATE: UpdateState = {
 
 function formatUpdateStatus(status: UpdateState['status']): string {
   return status.replaceAll('_', ' ');
+}
+
+function updateErrorTranslationKey(errorMessage?: string | null): string {
+  return `settings:release.update.errors.${classifyUpdateError(errorMessage)}`;
 }
 
 function updateStateFromError(currentVersion: string, error: unknown): UpdateState {
@@ -279,6 +284,9 @@ export function ReleasePanel() {
       tone: updateState.status === 'failed' ? ('danger' as const) : ('default' as const),
     },
   ];
+  const updateErrorMessage = updateState.lastError
+    ? t(updateErrorTranslationKey(updateState.lastError))
+    : null;
 
   const securityDiagnostics = [
     {
@@ -326,7 +334,14 @@ export function ReleasePanel() {
           {t('settings:release.update.title')}
         </h4>
         <SettingsDiagnosticList items={updateDiagnostics} columns={2} />
-        {updateState.lastError ? <Notice tone='destructive'>{updateState.lastError}</Notice> : null}
+        {updateState.lastError ? (
+          <Notice tone='destructive'>
+            <div className='space-y-1'>
+              <p>{updateErrorMessage}</p>
+              <small className='font-mono'>{updateState.lastError}</small>
+            </div>
+          </Notice>
+        ) : null}
         {updateState.availableVersion ? (
           <Notice tone='accent'>
             {t('settings:release.update.available', { version: updateState.availableVersion })}

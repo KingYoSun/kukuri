@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import type { NotificationView } from '@/lib/api';
 import {
   buildSafeDiagnosticReport,
+  classifyUpdateError,
   DEFAULT_OS_NOTIFICATION_SETTINGS,
   loadOsNotificationSettings,
   notificationBody,
@@ -85,6 +86,18 @@ describe('release readiness helpers', () => {
     expect(report).not.toContain('auth-token');
     expect(report).not.toContain('private body');
     expect(report).toContain('secret keys, auth tokens, private channel capability secrets');
+  });
+
+  test('update errors are classified for user-facing guidance', () => {
+    expect(classifyUpdateError('Could not fetch a valid release JSON from the remote')).toBe(
+      'manifest'
+    );
+    expect(classifyUpdateError('request timed out while contacting updater endpoint')).toBe(
+      'network'
+    );
+    expect(classifyUpdateError('signature verification failed')).toBe('signature');
+    expect(classifyUpdateError('failed to install update bundle')).toBe('install');
+    expect(classifyUpdateError('unexpected updater failure')).toBe('unknown');
   });
 
   test('OS notification settings persist independently from local inbox state', () => {

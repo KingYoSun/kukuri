@@ -177,7 +177,14 @@
       "status": "Status",
       "check": "Check",
       "install": "Install",
-      "available": "Update {{version}} is available."
+      "available": "Update {{version}} is available.",
+      "errors": {
+        "network": "Could not connect to the update server. Check your network connection and try again.",
+        "manifest": "Could not fetch or read the update information. Check the release publication state and try again.",
+        "signature": "The update signature verification failed. This update will not be installed.",
+        "install": "The update failed to install. Restart the app and try again.",
+        "unknown": "The update failed. Try again later, and include a diagnostic report if it keeps failing."
+      }
     },
     "diagnostics": {
       "title": "Diagnostics",

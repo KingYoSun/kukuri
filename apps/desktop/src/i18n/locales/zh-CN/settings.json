@@ -159,7 +159,14 @@
       "status": "状态",
       "check": "检查",
       "install": "安装",
-      "available": "可用更新 {{version}}。"
+      "available": "可用更新 {{version}}。",
+      "errors": {
+        "network": "无法连接到更新服务器。请检查网络连接后重试。",
+        "manifest": "无法获取或读取更新信息。请确认 release 发布状态后重试。",
+        "signature": "更新文件签名验证失败。此更新不会被安装。",
+        "install": "更新安装失败。请重启应用后重试。",
+        "unknown": "更新失败。请稍后重试；如果持续失败，请附上诊断报告。"
+      }
     },
     "diagnostics": {
       "title": "诊断",
