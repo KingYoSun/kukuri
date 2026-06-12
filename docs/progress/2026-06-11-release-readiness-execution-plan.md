@@ -16,6 +16,8 @@
 - `Settings -> Release` を追加し、更新確認、更新インストール、秘匿情報除去済み診断レポートのコピー/書き出し、GitHub フィードバック、OS 通知設定、リリースセキュリティ、データ安全性、サードパーティ通知への導線を追加しました。
 - 通常の shell から `Settings -> Release` を開ける preview release banner を追加しました。更新状態は既存のアクティビティ通知 inbox には保存しません。
 - OS 通知は localStorage backed の独立設定として実装し、既存の `NotificationView` を best-effort で橋渡しします。重複抑止を行い、inbox の既読/削除状態は変更しません。
+- `v0.1.0-preview.4` で OS 通知 bridge refresh fix を含めて公開しましたが、Windows 11 実機 2 台では OS 通知が発生しないことを確認しました。これは [#313](https://github.com/KingYoSun/kukuri/issues/313) で既知不具合として追跡し、初回 preview 公開の blocker からは外します。
+- `v0.1.0-preview.3` / `v0.1.0-preview.4` はどちらもアプリ内 version が `0.1.0` のため、updater の「更新あり」判定には使えません。旧 preview から新 preview への updater smoke 用に、次の候補は `0.1.1` / `v0.1.1-preview.1` として準備します。
 - `cargo xtask release-check [tag]` を追加し、workspace / desktop package / Tauri config のバージョン同期と `vX.Y.Z-preview.N` 形式のタグを検証できるようにしました。
 - `.github/workflows/kukuri-release.yml` を `validate-release-inputs -> linux-verify -> windows-package -> release-assets -> publish-draft` に分割し、draft release asset、updater bundle、`.sig`、`latest-preview.json`、`SHA256SUMS.txt`、リリースノート、手動 smoke checklist、artifact attestation を生成するようにしました。
 - `scripts/release/create-preview-assets.ps1` と smoke test を追加し、`.sig` 内容の埋め込み、checksum 生成、asset list 生成、release notes、manual smoke checklist の出力を検証しました。
@@ -138,6 +140,7 @@
 
 - [x] 初回プレビュータグ形式を決める。例: `v0.1.0-preview.1`。
 - [ ] リリースチェックリスト issue または追跡ボードを作る。
+  - `#314` は重複した空の追跡 issue として削除済み。今後はこの plan md を正本として進める。
 - [x] 対象 OS を確認する。パッケージ配布は Windows 10 / Windows 11、Linux はソース起動のみとする。
 - [x] リリースブランチ方針を確認する。`main` から直接タグを打つか、リリースブランチを使うかを決める。
 - [x] release workflow は既存の `cargo xtask desktop-package` / `.github/workflows/kukuri-release.yml` を拡張する方針で固定し、初回プレビューでは `tauri-action` への全面移行を行わない。
@@ -361,6 +364,7 @@
   - Windows 11 で OS 通知設定を有効化しても、ローカル通知 inbox の既読/未読状態が変わらないことを確認。
   - 診断レポートでは `os_notifications_enabled: yes`、`os_notification_permission: prompt`。OS 権限がアプリから `granted` として読める状態、および新規未読通知からの OS 通知表示は未確認。
   - 実機確認で、通知画面を開いていない状態では OS 通知ブリッジが新規未読通知を拾えない経路を確認。通常の通知 status refresh で未読通知一覧も取得するよう修正し、診断レポート表示中の権限状態も最新化する。
+  - `v0.1.0-preview.4` で Windows 11 client 2 台を `granted` にできたが、通知 inbox を開いている状態 / 開いていない状態のどちらでも OS 通知は発生しなかった。アプリ内通知 inbox は機能しているため、[#313](https://github.com/KingYoSun/kukuri/issues/313) で継続調査する。
 
 完了条件:
 
@@ -405,6 +409,7 @@
   - トラブルシューティングへのリンク。
 - [x] 最終 smoke 後にリリースを公開する。
   - `v0.1.0-preview.3` を draft 解除し、GitHub Releases で公開済み。
+  - `v0.1.0-preview.4` を draft 解除し、GitHub Releases で公開済み。release note に OS 通知既知不具合 [#313](https://github.com/KingYoSun/kukuri/issues/313) を追記済み。
 
 完了条件:
 
