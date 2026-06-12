@@ -171,6 +171,29 @@ test('sidebar notifications button shows unread count and opening inbox auto-mar
   expect(screen.getByText('second unread notification')).toBeInTheDocument();
 });
 
+test('desktop shell loads unread notification rows outside the inbox for OS notification bridge', async () => {
+  const api = createDesktopMockApi({
+    notifications: [
+      buildNotification({
+        notification_id: 'notification-bridge-unread',
+        preview_text: 'bridge unread notification',
+      }),
+    ],
+  });
+  const listNotifications = vi.fn(api.listNotifications);
+  const markAllNotificationsRead = vi.fn(api.markAllNotificationsRead);
+  api.listNotifications = listNotifications;
+  api.markAllNotificationsRead = markAllNotificationsRead;
+
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ademo', api);
+
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: /Notifications/ })).toHaveTextContent('1');
+    expect(listNotifications).toHaveBeenCalled();
+  });
+  expect(markAllNotificationsRead).not.toHaveBeenCalled();
+});
+
 test('clicking the active notifications button returns to the previous route', async () => {
   const user = userEvent.setup();
 

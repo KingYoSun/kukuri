@@ -88,7 +88,7 @@
 
 ビルドは次をすべて満たした時点で、リリース準備完了とします。
 
-- [ ] Windows インストーラーを GitHub Releases から取得し、新規 Windows ユーザープロファイルへインストールできる。
+- [x] Windows インストーラーを GitHub Releases から取得し、新規 Windows ユーザープロファイルへインストールできる。
 - [ ] インストール済みアプリが更新確認、更新あり表示、更新インストール、再起動、ローカルデータ保持まで完了できる。
 - [x] 更新ファイルは署名され、インストール前にアプリ側で検証される。
 - [x] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
@@ -334,6 +334,7 @@
 - この機能は `NotificationRow` の永続化とは別です。
 - 既存のローカル通知 inbox は、プロダクト内アクティビティ履歴の永続的な正本として維持します。
 - OS 通知は、ユーザーの注意を促すための best effort な表示面です。
+- 初回プレビューでは、アプリ起動中にローカル通知 inbox へ入った未読通知を OS 通知へ橋渡しする範囲に留めます。tray 常駐、close-to-tray、アプリ終了後の購読継続、Windows バックグラウンドタスクは含めません。
 
 作業:
 
@@ -356,7 +357,10 @@
   - 返信/メンション/リポストは thread または topic を開く。
   - フォロー通知は author pane を開く。
 - [x] 設定と重複排除方針のテストを追加する。
-- [ ] 権限許可/拒否、フォアグラウンド/バックグラウンド、可能な範囲でアプリ終了時の手動 QA を追加する。
+- [ ] 権限許可/拒否、アプリ起動中の OS 通知表示、ローカル通知 inbox との独立性の手動 QA を追加する。
+  - Windows 11 で OS 通知設定を有効化しても、ローカル通知 inbox の既読/未読状態が変わらないことを確認。
+  - 診断レポートでは `os_notifications_enabled: yes`、`os_notification_permission: prompt`。OS 権限がアプリから `granted` として読める状態、および新規未読通知からの OS 通知表示は未確認。
+  - 実機確認で、通知画面を開いていない状態では OS 通知ブリッジが新規未読通知を拾えない経路を確認。通常の通知 status refresh で未読通知一覧も取得するよう修正し、診断レポート表示中の権限状態も最新化する。
 
 完了条件:
 
@@ -370,9 +374,13 @@
 
 作業:
 
-- [ ] リリースワークフローを draft mode で実行する。
+- [x] リリースワークフローを draft mode で実行する。
 - [ ] clean な Windows 10 / Windows 11 環境に draft 配布物をインストールする。
-- [ ] happy path を完了する。
+  - Windows 11: `v0.1.0-preview.3` の draft 配布物で新規インストール完了。
+  - Windows 10: 手元環境がないため未実施。
+- [x] happy path を完了する。
+  - Windows 11 2 台で `v0.1.0-preview.3` の新規インストール後 happy path を完了。
+  - 診断レポートでは `sync_connected: yes`、`delivery_state: Live`、`discovery_mode: seeded_dht`、`active_path: relay_supported_p2p`、Community Node `session_phase: ready`、`last_error: none` を確認。
   - 起動する。
   - Community Node が ready になる。
   - starter topic を開く。
@@ -383,6 +391,11 @@
   - 通知 inbox を確認する。
   - 診断レポートを書き出す。
 - [ ] 前回 RC からのアップデート経路を完了する。
+  - `v0.1.0-preview.3` 公開後、インストール済み `0.1.0` から「更新を確認」で `up to date` 表示になることを確認。公開済み `latest-preview.json` の取得は完了。
+  - 更新あり表示、更新インストール、再起動、ローカルデータ保持は、次の preview 候補で継続確認する。
+- [x] 再インストール時のローカルデータ保持を確認する。
+  - Windows 11 で `v0.1.0-preview.3` installer を再実行し、既存ローカルデータを保持したまま通常起動できることを確認。
+  - 診断レポートでは `sync_connected: yes`、`delivery_state: Live`、`active_path: relay_supported_p2p`、Community Node `session_phase: ready`、`update_last_error: none`、`last_sync_error: none`、`last_discovery_error: none` を確認。
 - [x] リリースノートに次が含まれることを確認する。
   - プレビュー範囲。
   - 既知の制限。
@@ -390,7 +403,8 @@
   - データ保存/プライバシーに関する注意。
   - フィードバック手順。
   - トラブルシューティングへのリンク。
-- [ ] 最終 smoke 後にリリースを公開する。
+- [x] 最終 smoke 後にリリースを公開する。
+  - `v0.1.0-preview.3` を draft 解除し、GitHub Releases で公開済み。
 
 完了条件:
 
@@ -418,7 +432,7 @@
 | Community Node connectivity | `cargo xtask scenario community_node_public_connectivity` |
 | updater test | 旧ビルドをインストールし、新ビルドへ更新し、データ保持を確認する |
 | diagnostics test | 秘匿情報除去済みレポートを書き出し、秘密情報が含まれないことを確認する |
-| OS notification test | 権限許可/拒否、フォアグラウンド/バックグラウンド、クリック時遷移を確認する |
+| OS notification test | 権限許可/拒否、アプリ起動中の OS 通知表示、ローカル通知 inbox との独立性、クリック時遷移を確認する |
 
 ## リリースチェックリスト
 
@@ -426,19 +440,19 @@
 - [x] `docs/runbooks/mvp-user-quickstart.md` に、更新確認と診断付きフィードバック手順がある。
 - [x] `docs/runbooks/mvp-troubleshooting.md` に、アップデーター、インストール失敗、更新失敗の状態説明がある。
 - [x] `docs/runbooks/release.md` が存在し、ワークフローと一致している。
-- [ ] リリースワークフローが、tag/ref/channel/version consistency gate を通したうえで draft release を作成できる。
-- [ ] draft release に、インストーラー、更新用ファイル、署名、チェックサム、マニフェスト、リリースノートが含まれている。
-- [ ] draft release の成果物は GitHub-hosted runner で生成されたもので、手元ビルドとの差し替えを行っていない。
+- [x] リリースワークフローが、tag/ref/channel/version consistency gate を通したうえで draft release を作成できる。
+- [x] draft release に、インストーラー、更新用ファイル、署名、チェックサム、マニフェスト、リリースノートが含まれている。
+- [x] draft release の成果物は GitHub-hosted runner で生成されたもので、手元ビルドとの差し替えを行っていない。
 - [x] `latest-preview.json` の `signature` は `.sig` URL ではなく `.sig` 内容である。
 - [x] `SHA256SUMS.txt` が release asset と一致している。
 - [x] artifact attestation を使う場合、検証手順が release note または runbook にある。
 - [x] インストーラーが署名済みである。未署名の場合は、未署名プレビューであるリスクが明記されている。
 - [x] updater マニフェストが、同じバージョン/チャンネルの配布物を参照している。
 - [ ] 正しい署名と不正な署名の両方で、更新署名検証を確認している。
-- [ ] 新規インストールの happy path を手動確認している。
+- [x] 新規インストールの happy path を手動確認している。
 - [ ] アップデートの happy path を手動確認している。
-- [ ] 再インストール時の挙動を手動確認している。
-- [ ] 診断レポートの書き出しと秘匿処理を手動確認している。
+- [x] 再インストール時の挙動を手動確認している。
+- [x] 診断レポートの書き出しと秘匿処理を手動確認している。
 - [x] 既存のローカル通知 inbox が、アクティビティ通知シナリオで引き続き通る。
 - [x] OS 通知設定が、ローカル通知 inbox の挙動を変更しない。
 - [x] プライバシー/データ保存説明が、初回利用前または初回利用中に読める。
