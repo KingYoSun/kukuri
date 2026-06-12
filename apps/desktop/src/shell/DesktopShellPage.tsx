@@ -940,6 +940,17 @@ export function DesktopShellPage({
             setPrimarySectionRef={setPrimarySectionRef}
             focusPrimarySection={focusPrimarySection}
             focusTimelineView={focusTimelineView}
+            openCommunityNodeSettings={() => {
+              setShellChromeState((current) => ({
+                ...current,
+                settingsOpen: true,
+                activeSettingsSection: 'community-node',
+              }));
+              syncRoute('push', {
+                settingsOpen: true,
+                settingsSection: 'community-node',
+              });
+            }}
             loadReactionCatalogData={loadReactionCatalogData}
             refreshTimelineFeed={refreshTimelineFeed}
             refreshCurrentTopic={() => loadTopics(trackedTopics, activeTopic, selectedThread)}

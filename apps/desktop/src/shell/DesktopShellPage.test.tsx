@@ -4192,6 +4192,7 @@ test('messages workspace keeps the last successful DM state when status refresh 
 });
 
 test('workspace shows a community-node unavailable notice when a configured node reports an error', async () => {
+  const user = userEvent.setup();
   const baseApi = createDesktopMockApi();
   const baseStatuses = await baseApi.getCommunityNodeStatuses();
   const api: DesktopApi = {
@@ -4212,9 +4213,15 @@ test('workspace shows a community-node unavailable notice when a configured node
   expect(notice).toHaveTextContent(
     'A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.'
   );
-  expect(
-    within(notice).getByRole('button', { name: 'Open Community Node Settings' })
-  ).toBeInTheDocument();
+  await user.click(within(notice).getByRole('button', { name: 'Open Community Node Settings' }));
+
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
+  expect(within(drawer).getByTestId('settings-section-community-node')).toHaveAttribute(
+    'aria-current',
+    'location'
+  );
+  expect(within(drawer).getByRole('heading', { name: 'Community Node' })).toBeInTheDocument();
+  expect(window.location.hash).toContain('settings=community-node');
 });
 
 test('timeline keeps the last successful workspace state when joined channels refresh fails', async () => {
