@@ -250,7 +250,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xs);
   overflow: hidden;
-  background: #101318;
+  background: var(--surface-metaverse);
 }
 
 .metaverse-viewport-canvas {
@@ -263,7 +263,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xs);
   overflow: hidden;
-  background: #101318;
+  background: var(--surface-metaverse);
 }
 
 .metaverse-hud-toolbar {
@@ -278,7 +278,7 @@
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
 }
 
 .metaverse-hud-toolbar[data-open='false'] {
@@ -310,7 +310,7 @@
   font-size: var(--text-body);
   font-weight: 700;
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
 }
 
 .metaverse-connection-badge[data-state='live'] {
@@ -344,7 +344,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
   scrollbar-color: color-mix(in srgb, var(--accent) 72%, white 8%) color-mix(in srgb, var(--surface-raised) 76%, black 12%);
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -519,7 +519,7 @@
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--surface-panel) 80%, transparent);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
 }
 
 .metaverse-room-chat-log-header {
@@ -1540,7 +1540,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-panel);
   background: var(--surface-panel);
-  box-shadow: 0 12px 32px rgba(2, 7, 15, 0.12);
+  box-shadow: var(--shadow-dropdown);
 }
 
 .release-preview-banner strong,
@@ -2383,8 +2383,8 @@
   inset: 0;
   z-index: 80;
   background: color-mix(in srgb, var(--surface-overlay) 56%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
+  -webkit-backdrop-filter: blur(var(--blur-hud));
 }
 
 .ui-dialog-content {
@@ -2625,8 +2625,8 @@
 
 .shell-settings-backdrop {
   background: color-mix(in srgb, var(--surface-overlay) 52%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--blur-hud));
+  -webkit-backdrop-filter: blur(var(--blur-hud));
 }
 
 .shell-mobile-close {
