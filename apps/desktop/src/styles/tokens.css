@@ -2,6 +2,13 @@
   --font-sans: "IBM Plex Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP",
     "Meiryo", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Code", "Consolas", SFMono-Regular, monospace;
+  --text-display: clamp(1.9rem, 4vw, 3.5rem);
+  --text-h1: 1.5rem;
+  --text-h2: 1.25rem;
+  --text-h3: 1rem;
+  --text-body-reading: 0.9375rem;
+  --text-body: 0.875rem;
+  --text-caption: 0.75rem;
   --radius: 1rem;
   --radius-panel: 22px;
   --radius-input: 14px;

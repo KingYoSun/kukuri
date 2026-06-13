@@ -21,7 +21,7 @@
 
 .shell-phase1 .hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.6rem);
+  font-size: var(--text-display);
   line-height: 0.96;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .shell-phase1 .field span {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted-foreground);
@@ -185,7 +185,7 @@
 }
 
 .shell-phase1 .reply-banner strong {
-  font-size: 0.96rem;
+  font-size: var(--text-body-reading);
   line-height: 1.1;
 }
 
@@ -251,13 +251,13 @@
 }
 
 .shell-phase1 .status-grid dt {
-  font-size: 0.75rem;
+  font-size: var(--text-caption);
   color: var(--muted-foreground);
 }
 
 .shell-phase1 .status-grid dd {
   margin: 0.35rem 0 0;
-  font-size: 1.15rem;
+  font-size: var(--text-h2);
 }
 
 .shell-phase1 .topic-list {
@@ -308,7 +308,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   color: var(--muted-foreground);
-  font-size: 0.78rem;
+  font-size: var(--text-caption);
 }
 
 .shell-phase1 .topic-diagnostic-secondary {
@@ -383,14 +383,14 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 16px;
-  font-size: 0.95rem;
+  font-size: var(--text-body-reading);
 }
 
 .shell-phase1 .author-avatar-lg {
   width: 4.5rem;
   height: 4.5rem;
   border-radius: 22px;
-  font-size: 1.45rem;
+  font-size: var(--text-h1);
 }
 
 .shell-phase1 .author-avatar-image {
@@ -439,7 +439,7 @@
   gap: 0.4rem 0.75rem;
   margin-bottom: 0.55rem;
   color: var(--muted-foreground-soft);
-  font-size: 0.78rem;
+  font-size: var(--text-caption);
 }
 
 .shell-phase1 .repost-source-eyebrow {
@@ -502,7 +502,7 @@
   align-items: center;
   border-radius: 999px;
   padding: 0.28rem 0.6rem;
-  font-size: 0.72rem;
+  font-size: var(--text-caption);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border: 1px solid var(--border-subtle);
@@ -538,7 +538,7 @@
 
 .shell-phase1 .media-ready-placeholder {
   color: var(--muted-foreground);
-  font-size: 0.88rem;
+  font-size: var(--text-body);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -563,7 +563,7 @@
   margin-top: -0.15rem;
   margin-bottom: 0.65rem;
   color: var(--muted-foreground-soft);
-  font-size: 0.76rem;
+  font-size: var(--text-caption);
 }
 
 .shell-phase1 .text-skeleton-group {
@@ -662,7 +662,7 @@
 }
 
 .shell-phase1 .post-reaction-picker-button.post-reaction-picker-button-compact .post-reaction-picker-label {
-  font-size: 1.2rem;
+  font-size: var(--text-h2);
   line-height: 1;
 }
 
@@ -679,7 +679,7 @@
   border-radius: 14px;
   background: var(--surface-panel-muted);
   color: var(--foreground-strong);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   font-weight: 700;
   flex: none;
 }
@@ -883,7 +883,7 @@
 
 .shell-phase1 .active-topic-label {
   color: var(--muted-foreground);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
 }
 
 .shell-phase1 .post-meta {
@@ -893,7 +893,7 @@
   flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 0.55rem;
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   color: var(--muted-foreground);
 }
 
@@ -1015,7 +1015,7 @@
 }
 
 .shell-phase1 .author-detail-name {
-  font-size: 1.15rem;
+  font-size: var(--text-h2);
   line-height: 1.1;
 }
 
@@ -1053,7 +1053,7 @@
 .shell-phase1 .author-detail-monotext {
   display: block;
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--text-caption);
   line-height: 1.45;
   color: var(--muted-foreground-soft);
 }
