@@ -87,7 +87,7 @@ export const SETTINGS_SECTION_COPY: Array<{
   {
     id: 'release',
     label: 'Release',
-    description: 'Preview updates, diagnostics, OS notifications, and privacy.',
+    description: 'Preview updates, diagnostics, and OS notifications.',
   },
 ];
 

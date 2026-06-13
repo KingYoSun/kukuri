@@ -4,10 +4,6 @@ export const RELEASE_CHANNEL = 'preview';
 export const RELEASE_MANIFEST_NAME = 'latest-preview.json';
 export const RELEASE_FEEDBACK_URL =
   'https://github.com/KingYoSun/kukuri/issues/new?template=preview-feedback.md';
-export const RELEASE_RUNBOOK_URL =
-  'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/release.md';
-export const THIRD_PARTY_NOTICES_URL =
-  'https://github.com/KingYoSun/kukuri/blob/main/docs/THIRD_PARTY_NOTICES.md';
 
 export const OS_NOTIFICATION_SETTINGS_STORAGE_KEY = 'kukuri:os-notification-settings:v1';
 const OS_NOTIFICATION_SEEN_STORAGE_KEY = 'kukuri:os-notification-seen:v1';

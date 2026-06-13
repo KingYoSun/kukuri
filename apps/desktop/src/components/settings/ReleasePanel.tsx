@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, Download, ExternalLink, FileText, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Download, FileText, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-
-import packageJson from '../../../package.json';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -17,25 +15,15 @@ import {
   RELEASE_CHANNEL,
   RELEASE_FEEDBACK_URL,
   RELEASE_MANIFEST_NAME,
-  RELEASE_RUNBOOK_URL,
   saveOsNotificationSettings,
-  THIRD_PARTY_NOTICES_URL,
   type OsNotificationSettings,
   type UpdateState,
 } from '@/lib/releaseReadiness';
+import { useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellStore } from '@/shell/store';
 
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
-
-const INITIAL_UPDATE_STATE: UpdateState = {
-  status: 'idle',
-  currentVersion: packageJson.version,
-  availableVersion: null,
-  downloadedBytes: 0,
-  contentLength: null,
-  lastError: null,
-};
 
 function formatUpdateStatus(status: UpdateState['status']): string {
   return status.replaceAll('_', ' ');
@@ -45,27 +33,15 @@ function updateErrorTranslationKey(errorMessage?: string | null): string {
   return `settings:release.update.errors.${classifyUpdateError(errorMessage)}`;
 }
 
-function updateStateFromError(currentVersion: string, error: unknown): UpdateState {
-  return {
-    status: 'failed',
-    currentVersion,
-    availableVersion: null,
-    lastError: error instanceof Error ? error.message : String(error),
-  };
-}
-
-type PendingUpdate = {
-  version: string;
-  downloadAndInstall: (onEvent?: (event: unknown) => void) => Promise<void>;
-};
-
 export function ReleasePanel() {
   const { t } = useTranslation(['common', 'settings']);
   const syncStatus = useDesktopShellStore((state) => state.syncStatus);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const communityNodeStatuses = useDesktopShellStore((state) => state.communityNodeStatuses);
-  const [updateState, setUpdateState] = useState<UpdateState>(INITIAL_UPDATE_STATE);
-  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  const updateState = useAppUpdateStore((state) => state.updateState);
+  const pendingUpdate = useAppUpdateStore((state) => state.pendingUpdate);
+  const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
+  const installUpdate = useAppUpdateStore((state) => state.installUpdate);
   const [diagnosticReport, setDiagnosticReport] = useState('');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null);
   const [osNotificationSettings, setOsNotificationSettings] =
@@ -113,90 +89,6 @@ export function ReleasePanel() {
       updateOsNotificationSetting({ enabled: true });
     }
   }, [updateOsNotificationSetting]);
-
-  const checkForUpdate = useCallback(async () => {
-    setUpdateState((current) => ({
-      ...current,
-      status: 'checking',
-      lastError: null,
-    }));
-    try {
-      const [{ getVersion }, updater] = await Promise.all([
-        import('@tauri-apps/api/app'),
-        import('@tauri-apps/plugin-updater'),
-      ]);
-      const currentVersion = isTauriRuntime() ? await getVersion() : packageJson.version;
-      const update = isTauriRuntime() ? await updater.check() : null;
-      if (!update) {
-        setPendingUpdate(null);
-        setUpdateState({
-          status: 'up_to_date',
-          currentVersion,
-          availableVersion: null,
-          lastError: null,
-        });
-        return;
-      }
-      setPendingUpdate(update);
-      setUpdateState({
-        status: 'available',
-        currentVersion,
-        availableVersion: update.version,
-        lastError: null,
-      });
-    } catch (error) {
-      setUpdateState((current) => updateStateFromError(current.currentVersion, error));
-    }
-  }, []);
-
-  const installUpdate = useCallback(async () => {
-    if (!pendingUpdate) {
-      await checkForUpdate();
-      return;
-    }
-    setUpdateState((current) => ({
-      ...current,
-      status: 'downloading',
-      downloadedBytes: 0,
-      contentLength: null,
-      lastError: null,
-    }));
-    try {
-      await pendingUpdate.downloadAndInstall((event) => {
-        if (!event || typeof event !== 'object' || !('event' in event)) {
-          return;
-        }
-        const downloadEvent = event as {
-          event: string;
-          data?: { chunkLength?: number; contentLength?: number };
-        };
-        setUpdateState((current) => {
-          if (downloadEvent.event === 'Started') {
-            return {
-              ...current,
-              contentLength: downloadEvent.data?.contentLength ?? null,
-              downloadedBytes: 0,
-            };
-          }
-          if (downloadEvent.event === 'Progress') {
-            return {
-              ...current,
-              downloadedBytes:
-                (current.downloadedBytes ?? 0) + (downloadEvent.data?.chunkLength ?? 0),
-            };
-          }
-          return current;
-        });
-      });
-      setUpdateState((current) => ({
-        ...current,
-        status: 'ready_to_restart',
-        lastError: null,
-      }));
-    } catch (error) {
-      setUpdateState((current) => updateStateFromError(current.currentVersion, error));
-    }
-  }, [checkForUpdate, pendingUpdate]);
 
   const diagnosticReportText = useMemo(
     () =>
@@ -287,40 +179,6 @@ export function ReleasePanel() {
   const updateErrorMessage = updateState.lastError
     ? t(updateErrorTranslationKey(updateState.lastError))
     : null;
-
-  const securityDiagnostics = [
-    {
-      label: t('settings:release.security.csp'),
-      value: t('settings:release.security.cspValue'),
-    },
-    {
-      label: t('settings:release.security.updaterSignature'),
-      value: t('settings:release.security.updaterSignatureValue'),
-    },
-    {
-      label: t('settings:release.security.codeSigning'),
-      value: t('settings:release.security.codeSigningValue'),
-    },
-  ];
-
-  const dataSafetyDiagnostics = [
-    {
-      label: t('settings:release.dataSafety.identity'),
-      value: t('settings:release.dataSafety.identityValue'),
-    },
-    {
-      label: t('settings:release.dataSafety.localData'),
-      value: t('settings:release.dataSafety.localDataValue'),
-    },
-    {
-      label: t('settings:release.dataSafety.backup'),
-      value: t('settings:release.dataSafety.backupValue'),
-    },
-    {
-      label: t('settings:release.dataSafety.reset'),
-      value: t('settings:release.dataSafety.resetValue'),
-    },
-  ];
 
   return (
     <Card className='min-w-0 space-y-5'>
@@ -441,45 +299,6 @@ export function ReleasePanel() {
             onClick={() => void requestOsNotificationPermission()}
           >
             {t('settings:release.osNotifications.requestPermission')}
-          </Button>
-        </SettingsActionRow>
-      </section>
-
-      <section className='min-w-0 space-y-3'>
-        <h4 className='flex items-center gap-2 text-base font-semibold text-foreground'>
-          <ShieldCheck className='size-4' aria-hidden='true' />
-          {t('settings:release.security.title')}
-        </h4>
-        <SettingsDiagnosticList items={securityDiagnostics} columns={2} />
-        <Notice>{t('settings:release.privacy')}</Notice>
-      </section>
-
-      <section className='min-w-0 space-y-3'>
-        <h4 className='flex items-center gap-2 text-base font-semibold text-foreground'>
-          <BookOpen className='size-4' aria-hidden='true' />
-          {t('settings:release.dataSafety.title')}
-        </h4>
-        <SettingsDiagnosticList items={dataSafetyDiagnostics} columns={2} />
-        <SettingsActionRow>
-          <Button
-            variant='secondary'
-            type='button'
-            onClick={() => {
-              window.open(RELEASE_RUNBOOK_URL, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            <ExternalLink className='size-4' aria-hidden='true' />
-            {t('settings:release.dataSafety.releaseRunbook')}
-          </Button>
-          <Button
-            variant='secondary'
-            type='button'
-            onClick={() => {
-              window.open(THIRD_PARTY_NOTICES_URL, '_blank', 'noopener,noreferrer');
-            }}
-          >
-            <ExternalLink className='size-4' aria-hidden='true' />
-            {t('settings:release.dataSafety.thirdPartyNotices')}
           </Button>
         </SettingsActionRow>
       </section>

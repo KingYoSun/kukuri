@@ -53,13 +53,15 @@ test('desktop app restores a persisted light theme on boot', async () => {
   });
 });
 
-test('preview release banner opens release settings', async () => {
+test('settings drawer can open the release section', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await user.click(await screen.findByRole('button', { name: 'Updates' }));
-
+  await user.click(await screen.findByRole('button', { name: 'Open settings' }));
   expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Release' }));
+
   expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
 });
 
