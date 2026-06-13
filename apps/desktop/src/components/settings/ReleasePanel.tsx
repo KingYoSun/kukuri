@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Download, FileText, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -54,12 +55,19 @@ export function ReleasePanel() {
       return;
     }
     let cancelled = false;
-    void import('@tauri-apps/plugin-notification').then(async (plugin) => {
-      const granted = await plugin.isPermissionGranted();
-      if (!cancelled) {
-        setOsNotificationPermission(granted ? 'granted' : 'prompt');
-      }
-    });
+    // Query the Tauri backend directly instead of the WebView Web Notification
+    // API, whose permission state is volatile and unreliable on Windows (#313).
+    void invoke<boolean | null>('plugin:notification|is_permission_granted')
+      .then((granted) => {
+        if (!cancelled) {
+          setOsNotificationPermission(granted ? 'granted' : 'prompt');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOsNotificationPermission('prompt');
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -82,10 +90,10 @@ export function ReleasePanel() {
       setOsNotificationPermission('unavailable');
       return;
     }
-    const plugin = await import('@tauri-apps/plugin-notification');
-    const permission = await plugin.requestPermission();
-    setOsNotificationPermission(permission);
-    if (permission === 'granted') {
+    const permission = await invoke<string>('plugin:notification|request_permission');
+    const normalized = permission.toLowerCase();
+    setOsNotificationPermission(normalized);
+    if (normalized === 'granted') {
       updateOsNotificationSetting({ enabled: true });
     }
   }, [updateOsNotificationSetting]);

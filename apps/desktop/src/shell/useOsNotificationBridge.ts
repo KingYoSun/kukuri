@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 import type { NotificationView } from '@/lib/api';
 import {
@@ -44,28 +45,34 @@ export function useOsNotificationBridge(
     }
 
     let cancelled = false;
-    void import('@tauri-apps/plugin-notification').then(async (plugin) => {
-      const granted = await plugin.isPermissionGranted();
-      if (!granted || cancelled) {
-        return;
-      }
+    // Route through the Tauri backend `notify` command directly. The
+    // `@tauri-apps/plugin-notification` JS helpers go through the WebView2 Web
+    // Notification API, which does not produce real Windows toasts and reports a
+    // volatile permission state (see issue #313). The Rust backend grants
+    // permission unconditionally on desktop and emits a proper OS toast.
+    void (async () => {
       for (const notification of unseen) {
-        plugin.sendNotification({
-          id: nextOsNotificationId(notification.notification_id),
-          title: notificationTitle(notification),
-          body: notificationBody(notification, settings),
-          silent: settings.quietMode,
-          autoCancel: true,
-          extra: {
-            notificationId: notification.notification_id,
-            topicId: notification.topic_id ?? '',
-            dmId: notification.dm_id ?? '',
-          },
-        });
-        seenNotificationIdsRef.current.add(notification.notification_id);
+        if (cancelled) {
+          break;
+        }
+        try {
+          await invoke('plugin:notification|notify', {
+            options: {
+              id: nextOsNotificationId(notification.notification_id),
+              title: notificationTitle(notification),
+              body: notificationBody(notification, settings),
+              silent: settings.quietMode,
+            },
+          });
+          seenNotificationIdsRef.current.add(notification.notification_id);
+        } catch {
+          // best effort OS notification
+        }
       }
-      writeSeenOsNotificationIds(seenNotificationIdsRef.current);
-    });
+      if (!cancelled) {
+        writeSeenOsNotificationIds(seenNotificationIdsRef.current);
+      }
+    })();
 
     return () => {
       cancelled = true;
