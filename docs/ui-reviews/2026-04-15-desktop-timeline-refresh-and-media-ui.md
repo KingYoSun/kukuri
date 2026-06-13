@@ -6,3 +6,4 @@
 - Review result: implementation slice と Storybook review surface を更新した。review surface では top bar を外した shell layout、pending banner を持つ timeline、icon-only rail actions、reaction/media refresh、crop dialog の isolated story を確認対象に揃えた。
 - Exceptions: Figma HTML capture artifact はこの turn では未生成。`docs/DESIGN.md` の required flow に対して、local validation と Storybook review surface の更新を先行し、Figma link は follow-up 補完扱いにした。
 - Validation: `cd apps/desktop && npx pnpm@10.16.1 exec tsc --noEmit`; `cd apps/desktop && npx pnpm@10.16.1 test`; `cd apps/desktop && npx pnpm@10.16.1 storybook:build`; `cargo test -p kukuri-app-api parent_preview -- --nocapture`; `cargo test -p kukuri-app-api reply_preview -- --nocapture`; `cargo xtask desktop-ui-check` は pass。
+- Note (2026-06-13 #308): 上記 `docs/DESIGN.md` の required flow は廃止された。フロー / ガードレール / 例外ポリシーは `docs/adr/0014-uiux-dev-flow.md`、ビジュアル仕様は root `DESIGN.md` へ移設。本記録の Figma 言及は当時の履歴。

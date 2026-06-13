@@ -2,7 +2,8 @@
 
 ## Summary
 - この文書は、現行 `apps/desktop` shell UI を本番向け UI へ移行するための実行計画を固定する。
-- 正本はこの `docs/progress/` 文書 1 本とし、UI/UX workflow は `docs/adr/0014-uiux-dev-flow.md`、design-system / review rule は `docs/DESIGN.md` を前提にする。
+- 正本はこの `docs/progress/` 文書 1 本とし、UI/UX workflow と design-system / review rule は `docs/adr/0014-uiux-dev-flow.md`、visual spec は root `DESIGN.md` を前提にする。
+  - （2026-06-13 #308: Figma レビューフローは廃止し、design-system / review / 例外ポリシーは ADR 0014 へ統合、具体的なビジュアル仕様は root `DESIGN.md` へ移設した。本文中の Figma 言及は当時の履歴。）
 - scope は whole shell rewrite だが、execution order は `infra-first -> staged slices` に固定し、big-bang rewrite は前提にしない。
 - この計画では backend、Tauri command、frontend API contract を変更しない。将来 contract 変更が必要な場合は、この文書に黙って含めず別の implementation change または ADR で明示する。
 
@@ -39,7 +40,7 @@
 ### Purpose
 - 現行 shell UI の構造的な制約を前提に、本番向け UI への移行順序、責務分離、review artifact、validation gate を実装前に固定する。
 - 実装者が UI 置換と frontend infra 導入を同時進行で迷わないよう、phase ごとの entry criteria / deliverables / validation gates / not in phase を定義する。
-- product UI と diagnostics UI を分離し、`ADR 0014` と `docs/DESIGN.md` に整合する reviewable な移行パスを用意する。
+- product UI と diagnostics UI を分離し、`ADR 0014` と `DESIGN.md` に整合する reviewable な移行パスを用意する。
 
 ### Non-goals
 - この文書自体で新しい visual spec、token 値、layout pixel、component API を確定しない。これらは各 phase の Figma design artifact と implementation review で決める。
@@ -58,7 +59,7 @@
 ## Applicable Rules
 - workflow の正本は `docs/adr/0014-uiux-dev-flow.md` とし、Codex-assisted UI proposal では Figma を primary review artifact にする。
 - Codex-assisted UI proposal の既定 path は `local HTML / React draft -> generate_figma_design による HTML capture -> human review in Figma` とする。
-- design-system / review / exception policy の正本は `docs/DESIGN.md` とする。
+- design-system / review / exception policy の正本は `docs/adr/0014-uiux-dev-flow.md`、visual spec の正本は root `DESIGN.md` とする。
 - merge 済みで user-facing behavior または design rule を変えた UI 変更は `docs/ui-reviews/` に record を残す。
 - 新規 UI と大きく触る既存 UI の標準 stack は Tailwind + shadcn/ui + Storybook とし、Playwright は top-level flow 変更または component 境界をまたぐ高リスク変更で required にする。
 - product UI と diagnostics UI は設計と review の両方で分離する。observability surface を primary product flow として扱わない。
@@ -88,7 +89,7 @@
 ### Phase 0: frontend infra foundation
 - Entry criteria
   - 現行 shell は現役のまま維持する。
-  - `ADR 0014` と `docs/DESIGN.md` を前提に、導入する標準 stack の責務を明文化する。
+  - `ADR 0014` と `DESIGN.md` を前提に、導入する標準 stack の責務を明文化する。
 - Deliverables
   - Tailwind 導入
   - shared token layer の初期導入
@@ -259,7 +260,7 @@
 - 現行 shell の primary / secondary surface が新しい shell boundary に載り替わっている。
 - hard-coded one-off style 依存が shared token / primitive / component layer へ置き換わっている。
 - Storybook、Vitest、必要な Playwright、`cargo xtask` gate が新 UI を守る状態になっている。
-- `ADR 0014` と `docs/DESIGN.md` に沿った review artifact と validation note が各主要 phase の PR に揃っている。
+- `ADR 0014` と `DESIGN.md` に沿った review artifact と validation note が各主要 phase の PR に揃っている。
 - user-facing behavior または reusable design rule を変えた採用済み UI 変更について、必要な `docs/ui-reviews/` record が残っている。
 
 ## Notes
