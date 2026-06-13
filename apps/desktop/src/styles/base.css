@@ -25,6 +25,13 @@ select {
   font: inherit;
 }
 
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.56;

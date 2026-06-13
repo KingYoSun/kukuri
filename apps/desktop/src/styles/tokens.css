@@ -1,5 +1,7 @@
 :root {
-  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-sans: "IBM Plex Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP",
+    "Meiryo", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Code", "Consolas", SFMono-Regular, monospace;
   --radius: 1rem;
   --radius-panel: 22px;
   --radius-input: 14px;
@@ -114,6 +116,7 @@
 
 @theme inline {
   --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--surface-panel);
