@@ -24,7 +24,8 @@
     "title": "主题",
     "topicSummary": "{{status}} / peers: {{count}}",
     "topicsButton": "主题",
-    "trackedTopics": "跟踪的主题"
+    "trackedTopics": "跟踪的主题",
+    "updateAvailable": "有可用更新"
   },
   "primarySections": {
     "game": "游戏",
@@ -72,12 +73,6 @@
     "sectionsLabel": "设置部分",
     "title": "设置"
   },
-  "releaseBanner": {
-    "action": "更新",
-    "body": "发送反馈前可检查更新并导出诊断。",
-    "label": "预览版发布状态",
-    "title": "{{channel}} preview"
-  },
   "settingsSections": {
     "appearance": {
       "description": "本地亮色、暗色与语言选择。",
@@ -100,7 +95,7 @@
       "label": "Reactions"
     },
     "release": {
-      "description": "预览更新、诊断、系统通知和隐私。",
+      "description": "预览更新、诊断和系统通知。",
       "label": "Release"
     }
   },

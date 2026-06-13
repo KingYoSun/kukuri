@@ -6,12 +6,11 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, BookPlus, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
+import { Bell, BookPlus, Download, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
 import { TopicNavList } from '@/components/core/TopicNavList';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
-import { ReleasePreviewBanner } from '@/components/shell/ReleasePreviewBanner';
 import { type PrimarySection } from '@/components/shell/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +51,7 @@ import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
+import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
   DesktopShellDetailPaneStack,
@@ -63,6 +63,7 @@ import { DesktopShellPrimaryWorkspace } from '@/shell/page/DesktopShellPrimaryWo
 import { DesktopShellSettingsDrawer } from '@/shell/page/DesktopShellSettingsDrawer';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 export function DesktopShellPage({
   api = runtimeApi,
@@ -207,6 +208,8 @@ export function DesktopShellPage({
   const setNotificationAutoReadError = useDesktopShellFieldSetter('notificationAutoReadError');
   const setNotificationPanelState = useDesktopShellFieldSetter('notificationPanelState');
   const setShellChromeState = useDesktopShellFieldSetter('shellChromeState');
+  const updateAvailable = useAppUpdateStore(selectUpdateAvailable);
+  const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
   const setSelectedChannelIdByTopic = useDesktopShellFieldSetter('selectedChannelIdByTopic');
   const setComposeChannelByTopic = useDesktopShellFieldSetter('composeChannelByTopic');
   const setTimelineScopeByTopic = useDesktopShellFieldSetter('timelineScopeByTopic');
@@ -706,6 +709,16 @@ export function DesktopShellPage({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [activeGameRooms.length, gameFocusKey]);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+      return;
+    }
+    void checkForUpdate();
+    const intervalId = window.setInterval(() => {
+      void checkForUpdate();
+    }, UPDATE_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [checkForUpdate]);
   const notificationAction = (
     <Button
       className='shell-notification-button'
@@ -755,6 +768,29 @@ export function DesktopShellPage({
           />
         ) : null}
       </div>
+      {updateAvailable ? (
+        <Button
+          className='shell-update-button shell-icon-button'
+          variant='ghost'
+          size='icon'
+          type='button'
+          aria-label={t('shell:navigation.updateAvailable')}
+          data-testid='shell-update-trigger'
+          onClick={() => {
+            setSettingsOpen(true, false);
+            setShellChromeState((current) => ({
+              ...current,
+              activeSettingsSection: 'release',
+            }));
+            syncRoute('replace', {
+              settingsOpen: true,
+              settingsSection: 'release',
+            });
+          }}
+        >
+          <Download className='size-5' aria-hidden='true' />
+        </Button>
+      ) : null}
       <Button
         ref={settingsTriggerRef}
         className='shell-settings-button shell-icon-button'
@@ -878,21 +914,6 @@ export function DesktopShellPage({
     <>
       <ShellFrame
         skipTargetId={SHELL_WORKSPACE_ID}
-        topBar={
-          <ReleasePreviewBanner
-            onOpenReleaseSettings={() => {
-              setSettingsOpen(true, false);
-              setShellChromeState((current) => ({
-                ...current,
-                activeSettingsSection: 'release',
-              }));
-              syncRoute('replace', {
-                settingsOpen: true,
-                settingsSection: 'release',
-              });
-            }}
-          />
-        }
         navRail={
           <ShellNavRail
             railId={SHELL_NAV_ID}

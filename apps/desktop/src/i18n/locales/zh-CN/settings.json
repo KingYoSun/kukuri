@@ -188,29 +188,6 @@
       "quietMode": "静音模式",
       "previewBody": "显示预览文本",
       "requestPermission": "请求权限"
-    },
-    "security": {
-      "title": "安全",
-      "csp": "CSP",
-      "cspValue": "Release 构建使用显式 CSP。",
-      "updaterSignature": "更新签名",
-      "updaterSignatureValue": "更新包必须通过 Tauri 签名验证。",
-      "codeSigning": "Windows 代码签名",
-      "codeSigningValue": "未签名预览版必须在 release note 中说明。"
-    },
-    "privacy": "诊断不会包含 secret key、认证 token、private channel secret、invite/share token、私信正文或本地 DB path。",
-    "dataSafety": {
-      "title": "Data Safety",
-      "identity": "Identity",
-      "identityValue": "Updates preserve the existing identity and key material.",
-      "localData": "Local data",
-      "localDataValue": "Local DB, Iroh data, Community Node settings, private channel capability, and notification inbox state are treated as persistent user data.",
-      "backup": "Backup",
-      "backupValue": "Before uninstall or reset, export diagnostics and keep the app data directory if state must be retained.",
-      "reset": "Reset",
-      "resetValue": "Reinstall and migration failures should show actionable diagnostics instead of clearing data silently.",
-      "releaseRunbook": "Release Runbook",
-      "thirdPartyNotices": "Third-party Notices"
     }
   }
 }

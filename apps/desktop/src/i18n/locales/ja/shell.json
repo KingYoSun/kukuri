@@ -24,7 +24,8 @@
     "title": "トピック",
     "topicSummary": "{{status}} / peers: {{count}}",
     "topicsButton": "トピック",
-    "trackedTopics": "追跡中のトピック"
+    "trackedTopics": "追跡中のトピック",
+    "updateAvailable": "アップデートがあります"
   },
   "primarySections": {
     "game": "ゲーム",
@@ -72,12 +73,6 @@
     "sectionsLabel": "設定セクション",
     "title": "設定"
   },
-  "releaseBanner": {
-    "action": "更新",
-    "body": "フィードバック前に更新確認と診断レポート書き出しを行えます。",
-    "label": "プレビューリリース状態",
-    "title": "{{channel}} preview"
-  },
   "settingsSections": {
     "appearance": {
       "description": "ローカルのライト / ダーク / 言語設定です。",
@@ -100,7 +95,7 @@
       "label": "Reactions"
     },
     "release": {
-      "description": "プレビュー更新、診断、OS 通知、プライバシー設定です。",
+      "description": "プレビュー更新、診断、OS 通知です。",
       "label": "リリース"
     }
   },

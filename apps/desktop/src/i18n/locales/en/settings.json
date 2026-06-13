@@ -206,29 +206,6 @@
       "quietMode": "Quiet mode",
       "previewBody": "Show preview text",
       "requestPermission": "Request Permission"
-    },
-    "security": {
-      "title": "Security",
-      "csp": "CSP",
-      "cspValue": "Release builds use an explicit CSP.",
-      "updaterSignature": "Updater signature",
-      "updaterSignatureValue": "Update packages require Tauri signature verification.",
-      "codeSigning": "Windows code signing",
-      "codeSigningValue": "Unsigned preview builds must be called out in release notes."
-    },
-    "privacy": "Diagnostics omit secret keys, auth tokens, private channel secrets, invite/share tokens, DM bodies, and local DB paths.",
-    "dataSafety": {
-      "title": "Data Safety",
-      "identity": "Identity",
-      "identityValue": "Updates preserve the existing identity and key material.",
-      "localData": "Local data",
-      "localDataValue": "Local DB, Iroh data, Community Node settings, private channel capability, and notification inbox state are treated as persistent user data.",
-      "backup": "Backup",
-      "backupValue": "Before uninstall or reset, export diagnostics and keep the app data directory if state must be retained.",
-      "reset": "Reset",
-      "resetValue": "Reinstall and migration failures should show actionable diagnostics instead of clearing data silently.",
-      "releaseRunbook": "Release Runbook",
-      "thirdPartyNotices": "Third-party Notices"
     }
   }
 }

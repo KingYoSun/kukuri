@@ -24,7 +24,8 @@
     "title": "Topics",
     "topicSummary": "{{status}} / peers: {{count}}",
     "topicsButton": "Topics",
-    "trackedTopics": "Tracked Topics"
+    "trackedTopics": "Tracked Topics",
+    "updateAvailable": "Update available"
   },
   "primarySections": {
     "game": "Game",
@@ -72,12 +73,6 @@
     "sectionsLabel": "Settings sections",
     "title": "Settings"
   },
-  "releaseBanner": {
-    "action": "Updates",
-    "body": "Check updates and export diagnostics before sending feedback.",
-    "label": "Preview release status",
-    "title": "{{channel}} preview"
-  },
   "settingsSections": {
     "appearance": {
       "description": "Local light, dark, and language selection.",
@@ -100,7 +95,7 @@
       "label": "Reactions"
     },
     "release": {
-      "description": "Preview updates, diagnostics, OS notifications, and privacy.",
+      "description": "Preview updates, diagnostics, and OS notifications.",
       "label": "Release"
     }
   },
