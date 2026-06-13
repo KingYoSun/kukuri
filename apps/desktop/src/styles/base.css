@@ -111,7 +111,7 @@ button:disabled {
 .startup-error-summary dt {
   margin-bottom: 6px;
   color: var(--muted-foreground);
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 
 .startup-error-summary dd {
