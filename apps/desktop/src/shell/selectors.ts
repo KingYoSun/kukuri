@@ -477,7 +477,7 @@ export function mergeCommunityNodeStatus(
       ? next.consent_state ?? previous?.consent_state ?? null
       : next.consent_state ?? null,
     resolved_urls: next.resolved_urls ?? previous?.resolved_urls ?? null,
-    last_error: next.last_error ?? previous?.last_error ?? null,
+    last_error: next.last_error ?? null,
     session_phase: next.session_phase ?? previous?.session_phase ?? 'idle',
     retry_after: next.retry_after ?? previous?.retry_after ?? null,
   };
