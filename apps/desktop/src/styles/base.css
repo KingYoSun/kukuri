@@ -157,7 +157,7 @@ button:disabled {
 
 *::-webkit-scrollbar-thumb {
   border: 3px solid var(--scrollbar-track);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--scrollbar-thumb);
 }
 

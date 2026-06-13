@@ -9,9 +9,19 @@
   --text-body-reading: 0.9375rem;
   --text-body: 0.875rem;
   --text-caption: 0.75rem;
+  --radius-xs: 0.5rem;
+  --radius-sm: 0.75rem;
   --radius: 1rem;
   --radius-panel: 22px;
   --radius-input: 14px;
+  --radius-pill: 999px;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
 }
 
 :root,
