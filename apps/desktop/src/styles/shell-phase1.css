@@ -606,7 +606,7 @@
 }
 
 .metaverse-chat-list small {
-  color: var(--text-muted);
+  color: var(--muted-foreground);
   font-weight: 500;
 }
 
@@ -1023,10 +1023,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
   padding: 0.28rem 0.6rem;
-  background: var(--surface-card);
+  background: var(--surface-panel);
   color: var(--foreground);
   cursor: pointer;
 }
@@ -1251,7 +1251,7 @@
   width: min(100%, 16rem);
   border-radius: 1rem;
   object-fit: contain;
-  background: var(--surface-subtle);
+  background: var(--surface-panel-muted);
 }
 
 .reactions-crop-fields {
@@ -1265,7 +1265,7 @@
   width: 4rem;
   height: 4rem;
   border-radius: 1rem;
-  background-color: var(--surface-card);
+  background-color: var(--surface-panel);
   background-repeat: no-repeat;
   background-position: center;
   background-size: cover;
@@ -1328,7 +1328,7 @@
   padding: 0.5rem;
   border: 1px solid var(--border-subtle);
   border-radius: 1.1rem;
-  background: var(--surface-card);
+  background: var(--surface-panel);
 }
 
 .reactions-saved-tile-selected {
@@ -2117,7 +2117,7 @@
 }
 
 .notification-item:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -2533,7 +2533,7 @@
     radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--surface-contrast) 28%, transparent), transparent 58%),
     linear-gradient(160deg, color-mix(in srgb, var(--surface-button-primary) 94%, white 6%), color-mix(in srgb, var(--surface-button-primary) 72%, black 28%));
   box-shadow:
-    0 0 0 0.35rem color-mix(in srgb, var(--surface-background) 72%, transparent),
+    0 0 0 0.35rem color-mix(in srgb, var(--background) 72%, transparent),
     var(--shadow-panel);
 }
 
