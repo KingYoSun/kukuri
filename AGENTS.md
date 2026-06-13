@@ -7,7 +7,7 @@
 - `docs/runbooks/dev.md`
 - `docs/progress/2026-03-10-foundation.md`
 - `REFACTORING.md`（リファクタリング・構造整理・大きめの移動/抽出を行う場合）
-- `docs/DESIGN.md`（UI/UX 作業時）
+- `DESIGN.md`（UI/UX 作業時のビジュアル仕様。フロー/ガードレールは `docs/adr/0014-uiux-dev-flow.md`）
 
 ## 作業対象
 - 新規実装・修正は原則 root workspace の現行実装のみ。
@@ -27,7 +27,8 @@
 - 仕様: `docs/adr/`
 - 実行手順: `docs/runbooks/`
 - 現状: `docs/progress/`
-- デザインルール: `docs/DESIGN.md`
+- ビジュアル仕様: `DESIGN.md`
+- UI/UX フロー・ガードレール: `docs/adr/0014-uiux-dev-flow.md`
 - UI review record: `docs/ui-reviews/`
 - 振る舞い: `crates/*` のテストと `harness/scenarios/`
 
@@ -38,7 +39,7 @@
 - リファクタリングPRでは、機能追加・仕様変更・依存更新を混ぜない。
 - 変更pathごとの必須validationは `REFACTORING.md` の path別検証マトリクスに従う。
 - テストでは workspace 全体の長時間の重い再リンクが走っても途中で止めず、原則として完走させて結果を確認する。
-- root に新しい長文ドキュメントを増やさない。必要なら `docs/` に置く。
+- root に新しい長文ドキュメントを増やさない。必要なら `docs/` に置く（例外: ビジュアル仕様 `DESIGN.md` は gestaloka 慣習に合わせ root に置く）。
 - `console.error` は使わない。
 - コミットはユーザーが求めたときだけ行う。
 

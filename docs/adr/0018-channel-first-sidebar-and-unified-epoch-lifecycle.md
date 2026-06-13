@@ -13,7 +13,7 @@ Accepted
 - `docs/adr/0012-topic-first_progressive_community_filtering_draft.md`
 - `docs/adr/0013-social-graph-foundation-draft.md`
 - `docs/adr/0014-uiux-dev-flow.md`
-- `docs/DESIGN.md`
+- `DESIGN.md`
 - `docs/adr/0020-pairwise-dm-v1.md`
 
 ## Note

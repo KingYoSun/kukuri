@@ -5,16 +5,14 @@
 ## Record を追加する条件
 - merge された PR が user-facing UI behavior または layout を大きく変える。
 - merge された PR が reusable design rule を追加または変更する。
-- merge された PR が `docs/DESIGN.md` の例外付きで承認される。
+- merge された PR が `docs/adr/0014-uiux-dev-flow.md` の例外付きで承認される。
 
 ## File Naming
 - `YYYY-MM-DD-slug.md` を使う。
 
 ## 必須項目
 - PR link または identifier
-- 一次 review に使った Figma link
-  - 既定値は HTML capture で生成した Figma design URL
-  - FigJam link だけで済ませる場合は例外理由を record に書く
+- PR 上で読める preview image または short video（一次 review 面）
 - 採用された変更の short summary
 - review result
 - 承認された例外
@@ -25,7 +23,7 @@
 # YYYY-MM-DD slug
 
 - PR:
-- Figma:
+- Preview:
 - Summary:
 - Review result:
 - Exceptions:

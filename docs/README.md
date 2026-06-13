@@ -16,7 +16,7 @@
 9. `docs/adr/0008-dht-discovery-data-classification.md`
 10. `docs/adr/0009-community-node-relay-auth-data-classification.md`
 11. `docs/adr/0014-uiux-dev-flow.md`
-12. `docs/DESIGN.md`
+12. `DESIGN.md`（root・ビジュアル仕様）
 13. `harness/scenarios/`
 14. `docs/adr/0003-image-post-data-classification.md`
 15. `docs/adr/0004-video-post-data-classification.md`
@@ -35,6 +35,6 @@
 
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`
-- rules: `docs/DESIGN.md`
+- visual spec: `DESIGN.md`（root）
 - migration plan: `docs/progress/2026-03-24-shell-ui-production-migration.md`
 - accepted review records: `docs/ui-reviews/`
