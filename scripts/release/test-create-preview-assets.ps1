@@ -50,7 +50,8 @@ try {
   foreach ($requiredName in @(
       "RELEASE_NOTES_DRAFT.md",
       "manual-smoke-checklist.md",
-      "SHA256SUMS.txt"
+      "SHA256SUMS.txt",
+      "THIRD_PARTY_NOTICES.md"
     )) {
     if ($assetNames -notcontains $requiredName) {
       throw "Missing release asset list entry for $requiredName"

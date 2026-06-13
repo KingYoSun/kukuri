@@ -73,16 +73,15 @@ The draft release must include:
 ## Third-party Notices
 
 Before publishing a preview release, generate and review the Rust and desktop npm dependency
-license inventories from the release tag. Keep the generated inventories with the draft release
-notes or attach them to the draft release audit trail.
+license inventories from the release tag.
 
-The distribution notice lives at `docs/THIRD_PARTY_NOTICES.md`. Update it when a dependency requires
-specific attribution text to ship with the preview build.
+The distribution notice lives at `docs/THIRD_PARTY_NOTICES.md` and is included in the draft release
+assets as `THIRD_PARTY_NOTICES.md`. Update the generator if a dependency requires specific
+attribution text beyond the package-level license inventory.
 
 ```powershell
-cargo metadata --locked --format-version 1
-cd apps/desktop
-npx pnpm@10.16.1 licenses list --prod
+./scripts/release/generate-third-party-notices.ps1
+./scripts/release/generate-third-party-notices.ps1 -Check
 ```
 
 ## Manual Smoke
