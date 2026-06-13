@@ -264,7 +264,8 @@
   - ローカル通知を受信または作成する。
   - 新ビルドへ更新する。
   - すべての状態が残っていることを確認する。
-- [ ] 少なくとも 1 つの旧版 DB fixture を追加する。
+- [x] 少なくとも 1 つの旧版 DB fixture を追加する。
+  - `crates/store/fixtures/sqlite/pre-metaverse-game-room-columns.fixture` を追加し、`20260413000000` まで適用済みの旧 SQLite store を materialize して現行 migration で開けることを確認。
 - [x] 再インストール時にデータを保持するか削除するかを文書化する。
 - [x] keyring fallback と file fallback のリスクを文書化する。
 - [ ] マイグレーション失敗または DB open 失敗時のユーザー向け起動エラーを追加する。
