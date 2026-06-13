@@ -154,6 +154,10 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
+      - name: Third-party notices check
+        shell: pwsh
+        run: ./scripts/release/generate-third-party-notices.ps1 -Check
+
       - name: Install Playwright Chromium
         working-directory: apps/desktop
         run: pnpm exec playwright install chromium
@@ -293,6 +297,10 @@ jobs:
       - name: Release asset script smoke
         shell: pwsh
         run: ./scripts/release/test-create-preview-assets.ps1
+
+      - name: Third-party notice script smoke
+        shell: pwsh
+        run: ./scripts/release/test-generate-third-party-notices.ps1
 
       - name: Download Windows bundle artifact
         uses: actions/download-artifact@v4

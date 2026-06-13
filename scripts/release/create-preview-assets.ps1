@@ -92,6 +92,7 @@ This preview is distributed for Windows 10 and Windows 11 through GitHub Release
 - Tauri updater bundle and signature.
 - `latest-preview.json` with the embedded `.sig` contents.
 - `SHA256SUMS.txt`.
+- `THIRD_PARTY_NOTICES.md`.
 - Manual smoke checklist.
 
 ## Known limits
@@ -104,6 +105,12 @@ This preview is distributed for Windows 10 and Windows 11 through GitHub Release
 
 Use the in-app Release settings diagnostic report and attach it to the preview feedback issue template.
 "@ | Set-Content -LiteralPath $notesPath -Encoding UTF8
+
+$noticesSource = Join-Path $PSScriptRoot "..\..\docs\THIRD_PARTY_NOTICES.md"
+if (-not (Test-Path -LiteralPath $noticesSource)) {
+  throw "Third-party notices file not found: $noticesSource"
+}
+Copy-Item -LiteralPath $noticesSource -Destination (Join-Path $OutputDir "THIRD_PARTY_NOTICES.md") -Force
 
 $checksumPath = Join-Path $OutputDir "SHA256SUMS.txt"
 Get-ChildItem -LiteralPath $OutputDir -File |
