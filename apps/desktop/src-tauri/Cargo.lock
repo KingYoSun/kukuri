@@ -3684,7 +3684,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-app-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3705,7 +3705,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-blob-service"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3722,7 +3722,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-cn-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3741,7 +3741,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bech32",
@@ -3758,7 +3758,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-desktop-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3784,7 +3784,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-desktop-tauri"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "kukuri-app-api",
@@ -3804,7 +3804,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-docs-sync"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3826,7 +3826,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3840,7 +3840,7 @@ dependencies = [
 
 [[package]]
 name = "kukuri-transport"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",

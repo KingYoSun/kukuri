@@ -1,6 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+
+const { invokeMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: invokeMock,
+}));
 
 import { App } from '@/App';
 import { DESKTOP_THEME_STORAGE_KEY } from '@/lib/theme';
@@ -16,6 +24,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/');
   window.localStorage.clear();
   document.documentElement.removeAttribute('data-theme');
+  invokeMock.mockReset();
+  delete window.__KUKURI_DESKTOP__;
 });
 
 test('desktop app bootstraps the shell with the default timeline workspace', async () => {
@@ -51,4 +61,23 @@ test('preview release banner opens release settings', async () => {
 
   expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Release' })).toBeInTheDocument();
+});
+
+test('desktop app renders a startup error when the local database cannot be opened', async () => {
+  invokeMock.mockResolvedValueOnce({
+    status: 'failed',
+    error: {
+      kind: 'database_migration',
+      message: 'kukuri could not open the local app database.',
+      detail: 'migration checksum mismatch',
+      db_path: 'C:\\Users\\tester\\AppData\\Roaming\\kukuri\\kukuri.db',
+    },
+  });
+
+  render(<App />);
+
+  expect(await screen.findByText('kukuri could not open the local database.')).toBeInTheDocument();
+  expect(screen.getByText('Migration failure')).toBeInTheDocument();
+  expect(screen.getByDisplayValue(/migration checksum mismatch/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
 });

@@ -51,6 +51,94 @@ button:disabled {
   border: 0;
 }
 
+.startup-error-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--shell-background);
+  color: var(--foreground);
+}
+
+.startup-error-panel {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.startup-error-panel strong,
+.startup-error-panel span {
+  display: block;
+}
+
+.startup-error-panel strong {
+  margin-bottom: 4px;
+}
+
+.startup-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.startup-error-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.startup-error-summary div {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-panel-muted);
+}
+
+.startup-error-summary dt {
+  margin-bottom: 6px;
+  color: var(--muted-foreground);
+  font-size: 0.82rem;
+}
+
+.startup-error-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.startup-error-detail {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-input);
+  color: var(--foreground);
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .startup-error-screen {
+    padding: 16px;
+    place-items: stretch;
+  }
+
+  .startup-error-panel {
+    padding: 18px;
+  }
+
+  .startup-error-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 *::-webkit-scrollbar {
   width: 12px;
   height: 12px;

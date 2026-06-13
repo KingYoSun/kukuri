@@ -4,3 +4,4 @@ pub mod live_game;
 pub mod posts;
 pub mod profile;
 pub mod reactions;
+pub mod startup;

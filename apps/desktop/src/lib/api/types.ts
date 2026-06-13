@@ -12,6 +12,19 @@ export type TimelineScope =
   | { kind: 'all_joined' }
   | { kind: 'channel'; channel_id: string };
 
+export type DesktopStartupErrorKind = 'database_open' | 'database_migration' | 'unknown';
+
+export type DesktopStartupErrorView = {
+  kind: DesktopStartupErrorKind;
+  message: string;
+  detail: string;
+  db_path?: string | null;
+};
+
+export type DesktopStartupStatus =
+  | { status: 'ready' }
+  | { status: 'failed'; error: DesktopStartupErrorView };
+
 export type ChannelAudienceKind = 'invite_only' | 'friend_only' | 'friend_plus';
 export type ChannelSharingState = 'open' | 'frozen';
 

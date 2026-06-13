@@ -91,6 +91,20 @@
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"
   },
+  "startup": {
+    "checking": "起動状態を確認しています…",
+    "title": "ローカルデータベースを開けませんでした。",
+    "description": "データは削除されていません。再試行しても直らない場合は、下記の診断情報を添えて報告してください。",
+    "copyDetails": "詳細をコピー",
+    "kind": "分類",
+    "dbPath": "DB パス",
+    "detailLabel": "起動エラー詳細",
+    "kinds": {
+      "database_open": "DB open 失敗",
+      "database_migration": "マイグレーション失敗",
+      "unknown": "不明な起動エラー"
+    }
+  },
   "fallbacks": {
     "attachment": "添付",
     "authorDetail": "著者詳細",
