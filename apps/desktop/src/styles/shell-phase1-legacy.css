@@ -1126,7 +1126,7 @@
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 899px) {
   .shell-phase1 .hero, .shell-phase1 .grid {
     grid-template-columns: 1fr;
   }

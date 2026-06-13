@@ -131,7 +131,7 @@ button:disabled {
   line-height: 1.55;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 759px) {
   .startup-error-screen {
     padding: 16px;
     place-items: stretch;
