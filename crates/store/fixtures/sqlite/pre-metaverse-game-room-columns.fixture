@@ -1,0 +1,6 @@
+# SQLite store fixture: pre-metaverse game room columns
+#
+# This fixture describes a release-era SQLite database with migrations applied through
+# 20260413000000_unfiltered_projection_indexes. Tests materialize the database from the embedded
+# migration SQL and the embedded sqlx checksums, then verify that the current store can migrate it.
+applied_through=20260413000000
