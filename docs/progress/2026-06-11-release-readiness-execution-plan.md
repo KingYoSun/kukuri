@@ -268,7 +268,10 @@
   - `crates/store/fixtures/sqlite/pre-metaverse-game-room-columns.fixture` を追加し、`20260413000000` まで適用済みの旧 SQLite store を materialize して現行 migration で開けることを確認。
 - [x] 再インストール時にデータを保持するか削除するかを文書化する。
 - [x] keyring fallback と file fallback のリスクを文書化する。
-- [ ] マイグレーション失敗または DB open 失敗時のユーザー向け起動エラーを追加する。
+- [x] マイグレーション失敗または DB open 失敗時のユーザー向け起動エラーを追加する。
+  - Tauri setup で desktop runtime 初期化に失敗してもウィンドウを維持し、`get_desktop_startup_status` で起動失敗状態を返すようにした。
+  - frontend boot 時に startup status を確認し、DB open / migration 失敗時は shell を描画せず、分類、DB パス、詳細、再試行、詳細コピーを表示する起動エラー画面を追加した。
+  - `App.test.tsx` で migration 失敗時に起動エラー画面が表示され、通常 shell が表示されないことを確認した。
 
 完了条件:
 

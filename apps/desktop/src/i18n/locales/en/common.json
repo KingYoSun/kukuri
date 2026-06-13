@@ -91,6 +91,20 @@
   "feedback": {
     "copiedToClipboard": "Copied to clipboard."
   },
+  "startup": {
+    "checking": "Checking startup status…",
+    "title": "kukuri could not open the local database.",
+    "description": "Your data was not deleted. Retry startup, and include the diagnostic details below if the issue continues.",
+    "copyDetails": "Copy details",
+    "kind": "Kind",
+    "dbPath": "DB path",
+    "detailLabel": "Startup error details",
+    "kinds": {
+      "database_open": "DB open failure",
+      "database_migration": "Migration failure",
+      "unknown": "Unknown startup error"
+    }
+  },
   "fallbacks": {
     "attachment": "attachment",
     "authorDetail": "Author Detail",

@@ -2,11 +2,14 @@ mod commands;
 mod state;
 mod tracing;
 
-use ::tracing::info;
+use ::tracing::{error, info};
 use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
-use crate::{state::build_desktop_state, tracing::init_tracing};
+use crate::{
+    state::{DesktopStartupState, build_desktop_state, resolve_db_path},
+    tracing::init_tracing,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,14 +29,25 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let state = build_desktop_state(app.handle())?;
+            let startup_state = match build_desktop_state(app.handle()) {
+                Ok(state) => {
+                    info!("initialized kukuri desktop runtime");
+                    app.manage(state);
+                    DesktopStartupState::ready()
+                }
+                Err(error) => {
+                    error!(%error, "failed to initialize desktop runtime");
+                    let db_path = resolve_db_path(app.handle()).ok();
+                    DesktopStartupState::failed(error, db_path)
+                }
+            };
+            app.manage(startup_state);
             #[cfg(any(windows, target_os = "linux"))]
             app.deep_link().register_all()?;
-            info!("initialized kukuri desktop runtime");
-            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::startup::get_desktop_startup_status,
             commands::posts::create_post,
             commands::posts::create_repost,
             commands::reactions::toggle_reaction,

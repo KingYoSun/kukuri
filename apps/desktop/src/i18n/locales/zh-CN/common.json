@@ -84,6 +84,20 @@
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"
   },
+  "startup": {
+    "checking": "正在检查启动状态…",
+    "title": "kukuri 无法打开本地数据库。",
+    "description": "数据未被删除。请重试启动；如果问题持续，请附上下面的诊断信息。",
+    "copyDetails": "复制详情",
+    "kind": "分类",
+    "dbPath": "DB 路径",
+    "detailLabel": "启动错误详情",
+    "kinds": {
+      "database_open": "DB open 失败",
+      "database_migration": "迁移失败",
+      "unknown": "未知启动错误"
+    }
+  },
   "fallbacks": {
     "attachment": "附件",
     "authorDetail": "作者详情",
