@@ -5,7 +5,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const noticeVariants = cva(
-  'rounded-[var(--radius-input)] border px-4 py-3 text-sm leading-6 shadow-[0_12px_32px_rgba(2,7,15,0.12)]',
+  'rounded-[var(--radius-input)] border px-4 py-3 text-sm leading-6 shadow-[var(--shadow-dropdown)]',
   {
     variants: {
       tone: {
