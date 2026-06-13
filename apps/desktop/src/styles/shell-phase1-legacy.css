@@ -613,10 +613,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
   padding: 0.28rem 0.6rem;
-  background: var(--surface-card);
+  background: var(--surface-panel);
   color: var(--foreground);
   cursor: pointer;
 }
@@ -754,7 +754,7 @@
   margin-top: 0.75rem;
   padding: 0.85rem;
   border-radius: 1rem;
-  background: var(--surface-subtle);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .post-reaction-picker-row {
@@ -784,7 +784,7 @@
   width: min(100%, 16rem);
   border-radius: 1rem;
   object-fit: contain;
-  background: var(--surface-subtle);
+  background: var(--surface-panel-muted);
 }
 
 .shell-phase1 .reactions-crop-fields {
@@ -798,7 +798,7 @@
   width: 4rem;
   height: 4rem;
   border-radius: 1rem;
-  background-color: var(--surface-card);
+  background-color: var(--surface-panel);
   background-repeat: no-repeat;
   background-position: center;
   background-size: cover;
@@ -861,7 +861,7 @@
   padding: 0.5rem;
   border: 1px solid var(--border-subtle);
   border-radius: 1.1rem;
-  background: var(--surface-card);
+  background: var(--surface-panel);
 }
 
 .shell-phase1 .reactions-saved-tile-selected {

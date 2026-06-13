@@ -49,6 +49,8 @@
   --accent: #00b3a4;
   --accent-foreground: #eafffb;
   --destructive: #ffb48a;
+  --warning: #e6b066;
+  --danger: #ffb48a;
   --ring: rgba(0, 179, 164, 0.45);
   --shadow-panel: 0 18px 60px rgba(2, 7, 15, 0.22);
   --shadow-button-primary: 0 10px 28px rgba(245, 157, 98, 0.16);
@@ -100,6 +102,8 @@
   --accent: #0f8c82;
   --accent-foreground: #143633;
   --destructive: #b35f46;
+  --warning: #9a6e2a;
+  --danger: #b35f46;
   --ring: rgba(15, 140, 130, 0.32);
   --shadow-panel: 0 18px 48px rgba(33, 48, 59, 0.12);
   --shadow-button-primary: 0 10px 24px rgba(215, 125, 69, 0.18);

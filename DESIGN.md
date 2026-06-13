@@ -62,14 +62,16 @@
 | `--surface-warning-soft` | warning 淡面 | `#463423` | `#f6e7d9` |
 | `--border-warning` | warning 境界 | `#a36b40` | `#d1a06d` |
 | `--surface-info-soft` | info 淡面 | `#203449` | `#dce7f4` |
+| `--warning` | warning の前景（文字/アイコン） | `#e6b066` | `#9a6e2a` |
+| `--danger` | danger/error の前景（`--destructive` と統一） | `#ffb48a` | `#b35f46` |
 
-**将来定義**（既存の `-soft` / `-border` ファミリーと整合させ、`shell-phase1.css` が参照する未定義トークンを解消する。評価記録ギャップ1）:
+> `--warning` / `--danger` は #325 で定義し、`shell-phase1.css` の未定義参照（旧 評価記録ギャップ1）を解消した。
+
+**将来定義**（既存の `-soft` ファミリーと対になる前景色。現状コードに consumer が無いため未実装。consumer 追加時に定義する）:
 
 | Token | 役割 | Dark | Light |
 |-------|------|------|-------|
-| `--warning` | warning の前景（文字/アイコン） | `#e6b066` | `#9a6e2a` |
-| `--danger` | danger/error の前景（`--destructive` と統一） | `#ffb48a` | `#b35f46` |
-| `--info` | info の前景 | `#7fb1e0` | `#2c6aa6` |
+| `--info` | info の前景（`--surface-info-soft` と対） | `#7fb1e0` | `#2c6aa6` |
 | `--success` | success の前景（accent teal 寄り） | `#34c39a` | `#2f8f6e` |
 | `--surface-success-soft` | success 淡面 | `#17352c` | `#dff0e6` |
 | `--border-success` | success 境界 | `#2f8f6e` | `#8cc2a6` |
