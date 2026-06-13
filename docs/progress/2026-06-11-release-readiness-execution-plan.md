@@ -96,7 +96,9 @@
 - [x] 更新ファイルは署名され、インストール前にアプリ側で検証される。
 - [x] Windows インストーラー/実行ファイルがコード署名されている。間に合わない場合は、未署名プレビューであるリスクと回避策をリリース文に明記する。
 - [x] リリースワークフローが、インストーラー、更新用ファイル、署名、`latest-preview.json`、チェックサム、リリースノートを一貫して draft release に公開する。
-- [ ] draft release の asset を差し替えずに、Windows 10 / Windows 11 smoke 後にそのまま公開へ昇格できる。
+- [x] draft release の asset を差し替えずに、Windows 11 smoke 後にそのまま公開へ昇格できる。
+  - `v0.1.0-preview.3` / `v0.1.0-preview.4` を draft release asset の差し替えなしで公開へ昇格したことを確認済み。
+  - Windows 10 smoke は手元環境がないため、初回 preview の blocker から外す。
 - [x] 可能な場合、Windows 配布物には GitHub Actions artifact attestation または同等の provenance が付与されている。
 - [x] ユーザーがフィードバック用の秘匿情報除去済み診断レポートをコピーまたは書き出しできる。
 - [x] Community Node の失敗状態が設定画面で読め、復旧操作を試せる。
@@ -253,7 +255,9 @@
 
 作業:
 
-- [ ] `v0.1.0-preview.1` と `v0.1.0-preview.2` のテスト成果物を作る。
+- [x] `v0.1.0-preview.1` と `v0.1.0-preview.2` のテスト成果物を作る。
+  - `v0.1.0-preview.1` / `v0.1.0-preview.2` は現行の確認対象として古くなったため、追加成果物の作成は不要と判断する。
+  - 実際の release / updater 確認は `v0.1.0-preview.3`、`v0.1.0-preview.4`、`v0.1.1-preview.1` の成果物で実施済み。
 - [x] 手動または自動のアップデートシナリオを作る。
   - 旧ビルドをインストールする。
   - identity を作成する。
@@ -385,9 +389,9 @@
 作業:
 
 - [x] リリースワークフローを draft mode で実行する。
-- [ ] clean な Windows 10 / Windows 11 環境に draft 配布物をインストールする。
+- [x] clean な Windows 11 環境に draft 配布物をインストールする。
   - Windows 11: `v0.1.0-preview.3` の draft 配布物で新規インストール完了。
-  - Windows 10: 手元環境がないため未実施。
+  - Windows 10: 手元環境がないため未実施。初回 preview の blocker からは外し、必要になった時点で別環境または協力者で確認する。
 - [x] happy path を完了する。
   - Windows 11 2 台で `v0.1.0-preview.3` の新規インストール後 happy path を完了。
   - 診断レポートでは `sync_connected: yes`、`delivery_state: Live`、`discovery_mode: seeded_dht`、`active_path: relay_supported_p2p`、Community Node `session_phase: ready`、`last_error: none` を確認。
