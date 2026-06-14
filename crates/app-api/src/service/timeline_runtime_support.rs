@@ -910,6 +910,9 @@ impl AppService {
             source_author_pubkey: snapshot.source_author_pubkey.as_str().to_string(),
             source_author_name: source_profile.and_then(|value| value.name.clone()),
             source_author_display_name: source_profile.and_then(|value| value.display_name.clone()),
+            source_author_picture: source_profile.and_then(|value| value.picture.clone()),
+            source_author_picture_asset: source_profile
+                .and_then(|value| profile_asset_view_from_ref(value.picture_asset.as_ref())),
             source_object_kind: snapshot.source_object_kind,
             content: snapshot.content,
             attachments: attachment_views_from_refs(

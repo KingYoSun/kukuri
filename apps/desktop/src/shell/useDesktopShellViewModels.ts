@@ -8,6 +8,7 @@ import type {
   AuthorDetailView,
   ComposerDraftMediaView,
   PostCardView,
+  ReferencedAuthorMeta,
   ThreadPanelState,
   TopicDiagnosticSummary,
 } from '@/components/core/types';
@@ -29,6 +30,7 @@ import type {
   JoinedPrivateChannelView,
   LiveSessionView,
   PostView,
+  ProfileAssetView,
   TopicSyncStatus,
 } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
@@ -422,6 +424,57 @@ export function useDesktopShellViewModels({
         mediaObjectUrls
       );
 
+      const resolveRefAuthor = (
+        pubkey: string,
+        label: string,
+        picture?: string | null,
+        pictureAsset?: ProfileAssetView | null
+      ): ReferencedAuthorMeta => {
+        const known =
+          pubkey === syncStatus.local_author_pubkey
+            ? localProfile
+            : knownAuthorsByPubkey[pubkey] ?? null;
+        return {
+          pubkey,
+          label,
+          picture: resolveProfilePictureSrc(
+            {
+              picture: picture ?? known?.picture ?? null,
+              picture_asset: pictureAsset ?? known?.picture_asset ?? null,
+            },
+            mediaObjectUrls
+          ),
+        };
+      };
+
+      const repostSource = post.repost_of ?? null;
+      const repostSourceAuthor = repostSource
+        ? resolveRefAuthor(
+            repostSource.source_author_pubkey,
+            authorDisplayLabel(
+              repostSource.source_author_pubkey,
+              repostSource.source_author_display_name,
+              repostSource.source_author_name
+            ),
+            repostSource.source_author_picture,
+            repostSource.source_author_picture_asset
+          )
+        : null;
+
+      const replyPreview = post.reply_preview ?? null;
+      const replyParentAuthor = replyPreview
+        ? resolveRefAuthor(
+            replyPreview.author.pubkey,
+            authorDisplayLabel(
+              replyPreview.author.pubkey,
+              replyPreview.author.display_name,
+              replyPreview.author.name
+            ),
+            replyPreview.author.picture,
+            replyPreview.author.picture_asset
+          )
+        : null;
+
       return {
         post,
         context,
@@ -440,6 +493,9 @@ export function useDesktopShellViewModels({
         threadTopicId,
         canReply: post.is_threadable ?? (post.object_kind !== 'repost' || isQuoteRepost(post)),
         canRepost: canCreateRepostFromPost(post),
+        repostSourceAuthor,
+        replyParentAuthor,
+        suppressReplyPreview: context === 'thread',
         media: {
           objectId: post.object_id,
           kind: mediaKind,

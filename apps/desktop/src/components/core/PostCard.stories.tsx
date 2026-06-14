@@ -212,3 +212,86 @@ export const ChannelAccessToken: Story = {
     }),
   },
 };
+
+export const PureRepost: Story = {
+  args: {
+    view: createView({
+      canReply: false,
+      threadTargetId: 'source-root',
+      threadTopicId: 'kukuri:topic:source',
+      repostSourceAuthor: { pubkey: 'b'.repeat(64), label: 'Source Author', picture: null },
+      post: {
+        ...basePost,
+        object_kind: 'repost',
+        content: '',
+        repost_commentary: null,
+        repost_of: {
+          source_object_id: 'source-1',
+          source_topic_id: 'kukuri:topic:source',
+          source_author_pubkey: 'b'.repeat(64),
+          source_author_display_name: 'Source Author',
+          source_author_name: null,
+          source_object_kind: 'post',
+          content: 'The original post is now the star of a repost, with a subtle attribution above.',
+          attachments: [],
+          reply_to: null,
+          root_id: 'source-root',
+        },
+      },
+    }),
+  },
+};
+
+export const QuoteRepost: Story = {
+  args: {
+    view: createView({
+      repostSourceAuthor: { pubkey: 'b'.repeat(64), label: 'Source Author', picture: null },
+      post: {
+        ...basePost,
+        object_kind: 'repost',
+        content: 'Adding my own take on top of the original.',
+        repost_commentary: 'Adding my own take on top of the original.',
+        repost_of: {
+          source_object_id: 'source-1',
+          source_topic_id: 'kukuri:topic:source',
+          source_author_pubkey: 'b'.repeat(64),
+          source_author_display_name: 'Source Author',
+          source_author_name: null,
+          source_object_kind: 'post',
+          content: 'The quoted post sits in an embedded card with the author avatar.',
+          attachments: [],
+          reply_to: null,
+          root_id: 'source-1',
+        },
+      },
+    }),
+  },
+};
+
+export const Reply: Story = {
+  args: {
+    view: createView({
+      replyParentAuthor: { pubkey: 'b'.repeat(64), label: 'Parent Author', picture: null },
+      post: {
+        ...basePost,
+        content: 'This reply shows a compact context line above its own body.',
+        reply_to: 'parent-1',
+        reply_preview: {
+          object_id: 'parent-1',
+          topic: 'kukuri:topic:demo',
+          author: {
+            pubkey: 'b'.repeat(64),
+            name: 'parent-author',
+            display_name: 'Parent Author',
+            picture: null,
+            picture_asset: null,
+          },
+          content: 'The original post being replied to.',
+          attachments: [],
+          root_id: 'parent-1',
+          reply_to: null,
+        },
+      },
+    }),
+  },
+};

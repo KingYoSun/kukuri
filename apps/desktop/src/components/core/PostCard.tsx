@@ -9,7 +9,6 @@ import type {
   ReactionKeyInput,
   ReactionKeyView,
   RecentReactionView,
-  ReplyPreviewView,
 } from '@/lib/api';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
@@ -24,6 +23,7 @@ import {
 } from '@/components/ui/context-action-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
+import { AuthorAvatar } from './AuthorAvatar';
 import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
@@ -40,17 +40,6 @@ function sourceAuthorLabel(view: PostCardView['post']['repost_of']): string | nu
     view.source_author_display_name?.trim() ||
     view.source_author_name?.trim() ||
     `${view.source_author_pubkey.slice(0, 8)}…`
-  );
-}
-
-function replyPreviewAuthorLabel(preview: ReplyPreviewView | null | undefined): string | null {
-  if (!preview) {
-    return null;
-  }
-  return (
-    preview.author.display_name?.trim() ||
-    preview.author.name?.trim() ||
-    `${preview.author.pubkey.slice(0, 8)}…`
   );
 }
 
@@ -140,6 +129,15 @@ export function PostCard({
   const repostSource = post.repost_of ?? null;
   const replyPreview = post.reply_preview ?? null;
   const isQuoteRepost = post.object_kind === 'repost' && Boolean(post.repost_commentary?.trim());
+  const isPureRepost = post.object_kind === 'repost' && !isQuoteRepost;
+  // X-style: a pure repost renders the original post as the primary content, with the
+  // reposter demoted to a small attribution header above the (source) author identity.
+  const showRepostAsPrimary = isPureRepost && repostSource !== null && view.repostSourceAuthor != null;
+  const showReplyContext = replyPreview !== null && !view.suppressReplyPreview;
+  const primaryAuthor =
+    showRepostAsPrimary && view.repostSourceAuthor
+      ? view.repostSourceAuthor
+      : { pubkey: post.author_pubkey, label: view.authorLabel, picture: view.authorPicture ?? null };
   const canReply = view.canReply ?? true;
   const canRepost = view.canRepost ?? false;
   const localStateLabel =
@@ -150,7 +148,8 @@ export function PostCard({
         : localState === 'failed'
           ? t('feed.localFailed')
           : null;
-  const hasPrimaryContent = isPendingText || post.content.trim().length > 0;
+  const primaryContent = showRepostAsPrimary && repostSource ? repostSource.content : post.content;
+  const hasPrimaryContent = isPendingText || primaryContent.trim().length > 0;
   const reactionSummary = post.reaction_summary ?? [];
   const myReactionKeys = useMemo(
     () => new Set((post.my_reactions ?? []).map((reaction) => reaction.normalized_reaction_key)),
@@ -211,7 +210,8 @@ export function PostCard({
           replyTo?: string | null;
         }
       | null,
-    eyebrow: string
+    eyebrow: string,
+    author?: PostCardView['repostSourceAuthor']
   ) => {
     if (!source) {
       return null;
@@ -233,7 +233,19 @@ export function PostCard({
           ) : null}
         </div>
         <div className='post-body repost-source-body post-layout-safe'>
-          {source.authorLabel ? (
+          {author ? (
+            <button
+              type='button'
+              className='repost-source-author author-link'
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenAuthor(author.pubkey);
+              }}
+            >
+              <AuthorAvatar label={author.label} picture={author.picture ?? null} size='sm' />
+              <span>{author.label}</span>
+            </button>
+          ) : source.authorLabel ? (
             <strong className='post-title post-copy-wrap'>{source.authorLabel}</strong>
           ) : null}
           {source.content.trim().length > 0 ? (
@@ -251,6 +263,38 @@ export function PostCard({
   const contentBlock = (
     <>
       <div className='post-body post-layout-safe'>
+        {showReplyContext && view.replyParentAuthor && replyPreview ? (
+          <div className='post-reply-context'>
+            <span className='post-reply-context-eyebrow'>
+              {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
+            </span>
+            <button
+              type='button'
+              className='post-reply-context-author author-link'
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenAuthor(view.replyParentAuthor!.pubkey);
+              }}
+            >
+              <AuthorAvatar
+                label={view.replyParentAuthor.label}
+                picture={view.replyParentAuthor.picture ?? null}
+                size='sm'
+              />
+              <span>{view.replyParentAuthor.label}</span>
+            </button>
+            {replyPreview.content.trim().length > 0 ? (
+              <div className='post-reply-context-body post-copy-wrap'>
+                <SmartReferenceText
+                  text={replyPreview.content}
+                  className='post-copy-wrap'
+                  onActivateReference={onActivateReference}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {isPendingText ? (
           <div
             className='text-skeleton-group'
@@ -263,42 +307,41 @@ export function PostCard({
         ) : hasPrimaryContent ? (
           <strong className='post-title post-copy-wrap'>
             <SmartReferenceText
-              text={post.content}
+              text={primaryContent}
               className='post-copy-wrap'
               onActivateReference={onActivateReference}
             />
           </strong>
         ) : null}
 
-        {repostSource
-          ? renderReferencedCard(
-              {
-                authorLabel: sourceAuthorLabel(repostSource),
-                content: repostSource.content,
-                topic: repostSource.source_topic_id,
-                attachments: repostSource.attachments,
-                replyTo: repostSource.reply_to ?? null,
-              },
-              isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted')
-            )
-          : null}
-
-        {replyPreview
-          ? renderReferencedCard(
-              {
-                authorLabel: replyPreviewAuthorLabel(replyPreview),
-                content: replyPreview.content,
-                topic: replyPreview.topic,
-                attachments: replyPreview.attachments,
-                replyTo: replyPreview.reply_to ?? null,
-              },
-              t('actions.reply')
-            )
-          : null}
+        {showRepostAsPrimary && repostSource ? (
+          <div className='post-source-topic'>
+            <span>{t('labels.sourceTopic')}</span>
+            <SmartReferenceText
+              text={repostSource.source_topic_id}
+              className='shell-topic-link-label'
+              onActivateReference={onActivateReference}
+            />
+            {repostSource.attachments.length > 0 ? (
+              <span className='repost-source-attachments'>{`+${repostSource.attachments.length} media`}</span>
+            ) : null}
+          </div>
+        ) : repostSource ? (
+          renderReferencedCard(
+            {
+              authorLabel: sourceAuthorLabel(repostSource),
+              content: repostSource.content,
+              topic: repostSource.source_topic_id,
+              attachments: repostSource.attachments,
+              replyTo: repostSource.reply_to ?? null,
+            },
+            isQuoteRepost ? t('feed.quoteRepost') : t('feed.reposted'),
+            view.repostSourceAuthor
+          )
+        ) : null}
       </div>
 
       <small className='post-copy-wrap'>{post.envelope_id}</small>
-      {post.reply_to ? <em className='post-reply-flag'>{t('actions.reply')}</em> : null}
       {readOnly && publishedTopicId ? (
         <div className='topic-diagnostic topic-diagnostic-secondary'>
           <span>{t('feed.originTopic', { ns: 'profile' })}</span>
@@ -323,12 +366,29 @@ export function PostCard({
       data-post-object-id={post.object_id}
       tabIndex={isFocused ? -1 : undefined}
     >
+      {showRepostAsPrimary ? (
+        <button
+          type='button'
+          className='post-repost-attribution author-link'
+          onClick={() => onOpenAuthor(post.author_pubkey)}
+        >
+          <Repeat2 className='size-3.5' aria-hidden='true' />
+          <AuthorAvatar
+            label={view.authorLabel}
+            picture={view.authorPicture ?? null}
+            size='sm'
+            className='post-repost-attribution-avatar'
+          />
+          <span>{t('feed.repostedBy', { author: view.authorLabel })}</span>
+        </button>
+      ) : null}
+
       <div className='post-meta'>
         <AuthorIdentityButton
-          label={view.authorLabel}
-          picture={view.authorPicture ?? null}
+          label={primaryAuthor.label}
+          picture={primaryAuthor.picture ?? null}
           avatarTestId={`${post.object_id}-author-avatar`}
-          onClick={() => onOpenAuthor(post.author_pubkey)}
+          onClick={() => onOpenAuthor(primaryAuthor.pubkey)}
         />
         <div className='post-meta-trailing'>
           <RelationshipBadge label={view.relationshipLabel} />

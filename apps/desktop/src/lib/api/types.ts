@@ -157,6 +157,8 @@ export type RepostSourceView = {
   source_author_pubkey: string;
   source_author_name?: string | null;
   source_author_display_name?: string | null;
+  source_author_picture?: string | null;
+  source_author_picture_asset?: ProfileAssetView | null;
   source_object_kind: string;
   content: string;
   attachments: AttachmentView[];

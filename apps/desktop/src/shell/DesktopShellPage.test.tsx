@@ -1253,7 +1253,9 @@ test('desktop shell can create a simple repost from timeline', async () => {
       null
     );
   });
-  expect(screen.getByText('Reposted')).toBeInTheDocument();
+  // The repost renders X-style: the reposter is demoted to a small attribution header.
+  expect(await screen.findByText(/reposted$/i)).toBeInTheDocument();
+  expect(document.querySelector('.post-repost-attribution')).not.toBeNull();
 });
 
 test('desktop shell can create a quote repost from the composer', async () => {
