@@ -61,6 +61,27 @@ export type ReferencedAuthorMeta = {
   picture?: string | null;
 };
 
+// Resolved author info for rendering a mention hover card (in the composer
+// suggestion list and in rendered posts).
+export type MentionAuthorView = {
+  pubkey: string;
+  label: string;
+  displayName?: string | null;
+  name?: string | null;
+  aboutPreview?: string | null;
+  picture?: string | null;
+};
+
+// A candidate offered while typing `@` in the composer.
+export type MentionCandidate = {
+  pubkey: string;
+  label: string;
+  displayName?: string | null;
+  name?: string | null;
+  about?: string | null;
+  picture?: string | null;
+};
+
 export type PostCardView = {
   post: PostView;
   context: 'timeline' | 'thread';
@@ -76,6 +97,7 @@ export type PostCardView = {
   repostSourceAuthor?: ReferencedAuthorMeta | null;
   replyParentAuthor?: ReferencedAuthorMeta | null;
   suppressReplyPreview?: boolean;
+  mentionAuthors?: Record<string, MentionAuthorView>;
 };
 
 export type ThreadPanelState = {

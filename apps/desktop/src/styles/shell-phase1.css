@@ -2543,6 +2543,124 @@
   flex: 0 0 auto;
 }
 
+.smart-mention-chip {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--border-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.smart-mention-chip:hover {
+  text-decoration: underline;
+}
+
+.smart-mention-plain {
+  color: var(--border-accent);
+  font-weight: 600;
+}
+
+.composer-mention-anchor {
+  position: relative;
+}
+
+.composer-mention-list {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--space-2xs));
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-2xs);
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-panel, var(--surface-input));
+  box-shadow: var(--shadow-dropdown);
+}
+
+.composer-mention-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: var(--space-2xs) var(--space-xs);
+  border: none;
+  border-radius: var(--radius-input);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-mention-option-active,
+.composer-mention-option:hover {
+  background: var(--surface-active);
+}
+
+.composer-mention-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.composer-mention-option-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-mention-option-pubkey {
+  font-size: var(--text-caption);
+  color: var(--muted-foreground-soft);
+}
+
+.ui-hover-card-content.mention-hover-card {
+  width: 18rem;
+  max-width: calc(100vw - 2rem);
+  padding: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.mention-hover-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.mention-hover-card-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mention-hover-card-label {
+  font-weight: 600;
+}
+
+.mention-hover-card-name,
+.mention-hover-card-pubkey {
+  font-size: var(--text-caption);
+  color: var(--muted-foreground-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-hover-card-about {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--foreground);
+}
+
 .post-card-targeted {
   border-color: var(--border-accent);
   background: color-mix(in srgb, var(--surface-active) 88%, var(--surface-panel-muted));

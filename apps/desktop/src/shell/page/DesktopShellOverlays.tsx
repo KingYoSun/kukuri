@@ -49,6 +49,7 @@ type DesktopShellOverlaysProps = {
     | 'floatingActionLabel'
     | 'showFloatingActionButton'
     | 'activePrivateChannel'
+    | 'mentionCandidates'
   >;
   profileAvatarCropOpen: boolean;
   profileAvatarCropFile: File | null;
@@ -174,6 +175,7 @@ export function DesktopShellOverlays({
     floatingActionLabel,
     showFloatingActionButton,
     activePrivateChannel,
+    mentionCandidates,
   } = viewModels;
   const {
     attachmentInputKey,
@@ -423,6 +425,8 @@ export function DesktopShellOverlays({
             <ComposerPanel
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
+              onValueChange={setComposer}
+              mentionCandidates={mentionCandidates}
               onSubmit={(event) => void handlePublish(event)}
               attachmentInputKey={attachmentInputKey}
               onAttachmentSelection={(event) => {

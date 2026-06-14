@@ -56,6 +56,12 @@ export type InternalSmartReference =
   | GameLinkReference
   | ShareTokenReference;
 
+export type MentionSegment = {
+  kind: 'mention';
+  pubkey: string;
+  label: string;
+};
+
 export type SmartTextSegment =
   | {
       kind: 'text';
@@ -64,12 +70,34 @@ export type SmartTextSegment =
   | {
       kind: 'reference';
       reference: InternalSmartReference;
-    };
+    }
+  | MentionSegment;
 
 const TOPIC_PATTERN = /kukuri:topic:[A-Za-z0-9:_-]+/;
 const ROUTE_PATTERN = /#\/(?:timeline|live|game)\?[^\s]+/;
 const CHANNEL_ACCESS_PREVIEW_PATTERN = /kukuri:\/\/access-preview\?[^\s]+/;
 const MAX_CHANNEL_ACCESS_PREVIEW_TOKEN_LENGTH = 16 * 1024;
+
+// Internal mention token format: `@[label](pubkey)` where pubkey is 64 hex chars.
+// The label disallows `]` and newlines so the token stays unambiguous to parse.
+const MENTION_PATTERN_SINGLE = /@\[([^\]\n]+)\]\(([0-9a-fA-F]{64})\)/;
+export const MENTION_PATTERN = /@\[([^\]\n]+)\]\(([0-9a-fA-F]{64})\)/g;
+
+export function buildMentionToken(label: string, pubkey: string): string {
+  const sanitized = label.replace(/[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
+  const safeLabel = sanitized.length > 0 ? sanitized : shortenReferenceId(pubkey);
+  return `@[${safeLabel}](${pubkey})`;
+}
+
+export function extractMentions(text: string): Array<{ pubkey: string; label: string }> {
+  const results: Array<{ pubkey: string; label: string }> = [];
+  MENTION_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = MENTION_PATTERN.exec(text)) !== null) {
+    results.push({ label: match[1], pubkey: match[2] });
+  }
+  return results;
+}
 
 function buildRoute(pathname: string, params: URLSearchParams): string {
   const search = params.toString();
@@ -341,31 +369,45 @@ function parseTopicReference(rawTopic: string): TopicLinkReference {
 function findNextReference(
   value: string,
   offset: number
-): { index: number; length: number; reference: InternalSmartReference } | null {
+): { index: number; length: number; segment: SmartTextSegment } | null {
   const remaining = value.slice(offset);
   const routeMatch = ROUTE_PATTERN.exec(remaining);
   const accessPreviewMatch = CHANNEL_ACCESS_PREVIEW_PATTERN.exec(remaining);
   const topicMatch = TOPIC_PATTERN.exec(remaining);
+  const mentionMatch = MENTION_PATTERN_SINGLE.exec(remaining);
   const candidates = [
     accessPreviewMatch
       ? {
           index: offset + accessPreviewMatch.index,
           text: accessPreviewMatch[0],
-          reference: parseChannelAccessPreviewDeepLink(accessPreviewMatch[0]),
+          segment: segmentFromReference(
+            parseChannelAccessPreviewDeepLink(accessPreviewMatch[0])
+          ),
         }
       : null,
     routeMatch
       ? {
           index: offset + routeMatch.index,
           text: routeMatch[0],
-          reference: parseInternalRouteLink(routeMatch[0]),
+          segment: segmentFromReference(parseInternalRouteLink(routeMatch[0])),
         }
       : null,
     topicMatch
       ? {
           index: offset + topicMatch.index,
           text: topicMatch[0],
-          reference: parseTopicReference(topicMatch[0]),
+          segment: segmentFromReference(parseTopicReference(topicMatch[0])),
+        }
+      : null,
+    mentionMatch
+      ? {
+          index: offset + mentionMatch.index,
+          text: mentionMatch[0],
+          segment: {
+            kind: 'mention' as const,
+            label: mentionMatch[1],
+            pubkey: mentionMatch[2],
+          },
         }
       : null,
   ].filter(
@@ -374,7 +416,7 @@ function findNextReference(
     ): candidate is {
       index: number;
       text: string;
-      reference: InternalSmartReference | null;
+      segment: SmartTextSegment | null;
     } => candidate !== null
   );
 
@@ -384,14 +426,20 @@ function findNextReference(
 
   candidates.sort((left, right) => left.index - right.index);
   const next = candidates[0];
-  if (!next.reference) {
+  if (!next.segment) {
     return null;
   }
   return {
     index: next.index,
     length: next.text.length,
-    reference: next.reference,
+    segment: next.segment,
   };
+}
+
+function segmentFromReference(
+  reference: InternalSmartReference | null
+): SmartTextSegment | null {
+  return reference ? { kind: 'reference', reference } : null;
 }
 
 export function parseSmartText(value: string): SmartTextSegment[][] {
@@ -440,10 +488,7 @@ export function parseSmartText(value: string): SmartTextSegment[][] {
           text: line.slice(offset, next.index),
         });
       }
-      segments.push({
-        kind: 'reference',
-        reference: next.reference,
-      });
+      segments.push(next.segment);
       offset = next.index + next.length;
     }
 
