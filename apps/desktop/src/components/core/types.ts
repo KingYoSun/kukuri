@@ -55,6 +55,12 @@ export type PostMediaView = {
   videoProps?: React.VideoHTMLAttributes<HTMLVideoElement>;
 };
 
+export type ReferencedAuthorMeta = {
+  pubkey: string;
+  label: string;
+  picture?: string | null;
+};
+
 export type PostCardView = {
   post: PostView;
   context: 'timeline' | 'thread';
@@ -67,6 +73,9 @@ export type PostCardView = {
   canReply?: boolean;
   canRepost?: boolean;
   media: PostMediaView;
+  repostSourceAuthor?: ReferencedAuthorMeta | null;
+  replyParentAuthor?: ReferencedAuthorMeta | null;
+  suppressReplyPreview?: boolean;
 };
 
 export type ThreadPanelState = {

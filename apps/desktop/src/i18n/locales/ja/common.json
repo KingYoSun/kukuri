@@ -86,7 +86,9 @@
     "localSyncing": "同期中…",
     "pendingPosts": "{{count}}件のポストを表示",
     "quoteRepost": "引用リポスト",
-    "reposted": "リポスト"
+    "replyingTo": "{{author}}さんへの返信",
+    "reposted": "リポスト",
+    "repostedBy": "{{author}}さんがリポスト"
   },
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"

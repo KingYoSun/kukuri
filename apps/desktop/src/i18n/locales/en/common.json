@@ -86,7 +86,9 @@
     "localSyncing": "Syncing…",
     "pendingPosts": "Show {{count}} new post",
     "quoteRepost": "Quote repost",
-    "reposted": "Reposted"
+    "replyingTo": "Replying to {{author}}",
+    "reposted": "Reposted",
+    "repostedBy": "{{author}} reposted"
   },
   "feedback": {
     "copiedToClipboard": "Copied to clipboard."

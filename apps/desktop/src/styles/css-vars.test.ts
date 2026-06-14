@@ -9,7 +9,7 @@ const CSS_FILES = ['tokens.css', 'base.css', 'shell-phase1.css', 'shell-phase1-l
 
 // Custom properties intentionally injected at runtime (inline style / JS) rather
 // than declared in the static stylesheets. Tailwind owns the `--tw-*` space.
-const RUNTIME_VARS = new Set(['--shell-detail-pane-index']);
+const RUNTIME_VARS = new Set(['--shell-detail-pane-index', '--thread-depth']);
 const RUNTIME_PREFIXES = ['--tw-'];
 
 // Vitest runs with apps/desktop as the working directory (see package.json).

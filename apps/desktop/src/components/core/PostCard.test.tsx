@@ -149,39 +149,109 @@ test('post card renders repost source context for quote reposts', () => {
   expect(screen.getByText('original body')).toBeInTheDocument();
 });
 
-test('post card renders reply parent preview inline', () => {
+function createReplyView(overrides?: Partial<PostCardView>): PostCardView {
+  return createView({
+    replyParentAuthor: { pubkey: 'b'.repeat(64), label: 'Parent Author', picture: null },
+    post: {
+      ...createView().post,
+      reply_to: 'parent-1',
+      reply_preview: {
+        object_id: 'parent-1',
+        topic: 'kukuri:topic:source',
+        author: {
+          pubkey: 'b'.repeat(64),
+          name: 'parent-author',
+          display_name: 'Parent Author',
+          picture: null,
+          picture_asset: null,
+        },
+        content: 'parent body',
+        attachments: [],
+        root_id: 'parent-1',
+        reply_to: null,
+      },
+    },
+    ...overrides,
+  });
+}
+
+test('post card renders a compact reply context distinct from a quote repost', () => {
   render(
     <PostCard
-      view={createView({
-        post: {
-          ...createView().post,
-          reply_to: 'parent-1',
-          reply_preview: {
-            object_id: 'parent-1',
-            topic: 'kukuri:topic:source',
-            author: {
-              pubkey: 'b'.repeat(64),
-              name: 'parent-author',
-              display_name: 'Parent Author',
-              picture: null,
-              picture_asset: null,
-            },
-            content: 'parent body',
-            attachments: [],
-            root_id: 'parent-1',
-            reply_to: null,
-          },
-        },
-      })}
+      view={createReplyView()}
       onOpenAuthor={() => undefined}
       onOpenThread={() => undefined}
       onReply={() => undefined}
     />
   );
 
+  expect(screen.getByText('Replying to Parent Author')).toBeInTheDocument();
   expect(screen.getByText('Parent Author')).toBeInTheDocument();
   expect(screen.getByText('parent body')).toBeInTheDocument();
-  expect(screen.getAllByText('Reply').length).toBeGreaterThan(0);
+  // Reply context is its own block, not the quote/repost source card.
+  expect(document.querySelector('.post-reply-context')).not.toBeNull();
+  expect(document.querySelector('.repost-source-card')).toBeNull();
+});
+
+test('post card hides the reply context in thread/tree context', () => {
+  render(
+    <PostCard
+      view={createReplyView({ context: 'thread', suppressReplyPreview: true })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  expect(screen.queryByText('Replying to Parent Author')).not.toBeInTheDocument();
+  expect(document.querySelector('.post-reply-context')).toBeNull();
+  // The reply's own content still renders.
+  expect(screen.getByText('hello')).toBeInTheDocument();
+});
+
+test('post card promotes the original post for a pure repost', async () => {
+  const user = userEvent.setup();
+  const onOpenAuthor = vi.fn();
+
+  render(
+    <PostCard
+      view={createView({
+        canReply: false,
+        repostSourceAuthor: { pubkey: 'b'.repeat(64), label: 'Source Author', picture: null },
+        post: {
+          ...createView().post,
+          object_kind: 'repost',
+          content: '',
+          repost_commentary: null,
+          repost_of: {
+            source_object_id: 'source-1',
+            source_topic_id: 'kukuri:topic:source',
+            source_author_pubkey: 'b'.repeat(64),
+            source_author_display_name: 'Source Author',
+            source_author_name: null,
+            source_object_kind: 'post',
+            content: 'original body',
+            attachments: [],
+            reply_to: null,
+            root_id: 'source-root',
+          },
+        },
+      })}
+      onOpenAuthor={onOpenAuthor}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  // Reposter is demoted to a small attribution header…
+  expect(screen.getByText('Alice reposted')).toBeInTheDocument();
+  // …and the original post becomes the primary content.
+  expect(screen.getByText('original body')).toBeInTheDocument();
+  // The primary identity is now the source author.
+  expect(screen.getByTestId('post-1-author-avatar')).toHaveTextContent('S');
+
+  await user.click(screen.getByTestId('post-1-author-avatar'));
+  expect(onOpenAuthor).toHaveBeenCalledWith('b'.repeat(64));
 });
 
 test('post card marks long content fields as wrap-safe', () => {

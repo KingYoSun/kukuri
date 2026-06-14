@@ -6,7 +6,7 @@ import type {
 } from '@/lib/api';
 import type { InternalSmartReference } from '@/lib/internalLinks';
 
-import { TimelineFeed } from './TimelineFeed';
+import { ThreadTree } from './ThreadTree';
 import { type PostCardView, type ThreadPanelState } from './types';
 
 type ThreadPanelProps = {
@@ -64,11 +64,9 @@ export function ThreadPanel({
 }: ThreadPanelProps) {
   return (
     <div className='shell-main-stack'>
-      <TimelineFeed
+      <ThreadTree
         posts={posts}
         emptyCopy={state.emptyCopy}
-        listClassName='thread-list'
-        itemClassName='thread-item'
         onOpenAuthor={onOpenAuthor}
         onOpenThread={onOpenThread}
         onOpenThreadInTopic={onOpenThreadInTopic}

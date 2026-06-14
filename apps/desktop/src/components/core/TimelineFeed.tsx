@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
+import { useInfiniteScrollSentinel } from './useInfiniteScrollSentinel';
 
 type TimelineFeedProps = {
   posts: PostCardView[];
@@ -87,13 +88,13 @@ export function TimelineFeed({
   onApplyPending,
 }: TimelineFeedProps) {
   const { t } = useTranslation('common');
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const { sentinelRef: loadMoreRef, canAutoLoad } = useInfiniteScrollSentinel({
+    hasMore,
+    loadingMore,
+    onLoadMore,
+  });
   const overscrollAccumulationRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
-  const canAutoLoad =
-    typeof window !== 'undefined' &&
-    'IntersectionObserver' in window &&
-    typeof onLoadMore === 'function';
 
   const canApplyPending = pendingCount > 0 && typeof onApplyPending === 'function';
 
@@ -138,22 +139,6 @@ export function TimelineFeed({
       handleOverscrollIntent();
     }
   };
-
-  useEffect(() => {
-    if (!canAutoLoad || !hasMore || loadingMore || !loadMoreRef.current) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          onLoadMore?.();
-        }
-      },
-      { rootMargin: '200px 0px' }
-    );
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [canAutoLoad, hasMore, loadingMore, onLoadMore]);
 
   if (posts.length === 0 && !canApplyPending) {
     return <p className='empty'>{emptyCopy}</p>;

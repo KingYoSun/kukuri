@@ -131,6 +131,8 @@ pub struct RepostSourceView {
     pub source_author_pubkey: String,
     pub source_author_name: Option<String>,
     pub source_author_display_name: Option<String>,
+    pub source_author_picture: Option<String>,
+    pub source_author_picture_asset: Option<ProfileAssetView>,
     pub source_object_kind: String,
     pub content: String,
     pub attachments: Vec<AttachmentView>,

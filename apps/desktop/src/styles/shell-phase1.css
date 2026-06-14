@@ -753,11 +753,31 @@
 }
 
 .post-list,
-.thread-list {
+.thread-list,
+.thread-tree {
   display: grid;
   gap: var(--space-sm);
   padding: 0;
   list-style: none;
+}
+
+.thread-tree-item {
+  position: relative;
+  min-width: 0;
+  padding-left: calc(var(--thread-depth, 0) * var(--space-lg));
+}
+
+.thread-tree-connector {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--thread-depth, 0) - 0.5) * var(--space-lg));
+  border-left: 2px solid var(--border-accent);
+  pointer-events: none;
+}
+
+.thread-tree-item[data-depth='0'] .thread-tree-connector {
+  display: none;
 }
 
 .post-card {
@@ -1394,11 +1414,63 @@
   line-height: 1.1;
 }
 
-.post-reply-flag {
-  display: inline-block;
+.post-repost-attribution {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin-bottom: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--muted-foreground-soft);
+  font-size: var(--text-caption);
+  min-width: 0;
+}
+
+.author-avatar.author-avatar-sm.post-repost-attribution-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.625rem;
+}
+
+.repost-source-author,
+.post-reply-context-author {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.post-reply-context {
+  margin-bottom: var(--space-sm);
+  padding: var(--space-2xs) 0 var(--space-2xs) var(--space-sm);
+  border-left: 2px solid var(--border-accent);
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.post-reply-context-eyebrow {
+  color: var(--muted-foreground-soft);
+  font-size: var(--text-caption);
+}
+
+.post-reply-context-body {
+  color: var(--muted-foreground);
+  min-width: 0;
+}
+
+.post-source-topic {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
   margin-top: var(--space-xs);
-  font-style: normal;
-  color: var(--accent);
+  color: var(--muted-foreground-soft);
+  font-size: var(--text-caption);
+  min-width: 0;
 }
 
 .author-link {
