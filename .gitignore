@@ -128,3 +128,6 @@ kukuri-tauri/src-tauri/bootstrap_nodes.json
 .kamui/
 
 target/
+
+# 各エンジニアのローカル AI エージェント設定（雛形 *.example は commit する）
+AGENTS.local.md
