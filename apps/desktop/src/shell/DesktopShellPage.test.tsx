@@ -4224,6 +4224,33 @@ test('workspace shows a community-node unavailable notice when a configured node
   expect(window.location.hash).toContain('settings=community-node');
 });
 
+test('workspace clears the community-node unavailable notice after the node recovers', async () => {
+  let recovered = false;
+  const baseApi = createDesktopMockApi();
+  const baseStatuses = await baseApi.getCommunityNodeStatuses();
+  const api: DesktopApi = {
+    ...baseApi,
+    async getCommunityNodeStatuses() {
+      return baseStatuses.map((status) => ({
+        ...status,
+        last_error: recovered ? null : 'community node timeout',
+        session_phase: recovered ? 'ready' : 'retrying',
+      }));
+    },
+  };
+
+  render(<App api={api} />);
+
+  await screen.findByTestId('community-node-unavailable-notice');
+
+  recovered = true;
+  await new Promise((resolve) => window.setTimeout(resolve, REFRESH_INTERVAL_MS + 300));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('community-node-unavailable-notice')).not.toBeInTheDocument();
+  });
+});
+
 test('timeline keeps the last successful workspace state when joined channels refresh fails', async () => {
   let failNextJoinedChannelsRefresh = false;
   const baseApi = createDesktopMockApi({
