@@ -15,10 +15,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
+import { MentionHoverCard } from './MentionHoverCard';
+import { type MentionAuthorView } from './types';
+
 type SmartReferenceTextProps = {
   text: string;
   className?: string;
   onActivateReference?: (reference: InternalSmartReference) => void;
+  mentionAuthors?: Record<string, MentionAuthorView>;
+  onOpenMention?: (pubkey: string) => void;
 };
 
 function tokenKindLabel(
@@ -87,6 +92,8 @@ export function SmartReferenceText({
   text,
   className,
   onActivateReference,
+  mentionAuthors,
+  onOpenMention,
 }: SmartReferenceTextProps) {
   const { t } = useTranslation(['channels', 'common', 'shell']);
   const lines = parseSmartText(text);
@@ -101,6 +108,37 @@ export function SmartReferenceText({
                 <span key={`${lineIndex}-${segmentIndex}`} className={className}>
                   {segment.text}
                 </span>
+              );
+            }
+            if (segment.kind === 'mention') {
+              const author = mentionAuthors?.[segment.pubkey] ?? null;
+              const mentionLabel = `@${author?.label ?? segment.label}`;
+              if (!author) {
+                return (
+                  <span key={`${lineIndex}-${segmentIndex}`} className='smart-mention-plain'>
+                    {mentionLabel}
+                  </span>
+                );
+              }
+              return (
+                <MentionHoverCard
+                  key={`${lineIndex}-${segmentIndex}`}
+                  pubkey={segment.pubkey}
+                  label={segment.label}
+                  author={author}
+                >
+                  <button
+                    type='button'
+                    className='smart-mention-chip'
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenMention?.(segment.pubkey);
+                    }}
+                  >
+                    {mentionLabel}
+                  </button>
+                </MentionHoverCard>
               );
             }
             const label = referenceLabel(segment.reference, t);

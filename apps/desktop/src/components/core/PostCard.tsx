@@ -253,6 +253,8 @@ export function PostCard({
               text={source.content}
               className='post-copy-wrap'
               onActivateReference={onActivateReference}
+              mentionAuthors={view.mentionAuthors}
+              onOpenMention={onOpenAuthor}
             />
           ) : null}
         </div>
@@ -289,6 +291,8 @@ export function PostCard({
                   text={replyPreview.content}
                   className='post-copy-wrap'
                   onActivateReference={onActivateReference}
+                  mentionAuthors={view.mentionAuthors}
+                  onOpenMention={onOpenAuthor}
                 />
               </div>
             ) : null}
@@ -310,6 +314,8 @@ export function PostCard({
               text={primaryContent}
               className='post-copy-wrap'
               onActivateReference={onActivateReference}
+              mentionAuthors={view.mentionAuthors}
+              onOpenMention={onOpenAuthor}
             />
           </strong>
         ) : null}

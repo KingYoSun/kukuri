@@ -7,6 +7,8 @@ import {
 import type {
   AuthorDetailView,
   ComposerDraftMediaView,
+  MentionAuthorView,
+  MentionCandidate,
   PostCardView,
   ReferencedAuthorMeta,
   ThreadPanelState,
@@ -35,6 +37,7 @@ import type {
 } from '@/lib/api';
 import type { DesktopTheme } from '@/lib/theme';
 
+import { extractMentions } from '@/lib/internalLinks';
 import {
   PRIMARY_SECTION_ITEMS,
   SETTINGS_SECTION_COPY,
@@ -475,6 +478,33 @@ export function useDesktopShellViewModels({
           )
         : null;
 
+      const mentionAuthors: Record<string, MentionAuthorView> = {};
+      for (const source of [post.content, repostSource?.content, replyPreview?.content]) {
+        if (!source) {
+          continue;
+        }
+        for (const { pubkey, label } of extractMentions(source)) {
+          if (mentionAuthors[pubkey]) {
+            continue;
+          }
+          const known =
+            pubkey === syncStatus.local_author_pubkey
+              ? localProfile
+              : knownAuthorsByPubkey[pubkey] ?? null;
+          if (!known) {
+            continue;
+          }
+          mentionAuthors[pubkey] = {
+            pubkey,
+            label: known.display_name?.trim() || known.name?.trim() || label || shortPubkey(pubkey),
+            displayName: known.display_name ?? null,
+            name: known.name ?? null,
+            aboutPreview: known.about?.slice(0, 50) ?? null,
+            picture: resolveProfilePictureSrc(known, mediaObjectUrls),
+          };
+        }
+      }
+
       return {
         post,
         context,
@@ -495,6 +525,7 @@ export function useDesktopShellViewModels({
         canRepost: canCreateRepostFromPost(post),
         repostSourceAuthor,
         replyParentAuthor,
+        mentionAuthors,
         suppressReplyPreview: context === 'thread',
         media: {
           objectId: post.object_id,
@@ -616,6 +647,27 @@ export function useDesktopShellViewModels({
       })),
     [draftMediaItems, locale, translate]
   );
+  const followingConnections = state.socialConnections.following;
+  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+    const seen = new Set<string>();
+    const result: MentionCandidate[] = [];
+    for (const view of [...followingConnections, ...Object.values(knownAuthorsByPubkey)]) {
+      const pubkey = view.author_pubkey;
+      if (!pubkey || pubkey === syncStatus.local_author_pubkey || seen.has(pubkey)) {
+        continue;
+      }
+      seen.add(pubkey);
+      result.push({
+        pubkey,
+        label: authorDisplayLabel(pubkey, view.display_name, view.name),
+        displayName: view.display_name ?? null,
+        name: view.name ?? null,
+        about: view.about ?? null,
+        picture: resolveProfilePictureSrc(view, mediaObjectUrls),
+      });
+    }
+    return result;
+  }, [followingConnections, knownAuthorsByPubkey, mediaObjectUrls, syncStatus.local_author_pubkey]);
   const directMessageDraftViews = useMemo<ComposerDraftMediaView[]>(
     () =>
       directMessageDraftMediaItems.map((item) => ({
@@ -1019,6 +1071,7 @@ export function useDesktopShellViewModels({
     composerSourcePreview,
     topicNavItems,
     composerDraftViews,
+    mentionCandidates,
     directMessageDraftViews,
     threadPanelState,
     authorDetailView,

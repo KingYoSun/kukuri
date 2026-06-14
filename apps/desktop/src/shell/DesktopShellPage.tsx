@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -40,6 +41,7 @@ import {
 import {
   authorDisplayLabel,
   formatCount,
+  mergeKnownAuthors,
   messageFromError,
   privateComposeTarget,
   privateTimelineScope,
@@ -217,12 +219,40 @@ export function DesktopShellPage({
   const setSelectedGameRoomId = useDesktopShellFieldSetter('selectedGameRoomId');
   const setInviteOutput = useDesktopShellFieldSetter('inviteOutput');
   const setChannelError = useDesktopShellFieldSetter('channelError');
+  const setSocialConnections = useDesktopShellFieldSetter('socialConnections');
+  const setKnownAuthorsByPubkey = useDesktopShellFieldSetter('knownAuthorsByPubkey');
   const draftSequenceRef = useRef(0);
   const mediaFetchAttemptRef = useRef(new Map<string, number>());
   const remoteObjectUrlRef = useRef(new Map<string, string>());
   const draftPreviewUrlRef = useRef(new Map<string, string>());
   const directMessageDraftPreviewUrlRef = useRef(new Map<string, string>());
   const loadTopicsRequestRef = useRef(0);
+
+  // Mention suggestions need the followed-users list, which is otherwise only
+  // loaded in the profile section. Fetch it lazily when the composer opens.
+  useEffect(() => {
+    if (!composeDialogOpen) {
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const following = await api.listSocialConnections('following');
+        if (disposed) {
+          return;
+        }
+        startTransition(() => {
+          setSocialConnections((current) => ({ ...current, following }));
+          setKnownAuthorsByPubkey((current) => mergeKnownAuthors(current, following));
+        });
+      } catch {
+        // best effort: fall back to already-known authors for suggestions
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [api, composeDialogOpen, setKnownAuthorsByPubkey, setSocialConnections]);
   const pendingRouteUrlRef = useRef<string | null>(null);
   const didSyncRouteSectionRef = useRef(false);
   const navTriggerRef = useRef<HTMLButtonElement | null>(null);

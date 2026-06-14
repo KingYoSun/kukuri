@@ -7,10 +7,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { shortPubkey } from '@/shell/selectors';
 
+import { AuthorAvatar } from './AuthorAvatar';
 import { ComposerDraftPreviewList } from './ComposerDraftPreviewList';
+import { MentionHoverCard } from './MentionHoverCard';
 import { PostCard } from './PostCard';
-import { type ComposerDraftMediaView, type PostCardView } from './types';
+import { useMentionAutocomplete } from './useMentionAutocomplete';
+import {
+  type ComposerDraftMediaView,
+  type MentionAuthorView,
+  type MentionCandidate,
+  type PostCardView,
+} from './types';
+
+function mentionAuthorFromCandidate(candidate: MentionCandidate): MentionAuthorView {
+  return {
+    pubkey: candidate.pubkey,
+    label: candidate.label,
+    displayName: candidate.displayName,
+    name: candidate.name,
+    aboutPreview: candidate.about?.slice(0, 50) ?? null,
+    picture: candidate.picture,
+  };
+}
 
 type ReplyTargetView = {
   content: string;
@@ -38,7 +58,11 @@ type ComposerPanelProps = {
   onClearReply: () => void;
   onClearRepost?: () => void;
   attachmentsDisabled?: boolean;
+  mentionCandidates?: MentionCandidate[];
+  onValueChange?: (next: string) => void;
 };
+
+const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 
 export function ComposerPanel({
   value,
@@ -56,10 +80,26 @@ export function ComposerPanel({
   onClearReply,
   onClearRepost,
   attachmentsDisabled = false,
+  mentionCandidates = EMPTY_MENTION_CANDIDATES,
+  onValueChange,
 }: ComposerPanelProps) {
   const { t } = useTranslation(['common']);
   const clearActiveTarget = replyTarget ? onClearReply : onClearRepost;
   const bannerAriaLabel = replyTarget ? t('composer.clearReply') : t('composer.clearQuoteRepost');
+  const {
+    textareaRef: mentionTextareaRef,
+    isOpen: mentionOpen,
+    items: mentionItems,
+    activeIndex: mentionActiveIndex,
+    onKeyDown: onMentionKeyDown,
+    onSelectionChange: onMentionSelectionChange,
+    selectCandidate: selectMention,
+    setActiveIndex: setMentionActiveIndex,
+  } = useMentionAutocomplete({
+    value,
+    candidates: mentionCandidates,
+    onValueChange,
+  });
 
   return (
     <form className='composer' onSubmit={onSubmit}>
@@ -95,17 +135,71 @@ export function ComposerPanel({
         </div>
       ) : null}
 
-      <Textarea
-        value={value}
-        onChange={onChange}
-        placeholder={
-          replyTarget
-            ? t('composer.writeReply')
-            : repostTarget
-              ? t('composer.writeQuoteRepost')
-              : t('composer.writePost')
-        }
-      />
+      <div className='composer-mention-anchor'>
+        <Textarea
+          ref={mentionTextareaRef}
+          value={value}
+          onChange={(event) => {
+            onChange(event);
+            onMentionSelectionChange();
+          }}
+          onKeyDown={onMentionKeyDown}
+          onKeyUp={onMentionSelectionChange}
+          onClick={onMentionSelectionChange}
+          onSelect={onMentionSelectionChange}
+          aria-expanded={mentionOpen}
+          aria-controls={mentionOpen ? 'composer-mention-listbox' : undefined}
+          placeholder={
+            replyTarget
+              ? t('composer.writeReply')
+              : repostTarget
+                ? t('composer.writeQuoteRepost')
+                : t('composer.writePost')
+          }
+        />
+        {mentionOpen ? (
+          <ul
+            id='composer-mention-listbox'
+            className='composer-mention-list'
+            role='listbox'
+            aria-label={t('composer.mentionSuggestionsLabel')}
+          >
+            {mentionItems.map((candidate, index) => (
+              <li key={candidate.pubkey} role='presentation'>
+                <MentionHoverCard
+                  pubkey={candidate.pubkey}
+                  label={candidate.label}
+                  author={mentionAuthorFromCandidate(candidate)}
+                >
+                  <button
+                    type='button'
+                    role='option'
+                    aria-selected={index === mentionActiveIndex}
+                    className={
+                      index === mentionActiveIndex
+                        ? 'composer-mention-option composer-mention-option-active'
+                        : 'composer-mention-option'
+                    }
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectMention(candidate);
+                    }}
+                    onMouseEnter={() => setMentionActiveIndex(index)}
+                  >
+                    <AuthorAvatar label={candidate.label} picture={candidate.picture ?? null} size='sm' />
+                    <span className='composer-mention-option-text'>
+                      <span className='composer-mention-option-label'>{candidate.label}</span>
+                      <span className='composer-mention-option-pubkey'>
+                        {shortPubkey(candidate.pubkey)}
+                      </span>
+                    </span>
+                  </button>
+                </MentionHoverCard>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
 
       <Label className='file-field file-field-compact'>
         <span>{t('common:fallbacks.attachment')}</span>

@@ -1,7 +1,105 @@
+import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 
 import { ComposerPanel } from './ComposerPanel';
+import { type MentionCandidate } from './types';
+
+const ALICE = 'a'.repeat(64);
+const BOB = 'b'.repeat(64);
+const MENTION_CANDIDATES: MentionCandidate[] = [
+  { pubkey: ALICE, label: 'Alice', displayName: 'Alice', name: 'alice', about: 'Bio', picture: null },
+  { pubkey: BOB, label: 'Bob', displayName: 'Bob', name: 'bob', about: null, picture: null },
+];
+
+function MentionHarness({ candidates = MENTION_CANDIDATES }: { candidates?: MentionCandidate[] }) {
+  const [value, setValue] = useState('');
+  return (
+    <ComposerPanel
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onValueChange={setValue}
+      mentionCandidates={candidates}
+      onSubmit={(event) => event.preventDefault()}
+      attachmentInputKey={0}
+      onAttachmentSelection={() => undefined}
+      draftMediaItems={[]}
+      onRemoveDraftAttachment={() => undefined}
+      audienceLabel='Public'
+      onClearReply={() => undefined}
+    />
+  );
+}
+
+test('typing @ with a query shows matching mention candidates', async () => {
+  const user = userEvent.setup();
+  render(<MentionHarness />);
+
+  await user.click(screen.getByRole('textbox'));
+  await user.keyboard('@al');
+
+  expect(screen.getByRole('listbox', { name: 'Mention suggestions' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Bob/ })).not.toBeInTheDocument();
+});
+
+test('selecting a candidate with the keyboard inserts the mention token', async () => {
+  const user = userEvent.setup();
+  render(<MentionHarness />);
+
+  const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+  await user.click(textarea);
+  await user.keyboard('hi @al');
+  await user.keyboard('{Enter}');
+
+  expect(textarea.value).toBe(`hi @[Alice](${ALICE}) `);
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+});
+
+test('Escape closes the suggestion list', async () => {
+  const user = userEvent.setup();
+  render(<MentionHarness />);
+
+  await user.click(screen.getByRole('textbox'));
+  await user.keyboard('@al');
+  expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+});
+
+test('a bare @ lists all candidates', async () => {
+  const user = userEvent.setup();
+  render(<MentionHarness />);
+
+  await user.click(screen.getByRole('textbox'));
+  await user.keyboard('@');
+
+  expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /Bob/ })).toBeInTheDocument();
+});
+
+test('mention autocomplete stays inert without onValueChange', async () => {
+  const user = userEvent.setup();
+  render(
+    <ComposerPanel
+      value='@al'
+      onChange={() => undefined}
+      mentionCandidates={MENTION_CANDIDATES}
+      onSubmit={(event) => event.preventDefault()}
+      attachmentInputKey={0}
+      onAttachmentSelection={() => undefined}
+      draftMediaItems={[]}
+      onRemoveDraftAttachment={() => undefined}
+      audienceLabel='Public'
+      onClearReply={() => undefined}
+    />
+  );
+
+  await user.click(screen.getByRole('textbox'));
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+});
 
 test('reply banner keeps only the replying label and a compact clear icon action', () => {
   render(
