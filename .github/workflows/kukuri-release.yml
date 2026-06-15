@@ -284,8 +284,64 @@ jobs:
         with:
           subject-path: apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*
 
+  changelog:
+    needs: [validate-release-inputs, linux-verify, windows-package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Changelog script smoke
+        shell: pwsh
+        run: ./scripts/release/test-update-changelog.ps1
+
+      - name: Generate changelog section
+        shell: pwsh
+        run: >
+          ./scripts/release/update-changelog.ps1
+          -Tag '${{ needs.validate-release-inputs.outputs.release_tag }}'
+          -Repository '${{ github.repository }}'
+          -SectionOutputPath 'dist/changelog/CHANGELOG_SECTION.md'
+
+      - name: Commit changelog update to default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG for ${{ needs.validate-release-inputs.outputs.release_tag }} [skip ci]"
+          branch="${{ github.event.repository.default_branch }}"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${branch}"; then
+              echo "Pushed changelog update to ${branch}."
+              exit 0
+            fi
+            echo "Push failed (attempt ${attempt}); rebasing onto latest ${branch}."
+            git pull --rebase origin "${branch}"
+          done
+          echo "Failed to push changelog update after retries." >&2
+          exit 1
+
+      - name: Upload changelog section
+        uses: actions/upload-artifact@v4
+        with:
+          name: kukuri-changelog-section
+          path: dist/changelog/CHANGELOG_SECTION.md
+          if-no-files-found: error
+
   release-assets:
-    needs: [validate-release-inputs, windows-package]
+    needs: [validate-release-inputs, windows-package, changelog]
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -308,6 +364,12 @@ jobs:
           name: kukuri-windows-preview-bundle
           path: dist/windows-input
 
+      - name: Download changelog section artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kukuri-changelog-section
+          path: dist/changelog
+
       - name: Generate release assets
         shell: pwsh
         run: >
@@ -317,6 +379,7 @@ jobs:
           -Version '${{ needs.validate-release-inputs.outputs.release_version }}'
           -InputDir 'dist/windows-input'
           -OutputDir 'dist/release-assets'
+          -ChangelogSectionPath 'dist/changelog/CHANGELOG_SECTION.md'
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
