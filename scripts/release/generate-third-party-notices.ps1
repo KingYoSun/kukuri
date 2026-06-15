@@ -22,6 +22,39 @@ function Escape-MarkdownCell {
   return ($Value.Trim() -replace "\|", "\|" -replace "`r?`n", " ")
 }
 
+# Sort inventory rows with culture-invariant ordinal comparison and drop
+# duplicates by (Name, Version, License). Sort-Object uses culture-aware
+# collation whose order differs between Windows PowerShell 5.1 and pwsh 7, which
+# made the generated file depend on the host. Ordinal comparison keeps the
+# output identical across platforms so the CI -Check gate is deterministic.
+function Sort-Inventory {
+  param([object[]]$Items)
+
+  $list = [System.Collections.Generic.List[object]]::new()
+  if ($Items) { $list.AddRange([object[]]$Items) }
+
+  $comparison = [System.Comparison[object]] {
+    param($a, $b)
+    $c = [string]::CompareOrdinal([string]$a.Name, [string]$b.Name)
+    if ($c -ne 0) { return $c }
+    $c = [string]::CompareOrdinal([string]$a.Version, [string]$b.Version)
+    if ($c -ne 0) { return $c }
+    return [string]::CompareOrdinal([string]$a.License, [string]$b.License)
+  }
+  $list.Sort($comparison)
+
+  $result = [System.Collections.Generic.List[object]]::new()
+  $previousKey = $null
+  foreach ($item in $list) {
+    $key = "$($item.Name)|$($item.Version)|$($item.License)"
+    if ($key -ne $previousKey) {
+      $result.Add($item)
+      $previousKey = $key
+    }
+  }
+  return , $result.ToArray()
+}
+
 function Get-CargoMetadata {
   if (-not [string]::IsNullOrWhiteSpace($RustMetadataPath)) {
     return Get-Content -LiteralPath $RustMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -62,10 +95,9 @@ function Get-RustInventory {
         License = if ([string]::IsNullOrWhiteSpace($_.license)) { "UNKNOWN" } else { [string]$_.license }
         Source = "https://crates.io/crates/$($_.name)"
       }
-    } |
-    Sort-Object Name, Version, License -Unique
+    }
 
-  return @($packages)
+  return @(Sort-Inventory $packages)
 }
 
 function Get-NpmInventory {
@@ -83,7 +115,7 @@ function Get-NpmInventory {
     }
   }
 
-  return @($packages | Sort-Object Name, Version, License -Unique)
+  return @(Sort-Inventory $packages)
 }
 
 function Add-InventorySection {
