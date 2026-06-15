@@ -9,7 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Bell, BookPlus, Download, GitBranchPlus, PanelLeftOpen, Settings } from 'lucide-react';
 
-import { TopicNavList } from '@/components/core/TopicNavList';
+import { FilterableTopicNavList } from '@/components/core/FilterableTopicNavList';
 import { ShellFrame } from '@/components/shell/ShellFrame';
 import { ShellNavRail } from '@/components/shell/ShellNavRail';
 import { type PrimarySection } from '@/components/shell/types';
@@ -845,7 +845,7 @@ export function DesktopShellPage({
   );
 
   const topicList = (
-    <TopicNavList
+    <FilterableTopicNavList
       items={topicNavItems}
       onSelectTopic={(topic) => void handleSelectTopic(topic)}
       onSelectChannel={(topic, channelId) => {

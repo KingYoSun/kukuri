@@ -1932,7 +1932,35 @@
   margin-top: 0;
 }
 
-.shell-nav .topic-list > ul {
+.topic-nav-browser {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.topic-nav-controls {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.topic-nav-control-row {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.topic-nav-control-row .topic-nav-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.topic-nav-empty {
+  margin: var(--space-sm) 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+
+.shell-nav .topic-list > ul,
+.shell-nav .topic-nav-browser > ul {
   list-style: none;
   margin: var(--space-sm) 0 0;
   padding: 0;

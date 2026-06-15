@@ -20,6 +20,9 @@ export type TopicDiagnosticSummary = {
   connectionLabel: string;
   peerCount: number;
   lastReceivedLabel: string;
+  // Raw last-received timestamp used for "updated" sorting in the nav list.
+  // Null/absent means nothing has been received yet.
+  lastReceivedAt?: number | null;
   // Whether this topic is currently connected to the gossip network.
   // Absent is treated as connected.
   gossipJoined?: boolean;
