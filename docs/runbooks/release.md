@@ -79,16 +79,17 @@ The repository keeps a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-
 
 - The `changelog` job (`.github/workflows/kukuri-release.yml`) runs after `linux-verify` and `windows-package` succeed. It checks out the default branch with full history (`fetch-depth: 0`).
 - `scripts/release/update-changelog.ps1 -Tag <tag> -Repository <owner/repo>` walks `git log <previous-tag>..<tag>`, classifies each non-merge commit by Conventional Commit type into Features / Fixes / Other, links every `(#NNN)` reference to its pull request, and inserts a `## [<tag>] - <date>` section below `## [Unreleased]`. Re-running for the same tag replaces the section rather than duplicating it.
-- The job commits the updated `CHANGELOG.md` back to the default branch (commit message `docs: update CHANGELOG for <tag> [skip ci]`) and uploads the tag's section as the `kukuri-changelog-section` artifact, which `release-assets` embeds into `RELEASE_NOTES_DRAFT.md`.
+- The job uploads the tag's section as the `kukuri-changelog-section` artifact, which `release-assets` embeds into `RELEASE_NOTES_DRAFT.md`. This upload happens before the CHANGELOG commit, so the release notes never depend on the pull request step.
+- The default branch requires pull requests, so the job does not push to it directly. It commits the updated `CHANGELOG.md` to a `chore/changelog-<tag>` branch and opens (or reuses) a pull request titled `docs: update CHANGELOG for <tag>`. Merge that PR to record the release in `CHANGELOG.md`. This step is best-effort (`continue-on-error`): if it fails, the release still publishes and the CHANGELOG can be updated manually.
 - Changes released in `v0.1.1-preview.1` and earlier are not backfilled; they remain in GitHub Releases. Automated entries start from the next preview.
 
-To preview the generated section locally before tagging (no commit or push is performed):
+To preview the generated section locally before tagging (no commit, branch, or PR is created):
 
 ```powershell
 ./scripts/release/update-changelog.ps1 -Tag v0.1.2-preview.1 -Repository KingYoSun/kukuri -PreviousTag v0.1.1-preview.1
 ```
 
-If the default branch has branch protection that blocks the Actions `GITHUB_TOKEN` from pushing, allow GitHub Actions to bypass the relevant rule (or supply a dedicated token with push access); otherwise the `changelog` job fails at the push step.
+The `changelog` job needs `contents: write` and `pull-requests: write` permissions (already set in the workflow) to push the branch and open the PR.
 
 ## Third-party Notices
 
