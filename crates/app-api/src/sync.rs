@@ -95,6 +95,8 @@ impl AppService {
             topic_diagnostics: effective_topic_diagnostics,
             local_author_pubkey: self.current_author_pubkey(),
             discovery,
+            gossip_disabled_topics: self.list_gossip_disabled_topics().await,
+            gossip_disabled_channels: self.list_gossip_disabled_channels().await,
         })
     }
 
@@ -219,5 +221,45 @@ impl AppService {
 
     pub async fn peer_ticket(&self) -> Result<Option<String>> {
         self.transport.export_ticket().await
+    }
+
+    pub async fn set_topic_gossip_enabled(&self, topic_id: &str, enabled: bool) -> Result<()> {
+        if enabled {
+            self.gossip_disabled_topics.lock().await.remove(topic_id);
+            self.ensure_topic_subscription(topic_id).await?;
+            self.ensure_joined_private_channel_subscriptions(topic_id)
+                .await
+        } else {
+            self.gossip_disabled_topics
+                .lock()
+                .await
+                .insert(topic_id.to_string());
+            self.unsubscribe_topic(topic_id).await
+        }
+    }
+
+    pub async fn set_channel_gossip_enabled(
+        &self,
+        topic_id: &str,
+        channel_id: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        let key = gossip_disabled_channel_key(topic_id, channel_id);
+        if enabled {
+            self.gossip_disabled_channels.lock().await.remove(&key);
+            if self
+                .joined_private_channel_state(topic_id, channel_id)
+                .await
+                .is_some()
+            {
+                self.ensure_private_channel_subscription(topic_id, channel_id)
+                    .await
+            } else {
+                Ok(())
+            }
+        } else {
+            self.gossip_disabled_channels.lock().await.insert(key);
+            self.unsubscribe_private_channel(topic_id, channel_id).await
+        }
     }
 }

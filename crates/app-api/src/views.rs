@@ -499,6 +499,8 @@ pub struct SyncStatus {
     pub topic_diagnostics: Vec<TopicSyncStatus>,
     pub local_author_pubkey: String,
     pub discovery: DiscoveryStatus,
+    pub gossip_disabled_topics: Vec<String>,
+    pub gossip_disabled_channels: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

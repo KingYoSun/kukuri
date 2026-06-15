@@ -491,6 +491,9 @@ impl AppService {
         topic_id: &str,
         channel_id: &str,
     ) -> Result<()> {
+        if self.is_channel_gossip_disabled(topic_id, channel_id).await {
+            return Ok(());
+        }
         let Some(state) = self
             .joined_private_channel_state(topic_id, channel_id)
             .await

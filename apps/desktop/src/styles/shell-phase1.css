@@ -1958,11 +1958,38 @@
 .shell-nav .topic-link,
 .shell-nav .topic-remove,
 .shell-nav .topic-copy,
+.shell-nav .topic-plug,
 .shell-nav .topic-subitem {
   border: 0;
   color: inherit;
   background: none;
   cursor: pointer;
+}
+
+.shell-nav .topic-actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.shell-nav .topic-plug {
+  width: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.shell-nav .topic-plug.topic-plug-active {
+  opacity: 1;
+  color: var(--border-accent);
+}
+
+.shell-nav .topic-channel-settings.topic-plug-active {
+  border-color: var(--border-accent);
+  background: var(--surface-active);
+  color: var(--border-accent);
 }
 
 .shell-nav .topic-link {
@@ -2020,7 +2047,7 @@
 
 .shell-nav .topic-subitem-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
   gap: var(--space-2xs);
   align-items: stretch;
 }

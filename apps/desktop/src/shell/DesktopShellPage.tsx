@@ -331,6 +331,8 @@ export function DesktopShellPage({
     handleSelectTopic,
     handleOpenOriginalTopic,
     handleRemoveTopic,
+    handleToggleTopicGossip,
+    handleToggleChannelGossip,
     handleSelectPrivateChannel,
     handleCreatePrivateChannel,
     handleLeavePrivateChannel,
@@ -861,6 +863,10 @@ export function DesktopShellPage({
       }}
       onRemoveTopic={(topic) => void handleRemoveTopic(topic)}
       onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
+      onToggleTopicGossip={(topic, enabled) => void handleToggleTopicGossip(topic, enabled)}
+      onToggleChannelGossip={(topic, channelId, enabled) =>
+        void handleToggleChannelGossip(topic, channelId, enabled)
+      }
     />
   );
   const channelAction = (

@@ -387,6 +387,20 @@ export function createProfileTopicChannelActions({
     await loadTopics(nextTopics, nextActiveTopic, null);
   }
 
+  async function handleToggleTopicGossip(topic: string, enabled: boolean) {
+    await api.setTopicGossipEnabled(topic, enabled);
+    await loadTopics(trackedTopics, activeTopic, selectedThread);
+  }
+
+  async function handleToggleChannelGossip(
+    topic: string,
+    channelId: string,
+    enabled: boolean
+  ) {
+    await api.setChannelGossipEnabled(topic, channelId, enabled);
+    await loadTopics(trackedTopics, activeTopic, selectedThread);
+  }
+
   async function handleCreatePrivateChannel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!channelLabelInput.trim()) {
@@ -780,6 +794,8 @@ export function createProfileTopicChannelActions({
     handleSelectTopic,
     handleOpenOriginalTopic,
     handleRemoveTopic,
+    handleToggleTopicGossip,
+    handleToggleChannelGossip,
     handleCreatePrivateChannel,
     handleLeavePrivateChannel,
     handleShareChannelAccess,

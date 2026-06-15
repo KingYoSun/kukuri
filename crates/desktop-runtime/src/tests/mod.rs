@@ -1523,6 +1523,8 @@ fn sync_status_with_topic(
         }],
         local_author_pubkey: "author".to_string(),
         discovery: Default::default(),
+        gossip_disabled_topics: Vec::new(),
+        gossip_disabled_channels: Vec::new(),
     }
 }
 

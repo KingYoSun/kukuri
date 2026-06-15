@@ -7,6 +7,9 @@ export type TopicChannelSummary = {
   label: string;
   audienceKind: ChannelAudienceKind;
   active: boolean;
+  // Whether this channel is currently connected to the gossip network.
+  // Absent is treated as connected.
+  gossipJoined?: boolean;
 };
 
 export type TopicDiagnosticSummary = {
@@ -17,6 +20,9 @@ export type TopicDiagnosticSummary = {
   connectionLabel: string;
   peerCount: number;
   lastReceivedLabel: string;
+  // Whether this topic is currently connected to the gossip network.
+  // Absent is treated as connected.
+  gossipJoined?: boolean;
   channels?: TopicChannelSummary[];
 };
 

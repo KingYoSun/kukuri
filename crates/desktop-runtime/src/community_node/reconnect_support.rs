@@ -211,6 +211,8 @@ mod tests {
                 local_endpoint_id: String::new(),
                 last_discovery_error: None,
             },
+            gossip_disabled_topics: Vec::new(),
+            gossip_disabled_channels: Vec::new(),
         }
     }
 

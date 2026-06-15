@@ -2,6 +2,9 @@ use super::*;
 
 impl AppService {
     pub(crate) async fn ensure_topic_subscription(&self, topic_id: &str) -> Result<()> {
+        if self.is_topic_gossip_disabled(topic_id).await {
+            return Ok(());
+        }
         let stale_key = {
             let subscriptions = self.subscriptions.lock().await;
             match subscriptions.get(topic_id) {

@@ -294,6 +294,30 @@ impl DesktopRuntime {
             .await
     }
 
+    pub async fn set_topic_gossip_enabled(
+        &self,
+        request: SetTopicGossipEnabledRequest,
+    ) -> Result<()> {
+        self.app_service
+            .set_topic_gossip_enabled(request.topic.as_str(), request.enabled)
+            .await?;
+        self.persist_gossip_subscription_state_from_app().await
+    }
+
+    pub async fn set_channel_gossip_enabled(
+        &self,
+        request: SetChannelGossipEnabledRequest,
+    ) -> Result<()> {
+        self.app_service
+            .set_channel_gossip_enabled(
+                request.topic.as_str(),
+                request.channel.as_str(),
+                request.enabled,
+            )
+            .await?;
+        self.persist_gossip_subscription_state_from_app().await
+    }
+
     pub async fn local_peer_ticket(&self) -> Result<Option<String>> {
         self.app_service.peer_ticket().await
     }

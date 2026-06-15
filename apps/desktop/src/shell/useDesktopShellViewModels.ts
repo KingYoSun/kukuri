@@ -610,6 +610,14 @@ export function useDesktopShellViewModels({
           : null,
     [buildPostCardView, replyTarget, repostTarget]
   );
+  const gossipDisabledTopics = useMemo(
+    () => new Set(syncStatus.gossip_disabled_topics ?? []),
+    [syncStatus.gossip_disabled_topics]
+  );
+  const gossipDisabledChannels = useMemo(
+    () => new Set(syncStatus.gossip_disabled_channels ?? []),
+    [syncStatus.gossip_disabled_channels]
+  );
   const topicNavItems = useMemo<TopicDiagnosticSummary[]>(
     () =>
       trackedTopics.map((topic) => ({
@@ -620,6 +628,7 @@ export function useDesktopShellViewModels({
         connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
         peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
         lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
+        gossipJoined: !gossipDisabledTopics.has(topic),
         channels:
           topic === activeTopic
             ? (joinedChannelsByTopic[topic] ?? []).map((channel) => ({
@@ -627,10 +636,22 @@ export function useDesktopShellViewModels({
                 label: channel.label,
                 audienceKind: channel.audience_kind,
                 active: selectedChannelIdByTopic[topic] === channel.channel_id,
+                gossipJoined:
+                  !gossipDisabledTopics.has(topic) &&
+                  !gossipDisabledChannels.has(`${topic}::${channel.channel_id}`),
               }))
             : [],
       })),
-    [activeTopic, joinedChannelsByTopic, locale, selectedChannelIdByTopic, topicDiagnostics, trackedTopics]
+    [
+      activeTopic,
+      gossipDisabledChannels,
+      gossipDisabledTopics,
+      joinedChannelsByTopic,
+      locale,
+      selectedChannelIdByTopic,
+      topicDiagnostics,
+      trackedTopics,
+    ]
   );
   const composerDraftViews = useMemo<ComposerDraftMediaView[]>(
     () =>

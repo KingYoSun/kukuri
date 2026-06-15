@@ -83,6 +83,7 @@ pub(crate) use crate::views::*;
 mod attachment_support;
 mod direct_messages_delivery_support;
 mod direct_messages_subscription_support;
+mod gossip_subscription_support;
 mod hydration_support;
 mod live_game_support;
 mod metaverse_room_event_support;
@@ -96,6 +97,7 @@ mod social_runtime_support;
 mod timeline_runtime_support;
 
 pub(crate) use attachment_support::*;
+pub(crate) use gossip_subscription_support::*;
 pub(crate) use hydration_support::*;
 pub(crate) use metaverse_room_event_support::*;
 pub(crate) use notifications_support::*;
@@ -233,6 +235,8 @@ pub struct AppService {
     pub(crate) direct_message_subscription_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) replica_sync_restart_deadlines: Arc<Mutex<HashMap<String, i64>>>,
     pub(crate) empty_recovery_candidates: Arc<Mutex<HashSet<String>>>,
+    pub(crate) gossip_disabled_topics: Arc<Mutex<HashSet<String>>>,
+    pub(crate) gossip_disabled_channels: Arc<Mutex<HashSet<String>>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -384,6 +388,8 @@ impl AppService {
             direct_message_subscription_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             replica_sync_restart_deadlines: Arc::new(Mutex::new(HashMap::new())),
             empty_recovery_candidates: Arc::new(Mutex::new(HashSet::new())),
+            gossip_disabled_topics: Arc::new(Mutex::new(HashSet::new())),
+            gossip_disabled_channels: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 

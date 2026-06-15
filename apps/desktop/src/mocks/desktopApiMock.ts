@@ -197,6 +197,8 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       local_endpoint_id: 'local-endpoint-a',
       last_discovery_error: null,
     },
+    gossip_disabled_topics: [],
+    gossip_disabled_channels: [],
   };
   let myProfile: Profile = {
     pubkey: syncStatus.local_author_pubkey,
@@ -1455,6 +1457,23 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       syncStatus.topic_diagnostics = syncStatus.topic_diagnostics.filter(
         (value) => value.topic !== topic
       );
+    },
+    async setTopicGossipEnabled(topic, enabled) {
+      syncStatus.gossip_disabled_topics = syncStatus.gossip_disabled_topics.filter(
+        (value) => value !== topic
+      );
+      if (!enabled) {
+        syncStatus.gossip_disabled_topics.push(topic);
+      }
+    },
+    async setChannelGossipEnabled(topic, channelId, enabled) {
+      const key = `${topic}::${channelId}`;
+      syncStatus.gossip_disabled_channels = syncStatus.gossip_disabled_channels.filter(
+        (value) => value !== key
+      );
+      if (!enabled) {
+        syncStatus.gossip_disabled_channels.push(key);
+      }
     },
     async getLocalPeerTicket() {
       return 'peer1@127.0.0.1:7777';
