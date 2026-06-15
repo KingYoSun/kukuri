@@ -657,7 +657,7 @@ Total packages: 632
 
 ## Desktop npm packages
 
-Total packages: 139
+Total packages: 158
 
 | Package | Version | License | Source |
 | --- | --- | --- | --- |
@@ -686,31 +686,50 @@ Total packages: 139
 | @pixiv/types-vrmc-vrm-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
 | @pixiv/types-vrmc-vrm-animation-1.0 | 3.5.3 | MIT | https://github.com/pixiv/three-vrm#readme |
 | @radix-ui/primitive | 1.1.3 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/primitive | 1.1.4 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-arrow | 1.1.7 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-arrow | 1.1.9 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-compose-refs | 1.1.2 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-compose-refs | 1.1.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-context | 1.1.2 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-context | 1.1.4 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-dialog | 1.1.15 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-dismissable-layer | 1.1.11 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-dismissable-layer | 1.1.12 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-focus-guards | 1.1.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-focus-scope | 1.1.7 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-hover-card | 1.1.16 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-id | 1.1.1 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-popover | 1.1.15 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-popper | 1.2.8 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-popper | 1.3.0 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-portal | 1.1.11 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-portal | 1.1.9 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-presence | 1.1.5 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-presence | 1.1.6 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-primitive | 2.1.3 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-primitive | 2.1.5 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-slot | 1.2.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-slot | 1.2.4 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-slot | 1.2.5 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-tooltip | 1.2.8 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-callback-ref | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-callback-ref | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-controllable-state | 1.2.2 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-controllable-state | 1.2.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-effect-event | 0.0.2 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-effect-event | 0.0.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-escape-keydown | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-escape-keydown | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-layout-effect | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-layout-effect | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-rect | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-rect | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-use-size | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/react-use-size | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/react-visually-hidden | 1.2.3 | MIT | https://radix-ui.com/primitives |
 | @radix-ui/rect | 1.1.1 | MIT | https://radix-ui.com/primitives |
+| @radix-ui/rect | 1.1.2 | MIT | https://radix-ui.com/primitives |
 | @react-three/drei | 10.7.7 | MIT | https://github.com/pmndrs/drei |
 | @react-three/fiber | 9.6.1 | MIT | https://github.com/pmndrs/react-three-fiber#readme |
 | @tauri-apps/api | 2.11.0 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri#readme |
