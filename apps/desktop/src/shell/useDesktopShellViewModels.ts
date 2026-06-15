@@ -628,6 +628,7 @@ export function useDesktopShellViewModels({
         connectionLabel: topicConnectionLabel(topicDiagnostics[topic]),
         peerCount: topicDiagnostics[topic]?.peer_count ?? 0,
         lastReceivedLabel: formatLastReceivedLabel(topicDiagnostics[topic]?.last_received_at, locale),
+        lastReceivedAt: topicDiagnostics[topic]?.last_received_at ?? null,
         gossipJoined: !gossipDisabledTopics.has(topic),
         channels:
           topic === activeTopic
