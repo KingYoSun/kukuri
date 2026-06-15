@@ -49,6 +49,7 @@ cargo xtask desktop-package
    - `validate-release-inputs`
    - `linux-verify`
    - `windows-package`
+   - `changelog`
    - `release-assets`
    - `publish-draft`
 4. `publish-draft` creates a GitHub draft release by default.
@@ -69,6 +70,25 @@ The draft release must include:
 - `RELEASE_NOTES_DRAFT.md`.
 
 `latest-preview.json` must embed the `.sig` file contents in `platforms.windows-x86_64.signature`. It must not point `signature` at a `.sig` URL.
+
+`RELEASE_NOTES_DRAFT.md` embeds the changelog section for the release tag (the `## Changes` block with per-pull-request links) ahead of the static `Included` / `Known limits` / `Feedback` content. The `changelog` job produces that section; see [Changelog](#changelog).
+
+## Changelog
+
+The repository keeps a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)-style `CHANGELOG.md` at the root. Per-release sections are generated automatically.
+
+- The `changelog` job (`.github/workflows/kukuri-release.yml`) runs after `linux-verify` and `windows-package` succeed. It checks out the default branch with full history (`fetch-depth: 0`).
+- `scripts/release/update-changelog.ps1 -Tag <tag> -Repository <owner/repo>` walks `git log <previous-tag>..<tag>`, classifies each non-merge commit by Conventional Commit type into Features / Fixes / Other, links every `(#NNN)` reference to its pull request, and inserts a `## [<tag>] - <date>` section below `## [Unreleased]`. Re-running for the same tag replaces the section rather than duplicating it.
+- The job commits the updated `CHANGELOG.md` back to the default branch (commit message `docs: update CHANGELOG for <tag> [skip ci]`) and uploads the tag's section as the `kukuri-changelog-section` artifact, which `release-assets` embeds into `RELEASE_NOTES_DRAFT.md`.
+- Changes released in `v0.1.1-preview.1` and earlier are not backfilled; they remain in GitHub Releases. Automated entries start from the next preview.
+
+To preview the generated section locally before tagging (no commit or push is performed):
+
+```powershell
+./scripts/release/update-changelog.ps1 -Tag v0.1.2-preview.1 -Repository KingYoSun/kukuri -PreviousTag v0.1.1-preview.1
+```
+
+If the default branch has branch protection that blocks the Actions `GITHUB_TOKEN` from pushing, allow GitHub Actions to bypass the relevant rule (or supply a dedicated token with push access); otherwise the `changelog` job fails at the push step.
 
 ## Third-party Notices
 

@@ -12,12 +12,22 @@ try {
   Set-Content -LiteralPath (Join-Path $inputDir "kukuri_0.1.0_x64.zip") -Value "updater" -Encoding UTF8
   Set-Content -LiteralPath (Join-Path $inputDir "kukuri_0.1.0_x64.zip.sig") -Value "test-signature" -Encoding UTF8
 
+  $sectionPath = Join-Path $workDir "CHANGELOG_SECTION.md"
+  @"
+## [v0.1.0-preview.1] - 2026-06-15
+
+### Features
+
+- topic一覧にsearch/filter/sort機能を追加 ([#340](https://github.com/KingYoSun/kukuri/pull/340))
+"@ | Set-Content -LiteralPath $sectionPath -Encoding UTF8
+
   & $scriptPath `
     -Tag "v0.1.0-preview.1" `
     -Repository "KingYoSun/kukuri" `
     -Version "0.1.0" `
     -InputDir $inputDir `
-    -OutputDir $outputDir
+    -OutputDir $outputDir `
+    -ChangelogSectionPath $sectionPath
 
   $manifestPath = Join-Path $outputDir "latest-preview.json"
   $checksumPath = Join-Path $outputDir "SHA256SUMS.txt"
@@ -56,6 +66,17 @@ try {
     if ($assetNames -notcontains $requiredName) {
       throw "Missing release asset list entry for $requiredName"
     }
+  }
+
+  $notes = Get-Content -LiteralPath (Join-Path $outputDir "RELEASE_NOTES_DRAFT.md") -Raw -Encoding UTF8
+  if ($notes -notmatch '## Changes') {
+    throw "Release notes are missing the Changes section"
+  }
+  if ($notes -notmatch '\[#340\]\(https://github\.com/KingYoSun/kukuri/pull/340\)') {
+    throw "Release notes did not embed the changelog PR link"
+  }
+  if ($notes -notmatch '## Included') {
+    throw "Release notes lost the Included section after embedding changes"
   }
 
   Write-Host "create-preview-assets smoke test passed"
