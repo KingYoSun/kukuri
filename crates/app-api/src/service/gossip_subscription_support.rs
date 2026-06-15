@@ -6,10 +6,7 @@ pub(crate) fn gossip_disabled_channel_key(topic_id: &str, channel_id: &str) -> S
 
 impl AppService {
     pub(crate) async fn is_topic_gossip_disabled(&self, topic_id: &str) -> bool {
-        self.gossip_disabled_topics
-            .lock()
-            .await
-            .contains(topic_id)
+        self.gossip_disabled_topics.lock().await.contains(topic_id)
     }
 
     pub(crate) async fn is_channel_gossip_disabled(
