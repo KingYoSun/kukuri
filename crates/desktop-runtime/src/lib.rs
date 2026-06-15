@@ -33,8 +33,8 @@ pub use requests::{
     ListTimelineRequest, LiveSessionCommandRequest, NotificationIdRequest,
     PreviewChannelAccessTokenRequest, PublishMetaverseRoomEventRequest, ReactionKeyRequest,
     RemoveBookmarkedCustomReactionRequest, RemoveBookmarkedPostRequest,
-    RotatePrivateChannelRequest, SendDirectMessageRequest, SetMyProfileRequest,
-    ToggleReactionRequest, UnsubscribeTopicRequest, UpdateGameRoomRequest,
-    UpdateMetaverseRoomRequest,
+    RotatePrivateChannelRequest, SendDirectMessageRequest, SetChannelGossipEnabledRequest,
+    SetMyProfileRequest, SetTopicGossipEnabledRequest, ToggleReactionRequest,
+    UnsubscribeTopicRequest, UpdateGameRoomRequest, UpdateMetaverseRoomRequest,
 };
 pub use runtime::DesktopRuntime;

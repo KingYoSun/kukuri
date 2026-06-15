@@ -144,6 +144,19 @@ pub struct UnsubscribeTopicRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetTopicGossipEnabledRequest {
+    pub topic: String,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetChannelGossipEnabledRequest {
+    pub topic: String,
+    pub channel: String,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetBlobPreviewRequest {
     pub hash: String,
     pub mime: String,

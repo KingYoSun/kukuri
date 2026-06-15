@@ -114,6 +114,8 @@ pub fn run() {
             commands::community_node::import_peer_ticket,
             commands::community_node::set_discovery_seeds,
             commands::community_node::unsubscribe_topic,
+            commands::community_node::set_topic_gossip_enabled,
+            commands::community_node::set_channel_gossip_enabled,
             commands::community_node::get_local_peer_ticket,
             commands::posts::get_blob_media_payload,
             commands::posts::get_blob_preview_url,

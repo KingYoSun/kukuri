@@ -59,6 +59,8 @@ mod sync_live_api;
 
 pub(crate) const PRIVATE_CHANNEL_CAPABILITIES_PURPOSE: &str = "private-channel-capabilities";
 pub(crate) const PRIVATE_CHANNEL_CAPABILITIES_KEY: &str = "registry";
+pub(crate) const GOSSIP_SUBSCRIPTION_STATE_PURPOSE: &str = "gossip-subscription-state";
+pub(crate) const GOSSIP_SUBSCRIPTION_STATE_KEY: &str = "registry";
 
 pub struct DesktopRuntime {
     pub(crate) app_service: AppService,
@@ -119,6 +121,46 @@ fn persist_private_channel_capabilities(
         mode,
         PRIVATE_CHANNEL_CAPABILITIES_PURPOSE,
         PRIVATE_CHANNEL_CAPABILITIES_KEY,
+        encoded.as_str(),
+    )
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct GossipSubscriptionState {
+    #[serde(default)]
+    disabled_topics: Vec<String>,
+    #[serde(default)]
+    disabled_channels: Vec<String>,
+}
+
+fn load_gossip_subscription_state(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+) -> Result<GossipSubscriptionState> {
+    let Some(raw) = load_optional_secret(
+        db_path,
+        mode,
+        GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+        GOSSIP_SUBSCRIPTION_STATE_KEY,
+    )?
+    else {
+        return Ok(GossipSubscriptionState::default());
+    };
+    serde_json::from_str(&raw).context("failed to decode gossip subscription state")
+}
+
+fn persist_gossip_subscription_state(
+    db_path: &Path,
+    mode: IdentityStorageMode,
+    state: &GossipSubscriptionState,
+) -> Result<()> {
+    let encoded =
+        serde_json::to_string(state).context("failed to encode gossip subscription state")?;
+    persist_optional_secret(
+        db_path,
+        mode,
+        GOSSIP_SUBSCRIPTION_STATE_PURPOSE,
+        GOSSIP_SUBSCRIPTION_STATE_KEY,
         encoded.as_str(),
     )
 }
@@ -220,6 +262,13 @@ impl DesktopRuntime {
                 .restore_private_channel_capability(capability)
                 .await?;
         }
+        let gossip_subscription_state = load_gossip_subscription_state(&db_path, identity_mode)?;
+        app_service
+            .restore_gossip_disabled_state(
+                gossip_subscription_state.disabled_topics,
+                gossip_subscription_state.disabled_channels,
+            )
+            .await;
         app_service.warm_social_graph().await?;
         app_service.resume_direct_message_state().await?;
 
@@ -284,6 +333,17 @@ impl DesktopRuntime {
             &self.db_path,
             self.identity_mode,
             &self.app_service.list_private_channel_capabilities().await?,
+        )
+    }
+
+    pub(crate) async fn persist_gossip_subscription_state_from_app(&self) -> Result<()> {
+        persist_gossip_subscription_state(
+            &self.db_path,
+            self.identity_mode,
+            &GossipSubscriptionState {
+                disabled_topics: self.app_service.list_gossip_disabled_topics().await,
+                disabled_channels: self.app_service.list_gossip_disabled_channels().await,
+            },
         )
     }
 }

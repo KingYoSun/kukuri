@@ -853,6 +853,29 @@ export const runtimeApi: DesktopApi = {
       },
     });
   },
+  setTopicGossipEnabled: async (topic, enabled) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setTopicGossipEnabled(topic, enabled);
+    }
+    return invokeDesktop<void>('set_topic_gossip_enabled', {
+      request: {
+        topic,
+        enabled,
+      },
+    });
+  },
+  setChannelGossipEnabled: async (topic, channelId, enabled) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.setChannelGossipEnabled(topic, channelId, enabled);
+    }
+    return invokeDesktop<void>('set_channel_gossip_enabled', {
+      request: {
+        topic,
+        channel: channelId,
+        enabled,
+      },
+    });
+  },
   getLocalPeerTicket: async () => {
     if (window.__KUKURI_DESKTOP__) {
       return window.__KUKURI_DESKTOP__.getLocalPeerTicket();

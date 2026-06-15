@@ -187,6 +187,8 @@ function createSyncStatus(): SyncStatus {
       blob_assist_peer_ids: [],
       local_endpoint_id: 'local-endpoint-a',
     },
+    gossip_disabled_topics: [],
+    gossip_disabled_channels: [],
   };
 }
 

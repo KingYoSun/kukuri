@@ -374,6 +374,8 @@ export type SyncStatus = {
   topic_diagnostics: TopicSyncStatus[];
   local_author_pubkey: string;
   discovery: DiscoveryStatus;
+  gossip_disabled_topics: string[];
+  gossip_disabled_channels: string[];
 };
 
 export type CommunityNodeResolvedUrls = {
@@ -843,6 +845,8 @@ export interface DesktopApi {
   importPeerTicket(ticket: string): Promise<void>;
   setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;
+  setTopicGossipEnabled(topic: string, enabled: boolean): Promise<void>;
+  setChannelGossipEnabled(topic: string, channelId: string, enabled: boolean): Promise<void>;
   getLocalPeerTicket(): Promise<string | null>;
   getBlobMediaPayload(hash: string, mime: string): Promise<BlobMediaPayload | null>;
   getBlobPreviewUrl(hash: string, mime: string): Promise<string | null>;

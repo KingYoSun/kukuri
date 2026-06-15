@@ -281,6 +281,7 @@ fn app_with_hanging_remote_docs(
 }
 
 mod diagnostics;
+mod gossip_toggle;
 mod hint_rehydration;
 mod subscription_restarts;
 mod transport_replication;

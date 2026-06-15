@@ -6,8 +6,8 @@ use kukuri_desktop_runtime::{
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
     ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
-    RotatePrivateChannelRequest, SetCommunityNodeConfigRequest, SetDiscoverySeedsRequest,
-    UnsubscribeTopicRequest,
+    RotatePrivateChannelRequest, SetChannelGossipEnabledRequest, SetCommunityNodeConfigRequest,
+    SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest, UnsubscribeTopicRequest,
 };
 
 use crate::state::{DesktopState, map_error};
@@ -216,6 +216,30 @@ pub async fn unsubscribe_topic(
     request: UnsubscribeTopicRequest,
 ) -> Result<(), String> {
     state.runtime.unsubscribe_topic(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn set_topic_gossip_enabled(
+    state: tauri::State<'_, DesktopState>,
+    request: SetTopicGossipEnabledRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .set_topic_gossip_enabled(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn set_channel_gossip_enabled(
+    state: tauri::State<'_, DesktopState>,
+    request: SetChannelGossipEnabledRequest,
+) -> Result<(), String> {
+    state
+        .runtime
+        .set_channel_gossip_enabled(request)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]

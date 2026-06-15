@@ -344,6 +344,8 @@ export const DEFAULT_SYNC_STATUS: SyncStatus = {
     local_endpoint_id: '',
     last_discovery_error: null,
   },
+  gossip_disabled_topics: [],
+  gossip_disabled_channels: [],
 };
 
 export const DEFAULT_NOTIFICATION_STATUS: NotificationStatusView = {
