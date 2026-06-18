@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookCopy, Link2, Reply, Repeat2 } from 'lucide-react';
+import { Bookmark, Link2, Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
@@ -267,12 +267,10 @@ export function PostCard({
       <div className='post-body post-layout-safe'>
         {showReplyContext && view.replyParentAuthor && replyPreview ? (
           <div className='post-reply-context'>
-            <span className='post-reply-context-eyebrow'>
-              {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
-            </span>
             <button
               type='button'
-              className='post-reply-context-author author-link'
+              className='post-reply-context-avatar'
+              aria-label={view.replyParentAuthor.label}
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenAuthor(view.replyParentAuthor!.pubkey);
@@ -283,19 +281,30 @@ export function PostCard({
                 picture={view.replyParentAuthor.picture ?? null}
                 size='sm'
               />
-              <span>{view.replyParentAuthor.label}</span>
             </button>
-            {replyPreview.content.trim().length > 0 ? (
-              <div className='post-reply-context-body post-copy-wrap'>
-                <SmartReferenceText
-                  text={replyPreview.content}
-                  className='post-copy-wrap'
-                  onActivateReference={onActivateReference}
-                  mentionAuthors={view.mentionAuthors}
-                  onOpenMention={onOpenAuthor}
-                />
-              </div>
-            ) : null}
+            <div className='post-reply-context-main'>
+              <button
+                type='button'
+                className='post-reply-context-author author-link'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenAuthor(view.replyParentAuthor!.pubkey);
+                }}
+              >
+                {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
+              </button>
+              {replyPreview.content.trim().length > 0 ? (
+                <div className='post-reply-context-body post-copy-wrap'>
+                  <SmartReferenceText
+                    text={replyPreview.content}
+                    className='post-copy-wrap'
+                    onActivateReference={onActivateReference}
+                    mentionAuthors={view.mentionAuthors}
+                    onOpenMention={onOpenAuthor}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -619,7 +628,11 @@ export function PostCard({
                 aria-pressed={isBookmarked}
                 onClick={() => onToggleBookmark(post)}
               >
-                <BookCopy className='size-4' aria-hidden='true' />
+                <Bookmark
+                  className='size-4'
+                  fill={isBookmarked ? 'currentColor' : 'none'}
+                  aria-hidden='true'
+                />
               </Button>
             ) : null}
           </>

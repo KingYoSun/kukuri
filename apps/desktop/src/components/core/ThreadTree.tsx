@@ -83,16 +83,26 @@ export function ThreadTree({
 
   return (
     <ul className='thread-tree'>
-      {nodes.map(({ view, depth }) => {
+      {nodes.map(({ view, depth, rails, isLast }) => {
         const visualDepth = Math.min(depth, MAX_VISUAL_DEPTH);
+        const visibleRails = rails.slice(0, Math.max(0, visualDepth - 1));
         return (
-          <li
-            key={view.post.object_id}
-            className='thread-tree-item'
-            data-depth={visualDepth}
-            style={{ ['--thread-depth' as string]: visualDepth }}
-          >
-            {visualDepth > 0 ? <span className='thread-tree-connector' aria-hidden='true' /> : null}
+          <li key={view.post.object_id} className='thread-tree-item' data-depth={visualDepth}>
+            {visualDepth > 0 ? (
+              <span className='thread-tree-rails' aria-hidden='true'>
+                {visibleRails.map((continues, railIndex) => (
+                  <span
+                    key={`${view.post.object_id}-rail-${railIndex}`}
+                    className={continues ? 'thread-rail thread-rail-line' : 'thread-rail'}
+                  />
+                ))}
+                <span
+                  className='thread-rail thread-rail-elbow'
+                  data-last={isLast ? 'true' : 'false'}
+                />
+              </span>
+            ) : null}
+            <div className='thread-tree-body'>
             <PostCard
               view={view}
               onOpenAuthor={onOpenAuthor}
@@ -115,6 +125,7 @@ export function ThreadTree({
               onCopyLink={onCopyPostLink}
               isFocused={focusedPostObjectId === view.post.object_id}
             />
+            </div>
           </li>
         );
       })}

@@ -764,20 +764,62 @@
 .thread-tree-item {
   position: relative;
   min-width: 0;
-  padding-left: calc(var(--thread-depth, 0) * var(--space-lg));
+  display: flex;
+  align-items: stretch;
+  --thread-elbow-mid: 1.5rem;
 }
 
-.thread-tree-connector {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc((var(--thread-depth, 0) - 0.5) * var(--space-lg));
-  border-left: 2px solid var(--border-accent);
+.thread-tree-rails {
+  display: flex;
+  flex: none;
   pointer-events: none;
 }
 
-.thread-tree-item[data-depth='0'] .thread-tree-connector {
-  display: none;
+.thread-rail {
+  position: relative;
+  flex: none;
+  width: var(--space-lg);
+}
+
+/* Continuing ancestor line + elbow vertical: bridge the list gap upward so the
+   line stays connected across items. */
+.thread-rail-line::before,
+.thread-rail-elbow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(var(--space-sm) * -1);
+  border-left: 2px solid var(--border-accent);
+}
+
+.thread-rail-line::before {
+  bottom: 0;
+}
+
+/* Last child (└): vertical only reaches the horizontal branch. */
+.thread-rail-elbow::before {
+  height: calc(var(--space-sm) + var(--thread-elbow-mid));
+}
+
+/* Non-last child (├): vertical continues to the bottom for the next sibling. */
+.thread-rail-elbow[data-last='false']::before {
+  bottom: 0;
+  height: auto;
+}
+
+/* Horizontal branch from the vertical line to the card. */
+.thread-rail-elbow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  right: 0;
+  top: var(--thread-elbow-mid);
+  border-top: 2px solid var(--border-accent);
+}
+
+.thread-tree-body {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .post-card {
@@ -1443,13 +1485,49 @@
   min-width: 0;
 }
 
+/* X-style: the replied-to post is stacked above the reply body, linked by a
+   vertical connector through the parent avatar. Distinct from the bordered,
+   nested quote-repost card (.post-source-*). */
 .post-reply-context {
+  position: relative;
   margin-bottom: var(--space-sm);
-  padding: var(--space-2xs) 0 var(--space-2xs) var(--space-sm);
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: var(--space-2xs) var(--space-sm);
+  min-width: 0;
+}
+
+.post-reply-context::before {
+  content: '';
+  position: absolute;
+  left: 1.25rem;
+  top: 2.5rem;
+  bottom: calc(var(--space-sm) * -1);
   border-left: 2px solid var(--border-accent);
+  transform: translateX(-1px);
+}
+
+.post-reply-context-avatar {
+  display: inline-flex;
+  align-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.post-reply-context-main {
+  min-width: 0;
   display: grid;
   gap: var(--space-2xs);
-  min-width: 0;
+  align-self: start;
+}
+
+.post-reply-context-author {
+  justify-self: start;
+  font-weight: 600;
+  font-size: var(--text-caption);
+  color: var(--muted-foreground);
 }
 
 .post-reply-context-eyebrow {
@@ -2624,7 +2702,7 @@
 
 .composer-mention-list {
   position: absolute;
-  z-index: 30;
+  z-index: 82;
   left: 0;
   right: 0;
   top: calc(100% + var(--space-2xs));
@@ -2678,6 +2756,7 @@
 }
 
 .ui-hover-card-content.mention-hover-card {
+  z-index: 82;
   width: 18rem;
   max-width: calc(100vw - 2rem);
   padding: var(--space-sm);
