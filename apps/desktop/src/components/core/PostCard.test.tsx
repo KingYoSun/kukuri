@@ -186,7 +186,8 @@ test('post card renders a compact reply context distinct from a quote repost', (
   );
 
   expect(screen.getByText('Replying to Parent Author')).toBeInTheDocument();
-  expect(screen.getByText('Parent Author')).toBeInTheDocument();
+  // The parent avatar is a separate button labelled with the author name.
+  expect(screen.getByRole('button', { name: 'Parent Author' })).toBeInTheDocument();
   expect(screen.getByText('parent body')).toBeInTheDocument();
   // Reply context is its own block, not the quote/repost source card.
   expect(document.querySelector('.post-reply-context')).not.toBeNull();
