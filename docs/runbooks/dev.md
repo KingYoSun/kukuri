@@ -63,7 +63,9 @@ docker compose --env-file .env.community-node -f docker-compose.community-node.y
 ## community-node env 標準形
 - `.env.community-node.example` をコピーして `.env.community-node` を作り、compose では `--env-file .env.community-node` を使う
 - secret は `CN_POSTGRES_PASSWORD` と `COMMUNITY_NODE_JWT_SECRET` の 2 つを最低限上書きする
+- `COMMUNITY_NODE_JWT_SECRET` は起動時に検証される。32 byte 未満、または `change-me` を含む placeholder のままだと `cn-user-api` は fail-fast する
 - `COMMUNITY_NODE_JWT_SECRET` を rotate すると既存 bearer token は即時無効化される
+- `cn-user-api` の HTTP レート制限は `COMMUNITY_NODE_RATE_LIMIT_ENABLED`(既定 example では true)、`..._PER_SECOND` / `..._BURST` / `..._TRUST_FORWARDED_FOR` で調整する。Caddy などの信頼できる reverse proxy 配下でのみ `..._TRUST_FORWARDED_FOR=true` にしてクライアント単位で制限する（直公開時は X-Forwarded-For 詐称を避けるため false）
 - `COMMUNITY_NODE_DATABASE_URL` は compose 内では `cn-postgres` 向けに組み立てる。外部 Postgres を使う場合だけ個別に差し替える
 
 ## community-node 公開 manual smoke

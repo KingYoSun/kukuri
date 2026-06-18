@@ -40,6 +40,10 @@ pub async fn create_auth_challenge(pool: &PgPool, pubkey: &str) -> Result<AuthCh
     let pubkey = normalize_pubkey(pubkey)?;
     let challenge = uuid::Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::seconds(AUTH_CHALLENGE_TTL_SECONDS);
+    // `/v1/auth/challenge` is unauthenticated, so without opportunistic cleanup the
+    // table would grow without bound under challenge spam. The index on `expires_at`
+    // keeps this DELETE cheap.
+    prune_expired_auth_challenges(pool).await?;
     sqlx::query(
         "INSERT INTO cn_auth.auth_challenges (challenge, pubkey, expires_at)
          VALUES ($1, $2, $3)",
@@ -53,6 +57,19 @@ pub async fn create_auth_challenge(pool: &PgPool, pubkey: &str) -> Result<AuthCh
         challenge,
         expires_at: expires_at.timestamp(),
     })
+}
+
+pub(crate) async fn prune_expired_auth_challenges<'e, E>(executor: E) -> Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        "DELETE FROM cn_auth.auth_challenges
+         WHERE expires_at <= NOW()",
+    )
+    .execute(executor)
+    .await?;
+    Ok(())
 }
 
 pub async fn verify_auth_envelope_and_issue_token(

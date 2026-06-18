@@ -342,6 +342,84 @@ async fn create_same_topic_repost_persists_repost_object_and_profile_repost_doc(
 }
 
 #[tokio::test]
+async fn create_post_rejects_content_over_limit() {
+    let (app, _store, _docs_sync, _blob_service) = local_app_with_memory_services();
+    let topic = "kukuri:topic:post-length";
+
+    let oversized = "a".repeat(crate::service::MAX_POST_CONTENT_CHARS + 1);
+    let error = app
+        .create_post(topic, oversized.as_str(), None)
+        .await
+        .expect_err("post content over the limit should be rejected");
+    assert!(
+        error.to_string().contains("post content"),
+        "unexpected error: {error}"
+    );
+
+    let at_limit = "a".repeat(crate::service::MAX_POST_CONTENT_CHARS);
+    app.create_post(topic, at_limit.as_str(), None)
+        .await
+        .expect("post content at the limit should be accepted");
+}
+
+#[tokio::test]
+async fn create_repost_rejects_commentary_over_limit() {
+    let (app, _store, _docs_sync, _blob_service) = local_app_with_memory_services();
+    let topic = "kukuri:topic:repost-length";
+    let source_object_id = app
+        .create_post(topic, "source", None)
+        .await
+        .expect("source post");
+
+    let oversized = "a".repeat(crate::service::MAX_REPOST_COMMENTARY_CHARS + 1);
+    let error = app
+        .create_repost(topic, topic, source_object_id.as_str(), Some(oversized.as_str()))
+        .await
+        .expect_err("repost commentary over the limit should be rejected");
+    assert!(
+        error.to_string().contains("repost commentary"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn set_my_profile_rejects_text_fields_over_limit() {
+    let (app, _store, _docs_sync, _blob_service) = local_app_with_memory_services();
+
+    let error = app
+        .set_my_profile(ProfileInput {
+            name: Some("a".repeat(crate::service::MAX_PROFILE_NAME_CHARS + 1)),
+            display_name: None,
+            about: None,
+            picture: None,
+            picture_upload: None,
+            clear_picture: false,
+        })
+        .await
+        .expect_err("profile name over the limit should be rejected");
+    assert!(
+        error.to_string().contains("profile name"),
+        "unexpected error: {error}"
+    );
+
+    let error = app
+        .set_my_profile(ProfileInput {
+            name: None,
+            display_name: None,
+            about: Some("a".repeat(crate::service::MAX_PROFILE_ABOUT_CHARS + 1)),
+            picture: None,
+            picture_upload: None,
+            clear_picture: false,
+        })
+        .await
+        .expect_err("profile about over the limit should be rejected");
+    assert!(
+        error.to_string().contains("profile about"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn list_profile_timeline_ignores_profile_post_with_signer_mismatch() {
     let store = Arc::new(MemoryStore::default());
     let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));

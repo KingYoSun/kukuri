@@ -87,6 +87,11 @@ impl AppService {
         source_object_id: &str,
         commentary: Option<&str>,
     ) -> Result<String> {
+        ensure_optional_text_within_limit(
+            "repost commentary",
+            commentary,
+            MAX_REPOST_COMMENTARY_CHARS,
+        )?;
         self.ensure_topic_subscription(target_topic_id).await?;
         self.ensure_topic_subscription(source_topic_id).await?;
 
@@ -293,6 +298,7 @@ impl AppService {
         reply_to: Option<&str>,
         attachments: Vec<PendingAttachment>,
     ) -> Result<String> {
+        ensure_text_within_limit("post content", content, MAX_POST_CONTENT_CHARS)?;
         self.ensure_topic_subscription(topic_id).await?;
         let topic = TopicId::new(topic_id);
         let parent = if let Some(reply_to) = reply_to {

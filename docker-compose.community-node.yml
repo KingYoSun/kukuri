@@ -15,6 +15,7 @@ services:
   cn-postgres:
     image: postgres:17-bookworm
     environment: *cn-postgres-env
+    restart: unless-stopped
     ports:
       - "${CN_POSTGRES_HOST_BIND_IP:-127.0.0.1}:${CN_POSTGRES_PORT:-55432}:5432"
     healthcheck:
@@ -31,6 +32,7 @@ services:
 
   cn-valkey:
     image: valkey/valkey:8-alpine
+    restart: unless-stopped
     ports:
       - "${CN_VALKEY_HOST_BIND_IP:-127.0.0.1}:${CN_VALKEY_PORT:-56379}:6379"
     healthcheck:
@@ -77,6 +79,17 @@ services:
       COMMUNITY_NODE_JWT_ISSUER: ${COMMUNITY_NODE_JWT_ISSUER:-kukuri-cn}
       COMMUNITY_NODE_JWT_SECRET: ${COMMUNITY_NODE_JWT_SECRET:?set COMMUNITY_NODE_JWT_SECRET}
       COMMUNITY_NODE_JWT_TTL_SECONDS: ${COMMUNITY_NODE_JWT_TTL_SECONDS:-86400}
+      COMMUNITY_NODE_RATE_LIMIT_ENABLED: ${COMMUNITY_NODE_RATE_LIMIT_ENABLED:-true}
+      COMMUNITY_NODE_RATE_LIMIT_PER_SECOND: ${COMMUNITY_NODE_RATE_LIMIT_PER_SECOND:-10}
+      COMMUNITY_NODE_RATE_LIMIT_BURST: ${COMMUNITY_NODE_RATE_LIMIT_BURST:-30}
+      COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR: ${COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR:-false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - "${CN_USER_API_HOST_BIND_IP:-127.0.0.1}:${CN_USER_API_PORT:-18080}:8080"
 
@@ -87,6 +100,7 @@ services:
       args:
         TARGET_PACKAGE: kukuri-cn-iroh-relay
         TARGET_BIN: cn-iroh-relay
+    restart: unless-stopped
     environment:
       COMMUNITY_NODE_IROH_RELAY_HTTP_BIND_ADDR: ${CN_IROH_RELAY_HTTP_BIND_ADDR:-0.0.0.0:3340}
       COMMUNITY_NODE_IROH_RELAY_HTTPS_BIND_ADDR: ${CN_IROH_RELAY_HTTPS_BIND_ADDR:-}

@@ -707,6 +707,67 @@ async fn topic_rendezvous_keys_do_not_expose_raw_topic_ids() -> Result<()> {
 }
 
 #[tokio::test]
+async fn auth_challenge_prunes_expired_challenges() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server =
+        TestServer::spawn(admin_database_url.as_str(), "cn_user_api_challenge_gc").await?;
+    let client = Client::new();
+    let pool = PgPool::connect(server.database.database_url.as_str()).await?;
+
+    let keys = generate_keys();
+    // Issue a challenge and force it past its expiry without consuming it.
+    let stale = client
+        .post(format!("{}/v1/auth/challenge", server.base_url))
+        .json(&serde_json::json!({ "pubkey": keys.public_key_hex() }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<kukuri_cn_core::AuthChallengeResponse>()
+        .await?;
+    sqlx::query(
+        "UPDATE cn_auth.auth_challenges
+         SET expires_at = NOW() - INTERVAL '1 second'
+         WHERE challenge = $1",
+    )
+    .bind(stale.challenge.as_str())
+    .execute(&pool)
+    .await?;
+
+    let expired_before: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_auth.auth_challenges WHERE expires_at <= NOW()",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(expired_before, 1);
+
+    // A fresh challenge request must opportunistically prune the expired row.
+    client
+        .post(format!("{}/v1/auth/challenge", server.base_url))
+        .json(&serde_json::json!({ "pubkey": generate_keys().public_key_hex() }))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let expired_after: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cn_auth.auth_challenges WHERE expires_at <= NOW()",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(expired_after, 0);
+    let stale_remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM cn_auth.auth_challenges WHERE challenge = $1")
+            .bind(stale.challenge.as_str())
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(stale_remaining, 0);
+
+    server.shutdown().await
+}
+
+#[tokio::test]
 async fn auth_verify_rejects_capability_url_mismatch() -> Result<()> {
     let Some(admin_database_url) = integration_test_admin_database_url() else {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");

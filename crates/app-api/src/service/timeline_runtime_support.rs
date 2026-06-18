@@ -929,11 +929,42 @@ impl AppService {
     }
 }
 
+/// Upper bounds (in Unicode scalar values) for user-authored text that gets signed
+/// into envelopes and replicated to other peers. They bound the gossip/docs payload
+/// size and keep a single client from flooding the topic with oversized objects.
+pub(crate) const MAX_POST_CONTENT_CHARS: usize = 10_000;
+pub(crate) const MAX_REPOST_COMMENTARY_CHARS: usize = 2_000;
+pub(crate) const MAX_PROFILE_NAME_CHARS: usize = 64;
+pub(crate) const MAX_PROFILE_DISPLAY_NAME_CHARS: usize = 128;
+pub(crate) const MAX_PROFILE_ABOUT_CHARS: usize = 2_000;
+
 pub(crate) fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
+}
+
+/// Reject user text whose character count exceeds `max_chars`. Counting `chars()`
+/// keeps the limit user-facing (it matches what a person types) while still bounding
+/// the byte payload, since a scalar value is at most 4 bytes.
+pub(crate) fn ensure_text_within_limit(field: &str, value: &str, max_chars: usize) -> Result<()> {
+    let count = value.chars().count();
+    if count > max_chars {
+        anyhow::bail!("{field} must be at most {max_chars} characters (got {count})");
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_optional_text_within_limit(
+    field: &str,
+    value: Option<&str>,
+    max_chars: usize,
+) -> Result<()> {
+    match value {
+        Some(value) => ensure_text_within_limit(field, value, max_chars),
+        None => Ok(()),
+    }
 }
 
 pub(crate) fn profile_asset_view_from_ref(

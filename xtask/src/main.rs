@@ -676,7 +676,7 @@ fn is_ci() -> bool {
 fn cn_compose_envs() -> [(&'static str, &'static str); 2] {
     [
         ("CN_POSTGRES_PASSWORD", "cn_password"),
-        ("COMMUNITY_NODE_JWT_SECRET", "xtask-test-secret"),
+        ("COMMUNITY_NODE_JWT_SECRET", "xtask-test-secret-0123456789abcdef"),
     ]
 }
 
