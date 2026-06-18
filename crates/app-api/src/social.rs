@@ -35,6 +35,22 @@ impl AppService {
 
     pub async fn set_my_profile(&self, input: ProfileInput) -> Result<Profile> {
         let author_pubkey = Pubkey::from(self.current_author_pubkey());
+        // Normalize and length-check the text fields before any blob upload so invalid
+        // input fails fast without persisting a side effect.
+        let name = normalize_optional_text(input.name);
+        let display_name = normalize_optional_text(input.display_name);
+        let about = normalize_optional_text(input.about);
+        ensure_optional_text_within_limit("profile name", name.as_deref(), MAX_PROFILE_NAME_CHARS)?;
+        ensure_optional_text_within_limit(
+            "profile display name",
+            display_name.as_deref(),
+            MAX_PROFILE_DISPLAY_NAME_CHARS,
+        )?;
+        ensure_optional_text_within_limit(
+            "profile about",
+            about.as_deref(),
+            MAX_PROFILE_ABOUT_CHARS,
+        )?;
         let current_profile = self.get_my_profile().await?;
         let picture = if input.clear_picture || input.picture_upload.is_some() {
             normalize_optional_text(input.picture)
@@ -61,9 +77,9 @@ impl AppService {
             self.keys.as_ref(),
             &KukuriProfileEnvelopeContentV1 {
                 author_pubkey: author_pubkey.clone(),
-                name: normalize_optional_text(input.name),
-                display_name: normalize_optional_text(input.display_name),
-                about: normalize_optional_text(input.about),
+                name,
+                display_name,
+                about,
                 picture,
                 picture_asset,
             },

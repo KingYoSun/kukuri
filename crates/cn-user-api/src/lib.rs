@@ -20,6 +20,9 @@ use kukuri_cn_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
+use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::key_extractor::SmartIpKeyExtractor;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -115,6 +118,97 @@ impl UserApiConfig {
     }
 }
 
+/// Optional per-client rate limit for the public HTTP surface.
+///
+/// Disabled by default in code so unit/contract tests and library embeddings are
+/// never throttled; the shipped `.env.community-node.example` turns it on. Behind a
+/// trusted reverse proxy set `trust_forwarded_for` so each real client is limited
+/// individually instead of sharing the proxy's connection IP. Leave it `false` when
+/// the API is directly exposed, since `X-Forwarded-For` is attacker-controlled there.
+#[derive(Clone, Copy, Debug)]
+pub struct RateLimitConfig {
+    pub enabled: bool,
+    pub per_second: u64,
+    pub burst: u32,
+    pub trust_forwarded_for: bool,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            per_second: 10,
+            burst: 30,
+            trust_forwarded_for: false,
+        }
+    }
+}
+
+impl RateLimitConfig {
+    pub fn from_env() -> Result<Self> {
+        let defaults = Self::default();
+        Ok(Self {
+            enabled: parse_bool_env("COMMUNITY_NODE_RATE_LIMIT_ENABLED", defaults.enabled)?,
+            per_second: parse_u64_env("COMMUNITY_NODE_RATE_LIMIT_PER_SECOND", defaults.per_second)?
+                .max(1),
+            burst: parse_u32_env("COMMUNITY_NODE_RATE_LIMIT_BURST", defaults.burst)?.max(1),
+            trust_forwarded_for: parse_bool_env(
+                "COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR",
+                defaults.trust_forwarded_for,
+            )?,
+        })
+    }
+
+    fn replenish_period_ms(&self) -> u64 {
+        (1_000 / self.per_second.max(1)).max(1)
+    }
+}
+
+/// Apply the rate limit layer to `router` when enabled. Layering returns a plain
+/// `Router` regardless of the key-extractor type, so both branches unify cleanly.
+/// A background task periodically drops idle per-IP buckets so a flood of distinct
+/// source IPs cannot grow the limiter's state without bound; `retain_recent` resolves
+/// through the `Arc`'s deref to the concrete governor limiter, so no governor-internal
+/// type needs to be named here.
+pub fn apply_rate_limit(router: Router, config: &RateLimitConfig) -> Result<Router> {
+    if !config.enabled {
+        return Ok(router);
+    }
+    let period_ms = config.replenish_period_ms();
+    if config.trust_forwarded_for {
+        let governor = GovernorConfigBuilder::default()
+            .per_millisecond(period_ms)
+            .burst_size(config.burst)
+            .key_extractor(SmartIpKeyExtractor)
+            .finish()
+            .context("failed to build rate limit configuration")?;
+        let limiter = governor.limiter().clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                limiter.retain_recent();
+            }
+        });
+        Ok(router.layer(GovernorLayer::new(governor)))
+    } else {
+        let governor = GovernorConfigBuilder::default()
+            .per_millisecond(period_ms)
+            .burst_size(config.burst)
+            .finish()
+            .context("failed to build rate limit configuration")?;
+        let limiter = governor.limiter().clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                limiter.retain_recent();
+            }
+        });
+        Ok(router.layer(GovernorLayer::new(governor)))
+    }
+}
+
 pub async fn build_state(config: &UserApiConfig) -> Result<UserApiState> {
     let pool = connect_postgres(config.database_url.as_str()).await?;
     initialize_database(&pool).await?;
@@ -169,8 +263,17 @@ pub async fn run_from_env() -> Result<()> {
 
     let config = UserApiConfig::from_env()?;
     let bind_addr = config.bind_addr;
+    let rate_limit = RateLimitConfig::from_env()?;
     let state = build_runtime_state(&config).await?;
-    let app = app_router(state);
+    let app = apply_rate_limit(app_router(state), &rate_limit)?;
+    if rate_limit.enabled {
+        tracing::info!(
+            per_second = rate_limit.per_second,
+            burst = rate_limit.burst,
+            trust_forwarded_for = rate_limit.trust_forwarded_for,
+            "community-node user-api rate limit enabled"
+        );
+    }
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
         .with_context(|| format!("failed to bind user api at {bind_addr}"))?;
@@ -327,6 +430,39 @@ fn internal_error(error: impl std::fmt::Display) -> ApiError {
         "INTERNAL_ERROR",
         error.to_string(),
     )
+}
+
+fn parse_bool_env(var_name: &str, default: bool) -> Result<bool> {
+    match std::env::var(var_name) {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "" => Ok(default),
+            "1" | "true" | "yes" | "on" => Ok(true),
+            "0" | "false" | "no" | "off" => Ok(false),
+            other => Err(anyhow::anyhow!("failed to parse {var_name}: `{other}`")),
+        },
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(anyhow::anyhow!("{var_name}: {error}")),
+    }
+}
+
+fn parse_u64_env(var_name: &str, default: u64) -> Result<u64> {
+    match std::env::var(var_name) {
+        Ok(value) if !value.trim().is_empty() => value
+            .trim()
+            .parse::<u64>()
+            .with_context(|| format!("failed to parse {var_name}")),
+        _ => Ok(default),
+    }
+}
+
+fn parse_u32_env(var_name: &str, default: u32) -> Result<u32> {
+    match std::env::var(var_name) {
+        Ok(value) if !value.trim().is_empty() => value
+            .trim()
+            .parse::<u32>()
+            .with_context(|| format!("failed to parse {var_name}")),
+        _ => Ok(default),
+    }
 }
 
 fn parse_csv_env(var_name: &str) -> Vec<String> {

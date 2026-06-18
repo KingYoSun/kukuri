@@ -17,7 +17,7 @@ FROM debian:bookworm-slim AS runtime
 ARG TARGET_BIN
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN test -n "$TARGET_BIN"

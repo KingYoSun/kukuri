@@ -8,6 +8,7 @@ pub const AUTH_ENVELOPE_KIND: &str = "auth";
 pub const AUTH_CHALLENGE_TTL_SECONDS: i64 = 300;
 pub const AUTH_EVENT_MAX_SKEW_SECONDS: i64 = 600;
 pub const DEFAULT_TOKEN_TTL_SECONDS: i64 = 86_400;
+pub const MIN_JWT_SECRET_BYTES: usize = 32;
 pub const BOOTSTRAP_PEER_REGISTRATION_TTL_SECONDS: i64 = 90;
 pub const TOPIC_RENDEZVOUS_TTL_SECONDS: u64 = 45;
 pub const COMMUNITY_NODE_RENDEZVOUS_REDIS_URL_ENV: &str = "COMMUNITY_NODE_RENDEZVOUS_REDIS_URL";
@@ -42,6 +43,7 @@ impl JwtConfig {
             .unwrap_or_else(|| "kukuri-cn".to_string());
         let secret = std::env::var("COMMUNITY_NODE_JWT_SECRET")
             .context("COMMUNITY_NODE_JWT_SECRET is required")?;
+        validate_jwt_secret(secret.as_str())?;
         let ttl_seconds = std::env::var("COMMUNITY_NODE_JWT_TTL_SECONDS")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -67,6 +69,28 @@ impl JwtConfig {
     pub(crate) fn decoding_key(&self) -> DecodingKey {
         DecodingKey::from_secret(self.secret.as_bytes())
     }
+}
+
+/// Reject weak or placeholder JWT secrets at startup so a community node never
+/// runs with a brute-forceable or sample signing key.
+pub(crate) fn validate_jwt_secret(secret: &str) -> Result<()> {
+    if secret.len() < MIN_JWT_SECRET_BYTES {
+        bail!(
+            "COMMUNITY_NODE_JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes; got {}",
+            secret.len()
+        );
+    }
+    const PLACEHOLDER_MARKERS: [&str; 2] = ["change-me", "change_me"];
+    let lowered = secret.to_ascii_lowercase();
+    if PLACEHOLDER_MARKERS
+        .iter()
+        .any(|marker| lowered.contains(marker))
+    {
+        bail!(
+            "COMMUNITY_NODE_JWT_SECRET still contains a placeholder value; set a strong unique secret"
+        );
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
