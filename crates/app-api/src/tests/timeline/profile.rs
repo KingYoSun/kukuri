@@ -373,7 +373,12 @@ async fn create_repost_rejects_commentary_over_limit() {
 
     let oversized = "a".repeat(crate::service::MAX_REPOST_COMMENTARY_CHARS + 1);
     let error = app
-        .create_repost(topic, topic, source_object_id.as_str(), Some(oversized.as_str()))
+        .create_repost(
+            topic,
+            topic,
+            source_object_id.as_str(),
+            Some(oversized.as_str()),
+        )
         .await
         .expect_err("repost commentary over the limit should be rejected");
     assert!(

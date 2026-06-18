@@ -149,11 +149,8 @@ impl RateLimitConfig {
         let defaults = Self::default();
         Ok(Self {
             enabled: parse_bool_env("COMMUNITY_NODE_RATE_LIMIT_ENABLED", defaults.enabled)?,
-            per_second: parse_u64_env(
-                "COMMUNITY_NODE_RATE_LIMIT_PER_SECOND",
-                defaults.per_second,
-            )?
-            .max(1),
+            per_second: parse_u64_env("COMMUNITY_NODE_RATE_LIMIT_PER_SECOND", defaults.per_second)?
+                .max(1),
             burst: parse_u32_env("COMMUNITY_NODE_RATE_LIMIT_BURST", defaults.burst)?.max(1),
             trust_forwarded_for: parse_bool_env(
                 "COMMUNITY_NODE_RATE_LIMIT_TRUST_FORWARDED_FOR",

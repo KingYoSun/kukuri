@@ -712,8 +712,7 @@ async fn auth_challenge_prunes_expired_challenges() -> Result<()> {
         eprintln!("skipping cn-user-api integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
     };
-    let server =
-        TestServer::spawn(admin_database_url.as_str(), "cn_user_api_challenge_gc").await?;
+    let server = TestServer::spawn(admin_database_url.as_str(), "cn_user_api_challenge_gc").await?;
     let client = Client::new();
     let pool = PgPool::connect(server.database.database_url.as_str()).await?;
 
