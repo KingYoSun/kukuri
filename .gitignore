@@ -110,6 +110,7 @@ secrets/
 /docker/data/
 
 .claude/
+.codex/
 
 msedgedriver.exe
 

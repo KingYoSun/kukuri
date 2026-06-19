@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Download, FileText, RefreshCw } from 'lucide-react';
+import { Download, FileText, Power, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -42,9 +42,11 @@ export function ReleasePanel() {
   const updateState = useAppUpdateStore((state) => state.updateState);
   const pendingUpdate = useAppUpdateStore((state) => state.pendingUpdate);
   const checkForUpdate = useAppUpdateStore((state) => state.checkForUpdate);
-  const installUpdate = useAppUpdateStore((state) => state.installUpdate);
+  const downloadUpdate = useAppUpdateStore((state) => state.downloadUpdate);
+  const restartAndInstall = useAppUpdateStore((state) => state.restartAndInstall);
   const [diagnosticReport, setDiagnosticReport] = useState('');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null);
+  const [restartPromptDismissed, setRestartPromptDismissed] = useState(false);
   const [osNotificationSettings, setOsNotificationSettings] =
     useState<OsNotificationSettings>(DEFAULT_OS_NOTIFICATION_SETTINGS);
   const [osNotificationPermission, setOsNotificationPermission] = useState('unknown');
@@ -72,6 +74,12 @@ export function ReleasePanel() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (updateState.status !== 'ready_to_restart') {
+      setRestartPromptDismissed(false);
+    }
+  }, [updateState.status]);
 
   const updateOsNotificationSetting = useCallback(
     (patch: Partial<OsNotificationSettings>) => {
@@ -187,6 +195,8 @@ export function ReleasePanel() {
   const updateErrorMessage = updateState.lastError
     ? t(updateErrorTranslationKey(updateState.lastError))
     : null;
+  const updateBusy = updateState.status === 'checking' || updateState.status === 'downloading';
+  const updateReadyToRestart = updateState.status === 'ready_to_restart';
 
   return (
     <Card className='min-w-0 space-y-5'>
@@ -208,7 +218,35 @@ export function ReleasePanel() {
             </div>
           </Notice>
         ) : null}
-        {updateState.availableVersion ? (
+        {updateReadyToRestart && !restartPromptDismissed ? (
+          <Notice tone='warning'>
+            <div className='space-y-3'>
+              <div className='space-y-1'>
+                <p className='font-semibold'>{t('settings:release.update.ready')}</p>
+                <p>{t('settings:release.update.readyDescription')}</p>
+                <small>{t('settings:release.update.restartWarning')}</small>
+              </div>
+              <SettingsActionRow>
+                <Button
+                  type='button'
+                  onClick={() => void restartAndInstall()}
+                  disabled={!pendingUpdate}
+                >
+                  <Power className='size-4' aria-hidden='true' />
+                  {t('settings:release.update.restartNow')}
+                </Button>
+                <Button
+                  variant='secondary'
+                  type='button'
+                  onClick={() => setRestartPromptDismissed(true)}
+                >
+                  {t('settings:release.update.later')}
+                </Button>
+              </SettingsActionRow>
+            </div>
+          </Notice>
+        ) : null}
+        {updateState.availableVersion && !updateReadyToRestart ? (
           <Notice tone='accent'>
             {t('settings:release.update.available', { version: updateState.availableVersion })}
           </Notice>
@@ -217,21 +255,33 @@ export function ReleasePanel() {
           <Button
             variant='secondary'
             type='button'
-            disabled={updateState.status === 'checking' || updateState.status === 'downloading'}
+            disabled={updateBusy}
             onClick={() => void checkForUpdate()}
           >
             <RefreshCw className='size-4' aria-hidden='true' />
             {t('settings:release.update.check')}
           </Button>
-          <Button
-            variant='secondary'
-            type='button'
-            disabled={!pendingUpdate || updateState.status === 'downloading'}
-            onClick={() => void installUpdate()}
-          >
-            <Download className='size-4' aria-hidden='true' />
-            {t('settings:release.update.install')}
-          </Button>
+          {updateReadyToRestart ? (
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={!pendingUpdate}
+              onClick={() => void restartAndInstall()}
+            >
+              <Power className='size-4' aria-hidden='true' />
+              {t('settings:release.update.restartNow')}
+            </Button>
+          ) : (
+            <Button
+              variant='secondary'
+              type='button'
+              disabled={!pendingUpdate || updateBusy}
+              onClick={() => void downloadUpdate()}
+            >
+              <Download className='size-4' aria-hidden='true' />
+              {t('settings:release.update.install')}
+            </Button>
+          )}
         </SettingsActionRow>
       </section>
 
