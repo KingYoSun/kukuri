@@ -2967,6 +2967,7 @@ dependencies = [
  "axum",
  "chrono",
  "kukuri-cn-core",
+ "kukuri-cn-operator",
  "kukuri-core",
  "redis",
  "reqwest 0.13.4",

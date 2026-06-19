@@ -108,6 +108,27 @@ manifest:
     does_not_apply_to: null   # 未指定なら安全な default
 ```
 
+## public manifest endpoint（#356）
+
+稼働中の community node (`cn-user-api`) は、生成した manifest を unauthenticated な
+public endpoint から配信できる。`COMMUNITY_NODE_OPERATOR_CONFIG` に `operator-config.yaml`
+のパスを設定すると、起動時に config を読み込み・検証して `CommunityNodeManifest` を構築し、
+以下で配信する。
+
+```text
+GET /.well-known/kukuri/community-node.json
+GET /v1/node/manifest
+```
+
+- unauthenticated で取得できる。`cn-operator` と同じ生成ロジック・型を共有するため、
+  生成文書の `server-manifest.json` と endpoint response の schema drift が起きない。
+- `Cache-Control: public, max-age=300` を付与し、client が cache できる。
+- private secret / provider credential は含まれない（manifest は operator config 由来で
+  秘密情報を持たない）。
+- `COMMUNITY_NODE_OPERATOR_CONFIG` 未設定なら両 endpoint は `404`（`{"error":"manifest_not_configured"}`）。
+  この場合 client は default node / kukuri project へ fallback せず、別 node または直接 P2P 経路を使う。
+- config を指しているのに読込・検証に失敗した場合は起動時に失敗する（設定ミスを黙って無視しない）。
+
 ## 決定論性と CI
 
 出力は wall-clock に依存せず、version は config 由来（`manifest.manifest_version`）。
