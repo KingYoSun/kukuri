@@ -1,5 +1,6 @@
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
+import type { DownloadEvent } from '@tauri-apps/plugin-updater';
 
 import packageJson from '../../package.json';
 
@@ -7,7 +8,8 @@ import { isTauriRuntime, type UpdateState } from '@/lib/releaseReadiness';
 
 export type PendingUpdate = {
   version: string;
-  downloadAndInstall: (onEvent?: (event: unknown) => void) => Promise<void>;
+  download: (onEvent?: (event: DownloadEvent) => void) => Promise<void>;
+  install: () => Promise<void>;
 };
 
 export const INITIAL_UPDATE_STATE: UpdateState = {
@@ -32,7 +34,8 @@ export type AppUpdateStore = {
   updateState: UpdateState;
   pendingUpdate: PendingUpdate | null;
   checkForUpdate: () => Promise<void>;
-  installUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  restartAndInstall: () => Promise<void>;
 };
 
 export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
@@ -80,7 +83,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
       }));
     }
   },
-  installUpdate: async () => {
+  downloadUpdate: async () => {
     const { pendingUpdate, checkForUpdate } = get();
     if (!pendingUpdate) {
       await checkForUpdate();
@@ -96,14 +99,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
       },
     }));
     try {
-      await pendingUpdate.downloadAndInstall((event) => {
-        if (!event || typeof event !== 'object' || !('event' in event)) {
-          return;
-        }
-        const downloadEvent = event as {
-          event: string;
-          data?: { chunkLength?: number; contentLength?: number };
-        };
+      await pendingUpdate.download((downloadEvent) => {
         set((state) => {
           if (downloadEvent.event === 'Started') {
             return {
@@ -133,6 +129,19 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
           lastError: null,
         },
       }));
+    } catch (error) {
+      set((state) => ({
+        updateState: updateStateFromError(state.updateState.currentVersion, error),
+      }));
+    }
+  },
+  restartAndInstall: async () => {
+    const { pendingUpdate, updateState } = get();
+    if (!pendingUpdate || updateState.status !== 'ready_to_restart') {
+      return;
+    }
+    try {
+      await pendingUpdate.install();
     } catch (error) {
       set((state) => ({
         updateState: updateStateFromError(state.updateState.currentVersion, error),

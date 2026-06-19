@@ -205,6 +205,11 @@
       "check": "Check",
       "install": "Install",
       "available": "Update {{version}} is available.",
+      "ready": "Update ready to install",
+      "readyDescription": "The update has been downloaded and verified. Restart to finish installing.",
+      "restartNow": "Restart and install now",
+      "later": "Later",
+      "restartWarning": "Unsent drafts or text you're editing may be lost on restart. Save them first.",
       "errors": {
         "network": "Could not connect to the update server. Check your network connection and try again.",
         "manifest": "Could not fetch or read the update information. Check the release publication state and try again.",
