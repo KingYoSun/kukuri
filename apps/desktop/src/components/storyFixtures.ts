@@ -6,6 +6,7 @@ import type {
   TopicDiagnosticSummary,
 } from '@/components/core/types';
 import type { PrimarySection } from '@/components/shell/types';
+import type { ContentProvenance } from '@/lib/api';
 import i18n from '@/i18n';
 import { formatLocalizedTime } from '@/i18n/format';
 
@@ -83,6 +84,28 @@ const timelineRootPost = {
   my_reactions: [],
 };
 
+// 正本は author docs だが、community index 経由で観測したことを示す provenance 例。
+// truth source ではなく観測経路として community node を表す。
+export const STORY_INDEX_PROVENANCE: ContentProvenance = {
+  canonicalSource: 'author_docs',
+  observedVia: [
+    {
+      nodeBaseUrl: 'https://node.example',
+      capability: 'community_index',
+      nodeRole: 'community-node',
+      manifestVersion: 'v1',
+    },
+  ],
+  responsibleReportTargets: [
+    {
+      nodeBaseUrl: 'https://node.example',
+      capability: 'community_index',
+      reportEndpoint: 'https://node.example/v1/report',
+      abuseContact: 'abuse@node.example',
+    },
+  ],
+};
+
 export function createStoryTimelinePosts(): PostCardView[] {
   return [
     {
@@ -93,6 +116,7 @@ export function createStoryTimelinePosts(): PostCardView[] {
       relationshipLabel: i18n.t('common:relationships.mutual'),
       audienceChipLabel: i18n.t('common:audience.public'),
       threadTargetId: 'timeline-post-1',
+      provenance: STORY_INDEX_PROVENANCE,
       media: {
         objectId: 'timeline-post-1',
         kind: null,

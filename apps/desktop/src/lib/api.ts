@@ -1,3 +1,4 @@
 export * from './api/types';
+export * from './api/provenance';
 export { getDesktopStartupStatus } from './api/startupStatus';
 export { runtimeApi } from './api/commands/runtimeApi';

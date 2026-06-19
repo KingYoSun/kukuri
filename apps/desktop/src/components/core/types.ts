@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-import type { AuthorSocialView, ChannelAudienceKind, PostView } from '@/lib/api';
+import type { AuthorSocialView, ChannelAudienceKind, ContentProvenance, PostView } from '@/lib/api';
 
 export type TopicChannelSummary = {
   channelId: string;
@@ -62,6 +62,9 @@ export type PostMediaView = {
   videoPlaybackSrc?: string | null;
   videoUnsupportedOnClient: boolean;
   videoProps?: React.VideoHTMLAttributes<HTMLVideoElement>;
+  // どの source を正本とし、どの community node capability（media_cache 等）経由で
+  // 観測したか。media cache 由来の通報ルーティングに使う。
+  provenance?: ContentProvenance;
 };
 
 export type ReferencedAuthorMeta = {
@@ -107,6 +110,9 @@ export type PostCardView = {
   replyParentAuthor?: ReferencedAuthorMeta | null;
   suppressReplyPreview?: boolean;
   mentionAuthors?: Record<string, MentionAuthorView>;
+  // 正本（通常は author_docs）と、index / moderation / cache 等の観測経路を分離して保持する。
+  // 通報ルーティング（#310）・content details・default node boundary 説明に使う。
+  provenance?: ContentProvenance;
 };
 
 export type ThreadPanelState = {
@@ -136,4 +142,7 @@ export type AuthorDetailView = {
   summary: AuthorRelationshipSummary | null;
   canMessage?: boolean;
   authorError?: string | null;
+  // profile の canonical source は author_docs。community node はあくまで観測経路であり
+  // truth source ではないことを provenance で表す。
+  provenance?: ContentProvenance;
 };
