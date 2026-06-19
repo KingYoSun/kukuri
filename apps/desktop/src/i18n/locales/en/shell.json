@@ -131,5 +131,61 @@
     "communityNodeUnavailableBody": "A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "View Scope"
+  },
+  "report": {
+    "title": "Report content",
+    "boundaryNotice": "This report is sent to a specific community node, not to the kukuri network as a whole.",
+    "boundaryDetail": "The target node is one that actually indexed, moderated, cached, or recommended this content. kukuri has no central abuse intake.",
+    "identityBoundaryNote": "Your identity, profile, and social graph are not owned by any node and are not handed over for this report.",
+    "subject": {
+      "post": "Post",
+      "profile": "Profile",
+      "media": "Media",
+      "search_result": "Search result",
+      "recommendation": "Recommendation"
+    },
+    "targetsHeading": "Send to",
+    "capability": {
+      "community_index": "Community index",
+      "moderation": "Moderation",
+      "trust_signal": "Trust signal",
+      "media_cache": "Media cache",
+      "recommendation": "Recommendation",
+      "relay_assist": "Relay assist",
+      "bootstrap_assist": "Bootstrap assist"
+    },
+    "contact": {
+      "endpoint": "Submitted to the node report endpoint",
+      "mailto": "Abuse contact: {{contact}}"
+    },
+    "openPolicy": "View node policy",
+    "reasonLabel": "Reason",
+    "reasons": {
+      "spam": "Spam",
+      "harassment": "Harassment",
+      "csam": "Child sexual abuse material (CSAM)",
+      "sexual_exploitation": "Sexual exploitation",
+      "malware": "Malware",
+      "phishing": "Phishing",
+      "illegal": "Other illegal content",
+      "other": "Other"
+    },
+    "criticalSafetyNote": "Critical safety reports are routed to the responsible node. Do not attach or redistribute the material itself; describe it instead.",
+    "detailsLabel": "Details (optional)",
+    "detailsPlaceholder": "Describe the problem. Do not paste the offending material.",
+    "reporterContactLabel": "Your contact (optional)",
+    "reporterContactPlaceholder": "Email or handle the node can use to follow up",
+    "reporterContactHint": "Only shared if you enter it. Leave blank to report anonymously.",
+    "submit": "Send report",
+    "submitting": "Sending…",
+    "copyContact": "Copy abuse contact",
+    "success": "Report sent to the community node.",
+    "referenceId": "Reference: {{id}}",
+    "unknownTitle": "Cannot determine a report target",
+    "unknownBody": "It is not clear which node or source surfaced this content, so there is no responsible community node to report to.",
+    "observedUnresolvedTitle": "No reachable report target",
+    "observedUnresolvedBody": "A node surfaced this content but its manifest or report contact is unavailable, so the report cannot be routed.",
+    "localActionsHint": "You can still block, mute, or hide this locally.",
+    "actionLabel": "Report"
   }
 }

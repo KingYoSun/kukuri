@@ -33,7 +33,9 @@
     "save": "保存",
     "unmute": "ミュート解除",
     "unfollow": "フォロー解除",
-    "zoom": "拡大率"
+    "zoom": "拡大率",
+    "close": "閉じる",
+    "report": "通報"
   },
   "composer": {
     "clearQuoteRepost": "引用リポストをクリア",

@@ -23,6 +23,7 @@ mod config_support;
 mod http_client_support;
 mod manifest_support;
 mod reconnect_support;
+mod report_routing_support;
 mod requests_support;
 mod session_runtime_support;
 mod session_state_support;
@@ -33,6 +34,10 @@ pub(crate) use http_client_support::*;
 pub use manifest_support::{
     CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
     CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,
+};
+pub use report_routing_support::{
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    SubmitCommunityNodeReportStatus,
 };
 pub(crate) use token_storage_support::*;
 

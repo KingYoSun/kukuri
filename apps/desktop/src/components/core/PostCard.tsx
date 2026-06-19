@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bookmark, Link2, Reply, Repeat2 } from 'lucide-react';
+import { Bookmark, Flag, Link2, Reply, Repeat2 } from 'lucide-react';
 
 import { formatLocalizedTime } from '@/i18n/format';
 import type {
   BookmarkedCustomReactionView,
+  CommunityNodeManifest,
   CustomReactionAssetView,
   ReactionKeyInput,
   ReactionKeyView,
   RecentReactionView,
+  SubmitCommunityNodeReportRequest,
+  SubmitCommunityNodeReportResult,
 } from '@/lib/api';
+import { planReportRouting } from '@/lib/api/reportRouting';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
   buildPostLink,
@@ -28,6 +32,7 @@ import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
+import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
 import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
 import { type PostCardView } from './types';
@@ -69,6 +74,15 @@ type PostCardProps = {
   onActivateReference?: (reference: InternalSmartReference) => void;
   onCopyLink?: (link: string) => void;
   isFocused?: boolean;
+  // 分散通報ルーティング（#310）。取得済み community node manifest（ok のみ）。
+  // 通報先は post の provenance（観測経路）と突き合わせて解決する。
+  communityNodeManifests?: Record<string, CommunityNodeManifest>;
+  // 解決済みの通報先 node へ通報を送信する。未指定なら通報導線を表示しない。
+  onSubmitReport?: (
+    request: SubmitCommunityNodeReportRequest
+  ) => Promise<SubmitCommunityNodeReportResult>;
+  // abuse contact（endpoint 無し node）の案内用コピー。
+  onCopyReportContact?: (value: string) => void;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -107,10 +121,14 @@ export function PostCard({
   onActivateReference,
   onCopyLink,
   isFocused = false,
+  communityNodeManifests = {},
+  onSubmitReport,
+  onCopyReportContact,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -170,6 +188,34 @@ export function PostCard({
       return;
     }
     onOpenThread(view.threadTargetId);
+  };
+
+  // 通報先は post の provenance（観測経路）と取得済み manifest から解決する。
+  // provenance 不明 / 通報先未解決でも dialog は開き、local action のみ案内する。
+  const reportPlan = useMemo(
+    () => planReportRouting(view.provenance, communityNodeManifests),
+    [view.provenance, communityNodeManifests]
+  );
+  const showReportAction = Boolean(onSubmitReport);
+
+  const handleSubmitReport = async (
+    input: ReportSubmitInput
+  ): Promise<SubmitCommunityNodeReportResult> => {
+    if (!onSubmitReport) {
+      throw new Error('report submission is not available');
+    }
+    const { candidate, reason, details, reporterContact } = input;
+    const request: SubmitCommunityNodeReportRequest = {
+      node_base_url: candidate.target.nodeBaseUrl,
+      report_endpoint: candidate.target.reportEndpoint ?? '',
+      subject_kind: 'post',
+      subject_id: post.object_id,
+      capability: candidate.target.capability,
+      reason,
+      details: details.trim() ? details.trim() : null,
+      reporter_contact: reporterContact.trim() ? reporterContact.trim() : null,
+    };
+    return onSubmitReport(request);
   };
 
   const reactionMenuItems = useMemo(() => {
@@ -635,6 +681,18 @@ export function PostCard({
                 />
               </Button>
             ) : null}
+            {showReportAction ? (
+              <Button
+                variant='secondary'
+                size='icon'
+                className='post-action-button'
+                type='button'
+                aria-label={t('report.actionLabel', { ns: 'shell' })}
+                onClick={() => setReportDialogOpen(true)}
+              >
+                <Flag className='size-4' aria-hidden='true' />
+              </Button>
+            ) : null}
           </>
         )}
       </div>
@@ -655,6 +713,16 @@ export function PostCard({
           setReactionMenuPosition(null);
         }}
       />
+      {showReportAction && onSubmitReport ? (
+        <ReportRoutingDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          subject={{ kind: 'post', id: post.object_id, label: view.authorLabel }}
+          plan={reportPlan}
+          onSubmit={handleSubmitReport}
+          onCopyContact={onCopyReportContact}
+        />
+      ) : null}
     </article>
   );
 }

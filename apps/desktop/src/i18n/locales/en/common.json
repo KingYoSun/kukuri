@@ -33,7 +33,9 @@
     "save": "Save",
     "unmute": "Unmute",
     "unfollow": "Unfollow",
-    "zoom": "Zoom"
+    "zoom": "Zoom",
+    "close": "Close",
+    "report": "Report"
   },
   "composer": {
     "clearQuoteRepost": "Clear quote repost",

@@ -24,6 +24,10 @@ pub struct CommunityNodeManifest {
     pub p2p_boundary: CommunityNodeP2pBoundary,
     #[serde(default)]
     pub abuse_contact: String,
+    /// node が公開する通報受付 endpoint（#310）。未公開の場合は空文字。
+    /// client は空なら `abuse_contact` を mailto / copyable contact として案内する。
+    #[serde(default)]
+    pub report_endpoint: String,
     #[serde(default)]
     pub terms_url: String,
     #[serde(default)]
@@ -146,6 +150,7 @@ mod tests {
             "network_wide_authority": false
         },
         "abuse_contact": "abuse@example-kukuri.net",
+        "report_endpoint": "https://example-kukuri.net/v1/report",
         "terms_url": "https://example-kukuri.net/terms"
     }"#;
 
@@ -166,6 +171,17 @@ mod tests {
         );
         assert!(!manifest.p2p_boundary.network_wide_authority);
         assert_eq!(manifest.abuse_contact, "abuse@example-kukuri.net");
+        assert_eq!(
+            manifest.report_endpoint,
+            "https://example-kukuri.net/v1/report"
+        );
+    }
+
+    #[test]
+    fn report_endpoint_defaults_to_empty_when_absent() {
+        // report endpoint 未公開の node（Phase A）でも壊れず、空文字になる。
+        let manifest: CommunityNodeManifest = serde_json::from_str("{}").unwrap();
+        assert_eq!(manifest.report_endpoint, "");
     }
 
     #[test]

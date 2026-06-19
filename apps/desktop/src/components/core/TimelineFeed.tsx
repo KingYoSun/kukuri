@@ -4,9 +4,12 @@ import { useTranslation } from 'react-i18next';
 
 import type {
   BookmarkedCustomReactionView,
+  CommunityNodeManifest,
   CustomReactionAssetView,
   ReactionKeyInput,
   RecentReactionView,
+  SubmitCommunityNodeReportRequest,
+  SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import type { InternalSmartReference } from '@/lib/internalLinks';
 
@@ -50,6 +53,12 @@ type TimelineFeedProps = {
   onLoadMore?: () => void;
   pendingCount?: number;
   onApplyPending?: () => void;
+  // 分散通報ルーティング（#310）。取得済み community node manifest（ok のみ）と送信導線。
+  communityNodeManifests?: Record<string, CommunityNodeManifest>;
+  onSubmitReport?: (
+    request: SubmitCommunityNodeReportRequest
+  ) => Promise<SubmitCommunityNodeReportResult>;
+  onCopyReportContact?: (value: string) => void;
 };
 
 export function TimelineFeed({
@@ -86,6 +95,9 @@ export function TimelineFeed({
   onLoadMore,
   pendingCount = 0,
   onApplyPending,
+  communityNodeManifests,
+  onSubmitReport,
+  onCopyReportContact,
 }: TimelineFeedProps) {
   const { t } = useTranslation('common');
   const { sentinelRef: loadMoreRef, canAutoLoad } = useInfiniteScrollSentinel({
@@ -191,6 +203,9 @@ export function TimelineFeed({
             onActivateReference={onActivateReference}
             onCopyLink={onCopyPostLink}
             isFocused={focusedPostObjectId === view.post.object_id}
+            communityNodeManifests={communityNodeManifests}
+            onSubmitReport={onSubmitReport}
+            onCopyReportContact={onCopyReportContact}
           />
         </li>
       ))}

@@ -126,5 +126,61 @@
     "communityNodeUnavailableBody": "已配置的 community node 当前不可用。客户端会继续启动，direct P2P 连接仍然可用。",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "查看范围"
+  },
+  "report": {
+    "title": "举报内容",
+    "boundaryNotice": "此举报将发送到特定的社区节点，而非整个 kukuri 网络。",
+    "boundaryDetail": "目标节点是实际参与了该内容的索引、审核、缓存或推荐的节点。kukuri 没有中央举报入口。",
+    "identityBoundaryNote": "你的身份、资料与社交关系不属于任何节点，也不会因此举报而交给节点。",
+    "subject": {
+      "post": "帖子",
+      "profile": "资料",
+      "media": "媒体",
+      "search_result": "搜索结果",
+      "recommendation": "推荐"
+    },
+    "targetsHeading": "发送至",
+    "capability": {
+      "community_index": "社区索引",
+      "moderation": "审核",
+      "trust_signal": "信任信号",
+      "media_cache": "媒体缓存",
+      "recommendation": "推荐",
+      "relay_assist": "中继协助",
+      "bootstrap_assist": "引导协助"
+    },
+    "contact": {
+      "endpoint": "已提交到节点举报端点",
+      "mailto": "滥用联系方式：{{contact}}"
+    },
+    "openPolicy": "查看节点政策",
+    "reasonLabel": "原因",
+    "reasons": {
+      "spam": "垃圾信息",
+      "harassment": "骚扰",
+      "csam": "儿童性虐待内容 (CSAM)",
+      "sexual_exploitation": "性剥削",
+      "malware": "恶意软件",
+      "phishing": "网络钓鱼",
+      "illegal": "其他违法内容",
+      "other": "其他"
+    },
+    "criticalSafetyNote": "严重安全举报会被路由到负责的节点。请勿附加或转发该内容本身，只需描述。",
+    "detailsLabel": "详情（可选）",
+    "detailsPlaceholder": "描述问题。请勿粘贴违规内容本身。",
+    "reporterContactLabel": "你的联系方式（可选）",
+    "reporterContactPlaceholder": "节点可用于跟进的邮箱或账号",
+    "reporterContactHint": "仅在你填写时才会共享。如需匿名举报请留空。",
+    "submit": "发送举报",
+    "submitting": "发送中…",
+    "copyContact": "复制滥用联系方式",
+    "success": "已向社区节点发送举报。",
+    "referenceId": "受理编号：{{id}}",
+    "unknownTitle": "无法确定举报对象",
+    "unknownBody": "无法确定该内容是经由哪个节点或来源显示的，因此没有可举报的负责社区节点。",
+    "observedUnresolvedTitle": "没有可达的举报对象",
+    "observedUnresolvedBody": "有节点显示了该内容，但其 manifest 或举报联系方式不可用，因此无法路由举报。",
+    "localActionsHint": "你仍可在本地屏蔽、静音或隐藏。",
+    "actionLabel": "举报"
   }
 }

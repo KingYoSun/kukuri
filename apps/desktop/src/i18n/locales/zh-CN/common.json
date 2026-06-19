@@ -28,7 +28,9 @@
     "rotate": "轮换",
     "save": "保存",
     "unmute": "取消静音",
-    "unfollow": "取消关注"
+    "unfollow": "取消关注",
+    "close": "关闭",
+    "report": "举报"
   },
   "composer": {
     "clearQuoteRepost": "清除引用转发",
