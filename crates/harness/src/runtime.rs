@@ -100,6 +100,7 @@ impl CommunityNodeStack {
             public_base_url: base_url.clone(),
             connectivity_urls: vec![iroh_relay_url.clone()],
             jwt_config: JwtConfig::new("kukuri-cn-harness", "test-secret", 3600),
+            operator_config_path: None,
         })
         .await
         .context("failed to build community-node user-api state")?;

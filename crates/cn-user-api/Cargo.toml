@@ -22,6 +22,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 kukuri-cn-core = { path = "../cn-core" }
+kukuri-cn-operator = { path = "../cn-operator" }
 
 [dev-dependencies]
 kukuri-core = { path = "../core" }

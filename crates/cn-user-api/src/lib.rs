@@ -1,8 +1,11 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::extract::State;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use kukuri_cn_core::{
@@ -17,6 +20,7 @@ use kukuri_cn_core::{
     require_bearer_identity, require_bearer_pubkey, require_consents,
     verify_auth_envelope_and_issue_token,
 };
+use kukuri_cn_operator::{CommunityNodeManifest, build_manifest, load_and_validate};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
@@ -32,6 +36,15 @@ pub struct UserApiState {
     rendezvous_store: TopicRendezvousStore,
     jwt_config: JwtConfig,
     self_node: CommunityNodeBootstrapNode,
+    /// 公開する manifest（operator config が設定されている場合のみ）。
+    manifest: Option<Arc<CommunityNodeManifest>>,
+}
+
+/// public manifest endpoint 用の最小 state。DB を必要としないため、
+/// manifest 単独でテスト・配信できる。
+#[derive(Clone)]
+struct ManifestState {
+    manifest: Option<Arc<CommunityNodeManifest>>,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +57,9 @@ pub struct UserApiConfig {
     pub public_base_url: String,
     pub connectivity_urls: Vec<String>,
     pub jwt_config: JwtConfig,
+    /// 公開 manifest を生成する operator-config.yaml のパス。
+    /// 未設定なら manifest endpoint は 404 を返す（client は別 node / 直接 P2P へ fallback）。
+    pub operator_config_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +121,10 @@ impl UserApiConfig {
         )?;
         let connectivity_urls =
             normalize_http_url_list(parse_csv_env("COMMUNITY_NODE_CONNECTIVITY_URLS"))?;
+        let operator_config_path = std::env::var("COMMUNITY_NODE_OPERATOR_CONFIG")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from);
         Ok(Self {
             bind_addr,
             database_url,
@@ -114,6 +134,7 @@ impl UserApiConfig {
             public_base_url,
             connectivity_urls,
             jwt_config: JwtConfig::from_env()?,
+            operator_config_path,
         })
     }
 }
@@ -226,6 +247,7 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
         config.rendezvous_redis_url.as_str(),
         config.rendezvous_key_prefix.as_str(),
     )?;
+    let manifest = load_manifest(config.operator_config_path.as_deref())?;
     Ok(UserApiState {
         pool,
         rendezvous_store,
@@ -238,11 +260,28 @@ async fn build_state_from_pool(config: &UserApiConfig, pool: PgPool) -> Result<U
                 Vec::new(),
             )?,
         },
+        manifest,
     })
 }
 
+/// operator config から公開 manifest を構築する。
+///
+/// config が指定されているのに読込・検証に失敗した場合は起動を失敗させる
+/// （運営者の設定ミスを黙って無視せず、明示的に止める）。
+fn load_manifest(path: Option<&std::path::Path>) -> Result<Option<Arc<CommunityNodeManifest>>> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let yaml = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read operator config at {}", path.display()))?;
+    let resolved = load_and_validate(&yaml)
+        .with_context(|| format!("invalid operator config at {}", path.display()))?;
+    Ok(Some(Arc::new(build_manifest(&resolved))))
+}
+
 pub fn app_router(state: UserApiState) -> Router {
-    Router::new()
+    let manifest = manifest_routes(state.manifest.clone());
+    let api = Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/auth/challenge", post(auth_challenge))
         .route("/v1/auth/verify", post(auth_verify))
@@ -254,8 +293,46 @@ pub fn app_router(state: UserApiState) -> Router {
             "/v1/rendezvous/topics/heartbeat",
             post(topic_rendezvous_heartbeat),
         )
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .with_state(state);
+    api.merge(manifest).layer(TraceLayer::new_for_http())
+}
+
+/// 公開 manifest endpoint。unauthenticated で取得できる。
+///
+/// `GET /.well-known/kukuri/community-node.json` と `GET /v1/node/manifest` の
+/// 両方を同じ handler で提供する。manifest 単独でテスト・配信できるよう、DB を
+/// 必要としない最小 state を持つ独立 router にしている。
+pub fn manifest_routes(manifest: Option<Arc<CommunityNodeManifest>>) -> Router {
+    Router::new()
+        .route(
+            "/.well-known/kukuri/community-node.json",
+            get(node_manifest),
+        )
+        .route("/v1/node/manifest", get(node_manifest))
+        .with_state(ManifestState { manifest })
+}
+
+/// public manifest を返す。設定されていなければ 404（client は別経路へ fallback）。
+async fn node_manifest(State(state): State<ManifestState>) -> Response {
+    match state.manifest {
+        Some(manifest) => {
+            let mut response = Json(manifest.as_ref()).into_response();
+            // client が安全に cache できるようにする（private secret は含まれない）。
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=300"),
+            );
+            response
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": "manifest_not_configured",
+                "message": "this community node does not publish a manifest"
+            })),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn run_from_env() -> Result<()> {
