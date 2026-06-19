@@ -13,6 +13,7 @@
 //!   による明示承認がなければ検証で失敗する。
 
 pub mod capability;
+pub mod capability_risk;
 pub mod config;
 pub mod docs;
 pub mod drift;
@@ -20,6 +21,7 @@ pub mod manifest;
 pub mod profile;
 
 pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestination};
+pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
     OperatorConfig, ResolvedConfig, RetentionConfig, ServerConfig, load_and_validate, parse_config,
     resolve_and_validate,

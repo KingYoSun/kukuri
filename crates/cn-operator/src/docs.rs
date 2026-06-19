@@ -472,6 +472,81 @@ fn gen_prior_consultation_email(config: &ResolvedConfig) -> String {
     s
 }
 
+/// capability 別リスクと推奨対応ガイド（#359）。
+///
+/// 個人・小規模運営を discourage しない。各 capability の性質・責任範囲・リスク・推奨対応を
+/// 示し、限定された責任範囲で現実的に運用できるようにする。有効 capability を実践ガイドとして、
+/// 無効 capability を「引き受けていない責務」として記述する。
+fn gen_capability_risk_and_practices(config: &ResolvedConfig) -> String {
+    let mut s = header(config, "Capability 別リスクと推奨対応ガイド（ドラフト）");
+
+    let _ = writeln!(
+        s,
+        "\nkukuri は、コミュニティ基盤の運営を企業だけが担うものとは考えない。\
+         このガイドは、個人・小規模グループが各 capability の性質を理解し、\
+         限定された責任範囲で現実的に運用するための実践的なガイドである。\n"
+    );
+    let _ = writeln!(
+        s,
+        "各 capability は authority scope（責任を主張する範囲）と responsibility boundary\
+         （引き受けない範囲）を持つ。これらは `docs/architecture/p2p-first-community-node-responsibility-boundary.md`\
+         の責任境界と整合する。\n"
+    );
+
+    let _ = writeln!(s, "## 有効化している capability\n");
+    let enabled = config.enabled_capabilities();
+    for cap in &enabled {
+        write_capability_risk_section(&mut s, *cap);
+    }
+
+    // 無効 capability は「引き受けていない責務」として一覧する。
+    let disabled = config.disabled_capabilities();
+    if !disabled.is_empty() {
+        let _ = writeln!(s, "## 引き受けていない責務（無効な capability）\n");
+        let _ = writeln!(
+            s,
+            "以下の capability は無効であり、本ノードはこれらに関する責務を引き受けていない。\n"
+        );
+        for cap in disabled {
+            let m = cap.meta();
+            let _ = writeln!(s, "- **{}**: {}", m.display_name, m.purpose);
+        }
+        s.push('\n');
+    }
+
+    s
+}
+
+/// 1 capability 分のリスク・推奨対応セクションを書き出す。
+fn write_capability_risk_section(s: &mut String, cap: Capability) {
+    let m = cap.meta();
+    let rp = cap.risk_practices();
+    let availability = match cap.availability() {
+        Availability::Available => "提供中（Phase A）",
+        Availability::Planned => "計画中・未提供（Phase B）",
+    };
+
+    let _ = writeln!(s, "### {}（{}）\n", m.display_name, availability);
+    let _ = writeln!(s, "- 機能: {}", m.purpose);
+    let _ = writeln!(s, "- 取り扱うデータ: {}", m.handled_data);
+    let _ = writeln!(s, "- user の期待: {}", rp.user_expectation);
+    let _ = writeln!(s, "- authority scope: {}", rp.authority_scope);
+    let _ = writeln!(s, "- 引き受けない範囲: {}", rp.responsibility_boundary);
+    let _ = writeln!(s, "- 保持への影響: {}", m.retention_impact);
+
+    let _ = writeln!(s, "- 想定リスク:");
+    for risk in rp.risks {
+        let _ = writeln!(s, "  - {risk}");
+    }
+    let _ = writeln!(s, "- 推奨対応:");
+    for practice in rp.recommended_practices {
+        let _ = writeln!(s, "  - {practice}");
+    }
+    let _ = writeln!(s, "- 小規模運営の tips: {}", rp.small_scale_tips);
+    let _ = writeln!(s, "- scope を狭める / 無効化: {}", rp.how_to_reduce);
+    s.push('\n');
+}
+
 // ---------------------------------------------------------------------------
 // 集約
 // ---------------------------------------------------------------------------
@@ -522,6 +597,10 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
         GeneratedFile {
             filename: "prior-consultation-email.md".to_string(),
             content: gen_prior_consultation_email(config),
+        },
+        GeneratedFile {
+            filename: "capability-risk-and-practices.md".to_string(),
+            content: gen_capability_risk_and_practices(config),
         },
     ];
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
