@@ -107,10 +107,11 @@ impl Capability {
 
     pub fn availability(self) -> Availability {
         match self {
+            // index / moderation / local trust は未実装（spec のみ）。
             Capability::CommunityIndex
             | Capability::Moderation
-            | Capability::CommunityLocalTrust
-            | Capability::ReportEndpoint => Availability::Planned,
+            | Capability::CommunityLocalTrust => Availability::Planned,
+            // report endpoint は #370 で実装済み（POST /v1/report・保存・運営者確認導線）。
             _ => Availability::Available,
         }
     }
@@ -279,13 +280,13 @@ impl Capability {
             Capability::ReportEndpoint => CapabilityMeta {
                 capability: self,
                 display_name: "通報エンドポイント (report endpoint)",
-                handled_data: "（計画）通報内容、通報者の連絡先（任意）",
-                purpose: "（計画）本ノードが関与した対象に対する通報の受付",
-                retention_impact: "（計画）通報データ保持期間に従う",
+                handled_data: "通報内容（対象・理由・任意の補足）、通報者の連絡先（任意）",
+                purpose: "本ノードが関与した対象に対する通報の受付（POST /v1/report）",
+                retention_impact: "通報データは通報保持ポリシーに従って保持される",
                 external_transmission: None,
-                telecom_note: "（計画）通報受付はノードの authority scope 内に限定される。",
-                privacy_note: "（計画）通報データの扱いを実装時に明記する。",
-                terms_note: "（計画）通報は本ノードが関与した対象に限定され、中央通報窓口ではない旨を記載する。",
+                telecom_note: "通報受付はノードの authority scope 内に限定される。",
+                privacy_note: "reporter の identity / social graph は保持せず、明示入力された連絡先のみ任意保存する。",
+                terms_note: "通報は本ノードが関与した対象に限定され、中央通報窓口ではない。",
             },
         }
     }

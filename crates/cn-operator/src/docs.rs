@@ -353,7 +353,9 @@ fn gen_abuse_policy(config: &ResolvedConfig) -> String {
     if config.enabled(Capability::ReportEndpoint) {
         let _ = writeln!(
             s,
-            "（計画中）通報エンドポイントは未実装です。実装までは上記連絡先を窓口とします。\n"
+            "通報エンドポイント `POST {}` を提供します。通報は本ノードが関与した対象に限定され、\
+             reporter の identity / social graph は保持しません。上記連絡先も引き続き窓口とします。\n",
+            config.report_endpoint()
         );
     }
     s.push_str(&planned_section(config));

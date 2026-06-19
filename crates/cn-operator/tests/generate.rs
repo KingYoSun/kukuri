@@ -94,6 +94,38 @@ fn missing_required_fields_fail() {
 }
 
 #[test]
+fn report_endpoint_emitted_and_available_when_enabled() {
+    // #370: report endpoint は実装済み（Phase A）。有効化すると manifest に絶対 URL を出力し、
+    // available_enabled（planned ではなく）に入る。
+    let yaml = base_config("  report_endpoint: true\n", true);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let manifest = build_manifest(&resolved);
+    assert_eq!(
+        manifest.report_endpoint,
+        "https://example-kukuri.net/v1/report"
+    );
+
+    let m = manifest_value(&resolved);
+    let available = m["capability_scope"]["available_enabled"]
+        .as_array()
+        .unwrap();
+    assert!(
+        available.iter().any(|v| v == "report_endpoint"),
+        "report_endpoint should be available, not planned"
+    );
+    let planned = m["capability_scope"]["planned_enabled"].as_array().unwrap();
+    assert!(planned.iter().all(|v| v != "report_endpoint"));
+}
+
+#[test]
+fn report_endpoint_absent_when_capability_disabled() {
+    // report_endpoint を有効化しない node では空文字を出力し、client は abuse_contact 案内に切替。
+    let yaml = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    assert_eq!(build_manifest(&resolved).report_endpoint, "");
+}
+
+#[test]
 fn manifest_has_authority_scope_and_p2p_boundary() {
     let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
     let m = manifest_value(&resolved);

@@ -202,6 +202,9 @@ pub struct CommunityNodeManifest {
     pub region: String,
     pub contact: String,
     pub abuse_contact: String,
+    /// 通報受付 endpoint（#370）。report_endpoint capability が有効なときの絶対 URL、
+    /// 無効なら空文字。client（#310）は空なら abuse_contact 案内に切り替える。
+    pub report_endpoint: String,
     pub terms_url: String,
     pub privacy_url: String,
     pub external_transmission_url: String,
@@ -296,6 +299,7 @@ pub fn build_manifest(config: &ResolvedConfig) -> CommunityNodeManifest {
         region: server.region.clone().unwrap_or_default(),
         contact: config.contact(),
         abuse_contact: config.contact(),
+        report_endpoint: config.report_endpoint(),
         terms_url: config.policy_url("terms"),
         privacy_url: config.policy_url("privacy"),
         external_transmission_url: config.policy_url("external-transmission"),

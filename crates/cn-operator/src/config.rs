@@ -150,6 +150,16 @@ impl ResolvedConfig {
     pub fn policy_url(&self, path: &str) -> String {
         format!("https://{}/{}", self.raw.server.domain, path)
     }
+
+    /// 通報受付 endpoint（#370）。report_endpoint capability が有効なときのみ絶対 URL を返す。
+    /// 無効なら空文字を返し、client（#310）は abuse_contact 案内に切り替える。
+    pub fn report_endpoint(&self) -> String {
+        if self.enabled(Capability::ReportEndpoint) {
+            self.policy_url("v1/report")
+        } else {
+            String::new()
+        }
+    }
 }
 
 /// YAML 文字列をパースする。
