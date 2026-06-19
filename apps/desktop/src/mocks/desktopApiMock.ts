@@ -1461,10 +1461,17 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
             network_wide_authority: false,
           },
           abuse_contact: `abuse@${baseUrl.replace(/^https?:\/\//, '')}`,
+          report_endpoint: `${baseUrl}/v1/report`,
           terms_url: `${baseUrl}/terms`,
           privacy_url: `${baseUrl}/privacy`,
           moderation_policy_url: `${baseUrl}/moderation-policy`,
         },
+      };
+    },
+    async submitCommunityNodeReport(request) {
+      return {
+        status: 'submitted',
+        reference_id: `mock-${request.subject_kind}-${request.subject_id}`,
       };
     },
     async importPeerTicket() {},

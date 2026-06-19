@@ -468,6 +468,9 @@ export type CommunityNodeManifest = {
   authority_scope: CommunityNodeAuthorityScope;
   p2p_boundary: CommunityNodeP2pBoundary;
   abuse_contact: string;
+  // node が公開する通報受付 endpoint (#310)。未公開なら空文字。
+  // client は空なら abuse_contact を mailto / copyable contact として案内する。
+  report_endpoint: string;
   terms_url: string;
   privacy_url: string;
   moderation_policy_url: string;
@@ -480,6 +483,26 @@ export type CommunityNodeManifestFetchStatus = 'ok' | 'absent';
 export type CommunityNodeManifestFetch = {
   status: CommunityNodeManifestFetchStatus;
   manifest?: CommunityNodeManifest | null;
+};
+
+// 分散通報ルーティング (#310) の送信リクエスト。通報先は client が provenance + manifest
+// から解決し、その report_endpoint を載せて渡す。snake_case は Rust 由来の JSON 形状。
+export type SubmitCommunityNodeReportRequest = {
+  node_base_url: string;
+  report_endpoint: string;
+  subject_kind: string;
+  subject_id: string;
+  capability: string;
+  reason: string;
+  details?: string | null;
+  reporter_contact?: string | null;
+};
+
+export type SubmitCommunityNodeReportStatus = 'submitted';
+
+export type SubmitCommunityNodeReportResult = {
+  status: SubmitCommunityNodeReportStatus;
+  reference_id?: string | null;
 };
 
 export type TopicSyncStatus = {
@@ -887,6 +910,9 @@ export interface DesktopApi {
   ): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
+  submitCommunityNodeReport(
+    request: SubmitCommunityNodeReportRequest
+  ): Promise<SubmitCommunityNodeReportResult>;
   importPeerTicket(ticket: string): Promise<void>;
   setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;

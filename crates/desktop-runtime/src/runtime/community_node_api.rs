@@ -327,6 +327,15 @@ impl DesktopRuntime {
             .await
     }
 
+    /// 解決済みの通報先 node へ通報を送信する（#310 の分散通報ルーティング）。
+    /// 通報先は client が provenance + manifest から解決し、その report endpoint を渡す。
+    pub async fn submit_community_node_report(
+        &self,
+        request: SubmitCommunityNodeReportRequest,
+    ) -> Result<SubmitCommunityNodeReportResult> {
+        self.request_community_node_report_submit(&request).await
+    }
+
     pub async fn reapply_community_node_connectivity(&self) -> Result<()> {
         self.force_rebuild_runtime_connectivity_assist().await?;
         self.force_apply_effective_seed_peers().await?;

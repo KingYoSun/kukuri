@@ -8,7 +8,8 @@ use kukuri_desktop_runtime::{
     ImportPeerTicketRequest, ImportPrivateChannelInviteRequest, LeavePrivateChannelRequest,
     ListJoinedPrivateChannelsRequest, PreviewChannelAccessTokenRequest,
     RotatePrivateChannelRequest, SetChannelGossipEnabledRequest, SetCommunityNodeConfigRequest,
-    SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest, UnsubscribeTopicRequest,
+    SetDiscoverySeedsRequest, SetTopicGossipEnabledRequest, SubmitCommunityNodeReportRequest,
+    SubmitCommunityNodeReportResult, UnsubscribeTopicRequest,
 };
 
 use crate::state::{DesktopState, map_error};
@@ -363,6 +364,18 @@ pub async fn fetch_community_node_manifest(
     state
         .runtime
         .fetch_community_node_manifest(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn submit_community_node_report(
+    state: tauri::State<'_, DesktopState>,
+    request: SubmitCommunityNodeReportRequest,
+) -> Result<SubmitCommunityNodeReportResult, String> {
+    state
+        .runtime
+        .submit_community_node_report(request)
         .await
         .map_err(map_error)
 }

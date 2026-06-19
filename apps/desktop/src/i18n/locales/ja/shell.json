@@ -131,5 +131,61 @@
     "communityNodeUnavailableBody": "設定済みの community node に現在接続できません。起動は継続し、direct P2P 接続は引き続き利用できます。",
     "communityNodeUnavailableTitle": "Community node unavailable",
     "viewScope": "表示範囲"
+  },
+  "report": {
+    "title": "コンテンツを通報",
+    "boundaryNotice": "この通報は kukuri network 全体ではなく、特定の community node に送信されます。",
+    "boundaryDetail": "対象 node は、この content の表示・索引・モデレーション・キャッシュ等に実際に関与した node です。kukuri に中央通報窓口はありません。",
+    "identityBoundaryNote": "あなたの identity / profile / social graph はどの node にも属さず、この通報のために node へ預けられることはありません。",
+    "subject": {
+      "post": "投稿",
+      "profile": "プロフィール",
+      "media": "メディア",
+      "search_result": "検索結果",
+      "recommendation": "おすすめ"
+    },
+    "targetsHeading": "送信先",
+    "capability": {
+      "community_index": "コミュニティ索引",
+      "moderation": "モデレーション",
+      "trust_signal": "信頼シグナル",
+      "media_cache": "メディアキャッシュ",
+      "recommendation": "おすすめ",
+      "relay_assist": "リレー補助",
+      "bootstrap_assist": "ブートストラップ補助"
+    },
+    "contact": {
+      "endpoint": "node の通報エンドポイントへ送信",
+      "mailto": "通報連絡先: {{contact}}"
+    },
+    "openPolicy": "node のポリシーを表示",
+    "reasonLabel": "理由",
+    "reasons": {
+      "spam": "スパム",
+      "harassment": "嫌がらせ",
+      "csam": "児童性的虐待コンテンツ (CSAM)",
+      "sexual_exploitation": "性的搾取",
+      "malware": "マルウェア",
+      "phishing": "フィッシング",
+      "illegal": "その他の違法コンテンツ",
+      "other": "その他"
+    },
+    "criticalSafetyNote": "critical safety の通報は責任ある node へ route されます。対象物そのものを添付・再配布せず、内容を説明してください。",
+    "detailsLabel": "詳細（任意）",
+    "detailsPlaceholder": "問題の内容を説明してください。対象物そのものは貼り付けないでください。",
+    "reporterContactLabel": "あなたの連絡先（任意）",
+    "reporterContactPlaceholder": "node が follow-up に使える email / handle",
+    "reporterContactHint": "入力した場合のみ共有されます。匿名で通報する場合は空欄のままにしてください。",
+    "submit": "通報を送信",
+    "submitting": "送信中…",
+    "copyContact": "通報連絡先をコピー",
+    "success": "community node へ通報を送信しました。",
+    "referenceId": "受付参照: {{id}}",
+    "unknownTitle": "通報先を特定できません",
+    "unknownBody": "この content がどの node / source 経由で表示されたかが不明なため、通報すべき責任ある community node がありません。",
+    "observedUnresolvedTitle": "到達可能な通報先がありません",
+    "observedUnresolvedBody": "node 経由で表示されましたが、その manifest / 通報連絡先が取得できないため、通報を route できません。",
+    "localActionsHint": "ブロック・ミュート・ローカル非表示は引き続き可能です。",
+    "actionLabel": "通報"
   }
 }

@@ -16,6 +16,8 @@ pub use community_node::{
     CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig,
     CommunityNodeNodeStatus, CommunityNodeP2pBoundary, CommunityNodeSessionPhase,
     CommunityNodeTargetRequest, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
+    SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
+    SubmitCommunityNodeReportStatus,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};
 pub use paths::resolve_db_path_from_env;

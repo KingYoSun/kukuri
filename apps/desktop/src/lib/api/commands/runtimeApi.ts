@@ -27,6 +27,7 @@ import type {
   Profile,
   ReactionStateView,
   RecentReactionView,
+  SubmitCommunityNodeReportResult,
   SyncStatus,
   TimelineView,
 } from '../types';
@@ -832,6 +833,14 @@ export const runtimeApi: DesktopApi = {
       request: {
         base_url: baseUrl,
       },
+    });
+  },
+  submitCommunityNodeReport: async (request) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.submitCommunityNodeReport(request);
+    }
+    return invokeDesktop<SubmitCommunityNodeReportResult>('submit_community_node_report', {
+      request,
     });
   },
   importPeerTicket: async (ticket) => {
