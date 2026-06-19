@@ -154,7 +154,10 @@ mod tests {
         let manifest: CommunityNodeManifest = serde_json::from_str(SAMPLE_MANIFEST).unwrap();
         assert_eq!(manifest.node_role, "default-onboarding-node");
         assert_eq!(manifest.capability_scope.available_enabled.len(), 2);
-        assert_eq!(manifest.capability_scope.planned_enabled, vec!["moderation"]);
+        assert_eq!(
+            manifest.capability_scope.planned_enabled,
+            vec!["moderation"]
+        );
         assert!(
             manifest
                 .authority_scope
