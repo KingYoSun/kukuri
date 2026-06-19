@@ -31,6 +31,7 @@ function manifest(overrides: Partial<CommunityNodeManifest> = {}): CommunityNode
       network_wide_authority: false,
     },
     abuse_contact: 'abuse@node.example',
+    report_endpoint: 'https://node.example/v1/report',
     terms_url: 'https://node.example/terms',
     privacy_url: 'https://node.example/privacy',
     moderation_policy_url: 'https://node.example/moderation-policy',

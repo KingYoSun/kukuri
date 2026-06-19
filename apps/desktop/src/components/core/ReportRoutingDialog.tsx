@@ -184,7 +184,9 @@ export function ReportRoutingDialog({
                         <span className='report-target-contact'>
                           {contact.kind === 'endpoint'
                             ? t('report.contact.endpoint')
-                            : t('report.contact.mailto', { contact: contact.value })}
+                            : contact.kind === 'contact'
+                              ? t('report.contact.mailto', { contact: contact.value })
+                              : null}
                         </span>
                         {target.policyUrl ? (
                           <a

@@ -207,6 +207,7 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
                 network_wide_authority: false,
               },
               abuse_contact: 'abuse@api.kukuri.app',
+              report_endpoint: 'https://api.kukuri.app/v1/report',
               terms_url: 'https://api.kukuri.app/terms',
               privacy_url: 'https://api.kukuri.app/privacy',
               moderation_policy_url: 'https://api.kukuri.app/moderation-policy',
