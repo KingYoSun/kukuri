@@ -7,6 +7,7 @@ mod errors;
 mod models;
 mod normalize;
 mod rendezvous;
+mod reports;
 mod rollout;
 #[cfg(test)]
 mod tests;
@@ -44,5 +45,9 @@ pub use normalize::{
 pub use rendezvous::{
     TopicRendezvousCandidate, TopicRendezvousHeartbeat, TopicRendezvousHeartbeatResponse,
     TopicRendezvousStore, TopicRendezvousTopicResponse,
+};
+pub use reports::{
+    COMMUNITY_NODE_REPORT_STATUS_RECEIVED, CommunityNodeReport, NewCommunityNodeReport,
+    get_community_node_report, insert_community_node_report, list_community_node_reports,
 };
 pub use rollout::{ensure_default_auth_rollout, load_auth_rollout, store_auth_rollout};

@@ -3,7 +3,8 @@ use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use kukuri_cn_core::{
     AuthMode, AuthRolloutConfig, COMMUNITY_NODE_AUTH_SERVICE_NAME, connect_postgres,
-    initialize_database, migrate_postgres, seed_default_policies, store_auth_rollout,
+    get_community_node_report, initialize_database, list_community_node_reports, migrate_postgres,
+    seed_default_policies, store_auth_rollout,
 };
 
 #[derive(Debug, Parser)]
@@ -30,6 +31,27 @@ enum Command {
         grace_seconds: i64,
         #[arg(long, default_value_t = 10)]
         ws_auth_timeout_seconds: i64,
+    },
+    /// 受信した通報（#370）を確認する。
+    Reports {
+        #[command(subcommand)]
+        action: ReportsAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ReportsAction {
+    /// 受信した通報を新着順で一覧する。
+    List {
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+    /// 単一の通報を ID で表示する。
+    Show {
+        #[arg(long)]
+        id: String,
     },
 }
 
@@ -88,6 +110,55 @@ async fn main() -> Result<()> {
                 rollout.ws_auth_timeout_seconds
             );
         }
+        Command::Reports { action } => match action {
+            ReportsAction::List { limit, offset } => {
+                let reports = list_community_node_reports(&pool, limit, offset).await?;
+                if reports.is_empty() {
+                    println!("no reports");
+                } else {
+                    println!(
+                        "{} report(s) (limit={} offset={}):",
+                        reports.len(),
+                        limit,
+                        offset
+                    );
+                    for report in reports {
+                        println!(
+                            "{}  {}  {}/{}  capability={}  reason={}  status={}",
+                            report.created_at.to_rfc3339(),
+                            report.id,
+                            report.subject_kind,
+                            report.subject_id,
+                            report.capability,
+                            report.reason,
+                            report.status,
+                        );
+                    }
+                }
+            }
+            ReportsAction::Show { id } => {
+                match get_community_node_report(&pool, id.as_str()).await? {
+                    Some(report) => {
+                        println!("id:               {}", report.id);
+                        println!("created_at:       {}", report.created_at.to_rfc3339());
+                        println!("status:           {}", report.status);
+                        println!("subject_kind:     {}", report.subject_kind);
+                        println!("subject_id:       {}", report.subject_id);
+                        println!("capability:       {}", report.capability);
+                        println!("reason:           {}", report.reason);
+                        println!(
+                            "details:          {}",
+                            report.details.as_deref().unwrap_or("-")
+                        );
+                        println!(
+                            "reporter_contact: {}",
+                            report.reporter_contact.as_deref().unwrap_or("-")
+                        );
+                    }
+                    None => println!("report not found: {id}"),
+                }
+            }
+        },
     }
 
     Ok(())
