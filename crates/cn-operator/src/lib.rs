@@ -26,7 +26,11 @@ pub use config::{
 };
 pub use docs::{GeneratedFile, generate_all};
 pub use drift::{DriftReport, check_drift};
-pub use manifest::{build_manifest, render_manifest};
+pub use manifest::{
+    AuthorityScope, AuthorityScopeOverride, Capabilities, CapabilityScope, CommunityNodeManifest,
+    ManifestFeatures, ManifestRetention, NodeRole, P2pBoundary, build_manifest, manifest_value,
+    render_manifest,
+};
 pub use profile::Profile;
 
 /// `operator init` が出力するサンプル config。
@@ -59,6 +63,12 @@ retention:
 
 manifest:
   manifest_version: v1
+  # node_role 未指定なら有効 capability から推定する（既定: community-node）。
+  # default onboarding node の場合は明示する:
+  #   node_role: default-onboarding-node
+  # authority_scope:
+  #   additional_applies_to: []        # 導出された applies_to に追加する項目
+  #   does_not_apply_to: null          # 未指定なら安全な default を使う
 
 # community_index / moderation / community_local_trust / report_endpoint は
 # 現行実装では未提供（計画中）。spec として記述することを明示的に承認する。

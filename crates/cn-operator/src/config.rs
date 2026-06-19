@@ -8,6 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::capability::{Availability, Capability};
+use crate::manifest::{AuthorityScopeOverride, NodeRole};
 use crate::profile::Profile;
 
 /// `operator-config.yaml` の生表現。
@@ -82,12 +83,16 @@ fn default_moderation_logs_days() -> u32 {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestConfig {
-    /// node role。未指定なら有効 capability から推定する。
+    /// node role。未指定なら profile / 有効 capability から推定する。
     #[serde(default)]
-    pub node_role: Option<String>,
+    pub node_role: Option<NodeRole>,
     /// manifest / policy version。決定論的出力のため config 由来とする。
     #[serde(default = "default_manifest_version")]
     pub manifest_version: String,
+    /// authority scope を operator が明示的に拡張・上書きするための設定。
+    /// 未指定なら applies_to は有効 capability から導出し、does_not_apply_to は安全な default を使う。
+    #[serde(default)]
+    pub authority_scope: AuthorityScopeOverride,
 }
 
 fn default_manifest_version() -> String {

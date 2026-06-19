@@ -64,7 +64,7 @@ cargo run -p kukuri-cn-operator --bin cn-operator -- generate-docs \
 
 ```text
 dist/operator-docs/
-  server-manifest.json          # #355 の authority scope / P2P boundary / capability scope を含む
+  server-manifest.json          # #355: 型付き manifest schema（下記参照）
   network-diagram.md
   telecom-notification-draft.md
   service-description-draft.md
@@ -79,6 +79,34 @@ dist/operator-docs/
 
 各文書には「法的助言ではない」旨の注記が含まれる。最終判断は運営者自身および総合通信局・
 専門家への確認が必要。
+
+## server-manifest.json（#355）
+
+`server-manifest.json` は型付きの共有スキーマ（`kukuri_cn_operator::CommunityNodeManifest`）として
+定義される。public manifest endpoint (#356) や client（dependency 表示 / report routing /
+consent UI）が同じ型を共有して扱えるようにするためのもの。主な構造:
+
+- `node_role`: `default-onboarding-node` / `community-node` / `relay-assist` / `index-node` /
+  `moderation-node` / `trust-signal-node`。未指定なら有効 capability から推定（既定 `community-node`）。
+  default onboarding node は明示することで third-party community node と区別できる。
+- `capabilities`: 全 capability の有効・無効。
+- `capability_scope`: `available_enabled`（Phase A）/ `planned_enabled`（Phase B）を分離。
+- `authority_scope`: `applies_to`（有効 capability から導出 + operator が `additional_applies_to`
+  で拡張可能）/ `does_not_apply_to`（安全な default。operator が上書き可能）。
+- `p2p_boundary`: identity / profile / social graph / content truth source / network-wide
+  authority をすべて `false` 宣言。これは kukuri の P2P-first 設計の不変条件であり、operator は
+  変更できない（community node を home server / central operator と誤解させないため）。
+
+config からの設定例:
+
+```yaml
+manifest:
+  node_role: default-onboarding-node
+  authority_scope:
+    additional_applies_to:
+      - custom_scope
+    does_not_apply_to: null   # 未指定なら安全な default
+```
 
 ## 決定論性と CI
 

@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use crate::capability::{Availability, Capability, ExternalDestination};
 use crate::config::ResolvedConfig;
-use crate::manifest::render_manifest;
+use crate::manifest::{build_manifest, render_manifest};
 
 /// すべての生成文書に付す共通の注記。
 const LEGAL_DISCLAIMER: &str = "> 注記: この文書は operator config から自動生成された下書きであり、法的助言ではありません。\n\
@@ -131,6 +131,41 @@ fn gen_network_diagram(config: &ResolvedConfig) -> String {
              経由し得ます。届出要否は構成と所在地に依存するため、別途確認してください。\n"
         );
     }
+
+    // manifest の authority scope / P2P boundary を文書へ反映する。
+    let manifest = build_manifest(config);
+    let _ = writeln!(s, "## node role と責任境界 (authority scope)\n");
+    let _ = writeln!(
+        s,
+        "- node role: `{}`",
+        serde_json::to_value(manifest.node_role)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "community-node".to_string())
+    );
+    let _ = writeln!(s, "\n本ノードが責任を負う範囲 (applies_to):\n");
+    for item in &manifest.authority_scope.applies_to {
+        let _ = writeln!(s, "- `{item}`");
+    }
+    let _ = writeln!(s, "\n本ノードが責任を負わない範囲 (does_not_apply_to):\n");
+    for item in &manifest.authority_scope.does_not_apply_to {
+        let _ = writeln!(s, "- `{item}`");
+    }
+    let _ = writeln!(s, "\n## P2P boundary\n");
+    let _ = writeln!(
+        s,
+        "本ノードは以下のいずれの権威も持ちません（kukuri の P2P-first 設計の不変条件）。\n"
+    );
+    let _ = writeln!(s, "- identity authority: false");
+    let _ = writeln!(s, "- profile canonical store: false");
+    let _ = writeln!(s, "- social graph canonical store: false");
+    let _ = writeln!(s, "- content truth source: false");
+    let _ = writeln!(s, "- network-wide authority: false\n");
+    let _ = writeln!(
+        s,
+        "詳細は `server-manifest.json` の `authority_scope` / `p2p_boundary` を参照してください。\n"
+    );
+
     s.push_str(&planned_section(config));
     s
 }

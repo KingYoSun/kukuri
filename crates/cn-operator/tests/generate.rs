@@ -1,6 +1,6 @@
 use kukuri_cn_operator::{
-    Capability, SAMPLE_CONFIG, build_manifest, check_drift, generate_all, load_and_validate,
-    parse_config, resolve_and_validate,
+    Capability, NodeRole, SAMPLE_CONFIG, build_manifest, check_drift, generate_all,
+    load_and_validate, manifest_value, parse_config, resolve_and_validate,
 };
 
 fn base_config(extra_features: &str, ack: bool) -> String {
@@ -96,7 +96,7 @@ fn missing_required_fields_fail() {
 #[test]
 fn manifest_has_authority_scope_and_p2p_boundary() {
     let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
-    let m = build_manifest(&resolved);
+    let m = manifest_value(&resolved);
 
     // P2P boundary は identity / profile / social graph / network authority を false 宣言。
     let boundary = &m["p2p_boundary"];
@@ -246,4 +246,130 @@ fn parse_then_resolve_roundtrip() {
     assert_eq!(cfg.server.country, "JP");
     let resolved = resolve_and_validate(cfg).unwrap();
     assert!(resolved.enabled(Capability::CloudflareProxy));
+}
+
+// --- #355: manifest authority scope / P2P boundary / node role ---
+
+#[test]
+fn typed_manifest_roundtrips_through_json() {
+    let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
+    let manifest = build_manifest(&resolved);
+    let json = serde_json::to_string(&manifest).unwrap();
+    let back: kukuri_cn_operator::CommunityNodeManifest = serde_json::from_str(&json).unwrap();
+    // capabilities が型付きで往復できる。
+    assert_eq!(
+        back.capabilities.iroh_relay,
+        manifest.capabilities.iroh_relay
+    );
+    assert_eq!(back.node_role, manifest.node_role);
+}
+
+#[test]
+fn node_role_defaults_to_community_node() {
+    let yaml = base_config("  iroh_relay: true\n  community_index: true\n", true);
+    let resolved = load_and_validate(&yaml).unwrap();
+    // 複数 capability を持つため community-node に推定される。
+    assert_eq!(build_manifest(&resolved).node_role, NodeRole::CommunityNode);
+}
+
+#[test]
+fn node_role_infers_relay_assist_for_relay_only() {
+    let yaml = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n\
+                features:\n  iroh_relay: true\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    assert_eq!(build_manifest(&resolved).node_role, NodeRole::RelayAssist);
+}
+
+#[test]
+fn explicit_node_role_is_respected() {
+    let yaml = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n\
+                manifest:\n  node_role: default-onboarding-node\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    assert_eq!(
+        build_manifest(&resolved).node_role,
+        NodeRole::DefaultOnboardingNode
+    );
+}
+
+#[test]
+fn default_onboarding_node_distinguished_from_community_node() {
+    let onboarding = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n\
+                      manifest:\n  node_role: default-onboarding-node\n";
+    let community = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n\
+                     manifest:\n  node_role: community-node\n";
+    let a = build_manifest(&load_and_validate(onboarding).unwrap()).node_role;
+    let b = build_manifest(&load_and_validate(community).unwrap()).node_role;
+    assert_ne!(a, b);
+    assert_eq!(a, NodeRole::DefaultOnboardingNode);
+}
+
+#[test]
+fn authority_scope_applies_to_derives_from_capabilities() {
+    let yaml = base_config("  community_index: true\n", true);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let m = build_manifest(&resolved);
+    assert!(
+        m.authority_scope
+            .applies_to
+            .contains(&"this_node".to_string())
+    );
+    assert!(
+        m.authority_scope
+            .applies_to
+            .contains(&"communities_indexed_by_this_node".to_string())
+    );
+}
+
+#[test]
+fn operator_can_extend_applies_to() {
+    let yaml = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n\
+                manifest:\n  authority_scope:\n    additional_applies_to:\n      - custom_scope\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    let m = build_manifest(&resolved);
+    assert!(
+        m.authority_scope
+            .applies_to
+            .contains(&"custom_scope".to_string())
+    );
+}
+
+#[test]
+fn does_not_apply_to_has_safe_default() {
+    let yaml = "server:\n  domain: d.net\n  operator_name: Op\n  country: JP\n";
+    let resolved = load_and_validate(yaml).unwrap();
+    let m = build_manifest(&resolved);
+    for expected in [
+        "kukuri_network_as_a_whole",
+        "user_identity",
+        "user_profile_canonical_source",
+        "user_social_graph_canonical_source",
+        "third_party_nodes",
+    ] {
+        assert!(
+            m.authority_scope
+                .does_not_apply_to
+                .contains(&expected.to_string()),
+            "missing {expected}"
+        );
+    }
+}
+
+#[test]
+fn p2p_boundary_is_all_false_invariant() {
+    let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
+    let b = build_manifest(&resolved).p2p_boundary;
+    assert!(!b.identity_authority);
+    assert!(!b.profile_canonical_store);
+    assert!(!b.social_graph_canonical_store);
+    assert!(!b.content_truth_source);
+    assert!(!b.network_wide_authority);
+}
+
+#[test]
+fn generated_docs_reflect_authority_scope() {
+    let resolved = load_and_validate(SAMPLE_CONFIG).unwrap();
+    let diagram = doc(&generate_all(&resolved), "network-diagram.md");
+    assert!(diagram.contains("authority scope"));
+    assert!(diagram.contains("does_not_apply_to"));
+    assert!(diagram.contains("network-wide authority: false"));
 }
