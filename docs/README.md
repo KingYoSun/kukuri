@@ -36,6 +36,7 @@
 ## Architecture
 - P2P-first community node の責任境界: `docs/architecture/p2p-first-community-node-responsibility-boundary.md`（operator docs / safety / report routing の共通前提）
 - moderation event / safety advisory の trust semantics: `docs/architecture/moderation-event-trust-semantics.md`（optional trust input であり network-wide command ではないことを固定）
+- default community node 依存低減ロードマップ: `docs/architecture/default-community-node-dependency-reduction.md`（default node は onboarding infrastructure であり network-wide authority ではない）
 
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`
