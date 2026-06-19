@@ -2948,6 +2948,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-operator"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+]
+
+[[package]]
 name = "kukuri-cn-user-api"
 version = "0.1.2"
 dependencies = [

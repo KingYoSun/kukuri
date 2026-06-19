@@ -13,6 +13,7 @@ members = [
     "crates/cn-user-api",
     "crates/cn-iroh-relay",
     "crates/cn-cli",
+    "crates/cn-operator",
 ]
 exclude = [
     "apps/desktop/src-tauri",
