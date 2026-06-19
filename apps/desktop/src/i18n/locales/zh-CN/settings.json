@@ -29,6 +29,33 @@
       "clearToken": "清除令牌",
       "saveNodes": "保存节点"
     },
+    "dependency": {
+      "heading": "依赖与范围",
+      "diagnostics": {
+        "manifestStatus": "清单状态",
+        "origin": "类型",
+        "role": "节点角色",
+        "manifestVersion": "清单版本",
+        "capabilityAvailable": "已提供的能力",
+        "capabilityPlanned": "计划中的能力",
+        "authorityAppliesTo": "职责范围",
+        "authorityDoesNotApplyTo": "职责范围之外"
+      },
+      "origin": {
+        "default": "默认引导节点",
+        "userAdded": "用户添加的节点"
+      },
+      "status": {
+        "loading": "加载中…",
+        "ok": "已加载",
+        "absent": "该节点未发布清单",
+        "error": "无法获取清单"
+      },
+      "boundary": {
+        "identityNotOwned": "您的身份、个人资料和社交图谱不归该节点所有。该节点仅为 P2P 网络提供辅助能力。",
+        "defaultNotAuthority": "即使是默认节点，也不是整个网络的运营者或权限方。"
+      }
+    },
     "baseUrlsHint": "每行一个 HTTPS 基础 URL。",
     "baseUrlsLabel": "基础 URL",
     "baseUrlsPlaceholder": "https://community.example.com",

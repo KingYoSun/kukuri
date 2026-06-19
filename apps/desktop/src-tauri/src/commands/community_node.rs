@@ -1,6 +1,7 @@
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeNodeStatus,
-    CommunityNodeTargetRequest, CreatePrivateChannelRequest, DiscoveryConfig,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeManifestFetch,
+    CommunityNodeNodeStatus, CommunityNodeTargetRequest, CreatePrivateChannelRequest,
+    DiscoveryConfig,
     ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
     ExportPrivateChannelInviteRequest, FreezePrivateChannelRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
@@ -350,6 +351,18 @@ pub async fn refresh_community_node_metadata(
     state
         .runtime
         .refresh_community_node_metadata(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn fetch_community_node_manifest(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeManifestFetch, String> {
+    state
+        .runtime
+        .fetch_community_node_manifest(request)
         .await
         .map_err(map_error)
 }

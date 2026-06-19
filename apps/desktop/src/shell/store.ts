@@ -20,6 +20,7 @@ import {
   type BookmarkedPostView,
   type ChannelRef,
   type CommunityNodeConfig,
+  type CommunityNodeManifest,
   type CommunityNodeNodeStatus,
   type CreateAttachmentInput,
   type CustomReactionAssetView,
@@ -75,6 +76,13 @@ export type CommunityNodeDraftNode = {
   auto_approve: boolean;
 };
 
+// public manifest endpoint (#356) からの取得状態。base_url ごとに保持する。
+export type CommunityNodeManifestEntry =
+  | { status: 'loading' }
+  | { status: 'ok'; manifest: CommunityNodeManifest }
+  | { status: 'absent' }
+  | { status: 'error'; error: string };
+
 export type DesktopShellState = {
   trackedTopics: string[];
   activeTopic: string;
@@ -112,6 +120,7 @@ export type DesktopShellState = {
   discoveryError: string | null;
   communityNodeConfig: CommunityNodeConfig;
   communityNodeStatuses: CommunityNodeNodeStatus[];
+  communityNodeManifests: Record<string, CommunityNodeManifestEntry>;
   communityNodeInput: CommunityNodeDraftNode[];
   communityNodeEditorDirty: boolean;
   communityNodeError: string | null;
@@ -397,6 +406,7 @@ export function createInitialShellState(): DesktopShellState {
     discoveryError: null,
     communityNodeConfig: DEFAULT_COMMUNITY_NODE_CONFIG,
     communityNodeStatuses: [],
+    communityNodeManifests: {},
     communityNodeInput: [],
     communityNodeEditorDirty: false,
     communityNodeError: null,

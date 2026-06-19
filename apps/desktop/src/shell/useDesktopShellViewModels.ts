@@ -14,6 +14,7 @@ import type {
   ThreadPanelState,
   TopicDiagnosticSummary,
 } from '@/components/core/types';
+import { buildCommunityNodeDependencyView } from '@/components/settings/communityNodeDependency';
 import type {
   AppearancePanelView,
   CommunityNodePanelView,
@@ -199,6 +200,7 @@ export function useDesktopShellViewModels({
     communityNodeConfig,
     communityNodeError,
     communityNodeInput,
+    communityNodeManifests,
     communityNodeEditorDirty,
     reactionPanelState,
     ownedReactionAssets,
@@ -1015,6 +1017,10 @@ export function useDesktopShellViewModels({
               tone: status?.last_error ? 'danger' : 'default',
             },
           ],
+          dependency: buildCommunityNodeDependencyView(
+            communityNodeManifests[node.base_url],
+            t
+          ),
           lastError: status?.last_error ?? null,
         };
       }),
@@ -1024,6 +1030,7 @@ export function useDesktopShellViewModels({
       communityNodeEditorDirty,
       communityNodeError,
       communityNodeInput,
+      communityNodeManifests,
       communityNodeStatusByBaseUrl,
       t,
     ]

@@ -21,6 +21,7 @@ use crate::runtime::DesktopRuntime;
 
 mod config_support;
 mod http_client_support;
+mod manifest_support;
 mod reconnect_support;
 mod requests_support;
 mod session_runtime_support;
@@ -29,6 +30,10 @@ mod token_storage_support;
 
 pub(crate) use config_support::*;
 pub(crate) use http_client_support::*;
+pub use manifest_support::{
+    CommunityNodeAuthorityScope, CommunityNodeCapabilityScope, CommunityNodeManifest,
+    CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeP2pBoundary,
+};
 pub(crate) use token_storage_support::*;
 
 pub(crate) const COMMUNITY_NODE_TOKEN_PURPOSE: &str = "community-node-token";

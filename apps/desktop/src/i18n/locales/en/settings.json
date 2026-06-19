@@ -30,6 +30,33 @@
       "clearToken": "Clear Token",
       "saveNodes": "Save Nodes"
     },
+    "dependency": {
+      "heading": "Dependency & scope",
+      "diagnostics": {
+        "manifestStatus": "Manifest status",
+        "origin": "Type",
+        "role": "Node role",
+        "manifestVersion": "Manifest version",
+        "capabilityAvailable": "Available capabilities",
+        "capabilityPlanned": "Planned capabilities",
+        "authorityAppliesTo": "Authority scope",
+        "authorityDoesNotApplyTo": "Outside authority scope"
+      },
+      "origin": {
+        "default": "Default onboarding node",
+        "userAdded": "User-added node"
+      },
+      "status": {
+        "loading": "Loading…",
+        "ok": "Loaded",
+        "absent": "This node does not publish a manifest",
+        "error": "Could not fetch the manifest"
+      },
+      "boundary": {
+        "identityNotOwned": "Your identity, profile, and social graph are not owned by this node. The node only provides supporting capabilities for the P2P network.",
+        "defaultNotAuthority": "Even as a default node, it is not the operator or authority for the whole network."
+      }
+    },
     "autoApproveLabel": "Auto-approve consent for this node",
     "baseUrlLabel": "Base URL",
     "baseUrlsHint": "One HTTPS base URL per line.",

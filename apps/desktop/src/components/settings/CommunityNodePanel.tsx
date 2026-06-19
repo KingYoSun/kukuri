@@ -136,6 +136,21 @@ export function CommunityNodePanel({
               <SettingsDiagnosticList items={node.diagnostics} columns={2} />
             </div>
 
+            <div className='mt-4 space-y-2'>
+              <h5 className='text-sm font-semibold text-foreground'>
+                {t('settings:communityNode.dependency.heading')}
+              </h5>
+              <SettingsDiagnosticList items={node.dependency.diagnostics} columns={2} />
+              {node.dependency.manifestError ? (
+                <Notice tone='destructive'>{node.dependency.manifestError}</Notice>
+              ) : null}
+              {node.dependency.boundaryNotes.map((note) => (
+                <p key={note} className='text-sm text-[var(--muted-foreground)]'>
+                  {note}
+                </p>
+              ))}
+            </div>
+
             <div className='mt-4'>
               <SettingsActionRow>
                 <Button

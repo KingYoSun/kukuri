@@ -4,8 +4,12 @@ import type {
   ConnectivityPanelView,
   DiscoveryPanelView,
 } from './types';
+import { buildCommunityNodeDependencyView } from './communityNodeDependency';
 import i18n from '@/i18n';
 import { formatLocalizedTime, getResolvedLocale } from '@/i18n/format';
+
+const fixtureTranslate = (key: string, options?: Record<string, unknown>): string =>
+  i18n.t(key, options);
 
 export function createAppearancePanelFixture(): AppearancePanelView {
   return {
@@ -173,6 +177,43 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
             value: i18n.t('common:fallbacks.none'),
           },
         ],
+        dependency: buildCommunityNodeDependencyView(
+          {
+            status: 'ok',
+            manifest: {
+              node_id: '',
+              node_name: 'api.kukuri.app',
+              node_role: 'default-onboarding-node',
+              server_name: 'api.kukuri.app',
+              manifest_version: 'v1',
+              capability_scope: {
+                available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay'],
+                planned_enabled: ['community_index', 'moderation'],
+              },
+              authority_scope: {
+                applies_to: ['this_node'],
+                does_not_apply_to: [
+                  'kukuri_network_as_a_whole',
+                  'user_identity',
+                  'user_profile_canonical_source',
+                  'user_social_graph_canonical_source',
+                ],
+              },
+              p2p_boundary: {
+                identity_authority: false,
+                profile_canonical_store: false,
+                social_graph_canonical_store: false,
+                content_truth_source: false,
+                network_wide_authority: false,
+              },
+              abuse_contact: 'abuse@api.kukuri.app',
+              terms_url: 'https://api.kukuri.app/terms',
+              privacy_url: 'https://api.kukuri.app/privacy',
+              moderation_policy_url: 'https://api.kukuri.app/moderation-policy',
+            },
+          },
+          fixtureTranslate
+        ),
         lastError: null,
       },
       {
@@ -211,6 +252,7 @@ export function createCommunityNodePanelFixture(): CommunityNodePanelView {
             tone: 'danger',
           },
         ],
+        dependency: buildCommunityNodeDependencyView({ status: 'absent' }, fixtureTranslate),
         lastError: i18n.t('common:errors.failedToRefreshCommunityNode'),
       },
     ],

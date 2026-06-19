@@ -32,6 +32,7 @@ function CommunityNodePanelStory({
                 autoApprove: false,
                 saved: false,
                 diagnostics: [],
+                dependency: { diagnostics: [], boundaryNotes: [] },
                 lastError: null,
               },
             ])
