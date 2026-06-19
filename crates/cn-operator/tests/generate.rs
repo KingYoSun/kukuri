@@ -170,9 +170,35 @@ fn all_expected_docs_are_generated() {
         "moderation-policy.md",
         "data-retention-policy.md",
         "prior-consultation-email.md",
+        "capability-risk-and-practices.md",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
     }
+}
+
+#[test]
+fn capability_risk_guide_covers_enabled_and_disabled() {
+    // #359: enabled capability は実践ガイドとして、disabled capability は
+    // 「引き受けていない責務」として記述される。個人運営を discourage しない。
+    let yaml = base_config("  report_endpoint: true\n  analytics: false\n", true);
+    let resolved = load_and_validate(&yaml).unwrap();
+    let guide = doc(&generate_all(&resolved), "capability-risk-and-practices.md");
+
+    // discourage しないトーンの明示。
+    assert!(guide.contains("企業だけが担うものとは考えない"));
+    // セクション構造。
+    assert!(guide.contains("## 有効化している capability"));
+    assert!(guide.contains("## 引き受けていない責務（無効な capability）"));
+    // 有効化した report_endpoint の実践記述。
+    assert!(guide.contains("通報エンドポイント"));
+    assert!(guide.contains("authority scope:"));
+    assert!(guide.contains("推奨対応:"));
+    assert!(guide.contains("scope を狭める / 無効化:"));
+    // 無効化した analytics は「引き受けていない責務」側に出る。
+    let disabled_section = guide.split("引き受けていない責務").nth(1).unwrap();
+    assert!(disabled_section.contains("アナリティクス"));
+    // 法的免責が含まれる（header 経由）。
+    assert!(guide.contains("法的助言ではありません"));
 }
 
 #[test]
