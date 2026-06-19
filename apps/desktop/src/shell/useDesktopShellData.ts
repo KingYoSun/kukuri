@@ -135,6 +135,7 @@ export function useDesktopShellData({
   const setDiscoveryError = useDesktopShellFieldSetter('discoveryError');
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeStatuses = useDesktopShellFieldSetter('communityNodeStatuses');
+  const setCommunityNodeManifests = useDesktopShellFieldSetter('communityNodeManifests');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setMediaObjectUrls = useDesktopShellFieldSetter('mediaObjectUrls');
@@ -914,6 +915,44 @@ export function useDesktopShellData({
                   );
                   setCommunityNodeError(null);
                 });
+                // public manifest endpoint (#356) から dependency 情報を best-effort 取得する。
+                const baseUrls = config.nodes
+                  .map((node) => node.base_url)
+                  .filter((baseUrl) => baseUrl.trim().length > 0);
+                if (baseUrls.length > 0) {
+                  setCommunityNodeManifests((current) => {
+                    const next = { ...current };
+                    for (const baseUrl of baseUrls) {
+                      next[baseUrl] = { status: 'loading' };
+                    }
+                    return next;
+                  });
+                  for (const baseUrl of baseUrls) {
+                    void api
+                      .fetchCommunityNodeManifest(baseUrl)
+                      .then((result) => {
+                        setCommunityNodeManifests((current) => ({
+                          ...current,
+                          [baseUrl]:
+                            result.status === 'ok' && result.manifest
+                              ? { status: 'ok', manifest: result.manifest }
+                              : { status: 'absent' },
+                        }));
+                      })
+                      .catch((error) => {
+                        setCommunityNodeManifests((current) => ({
+                          ...current,
+                          [baseUrl]: {
+                            status: 'error',
+                            error: messageFromError(
+                              error,
+                              translate('common:errors.failedToLoadSettings')
+                            ),
+                          },
+                        }));
+                      });
+                  }
+                }
               })
               .catch((error) => {
                 setCommunityNodeError(
@@ -950,6 +989,7 @@ export function useDesktopShellData({
       setCommunityNodeConfig,
       setCommunityNodeError,
       setCommunityNodeInput,
+      setCommunityNodeManifests,
       setCommunityNodeStatuses,
       setDirectMessages,
       setDirectMessageError,

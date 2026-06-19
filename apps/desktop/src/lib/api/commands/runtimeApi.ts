@@ -6,6 +6,7 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
+  CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
   CustomReactionAssetView,
   DesktopApi,
@@ -818,6 +819,16 @@ export const runtimeApi: DesktopApi = {
       return window.__KUKURI_DESKTOP__.refreshCommunityNodeMetadata(baseUrl);
     }
     return invokeDesktop<CommunityNodeNodeStatus>('refresh_community_node_metadata', {
+      request: {
+        base_url: baseUrl,
+      },
+    });
+  },
+  fetchCommunityNodeManifest: async (baseUrl) => {
+    if (window.__KUKURI_DESKTOP__) {
+      return window.__KUKURI_DESKTOP__.fetchCommunityNodeManifest(baseUrl);
+    }
+    return invokeDesktop<CommunityNodeManifestFetch>('fetch_community_node_manifest', {
       request: {
         base_url: baseUrl,
       },

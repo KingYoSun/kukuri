@@ -11,8 +11,10 @@ mod stack;
 mod tests;
 
 pub use community_node::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeAuthState, CommunityNodeConfig,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeSessionPhase,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeAuthState, CommunityNodeAuthorityScope,
+    CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeManifest,
+    CommunityNodeManifestFetch, CommunityNodeManifestFetchStatus, CommunityNodeNodeConfig,
+    CommunityNodeNodeStatus, CommunityNodeP2pBoundary, CommunityNodeSessionPhase,
     CommunityNodeTargetRequest, SetCommunityNodeConfigNode, SetCommunityNodeConfigRequest,
 };
 pub use discovery::{DiscoveryConfig, SetDiscoverySeedsRequest};

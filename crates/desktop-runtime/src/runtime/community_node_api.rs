@@ -317,6 +317,16 @@ impl DesktopRuntime {
         self.community_node_status(refreshed, None, None).await
     }
 
+    /// public manifest endpoint (#356) から node manifest を取得する。
+    /// dependency 表示（#357）のため client が unauthenticated に呼ぶ。
+    pub async fn fetch_community_node_manifest(
+        &self,
+        request: CommunityNodeTargetRequest,
+    ) -> Result<CommunityNodeManifestFetch> {
+        self.request_community_node_manifest(request.base_url.as_str())
+            .await
+    }
+
     pub async fn reapply_community_node_connectivity(&self) -> Result<()> {
         self.force_rebuild_runtime_connectivity_assist().await?;
         self.force_apply_effective_seed_peers().await?;

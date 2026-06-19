@@ -90,6 +90,7 @@ function SettingsDrawerStory({ initialSection = 'connectivity' }: { initialSecti
                 autoApprove: false,
                 saved: false,
                 diagnostics: [],
+                dependency: { diagnostics: [], boundaryNotes: [] },
                 lastError: null,
               },
             ])

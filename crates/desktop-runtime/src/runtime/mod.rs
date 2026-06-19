@@ -32,13 +32,13 @@ use crate::attachments::{
 };
 use crate::community_node::{
     AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeReconnectState,
-    CommunityNodeSessionPhase, CommunityNodeTargetRequest, SetCommunityNodeConfigRequest,
-    community_node_seed_peers, default_preview_community_node_config,
-    effective_seed_peer_apply_state, load_community_node_config_from_file,
-    load_community_node_token, normalize_community_node_config,
-    relay_config_from_community_node_config, runtime_connectivity_assist_state,
-    save_community_node_config,
+    CommunityNodeManifestFetch, CommunityNodeNodeConfig, CommunityNodeNodeStatus,
+    CommunityNodeReconnectState, CommunityNodeSessionPhase, CommunityNodeTargetRequest,
+    SetCommunityNodeConfigRequest, community_node_seed_peers,
+    default_preview_community_node_config, effective_seed_peer_apply_state,
+    load_community_node_config_from_file, load_community_node_token,
+    normalize_community_node_config, relay_config_from_community_node_config,
+    runtime_connectivity_assist_state, save_community_node_config,
 };
 use crate::discovery::{
     DiscoveryConfig, SetDiscoverySeedsRequest, parse_seed_entries,

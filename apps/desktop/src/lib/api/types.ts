@@ -438,6 +438,50 @@ export type CommunityNodeConfigInput = {
   auto_approve: boolean;
 };
 
+// community node manifest (#355/#356) の client 側表現。public manifest endpoint から取得し、
+// dependency 表示 (#357) に使う。snake_case は Rust 由来の JSON 形状に合わせる。
+export type CommunityNodeCapabilityScope = {
+  available_enabled: string[];
+  planned_enabled: string[];
+};
+
+export type CommunityNodeAuthorityScope = {
+  applies_to: string[];
+  does_not_apply_to: string[];
+};
+
+export type CommunityNodeP2pBoundary = {
+  identity_authority: boolean;
+  profile_canonical_store: boolean;
+  social_graph_canonical_store: boolean;
+  content_truth_source: boolean;
+  network_wide_authority: boolean;
+};
+
+export type CommunityNodeManifest = {
+  node_id: string;
+  node_name: string;
+  node_role: string;
+  server_name: string;
+  manifest_version: string;
+  capability_scope: CommunityNodeCapabilityScope;
+  authority_scope: CommunityNodeAuthorityScope;
+  p2p_boundary: CommunityNodeP2pBoundary;
+  abuse_contact: string;
+  terms_url: string;
+  privacy_url: string;
+  moderation_policy_url: string;
+};
+
+// manifest fetch 状態。'ok' は取得成功、'absent' は node が未公開 (404)。
+// 'error' は fetch 失敗、'loading' は取得中（client 側で付与）。
+export type CommunityNodeManifestFetchStatus = 'ok' | 'absent';
+
+export type CommunityNodeManifestFetch = {
+  status: CommunityNodeManifestFetchStatus;
+  manifest?: CommunityNodeManifest | null;
+};
+
 export type TopicSyncStatus = {
   topic: string;
   joined: boolean;
@@ -842,6 +886,7 @@ export interface DesktopApi {
     policySlugs: string[]
   ): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
+  fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
   importPeerTicket(ticket: string): Promise<void>;
   setDiscoverySeeds(seedEntries: string[]): Promise<DiscoveryConfig>;
   unsubscribeTopic(topic: string): Promise<void>;

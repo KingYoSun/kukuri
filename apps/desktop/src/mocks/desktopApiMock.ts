@@ -1431,6 +1431,42 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
       };
       return communityNodeStatuses.find((status) => status.base_url === baseUrl)!;
     },
+    async fetchCommunityNodeManifest(baseUrl) {
+      return {
+        status: 'ok',
+        manifest: {
+          node_id: '',
+          node_name: baseUrl,
+          node_role: 'community-node',
+          server_name: baseUrl,
+          manifest_version: 'v1',
+          capability_scope: {
+            available_enabled: ['auth_consent', 'bootstrap_assist', 'iroh_relay'],
+            planned_enabled: ['community_index', 'moderation'],
+          },
+          authority_scope: {
+            applies_to: ['this_node'],
+            does_not_apply_to: [
+              'kukuri_network_as_a_whole',
+              'user_identity',
+              'user_profile_canonical_source',
+              'user_social_graph_canonical_source',
+            ],
+          },
+          p2p_boundary: {
+            identity_authority: false,
+            profile_canonical_store: false,
+            social_graph_canonical_store: false,
+            content_truth_source: false,
+            network_wide_authority: false,
+          },
+          abuse_contact: `abuse@${baseUrl.replace(/^https?:\/\//, '')}`,
+          terms_url: `${baseUrl}/terms`,
+          privacy_url: `${baseUrl}/privacy`,
+          moderation_policy_url: `${baseUrl}/moderation-policy`,
+        },
+      };
+    },
     async importPeerTicket() {},
     async setDiscoverySeeds(seedEntries) {
       discoveryConfig = {

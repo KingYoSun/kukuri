@@ -30,6 +30,33 @@
       "clearToken": "トークンをクリア",
       "saveNodes": "ノードを保存"
     },
+    "dependency": {
+      "heading": "依存とスコープ",
+      "diagnostics": {
+        "manifestStatus": "マニフェスト状態",
+        "origin": "種別",
+        "role": "ノードロール",
+        "manifestVersion": "マニフェストバージョン",
+        "capabilityAvailable": "提供中の capability",
+        "capabilityPlanned": "計画中の capability",
+        "authorityAppliesTo": "責任範囲",
+        "authorityDoesNotApplyTo": "責任範囲外"
+      },
+      "origin": {
+        "default": "オンボーディング用デフォルトノード",
+        "userAdded": "ユーザー追加ノード"
+      },
+      "status": {
+        "loading": "取得中…",
+        "ok": "取得済み",
+        "absent": "このノードはマニフェストを公開していません",
+        "error": "マニフェストを取得できませんでした"
+      },
+      "boundary": {
+        "identityNotOwned": "あなたの identity・プロフィール・ソーシャルグラフはこのノードに所有されません。ノードは P2P ネットワークの補助機能を提供するだけです。",
+        "defaultNotAuthority": "デフォルトノードであっても、ネットワーク全体の運営者・権限者ではありません。"
+      }
+    },
     "autoApproveLabel": "このノードの consent を自動承認する",
     "baseUrlLabel": "ベース URL",
     "baseUrlsHint": "HTTPS の base URL を 1 行に 1 つ入力します。",
