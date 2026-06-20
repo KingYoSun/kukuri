@@ -130,14 +130,6 @@ export function notificationBody(
   return notification.preview_text ?? undefined;
 }
 
-export function nextOsNotificationId(notificationId: string): number {
-  let hash = 0;
-  for (let index = 0; index < notificationId.length; index += 1) {
-    hash = (hash * 31 + notificationId.charCodeAt(index)) >>> 0;
-  }
-  return hash & 0x7fffffff;
-}
-
 export function readSeenOsNotificationIds(): Set<string> {
   if (typeof window === 'undefined') {
     return new Set();

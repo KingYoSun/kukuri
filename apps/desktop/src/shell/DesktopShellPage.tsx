@@ -53,6 +53,7 @@ import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
 import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
+import { useOsNotificationActivation } from '@/shell/useOsNotificationActivation';
 import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
@@ -420,6 +421,7 @@ export function DesktopShellPage({
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
   useOsNotificationBridge(notifications, syncStatus.local_author_pubkey);
+  useOsNotificationActivation(notifications, handleOpenNotification);
   const notificationItems = useMemo(
     () =>
       notifications.map((notification) => {

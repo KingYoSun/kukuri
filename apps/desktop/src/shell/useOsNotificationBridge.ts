@@ -5,7 +5,6 @@ import type { NotificationView } from '@/lib/api';
 import {
   isTauriRuntime,
   loadOsNotificationSettings,
-  nextOsNotificationId,
   notificationBody,
   notificationTitle,
   OS_NOTIFICATION_SETTINGS_STORAGE_KEY,
@@ -45,24 +44,23 @@ export function useOsNotificationBridge(
     }
 
     let cancelled = false;
-    // Route through the Tauri backend `notify` command directly. The
+    // Route through the custom `show_os_notification` command. The
     // `@tauri-apps/plugin-notification` JS helpers go through the WebView2 Web
     // Notification API, which does not produce real Windows toasts and reports a
-    // volatile permission state (see issue #313). The Rust backend grants
-    // permission unconditionally on desktop and emits a proper OS toast.
+    // volatile permission state (see issue #313). The plugin's desktop backend
+    // also never reports toast click/activation events back to the app, so we
+    // own the toast here to wire up click-to-open (see useOsNotificationActivation).
     void (async () => {
       for (const notification of unseen) {
         if (cancelled) {
           break;
         }
         try {
-          await invoke('plugin:notification|notify', {
-            options: {
-              id: nextOsNotificationId(notification.notification_id),
-              title: notificationTitle(notification),
-              body: notificationBody(notification, settings),
-              silent: settings.quietMode,
-            },
+          await invoke('show_os_notification', {
+            id: notification.notification_id,
+            title: notificationTitle(notification),
+            body: notificationBody(notification, settings),
+            silent: settings.quietMode,
           });
           seenNotificationIdsRef.current.add(notification.notification_id);
         } catch {
