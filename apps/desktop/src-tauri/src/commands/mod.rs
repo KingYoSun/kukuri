@@ -1,3 +1,4 @@
+pub mod background_notifications;
 pub mod community_node;
 pub mod direct_messages;
 pub mod live_game;

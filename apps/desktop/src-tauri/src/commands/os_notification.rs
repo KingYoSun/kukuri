@@ -40,7 +40,7 @@ pub fn show_os_notification(
 }
 
 #[cfg(windows)]
-fn show_platform_notification(
+pub(crate) fn show_platform_notification(
     app: AppHandle,
     id: String,
     title: String,
@@ -70,7 +70,7 @@ fn show_platform_notification(
 }
 
 #[cfg(target_os = "linux")]
-fn show_platform_notification(
+pub(crate) fn show_platform_notification(
     app: AppHandle,
     id: String,
     title: String,
@@ -103,7 +103,7 @@ fn show_platform_notification(
 }
 
 #[cfg(target_os = "macos")]
-fn show_platform_notification(
+pub(crate) fn show_platform_notification(
     _app: AppHandle,
     _id: String,
     title: String,
