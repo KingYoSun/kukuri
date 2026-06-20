@@ -3,13 +3,61 @@ mod state;
 mod tracing;
 
 use ::tracing::{error, info};
-use tauri::Manager;
+use tauri::{
+    AppHandle, Manager, WindowEvent,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{
+    commands::background_notifications::OsNotificationBackground,
     state::{DesktopStartupState, build_desktop_state, resolve_db_path},
     tracing::init_tracing,
 };
+
+/// Bring the main window back from the tray.
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Build the system tray so kukuri stays resident after the window is closed
+/// (issue #304). Closing the window hides it; the app keeps syncing in the
+/// background and only exits via the tray "Quit" entry.
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let open_item = MenuItem::with_id(app, "open", "Open kukuri", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+
+    let mut builder = TrayIconBuilder::with_id("main")
+        .tooltip("kukuri")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,8 +67,11 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|_app, argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             info!(?argv, "received kukuri desktop single-instance activation");
+            // The app may be resident in the tray with its window hidden
+            // (issue #304); a re-launch should bring it back to the front.
+            show_main_window(app);
         }));
     }
 
@@ -28,6 +79,15 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| {
+            // Issue #304: closing the window keeps kukuri running in the
+            // background (tray) instead of exiting. Only the tray "Quit" entry
+            // terminates the process.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             let startup_state = match build_desktop_state(app.handle()) {
                 Ok(state) => {
@@ -42,6 +102,11 @@ pub fn run() {
                 }
             };
             app.manage(startup_state);
+            app.manage(OsNotificationBackground::new(app.handle()));
+            if let Err(error) = build_tray(app.handle()) {
+                error!(%error, "failed to build system tray");
+            }
+            commands::background_notifications::spawn(app.handle().clone());
             #[cfg(any(windows, target_os = "linux"))]
             app.deep_link().register_all()?;
             Ok(())
@@ -130,7 +195,8 @@ pub fn run() {
             commands::community_node::refresh_community_node_metadata,
             commands::community_node::fetch_community_node_manifest,
             commands::community_node::submit_community_node_report,
-            commands::os_notification::show_os_notification
+            commands::os_notification::show_os_notification,
+            commands::background_notifications::set_os_notification_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");

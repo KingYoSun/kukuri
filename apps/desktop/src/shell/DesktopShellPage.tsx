@@ -420,7 +420,7 @@ export function DesktopShellPage({
   } = viewModels;
   const notificationBadgeLabel =
     notificationStatus.unread_count > 99 ? '99+' : formatCount(notificationStatus.unread_count);
-  useOsNotificationBridge(notifications, syncStatus.local_author_pubkey);
+  useOsNotificationBridge();
   useOsNotificationActivation(notifications, handleOpenNotification);
   const notificationItems = useMemo(
     () =>
