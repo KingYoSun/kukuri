@@ -129,7 +129,8 @@ pub fn run() {
             commands::community_node::accept_community_node_consents,
             commands::community_node::refresh_community_node_metadata,
             commands::community_node::fetch_community_node_manifest,
-            commands::community_node::submit_community_node_report
+            commands::community_node::submit_community_node_report,
+            commands::os_notification::show_os_notification
         ])
         .run(tauri::generate_context!())
         .expect("failed to run kukuri desktop tauri app");

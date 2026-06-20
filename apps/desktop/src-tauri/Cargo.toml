@@ -25,3 +25,9 @@ tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
 tauri-plugin-updater = "2.10.1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.7"
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+notify-rust = "4"
