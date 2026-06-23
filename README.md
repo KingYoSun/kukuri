@@ -57,25 +57,33 @@ Preview updates are expected to preserve identity, local DB state, Iroh data, Co
 - Connectivity comes from static-peer links, seeded DHT discovery, and community-node assist.
 - Durability is designed around offline use, restart recovery, and late join backfill.
 - Community nodes are bootstrap, auth, control-plane, and connectivity-assist components, not the canonical store for user content.
+- Moderation events and safety advisories are an optional trust input, not a network-wide command; each client decides how to apply them.
 - Nostr compatibility is a limited subset for identity, envelope shape, and some tags; kukuri's internal sync model is its own.
 
 ## What Works Today
 
 - Desktop targets: Linux and Windows.
-- Connectivity: static-peer, seeded DHT discovery, and community-node connectivity/auth.
+- Connectivity: static-peer, seeded DHT discovery, and community-node connectivity/auth, with per-topic/channel gossip toggles.
 - Topic timeline flow: public posts, reply/thread, image attachments, and video attachments.
+- Topic discovery: topic-list search, filter, and sort.
+- Post interaction: reactions and custom reactions, repost, and quote repost.
 - Social graph v1: public profiles, follow/unfollow, `mutual`, and `friend of friend` display.
+- Local social management: post bookmark library and local author mute.
 - Private channel audience v1: `invite_only`, `friend_only`, and `friend_plus` with epoch-aware lifecycle.
 - Pairwise DM v1: 1:1, mutual-only, offline-capable, local transcript/delete, and image/video attachments.
+- Local notification inbox v1: mentions, replies, reposts, quote reposts, DMs, and follow notifications.
+- OS notifications and tray residency: user-permission-gated, with click-to-open and background OS notifications, kept independent of the local notification inbox.
+- Builder preview release plane: in-app updater, `Settings -> Release`, sanitized diagnostics report, and feedback flow.
+- Safety/operations: content provenance and capability-scope display, distributed report routing to community nodes, and community-node operator docs generation.
 - Live session and game room state that recover from `docs + blobs`.
 
-Current scope is defined by [foundation progress](./docs/progress/2026-03-10-foundation.md) and the accepted ADRs under [docs/adr/](./docs/adr/).
+Current scope is defined by [foundation progress](./docs/progress/2026-03-10-foundation.md), the [release readiness plan](./docs/progress/2026-06-11-release-readiness-execution-plan.md), and the accepted ADRs under [docs/adr/](./docs/adr/).
 
 ## Longer-Term Direction
 
 - Search and suggestion can be provided by optional specialized services instead of becoming required parts of the core sync plane.
 - Gateway and bridge layers can provide selective import/export and ecosystem interoperability.
-- Trust, moderation, and policy-assist functions can grow around community nodes without turning them into the canonical content store.
+- Trust, moderation, and policy-assist functions can grow around community nodes without turning them into the canonical content store. Distributed report routing and operator docs are an initial step in this direction.
 - These are planned directions and optional ecosystem services, not a statement that they are all shipped in the current workspace.
 
 ## For Contributors
@@ -83,16 +91,25 @@ Current scope is defined by [foundation progress](./docs/progress/2026-03-10-fou
 - New work targets the root workspace.
 - Current sources of truth:
   - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
+  - [docs/progress/2026-06-11-release-readiness-execution-plan.md](./docs/progress/2026-06-11-release-readiness-execution-plan.md)
   - [docs/README.md](./docs/README.md)
   - [docs/runbooks/dev.md](./docs/runbooks/dev.md)
+  - [CHANGELOG.md](./CHANGELOG.md)
   - [harness/scenarios/](./harness/scenarios/)
 - Key protocol and product references:
   - [docs/adr/0010-kukuri-protocol-v1-boundary-definition.md](./docs/adr/0010-kukuri-protocol-v1-boundary-definition.md)
   - [docs/adr/0011-kukuri-protocol-v1-draft.md](./docs/adr/0011-kukuri-protocol-v1-draft.md)
   - [docs/adr/0012-topic-first_progressive_community_filtering_draft.md](./docs/adr/0012-topic-first_progressive_community_filtering_draft.md)
   - [docs/adr/0013-social-graph-foundation-draft.md](./docs/adr/0013-social-graph-foundation-draft.md)
+  - [docs/adr/0016-repost-data-classification.md](./docs/adr/0016-repost-data-classification.md)
+  - [docs/adr/0017-reaction-data-classification.md](./docs/adr/0017-reaction-data-classification.md)
   - [docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md](./docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md)
   - [docs/adr/0020-pairwise-dm-v1.md](./docs/adr/0020-pairwise-dm-v1.md)
+  - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
+- Community-node responsibility and trust boundaries:
+  - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
+  - [docs/architecture/moderation-event-trust-semantics.md](./docs/architecture/moderation-event-trust-semantics.md)
+  - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
 
 ### Entry Points
 
@@ -101,7 +118,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.0-preview.1
+cargo xtask release-check v0.1.2-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install

@@ -57,25 +57,33 @@ preview 更新では identity、local DB、Iroh data、Community Node 設定、p
 - connectivity は static-peer、seeded DHT discovery、community-node assist が担います。
 - durability は offline 利用、restart 復元、late join backfill を前提に設計します。
 - community-node は bootstrap、auth、control plane、connectivity assist を担うもので、ユーザーコンテンツの canonical store ではありません。
+- moderation event / safety advisory は optional な trust input であり、network-wide command ではありません。適用方法は各 client が判断します。
 - Nostr 互換は identity、envelope 形状、一部 tag に限った subset であり、kukuri の内部同期モデルは kukuri 固有です。
 
 ## 現在動いている範囲
 
 - desktop target: Linux / Windows
-- connectivity: static-peer、seeded DHT discovery、community-node connectivity/auth
+- connectivity: static-peer、seeded DHT discovery、community-node connectivity/auth、topic/channel ごとの gossip 接続トグル
 - topic timeline: public post、reply/thread、image 添付、video 添付
+- topic discovery: topic 一覧の search / filter / sort
+- post interaction: reaction / custom reaction、repost、quote repost
 - social graph v1: public profile、follow/unfollow、`mutual`、`friend of friend` 表示
+- local social management: post bookmark library、local author mute
 - private channel audience v1: `invite_only`、`friend_only`、`friend_plus` と epoch-aware lifecycle
 - pairwise DM v1: 1on1、mutual 限定、offline 可、local transcript/delete、image/video attachment
+- local notification inbox v1: mention、reply、repost、quote repost、DM、follow 通知
+- OS 通知 / tray 常駐: ユーザー許可制、click-to-open、background OS 通知。local notification inbox とは独立
+- builder preview リリース面: in-app updater、`Settings -> Release`、秘匿情報除去済み診断レポート、feedback 導線
+- safety / operations: content provenance と capability scope 表示、community node 宛ての分散通報ルーティング、community-node 運営者向け文書生成
 - `docs + blobs` から復元できる live session / game room state
 
-現在のスコープは [foundation progress](./docs/progress/2026-03-10-foundation.md) と [docs/adr/](./docs/adr/) 配下の accepted ADR を正とします。
+現在のスコープは [foundation progress](./docs/progress/2026-03-10-foundation.md)、[release readiness plan](./docs/progress/2026-06-11-release-readiness-execution-plan.md)、[docs/adr/](./docs/adr/) 配下の accepted ADR を正とします。
 
 ## 今後の方向性
 
 - 検索やサジェストは、core sync plane に必須で埋め込むのではなく、optional な specialized service として扱えるようにする方針です。
 - gateway / bridge 層によって、選択的な import/export や ecosystem interoperability を持てる余地を残します。
-- trust、moderation、policy assist は community-node の周辺で拡張しうる一方、canonical content store にはしません。
+- trust、moderation、policy assist は community-node の周辺で拡張しうる一方、canonical content store にはしません。分散通報ルーティングと運営者向け文書はその最初の一歩です。
 - これらは longer-term direction / optional ecosystem services であり、現行 workspace ですべて出荷済みという意味ではありません。
 
 ## コントリビューター向け
@@ -83,16 +91,25 @@ preview 更新では identity、local DB、Iroh data、Community Node 設定、p
 - 新規実装・修正は root workspace を対象にします。
 - 現在の truth は主に次です。
   - [docs/progress/2026-03-10-foundation.md](./docs/progress/2026-03-10-foundation.md)
+  - [docs/progress/2026-06-11-release-readiness-execution-plan.md](./docs/progress/2026-06-11-release-readiness-execution-plan.md)
   - [docs/README.md](./docs/README.md)
   - [docs/runbooks/dev.md](./docs/runbooks/dev.md)
+  - [CHANGELOG.md](./CHANGELOG.md)
   - [harness/scenarios/](./harness/scenarios/)
 - protocol / product の主要参照は次です。
   - [docs/adr/0010-kukuri-protocol-v1-boundary-definition.md](./docs/adr/0010-kukuri-protocol-v1-boundary-definition.md)
   - [docs/adr/0011-kukuri-protocol-v1-draft.md](./docs/adr/0011-kukuri-protocol-v1-draft.md)
   - [docs/adr/0012-topic-first_progressive_community_filtering_draft.md](./docs/adr/0012-topic-first_progressive_community_filtering_draft.md)
   - [docs/adr/0013-social-graph-foundation-draft.md](./docs/adr/0013-social-graph-foundation-draft.md)
+  - [docs/adr/0016-repost-data-classification.md](./docs/adr/0016-repost-data-classification.md)
+  - [docs/adr/0017-reaction-data-classification.md](./docs/adr/0017-reaction-data-classification.md)
   - [docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md](./docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md)
   - [docs/adr/0020-pairwise-dm-v1.md](./docs/adr/0020-pairwise-dm-v1.md)
+  - [docs/adr/0023-local-notification-inbox-v1.md](./docs/adr/0023-local-notification-inbox-v1.md)
+- community-node の責任境界 / trust 境界は次です。
+  - [docs/architecture/p2p-first-community-node-responsibility-boundary.md](./docs/architecture/p2p-first-community-node-responsibility-boundary.md)
+  - [docs/architecture/moderation-event-trust-semantics.md](./docs/architecture/moderation-event-trust-semantics.md)
+  - [docs/architecture/default-community-node-dependency-reduction.md](./docs/architecture/default-community-node-dependency-reduction.md)
 
 ### 作業入口
 
@@ -101,7 +118,7 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask test
 cargo xtask e2e-smoke
-cargo xtask release-check v0.1.0-preview.1
+cargo xtask release-check v0.1.2-preview.1
 
 cd apps/desktop
 npx pnpm@10.16.1 install
