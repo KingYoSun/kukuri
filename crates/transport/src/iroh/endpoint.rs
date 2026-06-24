@@ -118,7 +118,7 @@ pub(crate) async fn bind_endpoint_with_options(
     }
     #[cfg(test)]
     {
-        builder = builder.ca_roots_config(CaRootsConfig::insecure_skip_verify());
+        builder = builder.ca_tls_config(CaTlsConfig::insecure_skip_verify());
     }
     builder = apply_bind(builder, bind_addr)?;
     let endpoint = builder

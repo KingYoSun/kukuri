@@ -154,6 +154,9 @@ fn rust_test() -> Result<()> {
 }
 
 fn rust_test_with_nextest() -> Result<()> {
+    let stack_env = rust_test_stack_envs();
+    let stack_env_refs = env_refs(&stack_env);
+
     let mut nextest_args = vec![
         "nextest".to_string(),
         "run".to_string(),
@@ -162,12 +165,13 @@ fn rust_test_with_nextest() -> Result<()> {
     nextest_args.extend(cargo_exclude_args(
         &[&CN_PACKAGES[..], &[SERIAL_RUST_PACKAGE]].concat(),
     ));
-    run("cargo", nextest_args, &root_dir())?;
+    run_with_env("cargo", nextest_args, &root_dir(), &stack_env_refs)?;
 
-    run(
+    run_with_env(
         "cargo",
         ["nextest", "run", "-p", SERIAL_RUST_PACKAGE, "-j", "1"],
         &root_dir(),
+        &stack_env_refs,
     )?;
 
     let mut doc_args = vec![
@@ -176,10 +180,14 @@ fn rust_test_with_nextest() -> Result<()> {
         "--doc".to_string(),
     ];
     doc_args.extend(cargo_exclude_args(&CN_PACKAGES));
-    run("cargo", doc_args, &root_dir())
+    run_with_env("cargo", doc_args, &root_dir(), &stack_env_refs)
 }
 
 fn rust_test_with_cargo_test() -> Result<()> {
+    let mut serial_stack_env = rust_test_stack_envs();
+    serial_stack_env.push(("RUST_TEST_THREADS".to_string(), "1".to_string()));
+    let serial_stack_env_refs = env_refs(&serial_stack_env);
+
     let mut regular_test_args = vec![
         "test".to_string(),
         "--workspace".to_string(),
@@ -194,7 +202,7 @@ fn rust_test_with_cargo_test() -> Result<()> {
         "cargo",
         regular_test_args,
         &root_dir(),
-        &[("RUST_TEST_THREADS", "1")],
+        &serial_stack_env_refs,
     )?;
 
     run_with_env(
@@ -208,16 +216,39 @@ fn rust_test_with_cargo_test() -> Result<()> {
             "--tests",
         ],
         &root_dir(),
-        &[("RUST_TEST_THREADS", "1")],
+        &serial_stack_env_refs,
     )?;
 
+    let doc_stack_env = rust_test_stack_envs();
+    let doc_stack_env_refs = env_refs(&doc_stack_env);
     let mut doc_args = vec![
         "test".to_string(),
         "--workspace".to_string(),
         "--doc".to_string(),
     ];
     doc_args.extend(cargo_exclude_args(&CN_PACKAGES));
-    run("cargo", doc_args, &root_dir())
+    run_with_env("cargo", doc_args, &root_dir(), &doc_stack_env_refs)
+}
+
+/// Raise the per-thread stack used while running the Rust test suites.
+///
+/// The async integration tests (notably the desktop-runtime private channel
+/// restore tests that drive several runtimes at once) overflow the default
+/// 2 MiB worker-thread stack under nextest, where the harness `main`
+/// `stack_size` override does not apply. Setting `RUST_MIN_STACK` covers both
+/// nextest and `cargo test`, including each tokio worker thread. Respect an
+/// explicit operator override when one is already present.
+fn rust_test_stack_envs() -> Vec<(String, String)> {
+    if std::env::var_os("RUST_MIN_STACK").is_some() {
+        return Vec::new();
+    }
+    vec![("RUST_MIN_STACK".to_string(), (64 * 1024 * 1024).to_string())]
+}
+
+fn env_refs(envs: &[(String, String)]) -> Vec<(&str, &str)> {
+    envs.iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect()
 }
 
 fn tauri_check() -> Result<()> {

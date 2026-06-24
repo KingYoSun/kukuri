@@ -23,7 +23,7 @@ use iroh::endpoint::{
 use iroh::endpoint_info::EndpointInfo;
 use iroh::protocol::Router;
 #[cfg(test)]
-use iroh::tls::CaRootsConfig;
+use iroh::tls::CaTlsConfig;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayUrl, SecretKey};
 use iroh_gossip::api::{Event as GossipEvent, GossipSender};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, Gossip, TopicId as GossipTopicId};

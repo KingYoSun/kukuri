@@ -24,7 +24,7 @@ use tokio::time::timeout;
 use tracing::warn;
 
 #[cfg(test)]
-use iroh::tls::CaRootsConfig;
+use iroh::tls::CaTlsConfig;
 
 const ENDPOINT_SECRET_FILE_NAME: &str = "endpoint-secret.json";
 const DOCS_STORE_FILE_NAME: &str = "docs.redb";
@@ -232,8 +232,7 @@ impl IrohDocsNode {
         )?;
         #[cfg(test)]
         {
-            endpoint_builder =
-                endpoint_builder.ca_roots_config(CaRootsConfig::insecure_skip_verify());
+            endpoint_builder = endpoint_builder.ca_tls_config(CaTlsConfig::insecure_skip_verify());
         }
         if let Some(secret_key) = endpoint_secret {
             endpoint_builder = endpoint_builder.secret_key(secret_key);
