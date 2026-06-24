@@ -128,6 +128,12 @@ kukuri-tauri/src-tauri/bootstrap_nodes.json
 # kamui
 .kamui/
 
+# kilo code
+.kilo/
+
+# firecrawl
+.firecrawl/
+
 target/
 
 # 各エンジニアのローカル AI エージェント設定（雛形 *.example は commit する）

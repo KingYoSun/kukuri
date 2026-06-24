@@ -307,6 +307,116 @@ async fn transport_custom_relay_three_clients_multiple_topics_with_stale_addr_hi
     .await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unreachable_home_relay_does_not_starve_concurrent_direct_dials() {
+    let relay_config = TransportRelayConfig {
+        iroh_relay_urls: vec!["https://127.0.0.1:1".to_string()],
+    }
+    .normalized();
+    let config = TransportNetworkConfig::loopback();
+    let (transport_seed, transport_leaf_one, transport_leaf_two) = tokio::try_join!(
+        IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        ),
+        IrohGossipTransport::bind_with_options(
+            config.clone(),
+            DhtDiscoveryOptions::disabled(),
+            relay_config.clone(),
+        ),
+        IrohGossipTransport::bind_with_options(
+            config,
+            DhtDiscoveryOptions::disabled(),
+            relay_config,
+        )
+    )
+    .expect("transports");
+
+    let topic = TopicId::new("kukuri:topic:unreachable-relay-concurrent-dial");
+    let ticket_seed = transport_seed
+        .export_ticket()
+        .await
+        .expect("ticket seed")
+        .expect("ticket seed value");
+    let ticket_leaf_one = transport_leaf_one
+        .export_ticket()
+        .await
+        .expect("ticket leaf one")
+        .expect("ticket leaf one value");
+    let ticket_leaf_two = transport_leaf_two
+        .export_ticket()
+        .await
+        .expect("ticket leaf two")
+        .expect("ticket leaf two value");
+
+    let (mut stream_seed, mut stream_leaf_one, mut stream_leaf_two) = tokio::try_join!(
+        transport_seed.subscribe_hints(&topic),
+        transport_leaf_one.subscribe_hints(&topic),
+        transport_leaf_two.subscribe_hints(&topic),
+    )
+    .expect("subscribe hints");
+
+    tokio::try_join!(
+        transport_seed.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![
+                seed_peer_from_ticket(&ticket_leaf_one),
+                seed_peer_from_ticket(&ticket_leaf_two),
+            ],
+            Vec::new(),
+        ),
+        transport_leaf_one.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![seed_peer_from_ticket(&ticket_seed)],
+            Vec::new(),
+        ),
+        transport_leaf_two.configure_discovery(
+            DiscoveryMode::StaticPeer,
+            false,
+            vec![seed_peer_from_ticket(&ticket_seed)],
+            Vec::new(),
+        ),
+    )
+    .expect("configure unreachable-relay seed peers");
+
+    let join_timeout = initial_topic_join_timeout();
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_seed,
+            stream: &mut stream_seed,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_leaf_one,
+            stream: &mut stream_leaf_one,
+            expected_source_peer: None,
+        },
+        &topic,
+        join_timeout,
+        "unreachable relay concurrent dial seed-leaf-one",
+    )
+    .await;
+    wait_for_hint_roundtrip(
+        HintRoundtripParticipant {
+            transport: &transport_seed,
+            stream: &mut stream_seed,
+            expected_source_peer: None,
+        },
+        HintRoundtripParticipant {
+            transport: &transport_leaf_two,
+            stream: &mut stream_leaf_two,
+            expected_source_peer: None,
+        },
+        &topic,
+        join_timeout,
+        "unreachable relay concurrent dial seed-leaf-two",
+    )
+    .await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_custom_relay_lookup_connects_unknown_peer_without_dht_publish() {
     let (_relay_map, relay_url, _guard) = iroh::test_utils::run_relay_server()

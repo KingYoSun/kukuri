@@ -40,16 +40,16 @@ hkdf = "0.12.4"
 hmac = "0.12.1"
 httpdate = "1.0.3"
 image = { version = "0.25.10", default-features = false, features = ["png", "gif", "jpeg", "webp"] }
-iroh = "1.0.0-rc.1"
-iroh-docs = "0.100.0"
-iroh-blobs = "0.102.0"
-iroh-gossip = "0.100.0"
-iroh-mainline-address-lookup = "0.3.0"
-iroh-relay = { version = "1.0.0-rc.1", features = ["server"] }
+iroh = "1.0.0"
+iroh-docs = "0.101.0"
+iroh-blobs = "0.103.0"
+iroh-gossip = "0.101.0"
+iroh-mainline-address-lookup = "0.4.0"
+iroh-relay = { version = "1.0.0", features = ["server"] }
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 keyring = { version = "3.6.3", default-features = false }
 chacha20poly1305 = "0.10.1"
-n0-mainline = "0.4.0"
+n0-mainline = "0.5.0"
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
 redis = { version = "1.2.2", default-features = false, features = ["tokio-comp"] }
 rustls = { version = "0.23.38", default-features = false, features = ["ring", "std"] }
@@ -71,3 +71,6 @@ tower-http = { version = "0.6.8", features = ["trace"] }
 tower_governor = "0.8.0"
 url = "2.5.8"
 uuid = { version = "1.23.1", features = ["serde", "v4"] }
+
+[patch.crates-io]
+netwatch = { git = "https://github.com/n0-computer/net-tools", rev = "8b2d36b9be2b44281fdbf58121a9ab6a739919bc" }
