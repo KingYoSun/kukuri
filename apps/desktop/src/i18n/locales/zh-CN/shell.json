@@ -88,6 +88,10 @@
     "title": "设置"
   },
   "settingsSections": {
+    "about": {
+      "description": "服务条款、隐私政策、应用版本与同意状态。",
+      "label": "关于 / 法律信息"
+    },
     "appearance": {
       "description": "本地亮色、暗色与语言选择。",
       "label": "显示"

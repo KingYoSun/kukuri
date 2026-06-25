@@ -1,3 +1,4 @@
+import { AboutPanel } from '@/components/settings/AboutPanel';
 import { AppearancePanel } from '@/components/settings/AppearancePanel';
 import { CommunityNodePanel } from '@/components/settings/CommunityNodePanel';
 import { ConnectivityPanel } from '@/components/settings/ConnectivityPanel';
@@ -100,6 +101,10 @@ export function DesktopShellSettingsDrawer({
   const settingsSections = [
     {
       ...settingsSectionCopy[0],
+      content: <AboutPanel />,
+    },
+    {
+      ...settingsSectionCopy[1],
       content: (
         <AppearancePanel
           view={appearancePanelView}
@@ -109,7 +114,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[1],
+      ...settingsSectionCopy[2],
       content: (
         <ConnectivityPanel
           view={connectivityPanelView}
@@ -119,7 +124,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[2],
+      ...settingsSectionCopy[3],
       content: (
         <DiscoveryPanel
           view={discoveryPanelView}
@@ -139,7 +144,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[3],
+      ...settingsSectionCopy[4],
       content: (
         <CommunityNodePanel
           view={communityNodePanelView}
@@ -190,7 +195,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[4],
+      ...settingsSectionCopy[5],
       content: (
         <ReactionsPanel
           view={reactionsPanelView}
@@ -204,7 +209,7 @@ export function DesktopShellSettingsDrawer({
       ),
     },
     {
-      ...settingsSectionCopy[5],
+      ...settingsSectionCopy[6],
       content: <ReleasePanel />,
     },
   ];

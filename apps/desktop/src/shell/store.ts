@@ -306,6 +306,7 @@ function parseInitialSettingsSection(): {
 
   const requestedSection = new URLSearchParams(search).get('settings');
   if (
+    requestedSection !== 'about' &&
     requestedSection !== 'appearance' &&
     requestedSection !== 'connectivity' &&
       requestedSection !== 'discovery' &&

@@ -9,6 +9,7 @@ export type TimelineWorkspaceView = 'feed' | 'bookmarks';
 export type ProfileConnectionsView = 'following' | 'followed' | 'muted';
 
 export type SettingsSection =
+  | 'about'
   | 'appearance'
   | 'connectivity'
   | 'discovery'

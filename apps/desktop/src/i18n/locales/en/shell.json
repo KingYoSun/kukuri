@@ -88,6 +88,10 @@
     "title": "Settings"
   },
   "settingsSections": {
+    "about": {
+      "description": "Terms, privacy, app version, and consent status.",
+      "label": "About / Legal"
+    },
     "appearance": {
       "description": "Local light, dark, and language selection.",
       "label": "Appearance"

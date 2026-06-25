@@ -88,6 +88,10 @@
     "title": "設定"
   },
   "settingsSections": {
+    "about": {
+      "description": "利用規約、プライバシーポリシー、アプリと同意の状態です。",
+      "label": "アプリ / 法的情報"
+    },
     "appearance": {
       "description": "ローカルのライト / ダーク / 言語設定です。",
       "label": "表示"

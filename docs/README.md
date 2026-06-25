@@ -39,6 +39,10 @@
 - public community node critical safety architecture: `docs/safety/community-node-critical-safety.md`（canonical English。日本語版: `docs/safety/community-node-critical-safety_ja.md`）
 - default community node 依存低減ロードマップ: `docs/architecture/default-community-node-dependency-reduction.md`（default node は onboarding infrastructure であり network-wide authority ではない）
 
+## Legal
+- app-level 利用規約 / プライバシーポリシー（client 自体への同意。per-node consent とは別建て）: `docs/legal/terms-of-service.md` / `docs/legal/privacy-policy.md`（canonical SSoT。アプリ内表示は i18n `legal` namespace がミラー）
+- feature data classification: `docs/legal/app-consent-data-classification.md`
+
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`
 - visual spec: `DESIGN.md`（root）

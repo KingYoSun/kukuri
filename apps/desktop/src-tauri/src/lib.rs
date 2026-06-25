@@ -12,7 +12,10 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{
     commands::background_notifications::OsNotificationBackground,
-    state::{DesktopStartupState, build_desktop_state, resolve_db_path},
+    state::{
+        DesktopStartupState, build_desktop_state, consent_satisfied, load_app_consent,
+        resolve_db_path,
+    },
     tracing::init_tracing,
 };
 
@@ -89,17 +92,30 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let startup_state = match build_desktop_state(app.handle()) {
-                Ok(state) => {
-                    info!("initialized kukuri desktop runtime");
-                    app.manage(state);
-                    DesktopStartupState::ready()
+            let accepted_bundle_version = resolve_db_path(app.handle())
+                .ok()
+                .and_then(|db_path| load_app_consent(&db_path))
+                .map(|record| record.accepted_bundle_version);
+
+            let startup_state = if consent_satisfied(accepted_bundle_version) {
+                match build_desktop_state(app.handle()) {
+                    Ok(state) => {
+                        info!("initialized kukuri desktop runtime");
+                        app.manage(state);
+                        DesktopStartupState::ready()
+                    }
+                    Err(error) => {
+                        error!(%error, "failed to initialize desktop runtime");
+                        let db_path = resolve_db_path(app.handle()).ok();
+                        DesktopStartupState::failed(error, db_path)
+                    }
                 }
-                Err(error) => {
-                    error!(%error, "failed to initialize desktop runtime");
-                    let db_path = resolve_db_path(app.handle()).ok();
-                    DesktopStartupState::failed(error, db_path)
-                }
+            } else {
+                info!("app-level legal consent required; deferring runtime startup");
+                DesktopStartupState::consent_required(
+                    crate::state::LEGAL_BUNDLE_VERSION,
+                    accepted_bundle_version,
+                )
             };
             app.manage(startup_state);
             app.manage(OsNotificationBackground::new(app.handle()));
@@ -113,6 +129,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
+            commands::app_consent::get_app_consent_status,
+            commands::app_consent::accept_app_consents,
             commands::posts::create_post,
             commands::posts::create_repost,
             commands::reactions::toggle_reaction,

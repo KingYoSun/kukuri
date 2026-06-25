@@ -1,0 +1,97 @@
+{
+  "gate": {
+    "title": "Before you continue",
+    "intro": "Please review the terms of service and privacy policy before using kukuri. kukuri does not start any network connection (which would expose your IP address) until you accept.",
+    "draftNotice": "These documents are drafts and are not legal advice.",
+    "updatedNotice": "The terms of service or privacy policy have been updated. Please review and accept again to continue.",
+    "accept": "Accept and continue",
+    "decline": "Decline",
+    "declineNotice": "If you do not accept, you cannot use kukuri. Please close the app.",
+    "accepting": "Applying…",
+    "acceptError": "Failed to save your consent. Please try again."
+  },
+  "about": {
+    "title": "About / Legal",
+    "summary": "Terms of service, privacy policy, and app and consent status.",
+    "appVersionLabel": "App version",
+    "bundleVersionLabel": "Legal version",
+    "acceptedVersionLabel": "Accepted version",
+    "acceptedAtLabel": "Accepted at",
+    "notAccepted": "Not accepted",
+    "documentsHeading": "Documents"
+  },
+  "documents": {
+    "draftNotice": "This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.",
+    "terms": {
+      "title": "Terms of Service",
+      "sections": [
+        {
+          "heading": "What kukuri is",
+          "paragraphs": [
+            "kukuri is a decentralized application built on a P2P foundation. A central authority that governs the entire network does not exist; it is structurally impossible.",
+            "User identity, profile, and social graph are not owned by any particular community node and are not lost when a node stops or changes."
+          ]
+        },
+        {
+          "heading": "Prohibited uses",
+          "paragraphs": [
+            "Using kukuri for unlawful purposes, or creating, sharing, or distributing child sexual abuse / exploitation (CSAM / CSE) or other critical rights-violating content, is prohibited.",
+            "Infringing the rights of others (intellectual property, privacy, reputation, etc.), disrupting the network, community nodes, or relays, and using kukuri for malware, phishing, or other malicious purposes are prohibited."
+          ]
+        },
+        {
+          "heading": "Disclaimer for developers and node operators",
+          "paragraphs": [
+            "The kukuri developers provide software that runs on a P2P foundation and are not responsible for the network as a whole, other users, or the activities of any community node.",
+            "A community node operator is responsible only within the scope of the support features that operator actually participated in, and not for the kukuri network as a whole or other nodes.",
+            "kukuri is provided as-is, and to the maximum extent permitted by applicable law, no liability is accepted for any damages arising from its use or inability to use."
+          ]
+        },
+        {
+          "heading": "Changes to these terms",
+          "paragraphs": [
+            "These terms may be updated. When there is a significant update, the app re-displays the updated terms and asks you to accept them again."
+          ]
+        }
+      ]
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "sections": [
+        {
+          "heading": "Information stored locally",
+          "paragraphs": [
+            "Your identity (keys), profile, social graph, and local projections such as posts, as well as app settings (theme, language, discovery settings, community node settings, and your consent to this policy) are stored only locally on your device."
+          ]
+        },
+        {
+          "heading": "Information handled during signaling and connection",
+          "paragraphs": [
+            "While establishing P2P connections (signaling) or communicating via relays, your source IP address can become visible to peers and to community nodes / relays. This is technically unavoidable in order to establish connections on a P2P network.",
+            "Connection metadata (connection logs) such as connection targets, timestamps, and endpoint identifiers can be temporarily handled by community nodes / relays on the path. The kukuri client itself does not centrally collect or store these."
+          ]
+        },
+        {
+          "heading": "Retention",
+          "paragraphs": [
+            "Information stored locally is retained on your device until you delete the app's data.",
+            "The retention period of connection logs handled by community nodes / relays follows each operator's privacy policy. The kukuri client does not control this."
+          ]
+        },
+        {
+          "heading": "Disclosure to third parties",
+          "paragraphs": [
+            "The kukuri client does not centrally aggregate your personal information and disclose it to third parties.",
+            "Due to the nature of P2P, content and connection information you share can become technically visible to peers, community nodes, and relays. This is not third-party disclosure but an inherent technical characteristic of P2P communication."
+          ]
+        },
+        {
+          "heading": "Consent",
+          "paragraphs": [
+            "On first launch, before starting any network connection, the app asks for your consent to this policy. kukuri does not start a network connection until you accept. When there is a significant update, it asks you to review and accept again."
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,3 +1,4 @@
+pub mod app_consent;
 pub mod background_notifications;
 pub mod community_node;
 pub mod direct_messages;
